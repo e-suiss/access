@@ -113,13 +113,15 @@ access-cli apply  <connect> --file realm.yaml [--prune] [--proposals FILE]
 access-cli apply  <connect> --release <kind>/<key> [--proposals FILE]
 access-cli replay --bundle bundle.json
 access-cli realm apply-template <connect> <name|FILE>
+access-cli realm check <connect> --profile pci-dss-4|m-22-09
 ```
 
 - **`admin`** reads and writes the resources the management API contract (`sdks/openapi/admin-v1.json`) lists: `clients`, `groups`, `upstream-idps`, `accounts`, `settings/<section>`, `mappers`. A name the contract does not list is refused before anything is sent. `update` reads the current `ETag` and sends it as `If-Match`. `retire` is the only removal; nothing is deleted. Bulk `jobs` are refused: send each write on its own, as `apply` does. Routes the server declares but does not apply yet (account delete, realm rehome, reset intents) are reserved and never sent.
 - **`export`** writes the realm's configuration as YAML: resources sorted by their natural key, keys sorted, strings quoted, server-generated members and retired resources left out (keep them with `--with-generated`). Secrets appear only as `secret://` references; a secret value anywhere stops the export.
 - **`diff`** shows the plan from the running realm to a document, without writing. Only the members the document sets are compared: deleting a line from the file stops managing that member, it does not reset it. Exit status 0 means in sync, 7 means changes, 5 means conflicts.
 - **`apply`** reconciles: each change is one Exercise, applied in plan order, stopping at the first failure. A plan with a conflict applies nothing.
-- **`realm apply-template`** applies a realm template from `deploy/realm-templates/` (`b2c`, `b2b-saas`, `workforce`, `finance`, `health`, `public`, `ecommerce`, `mobile`, `devplatform`, `tr-payment`) or a file of the same shape: each setting is its own Exercise, and the first failure stops the run with the earlier steps committed. Rules a template carries that the realm settings cannot express yet are printed for the operator.
+- **`realm apply-template`** applies a realm template from `deploy/realm-templates/` (`b2c`, `b2b-saas`, `workforce`, `finance`, `health`, `public`, `ecommerce`, `mobile`, `devplatform`, `tr-payment`, `tr-gkd`) or a file of the same shape: each setting is its own Exercise, and the first failure stops the run with the earlier steps committed. Rules a template carries that the realm settings cannot express yet are printed for the operator.
+- **`realm check`** reads the realm's settings and prints, per check, whether they meet the authentication requirements of a profile: `pci-dss-4` (MFA on every access, passwords of at least 12 characters, a lockout within 10 attempts, 15 minutes idle) or `m-22-09` (MFA, phishing-resistant methods only, no SMS or voice codes). It only reads; it changes no setting. Exit status 0 means every check passed, 7 means at least one failed. The report is input to your own assessment; it does not establish conformity with either framework.
 - **`replay`** re-evaluates a recorded decision with the Kernel from a bundle `{"input": <hex CBOR>, "decision": <hex CBOR>, "fuel": <n>}` and prints `match` or `mismatch`.
 
 ## `ssh login`

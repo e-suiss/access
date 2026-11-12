@@ -1,3 +1,6 @@
+//! `access-cli realm check` (OP-159 m.3 (ii)) reads the realm's settings and reports them
+//! against a profile's authentication requirements; it writes nothing.
+//!
 //! `access-cli realm apply-template` (OP-153 m.3 (r), §10.9.2): a realm template is data
 //! (`deploy/realm-templates/*.toml`), a list of realm settings writes. Each step is its own
 //! Exercise signed with the Instance key, and the first failure stops the run; a step already
@@ -12,15 +15,17 @@ use figment::providers::{Format as _, Toml};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
+use access_identity_admin::domain::profile_check::{self, Profile, Report};
+
 use super::admin::write;
-use super::{Connect, load_key, note};
+use super::{Connect, failed, load_key, note, out};
 use crate::api::{self, Method, Operation};
-use crate::client::{Client, System};
+use crate::client::{Client, ClientError, Env, System};
 use crate::exit::{self, Code};
-use crate::http::Https;
+use crate::http::{Https, Transport};
 
 /// The templates shipped with this command line, by name (OP-153 m.3 (r)).
-pub(crate) const TEMPLATES: [(&str, &str); 10] = [
+pub(crate) const TEMPLATES: [(&str, &str); 11] = [
     (
         "b2c",
         include_str!("../../../../deploy/realm-templates/b2c.toml"),
@@ -61,6 +66,11 @@ pub(crate) const TEMPLATES: [(&str, &str); 10] = [
         "tr-payment",
         include_str!("../../../../deploy/realm-templates/tr-payment.toml"),
     ),
+    // IDP-9, OP-159 m.3 (ii)
+    (
+        "tr-gkd",
+        include_str!("../../../../deploy/realm-templates/tr-gkd.toml"),
+    ),
 ];
 
 /// `realm` arguments.
@@ -78,8 +88,18 @@ pub(crate) enum RealmVerb {
         #[command(flatten)]
         connect: Connect,
         /// A shipped template's name (`b2c`, `b2b-saas`, `workforce`, `finance`, `health`,
-        /// `public`, `ecommerce`, `mobile`, `devplatform`, `tr-payment`) or a template file.
+        /// `public`, `ecommerce`, `mobile`, `devplatform`, `tr-payment`, `tr-gkd`) or a
+        /// template file.
         template: String,
+    },
+    /// Reports the realm's settings against a profile's authentication requirements
+    /// (`pci-dss-4` or `m-22-09`); reads only, changes nothing (OP-159 m.3 (ii)).
+    Check {
+        #[command(flatten)]
+        connect: Connect,
+        /// The profile: `pci-dss-4` or `m-22-09`.
+        #[arg(long)]
+        profile: String,
     },
 }
 
@@ -94,6 +114,9 @@ pub(crate) struct Template {
     /// Rules the realm settings cannot express yet.
     #[serde(default)]
     pub(crate) notes: Vec<String>,
+    /// The regulatory template the governing domain installs with `policy.set` (U62).
+    #[serde(default)]
+    pub(crate) regulatory: Option<String>,
     /// The writes, in order.
     pub(crate) step: Vec<Step>,
 }
@@ -115,6 +138,11 @@ pub(crate) fn parse(text: &str) -> Result<Template, String> {
         .map_err(|e| e.to_string())?;
     if t.step.is_empty() {
         return Err(String::from("a template has at least one step"));
+    }
+    if let Some(d) = &t.regulatory
+        && access_authority_core::app::templates::Template::parse(d).is_none()
+    {
+        return Err(format!("no regulatory template `{d}`"));
     }
     Ok(t)
 }
@@ -141,9 +169,66 @@ pub(crate) fn operation(step: &Step) -> Option<&'static Operation> {
         .filter(|op| op.writes())
 }
 
+/// The realm's settings view, read through `client`, under `profile` (OP-159 m.3 (ii)).
+///
+/// # Errors
+/// The read's [`ClientError`].
+pub(crate) async fn report<T: Transport, E: Env>(
+    client: &Client<'_, T, E>,
+    realm: &str,
+    profile: Profile,
+) -> Result<Report, ClientError> {
+    let path = format!("/admin/v1/realms/{}/settings", api::segment(realm));
+    let (settings, _) = client.get(&path).await?;
+    Ok(profile_check::check(profile, &settings))
+}
+
+async fn check(connect: Connect, profile: &str) -> Code {
+    let Some(profile) = Profile::parse(profile) else {
+        note(&format!(
+            "access-cli: --profile {profile}: one of {}",
+            Profile::ALL.map(Profile::name).join(", ")
+        ));
+        return exit::USAGE;
+    };
+    let target = match connect.target() {
+        Ok(t) => t,
+        Err(e) => {
+            note(&format!("access-cli: {e}"));
+            return exit::USAGE;
+        }
+    };
+    let instance = match load_key(&connect) {
+        Ok(k) => k,
+        Err(c) => return c,
+    };
+    let https = match Https::new(&connect.ca) {
+        Ok(h) => h,
+        Err(e) => {
+            note(&format!("access-cli: {e}"));
+            return exit::CONFIG;
+        }
+    };
+    let client = Client::new(&https, &instance, &target, &System);
+    match report(&client, &target.realm, profile).await {
+        Ok(r) => {
+            let code = out(&format!("{:#}\n", r.to_json(&target.realm)));
+            if code != exit::OK || r.passed {
+                code
+            } else {
+                exit::DIFFERS
+            }
+        }
+        Err(e) => failed(&e),
+    }
+}
+
 /// Runs `realm`.
 pub(crate) async fn run(args: RealmArgs) -> Code {
-    let RealmVerb::ApplyTemplate { connect, template } = args.verb;
+    let (connect, template) = match args.verb {
+        RealmVerb::ApplyTemplate { connect, template } => (connect, template),
+        RealmVerb::Check { connect, profile } => return check(connect, &profile).await,
+    };
     let template = match load(&template) {
         Ok(t) => t,
         Err(c) => return c,
@@ -166,6 +251,11 @@ pub(crate) async fn run(args: RealmArgs) -> Code {
     for n in &template.notes {
         note(&format!(
             "access-cli: not expressible yet, apply by hand: {n}"
+        ));
+    }
+    if let Some(d) = &template.regulatory {
+        note(&format!(
+            "access-cli: the governing domain installs the `{d}` regulatory template with policy.set"
         ));
     }
     let target = match connect.target() {
@@ -245,5 +335,43 @@ mod tests {
             assert!(!tr.notes.iter().any(|n| n.contains(rule)), "{rule}");
         }
         assert!(parse("name = \"x\"\ndescription = \"y\"\nstep = []\n").is_err());
+    }
+
+    // IDP-9, N-52, OP-159 m.3 (ii), Ek B 6261
+    #[test]
+    fn the_tr_gkd_template_names_its_domain_half_and_claims_no_conformity() {
+        let t = parse(TEMPLATES[10].1).unwrap();
+        assert_eq!(t.name, "tr-gkd");
+        assert_eq!(
+            t.regulatory
+                .as_deref()
+                .and_then(access_authority_core::app::templates::Template::parse),
+            Some(access_authority_core::app::templates::Template::TrGkd)
+        );
+        let body = |r: &str| {
+            t.step
+                .iter()
+                .find(|s| s.resource == r)
+                .map_or_else(|| panic!("tr-gkd: {r}"), |s| Value::Object(s.body.clone()))
+        };
+        assert_eq!(body("settings/signin-policy")["profile"], "tr-payment");
+        assert_eq!(
+            body("settings/signin-policy")["methods"],
+            serde_json::json!(["passkey"])
+        );
+        assert_eq!(body("settings/signin-policy")["mfa_required"], true);
+        assert!(t.description.contains("NOT GUARANTEED"));
+        assert!(t.notes.iter().any(|n| n.contains("NOT GUARANTEED")));
+        for doc in ["documentation.md", "test-report.md"] {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../deploy/realm-templates/tr-gkd")
+                .join(doc);
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(text.contains("NOT GUARANTEED"), "{doc}");
+        }
+        assert!(
+            parse("name = \"x\"\ndescription = \"y\"\nregulatory = \"nope\"\n[[step]]\nresource = \"settings/push\"\n[step.body]\nenabled = true\n")
+                .is_err()
+        );
     }
 }

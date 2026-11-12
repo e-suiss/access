@@ -1212,3 +1212,5 @@ mod recovery;
 // OP-159 m.4 (b) (J7)
 #[path = "redteam.rs"]
 mod redteam;
+// OP-159 m.4 (b) (J9)
+mod profile_check;

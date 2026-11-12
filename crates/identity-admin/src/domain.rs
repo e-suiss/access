@@ -37,6 +37,7 @@ pub mod gateway;
 pub mod hr;
 pub mod linux;
 pub mod org;
+pub mod profile_check;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 

@@ -559,3 +559,41 @@ fn the_next_link_is_read() {
     );
     assert_eq!(next_link("<x>; rel=\"prev\""), None);
 }
+
+// OP-159 m.3 (ii)
+#[tokio::test(flavor = "current_thread")]
+async fn a_realm_check_only_reads_and_reports_each_requirement() {
+    use access_identity_admin::domain::profile_check::{Outcome, Profile};
+    let fake = Fake::new();
+    *fake.settings.borrow_mut() = json!({
+        "signin_policy": {"methods": ["passkey", "username"], "mfa_required": true},
+        "session_policy": {"idle_ms": 900_000},
+        "push": {"enabled": false},
+        "sms_otp": {"enabled": false},
+    });
+    let k = key();
+    let t = target();
+    let c = Client::new(&fake, &k, &t, &Fixed);
+    let r = crate::commands::realm::report(&c, "acme", Profile::PciDss4)
+        .await
+        .unwrap();
+    assert!(!r.passed);
+    let failed: Vec<&str> = r
+        .checks
+        .iter()
+        .filter(|f| f.result == Outcome::Fail)
+        .map(|f| f.check)
+        .collect();
+    assert_eq!(failed, ["password-length-12", "lockout-10-attempts"]);
+    assert_eq!(fake.writes.get(), 0);
+    let seen = fake.seen.borrow();
+    assert!(
+        seen.iter()
+            .filter(|r| r.url.starts_with(API))
+            .all(|r| r.method == "GET"),
+        "a check sends no write"
+    );
+    let json = r.to_json("acme");
+    assert_eq!(json["profile"], "pci-dss-4");
+    assert_eq!(json["checks"][1]["control"], "8.3.6");
+}

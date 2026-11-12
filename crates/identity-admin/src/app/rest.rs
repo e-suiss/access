@@ -3594,6 +3594,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let protection = access_identity_risk::app::settings::mode(t)
                     .await
                     .map_err(|_| AdminError::Unavailable(String::from("risk")))?;
+                // OP-156 m.3 (d), (f), OP-159 m.3 (ii)
+                let push = t.push_enabled().await?;
+                let sms_otp = t.sms_otp_enabled().await?;
                 let view = json!({
                     "jose_alg": s.jose_alg,
                     "argon2": {
@@ -3613,6 +3616,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "csp_mode": csp_mode.name(),
                     "related_origins": related,
                     "locale_overrides": stored(overrides.as_deref(), &Value::Map(Vec::new())),
+                    "push": { "enabled": push },
+                    "sms_otp": { "enabled": sms_otp },
                     // TN-124, OP-151 m.17 (d)
                     "managed": [],
                 });

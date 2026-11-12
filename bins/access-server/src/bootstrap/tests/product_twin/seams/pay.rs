@@ -501,3 +501,70 @@ async fn a_regulatory_template_is_enforced_on_the_decision_path() {
 fn s_only_public(p: &Product) {
     p.s.only_public();
 }
+
+// IDP-9, U62, N-52, §10.3.4, OP-159 m.3 (ii), Ek B 6261
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn under_the_tr_gkd_realm_template_a_payment_without_dynamic_linking_is_refused() {
+    let realm: toml::Value = toml::from_str(include_str!(
+        "../../../../../../../deploy/realm-templates/tr-gkd.toml"
+    ))
+    .unwrap();
+    let template = Template::parse(realm["regulatory"].as_str().unwrap()).unwrap();
+    assert_eq!(template, Template::TrGkd);
+    let p = Product::open("j9-tr-gkd", "pay").await;
+    let payer = p.s.actor().await;
+    let merchant = p.s.actor().await;
+    let authenticator = p.s.actor().await;
+    p.accept_from(authenticator.party, PREDICATE_INPUT, &["authentication"])
+        .await;
+    let (grant, since) =
+        p.s.grant(
+            SubjectSelector::Party(payer.party),
+            payment_authority(
+                &p,
+                &["initiate"],
+                structural("pay.instrument", &[]),
+                (100_000, 1_000_000),
+                Some(merchant.party),
+                None,
+            ),
+        )
+        .await;
+    let basis = holding(grant, payer.party, since);
+    let card = ("pay.instrument", &["card-1"][..]);
+    let pay = |kurus| payment(&p, "initiate", card, kurus, Some(merchant.party), None);
+    let ask = async |intent: IntentEnvelope, proofs: Vec<Proof>| {
+        p.s.twin
+            .ask(&p.s.domain, &p.s.request(&payer, intent, basis, proofs))
+            .await
+    };
+    assert!(ask(pay(2_000), Vec::new()).await.is_ok());
+    let install = Install {
+        issuer: SubjectSelector::Party(authenticator.party),
+        actions: BTreeSet::from([String::from("pay:initiate")]),
+    };
+    p.s.root(Payload::PolicySet {
+        defaults: None,
+        policy: None,
+        content: template.content(&install).unwrap(),
+    })
+    .await;
+    let gkd = [
+        ("aal", 2),
+        ("phishing_resistant", 1),
+        ("app_controlled_factor", 1),
+    ];
+
+    let r = ask(pay(2_001), Vec::new()).await;
+    assert!(refused(&r, Refusal::RequireAction), "{r:?}");
+    let first = pay(2_002);
+    let second = pay(2_003);
+    let bound_to_first = authentication(&p, &authenticator, &payer, &first, &gkd);
+    let r = ask(second, vec![bound_to_first.clone()]).await;
+    assert!(refused(&r, Refusal::RequireAction), "{r:?}");
+    let allowed = ask(first.clone(), vec![bound_to_first]).await.unwrap();
+    let mut settled = Vec::new();
+    ProductTwin::enforce(allowed, &first, || settled.push(2_002)).unwrap();
+    assert_eq!(settled, [2_002]);
+    s_only_public(&p);
+}

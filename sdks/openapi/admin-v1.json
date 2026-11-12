@@ -22823,7 +22823,7 @@
       },
       "Settings": {
         "type": "object",
-        "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18) and `locale_overrides` by locale and key (X35)."
+        "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18), `locale_overrides` by locale and key (X35), and whether push verification (`push.enabled`) and the restricted SMS code (`sms_otp.enabled`) are on (OP-156 m.3 (d), (f))."
       },
       "SsoEnforcementPreview": {
         "type": "object",

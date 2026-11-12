@@ -1,0 +1,56 @@
+# Realm template `tr-gkd` (IDP-9, §10.3.4, OP-159 m.3 (ii)): the identity half of the Turkish
+# ÖHY ve BS Tebliği güçlü kimlik doğrulama (GKD) rules as realm settings, and the name of the
+# regulatory template its governing domain installs. `access-cli realm apply-template` commits
+# each step as its own Exercise and stops at the first failure.
+#
+# - Two elements of different categories: a device-bound passkey (possession) unlocked by the
+#   device's user verification, and the app-controlled factor (an approver key attested in
+#   hardware that signs only after the app's own PIN, knowledge) for CT2 and CT3.
+# - Dynamic linking: a payment action needs an authentication bound to that payment's own
+#   intent (amount and payee), fresh and used once; the domain's `tr-gkd` policy enforces it on
+#   the decision path (U62).
+# - SMS codes only to activate the app-controlled factor; platform biometrics alone are never
+#   a factor.
+# - Documentation (m.22/7) and the two tests a year (m.22/6): tr-gkd/documentation.md and
+#   tr-gkd/test-report.md.
+#
+# Regulatory conformity is NOT GUARANTEED (N-52): the legal assessment is the institution's.
+
+name = "tr-gkd"
+description = "Turkish payment and e-money institutions, ÖHY ve BS Tebliği GKD: passkeys and the app-controlled factor, MFA required, SMS only for activation, payments bound to their own intent. Regulatory conformity is NOT GUARANTEED."
+regulatory = "tr-gkd"
+notes = [
+  "Mother's maiden name and identity card data are never a factor.",
+  "Install the `tr-gkd` regulatory template on the governing domain (policy.set) and name its payment actions: a CT2 or CT3 payment then needs a phishing-resistant authentication with the app-controlled factor, bound to that payment's own intent.",
+  "Keep the documentation of m.22/7 and run the two tests a year of m.22/6 with the templates in deploy/realm-templates/tr-gkd/.",
+  "Regulatory conformity is NOT GUARANTEED; the legal assessment is the institution's.",
+]
+
+[[step]]
+resource = "settings/signin-policy"
+
+[step.body]
+methods = ["passkey"]
+required_fields = ["email", "phone_number"]
+mfa_required = true
+profile = "tr-payment"
+
+[[step]]
+resource = "settings/push"
+
+[step.body]
+enabled = true
+
+[[step]]
+resource = "settings/sms-otp"
+
+[step.body]
+enabled = true
+
+[[step]]
+resource = "settings/session-policy"
+
+[step.body]
+absolute_ms = 900000
+idle_ms = 300000
+binding = "ip"

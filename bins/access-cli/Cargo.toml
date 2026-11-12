@@ -17,6 +17,8 @@ path = "src/main.rs"
 access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
+# OP-159 m.3 (ii): `realm check` reports with the profile check of the admin domain
+access-identity-admin = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-ssh = { workspace = true }
@@ -39,7 +41,6 @@ tracing = { workspace = true, features = ["std"] }
 access-telemetry = { workspace = true }
 
 [dev-dependencies]
-access-identity-admin = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 

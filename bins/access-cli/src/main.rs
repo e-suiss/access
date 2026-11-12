@@ -57,7 +57,8 @@ enum Command {
     Apply(commands::apply::ApplyArgs),
     /// Re-evaluates a recorded decision with the Kernel (INV-21).
     Replay(commands::replay::ReplayArgs),
-    /// Applies a realm template, one Exercise per setting (OP-153 m.3 (r)).
+    /// Applies a realm template, one Exercise per setting (OP-153 m.3 (r)), or reports the
+    /// realm's settings against a profile (OP-159 m.3 (ii)).
     Realm(commands::realm::RealmArgs),
     /// Lists undelivered Relay messages and resends one (OP-156 m.3 (c)).
     Relay(commands::relay::RelayArgs),

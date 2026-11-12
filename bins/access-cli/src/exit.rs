@@ -31,5 +31,6 @@ pub(crate) const FAILED: Code = Code(5);
 /// The management API refused or did not answer (an RFC 9457 problem on standard error).
 pub(crate) const REMOTE: Code = Code(6);
 
-/// `diff`: the desired and the runtime state differ; `replay`: the decision did not match.
+/// `diff`: the desired and the runtime state differ; `replay`: the decision did not match;
+/// `realm check`: a setting does not meet the profile.
 pub(crate) const DIFFERS: Code = Code(7);
