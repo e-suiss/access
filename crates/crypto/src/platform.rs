@@ -1,6 +1,7 @@
 //! Where a production signer may run (CR-39 m.6, OP-150 (o)): the data memory-dependent
 //! prefetcher of Apple Silicon breaks constant-time code (`GoFetch`), so a signer process built for
-//! an `aarch64-apple-*` target refuses to start. Tests build the signer crates in-process and
+//! an `aarch64-apple-*` target refuses to start, and so does one built for aarch64 Linux that
+//! finds an Apple CPU at start (OP-159 m.3 (s)). Tests build the signer crates in-process and
 //! never reach this check; local work runs the Linux image.
 
 /// The target a binary was built for, as far as the refusal needs it.
@@ -33,12 +34,15 @@ impl UnsafeHost {
     }
 }
 
-/// Whether a signer built for `target` may start.
+/// Whether a signer built for `target` may start; for [`Target::BUILT`] the CPU it runs on is
+/// read too.
 ///
 /// # Errors
-/// [`UnsafeHost`] on `aarch64-apple-*`.
-pub const fn signer_host(target: Target) -> Result<(), UnsafeHost> {
-    if target.aarch64 && target.apple {
+/// [`UnsafeHost`] on `aarch64-apple-*`, or on aarch64 hardware whose CPU is Apple's or cannot be
+/// read.
+pub fn signer_host(target: Target) -> Result<(), UnsafeHost> {
+    let apple_cpu = target == Target::BUILT && crate::dit::apple_silicon();
+    if target.aarch64 && (target.apple || apple_cpu) {
         Err(UnsafeHost)
     } else {
         Ok(())

@@ -45,6 +45,35 @@ impl Drop for DitGuard {
     }
 }
 
+/// Whether this host is Apple Silicon. Its data memory-dependent prefetcher (GoFetch) breaks
+/// constant-time code, so a production signer refuses to start on it (CR-39 m.6). An aarch64
+/// Linux host whose CPU cannot be read counts as Apple Silicon.
+#[must_use]
+pub fn apple_silicon() -> bool {
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(all(target_arch = "aarch64", not(target_os = "macos")))]
+    {
+        std::fs::read_to_string("/proc/cpuinfo").map_or(true, |c| apple_implementer(&c))
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        false
+    }
+}
+
+/// Whether a `/proc/cpuinfo` text names Apple (implementer `0x61`) as a CPU's implementer.
+#[must_use]
+pub fn apple_implementer(cpuinfo: &str) -> bool {
+    cpuinfo.lines().any(|l| {
+        l.split_once(':').is_some_and(|(k, v)| {
+            k.trim() == "CPU implementer" && v.trim().eq_ignore_ascii_case("0x61")
+        })
+    })
+}
+
 #[cfg(target_arch = "aarch64")]
 mod imp {
     use core::arch::asm;
@@ -110,5 +139,33 @@ mod tests {
             assert_eq!(DitGuard::active(), imp::supported());
         }
         assert_eq!(DitGuard::active(), before);
+    }
+
+    // CR-39 m.6, OP-159 m.3 (s)
+    #[test]
+    fn dit_is_active_where_the_cpu_has_it() {
+        if std::env::var_os("ACCESS_REQUIRE_DIT").is_some() {
+            assert!(
+                imp::supported(),
+                "the CPU reports FEAT_DIT but the guard sees none"
+            );
+        }
+        let _guard = DitGuard::new();
+        assert_eq!(DitGuard::active(), imp::supported());
+    }
+
+    // CR-39 m.6
+    #[test]
+    fn an_apple_implementer_is_recognised() {
+        let apple =
+            "processor\t: 0\nBogoMIPS\t: 48.00\nCPU implementer\t: 0x61\nCPU part\t: 0x022\n";
+        let neoverse = "processor\t: 0\nCPU implementer\t: 0x41\nCPU part\t: 0xd4f\n";
+        assert!(apple_implementer(apple));
+        assert!(!apple_implementer(neoverse));
+        assert!(!apple_implementer(""));
+        #[cfg(not(target_arch = "aarch64"))]
+        assert!(!apple_silicon());
+        #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+        assert!(apple_silicon());
     }
 }

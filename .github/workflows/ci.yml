@@ -314,8 +314,13 @@ jobs:
           conformance/tla/check.sh "$(scripts/tla-fetch.sh "$RUNNER_TEMP/tla")"
 
   cross:
-    name: cross
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.leg == 'arm64' && 'cross (arm64 DIT)' || 'cross' }}
+    # CR-39 m.6, OP-159 m.3 (s)
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [x86_64, arm64]
+    runs-on: ${{ matrix.leg == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -324,11 +329,24 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        if: matrix.leg == 'x86_64'
         with:
           cache-key: cross
           tools: wasmtime
+      - uses: ./.github/actions/setup
+        if: matrix.leg == 'arm64'
+        with:
+          cache-key: cross-arm64
+      # CR-39 m.6, OP-159 m.3 (s)
+      - name: DIT guard on native arm64
+        if: matrix.leg == 'arm64'
+        run: |
+          if grep -qw dit /proc/cpuinfo; then export ACCESS_REQUIRE_DIT=1; fi
+          echo "FEAT_DIT: ${ACCESS_REQUIRE_DIT:-absent}"
+          cargo test --locked -p esuiss-crypto --features aws-lc --lib -- dit secret --nocapture
       # OP-104 m.7
       - name: Use the NDK compiler for Android
+        if: matrix.leg == 'x86_64'
         run: |
           bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           test -x "$bin/aarch64-linux-android24-clang"
@@ -341,16 +359,20 @@ jobs:
           } >> "$GITHUB_ENV"
       # CMP-24, MD-1, T41, OP-116 m.3
       - name: Kernel and uniffi binding cross-compilation
+        if: matrix.leg == 'x86_64'
         run: just cross
       # OP-116 m.3
       - name: Android uniffi cdylib links against the NDK sysroot
+        if: matrix.leg == 'x86_64'
         run: just android-link-check
       # OP-56, OP-106 m.24
       - name: Vector cross-check with an independent encoder
+        if: matrix.leg == 'x86_64'
         working-directory: conformance/vectors/tools/cbor-crosscheck
         run: go run . ../..
       # OP-112, CR-49 m.2
       - name: F0 reference evaluator on the vectors
+        if: matrix.leg == 'x86_64'
         run: just f0
 
   supply-chain:
