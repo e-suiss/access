@@ -69,6 +69,11 @@ ca_file = "/etc/access/tls/ca.crt"
 kms_shared = false
 hsm_partition_shared = true
 
+# HL-8, HL-17, DL-10, OP-159 m.3 (s)
+[hosting]
+hsm_partition = "shared"
+compute = "shared"
+
 # OP-94, OP-141 m.18 (h), OP-69
 [hsm]
 module = "/usr/lib/softhsm/libsofthsm2.so"

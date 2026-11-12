@@ -152,7 +152,18 @@ published as `null`.
 |---|---|
 | `kms_quota_per_second` | KMS or HSM operations per second. |
 | `kms_shared` | Whether the KMS quota is shared. |
-| `hsm_partition_shared` | Whether the HSM partition is shared. |
+| `hsm_partition_shared` | Whether the HSM partition is shared; when set, it must agree with `[hosting]`. |
+
+### `[hosting]`
+
+Whether the signers' hardware is shared with other tenants. Every domain led here publishes it in
+its Domain Metadata, and the durability read, the realm metadata and the console show it. What is
+not stated is `shared`, and on shared hardware the co-tenant side-channel risk applies.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `hsm_partition` | `shared` | `shared` or `dedicated`: the HSM partition. |
+| `compute` | `shared` | `shared` or `dedicated`: the hosts the signers run on. |
 
 ### `[telemetry]`
 
