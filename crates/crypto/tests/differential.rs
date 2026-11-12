@@ -1254,9 +1254,9 @@ mod retired {
                     salt: [0x5a; 32],
                 },
             )]);
-            let (_, m_cp, m_cs) = signed(&member);
-            let (_, e_cp, e_cs) = signed(&empty);
-            let (_, x_cp, x_cs) = signed(&missing);
+            let (_, member_checkpoint, member_cosigns) = signed(&member);
+            let (_, empty_checkpoint, empty_cosigns) = signed(&empty);
+            let (_, missing_checkpoint, missing_cosigns) = signed(&missing);
             let other = sign1(&witness, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
             let w = |independent| {
                 Witness::new(
@@ -1354,8 +1354,8 @@ mod retired {
                     "artifacts-member",
                     Some(anchor(true)),
                     &member,
-                    &m_cp,
-                    Some(&m_cs),
+                    &member_checkpoint,
+                    Some(&member_cosigns),
                     [0xa1; 32],
                     true,
                 ),
@@ -1363,8 +1363,8 @@ mod retired {
                     "artifacts-non-member",
                     Some(anchor(true)),
                     &member,
-                    &m_cp,
-                    Some(&m_cs),
+                    &member_checkpoint,
+                    Some(&member_cosigns),
                     [0xee; 32],
                     true,
                 ),
@@ -1372,8 +1372,8 @@ mod retired {
                     "artifacts-empty",
                     Some(anchor(true)),
                     &empty,
-                    &e_cp,
-                    Some(&e_cs),
+                    &empty_checkpoint,
+                    Some(&empty_cosigns),
                     [0xa1; 32],
                     true,
                 ),
@@ -1381,8 +1381,8 @@ mod retired {
                     "artifacts-missing",
                     Some(anchor(true)),
                     &missing,
-                    &x_cp,
-                    Some(&x_cs),
+                    &missing_checkpoint,
+                    Some(&missing_cosigns),
                     [0xa1; 32],
                     true,
                 ),
