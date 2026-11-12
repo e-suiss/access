@@ -116,10 +116,46 @@ fn public_jwks_name_their_key() {
     assert!(jwk.contains(r#""alg":"Ed25519""#));
 }
 
-// MD-3, CR-6
+// CR-41 m.3, OP-159 m.3 (o)
 #[test]
-fn akp_keys_are_not_published() {
-    let key = PublicKey::MlDsa(Algorithm::MlDsa65, vec![0; 1952]);
-    assert_eq!(public_jwk(&[0; 32], &key), Err(JoseError::Key));
-    assert_eq!(JwsAlg::of(&key), None);
+fn akp_keys_are_published_with_alg_and_exact_length() {
+    use suiss_crypto::signer::MlDsaSigner;
+    for alg in [JwsAlg::MlDsa44, JwsAlg::MlDsa65, JwsAlg::MlDsa87] {
+        let (signer, _) = MlDsaSigner::generate(alg.algorithm()).unwrap();
+        let key = signer.public_key();
+        assert_eq!(JwsAlg::of(&key), Some(alg));
+        assert!(alg.post_quantum());
+        assert_eq!(JwsAlg::ml_dsa(alg.name()), Some(alg));
+        let jwk = public_jwk(&thumbprint(&key), &key).unwrap();
+        assert!(jwk.starts_with(r#"{"kty":"AKP","alg":""#), "{jwk}");
+        assert!(jwk.contains(&format!(r#""alg":"{}""#, alg.name())));
+        assert!(!jwk.contains(r#""priv""#));
+        let PublicKey::MlDsa(a, mut short) = key else {
+            panic!("ml-dsa");
+        };
+        short.pop();
+        assert_eq!(
+            public_jwk(&[1; 32], &PublicKey::MlDsa(a, short)),
+            Err(JoseError::Key)
+        );
+    }
+    assert_eq!(JwsAlg::ml_dsa("ES256"), None);
+    assert!(!JwsAlg::Es256.post_quantum());
+}
+
+// CR-41, L0-SIG-8, OP-159 m.3 (o)
+#[test]
+fn ml_dsa_tokens_verify_in_the_kernel_only_with_an_ml_dsa_backend() {
+    use suiss_crypto::aws::AwsLcBackend;
+    use suiss_crypto::signer::MlDsaSigner;
+    let (signer, _) = MlDsaSigner::generate(Algorithm::MlDsa65).unwrap();
+    let (kid, set) = keys(&signer, JwsAlg::MlDsa65);
+    let token = sign_compact(&signer, &kid, "JWT", br#"{"sub":"a"}"#).unwrap();
+    assert!(token.len() < 8192, "{}", token.len());
+    let v = verify_compact(&AwsLcBackend, &token, &set, "JWT", Origin::Native).unwrap();
+    assert_eq!(v.algorithm, Algorithm::MlDsa65);
+    assert_eq!(
+        verify_compact(&PureBackend, &token, &set, "JWT", Origin::Native).unwrap_err(),
+        JwsError::Algorithm
+    );
 }

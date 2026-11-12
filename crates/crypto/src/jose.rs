@@ -10,13 +10,20 @@ use suiss_crypto::cose::{Algorithm, PublicKey};
 use suiss_crypto::signer::{SignError, Signer};
 
 /// A JWS algorithm Access signs with, by its fully-specified name (CR-5, MD-3); `EdDSA` is
-/// never produced.
+/// never produced. The ML-DSA parameter sets sign only under a realm's post-quantum signing
+/// profile (CR-41, OP-159 m.3 (o)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum JwsAlg {
     /// ECDSA P-256 with SHA-256, `r ‖ s` with low S.
     Es256,
     /// Ed25519.
     Ed25519,
+    /// ML-DSA-44 (FIPS 204).
+    MlDsa44,
+    /// ML-DSA-65 (FIPS 204).
+    MlDsa65,
+    /// ML-DSA-87 (FIPS 204).
+    MlDsa87,
 }
 
 impl JwsAlg {
@@ -26,6 +33,9 @@ impl JwsAlg {
         match self {
             Self::Es256 => "ES256",
             Self::Ed25519 => "Ed25519",
+            Self::MlDsa44 => "ML-DSA-44",
+            Self::MlDsa65 => "ML-DSA-65",
+            Self::MlDsa87 => "ML-DSA-87",
         }
     }
 
@@ -35,7 +45,24 @@ impl JwsAlg {
         match self {
             Self::Es256 => Algorithm::Es256,
             Self::Ed25519 => Algorithm::Ed25519,
+            Self::MlDsa44 => Algorithm::MlDsa44,
+            Self::MlDsa65 => Algorithm::MlDsa65,
+            Self::MlDsa87 => Algorithm::MlDsa87,
         }
+    }
+
+    /// Whether it is an ML-DSA parameter set (CR-41).
+    #[must_use]
+    pub const fn post_quantum(self) -> bool {
+        matches!(self, Self::MlDsa44 | Self::MlDsa65 | Self::MlDsa87)
+    }
+
+    /// The parameter set of a JOSE `alg` name, ML-DSA only.
+    #[must_use]
+    pub fn ml_dsa(name: &str) -> Option<Self> {
+        [Self::MlDsa44, Self::MlDsa65, Self::MlDsa87]
+            .into_iter()
+            .find(|a| a.name() == name)
     }
 
     /// The algorithm a public key signs with.
@@ -44,6 +71,9 @@ impl JwsAlg {
         match key {
             PublicKey::P256(_) => Some(Self::Es256),
             PublicKey::Ed25519(_) => Some(Self::Ed25519),
+            PublicKey::MlDsa(Algorithm::MlDsa44, _) => Some(Self::MlDsa44),
+            PublicKey::MlDsa(Algorithm::MlDsa65, _) => Some(Self::MlDsa65),
+            PublicKey::MlDsa(Algorithm::MlDsa87, _) => Some(Self::MlDsa87),
             PublicKey::MlDsa(..) => None,
         }
     }
@@ -167,6 +197,9 @@ fn sign(
     let consistent = match alg {
         JwsAlg::Es256 => matches!(signer.algorithm(), Algorithm::Es256 | Algorithm::Esp256),
         JwsAlg::Ed25519 => signer.algorithm() == Algorithm::Ed25519,
+        JwsAlg::MlDsa44 | JwsAlg::MlDsa65 | JwsAlg::MlDsa87 => {
+            signer.algorithm() == alg.algorithm()
+        }
     };
     if !consistent {
         return Err(JoseError::Key);
@@ -213,14 +246,28 @@ pub fn confirmation_jwk(key: &PublicKey) -> Result<Json, JoseError> {
     ]))
 }
 
-/// The public JWK of `key` with its `kid`, `alg` and `use: "sig"`: EC P-256 or OKP Ed25519
-/// (RFC 7517, RFC 8037). `AKP` keys are not published (MD-3, closed by default).
+/// The public JWK of `key` with its `kid`, `alg` and `use: "sig"`: EC P-256, OKP Ed25519
+/// (RFC 7517, RFC 8037) or, under a realm's post-quantum signing profile, `AKP` with its
+/// mandatory `alg` and `pub` of the exact length (RFC 9964, CR-41 m.3, OP-159 m.3 (o)).
 ///
 /// # Errors
 /// [`JoseError::Key`].
 pub fn public_jwk(kid: &[u8; 32], key: &PublicKey) -> Result<String, JoseError> {
     let alg = JwsAlg::of(key).ok_or(JoseError::Key)?;
     let kid = b64url_encode(kid);
+    // CR-41 m.3
+    if let PublicKey::MlDsa(a, public) = key {
+        let exact = access_kernel::verify::pq::PqAlgorithm::of(*a)
+            .is_some_and(|p| p.public_key_len() == public.len());
+        if !exact {
+            return Err(JoseError::Key);
+        }
+        return Ok(format!(
+            r#"{{"kty":"AKP","alg":"{}","pub":"{}","kid":"{kid}","use":"sig"}}"#,
+            alg.name(),
+            b64url_encode(public)
+        ));
+    }
     if let PublicKey::Ed25519(x) = key {
         return Ok(format!(
             r#"{{"kty":"OKP","crv":"Ed25519","x":"{}","kid":"{kid}","alg":"{}","use":"sig"}}"#,
