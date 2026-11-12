@@ -832,9 +832,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::Iys { .. }
             | Change::PreferenceTopics(_)
             | Change::FrontchannelLogout
-            | Change::ClientProfile { .. }
             | Change::MapperSet { .. }
-            | Change::JoseAlg(_)
             | Change::Branding(_)
             | Change::KeyPolicy(_)
             | Change::KeyRotate { .. }
@@ -847,12 +845,46 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_)
             | Change::AuditTier(_)
-            | Change::CryptoProfile(_)
             | Change::RateLimit(_)
-            | Change::DrProfile(_) => {}
-            // OP-159 m.4 (a)
-            Change::SigningProfile(_) | Change::KexShare(_) => {
-                return Err(Invalid::NotYetServed.into());
+            | Change::DrProfile(_)
+            | Change::SigningProfile(None)
+            | Change::KexShare(_) => {}
+            // CR-41, OP-159 m.3 (o)
+            Change::ClientProfile { delta, .. } => {
+                if let crate::domain::ProfileDelta::SigningAlg(Some(a)) = delta
+                    && let Some(pq) = a.ml_dsa()
+                {
+                    let held = t.realm_signing().await?.profile.as_deref().and_then(
+                        access_identity_oauth::adapters::oauth::profile_alg,
+                    );
+                    if held != Some(pq) {
+                        return Err(Invalid::AlgorithmProfileConflict.into());
+                    }
+                }
+            }
+            // CR-44, HL-27, OP-159 m.3 (r)
+            Change::SigningProfile(Some(_)) => {
+                if t.realm_crypto().await?.fips {
+                    return Err(Invalid::FipsPqExclusive.into());
+                }
+            }
+            // CR-15, CR-44, HL-27, OP-158 m.9, OP-159 m.3 (r)
+            Change::CryptoProfile(c) => {
+                if c.fips && t.realm_signing().await?.profile.is_some() {
+                    return Err(Invalid::FipsPqExclusive.into());
+                }
+                let ed25519 = idp::settings(t)
+                    .await?
+                    .is_some_and(|s| s.jose_alg == JoseAlg::Ed25519.name());
+                if c.fips && ed25519 {
+                    return Err(Invalid::AlgorithmProfileConflict.into());
+                }
+            }
+            // CR-15, OP-158 m.9, OP-159 m.3 (r)
+            Change::JoseAlg(alg) => {
+                if *alg != JoseAlg::Es256 && t.realm_crypto().await?.fips {
+                    return Err(Invalid::AlgorithmProfileConflict.into());
+                }
             }
             // E14, MD-5a, OP-158 m.3 (o)
             Change::Rehome(r) => rehome::current(t, g, r).await?,
@@ -892,6 +924,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// A rotation or drop names a key the realm publishes now; a retry of an applied one no
     /// longer has to (TN-118, §13.2).
     async fn published(&self, p: &Proposal) -> Result<(), AdminError> {
+        // OP-159 m.3 (d)
+        if let Change::SigningProfile(Some(s)) = &p.change {
+            let ready = self
+                .keys
+                .pq_ready(s.profile)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?;
+            return if ready {
+                Ok(())
+            } else {
+                Err(Invalid::PqKeyUnavailable.into())
+            };
+        }
         let (Change::KeyRotate { retire: kid } | Change::KeyDrop { kid, .. }) = &p.change else {
             return Ok(());
         };
@@ -1526,6 +1571,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     async fn after(&self, p: &Proposal) -> Result<(), AdminError> {
         let done = match &p.change {
             Change::JoseAlg(alg) => self.keys.open(p.realm, *alg).await,
+            // CR-41, OP-159 m.3 (o), (d)
+            Change::SigningProfile(Some(s)) => self.keys.pq_open(p.realm, s.profile).await,
+            Change::SigningProfile(None) => self.keys.pq_close(p.realm).await,
             // TN-118, §13.2
             Change::KeyPolicy(policy) => self.keys.set_policy(p.realm, *policy).await,
             Change::KeyRotate { retire } => self.keys.rotate(p.realm, *retire).await,
@@ -1702,9 +1750,28 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?;
                 true
             }
-            // OP-159 m.4 (a)
-            Change::SigningProfile(_) | Change::KexShare(_) => {
-                return Err(Invalid::NotYetServed.into());
+            // CR-41, OP-159 m.3 (a), (o)
+            Change::SigningProfile(profile) => {
+                let name = profile.map(|p| p.profile.name());
+                t.put_signing_profile(bound, name).await?;
+                let correlation = bound.position().to_string();
+                t.audit(&access_store::audit::AuditEvent {
+                    event_type: if name.is_some() {
+                        "signing_profile.opened"
+                    } else {
+                        "signing_profile.closed"
+                    },
+                    actor: DECIDED_BY,
+                    target: name.unwrap_or("classical"),
+                    correlation: &correlation,
+                })
+                .await?;
+                true
+            }
+            // CR-12 m.3, OP-159 m.3 (a), (t)
+            Change::KexShare(k) => {
+                t.put_kex_share(bound, k.mode.name()).await?;
+                true
             }
             // OP-158 m.3 (w)
             Change::AuditTier(tier) => {

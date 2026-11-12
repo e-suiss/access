@@ -662,6 +662,10 @@ pub enum Invalid {
     /// No HSM ML-DSA mechanism for the post-quantum profile (CR-18, OP-159 m.3 (d)).
     #[error("post-quantum key unavailable")]
     PqKeyUnavailable,
+    /// J3: a FIPS realm signing with anything but ES256/ESP256, or a client's ML-DSA algorithm
+    /// the realm's signing profile does not hold (CR-15, OP-158 m.9, OP-159 m.3 (o), (r)).
+    #[error("algorithm and profile conflict")]
+    AlgorithmProfileConflict,
 }
 
 impl Invalid {
@@ -815,6 +819,7 @@ impl Invalid {
             Self::PlacementMismatch => "placement-mismatch",
             Self::FipsPqExclusive => "fips-pq-exclusive",
             Self::PqKeyUnavailable => "pq-key-unavailable",
+            Self::AlgorithmProfileConflict => "algorithm-profile-conflict",
         }
     }
 }
@@ -2702,8 +2707,8 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
-            // OP-159 m.4 (a)
-            Self::SigningProfile(_) | Self::KexShare(_) => Err(Invalid::NotYetServed),
+            // OP-159 m.3 (a), (o), (t)
+            Self::SigningProfile(_) | Self::KexShare(_) => Ok(()),
             // OP-157 m.3 (m), OP-158 m.3 (o), (r)
             Self::Rehome(_)
             | Self::Residency(_)

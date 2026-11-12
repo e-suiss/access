@@ -1904,9 +1904,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putResidency" | "putDrProfile" => (Settings, w(true)),
         // OP-158 m.4 (b) (W6)
         "getRecovery" => (ResourceKind::Recovery, Shape::Get),
-        // OP-159 m.4 (a)
-        "getSigning" => (ResourceKind::Signing, Shape::Planned("Signing")),
-        "putSigningProfile" | "putKexShare" => (Settings, Shape::Planned("WriteResult")),
+        // OP-159 m.3 (a), (o), (t), m.7 (b)
+        "getSigning" => (ResourceKind::Signing, Shape::Get),
+        "putSigningProfile" | "putKexShare" => (Settings, w(false)),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
@@ -2202,6 +2202,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             // OP-159 m.3 (nn)
             Invalid::FipsPqExclusive => &codes::assurance::FIPS_PQ_EXCLUSIVE,
             Invalid::PqKeyUnavailable => &codes::assurance::PQ_KEY_UNAVAILABLE,
+            Invalid::AlgorithmProfileConflict => &codes::assurance::ALGORITHM_PROFILE_CONFLICT,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91

@@ -19,7 +19,7 @@ use tower::ServiceExt as _;
 const ADMIN: [&str; 3] = ["getSigning", "putSigningProfile", "putKexShare"];
 
 /// The Stage 14 admin rows their lanes serve.
-const SERVED: [&str; 0] = [];
+const SERVED: [&str; 3] = ["getSigning", "putSigningProfile", "putKexShare"];
 
 // OP-159 m.4 (a)
 #[test]

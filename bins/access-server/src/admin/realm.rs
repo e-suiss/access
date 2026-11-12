@@ -683,6 +683,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     None => None,
                 }
             }
+            // OP-159 m.3 (g), (r)
+            (ResourceKind::Signing, Ok(r), signer) => {
+                let domain = r
+                    .items
+                    .first()
+                    .and_then(|(b, _)| b["governing_domain"].as_str());
+                Some(Self::reanchor(signer, domain).await)
+            }
             _ => None,
         };
         // §12.5.4, TN-127, OP-158 m.3 (v)
@@ -732,6 +740,33 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
 }
 
 impl<P> Realms<P> {
+    /// The governing domain's last post-quantum re-anchor as its Domain Metadata declares it,
+    /// `null` before the first or when the metadata cannot be read (OP-159 m.3 (g)).
+    async fn reanchor(
+        signer: Option<&std::path::Path>,
+        domain: Option<&str>,
+    ) -> serde_json::Map<String, Value> {
+        let d = domain
+            .and_then(|d| access_kernel::json::b64url_decode(d).ok())
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok());
+        let declared = match (signer, d) {
+            (Some(signer), Some(d)) => access_authority_core::app::placement::declared(signer, Digest(d))
+                .await
+                .ok(),
+            _ => None,
+        };
+        let pq = declared.as_ref().and_then(|d| d.pq_reanchor.as_ref()).map(|r| {
+            serde_json::json!({
+                "size": r.size,
+                "time": r.time,
+                "witnesses": r.witnesses,
+            })
+        });
+        let mut out = serde_json::Map::new();
+        out.insert(String::from("pq_reanchor"), pq.unwrap_or(Value::Null));
+        out
+    }
+
     /// What the governing domain `domain` (base64url) declares about its witnesses, replicas
     /// and durability, as members of the durability read (OP-158 m.3 (b), (p)).
     async fn declarations(

@@ -44,6 +44,34 @@ pub trait RealmKeys: Send + Sync {
         alg: JoseAlg,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 
+    /// Whether the identity signer can hold an ML-DSA key of `alg` (OP-159 m.3 (d)); without
+    /// one the realm's post-quantum profile is refused.
+    fn pq_ready(
+        &self,
+        alg: crate::domain::assurance::MlDsa,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        let _ = alg;
+        async { Ok(false) }
+    }
+
+    /// Opens the realm's post-quantum key set with `alg` (CR-41, OP-159 m.3 (o)); repeating it
+    /// changes nothing.
+    fn pq_open(
+        &self,
+        realm: RealmId,
+        alg: crate::domain::assurance::MlDsa,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = (realm, alg);
+        async { Err(Unavailable(String::from("no post-quantum keys"))) }
+    }
+
+    /// Drops every key of the realm's post-quantum key set (OP-159 m.3 (a)); repeating it
+    /// changes nothing.
+    fn pq_close(&self, realm: RealmId) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = realm;
+        async { Ok(()) }
+    }
+
     /// The realm's JWKS document as relying parties read it.
     fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
 

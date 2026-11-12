@@ -3535,11 +3535,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | (
                 Kind::SupportGrants
                 | Kind::ReviewItems
-                | Kind::OffboardingPreviews
-                // OP-159 m.4 (a)
-                | Kind::Signing,
+                | Kind::OffboardingPreviews,
                 _,
             ) => Read::default(),
+            // CR-41, CR-44, OP-159 m.3 (o), (r), (t)
+            (Kind::Signing, _) => Read {
+                items: vec![(signing_view(t).await?, 0)],
+                last: None,
+            },
             // TI-17, CMP-26, OP-158 m.3 (o)
             (Kind::Placement, _) => Read {
                 items: vec![(super::rehome::placement_view(t).await?, 0)],
@@ -3634,4 +3637,31 @@ fn agent_key(k: &str) -> Option<[u8; 16]> {
     b64url_decode(k)
         .ok()
         .and_then(|b| <[u8; 16]>::try_from(b).ok())
+}
+
+/// The realm's signing view (OP-159 m.3 (o), (r), (t), m.7 (b)): its post-quantum signing
+/// profile, the algorithms it signs with, its key exchange share policy, its FIPS profile and
+/// whether this deployment runs the validated module. The domain's last post-quantum re-anchor is
+/// added from its Domain Metadata by the caller.
+async fn signing_view(t: &mut TenantTx) -> Result<Json, AdminError> {
+    let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+    let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+    let signing = t.realm_signing().await?;
+    let crypto = t.realm_crypto().await?;
+    let mut algorithms = vec![s.jose_alg.clone()];
+    if let Some(pq) = signing
+        .profile
+        .as_deref()
+        .and_then(access_identity_oauth::adapters::oauth::profile_alg)
+    {
+        algorithms.push(String::from(pq.name()));
+    }
+    Ok(json!({
+        "signing_profile": signing.profile,
+        "algorithms": algorithms,
+        "kex_share": signing.kex_share,
+        "fips": crypto.fips,
+        "fips_module": suiss_crypto::fips::module(),
+        "governing_domain": access_kernel::json::b64url_encode(g.domain.as_bytes()),
+    }))
 }
