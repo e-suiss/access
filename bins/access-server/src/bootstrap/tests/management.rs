@@ -1209,3 +1209,6 @@ mod dr;
 mod residency;
 // OP-158 m.4 (b) (W6)
 mod recovery;
+// OP-159 m.4 (b) (J7)
+#[path = "redteam.rs"]
+mod redteam;
