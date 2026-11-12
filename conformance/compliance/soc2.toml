@@ -45,8 +45,12 @@ note = "Outbound calls reach only declared public targets; inbound requests are 
 control = "CC6.7 data in transit"
 status = "met"
 rules = ["SEC4"]
-tests = ["crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it"]
-note = "Every listener serves TLS."
+tests = [
+  "crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it",
+  "crates/http/tests/tls.rs::tls_13_with_the_hybrid_group",
+  "crates/http/tests/tls.rs::an_ml_dsa_certificate_is_refused_at_start",
+]
+note = "Every listener serves TLS 1.3 with the hybrid key exchange group."
 
 [[control]]
 control = "CC6.8 unauthorized software"

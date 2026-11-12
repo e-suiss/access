@@ -28,8 +28,14 @@ note = "Per-request access decisions, MFA, and personal data sealed under per-su
 control = "Art. 9(4)(d) cryptographic controls"
 status = "partial"
 rules = ["SEC4", "TNI-2"]
-tests = ["crates/identity-signer/src/app/tests.rs::rotation_runs_without_gaps"]
-note = "Key rotation and HSM-held keys; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3."
+tests = [
+  "crates/identity-signer/src/app/tests.rs::rotation_runs_without_gaps",
+  "bins/access-server/src/bootstrap/tests/durability/hybrid.rs::a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components",
+  "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
+  "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
+  "bins/access-verify/tests/artefacts.rs::receipt_evidence_vectors",
+]
+note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3."
 
 [[control]]
 control = "Art. 10 detection"

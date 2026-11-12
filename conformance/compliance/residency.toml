@@ -19,6 +19,7 @@ rules = ["HL-17", "U54"]
 tests = [
   "bins/access-server/src/bootstrap/tests/placement.rs::tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_other_tenant_lands_there",
   "bins/access-server/src/bootstrap/tests/management/residency.rs::hl_17_the_durability_read_shows_shared_hosting_until_dedicated_is_declared",
+  "bins/access-server/src/bootstrap/tests/placement.rs::hl_17_domain_metadata_declares_shared_hosting_unless_the_provider_states_dedicated",
 ]
 note = "A silo move takes a tenant to a dedicated cell; the durability read shows shared hosting until dedicated is declared."
 

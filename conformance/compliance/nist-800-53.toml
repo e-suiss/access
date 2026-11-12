@@ -110,8 +110,12 @@ note = "Sessions end at their idle and absolute limits."
 control = "SC-8"
 status = "met"
 rules = ["SEC4"]
-tests = ["crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it"]
-note = "Every listener serves TLS."
+tests = [
+  "crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it",
+  "crates/http/tests/tls.rs::tls_13_with_the_hybrid_group",
+  "crates/http/tests/tls.rs::an_ml_dsa_certificate_is_refused_at_start",
+]
+note = "Every listener serves TLS 1.3 with the hybrid key exchange group; TLS 1.2 and an ML-DSA certificate on browser-facing TLS are refused."
 
 [[control]]
 control = "SC-12"
@@ -127,8 +131,12 @@ note = "Signing keys live in the signer process or an HSM and rotate without gap
 control = "SC-13"
 status = "partial"
 rules = ["SEC4"]
-tests = ["crates/suiss-crypto/src/pkcs11/tests.rs::token_aead_seals_and_opens"]
-note = "Classical algorithms through aws-lc-rs and PKCS#11; the FIPS 140-3 build profile waits on lane J3 and its image builds on CI only."
+tests = [
+  "crates/suiss-crypto/src/pkcs11/tests.rs::token_aead_seals_and_opens",
+  "bins/access-server/src/bootstrap/tests/durability/hybrid.rs::a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components",
+  "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
+]
+note = "Classical algorithms through aws-lc-rs and PKCS#11; a hybrid receipt verifies only with both components and the ML-DSA COSE layer needs a provider. The FIPS 140-3 build profile and realm post-quantum keys wait on lane J3; the FIPS image builds on CI only."
 
 [[control]]
 control = "SC-28"

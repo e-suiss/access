@@ -67,6 +67,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
   "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
   "bins/access-server/src/bootstrap/tests/redteam/enumeration.rs::as_19_the_login_identifier_and_password_steps_answer_the_same_for_every_account",
+  "crates/http/tests/login.rs::identifier_first_answers_are_padded_to_one_size_class",
 ]
 note = "NIST-aligned passwords, MFA, throttling, phishing-resistant passkeys, and answers that do not reveal accounts."
 
@@ -118,8 +119,11 @@ rules = ["SEC4", "U45", "SAI-42"]
 tests = [
   "crates/crypto/tests/dudect.rs::totp_matching_step",
   "crates/suiss-crypto/src/pkcs11/tests.rs::token_aead_seals_and_opens",
+  "bins/access-server/src/bootstrap/tests/durability/hybrid.rs::a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components",
+  "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
+  "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
 ]
-note = "Vetted primitives and constant-time comparisons by design; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3, and the timing measurements run on the bench runner."
+note = "Vetted primitives, a hybrid receipt carrier that needs both components and an ML-DSA COSE layer that needs a provider; realm post-quantum keys and the FIPS profile wait on lane J3, and the timing measurements run on the bench runner."
 
 [[control]]
 control = "V12 secure communication"
@@ -128,8 +132,10 @@ rules = ["SEC4"]
 tests = [
   "crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it",
   "crates/identity-oauth/src/adapters/outbound/tests.rs::targets_are_https_only",
+  "crates/http/tests/tls.rs::tls_13_with_the_hybrid_group",
+  "crates/http/tests/tls.rs::an_ml_dsa_certificate_is_refused_at_start",
 ]
-note = "TLS on every listener; outbound calls are HTTPS only."
+note = "TLS 1.3 with the hybrid key exchange group on every listener, a classical certificate on browser-facing TLS, and HTTPS-only outbound calls."
 
 [[control]]
 control = "V13 configuration"

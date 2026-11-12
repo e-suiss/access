@@ -79,8 +79,14 @@ note = "The product streams its records; monitoring them is the organization's."
 control = "A.8.24 use of cryptography"
 status = "partial"
 rules = ["SEC4", "TNI-2"]
-tests = ["crates/suiss-crypto/src/pkcs11/tests.rs::token_keys_sign_and_are_found_again"]
-note = "Classical algorithms and HSM-held keys; the post-quantum receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3."
+tests = [
+  "crates/suiss-crypto/src/pkcs11/tests.rs::token_keys_sign_and_are_found_again",
+  "bins/access-server/src/bootstrap/tests/durability/hybrid.rs::a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components",
+  "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
+  "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
+  "bins/access-verify/tests/artefacts.rs::receipt_evidence_vectors",
+]
+note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3."
 
 [[control]]
 control = "A.8.25 to A.8.29 secure development"

@@ -47,7 +47,7 @@ Edition: Regulation (EU) 2022/2554. Source: [`dora.toml`](dora.toml).
 |---|---|---|---|---|
 | Art. 6 ICT risk management framework | partial | SEC1 | 1 | The security model and its declared limits are inputs; the framework is the financial entity's. |
 | Art. 9 protection and prevention | met | G16, SEC10, U58 | 3 | Per-request access decisions, MFA, and personal data sealed under per-subject keys. |
-| Art. 9(4)(d) cryptographic controls | partial | SEC4, TNI-2 | 1 | Key rotation and HSM-held keys; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3. |
+| Art. 9(4)(d) cryptographic controls | partial | SEC4, TNI-2 | 5 | A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3. |
 | Art. 10 detection | met | U52, U70 | 2 | Tamper-evident audit records streamed to the entity's SIEM. |
 | Art. 11 response and recovery | met | U24, U10, SEC21 | 1 | Forced recovery from witnesses and exported records, without the provider. |
 | Art. 12 backup and restoration | met | U24 | 1 | The restore drill runs its nine items on a point-in-time restore. |
@@ -119,7 +119,7 @@ Edition: 2022, Annex A. Source: [`iso-27001.toml`](iso-27001.toml).
 | A.8.5 secure authentication | met | SEC10, HL-23 | 2 | Phishing-resistant passkeys, MFA as the realm requires, and throttled failures. |
 | A.8.15 logging | met | U52, U53 | 1 | A tamper-evident audit log, never sampled. |
 | A.8.16 monitoring activities | partial | U53 | 1 | The product streams its records; monitoring them is the organization's. |
-| A.8.24 use of cryptography | partial | SEC4, TNI-2 | 1 | Classical algorithms and HSM-held keys; the post-quantum receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3. |
+| A.8.24 use of cryptography | partial | SEC4, TNI-2 | 5 | A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3. |
 | A.8.25 to A.8.29 secure development | met | U56, OP-3-G3 | 2 | Gated test layers, pinned dependencies and actions, and releases only after vectors and proofs pass. |
 | ISMS certification | n/a |  | 0 | Certification applies to an organization's management system, not to a product. |
 
@@ -136,7 +136,7 @@ Edition: Directive (EU) 2022/2555. Source: [`nis2.toml`](nis2.toml).
 | Art. 21(2)(e) secure development and vulnerability handling | met | U56, OP-70 | 3 | Gated test layers, a published security.txt and disclosure policy, and five years of security fixes per major. |
 | Art. 21(2)(f) effectiveness assessment | partial | SEC1 | 1 | Formal and test evidence is published with its scope; the crystal-box audit by an external firm waits on Adem. |
 | Art. 21(2)(g) cyber hygiene and training | n/a |  | 0 | Training is the entity's own measure. |
-| Art. 21(2)(h) cryptography | partial | SEC4, TNI-2 | 2 | Classical cryptography with HSM-held keys and a post-quantum re-anchor; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3. |
+| Art. 21(2)(h) cryptography | partial | SEC4, TNI-2 | 6 | A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3. |
 | Art. 21(2)(i) access control and asset management | met | G16, TNI-3 | 1 | Access is decided per request; tenant rows are separated by forced row-level security. |
 | Art. 21(2)(j) multi-factor authentication | met | SEC10, HL-23 | 2 | MFA as the realm requires, with phishing-resistant passkeys. |
 | Art. 23 reporting obligations | partial |  | 1 | The 24-hour, 72-hour and one-month deadlines are computed by the PSIRT tool; the report to the national CSIRT is the entity's. |
@@ -159,9 +159,9 @@ Edition: Rev. 5, FedRAMP baseline source. Source: [`nist-800-53.toml`](nist-800-
 | IA-5(1) | met | U69 | 2 | Passwords are screened, hashed with Argon2id and rehashed when parameters rise. |
 | AC-7 | met | U46 | 1 | Consecutive failures wait longer each time and lock at 100. |
 | AC-12 | met | G57 | 1 | Sessions end at their idle and absolute limits. |
-| SC-8 | met | SEC4 | 1 | Every listener serves TLS. |
+| SC-8 | met | SEC4 | 3 | Every listener serves TLS 1.3 with the hybrid key exchange group; TLS 1.2 and an ML-DSA certificate on browser-facing TLS are refused. |
 | SC-12 | met | TNI-2, U42 | 2 | Signing keys live in the signer process or an HSM and rotate without gaps. |
-| SC-13 | partial | SEC4 | 1 | Classical algorithms through aws-lc-rs and PKCS#11; the FIPS 140-3 build profile waits on lane J3 and its image builds on CI only. |
+| SC-13 | partial | SEC4 | 3 | Classical algorithms through aws-lc-rs and PKCS#11; a hybrid receipt verifies only with both components and the ML-DSA COSE layer needs a provider. The FIPS 140-3 build profile and realm post-quantum keys wait on lane J3; the FIPS image builds on CI only. |
 | SC-28 | met | U58, U69 | 2 | Personal data is sealed under per-subject keys wrapped by a KEK; destroying the key makes it unreadable. |
 
 ## NIST SP 800-63-4
@@ -208,13 +208,13 @@ Edition: 5.0.0, chapter level; target L3 identity plane, L2 other components. So
 | V3 web frontend security | met | SA-21 | 3 | Pages cannot be framed, carry a content security policy, and writes need the origin and the session's CSRF token. |
 | V4 API and web service | met | SEC28 | 2 | Rate limits refuse before the body is read; problems are RFC 9457 documents. |
 | V5 file handling | met | U22 | 2 | Uploads are text only, redacted, bounded by the realm's limit and read under their own grant. |
-| V6 authentication | met | SEC10, U69, U46, SAI-5 | 3 | NIST-aligned passwords, MFA, throttling, phishing-resistant passkeys, and answers that do not reveal accounts. |
+| V6 authentication | met | SEC10, U69, U46, SAI-5 | 4 | NIST-aligned passwords, MFA, throttling, phishing-resistant passkeys, and answers that do not reveal accounts. |
 | V7 session management | met | G57, U35 | 2 | Idle and absolute limits, epochs that end every token, and back-channel logout. |
 | V8 authorization | met | G16, G48, U59 | 2 | Every consequential action is decided by the Kernel; unscoped queries return nothing. |
 | V9 self-contained tokens | met | G46, G61 | 2 | Tokens are sender-constrained and signed only with published keys. |
 | V10 OAuth and OIDC | met | G58 | 3 | PKCE for every client, exact redirect URIs, DPoP, and refresh rotation with reuse detection. |
-| V11 cryptography | partial | SEC4, U45, SAI-42 | 2 | Vetted primitives and constant-time comparisons by design; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3, and the timing measurements run on the bench runner. |
-| V12 secure communication | met | SEC4 | 2 | TLS on every listener; outbound calls are HTTPS only. |
+| V11 cryptography | partial | SEC4, U45, SAI-42 | 5 | Vetted primitives, a hybrid receipt carrier that needs both components and an ML-DSA COSE layer that needs a provider; realm post-quantum keys and the FIPS profile wait on lane J3, and the timing measurements run on the bench runner. |
+| V12 secure communication | met | SEC4 | 4 | TLS 1.3 with the hybrid key exchange group on every listener, a classical certificate on browser-facing TLS, and HTTPS-only outbound calls. |
 | V13 configuration | met | OP-49, OP-3-G3 | 2 | No secrets in the repository, a sandboxed process, and distroless images. |
 | V14 data protection | met | U58, SAI-8 | 2 | Per-subject keys for personal data, redacted support artefacts, and secrets that never print. |
 | V15 secure coding and architecture | met | SA-21, OP-93 | 2 | Enforced dependency direction, no request-path panics, and hardened builds. |
@@ -273,7 +273,7 @@ Edition: Access placement and residency settings. Source: [`residency.toml`](res
 | Control | Status | Rows | Tests | Note |
 |---|---|---|---|---|
 | Declared region | met | TNI-3 | 1 | A realm declares residency only in its cell's region and reads it back. |
-| Dedicated placement | met | HL-17, U54 | 2 | A silo move takes a tenant to a dedicated cell; the durability read shows shared hosting until dedicated is declared. |
+| Dedicated placement | met | HL-17, U54 | 3 | A silo move takes a tenant to a dedicated cell; the durability read shows shared hosting until dedicated is declared. |
 | Cross-region copies | partial | HL-17 | 1 | Export sinks, witnesses and replicas the operator configures may sit in other regions; choosing them is the operator's. |
 | Restore scope | not-claimed | N-58 | 0 | Restores are whole-database; restoring one tenant or realm alone is not offered (N-58, HL-32). |
 
@@ -287,7 +287,7 @@ Edition: Trust Services Criteria 2017 (rev. 2022). Source: [`soc2.toml`](soc2.to
 | CC6.2 registration and authorization of users | met | IDI-2, G28 | 1 | Joiners, movers and leavers move through rule-shaped authority and recorded offboarding. |
 | CC6.3 role and attribute changes | met | G4, G28 | 1 | A change of access is an Exercise; deactivation ends sessions in the same transaction. |
 | CC6.6 boundary protection | met | SEC4 | 2 | Outbound calls reach only declared public targets; inbound requests are rate limited before their bodies are read. |
-| CC6.7 data in transit | met | SEC4 | 1 | Every listener serves TLS. |
+| CC6.7 data in transit | met | SEC4 | 3 | Every listener serves TLS 1.3 with the hybrid key exchange group. |
 | CC6.8 unauthorized software | met | OP-3-G3, OP-49 | 2 | Dependencies are vetted and pinned, actions are pinned by digest, and images are distroless. |
 | CC7.1 detection of configuration changes | met | OPI-6, U70 | 1 | Every configuration change is an audited Exercise in a tamper-evident log. |
 | CC7.2 monitoring | partial | U53 | 1 | Audit and telemetry stream to the operator's SIEM; watching them is the operator's. |
