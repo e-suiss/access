@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:compliance-map:1",
+  "title": "Access compliance mapping (OP-159 m.3 (ii), SA-53)",
+  "description": "One framework's controls, each bound to catalog rows and existing tests. A mapping adds no claim; `met` names at least one test. Files live in conformance/compliance/.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "framework"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "framework": {
+      "type": "string",
+      "minLength": 1
+    },
+    "edition": {
+      "type": "string",
+      "minLength": 1
+    },
+    "control": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "control",
+          "status",
+          "rules",
+          "tests"
+        ],
+        "properties": {
+          "control": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "met",
+              "partial",
+              "not-claimed",
+              "n/a"
+            ]
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "if": {
+          "properties": {
+            "status": {
+              "const": "met"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "tests": {
+              "minItems": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

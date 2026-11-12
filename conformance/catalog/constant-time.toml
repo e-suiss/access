@@ -1,0 +1,12 @@
+# CR-39, CR-40, OP-159 m.3 (s)
+#
+# [[point]]
+# id        constant-time point of CR-39 m.1 ([ID] and [AU])
+# function  the function that holds the secret comparison or branch
+# secret    the Secret<N> or ct_eq use it relies on
+# measured  the dudect target or ctgrind test that measures it
+#
+# Lane J4 fills the points; xtask `constant-time-points` refuses a point without a function or a
+# measurement.
+
+version = 1

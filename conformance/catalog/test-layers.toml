@@ -1,0 +1,17 @@
+# SA-T1…SA-T18, SA-59, OP-159 m.3 (bb)
+#
+# [[layer]]
+# id       SA-Tn layer
+# content  what the layer tests
+# cadence  pr | nightly | weekly | release
+# phase    the build phase the layer is active from
+# recipe   the just recipe that runs it, or
+# job      the CI job that runs it
+# status   active | planned
+# rules    catalog rows the layer carries
+#
+# Lane J7 fills the layers; xtask `test-layers` checks every recipe and job exists and phase 0–1
+# layers are active.
+# Schema: conformance/schemas/test-layers.schema.json
+
+version = 1

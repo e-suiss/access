@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:test-layers:1",
+  "title": "Access test layers (OP-159 m.3 (bb), SA-59)",
+  "description": "Every SA-T test layer with its content, cadence, phase, the recipe or CI job that runs it and its status. The TOML file is conformance/catalog/test-layers.toml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "layer": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "content",
+          "cadence",
+          "phase",
+          "status",
+          "rules"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^SA-T[0-9]+$"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cadence": {
+            "enum": [
+              "pr",
+              "nightly",
+              "weekly",
+              "release"
+            ]
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recipe": {
+            "type": "string",
+            "minLength": 1
+          },
+          "job": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "active",
+              "planned"
+            ]
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "recipe"
+            ]
+          },
+          {
+            "required": [
+              "job"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "planned"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

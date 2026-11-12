@@ -1,0 +1,10 @@
+# §13.2, SA-7, SEC5, OP-159 m.3 (gg)
+#
+# name          the component as the trust model names it
+# trust         what it is trusted with
+# not_trusted   what it is never trusted with
+# blast_radius  the widest result when it is fully malicious
+# never         what it can never do (the semantic boundary)
+# containment   the attributable lever that stops it
+# rows          catalog rows that carry the boundary
+# tests         tests that exercise the boundary on the real path

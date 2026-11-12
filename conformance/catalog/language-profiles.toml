@@ -1,0 +1,10 @@
+# MD-2, SA-20, R-1…R-7, OP-159 m.3 (dd)
+#
+# [[cell]]
+# rule       R-n of MD-2
+# language   rust | typescript | c-ffi
+# mechanism  the lint, xtask rule or CI step that enforces it
+#
+# Lane J7 fills the cells; xtask `language-profiles` refuses an empty or missing mechanism.
+
+version = 1

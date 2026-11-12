@@ -1,0 +1,19 @@
+# CR-46, CR-50, MD-15, X41, OP-159 m.3 (y)
+#
+# [[target]]
+# target            what is checked: a module, function or model
+# tool              lean | kani | tla | drt | planned tool name
+# property          the property, in the words of the scope claim
+# rules             catalog rows the property carries
+# status            planned | modelled | proved | DRT-linked
+# assumptions       what the check assumes (bounds, stubs, trusted code)
+# scope             what is inside and outside the check
+# semantic_version  the Kernel semantic version the check holds for
+# evidence          the proof, harness, model and .cfg, or nightly summary that backs the status
+#
+# [[out_of_scope]]  parts declared outside every model, with the hard limit that says so
+#
+# Lane J6 fills the targets; xtask `formal-manifest` checks every status against its evidence.
+# Schema: conformance/schemas/formal-manifest.schema.json
+
+version = 1

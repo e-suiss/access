@@ -1,0 +1,16 @@
+# OP-68, B20, OP-159 m.3 (jj)
+#
+# major_support_years  security fixes for each major, from its release day
+# supported_minors     minors of one major that receive fixes
+# branch               the maintenance branch pattern a release is tagged from
+#
+# [[versions]]
+# version         major.minor
+# released        release date
+# security_until  last day of security fixes
+# status          supported | end-of-life
+#
+# Lane J10 fills the values; xtask `support-policy` checks SECURITY.md's table against this file.
+# Schema: conformance/schemas/support-policy.schema.json
+
+version = 1

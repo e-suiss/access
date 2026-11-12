@@ -9,6 +9,10 @@ This folder is the conformance layer of the Access Protocol: the data model, the
 | [`reference/f0/`](reference/f0) | F0, a naive reference evaluator written from the protocol text alone |
 | [`lean/`](lean) | An executable Lean model of the constraint algebra with machine-checked proofs |
 | [`catalog/`](catalog) | Invariants, guarantees and claims the vectors and tests are traced to |
+| [`formal/`](formal) | The formal verification manifest: every machine-checked property with its tool, scope and evidence |
+| [`threat/`](threat) | PASTA walks of the high-impact flows and their attack trees |
+| [`compliance/`](compliance) | Mappings from framework controls to the guarantee rows and tests that back them |
+| [`schemas/`](schemas) | JSON Schemas of the manifest, mapping, trust model, test layer, support policy and evidence pack files |
 | [`pep/`](pep) | PEP fault cases and a language-independent runner: no upstream fault may produce an effect |
 | [`interop/`](interop) | The interop lab: the systems Access is tested against, the public [compatibility table](interop/COMPATIBILITY.md) and the differential tests |
 

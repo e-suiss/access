@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:support-policy:1",
+  "title": "Access support policy (OP-159 m.3 (jj), OP-68)",
+  "description": "How long each major receives security fixes, how many minors are supported and the supported versions table SECURITY.md is generated from. The TOML file is conformance/catalog/support-policy.toml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "major_support_years": {
+      "type": "integer",
+      "minimum": 5
+    },
+    "supported_minors": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "versions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "released",
+          "security_until",
+          "status"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+$"
+          },
+          "released": {
+            "type": "string",
+            "format": "date"
+          },
+          "security_until": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "enum": [
+              "supported",
+              "end-of-life"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

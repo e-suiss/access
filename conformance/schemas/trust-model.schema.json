@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:trust-model:1",
+  "title": "Access trust model (OP-159 m.3 (gg), SEC5, SA-7)",
+  "description": "Every component of §13.2 and SA-7 with what it is trusted with, what it never does and the lever that contains it. The TOML file is conformance/catalog/trust-model.toml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "component": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "trust",
+          "not_trusted",
+          "blast_radius",
+          "never",
+          "containment",
+          "rows"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trust": {
+            "type": "string",
+            "minLength": 1
+          },
+          "not_trusted": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blast_radius": {
+            "type": "string",
+            "minLength": 1
+          },
+          "never": {
+            "type": "string",
+            "minLength": 1
+          },
+          "containment": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}
