@@ -186,7 +186,8 @@ pub fn with_cell(
     declared
 }
 
-/// Publishes a cell's `durability` and `residency` in `domain`'s Domain Metadata through the
+/// Publishes a cell's `durability` and `residency`, and the provider's `hosting` (HL-8, HL-17,
+/// OP-159 m.3 (s)), in `domain`'s Domain Metadata through the
 /// authority signer at `signer`, keeping every other declaration (HL-40, OP-158 m.3 (p)): a
 /// single-node cell says so, and nothing it declares about itself grants a SEC23
 /// acknowledgement without a declared replica and an independent witness. Returns whether the
@@ -199,15 +200,17 @@ pub async fn declare_cell(
     domain: Digest,
     (durability, residency): (Durability, Option<Residency>),
     canonical: &access_kernel::meta::RootSets,
+    hosting: access_kernel::verify::key_scope::Hosting,
 ) -> Result<bool, String> {
     use access_authority_signer::adapters::call;
     use access_authority_signer::protocol::{Request, Response};
     let declared = declared(signer, domain).await?;
     // OP-159 m.3 (j), m.16 (e)
-    let wanted = crate::app::reanchor::canonical_only(
+    let mut wanted = crate::app::reanchor::canonical_only(
         &with_cell(declared.clone(), durability, residency),
         canonical,
     );
+    wanted.hosting = Some(hosting);
     if wanted == declared {
         return Ok(false);
     }

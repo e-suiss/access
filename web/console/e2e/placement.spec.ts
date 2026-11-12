@@ -1,4 +1,4 @@
-// TI-17, CMP-26, HL-40, OP-158 m.3 (o), (p): Settings ▸ Placement and Durability over mocked
+// TI-17, CMP-26, HL-40, HL-8, HL-17, OP-158 m.3 (o), (p), OP-159 m.3 (s): Settings ▸ Placement and Durability over mocked
 // management answers; the placement, residency, rehome ends and declarations are the server's
 // (bins/access-server placement tests).
 import AxeBuilder from "@axe-core/playwright";
@@ -127,4 +127,35 @@ test("the durability screen shows the last post-quantum anchor and claims nothin
   await expect(page.getByTestId("durability")).not.toContainText(
     /quantum[- ]safe|continuity|proves/i,
   );
+});
+
+// HL-8, HL-17, DL-10, OP-159 m.3 (s)
+test("the durability screen shows the co-tenant risk when the hosting is shared or undeclared", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/durability");
+  const hosting = page.getByTestId("durability-hosting");
+  await expect(hosting).toHaveAttribute("data-hsm", "shared");
+  await expect(hosting).toHaveAttribute("data-compute", "shared");
+  await expect(hosting).toContainText("Shared HSM partition: co-tenant risk applies");
+  await expect(hosting).toContainText("Shared compute: co-tenant risk applies");
+  bff.admin.set("realms/acme/durability", {
+    durability: "replicated",
+    class: "regional",
+    region: "eu-central",
+    dr_profile: null,
+    rpo_s: 0,
+    governing_domain: "ZG9tYWluLWlk",
+    witnesses: [],
+    replicas: [],
+    declared_durability: "replicated",
+    acknowledges: false,
+    hosting: { hsm_partition: "dedicated", compute: "shared" },
+  });
+  await page.reload();
+  await expect(hosting).toHaveAttribute("data-hsm", "dedicated");
+  await expect(hosting).toContainText("Dedicated HSM partition");
+  await expect(hosting).toContainText("Shared compute: co-tenant risk applies");
+  expect(bff.writes).toEqual([]);
 });

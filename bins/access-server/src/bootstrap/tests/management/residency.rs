@@ -107,3 +107,19 @@ async fn op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_
     assert_eq!(d["durability"], "single-node");
     assert_eq!(d["rpo_s"], serde_json::Value::Null);
 }
+
+// HL-8, HL-17, DL-10, OP-159 m.3 (s), Ek B 6237
+#[tokio::test]
+async fn hl_17_the_durability_read_shows_shared_hosting_until_dedicated_is_declared() {
+    let c = console("j4-hosting", false).await;
+    placement::declare_cell(&c.w.db.app, &cell("regional"))
+        .await
+        .unwrap();
+    let (s, d, _) = c.rest_read("/admin/v1/realms/acme/durability").await;
+    assert_eq!(s, StatusCode::OK, "{d}");
+    assert_eq!(
+        d["hosting"],
+        serde_json::json!({ "hsm_partition": "shared", "compute": "shared" }),
+        "{d}"
+    );
+}

@@ -267,6 +267,8 @@ fn realm_view(ids: &IdKey, m: &RealmMeta) -> Result<Value, Unavailable> {
         "budget": budget_view(m.sandbox),
         "created_at": rfc3339(m.created_ms),
         "signing_available_at": rfc3339(signing_available_ms(m.created_ms)),
+        // CR-12 m.3, OP-159 m.3 (t)
+        "kex_share": m.kex_share,
     }))
 }
 
@@ -370,6 +372,8 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                             "key_state".to_owned(),
                             json!(key_state(&self.keys, m, now).await),
                         );
+                        // HL-8, HL-17, OP-159 m.3 (s)
+                        o.insert("hosting".to_owned(), self.hosting(m.domain).await);
                     }
                     return Ok(Some(Listing {
                         items: vec![Item { body, version: 0 }],
@@ -572,6 +576,8 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         "key_state".to_owned(),
                         json!(key_state(&self.keys, m, crate::admin::WallClock::now()).await),
                     );
+                    // HL-8, HL-17, OP-159 m.3 (s)
+                    o.insert("hosting".to_owned(), self.hosting(m.domain).await);
                     // TN-111, §13.6, §13.7.7, OP-158 m.3 (m)
                     let mut genesis = json!({
                         "digest": b64url_encode(&domain.0),

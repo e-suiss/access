@@ -192,3 +192,19 @@ fn traceparent_rides_along() {
     let long = "0".repeat(56);
     assert_eq!(encode_request_traced(&r, Some(&long)).unwrap(), plain);
 }
+
+// HL-8, HL-17, OP-159 m.3 (s), m.4 (b) (J4)
+#[test]
+fn declared_hosting_round_trips() {
+    use access_kernel::verify::key_scope::{Hosting, Sharing};
+    let r = Request::Declare {
+        domain: Digest([7; 32]),
+        declared: Box::new({
+            let mut d = crate::domain::declared_default();
+            d.hosting = Some(Hosting::new(Sharing::Dedicated, Sharing::Shared));
+            d
+        }),
+    };
+    let f = encode_request(&r).unwrap();
+    assert_eq!(decode_request(&f[4..]).unwrap(), r);
+}

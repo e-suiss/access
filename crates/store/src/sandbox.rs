@@ -150,6 +150,8 @@ pub struct RealmMeta {
     pub created_ms: u64,
     /// Its sandbox budget, for a sandbox realm.
     pub sandbox: Option<Budget>,
+    /// Its hybrid key share policy, `optimistic` or `advertise-only` (CR-12 m.3, OP-159 m.3 (t)).
+    pub kex_share: String,
 }
 
 /// The live realms: the one with slug `slug`, or those of `tenant` after the slug `after`, at
@@ -201,7 +203,7 @@ pub async fn realms(
         let tenant = TenantId::from_bytes(*r.tenant_id.as_bytes());
         let mut t = TenantTx::begin_tenant(app, tenant).await?;
         let own = sqlx::query!(
-            r#"SELECT r.placement_id, r.governing_domain_id,
+            r#"SELECT r.placement_id, r.governing_domain_id, r.kex_share,
                       (extract(epoch FROM r.created_at) * 1000)::bigint AS "created_ms!",
                       s.exercises_per_day AS "exercises_per_day?",
                       s.projections_per_day AS "projections_per_day?"
@@ -231,6 +233,7 @@ pub async fn realms(
                 .map_err(|_| StoreError::Corrupt)?,
             created_ms: unsigned(own.created_ms)?,
             sandbox,
+            kex_share: own.kex_share,
         });
     }
     Ok(out)

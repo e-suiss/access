@@ -134,6 +134,8 @@ pub const REALM_FIELDS: &[&str] = &[
     "created_at",
     "key_state",
     "signing_available_at",
+    "kex_share",
+    "hosting",
 ];
 
 /// The members the health summary may show.

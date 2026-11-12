@@ -124,6 +124,46 @@ pub(crate) struct Config {
     /// The deployment's cells and the one this process serves (OP-158 m.3 (o), (p)).
     #[serde(default)]
     pub(crate) cells: Cells,
+    /// Whether the HSM partition and the compute are shared with other tenants (HL-8, HL-17,
+    /// DL-10, OP-159 m.3 (s)); unset reads as shared.
+    #[serde(default)]
+    pub(crate) hosting: Hosting,
+}
+
+/// Whether a hosting resource is shared with other tenants (OP-159 m.3 (s)).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Sharing {
+    /// Shared; the co-tenant risk applies.
+    #[default]
+    Shared,
+    /// Dedicated to this provider install.
+    Dedicated,
+}
+
+/// The `[hosting]` section (HL-8, HL-17, DL-10, OP-159 m.3 (s)). What is not stated is shared:
+/// the reading that declares the risk.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Hosting {
+    /// The HSM partition.
+    #[serde(default)]
+    pub(crate) hsm_partition: Sharing,
+    /// The compute the signers run on.
+    #[serde(default)]
+    pub(crate) compute: Sharing,
+}
+
+impl Hosting {
+    /// The declaration Domain Metadata publishes.
+    pub(crate) fn declared(self) -> access_kernel::verify::key_scope::Hosting {
+        use access_kernel::verify::key_scope::Sharing as K;
+        let k = |s: Sharing| match s {
+            Sharing::Shared => K::Shared,
+            Sharing::Dedicated => K::Dedicated,
+        };
+        access_kernel::verify::key_scope::Hosting::new(k(self.hsm_partition), k(self.compute))
+    }
 }
 
 /// The cell placement grammar (OP-40).
@@ -1042,6 +1082,7 @@ impl Default for Config {
             transparency: Transparency::default(),
             upgrade: Upgrade::default(),
             cells: Cells::default(),
+            hosting: Hosting::default(),
         }
     }
 }
@@ -1055,6 +1096,10 @@ pub(crate) enum ConfigError {
     NoSecurityContact,
     #[error("security_txt_valid_days must be between 1 and 364")]
     SecurityTxtValidity,
+    #[error(
+        "provider.hsm_partition_shared contradicts hosting.hsm_partition (HL-8, OP-159 m.3 (s))"
+    )]
+    Hosting,
     #[error("tls.cert_file and tls.key_file are required: the server speaks TLS 1.3 only (CR-12)")]
     NoTls,
     #[error("issuer is required and must be an https URL without a trailing slash (L1-ADP-11)")]
@@ -1218,8 +1263,8 @@ impl Config {
         if !(1..=364).contains(&self.security_txt_valid_days) {
             return Err(ConfigError::SecurityTxtValidity);
         }
-        // OP-148, OP-151 m.3 (b), §17.9.6
-        check_listeners(self)?;
+        // OP-148, OP-151 m.3 (b), §17.9.6, OP-159 m.3 (s)
+        check_listeners(self).and_then(|()| self.check_hosting())?;
         // OP-156 m.3 (j)
         if self.doorbell.as_ref().is_some_and(|d| !d.valid()) {
             return Err(ConfigError::Doorbell);
@@ -1323,6 +1368,20 @@ impl Config {
                 || access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err())
         {
             return Err(ConfigError::BreachRangeApi);
+        }
+        Ok(())
+    }
+
+    /// The provider's HSM partition statement agrees with `[hosting]` (HL-8, CR-30, OP-159
+    /// m.3 (s)).
+    fn check_hosting(&self) -> Result<(), ConfigError> {
+        let shared = self.hosting.hsm_partition == Sharing::Shared;
+        if self
+            .provider
+            .hsm_partition_shared
+            .is_some_and(|s| s != shared)
+        {
+            return Err(ConfigError::Hosting);
         }
         Ok(())
     }
@@ -1443,6 +1502,40 @@ mod tests {
     #[test]
     fn defaults_with_tls_are_valid() {
         with_tls().validate().unwrap();
+    }
+
+    // HL-8, HL-17, CR-30, OP-159 m.3 (s)
+    #[test]
+    fn an_unstated_hosting_is_shared_and_a_contradiction_is_refused() {
+        use access_kernel::verify::key_scope::{Hosting as Declared, Sharing as S};
+        let c = with_tls();
+        assert_eq!(c.hosting.declared(), Declared::new(S::Shared, S::Shared));
+        let dedicated = Hosting {
+            hsm_partition: Sharing::Dedicated,
+            compute: Sharing::Dedicated,
+        };
+        assert_eq!(
+            dedicated.declared(),
+            Declared::new(S::Dedicated, S::Dedicated)
+        );
+        for (stated, hosting, ok) in [
+            (Some(true), Hosting::default(), true),
+            (Some(false), dedicated, true),
+            (None, dedicated, true),
+            (Some(false), Hosting::default(), false),
+            (Some(true), dedicated, false),
+        ] {
+            let mut c = with_tls();
+            c.provider.hsm_partition_shared = stated;
+            c.hosting = hosting;
+            assert_eq!(c.validate().is_ok(), ok, "{stated:?} {hosting:?}");
+            if !ok {
+                assert!(matches!(c.validate(), Err(ConfigError::Hosting)));
+            }
+        }
+        let toml: Hosting = toml::from_str("hsm_partition = \"dedicated\"").unwrap();
+        assert_eq!(toml.compute, Sharing::Shared);
+        assert!(toml::from_str::<Hosting>("compute = \"private\"").is_err());
     }
 
     // TN-36, OP-146 m.14 (c)

@@ -2307,6 +2307,8 @@ async fn serve(
             },
             // HL-40, OP-158 m.3 (p)
             cell: cells::profile(config),
+            // HL-8, HL-17, OP-159 m.3 (s)
+            hosting: config.hosting.declared(),
         },
         move || led.led(),
     );

@@ -376,7 +376,36 @@ fn declared_value(d: &Declarations) -> Value {
             ]),
         ));
     }
+    // OP-159 m.3 (s), m.4 (b) (J4)
+    if let Some(h) = d.hosting {
+        let word = |s: access_kernel::verify::key_scope::Sharing| {
+            Value::text(match s {
+                access_kernel::verify::key_scope::Sharing::Shared => "shared",
+                access_kernel::verify::key_scope::Sharing::Dedicated => "dedicated",
+            })
+        };
+        entries.push((
+            "hosting",
+            map(vec![
+                ("hsm_partition", word(h.hsm_partition)),
+                ("compute", word(h.compute)),
+            ]),
+        ));
+    }
     map(entries)
+}
+
+// OP-159 m.3 (s), m.4 (b) (J4)
+fn sharing_of(v: Option<&Value>) -> Result<access_kernel::verify::key_scope::Sharing, FrameError> {
+    match v {
+        Some(Value::Text(t)) if t == "shared" => {
+            Ok(access_kernel::verify::key_scope::Sharing::Shared)
+        }
+        Some(Value::Text(t)) if t == "dedicated" => {
+            Ok(access_kernel::verify::key_scope::Sharing::Dedicated)
+        }
+        _ => Err(FrameError::Malformed),
+    }
 }
 
 fn text_of(v: Option<&Value>) -> Result<String, FrameError> {
@@ -474,6 +503,13 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
                 .iter()
                 .map(|n| text_of(Some(n)))
                 .collect::<Result<_, _>>()?,
+        ));
+    }
+    // OP-159 m.3 (s), m.4 (b) (J4)
+    if let Some(h) = v.get("hosting") {
+        d.hosting = Some(access_kernel::verify::key_scope::Hosting::new(
+            sharing_of(h.get("hsm_partition"))?,
+            sharing_of(h.get("compute"))?,
         ));
     }
     Ok(d)

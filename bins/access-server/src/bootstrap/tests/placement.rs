@@ -29,6 +29,10 @@ use tower::ServiceExt as _;
 use super::authzen::{PEP, Pdp, pdp};
 use super::*;
 
+fn unstated() -> access_kernel::verify::key_scope::Hosting {
+    crate::config::Hosting::default().declared()
+}
+
 fn socket(label: &str) -> PathBuf {
     std::env::temp_dir()
         .join(format!("abs-auth-{label}-{}", std::process::id()))
@@ -89,12 +93,12 @@ async fn hl_40_a_single_node_cell_publishes_it_and_acknowledges_no_revocation_wi
         Some(small.clone())
     );
     assert!(
-        crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small)
+        crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small, unstated())
             .await
             .unwrap()
     );
     assert!(
-        !crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small)
+        !crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small, unstated())
             .await
             .unwrap(),
         "a declared cell declares nothing again"
@@ -550,4 +554,45 @@ async fn a_witness_only_the_provider_declared_is_a_proposal_and_no_anchor_is_cla
     // SEC23
     let v = revoke(&p).await;
     assert_eq!(v["context"]["ack"], "pending", "{v}");
+}
+
+// HL-8, HL-17, DL-10, OP-159 m.3 (s), Ek B 6237
+#[tokio::test(flavor = "multi_thread")]
+async fn hl_17_domain_metadata_declares_shared_hosting_unless_the_provider_states_dedicated() {
+    use access_kernel::verify::key_scope::{Hosting, Sharing};
+    let label = "j4-hosting";
+    let p = pdp(label).await;
+    let cell = profile("pool-default", "replicated", None);
+    crate::cells::declare(&p.w.db.app, &cell).await.unwrap();
+    assert!(
+        crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &cell, unstated())
+            .await
+            .unwrap()
+    );
+    let declared = p.w.domains.declared(p.domain).await;
+    assert_eq!(
+        declared.hosting,
+        Some(Hosting::new(Sharing::Shared, Sharing::Shared))
+    );
+    assert!(declared.mmd.is_some(), "the other declarations stay");
+    let dedicated = crate::config::Hosting {
+        hsm_partition: crate::config::Sharing::Dedicated,
+        compute: crate::config::Sharing::Dedicated,
+    };
+    assert!(
+        crate::cells::declare_domain(
+            (&socket(label), &p.w.db.app),
+            p.domain,
+            &cell,
+            dedicated.declared()
+        )
+        .await
+        .unwrap()
+    );
+    let declared = p.w.domains.declared(p.domain).await;
+    assert_eq!(
+        declared.hosting,
+        Some(Hosting::new(Sharing::Dedicated, Sharing::Dedicated))
+    );
+    p.w.domains.release().await;
 }

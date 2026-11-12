@@ -315,6 +315,9 @@ pub(crate) struct Inputs {
     pub(crate) publisher: publish::Publisher,
     /// This cell's profile, which every led domain's metadata declares (HL-40, OP-158 m.3 (p)).
     pub(crate) cell: access_store::placement::CellProfile,
+    /// The provider's hosting, which every led domain's metadata declares (HL-8, HL-17,
+    /// OP-159 m.3 (s)).
+    pub(crate) hosting: access_kernel::verify::key_scope::Hosting,
 }
 
 impl Checkpointers {
@@ -333,6 +336,7 @@ impl Checkpointers {
             publication,
             publisher,
             cell,
+            hosting,
         } = inputs;
         let audit = tokio::spawn(async move {
             let signer = SignerNotes(identity_signer);
@@ -367,8 +371,13 @@ impl Checkpointers {
                 for domain in led() {
                     // HL-40, OP-158 m.3 (p)
                     if !declared.contains(&domain) {
-                        match crate::cells::declare_domain((&authority_signer, &app), domain, &cell)
-                            .await
+                        match crate::cells::declare_domain(
+                            (&authority_signer, &app),
+                            domain,
+                            &cell,
+                            hosting,
+                        )
+                        .await
                         {
                             Ok(_) => {
                                 declared.insert(domain);

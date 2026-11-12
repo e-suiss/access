@@ -707,6 +707,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         if let (Some(d), Some(o)) = (&declared, body.as_object_mut()) {
                             o.extend(d.clone());
                         }
+                        // HL-8, HL-17, OP-159 m.3 (s)
+                        if let (ResourceKind::Durability, Some(o)) = (q.kind, body.as_object_mut())
+                        {
+                            o.entry("hosting").or_insert_with(|| hosting_value(None));
+                        }
                         // §13.6, OP-158 m.3 (m)
                         if let (ResourceKind::Recovery, Some(o)) = (q.kind, body.as_object_mut()) {
                             o.insert(String::from("realm"), Value::String(q.slug.clone()));
@@ -744,6 +749,34 @@ impl<P> Realms<P> {
         let canonical = access_authority_core::adapters::canonical_sets(&self.app, Digest(d)).await;
         Some(declared_view(&declared, &canonical))
     }
+
+    /// The hosting the Domain Metadata of `domain` declares; shared when the signer does not
+    /// answer or nothing is declared (HL-8, HL-17, DL-10, OP-159 m.3 (s)).
+    pub(crate) async fn hosting(&self, domain: [u8; 32]) -> Value {
+        let declared = match self.authority_signer.as_deref() {
+            Some(signer) => access_authority_core::app::placement::declared(signer, Digest(domain))
+                .await
+                .ok()
+                .and_then(|d| d.hosting),
+            None => None,
+        };
+        hosting_value(declared)
+    }
+}
+
+/// `declared` as the realm reads show it; nothing declared reads as shared, the reading that
+/// declares the co-tenant risk (HL-8, HL-17, DL-10, OP-159 m.3 (s)).
+pub(crate) fn hosting_value(declared: Option<access_kernel::verify::key_scope::Hosting>) -> Value {
+    use access_kernel::verify::key_scope::{Hosting, Sharing};
+    let h = declared.unwrap_or(Hosting::new(Sharing::Shared, Sharing::Shared));
+    let word = |s: Sharing| match s {
+        Sharing::Shared => "shared",
+        Sharing::Dedicated => "dedicated",
+    };
+    serde_json::json!({
+        "hsm_partition": word(h.hsm_partition),
+        "compute": word(h.compute),
+    })
 }
 
 /// What the governing domain declares, as members of the durability read: each witness and
@@ -810,6 +843,8 @@ pub(crate) fn declared_view(
             })
         }),
     );
+    // HL-8, HL-17, OP-159 m.3 (s)
+    out.insert(String::from("hosting"), hosting_value(declared.hosting));
     out
 }
 

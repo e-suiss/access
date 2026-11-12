@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.placement_id, r.governing_domain_id,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.exercises_per_day AS \"exercises_per_day?\",\n                      s.projections_per_day AS \"projections_per_day?\"\n                 FROM access.realms r\n                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id\n                WHERE r.tenant_id = $1 AND r.realm_id = $2",
+  "query": "SELECT r.placement_id, r.governing_domain_id, r.kex_share,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.exercises_per_day AS \"exercises_per_day?\",\n                      s.projections_per_day AS \"projections_per_day?\"\n                 FROM access.realms r\n                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id\n                WHERE r.tenant_id = $1 AND r.realm_id = $2",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,23 @@
       },
       {
         "ordinal": 2,
+        "name": "kex_share",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "kex_share"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "created_ms!",
         "type_info": "Int8",
         "origin": "Expression"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "exercises_per_day?",
         "type_info": "Int8",
         "origin": {
@@ -43,7 +54,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "projections_per_day?",
         "type_info": "Int8",
         "origin": {
@@ -63,10 +74,11 @@
     "nullable": [
       false,
       false,
+      false,
       null,
       true,
       true
     ]
   },
-  "hash": "b23f38c99e31c2af3d188b5c99c9333034619a355cc5ecb4155f718b4bba3704"
+  "hash": "80ba949017ee93b1ac533a976313275f0912fd4c61701246093ee0fbbd1c7305"
 }

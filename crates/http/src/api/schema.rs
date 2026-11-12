@@ -46,8 +46,48 @@ fn with_workload_clients(mut schemas: Value) -> Value {
     schemas
 }
 
+/// OP-159 m.3 (s), (t): the realm's key share policy and the hosting its domain declares.
+fn with_hosting(mut schemas: Value) -> Value {
+    let hosting = r("schemas", "Hosting");
+    for (at, members) in [
+        (
+            "/RealmMetadata/properties",
+            vec![
+                (
+                    "kex_share",
+                    json!({ "type": "string", "enum": ["optimistic", "advertise-only"], "description": "Its hybrid key share policy: SDK clients send the X25519MLKEM768 key share first, or list it and let the server retry to it (CR-12 m.3, OP-159 m.3 (t))." }),
+                ),
+                ("hosting", hosting.clone()),
+            ],
+        ),
+        ("/Durability/properties", vec![("hosting", hosting)]),
+    ] {
+        if let Some(p) = schemas.pointer_mut(at).and_then(Value::as_object_mut) {
+            for (k, v) in members {
+                p.insert(String::from(k), v);
+            }
+        }
+    }
+    if let Some(m) = schemas.as_object_mut() {
+        m.insert(
+            String::from("Hosting"),
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["hsm_partition", "compute"],
+                "description": "Whether the HSM partition and the compute are shared with other tenants, as the governing domain's metadata declares; undeclared reads as shared, and on shared hardware the co-tenant side-channel risk applies (HL-8, HL-17, DL-10, OP-159 m.3 (s)).",
+                "properties": {
+                    "hsm_partition": { "type": "string", "enum": ["shared", "dedicated"] },
+                    "compute": { "type": "string", "enum": ["shared", "dedicated"] },
+                },
+            }),
+        );
+    }
+    schemas
+}
+
 fn schemas() -> Value {
-    let mut out = base_schemas();
+    let mut out = with_hosting(base_schemas());
     if let Some(m) = out.as_object_mut() {
         // OP-159 m.4 (a)
         m.insert(

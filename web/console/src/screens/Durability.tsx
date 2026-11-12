@@ -4,6 +4,8 @@
 // replica, revocations are never shown as confirmed. OP-159 m.3 (g), (j), RR-35: the last
 // post-quantum anchor, or that there is none yet; a witness or replica only the provider
 // declared is a proposal until the root approves it, and it never counts before.
+// HL-8, HL-17, DL-10, OP-159 m.3 (s): whether the HSM partition and the compute are shared; an
+// undeclared hosting reads as shared and shows the co-tenant risk.
 import type { ReactElement } from "react";
 
 import { t } from "../i18n/index.js";
@@ -33,6 +35,10 @@ interface DurabilityView {
   readonly replicas?: readonly Declared[];
   readonly acknowledges?: boolean;
   readonly pq_reanchor?: PqReanchor | null;
+  readonly hosting?: {
+    readonly hsm_partition: "shared" | "dedicated";
+    readonly compute: "shared" | "dedicated";
+  };
 }
 
 function Parties({
@@ -96,6 +102,19 @@ export function Durability({ ctx }: { readonly ctx: Ctx }): ReactElement {
                     size: String(v.pq_reanchor.size),
                     time: at(v.pq_reanchor.time),
                   })}
+            </p>
+            <p
+              data-testid="durability-hosting"
+              data-hsm={v.hosting?.hsm_partition === "dedicated" ? "dedicated" : "shared"}
+              data-compute={v.hosting?.compute === "dedicated" ? "dedicated" : "shared"}
+            >
+              {v.hosting?.hsm_partition === "dedicated"
+                ? t("hostingDedicatedHsm")
+                : t("hostingSharedHsm")}
+              {" · "}
+              {v.hosting?.compute === "dedicated"
+                ? t("hostingDedicatedCompute")
+                : t("hostingSharedCompute")}
             </p>
             {v.acknowledges !== true && (
               <p role="status" data-testid="durability-unconfirmed">

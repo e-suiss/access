@@ -90,6 +90,7 @@ pub(crate) async fn declare_domain(
     (signer, app): (&Path, &Pool),
     domain: Digest,
     profile: &CellProfile,
+    hosting: access_kernel::verify::key_scope::Hosting,
 ) -> Result<bool, String> {
     let canonical = access_authority_core::adapters::canonical_sets(app, domain).await;
     access_authority_core::app::placement::declare_cell(
@@ -97,6 +98,7 @@ pub(crate) async fn declare_domain(
         domain,
         declared_of(profile),
         &canonical,
+        hosting,
     )
     .await
 }
