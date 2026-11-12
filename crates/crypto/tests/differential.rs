@@ -270,3 +270,200 @@ mod vectors {
         std::fs::write(dir.join("ml-dsa-random.json"), json).unwrap();
     }
 }
+
+#[cfg(test)]
+mod ml_dsa_layer {
+    use access_kernel::json::b64url_encode;
+    use access_kernel::verify::cose::{
+        ALG, Algorithm, CONTENT_TYPE, CoseError, KID, KeySet, PublicKey, to_be_signed, verify_sign1,
+    };
+    use access_kernel::verify::jws::{JwsError, Origin, verify_compact};
+    use access_kernel::verify::{Backend, PureBackend, SignatureError};
+    use aws_lc_rs::signature::{
+        KeyPair as _, ML_DSA_44, ML_DSA_65, ML_DSA_65_SIGNING, ML_DSA_87, PqdsaKeyPair,
+        UnparsedPublicKey,
+    };
+    use suiss_crypto::dcbor::{self, Limits, Value};
+
+    const CT: &str = "application/access-receipt+cbor";
+
+    struct PqBackend;
+
+    impl Backend for PqBackend {
+        fn ed25519(&self, public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.ed25519(public_key, message, signature)
+        }
+
+        fn p256(&self, public_key_sec1: &[u8], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.p256(public_key_sec1, message, signature)
+        }
+
+        fn ml_dsa(
+            &self,
+            alg: Algorithm,
+            public_key: &[u8],
+            message: &[u8],
+            signature: &[u8],
+        ) -> bool {
+            let verifier = match alg {
+                Algorithm::MlDsa44 => &ML_DSA_44,
+                Algorithm::MlDsa65 => &ML_DSA_65,
+                Algorithm::MlDsa87 => &ML_DSA_87,
+                _ => return false,
+            };
+            UnparsedPublicKey::new(verifier, public_key)
+                .verify(message, signature)
+                .is_ok()
+        }
+
+        fn supports(&self, _: Algorithm) -> bool {
+            true
+        }
+    }
+
+    fn pair() -> PqdsaKeyPair {
+        PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap()
+    }
+
+    fn sign(pair: &PqdsaKeyPair, message: &[u8]) -> Vec<u8> {
+        let mut sig = vec![0x5a; 3309];
+        let n = pair.sign(message, &mut sig).unwrap();
+        sig.truncate(n);
+        sig
+    }
+
+    fn sign1(
+        pair: &PqdsaKeyPair,
+        alg: i64,
+        payload: &[u8],
+        tamper: impl Fn(&mut Vec<u8>),
+    ) -> Vec<u8> {
+        let protected = dcbor::encode(
+            &Value::Map(vec![
+                (Value::Unsigned(ALG), Value::int(alg)),
+                (Value::Unsigned(CONTENT_TYPE), Value::text(CT)),
+                (Value::Unsigned(KID), Value::Bytes(vec![3; 32])),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap();
+        let mut sig = sign(pair, &to_be_signed(&protected, payload).unwrap());
+        tamper(&mut sig);
+        let body = Value::Array(vec![
+            Value::Bytes(protected),
+            Value::Map(vec![]),
+            Value::Bytes(payload.to_vec()),
+            Value::Bytes(sig),
+        ]);
+        [vec![0xd2], dcbor::encode(&body, Limits::CEILING).unwrap()].concat()
+    }
+
+    fn keys(pair: &PqdsaKeyPair, alg: Algorithm) -> KeySet {
+        let mut k = KeySet::default();
+        k.keys.insert(
+            [3; 32],
+            PublicKey::MlDsa(alg, pair.public_key().as_ref().to_vec()),
+        );
+        k.allowed.insert(Algorithm::MlDsa65);
+        k
+    }
+
+    // L0-SIG-8, L0-SIG-15, CR-41, OP-159 m.3 (c)
+    #[test]
+    fn an_ml_dsa_cose_sign1_verifies_only_with_a_provider() {
+        let p = pair();
+        let good = sign1(&p, -49, b"payload", |_| {});
+        let ks = keys(&p, Algorithm::MlDsa65);
+        let v = verify_sign1(&PqBackend, &good, &ks, CT).unwrap();
+        assert_eq!(
+            (v.algorithm, v.payload.as_slice()),
+            (Algorithm::MlDsa65, &b"payload"[..])
+        );
+        assert_eq!(
+            verify_sign1(&PureBackend, &good, &ks, CT).map(|_| ()),
+            Err(CoseError::Algorithm)
+        );
+        let mut narrow = ks.clone();
+        narrow.allowed.clear();
+        narrow.allowed.insert(Algorithm::Ed25519);
+        assert_eq!(
+            verify_sign1(&PqBackend, &good, &narrow, CT).map(|_| ()),
+            Err(CoseError::Algorithm)
+        );
+        let wrong = keys(&p, Algorithm::MlDsa44);
+        assert_eq!(
+            verify_sign1(&PqBackend, &good, &wrong, CT).map(|_| ()),
+            Err(CoseError::KeyType)
+        );
+        assert_eq!(
+            verify_sign1(&PqBackend, &good, &ks, "application/access-pap+cbor").map(|_| ()),
+            Err(CoseError::ContentType)
+        );
+        let flipped = sign1(&p, -49, b"payload", |s| s[0] ^= 1);
+        assert_eq!(
+            verify_sign1(&PqBackend, &flipped, &ks, CT).map(|_| ()),
+            Err(CoseError::Signature(SignatureError::Invalid))
+        );
+        let short = sign1(&p, -49, b"payload", |s| {
+            s.pop();
+        });
+        assert_eq!(
+            verify_sign1(&PqBackend, &short, &ks, CT).map(|_| ()),
+            Err(CoseError::Signature(SignatureError::Length))
+        );
+    }
+
+    // SAI-44, CR-42 m.2, OP-159 m.3 (u)
+    #[test]
+    fn composite_and_provisional_code_points_are_unknown() {
+        let p = pair();
+        let ks = keys(&p, Algorithm::MlDsa65);
+        for alg in -59..=-51 {
+            let s = sign1(&p, alg, b"payload", |_| {});
+            assert_eq!(
+                verify_sign1(&PqBackend, &s, &ks, CT).map(|_| ()),
+                Err(CoseError::Algorithm),
+                "{alg}"
+            );
+        }
+    }
+
+    fn jws(pair: &PqdsaKeyPair, alg: &str) -> String {
+        let h = b64url_encode(
+            format!(
+                r#"{{"alg":"{alg}","kid":"{}","typ":"TYP"}}"#,
+                b64url_encode(&[3; 32])
+            )
+            .as_bytes(),
+        );
+        let input = format!("{h}.{}", b64url_encode(b"{}"));
+        let sig = sign(pair, input.as_bytes());
+        format!("{input}.{}", b64url_encode(&sig))
+    }
+
+    // L0-SIG-8, CR-55 m.8, OP-159 m.3 (c)
+    #[test]
+    fn an_ml_dsa_jws_verifies_only_with_a_provider() {
+        let p = pair();
+        let ks = keys(&p, Algorithm::MlDsa65);
+        let token = jws(&p, "ML-DSA-65");
+        assert!(verify_compact(&PqBackend, &token, &ks, "TYP", Origin::Native).is_ok());
+        assert_eq!(
+            verify_compact(&PureBackend, &token, &ks, "TYP", Origin::Native).map(|_| ()),
+            Err(JwsError::Algorithm)
+        );
+        for composite in ["ML-DSA-65-Ed25519", "ML-DSA-65-ES256", "MLDSA65"] {
+            assert_eq!(
+                verify_compact(&PqBackend, &jws(&p, composite), &ks, "TYP", Origin::Native)
+                    .map(|_| ()),
+                Err(JwsError::Algorithm),
+                "{composite}"
+            );
+        }
+        let wrong = keys(&p, Algorithm::MlDsa44);
+        assert_eq!(
+            verify_compact(&PqBackend, &token, &wrong, "TYP", Origin::Native).map(|_| ()),
+            Err(JwsError::KeyType)
+        );
+    }
+}

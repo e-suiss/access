@@ -5,6 +5,7 @@ pub mod cose;
 pub mod dpop;
 pub mod jws;
 pub mod key_scope;
+pub mod ml_dsa;
 pub mod pq;
 pub mod projection;
 pub mod sd_jwt;

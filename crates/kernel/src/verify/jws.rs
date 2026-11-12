@@ -1,4 +1,5 @@
-//! Compact JWS and JWT claim checks (CR-55 m.8, m.9, CR-56).
+//! Compact JWS and JWT claim checks (CR-55 m.8, m.9, CR-56), with ML-DSA through the backend
+//! (OP-159 m.3 (c)).
 
 use alloc::vec::Vec;
 
@@ -159,6 +160,10 @@ fn check_signature(
             &parts.signature,
             origin == Origin::Native,
         )?,
+        // L0-SIG-8, OP-159 m.3 (c)
+        (PublicKey::MlDsa(a, pk), alg) if *a == alg => {
+            super::ml_dsa::signature(backend, alg, pk, input, &parts.signature)?;
+        }
         _ => return Err(JwsError::KeyType),
     }
     Ok(())
@@ -177,7 +182,7 @@ pub fn verify_compact(
 ) -> Result<Verified, JwsError> {
     let parts = split(token)?;
     let kid = parts.header.kid.ok_or(JwsError::Header)?;
-    if !keys.allowed.contains(&parts.header.alg) || !parts.header.alg.enabled() {
+    if !keys.allowed.contains(&parts.header.alg) || !backend.supports(parts.header.alg) {
         return Err(JwsError::Algorithm);
     }
     if parts.header.typ != typ {
@@ -208,7 +213,7 @@ pub fn verify_with_key(
     if parts.header.kid.is_some() {
         return Err(JwsError::Header);
     }
-    if !allowed.contains(&parts.header.alg) || !parts.header.alg.enabled() {
+    if !allowed.contains(&parts.header.alg) || !backend.supports(parts.header.alg) {
         return Err(JwsError::Algorithm);
     }
     if parts.header.typ != typ {
