@@ -2312,6 +2312,7 @@ pub mod projection;
 mod proofs;
 pub mod proxy;
 pub mod publishing;
+pub mod reanchor;
 pub mod recovery;
 mod regime;
 pub mod resources;
