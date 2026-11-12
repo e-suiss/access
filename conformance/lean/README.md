@@ -1,8 +1,8 @@
 # Access algebra model
 
 An executable [Lean 4](https://lean-lang.org) model of the authority algebra in
-[`protocol/l0/algebra.md`](../../protocol/l0/algebra.md), with machine-checked proofs of the
-properties that rule L0-ALG-5 requires.
+[`protocol/l0/algebra.md`](../../protocol/l0/algebra.md) and of the Decision Combinator, with
+machine-checked proofs of the properties that rule L0-ALG-5 and CR-48 ask for.
 
 The model is written from the L0 text, not from the Kernel source. It covers:
 
@@ -10,7 +10,11 @@ The model is written from the L0 text, not from the Kernel source. It covers:
   (`enum`, `eq`, `flag`, `range`, `count_max`, `interval`, `resource`, `subject`, `purpose`), for
   action sets, resource and subject selectors, purpose sets and whole authority sets;
 - intent coverage (L0-ALG-13, L0-EVAL-10);
-- `child_within_parent` (L0-ALG-70 to L0-ALG-77).
+- `child_within_parent` (L0-ALG-70 to L0-ALG-77);
+- projections and the validity of a lineage over time (`Grant.lean`);
+- the Decision Combinator of [`protocol/l0/evaluation.md`](../../protocol/l0/evaluation.md) over
+  prepared facts (`Combinator.lean`);
+- holding episodes (`Holding.lean`) and the holding terms of meta-actions (`Meta.lean`).
 
 It uses only the Lean core library. There are no other dependencies.
 
@@ -31,6 +35,17 @@ The main results:
 | `authMeet_normal` | `a ∩ b` of normalized values is normalized |
 | `authNorm_idem`, `authNorm_covers` | `normalize` is idempotent and covers exactly what its input covers |
 | `delegation_never_widens`, `chain_never_widens` | a delegated Grant never covers more than its parent, along a whole chain |
+| `decSubsumes`, `decMeetIs`, `decNormalizesTo` | `⊑`, `∩` and `normalize` are total functions, so their relations are decidable |
+| `projection_within_source` | a projection is `⊑` its source and covers nothing the source does not |
+| `cascade_monotone` | an ended link ends its lineage, an ended lineage never comes back, and narrowing a link narrows what the lineage permits |
+| `Combinator.forbid_trumps_permit` | a denying restriction makes the decision DENY |
+| `Combinator.default_deny` | a rejection, no basis, or a hop that is not understood or does not cover on every basis gives no ALLOW |
+| `Combinator.allowed_only_if_explicitly_permitted` | ALLOW needs a covering, live basis, its capacity, the mandate, no denying restriction and a proof for every term |
+| `Combinator.order_and_dup_independent` | the decision does not depend on the order of proofs or the order and repetition of restriction results |
+| `Combinator.sound_slicing` | dropping `no_objection` results and proofs that match no term keeps the decision |
+| `Holding.lazy_eq_eager` | the lazy `since`, the last false→true transition, equals the replayed episode |
+| `Holding.close_is_terminal`, `Holding.cutoff_lift_never_revives` | a closed episode never comes back, also when a cutoff is lifted |
+| `Meta.meta_holding_sound` | a meta-Exercise on a holding basis is allowed only when every link of the holding holds and the pin matches |
 
 The same properties are proved for single bounds (`boundLe_*`, `boundMeet_*`, `boundNorm_*`).
 Every function is total, so the three operations terminate by construction.
@@ -97,5 +112,11 @@ the model agree on the inputs tried, not on every input.
   laws L0-ALG-47 requires (`Catalog.Lawful`: a partial order, and only declared purposes sit
   strictly below another). The vector runner uses the empty catalog, where "below" is equality.
 - **Opaque values.** Identifiers, digests and requirement terms are compared by equality only.
+- **Prepared facts.** The Decision Combinator, holding and meta-action models take the facts that
+  L0-EVAL-4 says the preparer computes (coverage, status, conditions, budgets, restriction results,
+  which proof fits which term) as input, as the Kernel does. Each requirement term needs one proof;
+  `count`, independence and the term's position in the decision are not represented. The fuel rule
+  is modelled as a cost over every candidate, an upper bound of L0-EVAL-45.
 - **Outside the model.** Budget terms and agency terms (L0-ALG-57, L0-ALG-77) and unknown elements
-  in stored artifacts (L0-ALG-4) are not represented.
+  in stored artifacts (L0-ALG-4) are not represented. A theorem holds for its model; how closely
+  the Kernel follows a model is shown by the vectors and the differential test, not proved.

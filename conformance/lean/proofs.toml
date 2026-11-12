@@ -123,3 +123,99 @@ name = "Access.authMeet_normal"
 rule = "L0-ALG-51"
 claim = "the ∩ of two normalized authority sets is normalized"
 status = "proved"
+
+[[theorem]]
+name = "Access.decSubsumes"
+rule = "INV-8"
+claim = "⊑ on authority sets is a total Boolean function, so the relation it decides is Decidable"
+status = "proved"
+
+[[theorem]]
+name = "Access.decMeetIs"
+rule = "INV-8"
+claim = "∩ on authority sets is a total function, so whether a ∩ b equals a given value is Decidable"
+status = "proved"
+
+[[theorem]]
+name = "Access.decNormalizesTo"
+rule = "INV-8"
+claim = "normalize on authority sets is a total function, so whether it gives a given value is Decidable"
+status = "proved"
+
+[[theorem]]
+name = "Access.projection_within_source"
+rule = "INV-3"
+claim = "a projection (the source ∩ a scope) is ⊑ its source and covers no intent the source does not"
+status = "proved"
+
+[[theorem]]
+name = "Access.cascade_monotone"
+rule = "INV-3, INV-5"
+claim = "in the lineage model, an ended link ends the lineage from then on, an ended lineage never becomes valid again, and narrowing a link narrows what the lineage permits"
+status = "proved"
+
+[[theorem]]
+name = "Access.Combinator.forbid_trumps_permit"
+rule = "CR-48 m.2, MD-4, L0-EVAL-33"
+claim = "in the Decision Combinator model, a denying restriction result makes every decision DENY"
+status = "proved"
+
+[[theorem]]
+name = "Access.Combinator.default_deny"
+rule = "CR-48 m.2, SI-6, TI-9, MD-8, L0-EVAL-61"
+claim = "in the Decision Combinator model, a rejection, no candidate basis, or a hop on every basis that is not understood or does not cover gives no ALLOW"
+status = "proved"
+
+[[theorem]]
+name = "Access.Combinator.allowed_only_if_explicitly_permitted"
+rule = "CR-48 m.2, L0-EVAL-33"
+claim = "in the Decision Combinator model, ALLOW needs a basis whose hops all cover and hold, its capacity, a covering and holding mandate, no denying restriction and a matching proof for every requirement term"
+status = "proved"
+
+[[theorem]]
+name = "Access.Combinator.order_and_dup_independent"
+rule = "CR-48 m.2, INV-27, T14"
+claim = "in the Decision Combinator model, the decision does not depend on the order of the proofs nor on the order or repetition of the restriction results; the relied-on proof follows the earliest position"
+status = "proved"
+
+[[theorem]]
+name = "Access.Combinator.sound_slicing"
+rule = "CR-48 m.2, CR-49 m.3"
+claim = "in the Decision Combinator model, dropping no_objection results and proofs that match no term keeps the decision, within the same fuel"
+status = "proved"
+
+[[theorem]]
+name = "Access.Holding.lazy_eq_eager"
+rule = "CR-48 m.3, TI-RT9, INV-31"
+claim = "in the holding episode model, the lazy since (the last false→true transition of the level) equals the eagerly replayed episode"
+status = "proved"
+
+[[theorem]]
+name = "Access.Holding.staleness_keeps_episode"
+rule = "CR-48 m.3, INV-31"
+claim = "in the holding episode model, a stale proof does not close or rename the episode"
+status = "proved"
+
+[[theorem]]
+name = "Access.Holding.close_is_terminal"
+rule = "CR-48 m.3, INV-31"
+claim = "in the holding episode model, an affirmatively closed episode is never current again"
+status = "proved"
+
+[[theorem]]
+name = "Access.Holding.cutoff_lift_never_revives"
+rule = "CR-48 m.3, SI-10"
+claim = "in the holding episode model, lifting an ingest-time cutoff does not bring back the episodes it closed"
+status = "proved"
+
+[[theorem]]
+name = "Access.Meta.meta_holding_sound"
+rule = "OP-159 m.3 (k), L0-META-13"
+claim = "in the meta-action model, an allowed Exercise on a holding basis rests on a lineage whose every link holds at the trusted time, and on the pinned episode"
+status = "proved"
+
+[[theorem]]
+name = "Access.Meta.meta_other_bases_unchanged"
+rule = "OP-159 m.3 (k), L0-META-13"
+claim = "in the meta-action model, the holding terms do not change how anchor and public bases are decided"
+status = "proved"
