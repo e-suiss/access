@@ -25,6 +25,8 @@ pub fn verify(secret: &[u8], input: &[u8], signature: &[u8]) -> Result<(), Rejec
         return Err(Rejected);
     }
     let key = hmac::Key::new(hmac::HMAC_SHA256, secret);
+    // CR-39 m.6
+    let _dit = crate::dit::DitGuard::new();
     hmac::verify(&key, input, signature).map_err(|_| Rejected)
 }
 

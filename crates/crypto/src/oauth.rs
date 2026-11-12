@@ -35,6 +35,8 @@ pub fn secret_digest(secret: &[u8]) -> [u8; 32] {
 /// (CR-38, CR-39).
 #[must_use]
 pub fn secret_matches(stored: &[u8; 32], presented: &[u8]) -> bool {
+    // CR-39 m.6
+    let _dit = crate::dit::DitGuard::new();
     bool::from(secret_digest(presented).ct_eq(stored))
 }
 
@@ -42,6 +44,8 @@ pub fn secret_matches(stored: &[u8; 32], presented: &[u8]) -> bool {
 /// compared in constant time (CR-39).
 #[must_use]
 pub fn pkce_matches(challenge: &[u8; 32], verifier: &str) -> bool {
+    // CR-39 m.6
+    let _dit = crate::dit::DitGuard::new();
     bool::from(sha256(verifier.as_bytes()).ct_eq(challenge))
 }
 

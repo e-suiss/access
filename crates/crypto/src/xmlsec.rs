@@ -86,6 +86,8 @@ pub fn fill(out: &mut [u8]) -> Result<(), XmlSecError> {
 /// Whether `a` and `b` are equal, in time independent of where they differ.
 #[must_use]
 pub fn same(a: &[u8], b: &[u8]) -> bool {
+    // CR-39 m.6
+    let _dit = crate::dit::DitGuard::new();
     aws_lc_rs::constant_time::verify_slices_are_equal(a, b).is_ok()
 }
 

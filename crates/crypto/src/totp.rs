@@ -100,6 +100,8 @@ pub fn matching_step(
     now_s: u64,
     code: &str,
 ) -> Option<u64> {
+    // CR-39 m.6
+    let _dit = crate::dit::DitGuard::new();
     let current = step_of(now_s, params.step_s);
     let window = u64::from(params.window);
     let mut found: Option<u64> = None;

@@ -78,6 +78,8 @@ impl CursorKey {
             .checked_sub(TAG_LEN)
             .ok_or(CursorError::Invalid)?;
         let (body, tag) = bytes.split_at(split);
+        // CR-39 m.6
+        let _dit = crate::dit::DitGuard::new();
         if !bool::from(self.tag(list, body).ct_eq(tag)) {
             return Err(CursorError::Invalid);
         }
