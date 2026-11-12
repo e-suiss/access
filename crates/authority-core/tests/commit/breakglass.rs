@@ -695,7 +695,20 @@ async fn a_breakglass_basis_skips_the_time_lock_only_with_its_own_approvals() {
     )
     .await
     .unwrap();
-    assert!(time_locked(&unnamed), "{unnamed:?}");
+    // L0-META-13, OP-159 m.3 (k)
+    assert_eq!(
+        unnamed.decision.outcome,
+        Outcome::RequireAction,
+        "{unnamed:?}"
+    );
+    assert!(
+        unnamed
+            .decision
+            .unmet
+            .iter()
+            .any(|u| u.term.class == breakglass::APPROVAL),
+        "{unnamed:?}"
+    );
 
     // §12.3.8, OP-142
     let ask = widen(d, 23, (target, bg), Some(breakglass::PURPOSE), Vec::new());

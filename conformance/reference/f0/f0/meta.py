@@ -1436,6 +1436,34 @@ CT3_META = {
 CT3_QUORUM = 2
 
 
+def holding_terms(run, holding):
+    # L0-META-13, OP-157 m.22 (f), OP-159 m.3 (k)
+    try:
+        chain, anchor_id = run.lineage(holding[0])
+    except MetaError as error:
+        if error.code == "meta-depth":
+            raise
+        refuse("holding-terms")
+    anchor = run.read("anchor", anchor_id)
+    if anchor is None or "ended" in anchor:
+        refuse("holding-terms")
+    terms = []
+    for _, grant in chain:
+        start, end = grant["content"]["authority"]["constraints"]["validity"]
+        if "ended" in grant or not start <= run.now <= end:
+            refuse("holding-terms")
+        terms += grant["content"]["authority"].get("requirements", [])
+    for mandate_id in run.read("mandates", run.instance) or []:
+        mandate = run.read("mandate", mandate_id)
+        if "ended" in mandate:
+            continue
+        pin = mandate["envelope"].get("pin")
+        if pin is not None and not same(pin, holding):
+            refuse("holding-terms")
+        break
+    return terms
+
+
 def apply(state, domain_id, exercise, pos, now, party, instance, basis, capacity, payload):
     """Returns (effects, requirements, expansion) or raises MetaError."""
     store = {key: decode_canonical(value) for key, value in state}
@@ -1445,6 +1473,9 @@ def apply(state, domain_id, exercise, pos, now, party, instance, basis, capacity
     run = Apply(store, domain_id, exercise, pos, now, party, instance, exercise_basis, decode_canonical(capacity))
     before = run.read("anchor", exercise_basis["anchor"]) if "anchor" in exercise_basis else None
     expansion = getattr(run, name)(body)
+    # L0-META-13, L0-META-30, OP-159 m.3 (k)
+    if "holding" in exercise_basis and name != "contribute":
+        run.requirements = run.requirements + holding_terms(run, exercise_basis["holding"])
     # §13.7.3, SEC26, OP-141 m.43: the root the actor acts as, before the change
     if expansion and name in CT3_META and "anchor" in exercise_basis:
         anchor = before or {}

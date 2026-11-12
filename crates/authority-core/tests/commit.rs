@@ -37,6 +37,9 @@ mod sync_derived;
 // OP-159 m.3 (m)
 #[path = "commit/payee.rs"]
 mod payee;
+// OP-159 m.3 (k)
+#[path = "commit/holding_terms.rs"]
+mod holding_terms;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;

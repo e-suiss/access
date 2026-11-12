@@ -3716,9 +3716,60 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 .push((k, Some(set_value(retired.into_iter().map(Value::int)))));
         }
     }
+    // L0-META-13, L0-META-30, OP-157 m.22 (f), OP-159 m.3 (k)
+    if let ExerciseBasis::Holding(h) = ctx.basis
+        && !matches!(payload, Payload::Contribute { .. })
+    {
+        out.requirements.extend(holding_terms(ctx, view, &h)?);
+    }
     quorum(ctx, payload, view, &mut out);
     out.effects = sorted(out.effects);
     Ok(out)
+}
+
+/// The terms of the holding a meta-Exercise declares (L0-META-13, OP-157 m.22 (f), OP-159
+/// m.3 (k)): every Grant of its lineage and the lineage's Anchor have not ended, `now` lies in
+/// each Grant's validity window, the first live Mandate of the actor Instance is not pinned to
+/// another holding, and the Grants' requirement terms are returned for the Exercise to meet.
+/// The powers a meta-action is decided by (root, lineage, own Instance) are not changed, and
+/// `contribute` is evaluated against its Grant like any domain action (L0-META-30).
+///
+/// # Errors
+/// [`MetaError::HoldingTerms`] when one of them fails, [`MetaError::Depth`] or
+/// [`MetaError::Corrupt`].
+pub fn holding_terms(
+    ctx: &Context<'_>,
+    view: &dyn View,
+    h: &HoldingRef,
+) -> Result<BTreeSet<RequirementTerm>, MetaError> {
+    let fail = |e: MetaError| match e {
+        MetaError::Depth | MetaError::Corrupt => e,
+        _ => MetaError::HoldingTerms,
+    };
+    let (anchor, chain) = lineage(view, &h.grant).map_err(fail)?;
+    let a: AnchorState = read(view, kind::ANCHOR, &anchor).map_err(fail)?;
+    if a.ended.is_some() {
+        return Err(MetaError::HoldingTerms);
+    }
+    let mut terms = BTreeSet::new();
+    for (_, g) in &chain {
+        let v = &g.content.authority.constraints.validity;
+        if g.ended.is_some() || ctx.now < v.from || ctx.now > v.until {
+            return Err(MetaError::HoldingTerms);
+        }
+        terms.extend(g.content.authority.requirements.iter().cloned());
+    }
+    for m in ids(view, kind::MANDATES, &ctx.actor.instance)? {
+        let m: MandateState = read(view, kind::MANDATE, &m)?;
+        if m.ended.is_some() {
+            continue;
+        }
+        if m.envelope.pin.is_some_and(|p| p != *h) {
+            return Err(MetaError::HoldingTerms);
+        }
+        break;
+    }
+    Ok(terms)
 }
 
 // §13.7.3, SEC26, OP-141 m.43

@@ -34,10 +34,10 @@ fn intent(cents: i64) -> IntentEnvelope {
     }
 }
 
-// RT26, SI-8
+// RT26, SI-8, OP-159 m.3 (m)
 #[test]
 fn the_whitelist_is_closed_and_cited_values_read_back() {
-    assert_eq!(NAMES.len(), 11);
+    assert_eq!(NAMES.len(), 12);
     let v = Derived {
         party_consumption: 12,
         claim_age_s: NONE,
@@ -126,4 +126,33 @@ fn a_new_holder_counts_once_per_episode() {
             .iter()
             .any(|(k, _)| *k == transitions_key(&grant, bucket))
     );
+}
+
+// OP-159 m.3 (m)
+#[test]
+fn an_unseen_payee_is_marked_by_the_allow_and_a_seen_one_is_not() {
+    let payee = Digest([5; 32]);
+    let fresh = window(
+        &intent(100),
+        None,
+        &Counted {
+            payee: Some((payee, false)),
+            ..Counted::default()
+        },
+        0,
+    );
+    assert_eq!(fresh.values.payee_seen, 0);
+    assert_eq!(fresh.increments, vec![(payee_seen_key(&payee), 1)]);
+    let seen = window(
+        &intent(100),
+        None,
+        &Counted {
+            payee: Some((payee, true)),
+            ..Counted::default()
+        },
+        0,
+    );
+    assert_eq!(seen.values.payee_seen, 1);
+    assert_eq!(seen.increments.len(), 0);
+    assert_eq!(Derived::from_cited(&seen.values.cited()), Some(seen.values));
 }

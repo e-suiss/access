@@ -1746,6 +1746,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     let mut releases = Vec::new();
     let mut expansion = false;
     let mut own_terms = matches!(req.basis, ExerciseBasis::Holding(_));
+    // L0-META-13, OP-159 m.3 (k)
+    let mut held_terms: BTreeSet<access_kernel::model::RequirementTerm> = BTreeSet::new();
     // L0-META-30
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
@@ -1982,6 +1984,14 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                             breakglass: false,
                         });
                     }
+                }
+                // L0-META-13, G29, OP-157 m.19 (b), OP-159 m.3 (k)
+                if let ExerciseBasis::Holding(h) = req.basis
+                    && !read::<GrantState>(snapshot, kind::GRANT, &h.grant).is_some_and(|g| {
+                        crate::app::breakglass::is_breakglass(&g.content.authority.authority)
+                    })
+                {
+                    held_terms = meta::holding_terms(&ctx, snapshot, &h).unwrap_or_default();
                 }
                 effects = out.effects;
                 releases = out.releases;
@@ -2292,7 +2302,18 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         mappings: &mappings,
     };
     match evaluate(&input, &mut Fuel(FUEL)) {
-        Ok(decision) => {
+        Ok(mut decision) => {
+            // L0-META-13, OP-159 m.3 (k)
+            if decision.outcome != KernelOutcome::Allow
+                && !own_terms
+                && decision.unmet.iter().any(|u| {
+                    held_terms
+                        .iter()
+                        .any(|t| t.proof_kind == u.term.proof_kind && t.class == u.term.class)
+                })
+            {
+                decision = meta_denial(MetaError::HoldingTerms);
+            }
             let allowed = decision.outcome == KernelOutcome::Allow;
             if !allowed {
                 effects.clear();
