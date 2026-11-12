@@ -1,6 +1,6 @@
 # OP-81, SAI-1, SA-59, INV-2
 
-current_stage = 12
+current_stage = 13
 
 enforced_families = [
   "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",
@@ -1114,6 +1114,11 @@ reason = "OP-152 m.5 (e): Ek B line 1160, stage 3 item 'Approver bağımsızlı�
 id = "U18"
 stage = 12
 reason = "OP-152 m.5 (e): Ek B line 5670, stage 12 item 'Structuring / abuse guard'ları (Party toplamı, eşik-bitişik tekrar, kitlesel seçim)'; the Stage 3 Structuring / abuse guards item (line 1166) moved here (OP-142); rate and oracle limits exist earlier but the structuring controls the row bundles are this open item; built in Stage 12 lane V11 (OP-157 m.3 (q))"
+
+[[rule_overrides]]
+id = "U68"
+stage = 14
+reason = "OP-158 m.22: existed-by-T after an algorithm break rests on the ML-DSA re-anchor checkpoint and its PQ witness cosignature, built in Stage 14 lane J2 (OP-159 m.3 (g))"
 
 [[rule_overrides]]
 id = "U23"

@@ -1318,7 +1318,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 13
+stage = 14
 title = "Existed-by-T holds after algorithm break for PQ re-anchored records"
 tests = []
 
