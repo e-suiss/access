@@ -4,7 +4,7 @@
 #[path = "rules_adjacent.rs"]
 mod adjacent;
 #[path = "rules_advisories.rs"]
-mod advisories;
+pub(crate) mod advisories;
 #[path = "rules_attention.rs"]
 mod attention;
 #[path = "rules_breakglass.rs"]
@@ -90,7 +90,7 @@ mod standing;
 #[path = "rules_support.rs"]
 mod support;
 #[path = "rules_support_policy.rs"]
-mod support_policy;
+pub(crate) mod support_policy;
 #[path = "rules_switches.rs"]
 pub(crate) mod switches;
 #[path = "rules_sync_commit.rs"]

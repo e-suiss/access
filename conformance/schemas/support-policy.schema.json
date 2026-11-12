@@ -2,11 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:support-policy:1",
   "title": "Access support policy (OP-159 m.3 (jj), OP-68)",
-  "description": "How long each major receives security fixes, how many minors are supported and the supported versions table SECURITY.md is generated from. The TOML file is conformance/catalog/support-policy.toml.",
+  "description": "How long each major receives security fixes, how many minors are supported, the disclosure and fix times, the CRA Art. 14 reporting periods, the supported versions table and the CRA technical obligations. SECURITY.md's tables are generated from it. The TOML file is conformance/catalog/support-policy.toml.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version"
+    "version",
+    "major_support_years",
+    "supported_minors",
+    "branch",
+    "disclosure",
+    "fix_target",
+    "cra",
+    "versions",
+    "obligation"
   ],
   "properties": {
     "version": {
@@ -21,8 +29,7 @@
       "minimum": 2
     },
     "branch": {
-      "type": "string",
-      "minLength": 1
+      "const": "release/v<major>.<minor>"
     },
     "versions": {
       "type": "array",
@@ -53,6 +60,142 @@
               "supported",
               "end-of-life"
             ]
+          }
+        }
+      }
+    },
+    "disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "embargo_days",
+        "acknowledge_days",
+        "assessment_days"
+      ],
+      "properties": {
+        "embargo_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90
+        },
+        "acknowledge_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "assessment_days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "fix_target": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "severity",
+          "cvss",
+          "days"
+        ],
+        "properties": {
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "cvss": {
+            "type": "string",
+            "minLength": 1
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "cra": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "early_warning_hours",
+        "notification_hours",
+        "final_report_vulnerability_days",
+        "final_report_incident_months"
+      ],
+      "properties": {
+        "early_warning_hours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "notification_hours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "final_report_vulnerability_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "final_report_incident_months": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "obligation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "source",
+          "status",
+          "artefacts",
+          "tests"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^CRA-T[0-9]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "met",
+              "partial"
+            ]
+          },
+          "artefacts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "needs": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

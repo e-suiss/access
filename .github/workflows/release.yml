@@ -17,8 +17,9 @@ env:
   IMAGE: ghcr.io/e-suiss/access
 
 jobs:
-  # OP-68, SA-59: nothing is built or published unless the tagged commit is on main, its CI
-  # run passed, and the repository rules (rule coverage included) hold at the tag
+  # OP-68, SA-59, B20: nothing is built or published unless the tagged commit is on main or on
+  # the maintenance branch of a supported minor, its CI run passed, and the repository rules
+  # (rule coverage included) hold at the tag
   gate:
     name: gate
     runs-on: ubuntu-24.04
@@ -30,25 +31,39 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The tagged commit is on main and its CI passed
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+      # B20, OP-68, OP-159 m.3 (jj)
+      - name: The repository is public, the tag names a supported minor, and the commit is on main or its maintenance branch with a passed CI run
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
         run: |
-          on_main="$(gh api "repos/$REPOSITORY/compare/main...$SHA" --jq .status)"
-          case "$on_main" in
-            identical|behind) ;;
-            *) echo "::error::$SHA is not an ancestor of main (compare: $on_main)"; exit 1 ;;
-          esac
-          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success" --jq '.total_count')"
-          if [[ "$passed" -lt 1 ]]; then
-            echo "::error::no successful CI run on main for $SHA"
+          visibility="$(gh api "repos/$REPOSITORY" --jq .visibility)"
+          if [[ "$visibility" != "public" ]]; then
+            echo "::error::releases are tagged only in the public repository (B20)"
             exit 1
           fi
-      - uses: ./.github/actions/setup
-        with:
-          cache: "false"
+          maintenance="$(cargo xtask release-tag "$TAG")"
+          on_main="$(gh api "repos/$REPOSITORY/compare/main...$SHA" --jq .status)"
+          case "$on_main" in
+            identical|behind) branch=main ;;
+            *)
+              on_branch="$(gh api "repos/$REPOSITORY/compare/$maintenance...$SHA" --jq .status || echo missing)"
+              case "$on_branch" in
+                identical|behind) branch="$maintenance" ;;
+                *) echo "::error::$SHA is on neither main nor $maintenance (main: $on_main, $maintenance: $on_branch)"; exit 1 ;;
+              esac
+              ;;
+          esac
+          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=$branch&event=push&status=success" --jq '.total_count')"
+          if [[ "$passed" -lt 1 ]]; then
+            echo "::error::no successful CI run on $branch for $SHA"
+            exit 1
+          fi
       - name: Repository rules, rule coverage included (OP-62, SA-59)
         run: just rules
 
