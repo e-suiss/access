@@ -3,14 +3,20 @@
 
 #[path = "rules_adjacent.rs"]
 mod adjacent;
+#[path = "rules_advisories.rs"]
+mod advisories;
 #[path = "rules_attention.rs"]
 mod attention;
 #[path = "rules_breakglass.rs"]
 mod breakglass;
 #[path = "rules_comments.rs"]
 mod comments;
+#[path = "rules_compliance_map.rs"]
+mod compliance_map;
 #[path = "rules_conformance_profiles.rs"]
 mod conformance_profiles;
+#[path = "rules_constant_time_points.rs"]
+mod constant_time_points;
 #[path = "rules_crypto.rs"]
 mod crypto;
 #[path = "rules_custody.rs"]
@@ -19,12 +25,16 @@ mod custody;
 mod degraded_paths;
 #[path = "rules_deps.rs"]
 pub(crate) mod deps;
+#[path = "rules_dit_coverage.rs"]
+mod dit_coverage;
 #[path = "rules_edge.rs"]
 mod edge;
 #[path = "rules_files.rs"]
 pub(crate) mod files;
 #[path = "rules_fluent.rs"]
 mod fluent;
+#[path = "rules_formal_manifest.rs"]
+mod formal_manifest;
 #[path = "rules_interop.rs"]
 pub(crate) mod interop;
 #[path = "rules_iys.rs"]
@@ -33,6 +43,8 @@ mod iys;
 mod kill_switch;
 #[path = "rules_kyc.rs"]
 mod kyc;
+#[path = "rules_language_profiles.rs"]
+mod language_profiles;
 #[path = "rules_layer_order.rs"]
 mod layer_order;
 #[path = "rules_lex.rs"]
@@ -65,20 +77,32 @@ mod reputation;
 mod restriction;
 #[path = "rules_seam.rs"]
 mod seam;
+#[path = "rules_security_model.rs"]
+pub(crate) mod security_model;
+#[path = "rules_security_txt.rs"]
+mod security_txt;
+#[path = "rules_shared_layers.rs"]
+mod shared_layers;
 #[path = "rules_source.rs"]
 pub(crate) mod source;
 #[path = "rules_standing.rs"]
 mod standing;
 #[path = "rules_support.rs"]
 mod support;
+#[path = "rules_support_policy.rs"]
+mod support_policy;
 #[path = "rules_switches.rs"]
 pub(crate) mod switches;
 #[path = "rules_sync_commit.rs"]
 mod sync_commit;
 #[path = "rules_telemetry.rs"]
 mod telemetry;
+#[path = "rules_test_layers.rs"]
+mod test_layers;
 #[path = "rules_tofu_infra_only.rs"]
 mod tofu_infra_only;
+#[path = "rules_trust_model.rs"]
+pub(crate) mod trust_model;
 #[path = "rules_ui_terms.rs"]
 pub(crate) mod ui_terms;
 #[path = "rules_validity_paths.rs"]
@@ -87,6 +111,8 @@ mod validity_paths;
 mod vectors;
 #[path = "rules_witness_independence.rs"]
 mod witness_independence;
+#[path = "rules_write_permit.rs"]
+mod write_permit;
 
 use crate::Check;
 
@@ -346,6 +372,71 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "witness-independence",
             run: witness_independence::check,
+        },
+        // SEC5, SA-7, OP-159 m.3 (gg), m.4 (b) (J8)
+        Check {
+            name: "trust-model",
+            run: trust_model::check,
+        },
+        // SEC1, RT28, §13.9, OP-159 m.3 (gg), m.4 (b) (J8)
+        Check {
+            name: "security-model",
+            run: security_model::check,
+        },
+        // CR-46, CR-50, OP-159 m.3 (y)
+        Check {
+            name: "formal-manifest",
+            run: formal_manifest::check,
+        },
+        // SA-59, OP-159 m.3 (bb)
+        Check {
+            name: "test-layers",
+            run: test_layers::check,
+        },
+        // MD-2, SA-20, OP-159 m.3 (dd)
+        Check {
+            name: "language-profiles",
+            run: language_profiles::check,
+        },
+        // OP-91, INV-12, OP-159 m.3 (ee)
+        Check {
+            name: "write-permit",
+            run: write_permit::check,
+        },
+        // CR-39, OP-159 m.3 (s)
+        Check {
+            name: "constant-time-points",
+            run: constant_time_points::check,
+        },
+        // CR-39, OP-159 m.3 (s)
+        Check {
+            name: "dit-coverage",
+            run: dit_coverage::check,
+        },
+        // SA-53, OP-159 m.3 (ii)
+        Check {
+            name: "compliance-map",
+            run: compliance_map::check,
+        },
+        // OP-68, OP-159 m.3 (jj)
+        Check {
+            name: "support-policy",
+            run: support_policy::check,
+        },
+        // OP-159 m.3 (jj)
+        Check {
+            name: "security-txt",
+            run: security_txt::check,
+        },
+        // OP-159 m.3 (jj)
+        Check {
+            name: "advisories",
+            run: advisories::check,
+        },
+        // PI-18, OP-70, OP-159 m.3 (kk)
+        Check {
+            name: "shared-layers",
+            run: shared_layers::check,
         },
     ]);
     all
