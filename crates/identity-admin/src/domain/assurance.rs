@@ -186,7 +186,10 @@ mod tests {
             ("optimistic", KexMode::Optimistic),
             ("advertise-only", KexMode::AdvertiseOnly),
         ] {
-            assert_eq!(KexShare::parse(&json!({ "mode": name })).unwrap().mode, mode);
+            assert_eq!(
+                KexShare::parse(&json!({ "mode": name })).unwrap().mode,
+                mode
+            );
         }
         for bad in [json!({ "mode": "classic-only" }), json!({})] {
             assert_eq!(KexShare::parse(&bad), Err(Invalid::Body), "{bad}");

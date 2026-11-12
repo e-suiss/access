@@ -939,20 +939,22 @@ const BASE_LEN: usize = BASE.len();
     clippy::large_const_arrays,
     reason = "composed at compile time into the manifest, which a static cannot be"
 )]
-const ALL_ROWS: [Route; BASE_LEN
-    + STAGE9.len()
-    + STAGE10.len()
-    + STAGE11.len()
-    + STAGE12.len()
-    + STAGE13.len()
-    + STAGE14.len()] = {
-    let mut out = [BASE[0]; BASE_LEN
+const ALL_ROWS: [Route;
+    BASE_LEN
         + STAGE9.len()
         + STAGE10.len()
         + STAGE11.len()
         + STAGE12.len()
         + STAGE13.len()
-        + STAGE14.len()];
+        + STAGE14.len()] = {
+    let mut out = [BASE[0];
+        BASE_LEN
+            + STAGE9.len()
+            + STAGE10.len()
+            + STAGE11.len()
+            + STAGE12.len()
+            + STAGE13.len()
+            + STAGE14.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];

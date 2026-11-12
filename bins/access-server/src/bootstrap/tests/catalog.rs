@@ -828,7 +828,10 @@ async fn a_catalog_8_realm_refuses_the_version_9_actions_until_its_upgrade_commi
         .await
         .unwrap();
     w.domains.release().await;
-    for action in [IdpAction::RealmKexShare, IdpAction::RealmSigningProfileClose] {
+    for action in [
+        IdpAction::RealmKexShare,
+        IdpAction::RealmSigningProfileClose,
+    ] {
         let Verdict::NotAllowed { decision, .. } =
             exercise(&w, domain, "eighth", action, "realm").await
         else {
@@ -846,7 +849,10 @@ async fn a_catalog_8_realm_refuses_the_version_9_actions_until_its_upgrade_commi
     for action in IdpAction::ALL {
         assert!(accepts(&w, domain, action).await, "{action:?}");
     }
-    for action in [IdpAction::RealmKexShare, IdpAction::RealmSigningProfileClose] {
+    for action in [
+        IdpAction::RealmKexShare,
+        IdpAction::RealmSigningProfileClose,
+    ] {
         assert!(
             matches!(
                 exercise(&w, domain, "eighth", action, "realm").await,
