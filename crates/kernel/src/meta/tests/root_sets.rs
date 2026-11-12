@@ -162,3 +162,22 @@ fn only_the_canonical_sets_acknowledge() {
         !operator_only.acknowledges_with(&RootSets::new(vec![witness("w1.example", 4)], vec![rep]))
     );
 }
+
+// CR-44, L0-SIG-82, OP-159 m.3 (r)
+#[test]
+fn a_fips_domain_cannot_add_ml_dsa() {
+    use crate::verify::key_scope::{CryptoProfile, Declarations};
+    let fips = Declarations {
+        crypto_profile: Some(CryptoProfile::Fips),
+        ..Declarations::default()
+    };
+    assert_eq!(
+        admit_algorithm(&fips, Algorithm::MlDsa65),
+        Err(MetaError::AlgorithmProfileConflict)
+    );
+    assert_eq!(admit_algorithm(&fips, Algorithm::Es256), Ok(()));
+    assert_eq!(
+        admit_algorithm(&Declarations::default(), Algorithm::MlDsa87),
+        Ok(())
+    );
+}

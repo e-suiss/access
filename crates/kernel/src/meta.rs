@@ -3748,6 +3748,23 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
     Ok(out)
 }
 
+/// Whether a domain may add `alg` to its allowlist (CR-44, L0-SIG-82, OP-159 m.3 (r)): a domain
+/// that declares the FIPS profile cannot add ML-DSA, in whichever order the two are asked for.
+///
+/// # Errors
+/// [`MetaError::AlgorithmProfileConflict`].
+pub fn admit_algorithm(
+    declared: &crate::verify::key_scope::Declarations,
+    alg: crate::verify::cose::Algorithm,
+) -> Result<(), MetaError> {
+    if declared.crypto_profile == Some(crate::verify::key_scope::CryptoProfile::Fips)
+        && crate::verify::ml_dsa::is_ml_dsa(alg)
+    {
+        return Err(MetaError::AlgorithmProfileConflict);
+    }
+    Ok(())
+}
+
 /// The terms of the holding a meta-Exercise declares (L0-META-13, OP-157 m.22 (f), OP-159
 /// m.3 (k)): every Grant of its lineage and the lineage's Anchor have not ended, `now` lies in
 /// each Grant's validity window, the first live Mandate of the actor Instance is not pinned to
