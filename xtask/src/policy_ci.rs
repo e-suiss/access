@@ -110,6 +110,25 @@ pub(crate) fn semantics_release_findings(text: &str) -> Vec<String> {
     if !(gate.contains("lake build") && gate.contains("./check-axioms.sh")) {
         out.push("semantics gate must build the Lean model and run check-axioms (T-6)".to_owned());
     }
+    // OP-159 m.3 (z), U56
+    for (needle, what) in [
+        ("f0-drt.py check", "the nightly F0 and Lean DRT summary"),
+        (
+            "f0-drt.py stale",
+            "that the semantics did not change since the DRT",
+        ),
+        (
+            "f0-drt.py jobs",
+            "the lean and formal jobs on the tagged commit",
+        ),
+        ("xtask check formal-manifest", "a clean formal manifest"),
+    ] {
+        if !gate.contains(needle) {
+            out.push(format!(
+                "semantics gate must check {what} (`{needle}`, OP-159 m.3 (z))"
+            ));
+        }
+    }
     out
 }
 
@@ -310,12 +329,33 @@ mod tests {
         let ungated = gated.replace("release: true", "release: false");
         assert_eq!(release_findings(&ungated).len(), 1);
         let semantics = format!(
-            "jobs:\n  gate:\n    steps:\n{CHECK}        run: lake build --wfail A\n        run: ./check-axioms.sh\n"
+            "jobs:\n  gate:\n    steps:\n{CHECK}        run: lake build --wfail A\n        run: ./check-axioms.sh\n{DRT}"
         );
         assert_eq!(semantics_release_findings(&semantics), Vec::<String>::new());
-        let labels =
-            "jobs:\n  gate:\n    steps:\n        run: python3 f0-drt.py lean proofs.toml\n";
-        assert_eq!(semantics_release_findings(labels).len(), 2);
+        let labels = format!(
+            "jobs:\n  gate:\n    steps:\n        run: python3 f0-drt.py lean proofs.toml\n{DRT}"
+        );
+        assert_eq!(semantics_release_findings(&labels).len(), 2);
+    }
+
+    const DRT: &str = "        run: python3 f0-drt.py check s.json\n        run: python3 f0-drt.py stale c.txt\n        run: python3 f0-drt.py jobs j.json\n        run: cargo xtask check formal-manifest\n";
+
+    // OP-159 m.3 (z), U56
+    #[test]
+    fn the_semantics_gate_refuses_a_release_without_each_condition() {
+        let full = format!(
+            "jobs:\n  gate:\n    steps:\n{CHECK}        run: lake build --wfail A\n        run: ./check-axioms.sh\n{DRT}"
+        );
+        assert_eq!(semantics_release_findings(&full), Vec::<String>::new());
+        for needle in [
+            "f0-drt.py check",
+            "f0-drt.py stale",
+            "f0-drt.py jobs",
+            "xtask check formal-manifest",
+        ] {
+            let without = full.replace(needle, "true");
+            assert_eq!(semantics_release_findings(&without).len(), 1, "{needle}");
+        }
     }
 
     // T-18, D-5, T-16

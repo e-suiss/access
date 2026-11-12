@@ -96,8 +96,9 @@ conformance/reference/f0/
 F0 and the Kernel are released only from tags: `f0-v<VERSION>` and `kernel-v<version>`. The tag must match the declared version. The release workflow publishes nothing unless every condition holds:
 
 - every vector passes in the Kernel and in F0;
-- the latest nightly differential run compared at least 10⁷ inputs with no mismatch, and the Kernel, F0, vectors and CDDL have not changed since the commit it ran on;
-- every Lean algebra theorem in `conformance/lean/proofs.toml` is `proved`.
+- the latest nightly differential run compared the Kernel with F0 on at least 10⁷ inputs and with the Lean model on at least 10⁷ algebra cases, with no mismatch, and the Kernel, F0, vectors, CDDL and the Lean model have not changed since the commit it ran on;
+- every Lean algebra theorem and the four Decision Combinator theorems in `conformance/lean/proofs.toml` are `proved`;
+- the `lean` and `formal` CI jobs passed on the tagged commit, and the formal manifest is clean.
 
 A release carries `access-f0-<tag>.tar.gz` (this directory), `access-vectors-core-<version>-<tag>.tar.gz` (vectors and CDDL) and `SHA256SUMS`, with a GitHub artifact attestation (Sigstore build provenance) for each archive:
 
