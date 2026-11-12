@@ -2020,7 +2020,10 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Correlated breach via shared HSM partition or cross-domain key acceptance"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/placement.rs::hl_17_domain_metadata_declares_shared_hosting_unless_the_provider_states_dedicated",
+  "bins/access-server/src/config.rs::an_unstated_hosting_is_shared_and_a_contradiction_is_refused",
+]
 
 [[rule]]
 id = "HL-9"
@@ -2116,7 +2119,10 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Co-tenant side channels on shared hardware, Postgres or cache"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/placement.rs::hl_17_domain_metadata_declares_shared_hosting_unless_the_provider_states_dedicated",
+  "bins/access-server/src/bootstrap/tests/management/residency.rs::hl_17_the_durability_read_shows_shared_hosting_until_dedicated_is_declared",
+]
 
 [[rule]]
 id = "HL-18"
@@ -2415,7 +2421,10 @@ section = "13.1"
 status = "canonical"
 class = "NG"
 title = "Decision surface acts as a policy oracle"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/authzen/disclosure.rs::a_basis_outside_the_disclosure_scope_answers_like_a_missing_one",
+  "crates/http/tests/login.rs::identifier_first_answers_are_padded_to_one_size_class",
+]
 
 [[rule]]
 id = "DL-8"
@@ -2443,7 +2452,9 @@ status = "canonical"
 class = "NG"
 stage = 6
 title = "Co-tenant side channels on shared compute infrastructure"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/placement.rs::hl_17_domain_metadata_declares_shared_hosting_unless_the_provider_states_dedicated",
+]
 
 [[rule]]
 id = "RR-1"

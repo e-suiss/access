@@ -158,7 +158,7 @@ mod dudect {
             .saturating_add(1)
     }
 
-    // CR-39 m.1 (opaque token, device and user code), m.4, SAI-42
+    // CR-39 m.1, m.4, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn opaque_token_digest() {
@@ -175,7 +175,7 @@ mod dudect {
         report("opaque_digest", t);
     }
 
-    // CR-39 m.1 (HMAC/JWS), SAI-42
+    // CR-39 m.1, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn hmac_jws_verify() {
@@ -196,7 +196,7 @@ mod dudect {
         report("client_secret_jwt::verify", t);
     }
 
-    // CR-39 m.1 (TOTP), SAI-42
+    // CR-39 m.1, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn totp_matching_step() {
@@ -231,7 +231,7 @@ mod dudect {
         report("totp::matching_step", t);
     }
 
-    // CR-39 m.1 (client secret, API key), m.4, SAI-42
+    // CR-39 m.1, m.4, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn client_secret_match() {
@@ -245,7 +245,7 @@ mod dudect {
         report("oauth::secret_matches", t);
     }
 
-    // CR-39 m.1 (PKCE verifier), SAI-42
+    // CR-39 m.1, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn pkce_match() {
@@ -272,7 +272,7 @@ mod dudect {
         <[u8; 32]>::try_from(d.as_ref()).unwrap()
     }
 
-    // CR-39 m.1 [AU] (basis_ref token), SAI-42
+    // CR-39 m.1, SAI-42
     #[test]
     #[ignore = "nightly: just dudect"]
     fn basis_ref_open() {

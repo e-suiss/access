@@ -1798,7 +1798,11 @@ status = "candidate"
 class = "UDC"
 stage = 1
 title = "Constant-time secret comparison"
-tests = []
+tests = [
+  "crates/crypto/tests/dudect.rs::secret_comparisons_do_not_leak",
+  "crates/crypto/tests/ctgrind.rs::secret_comparisons_do_not_branch_on_secret_bytes",
+  "xtask/src/rules_constant_time_points.rs::every_point_is_mapped_and_measured",
+]
 
 [[rule]]
 id = "SAI-43"
@@ -1808,7 +1812,10 @@ status = "candidate"
 class = "BS"
 stage = 3
 title = "Unauthorized is indistinguishable from nonexistent"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/authzen/disclosure.rs::a_basis_outside_the_disclosure_scope_answers_like_a_missing_one",
+  "crates/http/tests/login.rs::identifier_first_answers_are_padded_to_one_size_class",
+]
 
 [[rule]]
 id = "SAI-44"
