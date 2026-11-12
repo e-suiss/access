@@ -292,6 +292,10 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::RealmHashProfile, Tier::Ct1),
         (IdpAction::RealmAuditTier, Tier::Ct2),
         (IdpAction::RealmAuditTierClose, Tier::Ct1),
+        // OP-159 m.3 (a)
+        (IdpAction::RealmSigningProfile, Tier::Ct3),
+        (IdpAction::RealmSigningProfileClose, Tier::Ct1),
+        (IdpAction::RealmKexShare, Tier::Ct2),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

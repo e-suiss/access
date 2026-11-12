@@ -15,8 +15,8 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
 /// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a),
-/// OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 8;
+/// OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 9;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
 /// OP-155 m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
@@ -518,11 +518,19 @@ pub enum IdpAction {
     RealmAuditTier,
     /// Closes the realm's cold audit tier target; narrowing, CT1.
     RealmAuditTierClose,
+    /// Adds an ML-DSA algorithm (`ml-dsa-65`, `ml-dsa-44` or `ml-dsa-87`) to the realm's accept
+    /// and signing set; the classical algorithms stay (CR-41, CR-8, OP-159 m.3 (a)): reserved, CT3.
+    RealmSigningProfile,
+    /// Takes ML-DSA out of the realm's set (§15.16 m.2); narrowing, CT1.
+    RealmSigningProfileClose,
+    /// Sets the realm's hybrid key exchange share policy, `optimistic` or `advertise-only`; both
+    /// offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a)): CT2.
+    RealmKexShare,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 209] = [
+    pub const ALL: [Self; 212] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -732,10 +740,13 @@ impl IdpAction {
         Self::RealmHashProfile,
         Self::RealmAuditTier,
         Self::RealmAuditTierClose,
+        Self::RealmSigningProfile,
+        Self::RealmSigningProfileClose,
+        Self::RealmKexShare,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
-    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a)).
+    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a)).
     #[must_use]
     #[expect(
         clippy::too_many_lines,
@@ -743,6 +754,7 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
+            Self::RealmSigningProfile | Self::RealmSigningProfileClose | Self::RealmKexShare => 9,
             Self::RealmResidency
             | Self::RealmDrProfile
             | Self::RealmDrProfileClose
@@ -972,6 +984,9 @@ impl IdpAction {
             | Self::RealmHashProfile
             | Self::RealmAuditTier
             | Self::RealmAuditTierClose
+            | Self::RealmSigningProfile
+            | Self::RealmSigningProfileClose
+            | Self::RealmKexShare
             | Self::RealmBranding
             | Self::RealmKeyPolicy
             | Self::RealmKeyRotate
@@ -1335,6 +1350,9 @@ impl IdpAction {
             Self::RealmHashProfile => "hash_profile",
             Self::RealmAuditTier => "audit_tier",
             Self::RealmAuditTierClose => "audit_tier_close",
+            Self::RealmSigningProfile => "signing_profile",
+            Self::RealmSigningProfileClose => "signing_profile_close",
+            Self::RealmKexShare => "kex_share",
         }
     }
 
@@ -1423,7 +1441,8 @@ impl IdpAction {
             | Self::OrgBreakglassReview
             | Self::RealmDrProfileClose
             | Self::RealmHashProfile
-            | Self::RealmAuditTierClose => EffectClass::Reversible,
+            | Self::RealmAuditTierClose
+            | Self::RealmSigningProfileClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -1465,6 +1484,7 @@ impl IdpAction {
                 | Self::AccountTokenLongLived
                 | Self::RealmResidency
                 | Self::RealmDrProfile
+                | Self::RealmSigningProfile
         )
     }
 

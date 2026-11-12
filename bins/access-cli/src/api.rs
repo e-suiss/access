@@ -427,6 +427,9 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putCryptoProfile" => IdpAction::RealmCryptoProfile,
         "putHashProfile" => IdpAction::RealmHashProfile,
         "putAuditTier" => IdpAction::RealmAuditTier,
+        // OP-159 m.3 (a)
+        "putSigningProfile" => IdpAction::RealmSigningProfile,
+        "putKexShare" => IdpAction::RealmKexShare,
         _ => return None,
     })
 }
