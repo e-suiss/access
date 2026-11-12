@@ -1036,6 +1036,10 @@ dependencies = [
 [[package]]
 name = "access-policy-solver"
 version = "0.6.0"
+dependencies = [
+ "esuiss-restriction-analysis",
+ "esuiss-sandbox",
+]
 
 [[package]]
 name = "access-product-twin"

@@ -10,6 +10,8 @@ publish = false
 
 # OP-159 m.3 (aa), (rr): restriction-analysis and suiss-sandbox only (`dependency-direction`)
 [dependencies]
+restriction-analysis = { package = "esuiss-restriction-analysis", path = "../../crates/restriction-analysis" }
+suiss-sandbox = { workspace = true }
 
 [lints]
 workspace = true
