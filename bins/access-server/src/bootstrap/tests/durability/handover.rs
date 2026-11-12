@@ -332,7 +332,214 @@ async fn forged(socket: &std::path::Path, domain: Digest, size: u64) -> (String,
     (format!("{body}\n{}", signed.line), signed.excerpt)
 }
 
-// §16.6 HO-1…HO-9, U27, U11, PI-15, G32, AP-13, E20, F16, PI-14, OP-158 m.3 (l)
+fn verify(args: &[&str]) -> (bool, String) {
+    let out = std::process::Command::new(bin("esuiss-access-verify", "access-verify"))
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().fold(String::new(), |mut h, x| {
+        let _ = std::fmt::Write::write_fmt(&mut h, format_args!("{x:02x}"));
+        h
+    })
+}
+
+/// A receipt the outgoing provider signed before the handover (`answer`), checked against the
+/// incoming provider's metadata `m`, where its binding key is superseded at `C_{h+1}` citing
+/// `C_k`: the real `access-verify` and the SDK verifier refuse it alone and accept it with the
+/// inclusion bundle the outgoing provider serves for its record in `C_k` and the consistency
+/// path to `C_{h+1}` (5780, L0-SIG-80, PI-15, U27, OP-159 m.17 (a)).
+async fn superseded_receipt(
+    p: &Pdp,
+    answer: &[u8],
+    m: &DomainMetadata,
+    (ck, ch1): (
+        &access_store::authority_checkpoint::AuthorityCheckpoint,
+        &access_store::authority_checkpoint::AuthorityCheckpoint,
+    ),
+    witness: &Witness,
+    served: &Target,
+) {
+    use access_kernel::receipt::{Expected, Receipt, ReceiptError};
+    use access_verifier::artefact::{self, Evidence, SentError};
+    use tower::ServiceExt as _;
+    let d = p.domain;
+    let answer: serde_json::Value = serde_json::from_slice(answer).unwrap();
+    let member = |k: &str| {
+        access_kernel::json::b64url_decode(answer["context"]["receipt"][k].as_str().unwrap())
+            .unwrap()
+    };
+    let (sign1, excerpt) = (member("sign1"), member("excerpt"));
+    let claimed = Receipt::from_bytes(
+        &suiss_crypto::cose::parse_sign1(&sign1)
+            .unwrap()
+            .payload
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(claimed.record < ck.size);
+    let origin = access_authority_sequencer::checkpoint::origin(&d);
+    let mut req = Request::get(format!(
+        "/access/v1/domains/{origin}/checkpoints/{}/inclusion/{}",
+        ck.size, claimed.record
+    ))
+    .body(Body::empty())
+    .unwrap();
+    req.extensions_mut()
+        .insert(access_http::adp::adapters::Pep(PEP.into()));
+    let r = access_http::transparency::router(crate::transparency::PgCheckpoints {
+        app: p.w.db.app.clone(),
+        witnesses: vec![served.clone()],
+    })
+    .oneshot(req)
+    .await
+    .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    let bundle = axum::body::to_bytes(r.into_body(), 1 << 22)
+        .await
+        .unwrap()
+        .to_vec();
+    let leaves =
+        access_store::witness::leaf_hashes(&p.w.db.app, &DomainId::from_bytes(d.0), 0, ch1.size)
+            .await
+            .unwrap();
+    let path =
+        suiss_ledger::checkpoint::proof::consistency(leaves.as_slice(), ck.size, ch1.size).unwrap();
+    let log = super::checkpoint::log_vkey(&origin, &ck.excerpt);
+
+    let root = std::env::temp_dir().join(format!("j2c-5780-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let file = |name: &str, bytes: &[u8]| {
+        let f = root.join(name);
+        std::fs::write(&f, bytes).unwrap();
+        f.to_str().unwrap().to_owned()
+    };
+    let (m_file, r_file, x_file, e_file) = (
+        file("metadata.cbor", &m.to_bytes().unwrap()),
+        file("receipt.cose", &sign1),
+        file("excerpt.cose", &excerpt),
+        file("evidence.cbor", &bundle),
+    );
+    let hashes: Vec<String> = path.iter().map(|h| hex(h)).collect();
+    let (d_hex, i_hex, now, at_size, at_root, at_path) = (
+        hex(&d.0),
+        hex(&claimed.intent.0),
+        (claimed.iat + 1).to_string(),
+        ch1.size.to_string(),
+        hex(&ch1.root),
+        hashes.join(","),
+    );
+    let base = [
+        "receipt",
+        "--metadata",
+        m_file.as_str(),
+        "--receipt",
+        r_file.as_str(),
+        "--excerpt",
+        x_file.as_str(),
+        "--domain",
+        d_hex.as_str(),
+        "--audience",
+        PEP,
+        "--intent",
+        i_hex.as_str(),
+        "--now",
+        now.as_str(),
+    ];
+    let (ok, text) = verify(&base);
+    assert!(!ok && text.contains("reject: receipt-key"), "{text}");
+    let mut with = base.to_vec();
+    with.extend([
+        "--evidence",
+        e_file.as_str(),
+        "--origin",
+        origin.as_str(),
+        "--log",
+        log.as_str(),
+        "--cosigners",
+        witness.vkey.as_str(),
+    ]);
+    let (ok, text) = verify(&with);
+    assert!(!ok && text.contains("reject: receipt-key"), "{text}");
+    with.extend([
+        "--at-size",
+        at_size.as_str(),
+        "--at-root",
+        at_root.as_str(),
+        "--at-path",
+        at_path.as_str(),
+    ]);
+    let (ok, text) = verify(&with);
+    assert!(
+        ok && text.contains(&hex(&claimed.to_bytes().unwrap())),
+        "{text}"
+    );
+
+    let evidence = Evidence::from_bundle(
+        &bundle,
+        (
+            origin.as_str(),
+            Verifier::parse(&log).unwrap(),
+            vec![Verifier::parse(&witness.vkey).unwrap()],
+        ),
+        Some((ch1.size, ch1.root, path.clone())),
+    )
+    .unwrap();
+    let expected = Expected {
+        domain: &d,
+        audience: PEP,
+        intent: &claimed.intent,
+        now: claimed.iat + 1,
+    };
+    let sdk = |e: Option<&Evidence>| {
+        artefact::receipt(&PureBackend, m, (&sign1, &excerpt, None), &expected, e)
+    };
+    assert_eq!(sdk(Some(&evidence)), Ok(claimed.clone()));
+    assert_eq!(
+        sdk(None),
+        Err(SentError::Receipt(ReceiptError::Key(
+            KeyScopeError::Superseded
+        )))
+    );
+    let pep = access_sdk::authorize::Pep {
+        audience: String::from(PEP),
+        domain: d,
+        metadata: m.clone(),
+    };
+    let digest = access_kernel::receipt::digest(&claimed).unwrap();
+    assert_eq!(
+        pep.receipt(
+            &PureBackend,
+            (&sign1, &excerpt, None),
+            &claimed.intent,
+            claimed.iat + 1,
+            Some(&evidence.of(digest)),
+        ),
+        Ok(claimed.clone())
+    );
+    assert_eq!(
+        pep.receipt(
+            &PureBackend,
+            (&sign1, &excerpt, None),
+            &claimed.intent,
+            claimed.iat + 1,
+            None,
+        ),
+        Err(access_sdk::authorize::Denied::Receipt(ReceiptError::Key(
+            KeyScopeError::Superseded
+        )))
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// §16.6 HO-1…HO-9, U27, U11, PI-15, G32, AP-13, E20, F16, PI-14, OP-158 m.3 (l), Ek B 5780
 #[tokio::test(flavor = "multi_thread")]
 async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     let label = "w5-ho-a";
@@ -342,9 +549,11 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     let d = p.domain;
     let id = DomainId::from_bytes(d.0);
     let router = routes(&p, 512);
+    let mut first = None;
     for _ in 0..3 {
-        let (s, _) = evaluate(&router, &p.allowed(Mode::Commit).await).await;
+        let (s, b) = evaluate(&router, &p.allowed(Mode::Commit).await).await;
         assert_eq!(s, StatusCode::OK);
+        first.get_or_insert(b);
     }
     let a_binding = p.w.domains.binding_key(d, false).await.unwrap();
     let suiss_crypto::cose::PublicKey::Ed25519(a_key) = a_binding.key else {
@@ -679,6 +888,17 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         )
         .is_ok()
     );
+
+    // 5780, L0-SIG-64, L0-SIG-80, PI-15, U27, OP-159 m.17 (a)
+    superseded_receipt(
+        &p,
+        &first.unwrap(),
+        &m,
+        (&ck, &ch1),
+        &independent,
+        &target(&independent, INDEPENDENT),
+    )
+    .await;
 
     independent.restart().unwrap();
     let (note, excerpt) = forged(&a_socket, d, next.size + 1).await;
