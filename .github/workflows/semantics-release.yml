@@ -1,4 +1,4 @@
-# OP-119 m.6, m.7, MD-15(b), OP-112 m.5, RT8, F-6, F-11
+# OP-119 m.6, m.7, MD-15(b), OP-112 m.5, OP-159 m.3 (z), U56, TI-RT12, RT8, F-6, F-11
 name: Semantics release
 
 on:
@@ -75,23 +75,39 @@ jobs:
         run: just f0
       - name: Kernel on the vectors
         run: cargo test --locked -p esuiss-access-kernel
-      # OP-119 m.3, m.6: every algebra theorem is marked proved, and the model builds with no
-      # theorem marked proved depending on sorry or an axiom outside the allowed set
-      - name: Lean algebra proofs are proved
+      # OP-119 m.3, m.6, OP-159 m.3 (v): every algebra theorem and the four Decision Combinator
+      # theorems are marked proved, and the model builds with no theorem marked proved depending on
+      # sorry or an axiom outside the allowed set
+      - name: Gate theorems are proved
         run: python3 -I .github/scripts/f0-drt.py lean conformance/lean/proofs.toml
       # F-2
       - name: Install the pinned Lean toolchain
         run: scripts/lean-fetch.sh "$RUNNER_TEMP/lean" >> "$GITHUB_PATH"
-      - name: Build the algebra model and its proofs
+      - name: Build the model, its proofs and the DRT runner
         working-directory: conformance/lean
-        run: lake build --wfail AccessAlgebra vectors
+        run: lake build --wfail AccessAlgebra vectors drt
       - name: No theorem marked proved depends on sorry
         working-directory: conformance/lean
         run: ./check-axioms.sh
       - name: Model against the Kernel algebra vectors
         working-directory: conformance/lean
         run: lake exe vectors ../vectors/core/*/*.json
-      # OP-119 m.6: the latest nightly DRT had zero mismatches over at least 10^7 inputs
+      # OP-159 m.3 (y), (z)
+      - name: Formal manifest is clean
+        run: cargo xtask check formal-manifest
+      # OP-159 m.3 (z): the lean and formal jobs passed on the tagged commit, none skipped
+      - name: Lean and formal jobs passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          run="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success" --jq '.workflow_runs[0].id // empty')"
+          if [[ -z "$run" ]]; then echo "::error::no successful CI run on main for $SHA"; exit 1; fi
+          gh api --paginate "repos/$REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '.jobs[]' | jq -s '{jobs: .}' > "$RUNNER_TEMP/jobs.json"
+          python3 -I .github/scripts/f0-drt.py jobs "$RUNNER_TEMP/jobs.json"
+      # OP-119 m.6, OP-159 m.3 (v): the latest nightly DRT had zero mismatches over at least 10^7
+      # inputs against F0 and 10^7 cases against the Lean model
       - name: Latest nightly DRT
         id: drt
         env:
@@ -108,10 +124,8 @@ jobs:
           python3 -I .github/scripts/f0-drt.py check "$RUNNER_TEMP/drt/f0-drt-summary.json"
           commit="$(jq -r .commit "$RUNNER_TEMP/drt/f0-drt-summary.json")"
           # the DRT counts only for the semantics it ran on
-          if ! git diff --quiet "$commit" "$GITHUB_SHA" -- crates/kernel ':!crates/kernel/benches' conformance/reference/f0 conformance/vectors conformance/cddl; then
-            echo "::error::Kernel, F0 or vectors changed since the nightly DRT at $commit"
-            exit 1
-          fi
+          git diff --name-only "$commit" "$GITHUB_SHA" > "$RUNNER_TEMP/drt/changed.txt"
+          python3 -I .github/scripts/f0-drt.py stale "$RUNNER_TEMP/drt/changed.txt"
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
@@ -157,8 +171,10 @@ jobs:
         run: |
           {
             echo "Released after the semantic version gate: every vector passes in the Kernel and in F0,"
-            echo "the Lean algebra proofs are proved, and nightly run [$DRT_RUN]($SERVER_URL/$REPOSITORY/actions/runs/$DRT_RUN)"
-            echo "compared the Kernel and F0 on at least 10^7 random inputs at \`$DRT_COMMIT\` with no difference."
+            echo "the Lean algebra and Decision Combinator theorems are proved, the lean and formal jobs passed,"
+            echo "and nightly run [$DRT_RUN]($SERVER_URL/$REPOSITORY/actions/runs/$DRT_RUN) compared the Kernel with F0 on"
+            echo "at least 10^7 random inputs and with the Lean model on at least 10^7 random algebra cases at"
+            echo "\`$DRT_COMMIT\` with no difference. The DRT is a differential test, not a proof."
             echo
             echo "Verify an archive with \`sha256sum -c SHA256SUMS\` and \`gh attestation verify <file> --repo $REPOSITORY\`."
             echo
