@@ -200,9 +200,20 @@ pub(crate) fn receipt(o: &Options) -> Result<Outcome, Usage> {
         &digest(o, "intent")?,
         o.uint("now")?,
     );
-    Ok(match result {
+    let out = match result {
         Ok(r) => Outcome::Accept(vec![("receipt", hex(&r))]),
         Err(e) => reject(&e),
+    };
+    // CR-45 RA-7, OP-159 m.3 (h)
+    crate::pq::retired(o, out, || {
+        Ok(crate::pq::receipt_digest(
+            &o.file("receipt")?,
+            (
+                &Digest(o.hash("domain")?),
+                o.text("audience")?,
+                &Digest(o.hash("intent")?),
+            ),
+        ))
     })
 }
 

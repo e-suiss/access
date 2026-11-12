@@ -191,6 +191,8 @@ mod tests {
         assert!(pep.metadata_signature);
         let verifier = load(&root(), "offline-verifier").unwrap();
         assert!(verifier.metadata_signature);
+        // CR-45 RA-7, OP-159 m.3 (h)
+        assert!(verifier.cddl.iter().any(|c| c == "pq-anchor.cddl"));
         assert_eq!(
             load(&root(), "approval-surface").unwrap().shared_with,
             ["work"]

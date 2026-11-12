@@ -509,3 +509,81 @@ fn the_class_table_matches_the_policy_defaults() {
     assert_eq!(caps::skew_ms(Tier::Ct1), 120_000);
     assert_eq!(caps::skew_ms(Tier::Ct2), 60_000);
 }
+
+fn pq_vectors() -> serde_json::Value {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../conformance/vectors/core/1/pq-inclusion.json");
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
+
+fn unhex(s: &str) -> Vec<u8> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
+}
+
+// CR-45 RA-7, L0-SIG-81, OP-159 m.3 (c), (h)
+#[test]
+fn pinned_pq_anchors_stay_local_and_a_pure_verifier_denies_a_retired_artefact() {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::digest::Digest;
+    use access_kernel::record::Disclosure;
+    use access_kernel::verify::key_scope::KeyScopeError;
+    use access_kernel::verify::pq::PqAnchor;
+    use access_kernel::verify::reanchor::{PqBundle, PqCosign};
+    let v = pq_vectors();
+    let c = v["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "bundle-reaches-the-anchor")
+        .unwrap();
+    let anchor = PqAnchor::from_bytes(&unhex(c["anchor"].as_str().unwrap())).unwrap();
+    let plain = support::profile();
+    let pinned = plain.clone().with_pq_anchors(vec![anchor]);
+    assert_eq!(pinned.digest(), plain.digest());
+    assert_eq!(pinned.pq_anchors().len(), 1);
+    let domain = Digest(unhex(v["domain"].as_str().unwrap()).try_into().unwrap());
+    let origin = v["origin"].as_str().unwrap();
+    let artefact = Digest(unhex(c["artefact"].as_str().unwrap()).try_into().unwrap());
+    let b = &c["bundle"];
+    let record = Disclosure::from_bytes(&unhex(b["record"].as_str().unwrap())).unwrap();
+    let path: Vec<[u8; 32]> = b["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| unhex(h.as_str().unwrap()).try_into().unwrap())
+        .collect();
+    let checkpoint = unhex(b["checkpoint"].as_str().unwrap());
+    let raw: Vec<(String, u64, Vec<u8>)> = b["cosigns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["name"].as_str().unwrap().to_owned(),
+                c["timestamp"].as_u64().unwrap(),
+                unhex(c["sign1"].as_str().unwrap()),
+            )
+        })
+        .collect();
+    let cosigns: Vec<PqCosign<'_>> = raw
+        .iter()
+        .map(|(n, t, s)| PqCosign::new(n, *t, s))
+        .collect();
+    let bundle = PqBundle::new(&record, &path, &checkpoint, &cosigns);
+    let backend = suiss_crypto::sig::PureBackend;
+    assert_eq!(
+        plain.accept_retired(&backend, (&domain, origin), &artefact, Some(&bundle)),
+        Err(KeyScopeError::PqAnchorMissing)
+    );
+    assert_eq!(
+        pinned.accept_retired(&backend, (&domain, origin), &artefact, None),
+        Err(KeyScopeError::Superseded)
+    );
+    assert_eq!(
+        pinned.accept_retired(&backend, (&domain, origin), &artefact, Some(&bundle)),
+        Err(KeyScopeError::Superseded)
+    );
+}

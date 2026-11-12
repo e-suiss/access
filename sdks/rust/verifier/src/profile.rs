@@ -6,7 +6,9 @@ use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::tier::Tier;
 use access_kernel::validity::{ProfileVariant, ValidityContract};
-use access_kernel::verify::key_scope::VerifierCaps;
+use access_kernel::verify::key_scope::{KeyScopeError, VerifierCaps};
+use access_kernel::verify::pq::PqAnchor;
+use access_kernel::verify::reanchor::PqBundle;
 
 use crate::caps::{self, Ceiling, SECURE_CLOCK_CLASS};
 
@@ -71,6 +73,7 @@ impl ProfileError {
 pub struct LocalProfile {
     body: VerifierProfile,
     digest: Digest,
+    pq_anchors: alloc::vec::Vec<PqAnchor>,
 }
 
 impl LocalProfile {
@@ -84,7 +87,45 @@ impl LocalProfile {
         Ok(Self {
             body,
             digest: Digest(digest),
+            pq_anchors: alloc::vec::Vec::new(),
         })
+    }
+
+    /// The profile with `anchors` pinned beforehand (`pq-anchor.cddl`, CR-45 RA-7, OP-159 m.3
+    /// (h)): local to this verifier, never part of the body or its digest.
+    #[must_use]
+    pub fn with_pq_anchors(mut self, anchors: alloc::vec::Vec<PqAnchor>) -> Self {
+        self.pq_anchors = anchors;
+        self
+    }
+
+    /// The pinned post-quantum anchors.
+    #[must_use]
+    pub fn pq_anchors(&self) -> &[PqAnchor] {
+        &self.pq_anchors
+    }
+
+    /// Accepts a classical artefact of `domain` with exact-content digest `artefact` after the
+    /// classical algorithm's retirement only through `bundle` reaching an anchor this profile
+    /// pinned (CR-45 RA-5, RA-7, L0-SIG-81).
+    ///
+    /// # Errors
+    /// [`KeyScopeError::PqAnchorMissing`] without a pinned anchor for `domain`;
+    /// [`KeyScopeError::Superseded`] without a bundle or when it does not reach the anchor.
+    pub fn accept_retired(
+        &self,
+        backend: &impl suiss_crypto::sig::Backend,
+        (domain, origin): (&Digest, &str),
+        artefact: &Digest,
+        bundle: Option<&PqBundle<'_>>,
+    ) -> Result<(), KeyScopeError> {
+        access_kernel::verify::reanchor::accept_retired(
+            backend,
+            &self.pq_anchors,
+            (domain, origin),
+            artefact,
+            bundle,
+        )
     }
 
     /// The body.

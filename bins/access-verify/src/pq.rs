@@ -150,3 +150,74 @@ pub(crate) fn pq_bundle(o: &Options) -> Result<Outcome, Usage> {
         },
     )
 }
+
+/// `out` of an artefact command of `--domain` (CR-45 RA-7, L0-SIG-81, OP-159 m.3 (h)): when
+/// the Domain Metadata shows the classical algorithm retired, the artefact whose exact-content
+/// digest `artefact` gives is accepted only through `--pq-bundle` reaching a pinned
+/// `--pq-anchors` anchor; without either it stays `pq-anchor-missing`.
+pub(crate) fn retired(
+    o: &Options,
+    out: Outcome,
+    artefact: impl FnOnce() -> Result<Option<access_kernel::digest::Digest>, Usage>,
+) -> Result<Outcome, Usage> {
+    if !matches!(&out, Outcome::Reject(r) if r.contains("pq-anchor-missing"))
+        || !o.has("pq-anchors")
+    {
+        return Ok(out);
+    }
+    let pinned = anchors(&o.file("pq-anchors")?)?;
+    if !o.has("pq-bundle") {
+        return Ok(reject("pq-bundle-missing"));
+    }
+    let Some(owned) = bundle(&o.file("pq-bundle")?) else {
+        return Ok(reject("bundle"));
+    };
+    let Some(digest) = artefact()? else {
+        return Ok(reject("artefact"));
+    };
+    let domain = access_kernel::digest::Digest(o.hash("domain")?);
+    let cosigns: Vec<PqCosign<'_>> = owned
+        .cosigns
+        .iter()
+        .map(|(n, t, s)| PqCosign::new(n, *t, s))
+        .collect();
+    let b = PqBundle::new(&owned.record, &owned.path, &owned.checkpoint, &cosigns);
+    Ok(
+        match accept_retired(
+            &AwsLcBackend,
+            &pinned,
+            (&domain, o.text("origin")?),
+            &digest,
+            Some(&b),
+        ) {
+            Ok(()) => Outcome::Accept(vec![("existed", String::from("anchored"))]),
+            Err(access_kernel::verify::key_scope::KeyScopeError::PqAnchorMissing) => {
+                reject("pq-anchor-missing")
+            }
+            Err(_) => reject("superseded"),
+        },
+    )
+}
+
+/// The `--artefact` digest.
+pub(crate) fn given(o: &Options) -> Result<Option<access_kernel::digest::Digest>, Usage> {
+    Ok(Some(access_kernel::digest::Digest(o.hash("artefact")?)))
+}
+
+/// The digest the decision record commits for the receipt `sign1` (TI-12) after checking it
+/// names `domain`, `audience` and `intent`.
+pub(crate) fn receipt_digest(
+    sign1: &[u8],
+    (domain, audience, intent): (
+        &access_kernel::digest::Digest,
+        &str,
+        &access_kernel::digest::Digest,
+    ),
+) -> Option<access_kernel::digest::Digest> {
+    let payload = suiss_crypto::cose::parse_sign1(sign1).ok()?.payload?;
+    let r = access_kernel::receipt::Receipt::from_bytes(&payload).ok()?;
+    if r.domain != *domain || r.audience != audience || r.intent != *intent {
+        return None;
+    }
+    access_kernel::receipt::digest(&r).ok()
+}

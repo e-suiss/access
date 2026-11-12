@@ -45,7 +45,18 @@ pub(crate) const COMMANDS: &[Command] = &[
     },
     Command {
         name: "key",
-        options: RESOLVE,
+        options: &[
+            "metadata",
+            "trusted",
+            "domain",
+            "excerpt",
+            "usage",
+            "iat",
+            "pq-anchors",
+            "pq-bundle",
+            "origin",
+            "artefact",
+        ],
         summary: "operational key for an artefact of --domain signed at --iat, from Domain Metadata and a key excerpt",
         run: key,
     },
@@ -61,6 +72,10 @@ pub(crate) const COMMANDS: &[Command] = &[
             "excerpt",
             "usage",
             "iat",
+            "pq-anchors",
+            "pq-bundle",
+            "origin",
+            "artefact",
         ],
         summary: "COSE_Sign1 artefact against a key-set, or against the operational key that `key` resolves",
         run: cose_sign1,
@@ -170,7 +185,17 @@ pub(crate) const COMMANDS: &[Command] = &[
     Command {
         name: "receipt",
         options: &[
-            "metadata", "trusted", "receipt", "excerpt", "domain", "audience", "intent", "now",
+            "metadata",
+            "trusted",
+            "receipt",
+            "excerpt",
+            "domain",
+            "audience",
+            "intent",
+            "now",
+            "pq-anchors",
+            "pq-bundle",
+            "origin",
         ],
         summary: "decision receipt for this PEP and intent (L2-RCP-3)",
         run: crate::artefacts::receipt,
@@ -268,13 +293,19 @@ fn resolve(o: &Options) -> Result<Result<Vec<u8>, Error>, Usage> {
 }
 
 fn key(o: &Options) -> Result<Outcome, Usage> {
-    Ok(match resolve(o)? {
+    let out = match resolve(o)? {
         Ok(k) => Outcome::Accept(vec![("key", hex(&k))]),
         Err(e) => reject(e),
-    })
+    };
+    crate::pq::retired(o, out, || crate::pq::given(o))
 }
 
 fn cose_sign1(o: &Options) -> Result<Outcome, Usage> {
+    let out = cose_inner(o)?;
+    crate::pq::retired(o, out, || crate::pq::given(o))
+}
+
+fn cose_inner(o: &Options) -> Result<Outcome, Usage> {
     let sign1 = o.file("sign1")?;
     let content_type = o.text("content-type")?;
     let keys = match (o.has("keys"), o.has("metadata")) {

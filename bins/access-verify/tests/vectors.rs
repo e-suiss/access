@@ -721,3 +721,51 @@ fn pq_bundle_needs_a_pinned_anchor_and_a_bundle_that_reaches_it() {
     assert_ne!(run.code, 0);
     assert_eq!(run.rejection(), None);
 }
+
+// CR-45 RA-7, L0-SIG-81, OP-159 m.3 (h)
+#[test]
+fn a_retired_classical_key_needs_a_bundle_to_an_anchor_pinned_for_its_domain() {
+    let k = vectors("key-scope");
+    let c = cases(&k)
+        .iter()
+        .find(|c| s(c, "id") == "retired-classical-key")
+        .unwrap();
+    let p = vectors("pq-inclusion");
+    let good = cases(&p)
+        .iter()
+        .find(|c| s(c, "id") == "bundle-reaches-the-anchor")
+        .unwrap();
+    let dir = Dir::new("pq-retired");
+    let domain = domain_hex(c);
+    let base = key_args(&dir, c, &domain);
+    let run = verify_owned("key", &base);
+    assert_eq!(run.rejection(), Some("pq-anchor-missing"), "{}", run.out);
+    let file = Value::Map(vec![
+        (Value::text("v"), Value::Unsigned(1)),
+        (
+            Value::text("anchors"),
+            Value::Array(vec![
+                dcbor::decode(&unhex(s(good, "anchor")), Limits::CEILING).unwrap(),
+            ]),
+        ),
+    ]);
+    let anchors = dir.file(
+        "anchors.cbor",
+        &dcbor::encode(&file, Limits::CEILING).unwrap(),
+    );
+    let mut pinned = base.clone();
+    pinned.extend(["--pq-anchors".into(), anchors]);
+    let run = verify_owned("key", &pinned);
+    assert_eq!(run.rejection(), Some("pq-bundle-missing"), "{}", run.out);
+    let bundle = pq_bundle_file(&dir, &good["bundle"]);
+    pinned.extend([
+        "--pq-bundle".into(),
+        bundle,
+        "--origin".into(),
+        s(&p, "origin").into(),
+        "--artefact".into(),
+        s(good, "artefact").into(),
+    ]);
+    let run = verify_owned("key", &pinned);
+    assert_eq!(run.rejection(), Some("pq-anchor-missing"), "{}", run.out);
+}
