@@ -17,3 +17,884 @@
 # Schema: conformance/schemas/formal-manifest.schema.json
 
 version = 1
+
+[[target]]
+target = "AccessAlgebra: the Grant algebra (⊑, ∩, normalize), delegation and projection"
+tool = "lean"
+property = "⊑ is a sound, decidable preorder, ∩ is the greatest lower bound up to coverage, normalize is idempotent and keeps coverage, delegation and projection never widen, and the lineage cascade is monotone"
+rules = [
+  "INV-3",
+  "INV-5",
+  "INV-8",
+  "L0-ALG-5",
+  "L0-ALG-51",
+  "L0-ALG-52",
+  "L0-ALG-70",
+  "L0-ALG-73",
+  "L0-ALG-75",
+  "CR-48 m.1",
+]
+status = "proved"
+assumptions = [
+  "only the axioms propext, Classical.choice and Quot.sound (check-axioms.sh); no sorry",
+  "the model is a Lean 4 model of the spec, not the Rust code",
+]
+scope = "the Lean model in conformance/lean; the Rust Kernel is compared with it by vectors and the nightly DRT, which is a test, not a proof"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/lean/proofs.toml#Access.boundLe_refl",
+  "conformance/lean/proofs.toml#Access.boundLe_trans",
+  "conformance/lean/proofs.toml#Access.withinB_mono",
+  "conformance/lean/proofs.toml#Access.boundMeet_le",
+  "conformance/lean/proofs.toml#Access.boundMeet_greatest",
+  "conformance/lean/proofs.toml#Access.boundNorm_idem",
+  "conformance/lean/proofs.toml#Access.boundNorm_within",
+  "conformance/lean/proofs.toml#Access.authLe_refl",
+  "conformance/lean/proofs.toml#Access.authLe_trans",
+  "conformance/lean/proofs.toml#Access.authLe_sound",
+  "conformance/lean/proofs.toml#Access.authMeet_le",
+  "conformance/lean/proofs.toml#Access.authMeet_greatest",
+  "conformance/lean/proofs.toml#Access.authMeet_greatest_wf",
+  "conformance/lean/proofs.toml#Access.authNorm_idem",
+  "conformance/lean/proofs.toml#Access.authNorm_covers",
+  "conformance/lean/proofs.toml#Access.delegation_never_widens",
+  "conformance/lean/proofs.toml#Access.chain_never_widens",
+  "conformance/lean/proofs.toml#Access.delegation_depth_decreases",
+  "conformance/lean/proofs.toml#Access.public_holder_is_leaf",
+  "conformance/lean/proofs.toml#Access.authMeet_normal",
+  "conformance/lean/proofs.toml#Access.decSubsumes",
+  "conformance/lean/proofs.toml#Access.decMeetIs",
+  "conformance/lean/proofs.toml#Access.decNormalizesTo",
+  "conformance/lean/proofs.toml#Access.projection_within_source",
+  "conformance/lean/proofs.toml#Access.cascade_monotone",
+  "ci:ci/lean",
+]
+
+[[target]]
+target = "AccessAlgebra.Combinator: the Decision Combinator model"
+tool = "lean"
+property = "a denying restriction makes every decision DENY, failure gives no ALLOW, ALLOW needs a covering basis, met requirements and no denying restriction, and the decision is independent of proof order and restriction order and repetition (T14 earliest position aside)"
+rules = [
+  "CR-48 m.2",
+  "MD-4",
+  "SI-6",
+  "TI-9",
+  "MD-8",
+  "INV-27",
+  "T14",
+]
+status = "proved"
+assumptions = [
+  "only the axioms propext, Classical.choice and Quot.sound (check-axioms.sh); no sorry",
+  "the model is a Lean 4 model of the spec, not the Rust code",
+]
+scope = "the Lean model in conformance/lean; the Rust Kernel is compared with it by vectors and the nightly DRT, which is a test, not a proof"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/lean/proofs.toml#Access.Combinator.forbid_trumps_permit",
+  "conformance/lean/proofs.toml#Access.Combinator.default_deny",
+  "conformance/lean/proofs.toml#Access.Combinator.allowed_only_if_explicitly_permitted",
+  "conformance/lean/proofs.toml#Access.Combinator.order_and_dup_independent",
+  "conformance/lean/proofs.toml#Access.Combinator.sound_slicing",
+  "ci:ci/lean",
+]
+
+[[target]]
+target = "AccessAlgebra.Holding: the holding episode model"
+tool = "lean"
+property = "the lazy since equals the eager episode, staleness never closes an episode, an affirmatively closed episode never comes back, and lifting a cutoff revives nothing"
+rules = [
+  "CR-48 m.3",
+  "INV-31",
+  "TI-RT9",
+  "SI-10",
+]
+status = "proved"
+assumptions = [
+  "only the axioms propext, Classical.choice and Quot.sound (check-axioms.sh); no sorry",
+  "the model is a Lean 4 model of the spec, not the Rust code",
+]
+scope = "the Lean model in conformance/lean; the Rust Kernel is compared with it by vectors and the nightly DRT, which is a test, not a proof"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/lean/proofs.toml#Access.Holding.lazy_eq_eager",
+  "conformance/lean/proofs.toml#Access.Holding.staleness_keeps_episode",
+  "conformance/lean/proofs.toml#Access.Holding.close_is_terminal",
+  "conformance/lean/proofs.toml#Access.Holding.cutoff_lift_never_revives",
+  "ci:ci/lean",
+]
+
+[[target]]
+target = "AccessAlgebra.Meta: meta-action holding terms"
+tool = "lean"
+property = "an allowed Exercise on a holding basis rests on a lineage whose every link holds at the trusted time and on the pinned episode, and anchor and public bases are decided as before"
+rules = [
+  "OP-159 m.3 (k)",
+  "L0-META-13",
+]
+status = "proved"
+assumptions = [
+  "only the axioms propext, Classical.choice and Quot.sound (check-axioms.sh); no sorry",
+  "the model is a Lean 4 model of the spec, not the Rust code",
+]
+scope = "the Lean model in conformance/lean; the Rust Kernel is compared with it by vectors and the nightly DRT, which is a test, not a proof"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/lean/proofs.toml#Access.Meta.meta_holding_sound",
+  "conformance/lean/proofs.toml#Access.Meta.meta_other_bases_unchanged",
+  "ci:ci/lean",
+]
+
+[[target]]
+target = "Kernel ↔ Lean model differential test (⊑, ∩, normalize, child_within_parent)"
+tool = "drt"
+property = "the Kernel and the Lean model give the same answer on random normalized algebra cases"
+rules = [
+  "CR-49 m.1",
+  "SA-T4",
+  "MD-15",
+]
+status = "DRT-linked"
+assumptions = [
+  "normalized authority sets only (OP-159 m.6 (b)); fixed catalog, no Case purposes (m.6 (c))",
+]
+scope = "at least 10^7 random cases a night with zero mismatches; probabilistic, not a proof"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "ci:nightly/f0-differential-summary",
+]
+
+[[target]]
+target = "Kernel ↔ F0 reference evaluator differential test"
+tool = "drt"
+property = "the Kernel and the naive F0 reference evaluator give the same outcome, blockers and digests on random inputs"
+rules = [
+  "CR-49 m.2",
+  "U13",
+  "MD-15",
+]
+status = "DRT-linked"
+assumptions = [
+  "F0 is written from the spec without optimisation; agreement is evidence, not proof",
+]
+scope = "at least 10^7 random inputs a night with zero mismatches"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "ci:nightly/f0-differential-summary",
+]
+
+[[target]]
+target = "validity::check: local acceptance arithmetic min(horizon, iat + cap)"
+tool = "kani"
+property = "acceptance holds exactly when iat ≤ now + skew and now ≤ min(iat + cap, horizon) + skew, and every sum that leaves u64 is Overflow, never acceptance"
+rules = [
+  "CR-K1",
+  "T20",
+  "OP-117 m.13",
+  "OP-118 m.4",
+]
+status = "proved"
+assumptions = [
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every u64 time, ceiling, horizon and skew; online use; the operational key window comparison inside verify::key_scope is checked by vectors, not by this harness"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k1.rs#k1_acceptance_is_exact_and_overflow_is_refused",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "validity::check: monotone ceilings"
+tool = "kani"
+property = "a narrower horizon ceiling or horizon never accepts what the wider one refuses"
+rules = [
+  "CR-K1",
+  "T20",
+]
+status = "proved"
+assumptions = [
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every u64 input; where the wider sum leaves u64 the wider one is Overflow, a refusal"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k1.rs#k1_narrowing_is_monotone",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "validity::ceiling: CT2 offline extension and report deadline"
+tool = "kani"
+property = "the CT2 offline extension never exceeds 4 h nor the declared value, and the report deadline never wraps"
+rules = [
+  "CR-K1",
+  "SEC14",
+]
+status = "proved"
+assumptions = [
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every u64 input"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k1.rs#k1_ceilings_hold",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "validity::horizon"
+tool = "kani"
+property = "the horizon is the earliest of issued_at + profile max and the dependency bounds, never wraps, and one more bound only lowers it"
+rules = [
+  "CR-K2",
+  "MD-7",
+  "OP-108 m.1",
+  "OP-108 m.2",
+]
+status = "proved"
+assumptions = [
+  "unwind 5",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "up to three dependency bounds plus one added"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k2.rs#k2_horizon_is_the_earliest_bound",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "validity::check: bounded-staleness Δ"
+tool = "kani"
+property = "offline bounded-staleness use is accepted exactly when a refresh at or before now is at most Δ old; a smaller Δ never accepts more"
+rules = [
+  "CR-K2",
+  "SI-7",
+]
+status = "proved"
+assumptions = [
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every u64 time and Δ; offline use"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k2.rs#k2_delta_is_consumed_and_never_extends",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "pap::demand"
+tool = "kani"
+property = "a count slice draws one per use and an amount slice the checked sum of the intent's amounts in its unit, nothing on a negative amount or overflow"
+rules = [
+  "CR-K3",
+  "L2-PAP-3",
+]
+status = "proved"
+assumptions = [
+  "unwind 4",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "two amount parameters, two units; the draw ≤ slice comparison inside pap::verify is checked by the L2-PAP vectors"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k3.rs#k3_demand_is_the_checked_sum",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "meta::ExerciseDraw decoding"
+tool = "kani"
+property = "a stored draw reads back only when released ≤ drawn"
+rules = [
+  "CR-K3",
+  "TI-RT8",
+  "OP-141 m.28",
+]
+status = "proved"
+assumptions = [
+  "unwind 8",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every drawn and released u64, count and amount units"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k3.rs#k3_release_never_exceeds_draw",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "report::verify totals"
+tool = "kani"
+property = "an offline report is accepted exactly when no deny entry draws and no total leaves u64, and each total is the sum of the allow draws"
+rules = [
+  "CR-K3",
+  "L2-RPT-3",
+]
+status = "modelled"
+assumptions = [
+  "unwind 4",
+  "stub access_kernel::report::seed",
+  "stub access_kernel::report::link",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "two entries, two budget terms; the chain digest is stubbed, so the chain itself is checked by the L2-RPT vectors"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k3.rs#k3_report_totals_are_exact",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "record::check_link"
+tool = "kani"
+property = "a record follows another only at the next position, over its leaf, in the same domain and never earlier"
+rules = [
+  "CR-K4",
+  "TI-RT2",
+  "TI-19",
+]
+status = "proved"
+assumptions = [
+  "stub access_kernel::record::LeafCore::leaf_hash",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every position and time; the leaf hash is stubbed, the hash itself is checked by vectors"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k4.rs#k4_recorded_at_is_monotone",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "fold::rollback_guard"
+tool = "kani"
+property = "an accepted recovery is bound to the cited N, to a root a witness co-signed at N, never below R*, and arm (i) only when the replica reproduces the highest witnessed checkpoint"
+rules = [
+  "CR-K5",
+  "T19",
+  "SEC21",
+  "SEC22",
+]
+status = "proved"
+assumptions = [
+  "unwind 5",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "up to three declared witnesses, two roots"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k5.rs#k5_guard_is_bound_to_n_cited",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "fold::rollback_guard: N below R*"
+tool = "kani"
+property = "a recovery citing N below R* is refused"
+rules = [
+  "CR-K5",
+  "SEC21",
+]
+status = "proved"
+assumptions = [
+  "unwind 5",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "up to three declared witnesses, two roots"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k5.rs#k5_below_r_star_is_refused",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "dcbor::decode and cose::parse_sign1 on up to 8 bytes"
+tool = "kani"
+property = "no panic, no out-of-bounds read, a decoded item re-encodes to the same bytes and nests no deeper than the limit"
+rules = [
+  "CR-K6",
+  "CR-10",
+]
+status = "proved"
+assumptions = [
+  "unwind 10",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "inputs of at most 8 bytes, depth limits 0 to 4"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k6.rs#k6_decoder_round_trips_up_to_8_bytes",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "dcbor::decode and cose::parse_sign1 on up to 32 bytes"
+tool = "kani"
+property = "no panic, no out-of-bounds read, a decoded item re-encodes to the same bytes and nests no deeper than the limit"
+rules = [
+  "CR-K6",
+  "CR-10",
+]
+status = "modelled"
+assumptions = [
+  "unwind 34",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "inputs of at most 32 bytes (CR-K6 N ≤ 32 B), the ceiling depth"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k6.rs#k6_decoder_round_trips_up_to_32_bytes",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "cose::Algorithm::from_cose"
+tool = "kani"
+property = "a COSE identifier names exactly one known algorithm or none"
+rules = [
+  "CR-K7",
+  "CR-5",
+]
+status = "proved"
+assumptions = [
+  "unwind 8",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every i64"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k7.rs#k7_cose_ids_are_exact",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "key_scope::hybrid_admits"
+tool = "kani"
+property = "one signature satisfies classic only when classical, pq only when ML-DSA, and both never"
+rules = [
+  "CR-K7",
+  "L0-SIG-75a",
+  "CR-42 m.2",
+]
+status = "proved"
+assumptions = [
+  "unwind 8",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "every policy and algorithm"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k7.rs#k7_hybrid_admits_one_signature",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "jws::verify_compact algorithm selection"
+tool = "kani"
+property = "a JWS whose alg is unknown, none, or outside the accepted set is refused as an algorithm error"
+rules = [
+  "CR-K7",
+  "CR-7",
+  "CR-55 m.8",
+]
+status = "modelled"
+assumptions = [
+  "unwind 160",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "eight alg names, every accepted subset; no key and no signature"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k7.rs#k7_alg_outside_the_set_is_refused",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "combinator::evaluate: budget terms"
+tool = "kani"
+property = "ALLOW exactly when every demand fits its remaining budget; an unfitting rolling window without a reset time is an input error"
+rules = [
+  "CR-K8",
+  "CR-36",
+  "L0-EVAL-15",
+  "OP-114 m.11",
+]
+status = "modelled"
+assumptions = [
+  "unwind 6",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "one hop, up to two budget terms, empty catalog"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k8.rs#k8_allowed_never_exceeds_budget",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "combinator::evaluate: lineage of 16"
+tool = "kani"
+property = "a lineage of 16 hops is decided or runs out of steps, without panic"
+rules = [
+  "CR-K9",
+  "SI-20",
+  "OP-108 m.10",
+]
+status = "modelled"
+assumptions = [
+  "unwind 19",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "16 identical active hops, every step budget"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k9.rs#k9_lineage_of_sixteen_is_decided",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "combinator::evaluate: lineage of 17"
+tool = "kani"
+property = "a lineage deeper than 16 is an input error"
+rules = [
+  "CR-K9",
+  "OP-108 m.10",
+]
+status = "modelled"
+assumptions = [
+  "unwind 19",
+  "the Kernel has no clock or RNG: time is an input, so nothing is stubbed for them",
+]
+scope = "17 identical active hops, every step budget"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "crates/kernel/src/proofs/k9.rs#k9_lineage_of_seventeen_is_refused",
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "Kernel pure functions (autoharness)"
+tool = "kani"
+property = "no panic and no arithmetic overflow in the pure functions of validity, tier and verify::ml_dsa"
+rules = [
+  "CR-47",
+]
+status = "modelled"
+assumptions = [
+  "one monomorphization per generic function, so a generic function is checked for one type only",
+]
+scope = "the functions cargo kani autoharness can generate inputs for in those modules"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "ci:nightly/test-full",
+]
+
+[[target]]
+target = "Commit.tla: commit protocol"
+tool = "tla"
+property = "total consumption stays within capacity, every acknowledged record is in the log, two leaders never both append (epoch CAS), and a retry appends nothing"
+rules = [
+  "CR-48 m.5",
+  "§5.1",
+  "§6.5",
+  "T6",
+]
+status = "proved"
+assumptions = [
+  "TLC explores every state within the bounds; nothing beyond them is checked",
+  "a design model of the protocol, not of the code",
+]
+scope = "bounds from Commit.cfg: Leaders = {l1, l2}, Requests = {r1, r2, r3}, Capacity = 2, MaxEpoch = 3, Fenced = TRUE"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/Commit.tla#TypeOK",
+  "conformance/tla/Commit.tla#WithinCapacity",
+  "conformance/tla/Commit.tla#AckedIsLogged",
+  "conformance/tla/Commit.tla#RetryIsIdempotent",
+  "conformance/tla/Commit.tla#AtMostOneWriter",
+  "conformance/tla/Commit.tla#EpochMonotone",
+  "conformance/tla/Commit.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "Commit.tla without the epoch CAS (control model)"
+tool = "tla"
+property = "with leaders not fenced by the epoch CAS, TLC finds a state where two leaders can append; the formal job fails unless this counterexample appears"
+rules = [
+  "F20",
+  "CR-48 m.5",
+]
+status = "modelled"
+assumptions = [
+  "a control: it shows the checker finds a known violation, it proves nothing",
+]
+scope = "bounds from CommitUnfenced.cfg: Leaders = {l1, l2}, Requests = {r1, r2, r3}, Capacity = 2, MaxEpoch = 3, Fenced = FALSE"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/Commit.tla#AtMostOneWriter",
+  "conformance/tla/CommitUnfenced.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "HandoverRecovery.tla: handover, recovery and witness with mirror-before-witness"
+tool = "tla"
+property = "one authoritative lineage, no cosignature above the fence under an old key, a sealed cutover, no witness fork on an honest failover, and after a recovery the new lineage is co-signed"
+rules = [
+  "EI-20",
+  "§13",
+  "§17.1",
+  "§6.5 S12",
+  "SEC21",
+  "SEC22",
+  "T17",
+]
+status = "proved"
+assumptions = [
+  "TLC explores every state within the bounds; nothing beyond them is checked",
+  "a design model of the protocol, not of the code",
+]
+scope = "bounds from HandoverRecovery.cfg: Providers = {p1, p2}, None = None, MaxLen = 3, MaxKey = 3, MaxId = 5, MirrorFirst = TRUE"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/HandoverRecovery.tla#TypeOK",
+  "conformance/tla/HandoverRecovery.tla#SingleLineage",
+  "conformance/tla/HandoverRecovery.tla#NoCosignAfterFence",
+  "conformance/tla/HandoverRecovery.tla#ForksAreDeclared",
+  "conformance/tla/HandoverRecovery.tla#HonestFailoverNoFork",
+  "conformance/tla/HandoverRecovery.tla#MirrorBeforeWitness",
+  "conformance/tla/HandoverRecovery.tla#CutoverIsSealed",
+  "conformance/tla/HandoverRecovery.tla#NewLineageCosigned",
+  "conformance/tla/HandoverRecovery.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "HandoverRecovery.tla: handover and recovery without mirror-before-witness (arm (ii), forks)"
+tool = "tla"
+property = "one authoritative lineage, no cosignature above the fence under an old key, and every witness fork lies in a suffix a recovery declared lost (the last common checkpoint of the replica's branch)"
+rules = [
+  "EI-20",
+  "§6.5 S12",
+  "SEC22",
+]
+status = "proved"
+assumptions = [
+  "TLC explores every state within the bounds; nothing beyond them is checked",
+  "a design model of the protocol, not of the code",
+]
+scope = "bounds from HandoverRecoveryLossy.cfg: Providers = {p1, p2}, None = None, MaxLen = 3, MaxKey = 3, MaxId = 5, MirrorFirst = FALSE"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/HandoverRecovery.tla#TypeOK",
+  "conformance/tla/HandoverRecovery.tla#SingleLineage",
+  "conformance/tla/HandoverRecovery.tla#NoCosignAfterFence",
+  "conformance/tla/HandoverRecovery.tla#ForksAreDeclared",
+  "conformance/tla/HandoverRecoveryLossy.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "AckBeforeWitness.tla: witness and replica before ack"
+tool = "tla"
+property = "an acknowledged revocation or CT3 record is in an independently witnessed checkpoint and in the replica's prefix, and survives the loss of the provider"
+rules = [
+  "SEC23",
+  "§13",
+  "§17.1",
+]
+status = "proved"
+assumptions = [
+  "TLC explores every state within the bounds; nothing beyond them is checked",
+  "a design model of the protocol, not of the code",
+]
+scope = "bounds from AckBeforeWitness.cfg: MaxLen = 5"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/AckBeforeWitness.tla#TypeOK",
+  "conformance/tla/AckBeforeWitness.tla#AckedIsWitnessedAndReplicated",
+  "conformance/tla/AckBeforeWitness.tla#AckSurvivesProviderLoss",
+  "conformance/tla/AckBeforeWitness.tla#ReplicaIsAPrefix",
+  "conformance/tla/AckBeforeWitness.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "PqReanchor.tla: PQ re-anchor and recovery re-anchor"
+tool = "tla"
+property = "an anchored PQ re-anchor checkpoint lies on the current lineage and its PQ cosignature follows the branch the recovery keeps; a re-anchor lost with a recovery suffix is pending again until re-made"
+rules = [
+  "CR-45",
+  "§15.18",
+  "T17",
+]
+status = "proved"
+assumptions = [
+  "TLC explores every state within the bounds; nothing beyond them is checked",
+  "a design model of the protocol, not of the code",
+]
+scope = "bounds from PqReanchor.cfg: MaxLen = 3, MaxId = 6"
+semantic_version = "kernel-v0.7.0"
+evidence = [
+  "conformance/tla/PqReanchor.tla#TypeOK",
+  "conformance/tla/PqReanchor.tla#AnchorFollowsBranch",
+  "conformance/tla/PqReanchor.tla#NoAnchorOnAbandonedBranch",
+  "conformance/tla/PqReanchor.tla#PendingIsAnchored",
+  "conformance/tla/PqReanchor.cfg",
+  "ci:ci/formal",
+]
+
+[[target]]
+target = "Merkle path and buffer slicing"
+tool = "Flux"
+property = "index < len; path length ≤ log2(size) + 1"
+rules = [
+  "CR-46",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "Status list and revocation cache races"
+tool = "Loom/Shuttle"
+property = "no revocation and verification race"
+rules = [
+  "CR-46",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "OAuth and OIDC actor protocol models"
+tool = "Stateright"
+property = "no authorization code used twice, no token without matching state, no PKCE exchange without the verifier"
+rules = [
+  "CR-48 m.5",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "Protocol security (key exchange, tokens)"
+tool = "Tamarin/ProVerif"
+property = "secrecy and authentication of the protocol messages"
+rules = [
+  "SA-T5",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "Replicated store histories"
+tool = "Jepsen/Elle"
+property = "no anomaly outside the declared isolation level"
+rules = [
+  "CR-46",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "Kernel functional correctness"
+tool = "Verus"
+property = "the Rust Kernel meets the Lean model's specification"
+rules = [
+  "CR-46",
+  "MD-1",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "Kernel parsers under continuous fuzzing"
+tool = "OSS-Fuzz"
+property = "no crash on the corpus over continuous runs"
+rules = [
+  "CR-46",
+  "SA-T6",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[target]]
+target = "OAuth and OIDC web model"
+tool = "Fett–Küsters–Schmitz web model"
+property = "protocol attack classes of the web model"
+rules = [
+  "CR-52 m.5",
+]
+status = "planned"
+assumptions = [
+  "needs a dependency or external tool not adopted in this release (OP-159 m.3 (y))",
+]
+scope = "not checked"
+semantic_version = "kernel-v0.7.0"
+evidence = []
+
+[[out_of_scope]]
+part = "the async runtime (tokio) and every await point"
+limit = "HL-15"
+note = "outside every model; covered by tests, fuzzing and deterministic simulation (HL-29)"
+
+[[out_of_scope]]
+part = "the HTTP layer, routing and serialization of requests"
+limit = "HL-15"
+note = "outside every model; covered by tests and the conformance suite (HL-29)"
+
+[[out_of_scope]]
+part = "the Rust code of the Kernel against the Lean model"
+limit = "HL-29"
+note = "related by vectors and the nightly differential test, which is a test, not a proof (CR-49 m.1)"
+
+[[out_of_scope]]
+part = "constant-time behaviour after compilation"
+limit = "HL-16"
+note = "the compiler gives no constant-time guarantee; the constant-time points are measured (dudect, ctgrind, assembly snapshots)"
+
+[[out_of_scope]]
+part = "the CPU and its microarchitecture"
+limit = "HL-16"
+note = "timing on the CPU is measured, not proved; DIT and padding reduce leakage, they do not remove it"
+
+[[out_of_scope]]
+part = "the cryptographic libraries (aws-lc-rs, ML-DSA and ML-KEM implementations)"
+limit = "HL-29"
+note = "assumed correct; the aws-lc-rs proofs carry their own caveats and do not cover ML-DSA or ML-KEM (CR-51 m.1)"
