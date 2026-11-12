@@ -4226,8 +4226,33 @@ export interface components {
             /** @enum {string} */
             compute: "shared" | "dedicated";
         };
-        /** @description The realm's signing profile, its classical and ML-DSA signing keys and algorithms, the key exchange share policy and whether the FIPS module is in use (OP-159 m.3 (o), (r), (t)); its lane names its members when it serves it. */
-        Signing: Record<string, never>;
+        /** @description The realm's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)). */
+        Signing: {
+            /**
+             * @description The open ML-DSA parameter set; null while the realm signs classically only.
+             * @enum {string|null}
+             */
+            signing_profile: "ml-dsa-65" | "ml-dsa-44" | "ml-dsa-87" | null;
+            /** @description The JWS algorithms the realm signs with: its classical algorithm, then ML-DSA while the profile is open. */
+            algorithms: string[];
+            /**
+             * @description The hybrid key exchange share policy; both offer the post-quantum group.
+             * @enum {string}
+             */
+            kex_share: "optimistic" | "advertise-only";
+            /** @description The realm's FIPS crypto profile is on. */
+            fips: boolean;
+            /** @description This deployment signs with the validated FIPS module. */
+            fips_module: boolean;
+            /** @description The governing domain, base64url. */
+            governing_domain: string;
+            /** @description The governing domain's last post-quantum re-anchor; null before the first. */
+            pq_reanchor: {
+                size?: number;
+                time?: number;
+                witnesses?: string[];
+            } | null;
+        };
     };
     responses: {
         /** @description Malformed request: query, filter, cursor, body or Idempotency-Key. */
@@ -14514,7 +14539,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -14559,7 +14583,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -14604,7 +14627,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };

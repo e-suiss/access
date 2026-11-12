@@ -20932,9 +20932,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -21014,9 +21011,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -21106,9 +21100,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -24363,7 +24354,81 @@
       },
       "Signing": {
         "type": "object",
-        "description": "The realm's signing profile, its classical and ML-DSA signing keys and algorithms, the key exchange share policy and whether the FIPS module is in use (OP-159 m.3 (o), (r), (t)); its lane names its members when it serves it."
+        "description": "The realm's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)).",
+        "required": [
+          "signing_profile",
+          "algorithms",
+          "kex_share",
+          "fips",
+          "fips_module",
+          "governing_domain",
+          "pq_reanchor"
+        ],
+        "properties": {
+          "signing_profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ml-dsa-65",
+              "ml-dsa-44",
+              "ml-dsa-87",
+              null
+            ],
+            "description": "The open ML-DSA parameter set; null while the realm signs classically only."
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The JWS algorithms the realm signs with: its classical algorithm, then ML-DSA while the profile is open."
+          },
+          "kex_share": {
+            "type": "string",
+            "enum": [
+              "optimistic",
+              "advertise-only"
+            ],
+            "description": "The hybrid key exchange share policy; both offer the post-quantum group."
+          },
+          "fips": {
+            "type": "boolean",
+            "description": "The realm's FIPS crypto profile is on."
+          },
+          "fips_module": {
+            "type": "boolean",
+            "description": "This deployment signs with the validated FIPS module."
+          },
+          "governing_domain": {
+            "type": "string",
+            "description": "The governing domain, base64url."
+          },
+          "pq_reanchor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The governing domain's last post-quantum re-anchor; null before the first.",
+            "properties": {
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "time": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "witnesses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "headers": {
