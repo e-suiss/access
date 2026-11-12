@@ -49,6 +49,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   placement: "screenPlacement",
   durability: "screenDurability",
   ratelimits: "screenRateLimits",
+  signing: "screenSigning",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -121,6 +122,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Durability ctx={ctx} />;
     case "ratelimits":
       return <RateLimits ctx={ctx} />;
+    case "signing":
+      return <Planned />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

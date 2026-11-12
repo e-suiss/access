@@ -1051,6 +1051,26 @@ export const en = {
   // OP-158 m.4 (b) (W6)
   recoveryAvailable: "Recovery is set up: {k} of {n} recovery keys are needed",
   recoveryHandoverAtPosition: "Moved to a new provider at record position {position}",
+  // OP-159 m.4 (a): Stage 14 signing screen and hosting lines
+  screenSigning: "Signing",
+  signingIntro:
+    "Which algorithms this realm signs tokens with. Adding post-quantum signatures keeps the classical ones; apps get them only when they ask.",
+  signingPqOn: "Post-quantum signatures on ({alg})",
+  signingPqOff: "Classical signatures only",
+  signingPqTurnOff: "Turn off post-quantum signatures",
+  signingNoAnchor: "No post-quantum anchor yet",
+  signingAnchor: "Post-quantum anchor at log size {size}, {time}",
+  signingFipsPqExclusive: "FIPS and post-quantum profiles can't be combined",
+  signingFipsModule: "FIPS 140-3 module: {state}",
+  signingKexShare: "Post-quantum key exchange: {mode}",
+  signingKexOptimistic: "Send the post-quantum key share first",
+  signingKexAdvertise: "Send the classical key share first and offer post-quantum",
+  signingKeyUnavailable:
+    "This HSM can't hold post-quantum keys, so post-quantum signatures can't be turned on.",
+  hostingSharedHsm: "Shared HSM partition: co-tenant risk applies",
+  hostingDedicatedHsm: "Dedicated HSM partition",
+  hostingSharedCompute: "Shared compute: co-tenant risk applies",
+  hostingDedicatedCompute: "Dedicated compute",
 } as const;
 
 export type Key = keyof typeof en;

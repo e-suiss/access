@@ -34,6 +34,7 @@ export const SCREENS = {
     "placement",
     "durability",
     "ratelimits",
+    "signing",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
@@ -115,6 +116,12 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   durability: [idp("realm", "dr_profile"), idp("realm", "dr_profile_close")],
   // OP-158 m.4 (a), m.3 (v)
   ratelimits: [idp("realm", "rate_limit")],
+  // OP-159 m.4 (a), m.3 (o), (r), (t)
+  signing: planned([
+    idp("realm", "signing_profile"),
+    idp("realm", "signing_profile_close"),
+    idp("realm", "kex_share"),
+  ]),
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

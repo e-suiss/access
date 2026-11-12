@@ -186,6 +186,9 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   putCryptoProfile: ["idp.realm", "crypto_profile"],
   putHashProfile: ["idp.realm", "hash_profile"],
   putAuditTier: ["idp.realm", "audit_tier"],
+  // OP-159 m.4 (a)
+  putSigningProfile: ["idp.realm", "signing_profile"],
+  putKexShare: ["idp.realm", "kex_share"],
 };
 
 export interface Write {

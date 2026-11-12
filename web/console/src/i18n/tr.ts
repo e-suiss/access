@@ -1062,4 +1062,24 @@ export const tr: Record<Key, string> = {
   // OP-158 m.4 (b) (W6)
   recoveryAvailable: "Kurtarma kurulu: {n} kurtarma anahtarından {k} tanesi gerekir",
   recoveryHandoverAtPosition: "{position} numaralı kayıt konumunda yeni bir sağlayıcıya taşındı",
+  // OP-159 m.4 (a): Stage 14 signing screen and hosting lines
+  screenSigning: "İmza",
+  signingIntro:
+    "Bu realm'in token'ları hangi algoritmalarla imzaladığı. Kuantum sonrası imza eklemek klasik imzaları korur; uygulamalar onları yalnız isterlerse alır.",
+  signingPqOn: "Kuantum sonrası imzalar açık ({alg})",
+  signingPqOff: "Yalnız klasik imzalar",
+  signingPqTurnOff: "Kuantum sonrası imzaları kapat",
+  signingNoAnchor: "Henüz kuantum sonrası çapa yok",
+  signingAnchor: "{size} kayıt boyutunda kuantum sonrası çapa, {time}",
+  signingFipsPqExclusive: "FIPS ve kuantum sonrası profiller birlikte kullanılamaz",
+  signingFipsModule: "FIPS 140-3 modülü: {state}",
+  signingKexShare: "Kuantum sonrası anahtar değişimi: {mode}",
+  signingKexOptimistic: "Önce kuantum sonrası anahtar payını gönder",
+  signingKexAdvertise: "Önce klasik anahtar payını gönder ve kuantum sonrasını sun",
+  signingKeyUnavailable:
+    "Bu HSM kuantum sonrası anahtar tutamıyor; bu yüzden kuantum sonrası imzalar açılamaz.",
+  hostingSharedHsm: "Paylaşılan HSM bölümü: ortak kiracı riski geçerli",
+  hostingDedicatedHsm: "Ayrılmış HSM bölümü",
+  hostingSharedCompute: "Paylaşılan işlem gücü: ortak kiracı riski geçerli",
+  hostingDedicatedCompute: "Ayrılmış işlem gücü",
 };
