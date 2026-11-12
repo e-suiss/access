@@ -838,7 +838,11 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         )
         .is_ok()
     );
-    assert_eq!(
+    // OP-159 m.3 (i), OP-158 m.16 (h)
+    assert!(m.binding.values().any(|b| b.superseded.is_some_and(
+        |s| s.cause == Some(access_kernel::verify::key_scope::SupersededCause::ReAnchor)
+    )));
+    assert!(
         operational_key(
             &PureBackend,
             &m,
@@ -846,6 +850,18 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
             &old_excerpt,
             KeyUsage::Receipt,
             old_iat,
+            None
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        operational_key(
+            &PureBackend,
+            &m,
+            &d,
+            &old_excerpt,
+            KeyUsage::Receipt,
+            m.issued_at + 1,
             None
         ),
         Err(KeyScopeError::Superseded)
