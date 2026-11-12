@@ -1386,9 +1386,13 @@ honest = "The Lean model of the constraint algebra is machine-checked and compar
 [[claim]]
 id = "j6-formally-verified-access"
 scope = "all"
-phrases = ["formally verified access", "verified by kani", "model-checked system"]
+phrases = [
+  "formally verified access", "verified by kani", "model-checked system", "kani proves the kernel",
+  "tla+ proves the implementation", "the protocol is formally verified", "proven protocol",
+  "fully verified kernel",
+]
 negation = true
-sources = ["CR-46", "CR-50", "MD-15", "OP-159 m.3 (y)"]
+sources = ["CR-46", "CR-50", "MD-15", "X41", "HL-29", "OP-159 m.3 (y)"]
 honest = "Property P of model M is machine-checked (Lean/Kani/TLA+); see scope."
 
 [[claim]]
