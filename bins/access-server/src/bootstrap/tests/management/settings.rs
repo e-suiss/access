@@ -310,3 +310,62 @@ async fn a_realm_without_dbsc_offers_no_registration_and_with_it_does() {
     let with = sign_in(app).await;
     assert!(with.headers.contains_key("secure-session-registration"));
 }
+
+// §10.2.4, OP-159 m.3 (ll)
+#[tokio::test]
+async fn the_direct_attestation_flag_reaches_the_passkey_registration() {
+    use super::super::recovery::{Page, Recording, account, hosted};
+    let c = console("rest-attestation", false).await;
+    let app = hosted(&c, Recording::default());
+    account(&c, "eda@example.com", true).await;
+    let begin = |app: axum::Router| async move {
+        let mut p = Page::default();
+        let flow = p.call(&app, &Method::POST, "/v1/login/flows", None).await;
+        let action = |g: &super::super::recovery::Got| {
+            let a = g.json["action"].as_str().unwrap();
+            a.strip_prefix("/realms/acme").unwrap_or(a).to_owned()
+        };
+        let id = p
+            .call(
+                &app,
+                &Method::POST,
+                &action(&flow),
+                Some(serde_json::json!({"method": "identifier",
+                    "fields": {"identifier": "eda@example.com"}})),
+            )
+            .await;
+        let done = p
+            .call(
+                &app,
+                &Method::POST,
+                &action(&id),
+                Some(serde_json::json!({"method": "password",
+                    "fields": {"password": super::super::recovery::PW}})),
+            )
+            .await;
+        assert_eq!(done.status, StatusCode::OK, "{}", done.json);
+        let reg = p
+            .call(
+                &app,
+                &Method::POST,
+                "/v1/account/passkeys",
+                Some(serde_json::json!({"name": "key"})),
+            )
+            .await;
+        assert_eq!(reg.status, StatusCode::CREATED, "{}", reg.json);
+        reg.json["options"]["attestation"].clone()
+    };
+    assert_eq!(begin(app.clone()).await, "none");
+    let (_, settings, _) = c.rest_read("/admin/v1/realms/acme/settings").await;
+    let mut policy = settings["signin_policy"].clone();
+    policy["attestation"] = serde_json::json!({"mode": "enterprise", "aaguids": []});
+    let set = c
+        .put_setting("signin-policy", "putSigninPolicy", policy)
+        .await;
+    assert_eq!(set.status, StatusCode::OK, "{}", set.body);
+    assert_eq!(
+        set.body["resource"]["signin_policy"]["attestation"]["mode"],
+        "enterprise"
+    );
+    assert_eq!(begin(app).await, "enterprise");
+}
