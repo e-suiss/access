@@ -4644,12 +4644,17 @@
               "cose_sign1": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+$",
-                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."
+                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b))."
               },
               "key_excerpt": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+$",
-                "description": "The binding-signed excerpt of the signing key (CR-58 m.1)."
+                "description": "The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier."
+              },
+              "pq_key_excerpt": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key."
               }
             }
           }
@@ -4744,12 +4749,17 @@
               "cose_sign1": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+$",
-                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."
+                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b))."
               },
               "key_excerpt": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+$",
-                "description": "The binding-signed excerpt of the signing key (CR-58 m.1)."
+                "description": "The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier."
+              },
+              "pq_key_excerpt": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key."
               }
             }
           }

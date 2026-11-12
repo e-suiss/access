@@ -1036,10 +1036,12 @@ export interface components {
             receipt?: {
                 /** @description The receipt payload, dCBOR (`application/access-receipt+cbor`). The receipt is addressed to PEPs: a client certificate caller reads it; a platform client asking with its assertion reads the record without `receipt` (OP-149 m.37). */
                 payload: string;
-                /** @description The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`. */
+                /** @description The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b)). */
                 cose_sign1?: string;
-                /** @description The binding-signed excerpt of the signing key (CR-58 m.1). */
+                /** @description The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier. */
                 key_excerpt?: string;
+                /** @description For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key. */
+                pq_key_excerpt?: string;
             };
         };
         Agency: {
@@ -1063,10 +1065,12 @@ export interface components {
             receipt: {
                 /** @description The receipt payload, dCBOR (`application/access-receipt+cbor`); its `agency` is the chain above. */
                 payload: string;
-                /** @description The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`. */
+                /** @description The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b)). */
                 cose_sign1?: string;
-                /** @description The binding-signed excerpt of the signing key (CR-58 m.1). */
+                /** @description The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier. */
                 key_excerpt?: string;
+                /** @description For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key. */
+                pq_key_excerpt?: string;
             };
         };
         PairingChallengeRequest: {
