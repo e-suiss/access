@@ -907,5 +907,7 @@ fn the_kernels_stage_14_values_meet_the_cddl() {
         root_terms: std::collections::BTreeSet::new(),
         sets: RootSets::new(vec![witness], Vec::new()),
     };
-    kernel().validate("meta-payload", &create.to_value()).unwrap();
+    kernel()
+        .validate("meta-payload", &create.to_value())
+        .unwrap();
 }
