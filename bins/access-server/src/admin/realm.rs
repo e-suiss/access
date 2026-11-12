@@ -750,18 +750,23 @@ impl<P> Realms<P> {
             .and_then(|d| access_kernel::json::b64url_decode(d).ok())
             .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok());
         let declared = match (signer, d) {
-            (Some(signer), Some(d)) => access_authority_core::app::placement::declared(signer, Digest(d))
-                .await
-                .ok(),
+            (Some(signer), Some(d)) => {
+                access_authority_core::app::placement::declared(signer, Digest(d))
+                    .await
+                    .ok()
+            }
             _ => None,
         };
-        let pq = declared.as_ref().and_then(|d| d.pq_reanchor.as_ref()).map(|r| {
-            serde_json::json!({
-                "size": r.size,
-                "time": r.time,
-                "witnesses": r.witnesses,
-            })
-        });
+        let pq = declared
+            .as_ref()
+            .and_then(|d| d.pq_reanchor.as_ref())
+            .map(|r| {
+                serde_json::json!({
+                    "size": r.size,
+                    "time": r.time,
+                    "witnesses": r.witnesses,
+                })
+            });
         let mut out = serde_json::Map::new();
         out.insert(String::from("pq_reanchor"), pq.unwrap_or(Value::Null));
         out

@@ -154,7 +154,10 @@ mod tests {
             assert_eq!(SigAlg::of_name(name), None, "{name}");
         }
         for a in SigAlg::ALL {
-            assert!(a.uri().contains("#rsa-sha") || a.uri().contains("#ecdsa-sha"), "{a:?}");
+            assert!(
+                a.uri().contains("#rsa-sha") || a.uri().contains("#ecdsa-sha"),
+                "{a:?}"
+            );
         }
     }
 }

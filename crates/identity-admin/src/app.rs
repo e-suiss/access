@@ -854,9 +854,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 if let crate::domain::ProfileDelta::SigningAlg(Some(a)) = delta
                     && let Some(pq) = a.ml_dsa()
                 {
-                    let held = t.realm_signing().await?.profile.as_deref().and_then(
-                        access_identity_oauth::adapters::oauth::profile_alg,
-                    );
+                    let held = t
+                        .realm_signing()
+                        .await?
+                        .profile
+                        .as_deref()
+                        .and_then(access_identity_oauth::adapters::oauth::profile_alg);
                     if held != Some(pq) {
                         return Err(Invalid::AlgorithmProfileConflict.into());
                     }

@@ -206,7 +206,11 @@ fn akp_keys(doc: &[u8]) -> Result<Vec<([u8; 32], Algorithm, PublicKey)>, JwtErro
             .and_then(|k| b64url_decode(k).ok())
             .and_then(|k| k.try_into().ok())
             .ok_or(JwtError::Jwks)?;
-        out.push((kid, pq.algorithm(), PublicKey::MlDsa(pq.algorithm(), public)));
+        out.push((
+            kid,
+            pq.algorithm(),
+            PublicKey::MlDsa(pq.algorithm(), public),
+        ));
     }
     Ok(out)
 }

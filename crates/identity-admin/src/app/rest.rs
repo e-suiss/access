@@ -3532,12 +3532,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (
-                Kind::SupportGrants
-                | Kind::ReviewItems
-                | Kind::OffboardingPreviews,
-                _,
-            ) => Read::default(),
+            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
+                Read::default()
+            }
             // CR-41, CR-44, OP-159 m.3 (o), (r), (t)
             (Kind::Signing, _) => Read {
                 items: vec![(signing_view(t).await?, 0)],

@@ -43,7 +43,10 @@ async fn the_bootstrap_opens_the_sample_realm_s_post_quantum_profile_once() {
     assert_eq!(held.profile.as_deref(), Some("ml-dsa-65"));
     assert_eq!(held.kex_share, "advertise-only");
     assert_eq!(
-        events.iter().filter(|e| *e == "signing_profile.opened").count(),
+        events
+            .iter()
+            .filter(|e| *e == "signing_profile.opened")
+            .count(),
         1,
         "{events:?}"
     );
@@ -62,7 +65,10 @@ async fn the_bootstrap_opens_the_sample_realm_s_post_quantum_profile_once() {
         .collect();
     t.commit().await.unwrap();
     assert_eq!(
-        again.iter().filter(|e| *e == "signing_profile.opened").count(),
+        again
+            .iter()
+            .filter(|e| *e == "signing_profile.opened")
+            .count(),
         1,
         "{again:?}"
     );

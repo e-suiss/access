@@ -777,9 +777,19 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
     assert_eq!(pq(&mut s, PqRequest::Close { realm: A }), Response::Opened);
     assert!(akp_keys(&jwks(&mut s, A)).keys.is_empty());
     assert_eq!(pq(&mut s, sign), Response::Error(String::from(NO_PQ)));
-    let stored = vault.0.lock().unwrap().get(&crate::pq::slot(A)).cloned().unwrap();
+    let stored = vault
+        .0
+        .lock()
+        .unwrap()
+        .get(&crate::pq::slot(A))
+        .cloned()
+        .unwrap();
     let (_, _, _, saved, _) = restored(&stored).unwrap();
-    assert!(saved.iter().all(|k| k.record.state == State::Dropped && k.sealed.is_none()));
+    assert!(
+        saved
+            .iter()
+            .all(|k| k.record.state == State::Dropped && k.sealed.is_none())
+    );
 }
 
 struct NoPq(SealedFactory<SoftKek>);
