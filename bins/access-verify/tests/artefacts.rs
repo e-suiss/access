@@ -274,43 +274,40 @@ fn receipt_evidence_vectors() {
             continue;
         }
         if let Some(e) = c.get("evidence") {
-            {
-                let path = e["path"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|h| Value::Bytes(unhex(h.as_str().unwrap())))
-                    .collect();
-                let bundle = Value::Map(vec![
-                    (Value::text("record"), Value::Bytes(unhex(s(e, "record")))),
-                    (Value::text("checkpoint"), Value::text(s(e, "note"))),
-                    (Value::text("cosignatures"), Value::Array(vec![])),
-                    (Value::text("inclusion"), Value::Array(path)),
-                ]);
-                let file = dir.file(
-                    &format!("{id}-evidence.cbor"),
-                    &dcbor::encode(&bundle, Limits::CEILING).unwrap(),
-                );
-                args.extend([
-                    "--evidence".into(),
-                    file,
-                    "--origin".into(),
-                    s(&v, "origin").into(),
-                    "--log".into(),
-                    s(&v, "log").into(),
-                    "--cosigners".into(),
-                    cosigners.clone(),
-                ]);
-            }
+            let path = e["path"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|h| Value::Bytes(unhex(h.as_str().unwrap())))
+                .collect();
+            let bundle = Value::Map(vec![
+                (Value::text("record"), Value::Bytes(unhex(s(e, "record")))),
+                (Value::text("checkpoint"), Value::text(s(e, "note"))),
+                (Value::text("cosignatures"), Value::Array(vec![])),
+                (Value::text("inclusion"), Value::Array(path)),
+            ]);
+            let file = dir.file(
+                &format!("{id}-evidence.cbor"),
+                &dcbor::encode(&bundle, Limits::CEILING).unwrap(),
+            );
+            args.extend([
+                "--evidence".into(),
+                file,
+                "--origin".into(),
+                s(&v, "origin").into(),
+                "--log".into(),
+                s(&v, "log").into(),
+                "--cosigners".into(),
+                cosigners.clone(),
+            ]);
         }
         let all: Vec<&str> = args.iter().map(String::as_str).collect();
         let r = verify(&all);
-        match c.get("error").and_then(J::as_str) {
-            Some(e) => assert_eq!(r.rejection(), Some(e), "{id}: {}", r.out),
-            None => {
-                assert!(r.accepted(), "{id}: {}", r.out);
-                assert_eq!(r.output("receipt"), Some(s(c, "receipt")), "{id}");
-            }
+        if let Some(e) = c.get("error").and_then(J::as_str) {
+            assert_eq!(r.rejection(), Some(e), "{id}: {}", r.out);
+        } else {
+            assert!(r.accepted(), "{id}: {}", r.out);
+            assert_eq!(r.output("receipt"), Some(s(c, "receipt")), "{id}");
         }
     }
 }

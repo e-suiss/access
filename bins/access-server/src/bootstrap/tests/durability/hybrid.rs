@@ -3,6 +3,7 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -155,7 +156,7 @@ async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_component
         std::fs::write(&path, bytes).unwrap();
         path.to_str().unwrap().to_owned()
     };
-    let (m_file, c_file, x_file, px_file, classic_file, pq_file) = (
+    let (m_file, c_file, x_file, pq_excerpt_file, classic_file, pq_file) = (
         file("metadata.cbor", &payload),
         file("carrier.cbor", &carrier),
         file("excerpt.cose", &excerpt),
@@ -191,7 +192,7 @@ async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_component
         }
         verify(&a)
     };
-    let (ok, text) = run(&c_file, Some(&px_file));
+    let (ok, text) = run(&c_file, Some(&pq_excerpt_file));
     assert!(
         ok && text.contains(&hex(&claimed.to_bytes().unwrap())),
         "{text}"
@@ -200,7 +201,7 @@ async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_component
     assert!(!ok && text.contains("reject: hybrid-missing"), "{text}");
     let (ok, text) = run(&classic_file, None);
     assert!(!ok && text.contains("reject: hybrid-missing"), "{text}");
-    let (ok, text) = run(&pq_file, Some(&px_file));
+    let (ok, text) = run(&pq_file, Some(&pq_excerpt_file));
     assert!(!ok && text.contains("reject: hybrid-missing"), "{text}");
 
     // OP-159 m.15 (b)
