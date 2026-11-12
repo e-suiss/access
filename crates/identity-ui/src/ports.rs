@@ -47,6 +47,10 @@ pub struct RealmKit {
     pub rp: RelyingParty,
     /// WebAuthn policy.
     pub webauthn: RealmPolicy,
+    /// What the realm's `direct` attestation policy verifies against: the FIDO metadata held
+    /// now and the attestation chains' CRLs (OP-159 m.3 (ll)).
+    pub attestation:
+        std::sync::Arc<dyn access_identity_webauthn::ports::AttestationSources + Send + Sync>,
     /// Sign-in requirements (TN-132).
     pub auth: AuthPolicy,
     /// Session lifetimes (TN-36).

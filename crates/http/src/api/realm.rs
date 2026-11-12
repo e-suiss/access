@@ -1670,6 +1670,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "domain_deny",
     "enumeration",
     "email_keep_days",
+    "attestation",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];

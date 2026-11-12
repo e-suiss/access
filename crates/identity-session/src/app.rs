@@ -24,7 +24,9 @@ use access_identity_account::domain::login::{Problem, REJECTED};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_webauthn::domain::policy::RealmPolicy as WebAuthnPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
-use access_identity_webauthn::ports::{CredentialRegistry, DecoySource, SignalSink};
+use access_identity_webauthn::ports::{
+    AttestationSources, CredentialRegistry, DecoySource, SignalSink,
+};
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::audit::AuditEvent;
 use access_store::sessions::{FlowRow, FlowUpdate};
@@ -57,6 +59,8 @@ pub struct Passkeys<'a, P, S> {
     pub rp: &'a RelyingParty,
     /// The realm's WebAuthn policy.
     pub policy: &'a WebAuthnPolicy,
+    /// What a `direct` realm verifies attestation against (OP-159 m.3 (ll)).
+    pub attestation: &'a (dyn AttestationSources + Sync),
 }
 
 /// The authentication service of one realm.

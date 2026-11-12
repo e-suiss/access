@@ -11,8 +11,9 @@ pub enum AttestationKind {
     None,
     /// Another format under a `none` realm: kept as a hint, never verified or trusted.
     Unverified(String),
-    /// `packed` full attestation verified against FIDO metadata.
-    Verified,
+    /// A statement of this format verified against FIDO metadata and revocation (OP-159 m.3
+    /// (ll)).
+    Verified(String),
 }
 
 /// Ceiling for stored transports, and for the length of each.

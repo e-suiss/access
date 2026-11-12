@@ -21,6 +21,10 @@ const KTY_RSA: i64 = 3;
 const CRV_P256: i64 = 1;
 const CRV_ED25519: i64 = 6;
 
+/// The ML-DSA COSE algorithm identifiers (ML-DSA-44, -65, -87). WebAuthn L3 and CTAP 2.3 do
+/// not define them for credentials; a credential that names one is refused (HL-19, CR-43).
+pub const ML_DSA: [i64; 3] = [-48, -49, -50];
+
 /// A credential algorithm Access accepts, in `pubKeyCredParams` order (§10.2.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CoseAlgorithm {
@@ -113,9 +117,12 @@ impl CoseKey {
     /// [`Rejection::CoseKey`].
     pub fn from_item(item: &Item<'_>) -> Result<Self, Rejection> {
         let kty = int(item, KTY).ok_or(Rejection::CoseKey)?;
-        let alg = int(item, ALG)
-            .and_then(CoseAlgorithm::from_id)
-            .ok_or(Rejection::CoseKey)?;
+        let alg = int(item, ALG).ok_or(Rejection::CoseKey)?;
+        // HL-19
+        if ML_DSA.contains(&alg) {
+            return Err(Rejection::Algorithm);
+        }
+        let alg = CoseAlgorithm::from_id(alg).ok_or(Rejection::CoseKey)?;
         match (kty, alg) {
             (KTY_EC2, CoseAlgorithm::Es256 | CoseAlgorithm::Esp256) => {
                 if int(item, CRV) != Some(CRV_P256) {

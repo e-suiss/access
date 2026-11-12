@@ -62,7 +62,7 @@ fn the_software_passkey_passes_the_real_ceremonies() {
             transports: &[String::from("internal")],
             extensions: ClientExtensionResults::default(),
         },
-        None,
+        &access_identity_webauthn::domain::attestation::Evidence::default(),
         NOW,
     )
     .unwrap();

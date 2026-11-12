@@ -15,6 +15,8 @@
     reason = "test fixtures"
 )]
 
+pub mod attest;
+
 use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::adapters::{MemoryRegistry, MemorySignals, RealmDecoyKeys};
 use access_identity_webauthn::app::WebAuthn;
@@ -260,6 +262,8 @@ pub enum Attestation {
     None,
     PackedSelf,
     Packed(Attester),
+    /// Any format, built from `authenticatorData` and `clientDataHash` (OP-159 m.3 (ll)).
+    Statement(attest::Build),
 }
 
 pub struct Authenticator {
@@ -376,6 +380,15 @@ impl Authenticator {
                         ),
                     ]),
                 )
+            }
+            Attestation::Statement(build) => {
+                let (fmt, stmt) = build(&auth_data, &sha256(&cdj));
+                let object = Value::Map(vec![
+                    (Value::text("fmt"), Value::text(&fmt)),
+                    (Value::text("attStmt"), stmt),
+                    (Value::text("authData"), Value::Bytes(auth_data)),
+                ]);
+                return (cdj, encode(&object, Limits::CEILING).unwrap());
             }
         };
         let object = Value::Map(vec![

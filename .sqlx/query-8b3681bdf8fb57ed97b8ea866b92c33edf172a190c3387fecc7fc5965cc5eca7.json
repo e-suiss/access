@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT next_update_s, crl FROM access.attestation_crl_cache\n          WHERE tenant_id = $1 AND source = $2\n          ORDER BY fetched_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "next_update_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.attestation_crl_cache",
+            "name": "next_update_s"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "crl",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.attestation_crl_cache",
+            "name": "crl"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8b3681bdf8fb57ed97b8ea866b92c33edf172a190c3387fecc7fc5965cc5eca7"
+}

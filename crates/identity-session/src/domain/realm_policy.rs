@@ -5,6 +5,8 @@
 
 use std::collections::BTreeSet;
 
+use access_identity_webauthn::domain::ids::Aaguid;
+use access_identity_webauthn::domain::policy::AttestationPolicy;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::domain::assurance::AssuranceProfile;
@@ -31,6 +33,8 @@ pub struct RealmSignin {
     pub dbsc: bool,
     /// The assurance profile (MD-11, SA-54, OP-156 m.3 (e)).
     pub profile: AssuranceProfile,
+    /// The WebAuthn attestation policy (§10.2.4, OP-159 m.3 (ll)).
+    pub attestation: AttestationPolicy,
 }
 
 impl Default for RealmSignin {
@@ -47,8 +51,37 @@ impl Default for RealmSignin {
             email_keep_days: None,
             dbsc: true,
             profile: AssuranceProfile::Standard,
+            attestation: AttestationPolicy::None,
         }
     }
+}
+
+/// `{mode: direct | enterprise, aaguids: [text]}` as `idp.realm.signin_policy` writes it.
+fn attestation(v: Option<&Value>) -> Option<AttestationPolicy> {
+    let Some(v) = v else {
+        return Some(AttestationPolicy::None);
+    };
+    let Value::Map(m) = v else {
+        return None;
+    };
+    let get = |k: &str| {
+        m.iter()
+            .find(|(key, _)| matches!(key, Value::Text(t) if t == k))
+            .map(|(_, v)| v)
+    };
+    let enterprise = match get("mode") {
+        Some(Value::Text(t)) if t == "direct" => false,
+        Some(Value::Text(t)) if t == "enterprise" => true,
+        _ => return None,
+    };
+    let aaguids = texts(get("aaguids"))?
+        .iter()
+        .map(|a| Aaguid::parse(a))
+        .collect::<Option<Vec<_>>>()?;
+    Some(AttestationPolicy::Direct {
+        aaguids,
+        enterprise,
+    })
 }
 
 fn texts(v: Option<&Value>) -> Option<BTreeSet<String>> {
@@ -109,7 +142,10 @@ impl RealmSignin {
             None => BTreeSet::from([String::from("email")]),
             v => texts(v)?,
         };
+        // OP-159 m.3 (ll)
+        let attestation = attestation(get("attestation"))?;
         Some(Self {
+            attestation,
             methods,
             mfa_required,
             domain_allow: texts(get("domain_allow"))?,
@@ -247,6 +283,51 @@ mod tests {
         m.push((Value::text("profile"), Value::text("lenient")));
         let bad = dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default();
         assert_eq!(RealmSignin::decode(&bad), None);
+    }
+
+    // §10.2.4, OP-159 m.3 (ll), MD-8
+    #[test]
+    fn a_policy_names_its_attestation_or_does_not_decode() {
+        let base = stored(&["passkey"], false, &[], &[]);
+        assert_eq!(
+            RealmSignin::decode(&base).unwrap().attestation,
+            AttestationPolicy::None
+        );
+        let Ok(Value::Map(m)) = dcbor::decode(&base, Limits::CEILING) else {
+            panic!("a policy map");
+        };
+        let with = |a: Value| {
+            let mut m = m.clone();
+            m.push((Value::text("attestation"), a));
+            RealmSignin::decode(&dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default())
+        };
+        let direct = with(Value::Map(vec![
+            (Value::text("mode"), Value::text("enterprise")),
+            (
+                Value::text("aaguids"),
+                Value::Array(vec![Value::text("6b6b6b6b-6b6b-6b6b-6b6b-6b6b6b6b6b6b")]),
+            ),
+        ]))
+        .unwrap();
+        assert_eq!(
+            direct.attestation,
+            AttestationPolicy::Direct {
+                aaguids: vec![Aaguid([0x6b; 16])],
+                enterprise: true,
+            }
+        );
+        assert_eq!(direct.attestation.conveyance(), "enterprise");
+        for bad in [
+            Value::text("direct"),
+            Value::Map(vec![(Value::text("mode"), Value::text("indirect"))]),
+            Value::Map(vec![(Value::text("mode"), Value::text("direct"))]),
+            Value::Map(vec![
+                (Value::text("mode"), Value::text("direct")),
+                (Value::text("aaguids"), Value::Array(vec![Value::text("x")])),
+            ]),
+        ] {
+            assert_eq!(with(bad), None);
+        }
     }
 
     // MD-8

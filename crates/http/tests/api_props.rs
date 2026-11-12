@@ -90,6 +90,7 @@ fn kit(f: &support::Fixture, seed: u8) -> RealmKit {
             related: Vec::new(),
         },
         webauthn: RealmPolicy::default(),
+        attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),

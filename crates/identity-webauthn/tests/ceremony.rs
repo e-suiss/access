@@ -64,7 +64,7 @@ async fn register_with(
             transports: &transports,
             extensions,
         },
-        None,
+        &access_identity_webauthn::adapters::NoAttestationSources,
     )
     .await
     .unwrap()
@@ -264,7 +264,7 @@ async fn registration_waits_for_a_pinned_rp_id() {
                 transports: &[],
                 extensions: ClientExtensionResults::default(),
             },
-            None,
+            &access_identity_webauthn::adapters::NoAttestationSources,
         )
         .await
         .unwrap();
@@ -463,7 +463,7 @@ async fn user_presence_is_required_outside_conditional_create() {
                 transports: &[],
                 extensions: ClientExtensionResults::default(),
             },
-            None,
+            &access_identity_webauthn::adapters::NoAttestationSources,
         )
         .await
         .unwrap();
@@ -865,7 +865,7 @@ async fn oversized_and_malformed_attestation_objects_are_rejected() {
                     transports: &[],
                     extensions: ClientExtensionResults::default(),
                 },
-                None,
+                &access_identity_webauthn::adapters::NoAttestationSources,
             )
             .await
             .unwrap()

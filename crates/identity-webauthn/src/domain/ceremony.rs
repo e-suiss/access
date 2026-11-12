@@ -1,18 +1,18 @@
 //! Registration and authentication ceremony verification (WebAuthn L3 §7.1, §7.2; §10.2.4).
-//! Pure: the caller supplies the issued state, the stored credential, metadata and time.
+//! Pure: the caller supplies the issued state, the stored credential, the attestation evidence
+//! and time.
 
 use access_crypto::webauthn::sha256;
 use serde::Deserialize;
 
 use super::Rejection;
 use super::assurance::{Assurance, classify};
-use super::attestation::{AttestationObject, verify_attestation};
+use super::attestation::{AttestationObject, Evidence, verify_attestation};
 use super::authenticator_data::{AuthenticatorData, Flags};
 use super::client_data::{CeremonyType, check_client_data};
 use super::cose::{CoseAlgorithm, CoseKey};
 use super::credential::{CredentialRecord, bounded_transports};
 use super::ids::{CredentialId, RealmId, UserHandle};
-use super::mds::MdsBlob;
 use super::policy::{RealmPolicy, SignCountAction, UserVerification};
 use super::prf::{PrfConfig, PrfSalt};
 use super::rp::RelyingParty;
@@ -144,7 +144,7 @@ pub fn verify_registration(
     policy: &RealmPolicy,
     state: &RegistrationState,
     response: &RegistrationResponse<'_>,
-    metadata: Option<&MdsBlob>,
+    evidence: &Evidence,
     now: u64,
 ) -> Result<CredentialRecord, Rejection> {
     if now > state.expires_at {
@@ -187,7 +187,7 @@ pub fn verify_registration(
         &auth,
         &client.hash,
         &policy.attestation,
-        metadata,
+        evidence,
         now,
     )?;
     let prf = match (response.extensions.prf_enabled, state.prf_salt) {

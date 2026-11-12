@@ -369,6 +369,69 @@ fn sign_in_requirements_are_checked() {
     assert_eq!(r.check(), Err(Invalid::SigninPolicy));
 }
 
+// §10.2.4, OP-159 m.3 (ll)
+#[test]
+fn the_attestation_policy_is_a_sign_in_requirement() {
+    let ids = ids();
+    let base = json!({"methods": ["email", "passkey"], "mfa_required": false,
+                      "required_fields": ["email"]});
+    let with = |a: serde_json::Value| {
+        let mut b = base.clone();
+        b["attestation"] = a;
+        compile(Op::PutSigninPolicy, None, &b, &ids)
+    };
+    let Ok(Change::SigninPolicy(p)) = compile(Op::PutSigninPolicy, None, &base, &ids) else {
+        panic!("a sign-in policy");
+    };
+    assert_eq!(p.attestation, Attestation::None);
+    assert!(!format!("{:?}", p.to_value()).contains("attestation"));
+    let model = "6b6b6b6b-6b6b-6b6b-6b6b-6b6b6b6b6b6b";
+    let Ok(Change::SigninPolicy(p)) = with(json!({"mode": "direct", "aaguids": [model]})) else {
+        panic!("a direct policy");
+    };
+    assert_eq!(
+        p.attestation,
+        Attestation::Direct {
+            enterprise: false,
+            aaguids: BTreeSet::from([String::from(model)]),
+        }
+    );
+    assert_eq!(p.check(), Ok(()));
+    let text = format!("{:?}", p.to_value());
+    assert!(
+        text.contains("attestation") && text.contains("direct"),
+        "{text}"
+    );
+    let Ok(Change::SigninPolicy(e)) = with(json!({"mode": "enterprise"})) else {
+        panic!("an enterprise policy");
+    };
+    assert_eq!(
+        e.attestation,
+        Attestation::Direct {
+            enterprise: true,
+            aaguids: BTreeSet::new(),
+        }
+    );
+    for bad in [
+        json!({"mode": "indirect"}),
+        json!({"mode": "none", "aaguids": [model]}),
+        json!({"mode": "direct", "extra": true}),
+        json!("direct"),
+    ] {
+        assert_eq!(
+            with(bad.clone()).err(),
+            Some(Invalid::SigninPolicy),
+            "{bad}"
+        );
+    }
+    let Ok(Change::SigninPolicy(upper)) =
+        with(json!({"mode": "direct", "aaguids": [model.to_uppercase()]}))
+    else {
+        panic!("parsed before the check");
+    };
+    assert_eq!(upper.check(), Err(Invalid::SigninPolicy));
+}
+
 // TN-110, OP-65
 #[test]
 fn the_validity_is_bounded() {

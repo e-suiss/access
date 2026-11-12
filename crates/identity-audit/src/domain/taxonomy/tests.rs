@@ -95,8 +95,6 @@ const UNPRODUCED: &[&str] = &[
     "signing_profile.opened",
     "signing_profile.closed",
     "projection.fetched",
-    "attestation.verified",
-    "attestation.rejected",
     "solver.unavailable",
 ];
 

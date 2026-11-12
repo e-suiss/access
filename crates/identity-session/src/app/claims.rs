@@ -223,7 +223,7 @@ fn attestation(k: &AttestationKind) -> (String, AttestationResult) {
     match k {
         AttestationKind::None => (String::from("none"), AttestationResult::None),
         AttestationKind::Unverified(f) => (f.clone(), AttestationResult::None),
-        AttestationKind::Verified => (String::from("packed"), AttestationResult::Verified),
+        AttestationKind::Verified(f) => (f.clone(), AttestationResult::Verified),
     }
 }
 

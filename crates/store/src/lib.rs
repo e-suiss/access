@@ -120,6 +120,8 @@ pub mod cells;
 pub mod replica_reads;
 // OP-158 m.3 (l)
 pub mod handover;
+// OP-159 m.3 (ll)
+pub mod attestation_crl;
 
 #[cfg(feature = "testing")]
 pub mod testing;

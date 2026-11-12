@@ -509,6 +509,69 @@ impl AssuranceProfile {
     }
 }
 
+/// Most authenticator models an attestation allowlist names (PD).
+pub const MAX_AAGUIDS: usize = 64;
+
+/// The realm's WebAuthn attestation policy (§10.2.4, OP-159 m.3 (ll)): `none` for consumers,
+/// where attestation is never a trust input, or the enterprise flag `direct` (or `enterprise`)
+/// with FIDO metadata, revocation and an optional AAGUID allowlist.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Attestation {
+    /// Nothing is requested (the default).
+    #[default]
+    None,
+    /// Attestation is verified before a passkey is registered.
+    Direct {
+        /// Request enterprise attestation instead of `direct`.
+        enterprise: bool,
+        /// Allowed models as lower-case AAGUID text; empty allows every model the metadata
+        /// vouches for.
+        aaguids: BTreeSet<String>,
+    },
+}
+
+impl Attestation {
+    fn check(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Direct { aaguids, .. } => {
+                aaguids.len() <= MAX_AAGUIDS && aaguids.iter().all(|a| aaguid_text(a))
+            }
+        }
+    }
+
+    fn to_value(&self) -> Option<Value> {
+        match self {
+            Self::None => None,
+            Self::Direct {
+                enterprise,
+                aaguids,
+            } => Some(Value::Map(vec![
+                (
+                    Value::text("mode"),
+                    Value::text(if *enterprise { "enterprise" } else { "direct" }),
+                ),
+                (
+                    Value::text("aaguids"),
+                    text_array(aaguids.iter().map(String::as_str)),
+                ),
+            ])),
+        }
+    }
+}
+
+/// Whether `text` is an AAGUID in canonical lower-case UUID form.
+fn aaguid_text(text: &str) -> bool {
+    text.len() == 36
+        && text.char_indices().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                matches!(c, '0'..='9' | 'a'..='f')
+            }
+        })
+}
+
 /// The shortest "keep N days" an e-mail reuse policy may name (OP-153 m.3 (i), TN-76 m.5).
 pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
 
@@ -537,6 +600,8 @@ pub struct SigninPolicy {
     pub dbsc: bool,
     /// The assurance profile (OP-156 m.3 (e)); standard by default.
     pub profile: AssuranceProfile,
+    /// The WebAuthn attestation policy (OP-159 m.3 (ll)); `none` by default.
+    pub attestation: Attestation,
 }
 
 impl SigninPolicy {
@@ -557,7 +622,7 @@ impl SigninPolicy {
         let keep_ok = self
             .email_keep_days
             .is_none_or(|d| d >= MIN_EMAIL_KEEP_DAYS);
-        if fields_ok && lists_ok && methods_ok && keep_ok {
+        if fields_ok && lists_ok && methods_ok && keep_ok && self.attestation.check() {
             Ok(())
         } else {
             Err(Invalid::SigninPolicy)
@@ -611,6 +676,10 @@ impl SigninPolicy {
         // OP-156 m.3 (e)
         if self.profile != AssuranceProfile::Standard {
             m.push((Value::text("profile"), Value::text(self.profile.name())));
+        }
+        // OP-159 m.3 (ll)
+        if let Some(a) = self.attestation.to_value() {
+            m.push((Value::text("attestation"), a));
         }
         Value::Map(m)
     }

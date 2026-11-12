@@ -409,6 +409,7 @@ where
                 decoys: &kit.decoys,
                 rp: &kit.rp,
                 policy: &kit.webauthn,
+                attestation: &*kit.attestation,
             },
             risk: access_identity_session::app::Sl2 {
                 services: &access_identity_session::app::RiskServices::without_sources(),

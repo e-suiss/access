@@ -272,6 +272,7 @@ macro_rules! signin {
                 decoys: &$kit.decoys,
                 rp: &$kit.rp,
                 policy: &$kit.webauthn,
+                attestation: &*$kit.attestation,
             },
             risk: ::access_identity_session::app::Sl2 {
                 services: &$self.risk,

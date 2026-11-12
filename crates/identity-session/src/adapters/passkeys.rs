@@ -41,7 +41,7 @@ fn failed(e: impl core::fmt::Display) -> WebAuthnError {
 fn attestation_text(a: &AttestationKind) -> String {
     match a {
         AttestationKind::None => "none".to_owned(),
-        AttestationKind::Verified => "verified".to_owned(),
+        AttestationKind::Verified(fmt) => format!("verified:{fmt}"),
         AttestationKind::Unverified(fmt) => format!("unverified:{fmt}"),
     }
 }
@@ -49,11 +49,15 @@ fn attestation_text(a: &AttestationKind) -> String {
 fn attestation_kind(text: &str) -> Result<AttestationKind, WebAuthnError> {
     match text {
         "none" => Ok(AttestationKind::None),
-        "verified" => Ok(AttestationKind::Verified),
-        other => other
-            .strip_prefix("unverified:")
-            .map(|f| AttestationKind::Unverified(f.to_owned()))
-            .ok_or_else(|| failed("attestation")),
+        "verified" => Ok(AttestationKind::Verified(String::from("packed"))),
+        other => match (
+            other.strip_prefix("verified:"),
+            other.strip_prefix("unverified:"),
+        ) {
+            (Some(f), _) => Ok(AttestationKind::Verified(f.to_owned())),
+            (_, Some(f)) => Ok(AttestationKind::Unverified(f.to_owned())),
+            _ => Err(failed("attestation")),
+        },
     }
 }
 

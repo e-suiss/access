@@ -21,6 +21,9 @@ mod push;
 #[path = "login/payment.rs"]
 mod payment;
 
+#[path = "login/attestation.rs"]
+mod attestation;
+
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -514,6 +517,7 @@ fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit
             platform_uv_is_factor: auth.profile.platform_uv_is_factor(),
             ..RealmPolicy::default()
         },
+        attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
@@ -575,6 +579,17 @@ async fn env_legacy(
     signup: access_identity_ui::app::signup::Signup,
     legacy: Option<Arc<dyn access_identity_account::ports::LegacyIdp>>,
 ) -> Env {
+    env_tweaked((seed, slug, auth, live), signin, signup, legacy, |_, _| {}).await
+}
+
+/// An environment whose realm kit `tweak` adjusts once its database exists.
+async fn env_tweaked(
+    (seed, slug, auth, live): (u8, &str, AuthPolicy, bool),
+    signin: RealmSignin,
+    signup: access_identity_ui::app::signup::Signup,
+    legacy: Option<Arc<dyn access_identity_account::ports::LegacyIdp>>,
+    tweak: impl FnOnce(&mut RealmKit, &TestDb),
+) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
@@ -595,6 +610,7 @@ async fn env_legacy(
     tx.commit().await.unwrap();
     let mut built = kit(tenant, realm, seed, auth);
     built.signin = signin;
+    tweak(&mut built, &db);
     let kit = Arc::new(built);
     let clock = TestClock {
         at: Arc::new(AtomicU64::new(1_800_000_000_000)),

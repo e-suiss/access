@@ -14,6 +14,7 @@ use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::adapters::{FileMdsSource, MemoryMdsCache};
 use access_identity_webauthn::app::{fresh_metadata, refresh_metadata};
 use access_identity_webauthn::domain::Rejection;
+use access_identity_webauthn::domain::attestation::Evidence;
 use access_identity_webauthn::domain::ceremony::{
     ClientExtensionResults, RegistrationResponse, RegistrationState, verify_registration,
 };
@@ -64,7 +65,7 @@ fn run(
             transports: &[],
             extensions: ClientExtensionResults::default(),
         },
-        metadata,
+        &Evidence::metadata(metadata.cloned()),
         NOW,
     )
 }
@@ -212,7 +213,10 @@ fn direct_policy_requires_verified_packed_attestation() {
         leaf_key: attester.leaf_key,
     }));
     let record = run(&mut a, &policy, Some(&fresh)).unwrap();
-    assert_eq!(record.attestation, AttestationKind::Verified);
+    assert_eq!(
+        record.attestation,
+        AttestationKind::Verified("packed".into())
+    );
     assert_eq!(record.aaguid, Aaguid(KEY_MODEL));
 
     assert_eq!(

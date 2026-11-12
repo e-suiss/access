@@ -420,6 +420,7 @@ async fn env(seed: u8, slug: &str) -> Env {
             related: Vec::new(),
         },
         webauthn: RealmPolicy::default(),
+        attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
         signin: RealmSignin::default(),

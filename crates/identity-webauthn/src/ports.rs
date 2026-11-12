@@ -1,6 +1,7 @@
 //! What the domain needs from the outside world (OP-63).
 
 use std::future::Future;
+use std::pin::Pin;
 
 use crate::WebAuthnError;
 use crate::domain::ceremony::Signal;
@@ -109,4 +110,18 @@ pub trait MdsCache {
 
     /// Replaces the cached blob.
     fn replace(&self, blob: MdsBlob) -> impl Future<Output = Result<(), WebAuthnError>> + Send;
+}
+
+/// A boxed future of an attestation source.
+pub type Pending<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// What a `direct` realm verifies attestation against (§10.2.4, OP-159 m.3 (ll)): the FIDO
+/// metadata held now and the CRLs of the statement's chain. A source that cannot answer gives
+/// nothing, and the registration is refused.
+pub trait AttestationSources {
+    /// The metadata blob held now, fresh or not.
+    fn metadata(&self) -> Pending<'_, Option<MdsBlob>>;
+
+    /// The CRL at `url`, current or the last one cached; `None` when it cannot be read.
+    fn crl<'a>(&'a self, url: &'a str) -> Pending<'a, Option<Vec<u8>>>;
 }

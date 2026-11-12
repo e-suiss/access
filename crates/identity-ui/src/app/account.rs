@@ -11,6 +11,7 @@ use access_identity_session::domain::recovery::Restricted;
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
 use access_identity_webauthn::app::RegistrationOutcome;
+use access_identity_webauthn::domain::Rejection;
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -28,6 +29,35 @@ const NOT_REGISTERED: Problem = Problem {
     title: "The passkey could not be registered",
     retry_after_s: None,
 };
+
+/// The realm's `direct` attestation policy refused the authenticator (§10.2.4, OP-159 m.3 (ll)).
+const ATTESTATION_FORMAT: Problem = Problem {
+    status: 422,
+    code: "attestation-format",
+    title: "This security key isn't accepted here",
+    retry_after_s: None,
+};
+
+/// The revocation status of the authenticator's attestation could not be read, so the `direct`
+/// policy refuses it (fail-closed, OP-159 m.3 (ll)).
+const ATTESTATION_REVOCATION_UNKNOWN: Problem = Problem {
+    status: 422,
+    code: "attestation-revocation-unknown",
+    title: "This security key can't be checked right now",
+    retry_after_s: None,
+};
+
+/// The answer to a refused registration: honest after authentication (X34).
+fn refused(rejection: Rejection) -> Reply {
+    match rejection {
+        // OP-159 m.3 (ll)
+        Rejection::AttestationRevocationUnknown | Rejection::MetadataUnavailable => {
+            Reply::problem(ATTESTATION_REVOCATION_UNKNOWN)
+        }
+        r if r.is_attestation() => Reply::problem(ATTESTATION_FORMAT),
+        _ => Reply::problem(NOT_REGISTERED),
+    }
+}
 
 fn rfc3339(ms: u64) -> Value {
     i128::from(ms)
@@ -373,7 +403,7 @@ where
             .await
         {
             Ok(Ok(RegistrationOutcome::Registered(_))) => Reply::json(201, json!({})),
-            Ok(Ok(RegistrationOutcome::Rejected(_))) => Reply::problem(NOT_REGISTERED),
+            Ok(Ok(RegistrationOutcome::Rejected(r))) => refused(r),
             Ok(Err(step)) => refusal(&step),
             Err(e) => failed(&e),
         }

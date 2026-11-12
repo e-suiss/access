@@ -1656,7 +1656,16 @@ fn login(
     );
     let hosted = Arc::new(Hosted {
         kits: login::HsmKits::new(keks, router, app.clone(), lifetimes)
-            .with_base(&realm_base_host(&identity.realm_base)),
+            .with_base(&realm_base_host(&identity.realm_base))
+            // OP-159 m.3 (ll)
+            .with_attestation(Arc::new(
+                access_identity_ui::adapters::CachedAttestationSources {
+                    metadata: mds::shared(),
+                    db: app.clone(),
+                    outbound: outbound.clone(),
+                    clock: access_identity_webauthn::adapters::SystemClock,
+                },
+            )),
         db: app,
         products,
         clock: SystemClock,

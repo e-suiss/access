@@ -394,6 +394,7 @@ pub(crate) struct HsmKits {
     app: Pool,
     lifetimes: SessionPolicy,
     base: Option<access_identity_domain::domain::host::Base>,
+    attestation: Arc<dyn access_identity_webauthn::ports::AttestationSources + Send + Sync>,
     loaded: Mutex<HashMap<[u8; 16], Loaded>>,
 }
 
@@ -406,8 +407,20 @@ impl HsmKits {
             app,
             lifetimes,
             base: None,
+            attestation: Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
             loaded: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// These kits with the sources a realm's `direct` attestation policy verifies against
+    /// (OP-159 m.3 (ll)).
+    #[must_use]
+    pub(crate) fn with_attestation(
+        mut self,
+        sources: Arc<dyn access_identity_webauthn::ports::AttestationSources + Send + Sync>,
+    ) -> Self {
+        self.attestation = sources;
+        self
     }
 
     /// These kits under the deployment's realm base host, which decides what a Suiss domain is
@@ -525,8 +538,11 @@ impl HsmKits {
             // MD-11, OP-156 m.3 (e)
             webauthn: RealmPolicy {
                 platform_uv_is_factor: signin.profile.platform_uv_is_factor(),
+                // OP-159 m.3 (ll)
+                attestation: signin.attestation.clone(),
                 ..RealmPolicy::default()
             },
+            attestation: self.attestation.clone(),
             auth: AuthPolicy {
                 push: settings.push,
                 sms: settings.sms,

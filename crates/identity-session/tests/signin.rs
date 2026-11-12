@@ -206,6 +206,7 @@ impl Env {
                 decoys: &self.decoys,
                 rp: &self.rp,
                 policy: &self.wa_policy,
+                attestation: &access_identity_webauthn::adapters::NoAttestationSources,
             },
             risk: Sl2 {
                 services: &self.risk,

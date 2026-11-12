@@ -5,7 +5,7 @@
 //! blob, verified again, and goes to the URL only when that one is due; a lower serial than the
 //! one held is refused (rollback). A blob that does not verify is never used.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use access_crypto::xmlsec::{Digest, digest};
@@ -55,6 +55,12 @@ impl Metadata {
             source,
             held: Arc::new(MemoryMdsCache::default()),
         }
+    }
+
+    /// This metadata holding its blob in `held`.
+    fn holding(mut self, held: Arc<MemoryMdsCache>) -> Self {
+        self.held = held;
+        self
     }
 
     /// The blob held now, when it is still fresh at `now_s`.
@@ -152,6 +158,13 @@ impl Metadata {
     }
 }
 
+/// The blob this process holds, which the refresh job keeps and a realm's `direct` attestation
+/// policy reads (OP-159 m.3 (ll)); empty without a configured service.
+pub(crate) fn shared() -> Arc<MemoryMdsCache> {
+    static HELD: OnceLock<Arc<MemoryMdsCache>> = OnceLock::new();
+    HELD.get_or_init(Arc::default).clone()
+}
+
 /// OP-148, OP-158 m.3 (y): the job of the configured service, none without one.
 ///
 /// # Errors
@@ -167,7 +180,7 @@ pub(crate) fn spawn(
     let root = access_kernel::json::b64url_decode(&m.root)
         .map_err(|_| "identity.fido_mds.root is not base64url DER".to_owned())?;
     Ok(Some(tokio::spawn(run(
-        Arc::new(Metadata::new(m.url.clone(), root)),
+        Arc::new(Metadata::new(m.url.clone(), root).holding(shared())),
         app,
         outbound.clone(),
     ))))

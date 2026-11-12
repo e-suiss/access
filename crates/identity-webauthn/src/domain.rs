@@ -8,6 +8,7 @@ pub mod ceremony;
 pub mod client_data;
 pub mod cose;
 pub mod credential;
+pub mod crl;
 pub mod decoy;
 pub mod ids;
 pub mod mds;
@@ -18,5 +19,6 @@ pub mod psl;
 pub mod rejection;
 pub mod rp;
 pub mod software;
+mod x509;
 
 pub use rejection::Rejection;

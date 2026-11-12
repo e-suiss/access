@@ -251,6 +251,7 @@ fn kit(entry: &RealmEntry) -> RealmKit {
             related: Vec::new(),
         },
         webauthn: RealmPolicy::default(),
+        attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
@@ -321,6 +322,7 @@ async fn register_passkey(
             decoys: &kit.decoys,
             rp: &kit.rp,
             policy: &kit.webauthn,
+            attestation: &*kit.attestation,
         },
         risk: access_identity_session::app::Sl2 {
             services: &risk,

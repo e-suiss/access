@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::WebAuthnError;
 use crate::domain::Rejection;
 use crate::domain::assurance::Assurance;
+use crate::domain::attestation::{AttestationObject, Evidence, revocation_points};
 use crate::domain::authenticator_data::AuthenticatorData;
 use crate::domain::ceremony::{
     AssertionResponse, AuthenticationState, RegistrationResponse, RegistrationState, Signal,
@@ -16,11 +17,12 @@ use crate::domain::decoy::decoy_descriptors;
 use crate::domain::ids::{CredentialId, UserHandle};
 use crate::domain::mds::{MdsBlob, MdsError, verify_blob};
 use crate::domain::options::{CredentialDescriptor, UserEntity, creation_options, request_options};
-use crate::domain::policy::RealmPolicy;
+use crate::domain::policy::{AttestationPolicy, RealmPolicy};
 use crate::domain::prf::{PrfConfig, PrfSalt};
 use crate::domain::rp::RelyingParty;
 use crate::ports::{
-    Clock, CredentialRegistry, DecoySource, Inserted, MdsCache, MdsSource, Random, SignalSink,
+    AttestationSources, Clock, CredentialRegistry, DecoySource, Inserted, MdsCache, MdsSource,
+    Random, SignalSink,
 };
 
 /// A started registration: keep `state` server-side, send `options` to the browser.
@@ -193,7 +195,8 @@ where
         })
     }
 
-    /// Finishes a registration and stores the credential.
+    /// Finishes a registration and stores the credential. Under `direct` the metadata and the
+    /// CRLs of the statement's chain come from `sources` first (OP-159 m.3 (ll)).
     ///
     /// # Errors
     /// [`WebAuthnError`]; refusals are [`RegistrationOutcome::Rejected`].
@@ -203,10 +206,11 @@ where
         policy: &RealmPolicy,
         state: &RegistrationState,
         response: &RegistrationResponse<'_>,
-        metadata: Option<&MdsBlob>,
+        sources: &(dyn AttestationSources + Sync),
     ) -> Result<RegistrationOutcome, WebAuthnError> {
+        let evidence = attestation_evidence(policy, response, sources).await;
         let now = self.clock.now()?;
-        let record = match verify_registration(rp, policy, state, response, metadata, now) {
+        let record = match verify_registration(rp, policy, state, response, &evidence, now) {
             Ok(r) => r,
             Err(e) => return Ok(RegistrationOutcome::Rejected(e)),
         };
@@ -323,6 +327,27 @@ where
             signals: verified.signals,
         })
     }
+}
+
+/// What a `direct` realm verifies `response` against: nothing under `none`, where attestation
+/// is never a trust input (§10.2.4, OP-159 m.3 (ll)).
+pub async fn attestation_evidence(
+    policy: &RealmPolicy,
+    response: &RegistrationResponse<'_>,
+    sources: &(dyn AttestationSources + Sync),
+) -> Evidence {
+    if policy.attestation == AttestationPolicy::None {
+        return Evidence::default();
+    }
+    let mut evidence = Evidence::metadata(sources.metadata().await);
+    let points = AttestationObject::parse(response.attestation_object)
+        .map(|o| revocation_points(&o))
+        .unwrap_or_default();
+    for url in points {
+        let crl = sources.crl(&url).await;
+        evidence.crls.insert(url, crl);
+    }
+    evidence
 }
 
 /// Fetches, verifies and caches a metadata blob (OP-146 m.4 (d)). A blob whose serial is below

@@ -9,7 +9,8 @@ use access_kernel::json::{Json, b64url_decode, parse};
 use rustls_pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
 use serde::Deserialize;
 use webpki::{
-    EndEntityCert, ExtendedKeyUsageValidator, KeyPurposeIdIter, KeyUsage, anchor_from_trusted_cert,
+    EndEntityCert, ExtendedKeyUsageValidator, KeyPurposeIdIter, KeyUsage, RevocationOptions,
+    anchor_from_trusted_cert,
 };
 
 use super::ids::Aaguid;
@@ -41,13 +42,15 @@ impl ExtendedKeyUsageValidator for AnyUsage {
     }
 }
 
-/// Verifies `leaf` up to one of `roots` through `intermediates` at `now` (Unix seconds).
+/// Verifies `leaf` up to one of `roots` through `intermediates` at `now` (Unix seconds), with
+/// the revocation checks of `revocation`.
 pub(crate) fn verify_chain(
     leaf: &CertificateDer<'_>,
     intermediates: &[CertificateDer<'_>],
     roots: &[CertificateDer<'_>],
     now: u64,
     usage: impl ExtendedKeyUsageValidator,
+    revocation: Option<RevocationOptions<'_>>,
 ) -> Result<(), webpki::Error> {
     let anchors = roots
         .iter()
@@ -60,7 +63,7 @@ pub(crate) fn verify_chain(
         intermediates,
         UnixTime::since_unix_epoch(Duration::from_secs(now)),
         usage,
-        None,
+        revocation,
         None,
     )
     .map(|_| ())
@@ -116,8 +119,11 @@ impl MdsError {
 /// One authenticator model from the blob.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MdsEntry {
-    /// The model.
+    /// The model; [`Aaguid::ZERO`] for a U2F model, which is named by its key identifiers.
     pub aaguid: Aaguid,
+    /// `attestationCertificateKeyIdentifiers`: the subject key identifiers of a U2F model's
+    /// attestation certificates (OP-159 m.3 (ll)).
+    pub key_ids: Vec<Vec<u8>>,
     /// Attestation root certificates (DER).
     pub roots: Vec<Vec<u8>>,
     /// Some status report marks the model revoked or a key or UV compromised.
@@ -144,10 +150,21 @@ impl MdsBlob {
         now < self.next_update.saturating_add(DAY)
     }
 
-    /// The entry for `aaguid`.
+    /// The entry for `aaguid`; never one for the zero AAGUID, which names no model.
     #[must_use]
     pub fn entry(&self, aaguid: Aaguid) -> Option<&MdsEntry> {
+        if aaguid == Aaguid::ZERO {
+            return None;
+        }
         self.entries.iter().find(|e| e.aaguid == aaguid)
+    }
+
+    /// The U2F entry whose attestation certificates have the key identifier `key_id`.
+    #[must_use]
+    pub fn entry_for_key(&self, key_id: &[u8]) -> Option<&MdsEntry> {
+        self.entries
+            .iter()
+            .find(|e| e.key_ids.iter().any(|k| k.as_slice() == key_id))
     }
 }
 
@@ -170,6 +187,8 @@ struct Payload {
 #[derive(Deserialize)]
 struct RawEntry {
     aaguid: Option<String>,
+    #[serde(rename = "attestationCertificateKeyIdentifiers", default)]
+    key_ids: Vec<String>,
     #[serde(rename = "metadataStatement")]
     statement: Option<RawStatement>,
     #[serde(rename = "statusReports", default)]
@@ -246,11 +265,36 @@ fn epoch_day(date: &str) -> Option<u64> {
         .checked_sub(719_468)
 }
 
-fn entry(raw: RawEntry) -> Result<Option<MdsEntry>, MdsError> {
-    let Some(aaguid) = raw.aaguid else {
-        return Ok(None);
+/// Lower-case hexadecimal, as key identifiers are written.
+fn hex(text: &str) -> Option<Vec<u8>> {
+    if text.is_empty() || !text.len().is_multiple_of(2) || text.len() > 128 {
+        return None;
+    }
+    let digit = |c: u8| match c {
+        b'0'..=b'9' => c.checked_sub(b'0'),
+        b'a'..=b'f' => c.checked_sub(b'a').and_then(|v| v.checked_add(10)),
+        _ => None,
     };
-    let aaguid = Aaguid::parse(&aaguid).ok_or(MdsError::Payload)?;
+    text.as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|[h, l]| digit(*h)?.checked_mul(16)?.checked_add(digit(*l)?))
+        .collect()
+}
+
+fn entry(raw: RawEntry) -> Result<Option<MdsEntry>, MdsError> {
+    let key_ids = raw
+        .key_ids
+        .iter()
+        .map(|k| hex(k).ok_or(MdsError::Payload))
+        .collect::<Result<Vec<_>, _>>()?;
+    // OP-159 m.3 (ll)
+    let aaguid = match raw.aaguid {
+        Some(a) => Aaguid::parse(&a).ok_or(MdsError::Payload)?,
+        None if !key_ids.is_empty() => Aaguid::ZERO,
+        None => return Ok(None),
+    };
     let (roots, description) = match raw.statement {
         Some(s) => (
             s.roots
@@ -267,6 +311,7 @@ fn entry(raw: RawEntry) -> Result<Option<MdsEntry>, MdsError> {
         .any(|r| COMPROMISED.contains(&r.status.as_str()));
     Ok(Some(MdsEntry {
         aaguid,
+        key_ids,
         roots,
         compromised,
         description,
@@ -318,6 +363,7 @@ pub fn verify_blob(jwt: &[u8], root: &[u8], now: u64) -> Result<MdsBlob, MdsErro
         core::slice::from_ref(&root),
         now,
         KeyUsage::server_auth(),
+        None,
     )
     .map_err(|_| MdsError::Certificate)?;
     let signature = b64url_decode(s).map_err(|_| MdsError::Format)?;

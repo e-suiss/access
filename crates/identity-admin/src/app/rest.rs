@@ -20,7 +20,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 
 use super::Admin;
 use crate::AdminError;
-use crate::domain::realm::{AssuranceProfile, Binding, EnumerationMode};
+use crate::domain::realm::{AssuranceProfile, Attestation, Binding, EnumerationMode};
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
@@ -1667,6 +1667,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "email_keep_days",
                     "dbsc",
                     "profile",
+                    "attestation",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1709,6 +1710,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     Some(Json::String(s)) => {
                         AssuranceProfile::parse(s).ok_or(Invalid::SigninPolicy)?
                     }
+                    Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                // OP-159 m.3 (ll)
+                attestation: match m.get("attestation") {
+                    None | Some(Json::Null) => Attestation::None,
+                    Some(Json::Object(a)) => attestation(a)?,
                     Some(_) => return Err(Invalid::SigninPolicy),
                 },
             })
@@ -2618,6 +2625,33 @@ pub fn cbor_json(v: &Value) -> Json {
     }
 }
 
+/// `{mode: none | direct | enterprise, aaguids?: [text]}` (§10.2.4, OP-159 m.3 (ll)).
+fn attestation(a: &Map<String, Json>) -> Result<Attestation, Invalid> {
+    if a.keys().any(|k| k != "mode" && k != "aaguids") {
+        return Err(Invalid::SigninPolicy);
+    }
+    let aaguids = match a.get("aaguids") {
+        None => BTreeSet::new(),
+        Some(Json::Array(list)) => list
+            .iter()
+            .map(|v| v.as_str().map(String::from).ok_or(Invalid::SigninPolicy))
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(Invalid::SigninPolicy),
+    };
+    match a.get("mode").and_then(Json::as_str) {
+        Some("none") if aaguids.is_empty() => Ok(Attestation::None),
+        Some("direct") => Ok(Attestation::Direct {
+            enterprise: false,
+            aaguids,
+        }),
+        Some("enterprise") => Ok(Attestation::Direct {
+            enterprise: true,
+            aaguids,
+        }),
+        _ => Err(Invalid::SigninPolicy),
+    }
+}
+
 fn stored(bytes: Option<&[u8]>, default: &Value) -> Json {
     bytes
         .and_then(|b| dcbor::decode(b, Limits::CEILING).ok())
@@ -2637,6 +2671,7 @@ pub fn default_signin() -> SigninPolicy {
         email_keep_days: None,
         dbsc: true,
         profile: AssuranceProfile::Standard,
+        attestation: Attestation::None,
     }
 }
 

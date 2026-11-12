@@ -13,8 +13,10 @@ use access_identity_account::domain::signal::{ChangeType, CredentialType, Initia
 use access_identity_account::notify::message::Notice;
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{RegistrationResponse, RegistrationState};
+use access_identity_webauthn::domain::credential::AttestationKind;
 use access_identity_webauthn::domain::ids::UserHandle;
 use access_identity_webauthn::domain::options::UserEntity;
+use access_identity_webauthn::domain::policy::AttestationPolicy;
 use access_identity_webauthn::domain::prf::PrfSalt;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
 use access_store::accounts::{NewCredential, Revoke, SealedSecret, SubjectRow};
@@ -756,9 +758,26 @@ where
                 self.passkeys.policy,
                 state,
                 response,
-                None,
+                self.passkeys.attestation,
             )
             .await?;
+        // §10.2.4, OP-159 m.3 (ll)
+        if let RegistrationOutcome::Rejected(r) = &outcome
+            && r.is_attestation()
+            && self.passkeys.policy.attestation != AttestationPolicy::None
+        {
+            let mut tx = self.begin().await?;
+            let actor = self.external(subject)?;
+            audit(
+                &mut tx,
+                "attestation.rejected",
+                &actor,
+                r.code(),
+                correlation,
+            )
+            .await?;
+            tx.commit().await?;
+        }
         if let RegistrationOutcome::Registered(record) = &outcome {
             let others =
                 CredentialRegistry::list(self.passkeys.registry, record.realm, &record.user)
@@ -787,6 +806,17 @@ where
                 correlation,
             )
             .await?;
+            // §10.2.4, OP-159 m.3 (ll)
+            if matches!(record.attestation, AttestationKind::Verified(_)) {
+                audit(
+                    &mut tx,
+                    "attestation.verified",
+                    &target,
+                    &target,
+                    correlation,
+                )
+                .await?;
+            }
             // SEC18, Ek B 3657
             self.account_notice(&mut tx, subject, Notice::NewMethod, now)
                 .await?;

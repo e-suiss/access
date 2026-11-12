@@ -60,7 +60,7 @@ proptest! {
                 transports: &[],
                 extensions: ClientExtensionResults::default(),
             },
-            None,
+            &access_identity_webauthn::domain::attestation::Evidence::default(),
             NOW,
         );
     }

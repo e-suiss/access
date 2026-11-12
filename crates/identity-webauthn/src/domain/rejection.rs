@@ -64,6 +64,13 @@ pub enum Rejection {
     /// The attestation does not chain to a root from the metadata service.
     #[error("attestation not trusted")]
     AttestationTrust,
+    /// A certificate of the attestation chain is revoked by its CRL (OP-159 m.3 (ll)).
+    #[error("attestation certificate revoked")]
+    AttestationRevoked,
+    /// A certificate of the attestation chain names a CRL that could not be read, is not
+    /// current or does not cover it (fail-closed, OP-159 m.3 (ll)).
+    #[error("attestation revocation unknown")]
+    AttestationRevocationUnknown,
     /// The realm requires `direct` attestation and no fresh metadata is available (fail-closed).
     #[error("metadata unavailable")]
     MetadataUnavailable,
@@ -120,6 +127,8 @@ impl Rejection {
             Self::AttestationFormat => "webauthn-attestation-format",
             Self::AttestationStatement => "webauthn-attestation-statement",
             Self::AttestationTrust => "webauthn-attestation-trust",
+            Self::AttestationRevoked => "webauthn-attestation-revoked",
+            Self::AttestationRevocationUnknown => "webauthn-attestation-revocation-unknown",
             Self::MetadataUnavailable => "webauthn-metadata-unavailable",
             Self::AaguidNotAllowed => "webauthn-aaguid-not-allowed",
             Self::AuthenticatorStatus => "webauthn-authenticator-status",
@@ -131,6 +140,25 @@ impl Rejection {
             Self::UserHandle => "webauthn-user-handle",
             Self::CredentialExists => "webauthn-credential-exists",
         }
+    }
+}
+
+impl Rejection {
+    /// Whether the realm's `direct` attestation policy refused the registration (§10.2.4,
+    /// OP-159 m.3 (ll)).
+    #[must_use]
+    pub const fn is_attestation(self) -> bool {
+        matches!(
+            self,
+            Self::AttestationFormat
+                | Self::AttestationStatement
+                | Self::AttestationTrust
+                | Self::AttestationRevoked
+                | Self::AttestationRevocationUnknown
+                | Self::MetadataUnavailable
+                | Self::AaguidNotAllowed
+                | Self::AuthenticatorStatus
+        )
     }
 }
 

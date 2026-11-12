@@ -14,7 +14,8 @@ use crate::domain::credential::CredentialRecord;
 use crate::domain::ids::{CredentialId, RealmId, UserHandle};
 use crate::domain::mds::{MAX_BLOB, MdsBlob, MdsError};
 use crate::ports::{
-    Clock, CredentialRegistry, DecoySource, Inserted, MdsCache, MdsSource, Random, SignalSink,
+    AttestationSources, Clock, CredentialRegistry, DecoySource, Inserted, MdsCache, MdsSource,
+    Pending, Random, SignalSink,
 };
 
 /// The host clock.
@@ -126,6 +127,55 @@ impl MdsCache for MemoryMdsCache {
                 .map(|mut b| *b = Some(blob))
                 .map_err(poisoned),
         )
+    }
+}
+
+/// No metadata and no CRLs: a `direct` realm served by it refuses every registration.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoAttestationSources;
+
+impl AttestationSources for NoAttestationSources {
+    fn metadata(&self) -> Pending<'_, Option<MdsBlob>> {
+        Box::pin(ready(None))
+    }
+
+    fn crl<'a>(&'a self, _url: &'a str) -> Pending<'a, Option<Vec<u8>>> {
+        Box::pin(ready(None))
+    }
+}
+
+/// Metadata and CRLs held in memory.
+#[derive(Clone, Debug, Default)]
+pub struct MemoryAttestationSources {
+    /// The metadata blob.
+    pub metadata: Option<MdsBlob>,
+    /// CRLs by URL.
+    pub crls: Vec<(String, Vec<u8>)>,
+}
+
+impl AttestationSources for MemoryAttestationSources {
+    fn metadata(&self) -> Pending<'_, Option<MdsBlob>> {
+        Box::pin(ready(self.metadata.clone()))
+    }
+
+    fn crl<'a>(&'a self, url: &'a str) -> Pending<'a, Option<Vec<u8>>> {
+        Box::pin(ready(
+            self.crls
+                .iter()
+                .find(|(u, _)| u == url)
+                .map(|(_, c)| c.clone()),
+        ))
+    }
+}
+
+/// The metadata of a cache the refresh job keeps; no CRLs.
+impl AttestationSources for MemoryMdsCache {
+    fn metadata(&self) -> Pending<'_, Option<MdsBlob>> {
+        Box::pin(ready(self.blob.read().ok().and_then(|b| b.clone())))
+    }
+
+    fn crl<'a>(&'a self, _url: &'a str) -> Pending<'a, Option<Vec<u8>>> {
+        Box::pin(ready(None))
     }
 }
 
