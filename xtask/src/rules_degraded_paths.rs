@@ -30,6 +30,7 @@ const SKIP_PREFIXES: &[&str] = &[
     "supply-chain/",
     "conformance/vectors/external/",
     "crates/suiss-crypto/vectors/external/",
+    "conformance/oidf/expected.json",
     "sdks/typescript/wasm/",
 ];
 
