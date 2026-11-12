@@ -242,6 +242,8 @@ export class ConsoleMock {
   readonly heldActions = new Set<string>();
   /** The publications received (L1-ADP-18). */
   readonly published: { package: unknown; domains: unknown }[] = [];
+  /** OP-159 m.4 (b) (J3): management writes refused with a problem, by path. */
+  readonly refuse = new Map<string, readonly [number, string]>();
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
   async signIn(context: BrowserContext, baseURL: string, account = "acc_ada"): Promise<string> {
@@ -501,6 +503,8 @@ export class ConsoleMock {
         ) {
           return problem(409, "passkey-loss-not-acknowledged");
         }
+        const refused = this.refuse.get(rest);
+        if (refused !== undefined) return problem(refused[0], refused[1]);
         const ifMatch = headers["if-match"];
         this.writes.push({
           method: r.method(),

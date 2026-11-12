@@ -117,11 +117,11 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   // OP-158 m.4 (a), m.3 (v)
   ratelimits: [idp("realm", "rate_limit")],
   // OP-159 m.4 (a), m.3 (o), (r), (t)
-  signing: planned([
+  signing: [
     idp("realm", "signing_profile"),
     idp("realm", "signing_profile_close"),
     idp("realm", "kex_share"),
-  ]),
+  ],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

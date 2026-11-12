@@ -17,6 +17,7 @@ import { Durability } from "./Durability.js";
 import { Proxy } from "./Proxy.js";
 import { Placement } from "./Placement.js";
 import { RateLimits } from "./RateLimits.js";
+import { Signing } from "./Signing.js";
 import { Recovery } from "./Recovery.js";
 import { Reviews } from "./Reviews.js";
 import { SignInSettings } from "./SignInSettings.js";
@@ -123,7 +124,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "ratelimits":
       return <RateLimits ctx={ctx} />;
     case "signing":
-      return <Planned />;
+      return <Signing ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

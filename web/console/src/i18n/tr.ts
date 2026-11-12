@@ -1084,4 +1084,7 @@ export const tr: Record<Key, string> = {
   hostingDedicatedCompute: "Ayrılmış işlem gücü",
   // OP-159 m.4 (b) (J2)
   durabilityProposed: "Sağlayıcı önerdi, kök henüz onaylamadı. Kök onaylayana kadar sayılmaz.",
+  // OP-159 m.4 (b) (J3)
+  signingFipsModuleInUse: "kullanımda",
+  signingFipsModuleNotInUse: "kullanımda değil",
 };
