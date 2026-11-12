@@ -111,6 +111,9 @@ jobs:
         run: |
           cargo build --locked -p access-server
           just checksec target/debug/access-server
+      # SA-T9, OP-159 m.3 (cc)
+      - name: Fuzz corpus regression (-runs=0)
+        run: just fuzz-regress
 
   # OP-66: the committed .sqlx metadata matches every query against the migrated schema
   # SA-59, OP-152 m.5 (c): diff-scoped mutation testing of the Kernel and the authority core's

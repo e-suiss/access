@@ -486,6 +486,43 @@ fuzz target seconds="60":
 fuzz-all seconds="60":
     for t in $(cd fuzz && cargo +{{sanitizer_nightly}} fuzz list); do just fuzz "$t" {{seconds}}; done
 
+# SA-T9, OP-159 m.3 (cc): every target replays its committed corpus once (-runs=0) on the stable toolchain
+fuzz-regress:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd fuzz
+    cargo build --locked --release --bins
+    dir="${CARGO_TARGET_DIR:-target}/release"
+    for t in $(sed -n 's/^name = "\(.*\)"$/\1/p' Cargo.toml | grep -vx access-fuzz); do
+        if [[ ! -d "corpus/$t" ]] || [[ -z "$(ls -A "corpus/$t")" ]]; then
+            echo "fuzz/corpus/$t is missing or empty" >&2
+            exit 1
+        fi
+        "$dir/$t" -runs=0 "corpus/$t"
+    done
+
+# SA-T9, OP-159 m.3 (cc): `count` targets a night, rotating by day, each for `seconds` under ASan
+fuzz-rotate count="3" seconds="600":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    targets=()
+    while IFS= read -r t; do targets+=("$t"); done < <(cd fuzz && cargo +{{sanitizer_nightly}} fuzz list)
+    n=${#targets[@]}
+    day=$(( $(date -u +%s) / 86400 ))
+    for (( i = 0; i < {{count}}; i++ )); do
+        just fuzz "${targets[$(( (day * {{count}} + i) % n ))]}" {{seconds}}
+    done
+
+# SA-T14, R-6, OP-159 m.3 (bb): the sequencer simulation over `seeds` seeds
+dst seeds="64":
+    ACCESS_DST_SEEDS={{seeds}} cargo nextest run --locked -p access-authority-sequencer --test dst --no-tests=fail
+
+# R-2, SA-20, OP-159 m.3 (dd): the Kernel, the parsers and the pure verifier under Miri
+miri:
+    MIRIFLAGS=-Zmiri-disable-isolation PROPTEST_CASES=4 cargo +{{sanitizer_nightly}} miri test --locked -p esuiss-access-kernel --lib
+    MIRIFLAGS=-Zmiri-disable-isolation PROPTEST_CASES=4 cargo +{{sanitizer_nightly}} miri test --locked -p access-parse --lib
+    MIRIFLAGS=-Zmiri-disable-isolation PROPTEST_CASES=4 cargo +{{sanitizer_nightly}} miri test --locked -p esuiss-crypto --no-default-features --features verify --lib
+
 # OP-106 m.24
 vectors-crosscheck:
     cd conformance/vectors/tools/cbor-crosscheck && go run . ../..

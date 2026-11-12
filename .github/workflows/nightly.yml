@@ -83,7 +83,7 @@ jobs:
   test-full:
     name: test-full
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
     services:
@@ -115,6 +115,22 @@ jobs:
         run: scripts/ci/apt-install.sh softhsm2
       - name: Full suite, including long-running tests
         run: just test-full
+      # SA-T14, R-6, OP-159 m.3 (bb)
+      - name: Sequencer simulation over 10^4 seeds
+        run: just dst 10000
+      # SA-T9, OP-159 m.3 (cc)
+      - name: Read the pinned sanitizer toolchain from the justfile
+        id: nightly
+        run: echo "toolchain=$(sed -n 's/^sanitizer_nightly := "\(.*\)"$/\1/p' justfile)" >> "$GITHUB_OUTPUT"
+      - name: Sanitizer toolchain and cargo-fuzz
+        env:
+          NIGHTLY: ${{ steps.nightly.outputs.toolchain }}
+        run: |
+          test -n "$NIGHTLY"
+          rustup toolchain install "$NIGHTLY" --profile minimal --component rust-src
+          cargo install --locked cargo-fuzz --version 0.13.1
+      - name: Rotating fuzz runs, ten minutes per target (ASan)
+        run: just fuzz-rotate 3 600
       # OP-158 m.3 (n), (r): the full failover suite on a replicated cell; the point-in-time drill
       # needs the native base backup and PITR helpers and runs where the binaries are installed
       - name: Failover suite on scripts/pg-ha.sh (container mode)

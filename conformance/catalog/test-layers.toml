@@ -15,3 +15,168 @@
 # Schema: conformance/schemas/test-layers.schema.json
 
 version = 1
+
+[[layer]]
+id = "SA-T1"
+content = "Normative L0/L2 vectors in the Kernel and the F0 reference; every §13.4 row has a vector or test"
+cadence = "pr"
+phase = 0
+recipe = "f0"
+job = "ci/test"
+status = "active"
+rules = ["SAI-1", "TI-RT12", "HL-12"]
+
+[[layer]]
+id = "SA-T2"
+content = "External suites: the OIDF plans with a versioned expected-failure baseline"
+cadence = "nightly"
+phase = 1
+job = "conformance/oidf-conformance"
+status = "active"
+rules = ["SA-43"]
+
+[[layer]]
+id = "SA-T3"
+content = "Interop matrix: the lab matrix and recorded vendor profiles"
+cadence = "nightly"
+phase = 2
+job = "conformance/interop-lab"
+status = "active"
+rules = ["SA-43", "T42"]
+
+[[layer]]
+id = "SA-T4"
+content = "Differential random testing of the Kernel against the F0 reference and the Lean model"
+cadence = "nightly"
+phase = 3
+recipe = "lean-drt"
+job = "nightly/f0-differential"
+status = "active"
+rules = ["SA-42", "U56"]
+
+[[layer]]
+id = "SA-T5"
+content = "Model checking: TLA+ sequencer, recovery and handover models; Tamarin and ProVerif protocol models"
+cadence = "pr"
+phase = 3
+status = "planned"
+rules = ["CR-48"]
+
+[[layer]]
+id = "SA-T6"
+content = "Kani harnesses on the no_std Kernel, targeted on PRs"
+cadence = "pr"
+phase = 2
+status = "planned"
+rules = ["MD-15"]
+
+[[layer]]
+id = "SA-T7"
+content = "Property-based tests on proptest, including the stateful GHSA-xxwr-vvr3-2g9f model of Set changes"
+cadence = "pr"
+phase = 0
+job = "ci/test"
+status = "active"
+rules = ["GHSA-xxwr-vvr3-2g9f", "SA-59"]
+
+[[layer]]
+id = "SA-T8"
+content = "Metamorphic relations MR1–MR8; MR4 permutes policy and role assignment order"
+cadence = "pr"
+phase = 1
+job = "ci/test"
+status = "active"
+rules = ["MR4", "SA-45"]
+
+[[layer]]
+id = "SA-T9"
+content = "Fuzz targets of the identity and authority planes: corpus regression with -runs=0 on PRs, rotating runs at night"
+cadence = "pr"
+phase = 1
+recipe = "fuzz-regress"
+job = "nightly/test-full"
+status = "active"
+rules = ["SA-44", "SAI-2", "T42"]
+
+[[layer]]
+id = "SA-T10"
+content = "Differential protocol tests against oidc-provider, openid-client, xmlsec1, SimpleSAMLphp, Shibboleth and scim2-tester"
+cadence = "nightly"
+phase = 1
+job = "conformance/differential"
+status = "active"
+rules = ["T42"]
+
+[[layer]]
+id = "SA-T11"
+content = "Wycheproof vectors on every signature, AEAD and ECDH path"
+cadence = "pr"
+phase = 0
+job = "ci/test"
+status = "active"
+rules = ["SA-T11"]
+
+[[layer]]
+id = "SA-T12"
+content = "Known-attack regression: the §14.3 advisory table, the enumeration suite, the XSW corpus and the AS-16…AS-19 red team suites"
+cadence = "pr"
+phase = 0
+job = "ci/test"
+status = "active"
+rules = ["AS-16", "AS-17", "AS-18", "AS-19"]
+
+[[layer]]
+id = "SA-T13"
+content = "Constant-time: dudect, ctgrind and the assembly snapshot"
+cadence = "nightly"
+phase = 1
+recipe = "dudect"
+job = "nightly/dudect"
+status = "active"
+rules = ["CR-39"]
+
+[[layer]]
+id = "SA-T14"
+content = "Deterministic simulation of the pure sequencer under a seeded scheduler"
+cadence = "nightly"
+phase = 2
+recipe = "dst"
+job = "nightly/test-full"
+status = "active"
+rules = ["R-6", "TI-6", "TI-2"]
+
+[[layer]]
+id = "SA-T15"
+content = "Jepsen/Elle isolation and failover checks; the local equivalent is the pg-ha failover suite"
+cadence = "release"
+phase = 2
+status = "planned"
+rules = ["SA-T15"]
+
+[[layer]]
+id = "SA-T16"
+content = "Split-brain: the failover suite on a replicated cell"
+cadence = "nightly"
+phase = 2
+job = "nightly/test-full"
+status = "active"
+rules = ["SA-47", "U51"]
+
+[[layer]]
+id = "SA-T17"
+content = "Load harness and read-path and commit measurements on the bench runner"
+cadence = "nightly"
+phase = 1
+recipe = "measure"
+job = "nightly/bench-wallclock"
+status = "active"
+rules = ["SA-46"]
+
+[[layer]]
+id = "SA-T18"
+content = "Test infrastructure: real PostgreSQL databases, insta snapshots of large outputs"
+cadence = "pr"
+phase = 0
+job = "ci/test"
+status = "active"
+rules = ["OP-66", "SA-59"]

@@ -240,7 +240,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    // INV-12, OP-91: a public field, a derived copy or a default permit is refused
+    // INV-12, OP-91
     #[test]
     fn inv_12_a_permit_with_a_public_field_or_a_copy_is_refused() {
         let good = "#[derive(Debug)]\npub struct WritePermit {\n    seal: (),\n}\n";
@@ -259,7 +259,7 @@ mod tests {
         );
     }
 
-    // INV-12, OP-91: only the core's app layer mints; tests use the test constructor
+    // INV-12, OP-91
     #[test]
     fn inv_12_a_permit_minted_outside_the_core_app_layer_is_refused() {
         let mint = "let p = WritePermit::mint();\n";
@@ -291,7 +291,7 @@ mod tests {
         );
     }
 
-    // OP-159 m.3 (ee): the commit entry asks for the permit first
+    // OP-159 m.3 (ee)
     #[test]
     fn op_91_the_commit_entry_takes_the_permit_first() {
         let good = "pub async fn commit(\n        &mut self,\n        permit: WritePermit,\n        now: TrustedTime,\n    ) {";
@@ -301,7 +301,7 @@ mod tests {
         assert!(!entry_takes_permit("", "pub async fn commit("));
     }
 
-    // OP-91: the test constructor is only reachable from dev-dependencies
+    // OP-91
     #[test]
     fn op_91_the_testing_feature_is_dev_only() {
         let dev = "[dependencies]\naccess-authority-sequencer = { path = \"x\" }\n[dev-dependencies]\naccess-authority-sequencer = { path = \"x\", features = [\"testing\"] }\n";
