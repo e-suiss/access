@@ -88,6 +88,16 @@ const UNPRODUCED: &[&str] = &[
     "domain.recovered",
     "upgrade.activated",
     "identity.degraded",
+    // OP-159 m.4 (a)
+    "pq.reanchored",
+    "pq.cosigned",
+    "algorithm.retired",
+    "signing_profile.opened",
+    "signing_profile.closed",
+    "projection.fetched",
+    "attestation.verified",
+    "attestation.rejected",
+    "solver.unavailable",
 ];
 
 // OP-41, OP-47, §17.8.1

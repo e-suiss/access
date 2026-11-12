@@ -2294,3 +2294,104 @@ ocsf_class = 6003
 ocsf_activity = 99
 caep = ""
 webhook = false
+
+# ---------------------------------------------------------------- Stage 14 (OP-159 m.3 (pp), m.4 (a), appended): post-quantum re-anchor and cosign, algorithm retirement, realm signing profile, projection references, WebAuthn attestation, the policy solver
+
+[[event]]
+event = "pq.reanchored"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "pq.cosigned"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "algorithm.retired"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "signing_profile.opened"
+plane = "identity"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "signing_profile.closed"
+plane = "identity"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "projection.fetched"
+plane = "authority"
+class = "token"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 2
+caep = ""
+webhook = false
+
+[[event]]
+event = "attestation.verified"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "attestation.rejected"
+plane = "identity"
+class = "credential"
+outcome = "failure"
+fields = ["actor", "target", "reason"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "solver.unavailable"
+plane = "authority"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target", "reason"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false

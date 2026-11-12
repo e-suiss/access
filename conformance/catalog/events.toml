@@ -1107,3 +1107,20 @@ severity = "warn"
 since = "unreleased"
 fields = ["outcome", "error"]
 ocsf = "detection_finding"
+
+# Stage 14 (OP-159 m.3 (pp), (t), m.4 (a), appended)
+[[event]]
+name = "tls.handshake"
+plane = "ops"
+severity = "debug"
+since = "unreleased"
+fields = ["listener", "group", "outcome"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "kex.fallback"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["listener", "group"]
+ocsf = "detection_finding"
