@@ -1144,3 +1144,233 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
     assert_eq!(kept[0].cosigns.len(), 0);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+struct NoDecision;
+
+impl access_http::adp::ports::Pdp for NoDecision {
+    fn evaluate(
+        &self,
+        _: access_authority_core::app::Incoming,
+    ) -> impl std::future::Future<
+        Output = Result<access_authority_core::app::Response, access_authority_core::CoreError>,
+    > + Send {
+        std::future::ready(Err(access_authority_core::CoreError::Protocol(
+            "not-reached",
+        )))
+    }
+}
+
+fn after_lock() -> u64 {
+    wall() + crate::algorithms::LOCK_MS + 1_000
+}
+
+/// The root's `algorithm_retire` of `alg` as an ADP commit body.
+fn retire_body(d: Digest, alg: suiss_crypto::cose::Algorithm) -> String {
+    use access_kernel::intent::{ContextRefs, IntentEnvelope};
+    use access_kernel::json::b64url_encode;
+    use access_kernel::meta::{Payload, core_action, meta_anchor};
+    use access_kernel::model::{ResourceRef, Window};
+    let payload = Payload::AlgorithmRetire { algorithm: alg };
+    let intent = IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
+        action: core_action("algorithm_retire"),
+        resources: vec![ResourceRef {
+            namespace: String::from("access.domain"),
+            path: vec![String::from("d")],
+            incarnation: 0,
+        }],
+        params: std::collections::BTreeMap::new(),
+        opaque: std::collections::BTreeMap::from([(
+            String::from("payload"),
+            payload.digest().unwrap(),
+        )]),
+        recipient: None,
+        purpose: None,
+        context: ContextRefs::default(),
+        validity: Window {
+            from: wall() - 60_000,
+            until: wall() + 600_000,
+        },
+    };
+    let mut wired = access_http::console::drafts::wire(&intent);
+    wired["opaque"] = serde_json::json!({ "payload": b64url_encode(&payload.digest().unwrap().0) });
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    serde_json::json!({
+        "subject": { "type": "access_party", "id": b64url_encode(&[1; 16]) },
+        "action": { "name": "algorithm_retire" },
+        "resource": { "type": "access.domain", "id": "d" },
+        "context": {
+            "domain": b64url_encode(&d.0),
+            "mode": "commit",
+            "nonce": b64url_encode(&nonce),
+            "intent": wired,
+            "payload": b64url_encode(&payload.to_bytes().unwrap()),
+            "basis": { "anchor": b64url_encode(&meta_anchor(&d).0) },
+            "capacity": "own",
+        },
+    })
+    .to_string()
+}
+
+async fn post(router: axum::Router, uri: &str, body: String) -> (u16, serde_json::Value) {
+    use tower::ServiceExt as _;
+    let mut req = axum::http::Request::post(uri)
+        .body(axum::body::Body::from(body))
+        .unwrap();
+    req.extensions_mut()
+        .insert(access_http::adp::adapters::Pep("pep-j2".into()));
+    let r = router.oneshot(req).await.unwrap();
+    let status = r.status().as_u16();
+    let body = axum::body::to_bytes(r.into_body(), 1 << 20).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap_or_default())
+}
+
+// §15.16, CR-45 RA-6, RB-0, RR-35, HL-34, OP-159 m.3 (e), (f), (g), m.9 (h), m.13 (a), (f)
+#[tokio::test(flavor = "multi_thread")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one walkthrough of the algorithm routes"
+)]
+async fn the_algorithm_routes_time_lock_an_admission_and_gate_a_retirement_on_the_re_anchor() {
+    use suiss_crypto::cose::Algorithm;
+    let db = fresh().await.unwrap();
+    let mut log = Log::create(&db).await;
+    let d = log.domain;
+    log.push_field(
+        &db,
+        ("artifacts", Digest([3; 32]).to_value()),
+        wall() - 30_000,
+    )
+    .await;
+    let root = std::env::temp_dir().join(format!("aw-alg-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mut witness = Witness::start(
+        &witness_bin(),
+        &root,
+        ("w-alg", "Example Witness Ltd"),
+        d.0,
+        binding_key(d),
+    )
+    .unwrap();
+    let public = witness.enable_pq().unwrap();
+    let classical = declare(&[(&witness, "Example Witness Ltd", true)]);
+    let declared = with_pq_witness(classical, "w-alg", public);
+    let socket = wall_signer("alg", d, declared).await;
+    let (heads, signer) = (PgHeads(db.app.clone()), SocketSigner::new(socket.clone()));
+    let publisher = Publisher {
+        targets: vec![target(&witness, "Example Witness Ltd")],
+        sinks: vec![],
+    };
+    let (row, _) = domain_step(
+        (&heads, &signer, &publisher),
+        (&db.app, &db.sequencer),
+        (d, &mut Cadence::default()),
+        wall(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(row.size, 2);
+    let routes = |now: fn() -> u64| {
+        access_http::algorithms::router(
+            crate::algorithms::PgAlgorithms {
+                socket: socket.clone(),
+                app: db.app.clone(),
+                sequencer: db.sequencer.clone(),
+                targets: publisher.targets.clone(),
+                notify: None,
+            },
+            NoDecision,
+            now,
+        )
+    };
+    let origin = access_authority_sequencer::checkpoint::origin(&d);
+    let admit = format!("/access/v1/domains/{origin}/algorithms");
+    let retire = format!("/access/v1/domains/{origin}/algorithms/retire");
+    let again = format!("/access/v1/domains/{origin}/reanchor");
+
+    // RA-6, §15.16 step (c)
+    let (s, b) = post(routes(wall), &retire, retire_body(d, Algorithm::Ed25519)).await;
+    assert_eq!(
+        (s, b["code"].as_str()),
+        (409, Some("reanchor-required")),
+        "{b}"
+    );
+    // OP-159 m.3 (d), m.13 (a)
+    let (s, b) = post(routes(wall), &again, String::new()).await;
+    assert_eq!(
+        (s, b["code"].as_str()),
+        (409, Some("pq-key-unavailable")),
+        "{b}"
+    );
+
+    // OP-159 m.3 (e), m.9 (h)
+    let (s, b) = post(routes(wall), &admit, r#"{"alg":-49}"#.into()).await;
+    assert_eq!((s, b["status"].as_str()), (202, Some("time-lock")), "{b}");
+    let until = b["wait_until"].as_u64().unwrap();
+    assert!(until >= wall() + crate::algorithms::LOCK_MS - 60_000);
+    let (s, b) = post(routes(wall), &admit, r#"{"alg":-49}"#.into()).await;
+    assert_eq!((s, b["wait_until"].as_u64()), (202, Some(until)), "{b}");
+    assert!(
+        !published(&socket, d)
+            .await
+            .algorithms
+            .contains(&Algorithm::MlDsa65)
+    );
+    let (s, b) = post(routes(after_lock), &admit, r#"{"alg":-49}"#.into()).await;
+    assert_eq!((s, b["status"].as_str()), (200, Some("admitted")), "{b}");
+    let m = published(&socket, d).await;
+    assert!(m.algorithms.contains(&Algorithm::MlDsa65));
+    assert_eq!(
+        m.hybrid,
+        Some(access_kernel::verify::key_scope::Hybrid::Both)
+    );
+    // RR-35
+    assert!(m.declared.pq_reanchor.is_none());
+
+    // RA-2, RA-3, RA-6
+    let (s, b) = post(routes(wall), &again, String::new()).await;
+    assert_eq!(
+        (s, b["status"].as_str(), b["size"].as_u64()),
+        (200, Some("anchored"), Some(2)),
+        "{b}"
+    );
+    assert_eq!(
+        published(&socket, d)
+            .await
+            .declared
+            .pq_reanchor
+            .map(|r| r.size),
+        Some(2)
+    );
+
+    // OP-159 m.13 (a), (f)
+    let (s, b) = post(routes(wall), &retire, retire_body(d, Algorithm::Ed25519)).await;
+    assert_eq!(
+        (s, b["code"].as_str()),
+        (409, Some("pq-key-unavailable")),
+        "{b}"
+    );
+    assert!(
+        published(&socket, d)
+            .await
+            .algorithms
+            .contains(&Algorithm::Ed25519)
+    );
+    let (s, _) = post(routes(wall), &retire, retire_body(d, Algorithm::MlDsa65)).await;
+    assert_eq!(s, 409);
+
+    // RA-3, HL-34
+    witness.kill().unwrap();
+    let (s, b) = post(routes(wall), &again, String::new()).await;
+    assert_eq!((s, b["status"].as_str()), (200, Some("pending")), "{b}");
+    let kept = access_store::pq_checkpoint::list(&db.app, &log.id, None, 8)
+        .await
+        .unwrap();
+    assert!(
+        kept.iter()
+            .any(|c| c.reason == access_store::pq_checkpoint::Reason::Retirement)
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

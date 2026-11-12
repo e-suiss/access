@@ -11,6 +11,7 @@
 //! output is its result, so its logs go to standard error.
 
 mod admin;
+mod algorithms;
 mod analysis;
 mod bootstrap;
 mod certificate;
@@ -2158,6 +2159,7 @@ async fn serve(
     let scim_keks = keks.clone();
     let hr_keks = keks.clone();
     let review_keks = keks.clone();
+    let algorithm_keks = keks.clone();
     // OP-155 m.3 (c), (e), (f)
     let saml = Arc::new(saml::Saml::new(
         all.app.clone(),
@@ -2431,6 +2433,25 @@ async fn serve(
         app: product_app.clone(),
         witnesses: config.transparency.targets().map_err(|e| e.to_string())?,
     });
+    // §15.16, CR-45 RA-6, OP-159 m.3 (e), (f), (g), m.9 (h)
+    let checkpoints = match config.signer.clone() {
+        Some(socket) => checkpoints.merge(access_http::algorithms::router(
+            algorithms::PgAlgorithms {
+                socket,
+                app: product_app.clone(),
+                sequencer: sequencer.clone(),
+                targets: config.transparency.targets().map_err(|e| e.to_string())?,
+                notify: Some(algorithms::Notify {
+                    router: tenants_pool.clone(),
+                    keks: algorithm_keks,
+                    ids: access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new(id_key)),
+                }),
+            },
+            domains.clone(),
+            algorithms::now_ms,
+        )),
+        None => checkpoints,
+    };
     let public_adp =
         access_http::adp::pep::with_tokens(adp.clone().merge(checkpoints), pep_tokens, issuer);
     // OP-151 m.3, m.2 M1, m.12

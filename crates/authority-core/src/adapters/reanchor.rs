@@ -142,3 +142,30 @@ pub async fn reanchor(
     }
     Ok(out)
 }
+
+/// Admits `alg` to `domain`'s allowlist, or with `retire` retires the classical `alg`, through
+/// the signer (OP-159 m.9 (h), m.13 (f)).
+///
+/// # Errors
+/// The signer's stable code, or `signer-unreachable`.
+pub async fn allowlist(
+    socket: &Path,
+    domain: Digest,
+    alg: suiss_crypto::cose::Algorithm,
+    retire: bool,
+) -> Result<(), String> {
+    match call(
+        socket,
+        &Request::Allowlist {
+            domain,
+            alg,
+            retire,
+        },
+    )
+    .await
+    {
+        Ok(Response::Opened) => Ok(()),
+        Ok(Response::Error(code)) => Err(code),
+        _ => Err(String::from("signer-unreachable")),
+    }
+}

@@ -25,7 +25,7 @@ pub(crate) fn urls(targets: &[Target]) -> Vec<(String, String)> {
         .collect()
 }
 
-async fn metadata(socket: &Path, domain: Digest) -> Option<DomainMetadata> {
+pub(crate) async fn metadata(socket: &Path, domain: Digest) -> Option<DomainMetadata> {
     use access_authority_sequencer::ports::NoteSigner as _;
     let m = access_authority_sequencer::adapters::SocketSigner::new(socket.to_path_buf())
         .metadata(domain)

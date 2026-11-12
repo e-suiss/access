@@ -3438,6 +3438,274 @@
         }
       }
     },
+    "/access/v1/domains/{domain}/algorithms": {
+      "post": {
+        "operationId": "admitAlgorithm",
+        "summary": "Adds the COSE algorithm {alg} to the domain's allowlist behind the CT3 time-lock (admit_algorithm, CR-44): the first request opens the 24 h lock (202, wait_until); the same request after it and within 7 days admits it (200). Adding ML-DSA makes the hybrid policy both (OP-159 m.3 (e), m.9 (h)).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-required: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not-found: no such domain.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "algorithm-profile-conflict: the domain declares the FIPS profile, so ML-DSA cannot join its allowlist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The time-lock runs until wait_until; nothing changed yet.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "200": {
+            "description": "The algorithm is in the allowlist.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "alg"
+                ],
+                "properties": {
+                  "alg": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/algorithms/retire": {
+      "post": {
+        "operationId": "retireAlgorithm",
+        "summary": "Retires a classical algorithm: the body is the ADP request of the root's algorithm_retire Exercise. A re-anchor runs first; only with an anchored re-anchor that covers the head is the Exercise decided, and only an allowed one leaves the allowlist and notifies the roots and domain administrators (§15.16, CR-45 RA-6, OP-159 m.3 (f)).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-required: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not-found: no such domain.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "reanchor-required: no anchored post-quantum re-anchor covers the head within the cadence; pq-key-unavailable: no ML-DSA key or binding; algorithm-profile-conflict: not a listed classical algorithm. Nothing is recorded.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The decision; an ALLOW retired the algorithm.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/reanchor": {
+      "post": {
+        "operationId": "reanchorDomain",
+        "summary": "One post-quantum re-anchor of the latest witnessed checkpoint now: pending until an independent witness's ML-DSA cosign arrives, then published as pq_reanchor (CR-45 RA-2, RA-3, RA-6, RR-35).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-required: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not-found: no such domain.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "reanchor-no-pq-witness: no independent witness with a declared ML-DSA key (RB-0); pq-key-unavailable: no ML-DSA key; checkpoint-not-witnessed: no witnessed checkpoint yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "status pending, or anchored with size, time and witnesses.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/eligibility:set": {
       "post": {
         "operationId": "eligibleSet",

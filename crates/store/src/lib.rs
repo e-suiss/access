@@ -50,6 +50,7 @@ pub mod hr;
 /// The connection pool type, so other crates need no driver dependency (OP-66 m.2).
 pub use sqlx::PgPool as Pool;
 
+pub mod algorithm_admission;
 pub mod identity;
 pub mod idp;
 pub mod issuer;

@@ -4,6 +4,7 @@
 
 pub mod account;
 pub mod adp;
+pub mod algorithms;
 pub mod api;
 pub mod audit;
 pub mod console;

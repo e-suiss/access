@@ -2395,3 +2395,15 @@ ocsf_class = 2004
 ocsf_activity = 1
 caep = ""
 webhook = false
+
+# OP-159 m.4 (b) (J2): an algorithm joined a domain's allowlist after its CT3 time-lock
+[[event]]
+event = "algorithm.admitted"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false

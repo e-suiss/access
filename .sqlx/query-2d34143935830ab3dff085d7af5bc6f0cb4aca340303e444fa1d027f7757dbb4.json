@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max(requested_at) FROM access.algorithm_admissions\n          WHERE domain_id = $1 AND algorithm = $2 AND requested_at >= $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2d34143935830ab3dff085d7af5bc6f0cb4aca340303e444fa1d027f7757dbb4"
+}

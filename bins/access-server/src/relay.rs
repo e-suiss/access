@@ -537,6 +537,97 @@ async fn directed(
     Ok(None)
 }
 
+/// The people a domain-wide notice goes to: every root participant of the domain's meta-anchor
+/// with an account in this realm and the realm's on-call Parties, its administrators (§13.6,
+/// §15.16 m.3, OP-158 m.3 (m), OP-159 m.3 (f)).
+async fn domain_people(
+    t: &mut TenantTx,
+    (app, domain): (&Pool, &access_store::scope::DomainId),
+) -> Result<std::collections::BTreeSet<[u8; 16]>, String> {
+    use access_kernel::codec::Canonical as _;
+    let e = |x: access_store::StoreError| x.to_string();
+    let meta = access_kernel::meta::meta_anchor(&access_kernel::digest::Digest(*domain.as_bytes()));
+    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
+    let roots = access_store::authority::state_of(app, domain, &[key])
+        .await
+        .map_err(e)?
+        .into_iter()
+        .find_map(|r| r.value)
+        .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
+        .map(|a| match a.root {
+            access_kernel::meta::Root::Sole(p) => vec![p],
+            access_kernel::meta::Root::Joint { parties, .. } => parties.into_iter().collect(),
+        })
+        .unwrap_or_default();
+    let mut to = std::collections::BTreeSet::new();
+    for p in roots {
+        if let Some(s) = access_store::idp::party_subject(t, &p.0).await.map_err(e)? {
+            to.insert(s);
+        }
+    }
+    to.extend(t.breakglass_on_call().await.map_err(e)?);
+    Ok(to)
+}
+
+/// Delivers the `algorithm_retired` notice of `domain` to the people of every live realm it
+/// governs (§15.16 m.3, OP-159 m.3 (f)); the notices queued.
+///
+/// # Errors
+/// A store failure.
+pub(crate) async fn algorithm_retired<K: access_identity_events::adapters::RealmKek>(
+    (app, router): (&Pool, &Pool),
+    (keks, ids): (&K, &IdKey),
+    domain: &access_store::scope::DomainId,
+    (algorithm, reanchor_size, at_ms): (&str, u64, u64),
+) -> Result<u32, String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_identity_account::notify::message::Body;
+    use access_identity_account::notify::notices::queue_body;
+    let e = |x: access_store::StoreError| x.to_string();
+    let mut sent = 0_u32;
+    for r in access_store::tenancy::routes(router).await.map_err(e)? {
+        let mut t = TenantTx::begin(app, r.tenant, r.realm).await.map_err(e)?;
+        let governs = access_store::idp::governance(&mut t)
+            .await
+            .map_err(e)?
+            .is_some_and(|g| g.domain.as_bytes() == domain.as_bytes());
+        let Some(kek) = keks.kek(r.tenant, r.realm).filter(|_| governs) else {
+            t.commit().await.map_err(e)?;
+            continue;
+        };
+        let link = format!("{}{SIGNING_PATH}", r.issuer.trim_end_matches('/'));
+        for subject in domain_people(&mut t, (app, domain)).await? {
+            let body = Body::AlgorithmRetired {
+                domain: r.slug.chars().take(200).collect(),
+                algorithm: algorithm.chars().take(200).collect(),
+                reanchor_size,
+                at_ms,
+                link: Secret::new(link.clone()),
+            };
+            if queue_body(
+                &mut t,
+                (&*kek, ids),
+                &SystemEntropy,
+                &SystemClock,
+                subject,
+                body,
+            )
+            .await
+            .map_err(|x| x.to_string())?
+            .is_some()
+            {
+                sent = sent.saturating_add(1);
+            }
+        }
+        t.commit().await.map_err(e)?;
+    }
+    Ok(sent)
+}
+
+/// The console page the algorithm retirement notice opens, under the realm issuer.
+const SIGNING_PATH: &str = "/console/durability";
+
 /// The console page the forced-recovery notice opens, under the realm issuer (§8.17.9.7).
 const RECOVERY_HISTORY_PATH: &str = "/console/recovery";
 
@@ -555,38 +646,17 @@ async fn domain_recovered(
     use access_identity_account::notify::message::Body;
     use access_identity_account::notify::notices::queue_body;
     use access_internal_api::events::Detail;
-    use access_kernel::codec::Canonical as _;
     let e = |x: access_store::StoreError| x.to_string();
     let Detail::Domain { position } = ev.detail else {
         return Ok(0);
     };
-    let meta = access_kernel::meta::meta_anchor(&access_kernel::digest::Digest(*domain.as_bytes()));
-    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
-    let roots = access_store::authority::state_of(app, domain, &[key])
-        .await
-        .map_err(e)?
-        .into_iter()
-        .find_map(|r| r.value)
-        .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
-        .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
-        .map(|a| match a.root {
-            access_kernel::meta::Root::Sole(p) => vec![p],
-            access_kernel::meta::Root::Joint { parties, .. } => parties.into_iter().collect(),
-        })
-        .unwrap_or_default();
     let kept = position.saturating_sub(1);
     let lost_after_ms = access_store::authority::read_log(app, domain, kept, kept)
         .await
         .map_err(e)?
         .first()
         .map_or(ev.at, |r| r.recorded_at);
-    let mut to = std::collections::BTreeSet::new();
-    for p in roots {
-        if let Some(s) = access_store::idp::party_subject(t, &p.0).await.map_err(e)? {
-            to.insert(s);
-        }
-    }
-    to.extend(t.breakglass_on_call().await.map_err(e)?);
+    let to = domain_people(t, (app, domain)).await?;
     let link = format!("{}{RECOVERY_HISTORY_PATH}", issuer.trim_end_matches('/'));
     let mut sent = 0_u32;
     for subject in to {

@@ -136,4 +136,114 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
             ("503", "checkpoints-unavailable: retry."),
         ],
     );
+    algorithms(paths);
+}
+
+/// A request body: media type and schema.
+type RequestBody<'a> = Option<(&'a str, Value)>;
+
+fn post(
+    paths: &mut Map<String, Value>,
+    path: &str,
+    (operation, summary): (&str, &str),
+    (request, ok): (RequestBody<'_>, &[(&str, &str)]),
+    refusals: &[(&str, &str)],
+) {
+    let mut responses = problems(refusals);
+    for (status, description) in ok {
+        responses.insert(
+            (*status).into(),
+            json!({ "description": description, "content": { "application/json": { "schema": {} } } }),
+        );
+    }
+    let mut op = json!({
+        "operationId": operation,
+        "summary": summary,
+        "parameters": [parameter("domain")],
+        "responses": responses,
+    });
+    if let (Some((media, schema)), Some(o)) = (request, op.as_object_mut()) {
+        o.insert(
+            "requestBody".into(),
+            json!({ "required": true, "content": { media: { "schema": schema } } }),
+        );
+    }
+    paths.insert(path.to_owned(), json!({ "post": op }));
+}
+
+// §15.16, CR-45 RA-6, OP-159 m.3 (e), (f), (g), m.9 (h)
+fn algorithms(paths: &mut Map<String, Value>) {
+    use crate::algorithms::{ADMIT_PATH, REANCHOR_PATH, RETIRE_PATH};
+    let common = [
+        ("400", "The request is refused; nothing changed."),
+        ("401", "pep-required: no authenticated PEP."),
+        ("404", "not-found: no such domain."),
+        ("503", "Temporarily unavailable; retry."),
+    ];
+    let mut admit = common.to_vec();
+    admit.push((
+        "409",
+        "algorithm-profile-conflict: the domain declares the FIPS profile, so ML-DSA cannot join its allowlist.",
+    ));
+    post(
+        paths,
+        ADMIT_PATH,
+        (
+            "admitAlgorithm",
+            "Adds the COSE algorithm {alg} to the domain's allowlist behind the CT3 time-lock (admit_algorithm, CR-44): the first request opens the 24 h lock (202, wait_until); the same request after it and within 7 days admits it (200). Adding ML-DSA makes the hybrid policy both (OP-159 m.3 (e), m.9 (h)).",
+        ),
+        (
+            Some((
+                "application/json",
+                json!({ "type": "object", "required": ["alg"], "properties": { "alg": { "type": "integer" } } }),
+            )),
+            &[
+                (
+                    "202",
+                    "The time-lock runs until wait_until; nothing changed yet.",
+                ),
+                ("200", "The algorithm is in the allowlist."),
+            ],
+        ),
+        &admit,
+    );
+    let mut retire = common.to_vec();
+    retire.push((
+        "409",
+        "reanchor-required: no anchored post-quantum re-anchor covers the head within the cadence; pq-key-unavailable: no ML-DSA key or binding; algorithm-profile-conflict: not a listed classical algorithm. Nothing is recorded.",
+    ));
+    post(
+        paths,
+        RETIRE_PATH,
+        (
+            "retireAlgorithm",
+            "Retires a classical algorithm: the body is the ADP request of the root's algorithm_retire Exercise. A re-anchor runs first; only with an anchored re-anchor that covers the head is the Exercise decided, and only an allowed one leaves the allowlist and notifies the roots and domain administrators (§15.16, CR-45 RA-6, OP-159 m.3 (f)).",
+        ),
+        (
+            Some(("application/json", json!({}))),
+            &[("200", "The decision; an ALLOW retired the algorithm.")],
+        ),
+        &retire,
+    );
+    let mut again = common.to_vec();
+    again.push((
+        "409",
+        "reanchor-no-pq-witness: no independent witness with a declared ML-DSA key (RB-0); pq-key-unavailable: no ML-DSA key; checkpoint-not-witnessed: no witnessed checkpoint yet.",
+    ));
+    post(
+        paths,
+        REANCHOR_PATH,
+        (
+            "reanchorDomain",
+            "One post-quantum re-anchor of the latest witnessed checkpoint now: pending until an independent witness's ML-DSA cosign arrives, then published as pq_reanchor (CR-45 RA-2, RA-3, RA-6, RR-35).",
+        ),
+        (
+            None,
+            &[(
+                "200",
+                "status pending, or anchored with size, time and witnesses.",
+            )],
+        ),
+        &again,
+    );
 }
