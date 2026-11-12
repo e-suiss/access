@@ -6,6 +6,8 @@ require '/tmp/sp/vendor/autoload.php';
 
 use RobRichards\XMLSecLibs\XMLSecurityKey;
 
+\SAML2\Compat\ContainerSingleton::setContainer(new \SAML2\Compat\MockContainer());
+
 function env_of(string $dir): array
 {
     $out = [];
