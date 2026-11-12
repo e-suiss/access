@@ -7,6 +7,7 @@ pub mod cell;
 pub mod checkpoint;
 pub mod domain;
 pub mod gate;
+pub mod permit;
 pub mod ports;
 pub mod witness;
 

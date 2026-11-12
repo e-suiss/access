@@ -12,6 +12,7 @@ use access_kernel::record::RecordKind;
 use super::{Leader, observe};
 use crate::SequencerError;
 use crate::domain::{Bound, Item, Outcome, check_effects, independent, nonces, replay, rows};
+use crate::permit::WritePermit;
 use crate::ports::DomainLog;
 use access_telemetry::metrics::Stopwatch;
 
@@ -38,6 +39,8 @@ impl<L: DomainLog> Leader<L> {
     /// that transaction fails every member and, as in [`Leader::commit`], steps the leader
     /// down unless it is a retry.
     ///
+    /// The group is spent against one `permit` (OP-91).
+    ///
     /// # Errors
     /// [`SequencerError::SteppedDown`] before anything is tried; the batch's own failure.
     #[expect(
@@ -46,9 +49,11 @@ impl<L: DomainLog> Leader<L> {
     )]
     pub async fn commit_group(
         &mut self,
+        permit: WritePermit,
         now: TrustedTime,
         groups: &[Vec<Item>],
     ) -> Result<Vec<Grouped>, SequencerError> {
+        permit.spend();
         if self.seq.stepped_down() {
             return Err(SequencerError::SteppedDown);
         }

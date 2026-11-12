@@ -19,7 +19,7 @@ use access_store::authority::Beside;
 
 use crate::CoreError;
 use crate::app::events::Derived;
-use crate::app::{Authority, MAX_RETRIES, NewClaim, Resolved};
+use crate::app::{Authority, MAX_RETRIES, NewClaim, Resolved, permit};
 use crate::domain::Snapshot;
 use crate::ports::{Binding, Reader, Salts};
 
@@ -185,7 +185,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let (items, ended) = self
                 .ingest_items(&resolved, &v, reported.as_ref(), now)
                 .await?;
-            match self.leader.commit(now, &items).await {
+            match self.leader.commit(permit::issue(), now, &items).await {
                 Ok(done) => {
                     let (position, ended) = match done {
                         Committed::Appended(positions) => {

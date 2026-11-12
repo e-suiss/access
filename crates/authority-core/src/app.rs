@@ -1786,7 +1786,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     decision.writes.extend(keys);
                 }
             }
-            match self.leader.commit(now, &items).await {
+            match self.leader.commit(permit::issue(), now, &items).await {
                 Ok(Committed::Appended(positions)) => {
                     let mut response = answer(
                         evaluation.decision,
@@ -2346,7 +2346,10 @@ pub mod snapshot;
 pub mod handover;
 // OP-158 m.4 (f)
 pub mod placement;
+// OP-159 m.4 (f)
+pub mod permit;
 
 pub use ingest::{Ingested, Lane, Lanes, REPORT_CLASS, Reported, Turn, lane_of};
+pub use permit::WritePermit;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
 pub use roles::ROLES_CLAIM;

@@ -21,7 +21,13 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "net", "sync", "time"] }
 tracing = { workspace = true, features = ["std"] }
 
+[features]
+# OP-159 m.3 (ee)
+testing = []
+
 [dev-dependencies]
+# OP-159 m.3 (ee)
+access-authority-sequencer = { path = ".", features = ["testing"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 # OP-158 m.3 (k): the local Roughtime twin

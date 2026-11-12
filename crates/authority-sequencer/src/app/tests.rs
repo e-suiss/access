@@ -10,6 +10,8 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+use crate::permit::WritePermit;
+
 use access_crypto::event_id::EventKey;
 use access_crypto::secret::Secret;
 use access_kernel::codec::Canonical;
@@ -169,10 +171,14 @@ async fn a_failed_commit_steps_down_without_moving_the_head() {
     let (log, d) = MemLog::with_genesis();
     log.state().fail_next_commit = true;
     let mut l = Leader::acquire(log, d, key()).await.unwrap();
-    assert!(l.commit(20, &[item("a")]).await.is_err());
+    assert!(
+        l.commit(WritePermit::for_tests(), 20, &[item("a")])
+            .await
+            .is_err()
+    );
     assert_eq!(l.head().pos, 0);
     assert!(matches!(
-        l.commit(21, &[item("b")]).await,
+        l.commit(WritePermit::for_tests(), 21, &[item("b")]).await,
         Err(SequencerError::SteppedDown)
     ));
 }
@@ -205,16 +211,18 @@ async fn a_new_epoch_fences_the_previous_leader() {
     let mut old = Leader::acquire(Shared(log.clone()), d, key())
         .await
         .unwrap();
-    old.commit(20, &[item("a")]).await.unwrap();
+    old.commit(WritePermit::for_tests(), 20, &[item("a")])
+        .await
+        .unwrap();
     let mut new = Leader::acquire(Shared(log.clone()), d, key())
         .await
         .unwrap();
     assert!(matches!(
-        old.commit(21, &[item("b")]).await,
+        old.commit(WritePermit::for_tests(), 21, &[item("b")]).await,
         Err(SequencerError::Store(StoreError::HeadMoved))
     ));
     assert!(
-        matches!(new.commit(22, &[item("c")]).await.unwrap(), Outcome::Appended(p) if p == [2])
+        matches!(new.commit(WritePermit::for_tests(), 22, &[item("c")]).await.unwrap(), Outcome::Appended(p) if p == [2])
     );
 }
 
@@ -241,7 +249,7 @@ async fn genesis_cannot_be_appended() {
     let mut g = item("g");
     g.draft.kind = RecordKind::Genesis;
     assert!(matches!(
-        l.commit(20, &[g]).await,
+        l.commit(WritePermit::for_tests(), 20, &[g]).await,
         Err(SequencerError::Genesis)
     ));
 }
@@ -267,7 +275,10 @@ async fn op_9_independent_commits_share_one_batch_and_change_nothing_else() {
     ];
     let (log, d) = MemLog::with_genesis();
     let mut grouped = Leader::acquire(log, d, key()).await.unwrap();
-    let out = grouped.commit_group(20, &groups).await.unwrap();
+    let out = grouped
+        .commit_group(WritePermit::for_tests(), 20, &groups)
+        .await
+        .unwrap();
     let positions: Vec<Vec<u64>> = out
         .into_iter()
         .map(|g| match g {
@@ -285,7 +296,10 @@ async fn op_9_independent_commits_share_one_batch_and_change_nothing_else() {
     let (log, _) = MemLog::with_genesis();
     let mut alone = Leader::acquire(log, d, key()).await.unwrap();
     let all: Vec<Item> = groups.iter().flatten().cloned().collect();
-    alone.commit(20, &all).await.unwrap();
+    alone
+        .commit(WritePermit::for_tests(), 20, &all)
+        .await
+        .unwrap();
     let leaves = |l: &Leader<MemLog>| -> Vec<[u8; 32]> {
         l.log.state().records.iter().map(|r| r.leaf_hash).collect()
     };
@@ -316,6 +330,7 @@ async fn pi_23_a_member_reading_an_earlier_members_write_is_handed_back() {
     first.nonce = again.nonce.clone();
     let out = l
         .commit_group(
+            WritePermit::for_tests(),
             20,
             &[
                 vec![with_rw("w", &[], &[b"k"])],
@@ -348,13 +363,18 @@ async fn op_9_a_failed_group_acknowledges_none_of_its_members() {
     log.state().fail_next_commit = true;
     let mut l = Leader::acquire(log, d, key()).await.unwrap();
     assert!(
-        l.commit_group(20, &[vec![item("a")], vec![item("b")]])
-            .await
-            .is_err()
+        l.commit_group(
+            WritePermit::for_tests(),
+            20,
+            &[vec![item("a")], vec![item("b")]]
+        )
+        .await
+        .is_err()
     );
     assert_eq!(l.head().pos, 0);
     assert!(matches!(
-        l.commit_group(21, &[vec![item("c")]]).await,
+        l.commit_group(WritePermit::for_tests(), 21, &[vec![item("c")]])
+            .await,
         Err(SequencerError::SteppedDown)
     ));
 }

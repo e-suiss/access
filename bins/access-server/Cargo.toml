@@ -84,6 +84,8 @@ access-linux-module = { path = "../../services/linux-client/module" }
 access-proxy = { path = "../../services/proxy" }
 access-sdk = { workspace = true, features = ["mcp"] }
 access-authority-signer = { path = "../../crates/authority-signer" }
+# OP-159 m.3 (ee)
+access-authority-sequencer = { path = "../../crates/authority-sequencer", features = ["testing"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-identity-signer = { path = "../../crates/identity-signer" }

@@ -186,7 +186,14 @@ async fn faulty_as(
         }),
     );
     let now = p.now().await;
-    let out = leader.commit(now, &[opening, decision]).await.unwrap();
+    let out = leader
+        .commit(
+            access_authority_sequencer::permit::WritePermit::for_tests(),
+            now,
+            &[opening, decision],
+        )
+        .await
+        .unwrap();
     leader.release().await.unwrap();
     let access_authority_sequencer::domain::Outcome::Appended(at) = out else {
         panic!("{out:?}");

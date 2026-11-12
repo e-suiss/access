@@ -17,6 +17,7 @@ use crate::SequencerError;
 use crate::domain::{
     Bound, Item, Outcome, check_effects, check_last, head_of, independent, nonces, replay, rows,
 };
+use crate::permit::WritePermit;
 use crate::ports::DomainLog;
 use access_store::StoreError;
 use access_telemetry::metrics::Stopwatch;
@@ -95,13 +96,17 @@ impl<L: DomainLog> Leader<L> {
     /// Appends `items` as one batch at trusted time `now`. Nothing is acknowledged unless the
     /// whole batch committed (TI-6); on a failed commit the leader steps down.
     ///
+    /// The batch is spent against `permit`, which only the authority core mints (OP-91).
+    ///
     /// # Errors
     /// [`SequencerError`]; after `Store(HeadMoved)` or any commit failure the leader is unusable.
     pub async fn commit(
         &mut self,
+        permit: WritePermit,
         now: TrustedTime,
         items: &[Item],
     ) -> Result<Outcome, SequencerError> {
+        permit.spend();
         if self.seq.stepped_down() {
             return Err(SequencerError::SteppedDown);
         }

@@ -52,6 +52,7 @@ dependencies = [
 name = "access-authority-sequencer"
 version = "0.6.0"
 dependencies = [
+ "access-authority-sequencer",
  "access-authority-signer",
  "access-crypto",
  "access-store",

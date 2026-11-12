@@ -489,7 +489,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let ids = resolved.claims.iter().map(|c| c.id).collect();
         let items = self.claim_items(&resolved, &crate::app::events::Derived::default())?;
         self.leader
-            .commit(now, &items)
+            .commit(crate::app::permit::issue(), now, &items)
             .await
             .map_err(|_| CoreError::Unavailable("commit"))?;
         Ok(ids)

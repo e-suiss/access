@@ -18,6 +18,7 @@ use access_authority_sequencer::adapters::{PgHeads, PgLog, create_genesis, verif
 use access_authority_sequencer::app::Leader;
 use access_authority_sequencer::checkpoint::{checkpoint, extensions, origin};
 use access_authority_sequencer::domain::{Draft, Item, NonceUse, Outcome};
+use access_authority_sequencer::permit::WritePermit;
 use access_authority_sequencer::ports::NoteSigner;
 use access_authority_signer::app::Noted;
 use access_crypto::event_id::EventKey;
@@ -162,7 +163,9 @@ async fn records_chain_and_the_frontier_root_is_the_tree_head() {
             .map(|i| item(&format!("{round}-{i}"), None))
             .collect();
         assert!(matches!(
-            l.commit(2_000 + u64::from(round), &items).await.unwrap(),
+            l.commit(WritePermit::for_tests(), 2_000 + u64::from(round), &items)
+                .await
+                .unwrap(),
             Outcome::Appended(_)
         ));
     }
@@ -186,7 +189,9 @@ async fn records_chain_and_the_frontier_root_is_the_tree_head() {
     let refs: Vec<&[u8]> = cores.iter().map(Vec::as_slice).collect();
     assert_eq!(l.head().frontier.root(), digest::root(&refs));
     // TI-19
-    l.commit(1, &[item("late", None)]).await.unwrap();
+    l.commit(WritePermit::for_tests(), 1, &[item("late", None)])
+        .await
+        .unwrap();
     let back = read_log(&db.app, &DomainId::from_bytes(d.0), last + 1, last + 1)
         .await
         .unwrap();
@@ -199,7 +204,9 @@ async fn a_fenced_leader_steps_down_and_writes_nothing() {
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut old = lead(&db, d, "a").await.unwrap();
-    old.commit(2_000, &[item("x", None)]).await.unwrap();
+    old.commit(WritePermit::for_tests(), 2_000, &[item("x", None)])
+        .await
+        .unwrap();
     assert!(matches!(
         lead(&db, d, "b").await,
         Err(SequencerError::Store(StoreError::LeaseHeld))
@@ -215,16 +222,22 @@ async fn a_fenced_leader_steps_down_and_writes_nothing() {
     .unwrap();
     let mut new = lead(&db, d, "b").await.unwrap();
     assert!(new.epoch() > old.epoch());
-    let err = old.commit(2_001, &[item("stale", None)]).await.unwrap_err();
+    let err = old
+        .commit(WritePermit::for_tests(), 2_001, &[item("stale", None)])
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, SequencerError::Store(StoreError::HeadMoved)),
         "{err}"
     );
     assert!(matches!(
-        old.commit(2_002, &[item("again", None)]).await,
+        old.commit(WritePermit::for_tests(), 2_002, &[item("again", None)])
+            .await,
         Err(SequencerError::SteppedDown)
     ));
-    new.commit(2_003, &[item("y", None)]).await.unwrap();
+    new.commit(WritePermit::for_tests(), 2_003, &[item("y", None)])
+        .await
+        .unwrap();
     verify_chain(&db.app, d, 0, new.head().pos).await.unwrap();
     assert_eq!(new.head().pos, 2);
 }
@@ -247,10 +260,14 @@ async fn the_doorbell_rings_only_after_a_durable_commit() {
     let mut old = lead(&db, d, "a").await.unwrap().with_bell(bell.clone());
     let mut it = item("x", None);
     it.events = vec![vec![1], vec![2]];
-    old.commit(2_000, &[it]).await.unwrap();
+    old.commit(WritePermit::for_tests(), 2_000, &[it])
+        .await
+        .unwrap();
     let mut quiet = item("quiet", None);
     quiet.events.clear();
-    old.commit(2_001, &[quiet]).await.unwrap();
+    old.commit(WritePermit::for_tests(), 2_001, &[quiet])
+        .await
+        .unwrap();
     let id = DomainId::from_bytes(d.0);
     let rows = read_outbox(&db.app, &id, (0, 0), 10).await.unwrap();
     let last = rows.last().unwrap();
@@ -273,11 +290,17 @@ async fn the_doorbell_rings_only_after_a_durable_commit() {
     let mut new = lead(&db, d, "b").await.unwrap().with_bell(bell.clone());
     let mut stale = item("stale", None);
     stale.events = vec![vec![3]];
-    assert!(old.commit(2_002, &[stale]).await.is_err());
+    assert!(
+        old.commit(WritePermit::for_tests(), 2_002, &[stale])
+            .await
+            .is_err()
+    );
     assert_eq!(bell.0.lock().unwrap().len(), 1);
     let mut fresh_item = item("y", None);
     fresh_item.events = vec![vec![4]];
-    new.commit(2_003, &[fresh_item]).await.unwrap();
+    new.commit(WritePermit::for_tests(), 2_003, &[fresh_item])
+        .await
+        .unwrap();
     let rang = bell.0.lock().unwrap();
     assert_eq!(rang.len(), 2);
     assert_eq!(rang[1].at.pos, new.head().pos);
@@ -289,22 +312,32 @@ async fn a_nonce_retry_replays_and_a_reuse_conflicts() {
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
-    let Outcome::Appended(first) = l.commit(2_000, &[item("x", Some((1, 7)))]).await.unwrap()
+    let Outcome::Appended(first) = l
+        .commit(WritePermit::for_tests(), 2_000, &[item("x", Some((1, 7)))])
+        .await
+        .unwrap()
     else {
         panic!()
     };
     // §9.5 k.5
     assert_eq!(
-        l.commit(2_001, &[item("x", Some((1, 7)))]).await.unwrap(),
+        l.commit(WritePermit::for_tests(), 2_001, &[item("x", Some((1, 7)))])
+            .await
+            .unwrap(),
         Outcome::Replayed(first[0])
     );
     assert!(matches!(
-        l.commit(2_002, &[item("x", Some((1, 8)))]).await,
+        l.commit(WritePermit::for_tests(), 2_002, &[item("x", Some((1, 8)))])
+            .await,
         Err(SequencerError::NonceConflict)
     ));
     assert!(matches!(
-        l.commit(2_003, &[item("a", Some((2, 1))), item("b", Some((2, 1)))])
-            .await,
+        l.commit(
+            WritePermit::for_tests(),
+            2_003,
+            &[item("a", Some((2, 1))), item("b", Some((2, 1)))]
+        )
+        .await,
         Err(SequencerError::NonceRepeated)
     ));
     assert_eq!(l.head().pos, 1);
@@ -318,7 +351,9 @@ async fn outbox_ids_are_keyed_per_domain_position_and_index() {
     let mut l = lead(&db, d, "a").await.unwrap();
     let mut it = item("x", None);
     it.events = vec![vec![1], vec![2]];
-    l.commit(2_000, &[it]).await.unwrap();
+    l.commit(WritePermit::for_tests(), 2_000, &[it])
+        .await
+        .unwrap();
     let id = DomainId::from_bytes(d.0);
     let rows = read_outbox(&db.app, &id, (0, 0), 10).await.unwrap();
     assert_eq!(
@@ -355,14 +390,21 @@ async fn a_stale_read_keeps_the_leader() {
     let mut l = lead(&db, d, "a").await.unwrap();
     let mut w = item("w", None);
     w.writes = vec![b"grants@p".to_vec()];
-    l.commit(2_000, &[w]).await.unwrap();
+    l.commit(WritePermit::for_tests(), 2_000, &[w])
+        .await
+        .unwrap();
     let mut r = item("r", None);
     r.reads = vec![(b"grants@p".to_vec(), 0)];
-    let err = l.commit(2_001, &[r]).await.unwrap_err();
+    let err = l
+        .commit(WritePermit::for_tests(), 2_001, &[r])
+        .await
+        .unwrap_err();
     assert!(err.is_retry(), "{err}");
     let mut r = item("r", None);
     r.reads = vec![(b"grants@p".to_vec(), 1)];
-    assert!(matches!(l.commit(2_002, &[r]).await.unwrap(), Outcome::Appended(p) if p == [2]));
+    assert!(
+        matches!(l.commit(WritePermit::for_tests(), 2_002, &[r]).await.unwrap(), Outcome::Appended(p) if p == [2])
+    );
     verify_chain(&db.app, d, 0, 2).await.unwrap();
 }
 
@@ -377,7 +419,8 @@ async fn a_record_depending_on_its_batch_is_refused() {
     let mut r = item("r", None);
     r.reads = vec![(b"k".to_vec(), 0)];
     assert!(matches!(
-        l.commit(2_000, &[w.clone(), r]).await,
+        l.commit(WritePermit::for_tests(), 2_000, &[w.clone(), r])
+            .await,
         Err(SequencerError::BatchConflict(1))
     ));
     let mut a = item("a", None);
@@ -385,11 +428,13 @@ async fn a_record_depending_on_its_batch_is_refused() {
     let mut b = item("b", None);
     b.single_use = vec![b"once".to_vec()];
     assert!(matches!(
-        l.commit(2_000, &[a, b]).await,
+        l.commit(WritePermit::for_tests(), 2_000, &[a, b]).await,
         Err(SequencerError::BatchConflict(1))
     ));
     assert!(matches!(
-        l.commit(2_000, &[w]).await.unwrap(),
+        l.commit(WritePermit::for_tests(), 2_000, &[w])
+            .await
+            .unwrap(),
         Outcome::Appended(_)
     ));
 }
@@ -427,13 +472,17 @@ async fn the_state_is_the_fold_of_the_log() {
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
     l.commit(
+        WritePermit::for_tests(),
         2_000,
         &[effect_item("a", vec![set(b"k1", 1), set(b"k2", 2)])],
     )
     .await
     .unwrap();
-    l.commit(2_001, &[item("plain", None)]).await.unwrap();
+    l.commit(WritePermit::for_tests(), 2_001, &[item("plain", None)])
+        .await
+        .unwrap();
     l.commit(
+        WritePermit::for_tests(),
         2_002,
         &[effect_item(
             "b",
@@ -476,7 +525,7 @@ async fn malformed_effects_are_refused_before_planning() {
     let mut l = lead(&db, d, "a").await.unwrap();
     let dup = effect_item("dup", vec![set(b"k", 1), set(b"k", 2)]);
     assert!(matches!(
-        l.commit(2_000, &[dup]).await,
+        l.commit(WritePermit::for_tests(), 2_000, &[dup]).await,
         Err(SequencerError::Fold(_))
     ));
     let mut deny = effect_item("deny", vec![set(b"k", 1)]);
@@ -488,7 +537,7 @@ async fn malformed_effects_are_refused_before_planning() {
         },
     );
     assert!(matches!(
-        l.commit(2_000, &[deny]).await,
+        l.commit(WritePermit::for_tests(), 2_000, &[deny]).await,
         Err(SequencerError::Fold(_))
     ));
     assert_eq!(l.head().pos, 0);
@@ -502,10 +551,15 @@ async fn cve_2022_23555_single_use_is_at_most_once() {
     let mut l = lead(&db, d, "a").await.unwrap();
     let mut enroll = item("enroll", Some((1, 1)));
     enroll.single_use = vec![b"invite@inv_1".to_vec()];
-    l.commit(2_000, &[enroll]).await.unwrap();
+    l.commit(WritePermit::for_tests(), 2_000, &[enroll])
+        .await
+        .unwrap();
     let mut recover = item("recover", Some((2, 2)));
     recover.single_use = vec![b"invite@inv_1".to_vec()];
-    let err = l.commit(2_001, &[recover]).await.unwrap_err();
+    let err = l
+        .commit(WritePermit::for_tests(), 2_001, &[recover])
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, SequencerError::Store(StoreError::Consumed)),
         "{err}"
@@ -524,8 +578,13 @@ async fn ghsa_5278_rrxc_mgf7_an_exclusion_cannot_fail_open() {
     allow.reads = vec![(b"revoked@g1".to_vec(), 0)];
     let mut revoke = item("revoke", Some((4, 4)));
     revoke.writes = vec![b"revoked@g1".to_vec()];
-    l.commit(2_000, &[revoke]).await.unwrap();
-    let err = l.commit(2_001, &[allow]).await.unwrap_err();
+    l.commit(WritePermit::for_tests(), 2_000, &[revoke])
+        .await
+        .unwrap();
+    let err = l
+        .commit(WritePermit::for_tests(), 2_001, &[allow])
+        .await
+        .unwrap_err();
     assert!(err.is_retry(), "{err}");
     assert_eq!(l.head().pos, 1);
 }
@@ -554,9 +613,13 @@ async fn a_checkpoint_names_the_committed_log() {
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
-    l.commit(2_000, &[item("a", None), item("b", None)])
-        .await
-        .unwrap();
+    l.commit(
+        WritePermit::for_tests(),
+        2_000,
+        &[item("a", None), item("b", None)],
+    )
+    .await
+    .unwrap();
     let (key, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
     let suiss_crypto::cose::PublicKey::Ed25519(public) =
         suiss_crypto::signer::Signer::public_key(&key)
