@@ -172,8 +172,7 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
     ];
     let args = |extra: &[&str]| {
         let mut a = vec![
-            String::from("--domain"),
-            b64url_encode(&d.0),
+            format!("--domain={}", b64url_encode(&d.0)),
             String::from("--witness"),
             named[0].clone(),
             String::from("--witness"),
