@@ -4,7 +4,9 @@
 use serde_json::{Map, Value, json};
 
 use super::problems;
-use crate::transparency::{CHECKPOINTS_PATH, INCLUSION_PATH, TILE_PATH};
+use crate::transparency::{
+    CHECKPOINTS_PATH, INCLUSION_PATH, PQ_CHECKPOINTS_PATH, PQ_INCLUSION_PATH, TILE_PATH,
+};
 
 fn parameter(name: &str) -> Value {
     json!({
@@ -96,6 +98,41 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
                 "checkpoint-unknown: no such tile in the witnessed tree.",
             ),
             ("409", "checkpoint-not-witnessed: nothing is witnessed yet."),
+            ("503", "checkpoints-unavailable: retry."),
+        ],
+    );
+    // CR-45 RA-2, RA-3, RA-4, RA-5, OP-159 m.13
+    get(
+        paths,
+        PQ_CHECKPOINTS_PATH,
+        (
+            "listPqCheckpoints",
+            "The domain's post-quantum re-anchor checkpoints: each a COSE_Sign1 over the C2SP note body signed with an ML-DSA operational key, with its witnesses' post-quantum cosigns, newest first (CR-45 RA-2, RA-3, pq-checkpoint.cddl, OP-159 m.3 (g)).",
+        ),
+        ("application/cbor", "The pq-checkpoint-list."),
+        &[
+            ("404", "checkpoint-unknown: no such domain."),
+            ("503", "checkpoints-unavailable: retry."),
+        ],
+    );
+    get(
+        paths,
+        PQ_INCLUSION_PATH,
+        (
+            "getPqInclusionBundle",
+            "The inclusion bundle of the record at `position` against the post-quantum re-anchor checkpoint of `size`, with the consistency proof from the previous re-anchor (CR-45 RA-4, RA-5, OP-159 m.3 (g)). For an authenticated PEP.",
+        ),
+        ("application/cbor", "The bundle."),
+        &[
+            ("401", "pep-required: no authenticated PEP."),
+            (
+                "404",
+                "checkpoint-unknown: no such domain, re-anchor checkpoint or position.",
+            ),
+            (
+                "409",
+                "checkpoint-not-witnessed: no independent witness cosigned that re-anchor checkpoint.",
+            ),
             ("503", "checkpoints-unavailable: retry."),
         ],
     );
