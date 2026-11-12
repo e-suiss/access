@@ -90,7 +90,11 @@ function Passkeys(props: {
         props.reload();
       })
       .catch((err: unknown) => {
-        props.fail(err);
+        // OP-159 m.3 (ll)
+        props.fail(err, {
+          "attestation-format": t("passkey.attestation_refused"),
+          "attestation-revocation-unknown": t("passkey.attestation_unknown"),
+        });
       })
       .finally(() => {
         setBusy(false);
@@ -99,6 +103,10 @@ function Passkeys(props: {
   return (
     <section aria-labelledby="passkeys-heading" data-testid="passkeys">
       <h4 id="passkeys-heading">{t("methods.passkeys")}</h4>
+      {/* HL-19 */}
+      <p className="meta" data-testid="passkey-no-pqc">
+        {t("security.passkey_no_pqc")}
+      </p>
       <ul className="rows">
         {props.methods.passkeys.map((p) => (
           <li key={p.id} className="row" data-testid="passkey-row">

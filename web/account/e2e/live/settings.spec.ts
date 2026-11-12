@@ -19,6 +19,10 @@ test.describe("@live sign-in methods and sign-ins", () => {
     const methods = page.getByTestId("sign-in-methods");
     await expect(methods.getByTestId("password")).toContainText("A password is set.");
     await expect(methods.getByTestId("passkeys")).toBeVisible();
+    // HL-19, OP-159 m.3 (ll)
+    await expect(methods.getByTestId("passkey-no-pqc")).toHaveText(
+      "Passkeys don't use post-quantum cryptography yet.",
+    );
     await expect(methods.getByTestId("authenticator")).toBeVisible();
     await expect(page.getByTestId("linked-sign-ins")).toBeVisible();
     await expect(page.getByTestId("connected-apps")).toBeVisible();

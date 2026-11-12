@@ -46,6 +46,14 @@ test("passkeys are created, seen and removed here (TN-99)", async ({ page, bff }
   await expect(passkeys.getByTestId("passkey-row")).toHaveCount(1);
 });
 
+// HL-19, OP-159 m.3 (ll)
+test("the passkeys block says passkeys have no post-quantum cryptography", async ({ page }) => {
+  await page.goto("/account/");
+  await expect(page.getByTestId("passkeys").getByTestId("passkey-no-pqc")).toHaveText(
+    "Passkeys don't use post-quantum cryptography yet.",
+  );
+});
+
 test("the last way to sign in is kept and said plainly (TN-68)", async ({ page, bff }) => {
   bff.lastMethod = true;
   await page.goto("/account/");
