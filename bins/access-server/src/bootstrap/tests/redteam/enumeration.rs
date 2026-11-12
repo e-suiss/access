@@ -5,6 +5,8 @@
 
 use std::collections::BTreeSet;
 
+use access_identity_webauthn::domain::decoy::MAX_DECOYS;
+
 use super::super::super::recovery::{Page, Recording, account, hosted};
 use super::*;
 
@@ -81,6 +83,7 @@ async fn as_19_the_login_identifier_and_password_steps_answer_the_same_for_every
     let _ann = account(&c, "ann@example.com", true).await;
     let mut identified = Vec::new();
     let mut refused = Vec::new();
+    let mut lengths = Vec::new();
     for who in [
         "ann@example.com",
         "nobody@example.com",
@@ -101,6 +104,7 @@ async fn as_19_the_login_identifier_and_password_steps_answer_the_same_for_every
             )
             .await;
         identified.push((who, shape(at.status, &at.json, &at.headers)));
+        lengths.push((who, passkeys(&at.json)));
         let next = relative(at.json["action"].as_str().unwrap_or(&action));
         let bad = p
             .call(
@@ -118,4 +122,31 @@ async fn as_19_the_login_identifier_and_password_steps_answer_the_same_for_every
             assert_eq!(s, &set[0].1, "{who} is told apart");
         }
     }
+    // OP-159 m.11 (g)
+    for (who, n) in &lengths {
+        assert!((1..=usize::from(MAX_DECOYS)).contains(n), "{who}: {n}");
+        let mut p = Page::default();
+        let flow = p.call(&app, &Method::POST, "/v1/login/flows", None).await;
+        let action = relative(flow.json["action"].as_str().unwrap());
+        let again = p
+            .call(
+                &app,
+                &Method::POST,
+                &action,
+                Some(
+                    serde_json::json!({ "method": "identifier", "fields": { "identifier": who } }),
+                ),
+            )
+            .await;
+        assert_eq!(passkeys(&again.json), *n, "{who}");
+    }
+}
+
+/// How many credentials the identifier step's passkey options allow.
+fn passkeys(json: &serde_json::Value) -> usize {
+    json["nodes"]
+        .as_array()
+        .and_then(|nodes| nodes.iter().find(|n| n["type"] == "passkey_get"))
+        .and_then(|n| n["options"]["allowCredentials"].as_array())
+        .map_or(0, Vec::len)
 }

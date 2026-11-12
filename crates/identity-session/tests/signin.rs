@@ -459,7 +459,7 @@ async fn identifier_first_does_not_tell_whether_the_account_exists() {
         let mut o = s.options.passkey.clone();
         o["challenge"] = serde_json::Value::Null;
         let allow = o["allowCredentials"].as_array().unwrap().len();
-        assert!((1..=2).contains(&allow));
+        assert!((1..=3).contains(&allow));
         o["allowCredentials"] = serde_json::Value::Null;
         shapes.push((
             o,

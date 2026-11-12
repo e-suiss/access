@@ -2151,6 +2151,44 @@ fn masked(a: &Answer) -> (u16, Vec<(String, String)>, String) {
     (a.status.as_u16(), headers, body.to_string())
 }
 
+// TN-97, AS-19, OP-159 m.11 (g)
+#[tokio::test]
+async fn a_decoy_passkey_list_is_keyed_stable_and_one_to_three_long() {
+    use access_identity_webauthn::domain::decoy::{MAX_DECOYS, decoy_descriptors};
+    use access_identity_webauthn::ports::DecoySource as _;
+    let e = env(13, "lg-decoy", AuthPolicy::DEFAULT).await;
+    let wa = WaRealm::from_bytes(*e.realm.as_bytes());
+    let ids = |a: &Answer| -> Vec<String> {
+        passkey_node(a)["allowCredentials"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let mut lengths = BTreeMap::new();
+    for i in 0..12 {
+        let who = format!("nobody{i}@example.com");
+        let first = ids(&e.browser(&format!("d{i}a")).identify(&who).await);
+        let again = ids(&e.browser(&format!("d{i}b")).identify(&who).await);
+        assert_eq!(first, again, "{who}");
+        assert!(
+            (1..=usize::from(MAX_DECOYS)).contains(&first.len()),
+            "{who}: {}",
+            first.len()
+        );
+        let derived: Vec<String> =
+            decoy_descriptors(wa, &who, |input| e.kit.decoys.derive(wa, input))
+                .unwrap()
+                .iter()
+                .map(|d| b64url_encode(d.id.as_bytes()))
+                .collect();
+        assert_eq!(first, derived, "{who}");
+        *lengths.entry(first.len()).or_insert(0_u32) += 1;
+    }
+    assert!(lengths.len() > 1, "{lengths:?}");
+}
+
 // OP-146 m.4 (h), CR-40, X34, TN-82, TN-96, TN-97, OP-146 m.10 (e)
 #[tokio::test]
 async fn enumeration_parity_on_login() {
