@@ -256,9 +256,9 @@ fn catalog_8_writes_compile_into_their_changes_and_are_not_yet_served() {
     );
 }
 
-// OP-159 m.3 (a), m.4 (a)
+// OP-159 m.3 (a), (o), (t), m.4 (a)
 #[test]
-fn catalog_9_writes_compile_into_their_changes_and_are_not_yet_served() {
+fn catalog_9_writes_compile_into_their_changes() {
     let ids = ids();
     let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
     for (op, body, action) in [
@@ -280,11 +280,7 @@ fn catalog_9_writes_compile_into_their_changes_and_are_not_yet_served() {
     ] {
         let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
         assert_eq!(change.action().label(), action, "{op:?}");
-        assert_eq!(
-            change.check(&declared),
-            Err(Invalid::NotYetServed),
-            "{op:?}"
-        );
+        assert_eq!(change.check(&declared), Ok(()), "{op:?}");
     }
     assert_eq!(
         compile(
