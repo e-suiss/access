@@ -12,6 +12,10 @@ publish = false
 name = "access-identity-signer"
 path = "src/main.rs"
 
+[features]
+# CR-15, OP-159 m.3 (r)
+fips = ["suiss-crypto/fips"]
+
 [dependencies]
 access-identity-signer = { path = "../../crates/identity-signer" }
 access-crypto = { workspace = true }

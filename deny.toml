@@ -194,3 +194,8 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
+
+# F-1, OP-159 m.3 (rr)
+[[licenses.exceptions]]
+crate = "aws-lc-fips-sys"
+allow = ["OpenSSL"]

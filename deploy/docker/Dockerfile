@@ -20,16 +20,24 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+# CR-15, OP-159 m.3 (r), (rr)
+ARG FIPS=
+RUN if [ -n "$FIPS" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends golang-go cmake clang libclang-dev \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 COPY --from=planner /src/recipe.json recipe.json
 RUN cargo chef cook --release --locked \
       --package access-server --package access-signer --package access-identity-signer-bin \
       --package access-local-client --package access-cli \
+      ${FIPS:+--features access-server/fips,access-signer/fips,access-identity-signer-bin/fips} \
       --recipe-path recipe.json
 COPY . .
 # F-5, SA-23, §14.5: dependency metadata embedded in every binary, and the hardening flags asserted
 RUN cargo auditable build --release --locked \
       --package access-server --package access-signer --package access-identity-signer-bin \
       --package access-local-client --package access-cli \
+      ${FIPS:+--features access-server/fips,access-signer/fips,access-identity-signer-bin/fips} \
  && scripts/checksec.sh target/release/access-server target/release/access-signer \
       target/release/access-identity-signer target/release/access-local-client target/release/access-cli
 

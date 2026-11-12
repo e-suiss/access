@@ -321,7 +321,7 @@ jobs:
       matrix:
         leg: [x86_64, arm64]
     runs-on: ${{ matrix.leg == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -374,6 +374,12 @@ jobs:
       - name: F0 reference evaluator on the vectors
         if: matrix.leg == 'x86_64'
         run: just f0
+      # CR-15, HL-27, OP-159 m.3 (r), (rr)
+      - name: FIPS build of the validated AWS-LC module and its start-up check
+        if: matrix.leg == 'x86_64'
+        run: |
+          cargo check --locked -p suiss-crypto
+          cargo test --locked -p suiss-crypto --features fips --lib fips
 
   supply-chain:
     name: supply-chain

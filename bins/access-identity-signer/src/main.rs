@@ -302,6 +302,14 @@ fn unsafe_host() -> bool {
 }
 
 fn main() -> ExitCode {
+    // CR-15, OP-159 m.3 (r)
+    if let Err(error) = suiss_crypto::fips::check() {
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("access-identity-signer: refusing to start: {error}");
+        }
+        return ExitCode::FAILURE;
+    }
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let provision = match args.as_slice() {
         [] => false,

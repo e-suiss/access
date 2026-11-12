@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# CR-15, OP-159 m.3 (r)
+fips = ["suiss-crypto/fips"]
+
 [dependencies]
 access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true }

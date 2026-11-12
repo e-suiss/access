@@ -105,8 +105,17 @@ pub fn metadata(
         caps: template.caps.clone(),
         hybrid: template.hybrid,
         discovery: template.discovery.clone(),
-        declared: template.declared.clone(),
+        declared: with_module(template.declared.clone()),
     }
+}
+
+/// The declarations with this build's `fips_module`: only the FIPS build in FIPS mode declares
+/// a validated module, and no caller can declare one for it (CR-15, OP-159 m.3 (r)).
+fn with_module(
+    mut d: access_kernel::verify::key_scope::Declarations,
+) -> access_kernel::verify::key_scope::Declarations {
+    d.fips_module = Some(suiss_crypto::fips::module());
+    d
 }
 
 /// The origin of a domain's log checkpoints: its `DomainID` in text form (§16.4.4 m.18,

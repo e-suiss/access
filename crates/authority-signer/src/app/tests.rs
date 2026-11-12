@@ -295,3 +295,21 @@ fn a_restart_restores_the_keys() {
             .any(|s| s.record.state == State::Dropped && s.sealed.is_none())
     );
 }
+
+// CR-15, HL-27, OP-159 m.3 (r)
+#[test]
+fn the_metadata_declares_the_build_s_fips_module_whatever_the_caller_declares() {
+    let mut ring = keyring();
+    let mut factory = Factory { down: false };
+    let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;
+    advance(&mut ring, &mut factory, 0, now);
+    let mut claimed = access_kernel::verify::key_scope::Declarations::default();
+    claimed.fips_module = Some(true);
+    ring.declare(claimed, now).unwrap();
+    let metadata =
+        verify_metadata(&PureBackend, ring.metadata().unwrap(), &trusted(&ring)).unwrap();
+    assert_eq!(
+        metadata.declared.fips_module,
+        Some(suiss_crypto::fips::BUILD)
+    );
+}
