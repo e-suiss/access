@@ -253,7 +253,7 @@ fn key_scope_vectors() {
             assert_eq!(r.output("key"), Some(s(c, "key")), "{}", c["id"]);
         }
     }
-    assert_eq!(cases(&v).len(), 29);
+    assert_eq!(cases(&v).len(), 38);
 }
 
 // CR-58 m.3, m.5, TI-17
@@ -272,7 +272,14 @@ fn artefact_chain_from_trusted_binding_keys() {
     for c in cases(&v) {
         let metadata = unhex(s(c, "metadata"));
         let signed = dir.file("signed.cbor", &sign1(1, METADATA_CONTENT_TYPE, &metadata));
-        let error = c.get("error").and_then(J::as_str);
+        // CR-58 m.6, L0-SIG-64, OP-159 m.3 (i)
+        let signer_superseded =
+            access_kernel::verify::key_scope::DomainMetadata::from_bytes(&metadata)
+                .is_ok_and(|m| m.binding.values().any(|b| b.superseded.is_some()));
+        let error = c
+            .get("error")
+            .and_then(J::as_str)
+            .or(signer_superseded.then_some("superseded"));
         let r = verify(&["metadata", "--signed", &signed, "--trusted", &trusted]);
         if r.accepted() {
             assert_eq!(r.output("metadata"), Some(s(c, "metadata")));

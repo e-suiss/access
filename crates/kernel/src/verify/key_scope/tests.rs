@@ -1016,3 +1016,29 @@ fn key_and_scope_variants_are_strict() {
 }
 
 mod inclusion;
+
+// L0-SIG-81, CR-45 RA-7
+#[test]
+fn metadata_signed_with_a_retired_classical_algorithm_needs_an_anchor() {
+    let mut c = Case::new();
+    c.metadata.algorithms = BTreeSet::from([Algorithm::MlDsa65]);
+    c.metadata.declared.pq_reanchor = Some(PqReanchor::new(
+        7,
+        10 * HOUR,
+        vec![String::from("witness.example")],
+    ));
+    let b = c.metadata.binding.values().next().unwrap().clone();
+    let signed = sign1(
+        &Signer::Ed(1),
+        b.kid,
+        METADATA_CONTENT_TYPE,
+        &c.metadata.to_bytes().unwrap(),
+    );
+    let mut trusted = KeySet::default();
+    trusted.keys.insert(b.kid, b.key.clone());
+    trusted.allowed.insert(Algorithm::Ed25519);
+    assert_eq!(
+        verify_metadata(&PureBackend, &signed, &trusted),
+        Err(KeyScopeError::PqAnchorMissing)
+    );
+}

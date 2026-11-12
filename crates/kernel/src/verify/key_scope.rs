@@ -586,6 +586,10 @@ pub fn verify_metadata(
     if signer.superseded.is_some() {
         return Err(KeyScopeError::Superseded);
     }
+    // L0-SIG-81
+    if classical_retired(&metadata, signer.alg) {
+        return Err(KeyScopeError::PqAnchorMissing);
+    }
     if signer.alg != verified.algorithm || !metadata.algorithms.contains(&signer.alg) {
         return Err(KeyScopeError::Algorithm);
     }
