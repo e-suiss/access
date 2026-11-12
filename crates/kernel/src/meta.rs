@@ -535,8 +535,9 @@ const NAMES: [&str; 31] = [
     "algorithm_retire",
 ];
 
-/// The Access-internal read actions: they change no authority state (§9.13.7, OP-141 m.39 (a)).
-pub const READS: [&str; 2] = ["read", "audit.export"];
+/// The Access-internal read actions: they change no authority state (§9.13.7, OP-141 m.39 (a),
+/// OP-159 m.3 (l)).
+pub const READS: [&str; 2] = ["read", "audit_export"];
 
 /// Whether `name` is an Access-internal read action.
 #[must_use]

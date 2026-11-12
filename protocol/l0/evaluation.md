@@ -281,3 +281,11 @@ Vector: `decision.json`: `deny-four-blocker-classes`.
 <a id="L0-EVAL-62"></a><!-- no-vector: outside-operation: how an enforcing party maps a decision to a boolean -->**L0-EVAL-62. Fail closed.** Only an `allow` decision permits an effect. A party that maps a decision onto a boolean MUST map `deny` and `require_action` to `false`.
 
 Vectors for this part: [`core/1/decision.json`](../../conformance/vectors/core/1/decision.json) and the `combinator.evaluate` cases of [`core/1/cve-regressions.json`](../../conformance/vectors/core/1/cve-regressions.json). Each case gives the canonical `evaluation-input` bytes and either the expected canonical `decision` bytes or the expected rejection kind. The fuel budget is given at file level; a case that gives its own `fuel` uses that instead. `allow-fuel-exact`, `reject-fuel-short`, `check-fuel-exact-recharges-restrictions` and `reject-check-fuel-short` sit on both sides of the cost of [L0-EVAL-45](#L0-EVAL-45).
+
+## 9. Consequence tier
+
+<a id="L0-EVAL-70"></a>**L0-EVAL-70. Read actions.** The Access-internal read actions are `access:read` and `access:audit_export`. They change no authority state. `read` is CT0. `audit_export` is a consequential read and stays CT1 whatever its parameters. Any other action of the `access` namespace that is not a meta-action is tiered as a domain action: by its amounts and its Action Schema.
+
+<a id="L0-EVAL-71"></a>**L0-EVAL-71. New payee.** A domain action whose intent names a `recipient` and carries at least one `amount` parameter is a payment. Its payee is `SHA-256("access/payee/v1" ‖ 0x00 ‖ dCBOR(recipient))`. The decision point gives the evaluation `payee_seen`: true only when the domain has an earlier committed ALLOW of a payment to the same payee. A payment with `payee_seen = false` is at least CT2. A value the decision point cannot read is `false`. A meta-action is never a payment. The floor only raises the tier.
+
+Vectors for this section: [`core/1/tier.json`](../../conformance/vectors/core/1/tier.json). Each case gives the canonical intent, an optional meta-payload and Action Schema, `expansion` and `payee_seen`, and the expected tier with the payee digest of a payment.

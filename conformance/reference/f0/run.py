@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, mldsa, note, pap, projection, receipt, record, render, report, sdjwt, status, validity, version_check
+from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, mldsa, note, pap, projection, receipt, record, render, report, sdjwt, status, tier, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -175,6 +175,18 @@ def acvp_ml_dsa(document):
             else:
                 got = mldsa.verify_internal(name, key, bytes.fromhex(test["message"]), sig)
             yield f"tg{group['tgId']}-tc{test['tcId']}", test["testPassed"], got
+
+
+def run_tier(case, document):
+    # L0-EVAL-70, L0-EVAL-71
+    optional = lambda name: bytes.fromhex(case[name]) if name in case else None
+    level, who = tier.tier(
+        bytes.fromhex(case["intent"]), optional("payload"), case["expansion"], optional("schema"), case["payee_seen"]
+    )
+    got = {"tier": f"ct{level}"}
+    if who is not None:
+        got["payee"] = who.hex()
+    return got, None
 
 
 def run_dcbor_decode(case, document):
@@ -636,6 +648,7 @@ OPERATIONS = {
     "key_scope.operational_key": (run_operational_key, ("key", "error")),
     "verify.ed25519": (run_ed25519, ("result",)),
     "verify.ml_dsa": (run_ml_dsa, ("result",)),
+    "tier.of": (run_tier, ("tier", "payee")),
     "verify.jws_compact": (run_jws_compact, ("expect",)),
     "verify.sd_jwt": (run_sd_jwt, ("claims", "error")),
     "verify.sd_jwt.disclosure": (run_sd_jwt_disclosure, ("digest", "name", "value", "error")),

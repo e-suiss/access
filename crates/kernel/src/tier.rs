@@ -1,6 +1,11 @@
 //! Consequence tiers (§13.7.1, OP-141 m.34): how much an Exercise risks, from its meta-action
 //! class and its amounts.
 
+use suiss_crypto::dcbor::{self, Limits};
+use suiss_crypto::digest::context_digest;
+
+use crate::codec::Canonical;
+use crate::digest::Digest;
 use crate::intent::{IntentEnvelope, ParamValue};
 use crate::meta::Payload;
 use crate::schema::{ActionSchema, EffectClass};
@@ -70,12 +75,12 @@ pub fn of(
 ) -> Tier {
     match payload {
         Some(p) => meta_tier(p, expansion),
-        // OP-141 m.39 (a)
+        // OP-141 m.39 (a), OP-159 m.3 (l)
         None if crate::meta::is_read(&intent.action.namespace, &intent.action.name) => {
             if intent.action.name == "read" {
                 Tier::Ct0
             } else {
-                Tier::Ct1
+                AUDIT_EXPORT_TIER
             }
         }
         None => {
@@ -96,6 +101,39 @@ pub fn of(
                 _ => amounts.unwrap_or(Tier::Ct1),
             }
         }
+    }
+}
+
+/// The tier of `audit_export`: a consequential read stays CT1 (G28, OP-159 m.3 (l)).
+pub const AUDIT_EXPORT_TIER: Tier = Tier::Ct1;
+
+/// The domain context of a payee digest (OP-159 m.3 (m)).
+pub const PAYEE_CONTEXT: &str = "access/payee/v1";
+
+/// The payee of a payment: the digest of the recipient of a domain action that names a
+/// recipient and carries an amount (§13.7.2, OP-159 m.3 (m)).
+#[must_use]
+pub fn payee(intent: &IntentEnvelope, payload: Option<&Payload>) -> Option<Digest> {
+    if payload.is_some()
+        || !intent
+            .params
+            .values()
+            .any(|v| matches!(v, ParamValue::Amount { .. }))
+    {
+        return None;
+    }
+    let bytes = dcbor::encode(&intent.recipient.as_ref()?.to_value(), Limits::CEILING).ok()?;
+    Some(Digest(context_digest(PAYEE_CONTEXT, &bytes).0))
+}
+
+/// The new-payee floor: a payment to a payee without an earlier committed ALLOW in the domain
+/// is at least CT2; a payee that cannot be read as seen is new (§13.7.2, SEC10, OP-159 m.3 (m)).
+#[must_use]
+pub fn payee_floor(intent: &IntentEnvelope, payload: Option<&Payload>, seen: bool) -> Tier {
+    if !seen && payee(intent, payload).is_some() {
+        Tier::Ct2
+    } else {
+        Tier::Ct0
     }
 }
 
