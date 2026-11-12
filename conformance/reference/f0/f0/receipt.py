@@ -1,5 +1,7 @@
 """Decision receipts (L2-RCP-1, L2-RCP-3), written from the protocol text."""
 
+import hashlib
+
 import cbor2
 
 from .ais import SKEW_MS
@@ -18,9 +20,11 @@ from .codec import (
     same,
 )
 from .cose import CoseError, verify_sign1
+from .inclusion import superseded_inclusion
 from .keyscope import KeyScopeError, operational_key
 
 CONTENT_TYPE = "application/access-receipt+cbor"
+DIGEST_CONTEXT = "access/receipt/v1"
 
 
 class ReceiptError(Exception):
@@ -86,11 +90,19 @@ def unverified_payload(data):
     return payload
 
 
-def verify(metadata_bytes, sign1, excerpt, domain, audience, intent, now):
+def verify(metadata_bytes, sign1, excerpt, domain, audience, intent, now, evidence=None):
     # L2-RCP-3
-    claimed = decode(unverified_payload(sign1))
+    unverified = unverified_payload(sign1)
+    claimed = decode(unverified)
+    check = None
+    if evidence is not None:
+        # OP-159 m.17 (a)
+        own = hashlib.sha256(DIGEST_CONTEXT.encode("utf-8") + b"\x00" + encode(claimed)).digest()
+        if own != evidence["artefact"]:
+            raise ReceiptError("receipt-key")
+        check = lambda binding: superseded_inclusion(binding, evidence)
     try:
-        key = operational_key(metadata_bytes, encode(claimed["domain"]), excerpt, "receipt", claimed["iat"])
+        key = operational_key(metadata_bytes, encode(claimed["domain"]), excerpt, "receipt", claimed["iat"], evidence=check)
     except KeyScopeError:
         raise ReceiptError("receipt-key")
     try:

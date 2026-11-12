@@ -8,6 +8,7 @@ import tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from f0 import reanchor
+from f0 import inclusion
 from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, mldsa, note, pap, projection, receipt, record, render, report, sdjwt, status, tier, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
@@ -139,6 +140,36 @@ def run_receipt(case, document):
             case["audience"],
             decode_canonical(bytes.fromhex(case["intent"])),
             case["now"],
+        )
+    except receipt.ReceiptError as error:
+        return {"error": error.name}, None
+    return {"receipt": payload.hex()}, None
+
+
+def run_receipt_evidence(case, document):
+    # L2-RCP-3, L0-SIG-80, OP-159 m.17 (a)
+    evidence = None
+    if "evidence" in case:
+        e = case["evidence"]
+        evidence = {
+            "artefact": bytes.fromhex(e["artefact"]),
+            "record": bytes.fromhex(e["record"]),
+            "path": [bytes.fromhex(h) for h in e["path"]],
+            "note": e["note"],
+            "origin": document["origin"],
+            "log": document["log"],
+            "witnesses": document["witnesses"],
+        }
+    try:
+        payload = receipt.verify(
+            bytes.fromhex(document["metadata"]),
+            bytes.fromhex(case["sign1"]),
+            bytes.fromhex(case["excerpt"]),
+            decode_canonical(bytes.fromhex(case["domain"])),
+            case["audience"],
+            decode_canonical(bytes.fromhex(case["intent"])),
+            case["now"],
+            evidence,
         )
     except receipt.ReceiptError as error:
         return {"error": error.name}, None
@@ -365,34 +396,20 @@ def record_expected(case):
 
 def run_inclusion(case, document):
     # L0-SIG-80: the superseded-at predicate (§9.10, §13.3, P18, SEC25, U12, U27)
-    refused = ({"error": "superseded"}, None)
-    binding = decode_canonical(bytes.fromhex(case["binding"]))
-    superseded = binding.get("superseded")
-    if superseded is None:
-        return refused
-    log = note.parse_vkey(document["log"])
-    witnesses = [w for w in (note.parse_vkey(v) for v in document["witnesses"])
-                 if w["kind"] == note.COSIGNER_KEY and (w["name"], w["id"]) != (log["name"], log["id"])]
-    try:
-        (_, size, root, _), accepted = note.verify_checkpoint(case["note"], document["origin"], log, witnesses)
-        disclosed = record.decode_disclosure(bytes.fromhex(case["record"]), envelope=False)
-        leaf = record.leaf_hash(disclosed)
-    except (note.NoteError, record.RecordError, Rejection):
-        return refused
-    cosigned = any(t is not None and any((w["name"], w["id"]) == (n, i) for w in witnesses) for n, i, t in accepted)
-    committed = record.commits_artefact(disclosed, bytes.fromhex(case["artefact"]))
-    path = [bytes.fromhex(h) for h in case["path"]]
-    if (not cosigned or not committed or root != bytes(superseded["cited"][1])
-            or not merkle.verify_inclusion(disclosed["pos"], size, leaf, path, root)):
-        return refused
-    at = bytes(superseded["at"][1])
-    if "consistency" not in case:
-        return ({"valid": True}, None) if at == bytes(superseded["cited"][1]) else refused
-    c = case["consistency"]
-    to_root = bytes.fromhex(c["to_root"])
-    if to_root != at or not merkle.verify_consistency(size, c["to_size"], root, to_root, [bytes.fromhex(h) for h in c["path"]]):
-        return refused
-    return {"valid": True}, None
+    c = case.get("consistency")
+    evidence = {
+        "artefact": bytes.fromhex(case["artefact"]),
+        "record": bytes.fromhex(case["record"]),
+        "path": [bytes.fromhex(h) for h in case["path"]],
+        "note": case["note"],
+        "consistency": None if c is None else (c["to_size"], bytes.fromhex(c["to_root"]), [bytes.fromhex(h) for h in c["path"]]),
+        "origin": document["origin"],
+        "log": document["log"],
+        "witnesses": document["witnesses"],
+    }
+    if inclusion.superseded_inclusion(decode_canonical(bytes.fromhex(case["binding"])), evidence):
+        return {"valid": True}, None
+    return {"error": "superseded"}, None
 
 
 def run_recovery_guard(case, document):
@@ -709,6 +726,7 @@ OPERATIONS = {
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
     "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),
     "receipt.verify": (run_receipt, ("receipt", "error")),
+    "receipt.verify_with_evidence": (run_receipt_evidence, ("receipt", "error")),
     "pap.verify": (run_pap, ("pap", "error")),
     "claim.body": (run_claim_body, ("digest", "valid", "error")),
     "claim.unsigned": (run_claim_unsigned, ("claim_id", "error")),

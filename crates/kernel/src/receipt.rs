@@ -12,7 +12,9 @@ use crate::meta::{ExerciseBasis, basis_value, capacity, capacity_value, exercise
 use crate::model::{Id, TrustedTime};
 use crate::verify::Backend;
 use crate::verify::cose::{CoseError, parse_sign1, verify_sign1};
-use crate::verify::key_scope::{DomainMetadata, KeyScopeError, KeyUsage, operational_key};
+use crate::verify::key_scope::{
+    DomainMetadata, InclusionEvidence, KeyScopeError, KeyUsage, operational_key,
+};
 
 /// `COSE_Sign1` content type of a receipt.
 pub const CONTENT_TYPE: &str = "application/access-receipt+cbor";
@@ -217,11 +219,35 @@ pub fn verify(
     excerpt: &[u8],
     expected: &Expected<'_>,
 ) -> Result<Receipt, ReceiptError> {
+    verify_with_evidence(backend, metadata, sign1, excerpt, expected, None)
+}
+
+/// [`verify`] with the inclusion evidence for a receipt whose excerpt is signed by a superseded
+/// binding key (L0-SIG-64, L0-SIG-80, OP-159 m.17 (a)). The evidence must name this receipt's
+/// [`digest`]; evidence for any other artefact refuses the key with `superseded`. Without
+/// evidence it is [`verify`].
+///
+/// # Errors
+/// [`ReceiptError`].
+pub fn verify_with_evidence(
+    backend: &impl Backend,
+    metadata: &DomainMetadata,
+    sign1: &[u8],
+    excerpt: &[u8],
+    expected: &Expected<'_>,
+    evidence: Option<&InclusionEvidence<'_>>,
+) -> Result<Receipt, ReceiptError> {
     let unverified = parse_sign1(sign1)
         .ok()
         .and_then(|s| s.payload)
         .ok_or(ReceiptError::Malformed)?;
     let claimed = Receipt::from_bytes(&unverified).map_err(|_| ReceiptError::Malformed)?;
+    // OP-159 m.17 (a)
+    if let Some(e) = evidence
+        && digest(&claimed).ok() != Some(e.artefact)
+    {
+        return Err(ReceiptError::Key(KeyScopeError::Superseded));
+    }
     let key = operational_key(
         backend,
         metadata,
@@ -229,7 +255,7 @@ pub fn verify(
         excerpt,
         KeyUsage::Receipt,
         claimed.iat,
-        None,
+        evidence,
     )
     .map_err(ReceiptError::Key)?;
     let verified = verify_sign1(backend, sign1, &key.key_set(), CONTENT_TYPE)
