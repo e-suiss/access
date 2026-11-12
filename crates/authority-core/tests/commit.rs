@@ -7263,8 +7263,8 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     let nonce = [5; 16];
     let proof = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW);
     let schema = schema_of("read");
-    let none = BTreeSet::new();
-    let use_ = Use::new((&pap_sign1, &excerpt), &proof, &read, &nonce, &none).with_schema(&schema);
+    let unmet = BTreeSet::new();
+    let use_ = Use::new((&pap_sign1, &excerpt), &proof, &read, &nonce, &unmet).with_schema(&schema);
     let Verdict::Allow(first) = device.verify(&use_) else {
         panic!("{:?}", device.verify(&use_));
     };
@@ -7330,10 +7330,9 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     // §7.9.14, 2727
     device.clock().advance(2 * hour);
     let late = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW + 2 * hour);
-    let Verdict::Deny(expired) = device.verify(&Use {
-        presentation: &late,
-        ..use_
-    }) else {
+    let mut later = use_;
+    later.presentation = &late;
+    let Verdict::Deny(expired) = device.verify(&later) else {
         panic!("horizon");
     };
     assert_eq!(expired.code(), "pap-validity");
