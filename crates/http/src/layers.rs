@@ -226,6 +226,41 @@ pub async fn lane(State(lane): State<Lane>, request: Request, next: Next) -> Res
     response
 }
 
+/// The largest body a streamed route takes before its own limit (OP-159 m.3 (mm)): a support
+/// artifact upload, whose handler authenticates and reads the realm's limit before it reads a
+/// byte and then streams the body under that limit.
+#[must_use]
+pub fn streamed(method: &axum::http::Method, path: &str) -> Option<usize> {
+    let tail = path
+        .strip_prefix("/realms/")
+        .and_then(|rest| rest.find('/').and_then(|at| rest.get(at..)))
+        .unwrap_or(path);
+    (method == axum::http::Method::POST && tail == "/v1/support/artifacts")
+        .then_some(access_identity_ui::app::support::MAX_ARTIFACT_BYTES)
+}
+
+/// The listener's body limit (§13.7.4, GHSA-84jc-3hj2-hwc7): a declared length over it is
+/// `413` before anything is read, and the body cannot grow past it. A streamed route has its
+/// own, larger cap; its handler enforces the realm's limit (OP-159 m.3 (mm)).
+pub async fn body_limit(State(max): State<usize>, request: Request, next: Next) -> Response {
+    let max = streamed(request.method(), request.uri().path()).unwrap_or(max);
+    let declared = request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|n| usize::try_from(n).map_or(true, |n| n > max)) {
+        return Problem::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "body-too-large",
+            "Payload Too Large",
+        )
+        .into_response();
+    }
+    let request = request.map(|b| axum::body::Body::new(http_body_util::Limited::new(b, max)));
+    next.run(request).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

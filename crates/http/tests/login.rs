@@ -5106,3 +5106,31 @@ async fn measured_password_sign_in_rate_and_cpu_ratio_with_its_environment() {
     .unwrap();
     assert!(ratio.is_some(), "{report}");
 }
+
+// CR-40 m.1, m.3, SAI-43, INV-27, OP-159 m.3 (s), Ek B 6236
+#[tokio::test]
+async fn identifier_first_answers_are_padded_to_one_size_class() {
+    let e = env(9, "lg-pad", AuthPolicy::DEFAULT).await;
+    e.account("pad1@example.com").await;
+    let mut seen = Vec::new();
+    for (i, who) in ["pad1@example.com", "pad2@example.com"].iter().enumerate() {
+        let mut b = e.browser(&format!("pad{i}"));
+        b.app = access_http::harden(b.app.clone(), access_http::Limits::default());
+        let at = b.identify(who).await;
+        assert!(
+            access_http::padding::CLASSES.contains(&at.body.len()),
+            "{}",
+            at.body.len()
+        );
+        let text = std::str::from_utf8(&at.body).unwrap();
+        assert!(text.trim_end().len() < text.len());
+        assert_eq!(
+            at.headers
+                .get(header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok()),
+            Some(at.body.len().to_string().as_str())
+        );
+        seen.push((at.body.len(), masked(&at)));
+    }
+    assert_eq!(seen[0], seen[1]);
+}

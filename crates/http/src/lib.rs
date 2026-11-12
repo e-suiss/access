@@ -44,6 +44,8 @@ pub mod layers;
 pub mod forwarded;
 // OP-158 m.3 (o)
 pub mod placement;
+// CR-40 m.3, OP-159 m.3 (s)
+pub mod padding;
 
 use std::time::Duration;
 
@@ -52,7 +54,6 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use serde::Serialize;
 use tower_http::catch_panic::CatchPanicLayer;
-use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 
 pub use problem::Problem;
@@ -127,6 +128,8 @@ pub fn router(security_txt: SecurityTxt, limits: Limits, api: Router) -> Router 
 /// Wraps routes in the shared outer stack. Apply it last: axum layers cover only
 /// routes added before them.
 pub fn harden(routes: Router, limits: Limits) -> Router {
+    // CR-40 m.3, SAI-43
+    let routes = routes.layer(axum::middleware::from_fn(padding::pad));
     // SA-27, GHSA-84jc-3hj2-hwc7
     let routes = match limits.admission {
         Some(a) => routes.layer(axum::middleware::from_fn_with_state(
@@ -140,7 +143,11 @@ pub fn harden(routes: Router, limits: Limits) -> Router {
             StatusCode::SERVICE_UNAVAILABLE,
             limits.request_timeout,
         ))
-        .layer(RequestBodyLimitLayer::new(limits.max_body_bytes));
+        // §13.7.4, OP-159 m.3 (mm)
+        .layer(axum::middleware::from_fn_with_state(
+            limits.max_body_bytes,
+            layers::body_limit,
+        ));
     let routes = match limits.admission {
         Some(a) => routes.layer(axum::middleware::from_fn_with_state(
             std::sync::Arc::new(layers::ClientRate::new(a.per_second, a.burst)),
