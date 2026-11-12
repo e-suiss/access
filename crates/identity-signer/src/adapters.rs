@@ -16,9 +16,11 @@ use crate::service::Service;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use suiss_crypto::secret::Secret;
-use suiss_crypto::signer::{PagedSigner, Pager, SignError, Signer, SoftSigner};
+use suiss_crypto::signer::{MlDsaSigner, PagedSigner, Pager, SignError, Signer, SoftSigner};
 
 use crate::ports::{Generated, KeyFactory};
+
+pub mod token;
 
 /// Binds the sealed key to what it is for; distinct from the authority's operational keys.
 const SEAL_CONTEXT: &[u8] = b"access/identity-signer/realm-key";
@@ -28,6 +30,9 @@ const RSA_ID_CONTEXT: &[u8] = b"access/identity-signer/rsa-id";
 
 /// Binds a sealed SAML key to its purpose (OP-155 m.3 (d)).
 const SAML_CONTEXT: &[u8] = b"access/identity-signer/saml";
+
+/// Binds a sealed ML-DSA seed to the realm's post-quantum key set (CR-41 m.3, OP-159 m.3 (d)).
+const PQ_CONTEXT: &[u8] = b"access/identity-signer/realm-pq-seed";
 
 /// Creates realm keys on aws-lc-rs and seals each PKCS#8 document under its own DEK, wrapped
 /// by the realm's KEK; the plaintext never leaves memory (CR-21 m.3).
@@ -57,9 +62,25 @@ impl<K: Kek> SealedFactory<K> {
     ) -> Result<Box<dyn Signer + Send>, SignError> {
         let ed25519 = alg == JwsAlg::Ed25519;
         Ok(match (&self.pager, alg) {
+            (_, JwsAlg::MlDsa44 | JwsAlg::MlDsa65 | JwsAlg::MlDsa87) => {
+                return Err(SignError::Algorithm);
+            }
             (Some(pager), _) => Box::new(PagedSigner::new(ed25519, doc, pager.as_ref())?),
             (None, JwsAlg::Es256) => Box::new(SoftSigner::p256_from_pkcs8(doc)?),
             (None, JwsAlg::Ed25519) => Box::new(SoftSigner::ed25519_from_pkcs8(doc)?),
+        })
+    }
+
+    /// The ML-DSA key a 32-byte seed expands to, the seed placed in the pager's protected
+    /// memory when there is one (CR-41 m.3, CR-34, SAI-45).
+    fn pq_signer(
+        &self,
+        alg: JwsAlg,
+        seed: &Secret<[u8; suiss_crypto::signer::ML_DSA_SEED_LEN]>,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        Ok(match &self.pager {
+            Some(pager) => Box::new(MlDsaSigner::paged(alg.algorithm(), seed, pager.as_ref())?),
+            None => Box::new(MlDsaSigner::from_seed(alg.algorithm(), seed)?),
         })
     }
 }
@@ -117,10 +138,26 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
         self.open(SAML_CONTEXT, sealed)
     }
 
+    // CR-41 m.3, OP-159 m.3 (d), (r)
+    fn pq_ready(&mut self, alg: JwsAlg) -> bool {
+        alg.post_quantum() && !suiss_crypto::fips::BUILD
+    }
+
     fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
         let (_, doc) = match alg {
             JwsAlg::Es256 => SoftSigner::generate_p256()?,
             JwsAlg::Ed25519 => SoftSigner::generate_ed25519()?,
+            JwsAlg::MlDsa44 | JwsAlg::MlDsa65 | JwsAlg::MlDsa87 => {
+                if !self.pq_ready(alg) {
+                    return Err(SignError::Algorithm);
+                }
+                let seed = Secret::new(suiss_crypto::signer::random_seed()?);
+                let signer = self.pq_signer(alg, &seed)?;
+                return Ok(Generated {
+                    signer,
+                    sealed: self.seal(PQ_CONTEXT, seed.expose())?,
+                });
+            }
         };
         let signer = self.signer(alg, &doc)?;
         let dek = Dek::generate().map_err(|_| SignError::Random)?;
@@ -139,6 +176,18 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
     }
 
     fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError> {
+        if alg.post_quantum() {
+            if !self.pq_ready(alg) {
+                return Err(SignError::Algorithm);
+            }
+            let doc = self.open(PQ_CONTEXT, sealed)?;
+            let seed: [u8; suiss_crypto::signer::ML_DSA_SEED_LEN] = doc
+                .expose()
+                .as_slice()
+                .try_into()
+                .map_err(|_| SignError::Key)?;
+            return self.pq_signer(alg, &Secret::new(seed));
+        }
         let v = dcbor::decode(sealed, Limits::CEILING).map_err(|_| SignError::Key)?;
         let bytes = |k: &str| match v.get(k) {
             Some(Value::Bytes(b)) => Ok(b.clone()),

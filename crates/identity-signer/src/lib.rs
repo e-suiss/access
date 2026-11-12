@@ -15,6 +15,7 @@ pub mod domain;
 pub mod issuer;
 pub mod kat;
 pub mod ports;
+pub mod pq;
 pub mod protocol;
 pub mod purpose;
 pub mod saml;

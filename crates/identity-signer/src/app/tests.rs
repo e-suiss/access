@@ -36,6 +36,7 @@ impl KeyFactory for Factory {
         let (signer, doc) = match alg {
             JwsAlg::Es256 => SoftSigner::generate_p256()?,
             JwsAlg::Ed25519 => SoftSigner::generate_ed25519()?,
+            _ => return Err(SignError::Algorithm),
         };
         Ok(Generated {
             signer: Box::new(signer),
@@ -48,6 +49,7 @@ impl KeyFactory for Factory {
         Ok(match alg {
             JwsAlg::Es256 => Box::new(SoftSigner::p256_from_pkcs8(&doc)?),
             JwsAlg::Ed25519 => Box::new(SoftSigner::ed25519_from_pkcs8(&doc)?),
+            _ => return Err(SignError::Algorithm),
         })
     }
 }

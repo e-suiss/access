@@ -57,6 +57,7 @@ pub struct Service<F, V> {
     saml: BTreeMap<Realm, crate::saml::Ring>,
     acme: Option<crate::acme::AcmeKey>,
     ssh: BTreeMap<Realm, crate::ssh::Ring>,
+    pq: BTreeMap<Realm, Keyring>,
 }
 
 /// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
@@ -70,6 +71,9 @@ pub const FEDERATION_TYPES: [&str; 4] = [
 
 /// The purpose word of a `federation` key set's vault entry.
 const FEDERATION: &str = "federation";
+
+/// The purpose word of a post-quantum key set's vault entry (OP-159 m.3 (o)).
+const PQ: &str = "realm-pq";
 
 /// The vault slot of `realm`'s `federation` key set, apart from its JOSE key set.
 fn federation_slot(realm: Realm) -> Realm {
@@ -113,8 +117,7 @@ fn bytes(v: Option<&Value>) -> Option<Vec<u8>> {
 fn key_bytes(key: &PublicKey) -> Option<Vec<u8>> {
     match key {
         PublicKey::Ed25519(k) => Some(k.to_vec()),
-        PublicKey::P256(k) => Some(k.clone()),
-        PublicKey::MlDsa(..) => None,
+        PublicKey::P256(k) | PublicKey::MlDsa(_, k) => Some(k.clone()),
     }
 }
 
@@ -122,6 +125,9 @@ fn key_of(alg: JwsAlg, b: Vec<u8>) -> Option<PublicKey> {
     match alg {
         JwsAlg::Ed25519 => b.try_into().ok().map(PublicKey::Ed25519),
         JwsAlg::Es256 => Some(PublicKey::P256(b)),
+        JwsAlg::MlDsa44 | JwsAlg::MlDsa65 | JwsAlg::MlDsa87 => {
+            Some(PublicKey::MlDsa(alg.algorithm(), b))
+        }
     }
 }
 
@@ -155,7 +161,7 @@ fn saved_of(v: &Value) -> Option<Saved> {
         _ => return None,
     };
     let alg = match v.get("alg") {
-        Some(Value::Text(t)) => alg_of(t)?,
+        Some(Value::Text(t)) => alg_of(t).or_else(|| JwsAlg::ml_dsa(t))?,
         _ => return None,
     };
     Some(Saved {
@@ -202,18 +208,28 @@ fn stored_as(
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>, bool);
+/// Which key set of a realm a vault entry holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    Jose,
+    Federation,
+    Pq,
+}
+
+type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>, Slot);
 
 fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
-    let federation = match v.get("purpose") {
-        None => false,
-        Some(Value::Text(t)) if t == FEDERATION => true,
+    let slot = match v.get("purpose") {
+        None => Slot::Jose,
+        Some(Value::Text(t)) if t == FEDERATION => Slot::Federation,
+        Some(Value::Text(t)) if t == PQ => Slot::Pq,
         Some(_) => return None,
     };
     let realm = Realm(bytes(v.get("realm"))?.try_into().ok()?);
-    let alg = match v.get("alg") {
-        Some(Value::Text(t)) => alg_of(t)?,
+    let alg = match (v.get("alg"), slot) {
+        (Some(Value::Text(t)), Slot::Pq) => JwsAlg::ml_dsa(t)?,
+        (Some(Value::Text(t)), _) => alg_of(t)?,
         _ => return None,
     };
     let Some(Value::Array(keys)) = v.get("keys") else {
@@ -225,7 +241,7 @@ fn restored(b: &[u8]) -> Option<Restored> {
         alg,
         policy,
         keys.iter().filter_map(saved_of).collect(),
-        federation,
+        slot,
     ))
 }
 
@@ -233,7 +249,9 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     /// A service that restores every realm the vault holds (CR-23).
     ///
     /// # Errors
-    /// The vault cannot be read; a realm that cannot be restored is left closed.
+    /// The vault cannot be read, or a realm's open post-quantum key set cannot be loaded back:
+    /// with the profile open and no key, the signer does not start (OP-159 m.3 (d)). Any other
+    /// realm that cannot be restored is left closed.
     pub fn start(factory: F, mut vault: V, policy: Policy) -> Result<Self, VaultError> {
         let all = vault.all()?;
         let mut s = Self {
@@ -248,15 +266,29 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             saml: BTreeMap::new(),
             acme: None,
             ssh: BTreeMap::new(),
+            pq: BTreeMap::new(),
         };
-        for (realm, alg, policy, saved, federation) in all.iter().filter_map(|b| restored(b)) {
+        for (realm, alg, policy, saved, slot) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
-            if let Ok(ring) = Keyring::restore(alg, policy, saved, &mut s.factory) {
-                if federation {
+            let ring = Keyring::restore(alg, policy, saved, &mut s.factory);
+            match (slot, ring) {
+                (Slot::Federation, Ok(ring)) => {
                     s.federation.insert(realm, ring);
-                } else {
+                }
+                (Slot::Jose, Ok(ring)) => {
                     s.rings.insert(realm, (alg, ring));
                 }
+                // OP-159 m.3 (d)
+                (Slot::Pq, Ok(ring))
+                    if ring.live() && (ring.unloaded() || !s.factory.pq_ready(alg)) =>
+                {
+                    return Err(VaultError);
+                }
+                (Slot::Pq, Ok(ring)) if ring.live() => {
+                    s.pq.insert(realm, ring);
+                }
+                (Slot::Pq, Err(_)) => return Err(VaultError),
+                _ => {}
             }
         }
         Ok(s)
@@ -336,7 +368,117 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 report.troubled.push(realm);
             }
         }
+        let pq: Vec<Realm> = self.pq.keys().copied().collect();
+        for realm in pq {
+            if !self.pq_round(realm, now, draw, &mut report) {
+                report.troubled.push(realm);
+            }
+        }
         report
+    }
+
+    fn persist_pq(&mut self, realm: Realm) -> bool {
+        let Some(ring) = self.pq.get(&realm) else {
+            return false;
+        };
+        stored_as(Some(PQ), realm, ring.alg(), &ring.policy(), &ring.saved())
+            .is_some_and(|b| self.vault.put(&crate::pq::slot(realm), &b).is_ok())
+    }
+
+    fn pq_round(&mut self, realm: Realm, now: u64, draw: u64, report: &mut Report) -> bool {
+        let round = self
+            .pq
+            .get_mut(&realm)
+            .map(|ring| ring.tick(&mut self.factory, now, draw));
+        let ok = round.as_ref().is_some_and(|r| !r.outage);
+        for step in round.map(|r| r.applied).unwrap_or_default() {
+            report.transitions.push((realm, step));
+        }
+        self.persist_pq(realm) && ok
+    }
+
+    /// Answers a request about a realm's post-quantum key set (CR-41, OP-159 m.3 (o), (d)).
+    fn handle_pq(&mut self, request: crate::pq::PqRequest, now: u64, draw: u64) -> Response {
+        use crate::pq::{NO_PQ, PQ_KEY_UNAVAILABLE, PqRequest};
+        match request {
+            PqRequest::Ready { alg } => {
+                if alg.post_quantum() && self.factory.pq_ready(alg) {
+                    Response::Opened
+                } else {
+                    Response::Error(String::from(PQ_KEY_UNAVAILABLE))
+                }
+            }
+            PqRequest::Open { realm, alg } => {
+                if self
+                    .pq
+                    .get(&realm)
+                    .is_some_and(|r| r.alg() == alg && r.live())
+                {
+                    return Response::Opened;
+                }
+                // OP-159 m.3 (d)
+                if !alg.post_quantum() || !self.factory.pq_ready(alg) {
+                    return Response::Error(String::from(PQ_KEY_UNAVAILABLE));
+                }
+                if let Some(old) = self.pq.get_mut(&realm) {
+                    old.close(now);
+                    if !self.persist_pq(realm) {
+                        return Response::Error(String::from("signer-outage"));
+                    }
+                }
+                let policy = self
+                    .rings
+                    .get(&realm)
+                    .map_or(self.policy, |(_, r)| r.policy());
+                let Ok(ring) = Keyring::new(alg, policy) else {
+                    return Response::Error(String::from("signer-policy"));
+                };
+                self.pq.insert(realm, ring);
+                let mut report = Report::default();
+                if !self.pq_round(realm, now, draw, &mut report) {
+                    self.pq.remove(&realm);
+                    return Response::Error(String::from(PQ_KEY_UNAVAILABLE));
+                }
+                Response::Opened
+            }
+            PqRequest::Close { realm } => {
+                let Some(ring) = self.pq.get_mut(&realm) else {
+                    return Response::Opened;
+                };
+                ring.close(now);
+                if !self.persist_pq(realm) {
+                    return Response::Error(String::from("signer-outage"));
+                }
+                self.pq.remove(&realm);
+                Response::Opened
+            }
+            PqRequest::Sign {
+                realm,
+                typ,
+                payload,
+                at,
+            } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                if FEDERATION_TYPES.contains(&typ.as_str()) {
+                    return Response::Error(String::from(crate::SignerError::Payload.code()));
+                }
+                let Some(ring) = self.pq.get_mut(&realm) else {
+                    return Response::Error(String::from(NO_PQ));
+                };
+                let signed = ring.sign(&typ, &payload, at);
+                let kept = self.persist_pq(realm);
+                match signed {
+                    Ok(s) if kept => Response::Signed {
+                        token: s.token,
+                        kid: s.kid,
+                    },
+                    Ok(_) => Response::Error(String::from("signer-outage")),
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
+        }
     }
 
     fn persist_federation(&mut self, realm: Realm) -> bool {
@@ -532,6 +674,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             Request::Saml(r) => self.handle_saml(&r, now),
             Request::Acme(r) => self.handle_acme(&r),
             Request::Ssh(r) => self.handle_ssh(&r, now),
+            Request::Pq(r) => self.handle_pq(r, now, draw),
             other => self.handle_issuer(&other, now),
         }
     }
@@ -636,9 +779,17 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         let rsa = self
             .rsa_id(realm)
             .map(access_crypto::rsa_id::RsaIdKey::public_jwk);
+        let pq = self.pq.get(&realm).map(|r| r.jwks().to_owned());
         self.rings.get(&realm).map_or_else(
             || Response::Error(String::from(UNKNOWN_REALM)),
-            |(_, ring)| Response::Jwks(with_rsa(ring.jwks(), rsa.as_deref())),
+            |(_, ring)| {
+                // OP-159 m.3 (o)
+                let jose = pq.as_deref().map_or_else(
+                    || String::from(ring.jwks()),
+                    |pq| crate::pq::merged(ring.jwks(), pq),
+                );
+                Response::Jwks(with_rsa(&jose, rsa.as_deref()))
+            },
         )
     }
 

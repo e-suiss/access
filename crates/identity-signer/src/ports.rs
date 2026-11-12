@@ -28,6 +28,13 @@ pub trait KeyFactory {
     /// [`SignError::Key`] when it cannot be unsealed.
     fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError>;
 
+    /// Whether this factory can hold an ML-DSA key of `alg` (OP-159 m.3 (d)); a factory that
+    /// cannot refuses the realm's post-quantum profile, with no classical key in its place.
+    fn pq_ready(&mut self, alg: JwsAlg) -> bool {
+        let _ = alg;
+        false
+    }
+
     /// A new RSA-3072 `rsa-id` key and its sealed form (MD-6, OP-155 m.3 (k)); a factory
     /// without RSA refuses.
     ///

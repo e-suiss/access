@@ -666,3 +666,168 @@ fn the_federation_key_signs_only_federation_statements() {
     .unwrap();
     assert_eq!(roundtrip, sign("trust-mark+jwt"));
 }
+
+fn pq(s: &mut Service<SealedFactory<SoftKek>, MemVault>, r: crate::pq::PqRequest) -> Response {
+    s.handle(Request::Pq(r), 0, 3)
+}
+
+/// The `AKP` keys of a JWKS as a relying party reads them, by `kid`.
+fn akp_keys(doc: &str) -> access_kernel::verify::cose::KeySet {
+    use access_kernel::json::{self, Json, b64url_decode};
+    use access_kernel::verify::cose::{KeySet, PublicKey as KernelKey};
+    let top = json::parse(doc.as_bytes(), 64 * 1024).unwrap();
+    let Some(Json::Array(keys)) = top.get("keys") else {
+        panic!("no keys");
+    };
+    let mut set = KeySet::default();
+    for k in keys {
+        if k.get("kty").and_then(Json::as_str) != Some("AKP") {
+            continue;
+        }
+        let alg = JwsAlg::ml_dsa(k.get("alg").and_then(Json::as_str).unwrap()).unwrap();
+        let public = b64url_decode(k.get("pub").and_then(Json::as_str).unwrap()).unwrap();
+        let kid: [u8; 32] = b64url_decode(k.get("kid").and_then(Json::as_str).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let key = KernelKey::MlDsa(alg.algorithm(), public);
+        assert_eq!(access_kernel::verify::key_scope::thumbprint(&key), kid);
+        set.allowed.insert(alg.algorithm());
+        set.insert(kid, key).unwrap();
+    }
+    set
+}
+
+// CR-41, OP-159 m.3 (o), (d)
+#[test]
+fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_trace() {
+    use crate::pq::{NO_PQ, PqRequest};
+    use access_kernel::verify::jws::{Origin, verify_compact};
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let open = Request::Open {
+        realm: A,
+        alg: JwsAlg::Es256,
+    };
+    assert_eq!(s.handle(open, 0, 7), Response::Opened);
+    assert!(akp_keys(&jwks(&mut s, A)).keys.is_empty());
+    assert_eq!(
+        pq(
+            &mut s,
+            PqRequest::Ready {
+                alg: JwsAlg::MlDsa65
+            }
+        ),
+        Response::Opened
+    );
+    let sign = PqRequest::Sign {
+        realm: A,
+        typ: String::from("JWT"),
+        payload: br#"{"sub":"a"}"#.to_vec(),
+        at: 0,
+    };
+    assert_eq!(
+        pq(&mut s, sign.clone()),
+        Response::Error(String::from(NO_PQ))
+    );
+    let open_pq = PqRequest::Open {
+        realm: A,
+        alg: JwsAlg::MlDsa65,
+    };
+    assert_eq!(pq(&mut s, open_pq.clone()), Response::Opened);
+    assert_eq!(pq(&mut s, open_pq), Response::Opened);
+    let doc = jwks(&mut s, A);
+    assert!(doc.contains(r#""kty":"EC""#), "{doc}");
+    let set = akp_keys(&doc);
+    assert_eq!(set.keys.len(), 2, "the founding key and its backup");
+    let Response::Signed { token, kid } = pq(&mut s, sign.clone()) else {
+        panic!("not signed");
+    };
+    let v = verify_compact(
+        &suiss_crypto::aws::AwsLcBackend,
+        &token,
+        &set,
+        "JWT",
+        Origin::Native,
+    )
+    .unwrap();
+    assert_eq!(v.kid, kid);
+    assert_eq!(v.algorithm, suiss_crypto::cose::Algorithm::MlDsa65);
+    let Response::Signed { token: classic, .. } = s.handle(
+        Request::Sign {
+            realm: A,
+            typ: String::from("JWT"),
+            payload: br#"{"sub":"a"}"#.to_vec(),
+            at: 0,
+        },
+        0,
+        0,
+    ) else {
+        panic!("not signed");
+    };
+    assert!(classic.starts_with("eyJhbGciOiJFUzI1NiI"), "{classic}");
+
+    let mut again = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    assert!(matches!(
+        again.handle(Request::Pq(sign.clone()), 0, 0),
+        Response::Signed { .. }
+    ));
+    assert_eq!(akp_keys(&jwks(&mut again, A)).keys.len(), 2);
+
+    assert_eq!(pq(&mut s, PqRequest::Close { realm: A }), Response::Opened);
+    assert!(akp_keys(&jwks(&mut s, A)).keys.is_empty());
+    assert_eq!(pq(&mut s, sign), Response::Error(String::from(NO_PQ)));
+    let stored = vault.0.lock().unwrap().get(&crate::pq::slot(A)).cloned().unwrap();
+    let (_, _, _, saved, _) = restored(&stored).unwrap();
+    assert!(saved.iter().all(|k| k.record.state == State::Dropped && k.sealed.is_none()));
+}
+
+struct NoPq(SealedFactory<SoftKek>);
+
+impl KeyFactory for NoPq {
+    fn generate(&mut self, alg: JwsAlg) -> Result<crate::ports::Generated, SignError> {
+        self.0.generate(alg)
+    }
+
+    fn load(
+        &mut self,
+        alg: JwsAlg,
+        sealed: &[u8],
+    ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, SignError> {
+        self.0.load(alg, sealed)
+    }
+}
+
+// OP-159 m.3 (d), TI-9
+#[test]
+fn without_an_ml_dsa_key_store_the_profile_is_refused_and_nothing_falls_back() {
+    use crate::pq::{PQ_KEY_UNAVAILABLE, PqRequest};
+    let vault = MemVault::default();
+    let mut s = Service::start(NoPq(factory()), vault.clone(), Policy::REALM).unwrap();
+    let refused = Response::Error(String::from(PQ_KEY_UNAVAILABLE));
+    for r in [
+        PqRequest::Ready {
+            alg: JwsAlg::MlDsa65,
+        },
+        PqRequest::Ready { alg: JwsAlg::Es256 },
+        PqRequest::Open {
+            realm: A,
+            alg: JwsAlg::MlDsa87,
+        },
+    ] {
+        assert_eq!(s.handle(Request::Pq(r), 0, 0), refused);
+    }
+    assert!(vault.0.lock().unwrap().is_empty());
+
+    let mut open = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let opened = open.handle(
+        Request::Pq(PqRequest::Open {
+            realm: A,
+            alg: JwsAlg::MlDsa65,
+        }),
+        0,
+        0,
+    );
+    assert_eq!(opened, Response::Opened);
+    assert!(Service::start(NoPq(factory()), vault, Policy::REALM).is_err());
+}

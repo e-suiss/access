@@ -12,7 +12,7 @@ publish = false
 access-kernel = { workspace = true }
 access-crypto = { workspace = true }
 access-internal-api = { workspace = true }
-suiss-crypto = { workspace = true, features = ["signer", "aead"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "pkcs11"] }
 thiserror = { workspace = true }
 access-telemetry = { workspace = true }
 tracing = { workspace = true, features = ["std"] }

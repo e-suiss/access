@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
-const ARTEFACTS: [Artefact; 11] = [
+const ARTEFACTS: [Artefact; 12] = [
     Artefact::IdentityToken,
     Artefact::IdentityCose,
     Artefact::AuditCheckpoint,
@@ -22,6 +22,7 @@ const ARTEFACTS: [Artefact; 11] = [
     Artefact::SshCertificate,
     Artefact::BlindSignature,
     Artefact::AcmeRequest,
+    Artefact::PqIdentityToken,
 ];
 
 // OP-155 m.1 (b), OP-144, §9.13.8, Ek B 5083
@@ -150,4 +151,21 @@ fn the_authority_signer_never_holds_an_identity_purpose() {
             );
         }
     }
+}
+
+// CR-41, OP-159 m.3 (o)
+#[test]
+fn the_post_quantum_purpose_holds_only_ml_dsa_and_signs_only_its_tokens() {
+    assert_eq!(
+        KeyPurpose::Pq.algs(),
+        &[KeyAlg::MlDsa44, KeyAlg::MlDsa65, KeyAlg::MlDsa87]
+    );
+    assert_eq!(KeyPurpose::Pq.artefacts(), &[Artefact::PqIdentityToken]);
+    assert!(!KeyPurpose::Jose.serves(Artefact::PqIdentityToken));
+    assert!(!KeyPurpose::Pq.serves(Artefact::IdentityToken));
+    for p in KeyPurpose::ALL {
+        assert_eq!(p.allows(KeyAlg::MlDsa65), p == KeyPurpose::Pq, "{p:?}");
+    }
+    assert_eq!(KeyAlg::MlDsa65.jws(), Some(JwsAlg::MlDsa65));
+    assert!(IDENTITY_ONLY.contains(&KeyPurpose::Pq));
 }

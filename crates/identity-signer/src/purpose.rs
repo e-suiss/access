@@ -34,6 +34,9 @@ pub enum KeyPurpose {
     PrivacyPass,
     /// The ACME account key that signs RFC 8555 requests, P-256 (OP-156 m.3 (i)).
     Acme,
+    /// The realm's post-quantum key set, ML-DSA, opened by its signing profile: identity tokens
+    /// of clients that registered its algorithm (CR-41, OP-159 m.3 (o)).
+    Pq,
 }
 
 /// A key algorithm a purpose may hold.
@@ -49,6 +52,12 @@ pub enum KeyAlg {
     EcdhEsP256,
     /// RSA-2048 used only for the raw blind private operation of RFC 9474 (OP-156 m.3 (z)).
     Rsa2048Blind,
+    /// ML-DSA-44 signatures (FIPS 204).
+    MlDsa44,
+    /// ML-DSA-65 signatures (FIPS 204).
+    MlDsa65,
+    /// ML-DSA-87 signatures (FIPS 204).
+    MlDsa87,
 }
 
 impl KeyAlg {
@@ -58,6 +67,9 @@ impl KeyAlg {
         match self {
             Self::Es256 => Some(JwsAlg::Es256),
             Self::Ed25519 => Some(JwsAlg::Ed25519),
+            Self::MlDsa44 => Some(JwsAlg::MlDsa44),
+            Self::MlDsa65 => Some(JwsAlg::MlDsa65),
+            Self::MlDsa87 => Some(JwsAlg::MlDsa87),
             Self::Rsa3072 | Self::EcdhEsP256 | Self::Rsa2048Blind => None,
         }
     }
@@ -89,11 +101,14 @@ pub enum Artefact {
     BlindSignature,
     /// A JWS of an ACME request (RFC 8555 §6.2).
     AcmeRequest,
+    /// An ML-DSA compact JWS identity token for a client that registered its algorithm
+    /// (OP-159 m.3 (o)).
+    PqIdentityToken,
 }
 
 impl KeyPurpose {
     /// Every purpose.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Jose,
         Self::AuditCheckpoint,
         Self::ClaimIssuer,
@@ -104,6 +119,7 @@ impl KeyPurpose {
         Self::SshCa,
         Self::PrivacyPass,
         Self::Acme,
+        Self::Pq,
     ];
 
     /// The purpose's label in the vault and in the protocol.
@@ -120,6 +136,7 @@ impl KeyPurpose {
             Self::SshCa => "ssh-ca",
             Self::PrivacyPass => "privacy-pass",
             Self::Acme => "acme",
+            Self::Pq => "realm-pq",
         }
     }
 
@@ -140,6 +157,7 @@ impl KeyPurpose {
             Self::PrivacyPass => &[KeyAlg::Rsa2048Blind],
             Self::JweEnc => &[KeyAlg::EcdhEsP256],
             Self::RsaId => &[KeyAlg::Rsa3072],
+            Self::Pq => &[KeyAlg::MlDsa44, KeyAlg::MlDsa65, KeyAlg::MlDsa87],
         }
     }
 
@@ -148,6 +166,7 @@ impl KeyPurpose {
     pub const fn artefacts(self) -> &'static [Artefact] {
         match self {
             Self::Jose => &[Artefact::IdentityToken, Artefact::IdentityCose],
+            Self::Pq => &[Artefact::PqIdentityToken],
             Self::AuditCheckpoint => &[Artefact::AuditCheckpoint],
             Self::ClaimIssuer => &[Artefact::Claim],
             Self::Saml => &[Artefact::SamlXml],
@@ -185,13 +204,14 @@ impl KeyPurpose {
                 | Self::SshCa
                 | Self::PrivacyPass
                 | Self::Acme
+                | Self::Pq
         )
     }
 }
 
-/// The purposes Stages 10 and 11 add; the authority signer never holds one (OP-155 m.1 (b),
-/// OP-156 m.1 (b)).
-pub const IDENTITY_ONLY: [KeyPurpose; 7] = [
+/// The purposes Stages 10, 11 and 14 add; the authority signer never holds one (OP-155 m.1 (b),
+/// OP-156 m.1 (b), OP-159 m.4 (e)).
+pub const IDENTITY_ONLY: [KeyPurpose; 8] = [
     KeyPurpose::Saml,
     KeyPurpose::Federation,
     KeyPurpose::JweEnc,
@@ -199,6 +219,7 @@ pub const IDENTITY_ONLY: [KeyPurpose; 7] = [
     KeyPurpose::SshCa,
     KeyPurpose::PrivacyPass,
     KeyPurpose::Acme,
+    KeyPurpose::Pq,
 ];
 
 #[cfg(test)]

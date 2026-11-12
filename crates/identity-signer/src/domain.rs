@@ -78,7 +78,8 @@ pub fn check(policy: &Policy) -> Result<(), PolicyError> {
 /// The JWKS document of `keys`, in the given order (RFC 7517 §5).
 ///
 /// # Errors
-/// [`JoseError::Key`] for a key Access does not publish, such as `AKP` (MD-3).
+/// [`JoseError::Key`] for a key Access does not publish, such as an `AKP` key of the wrong
+/// length (MD-3, CR-41 m.3).
 pub fn jwks<'a>(
     keys: impl IntoIterator<Item = (&'a [u8; 32], &'a PublicKey)>,
 ) -> Result<String, JoseError> {

@@ -150,6 +150,8 @@ pub enum Request {
     Acme(crate::acme::AcmeRequest),
     /// A request about the realm's SSH CA keys (OP-156 m.3 (o)).
     Ssh(crate::ssh::SshRequest),
+    /// A request about the realm's post-quantum key set (OP-159 m.3 (o)).
+    Pq(crate::pq::PqRequest),
 }
 
 /// The identity signer's answer.
@@ -434,6 +436,7 @@ impl Request {
             Self::Saml(s) => map(vec![("saml", s.to_value())]),
             Self::Acme(a) => map(vec![("acme", a.to_value())]),
             Self::Ssh(s) => map(vec![("ssh", s.to_value())]),
+            Self::Pq(p) => map(vec![("pq", p.to_value())]),
         }
     }
 
@@ -539,6 +542,9 @@ impl Request {
         }
         if let Some(s) = v.get("ssh") {
             return Ok(Self::Ssh(crate::ssh::SshRequest::from_value(s)?));
+        }
+        if let Some(p) = v.get("pq") {
+            return Ok(Self::Pq(crate::pq::PqRequest::from_value(p)?));
         }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {

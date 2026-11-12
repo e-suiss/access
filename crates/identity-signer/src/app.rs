@@ -234,6 +234,39 @@ impl Keyring {
         Ok(round)
     }
 
+    /// Drops every key at once and destroys its private material: a closed post-quantum
+    /// signing profile leaves nothing in the JWKS and signs nothing (OP-159 m.3 (a), OP-73).
+    /// Returns the keys it dropped.
+    pub fn close(&mut self, now: u64) -> Vec<[u8; 32]> {
+        let live: Vec<[u8; 32]> = self
+            .entries
+            .iter()
+            .filter(|e| e.record.state != State::Dropped)
+            .map(|e| e.record.kid)
+            .collect();
+        for kid in &live {
+            self.step(&Step::Drop(*kid), now);
+        }
+        self.rebuild();
+        live
+    }
+
+    /// Whether a key that is not dropped could not be loaded back (CR-23).
+    #[must_use]
+    pub fn unloaded(&self) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.record.state != State::Dropped && e.signer.is_none())
+    }
+
+    /// Whether a key of the set is not dropped.
+    #[must_use]
+    pub fn live(&self) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.record.state != State::Dropped)
+    }
+
     fn records(&self) -> Vec<Key> {
         self.entries.iter().map(|e| e.record.clone()).collect()
     }

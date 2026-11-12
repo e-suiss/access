@@ -41,10 +41,18 @@ fn the_cache_header_matches_the_cache_time() {
     assert_eq!(JWKS_CACHE_MS, (300 + 600) * 1000);
 }
 
-// MD-3
+// MD-3, CR-41 m.3, OP-159 m.3 (o)
 #[test]
-fn akp_keys_are_refused() {
-    let key = PublicKey::MlDsa(suiss_crypto::cose::Algorithm::MlDsa65, vec![0; 1952]);
-    assert_eq!(jwks([(&[0; 32], &key)]), Err(JoseError::Key));
+fn akp_keys_are_published_only_at_their_exact_length() {
+    let alg = suiss_crypto::cose::Algorithm::MlDsa65;
+    let short = PublicKey::MlDsa(alg, vec![0; 1951]);
+    assert_eq!(jwks([(&[0; 32], &short)]), Err(JoseError::Key));
+    let (signer, _) = suiss_crypto::signer::MlDsaSigner::generate(alg).unwrap();
+    let key = suiss_crypto::signer::Signer::public_key(&signer);
+    assert!(
+        jwks([(&[1; 32], &key)])
+            .unwrap()
+            .contains(r#""kty":"AKP","alg":"ML-DSA-65""#)
+    );
     assert_eq!(jwks([]).as_deref(), Ok(r#"{"keys":[]}"#));
 }
