@@ -206,6 +206,22 @@ Each line is a property of a model, machine-checked by the named tool; nothing o
 | delegation needs depth > 0 and strictly lowers it | `Access.delegation_depth_decreases` | L0-ALG-73 | machine-checked (Lean) |
 | a Grant delegated to public cannot be delegated further | `Access.public_holder_is_leaf` | L0-ALG-75 | machine-checked (Lean) |
 | the ∩ of two normalized authority sets is normalized | `Access.authMeet_normal` | L0-ALG-51 | machine-checked (Lean) |
+| ⊑ on authority sets is a total Boolean function, so the relation it decides is Decidable | `Access.decSubsumes` | INV-8 | machine-checked (Lean) |
+| ∩ on authority sets is a total function, so whether a ∩ b equals a given value is Decidable | `Access.decMeetIs` | INV-8 | machine-checked (Lean) |
+| normalize on authority sets is a total function, so whether it gives a given value is Decidable | `Access.decNormalizesTo` | INV-8 | machine-checked (Lean) |
+| a projection (the source ∩ a scope) is ⊑ its source and covers no intent the source does not | `Access.projection_within_source` | INV-3 | machine-checked (Lean) |
+| in the lineage model, an ended link ends the lineage from then on, an ended lineage never becomes valid again, and narrowing a link narrows what the lineage permits | `Access.cascade_monotone` | INV-3, INV-5 | machine-checked (Lean) |
+| in the Decision Combinator model, a denying restriction result makes every decision DENY | `Access.Combinator.forbid_trumps_permit` | CR-48 m.2, MD-4, L0-EVAL-33 | machine-checked (Lean) |
+| in the Decision Combinator model, a rejection, no candidate basis, or a hop on every basis that is not understood or does not cover gives no ALLOW | `Access.Combinator.default_deny` | CR-48 m.2, SI-6, TI-9, MD-8, L0-EVAL-61 | machine-checked (Lean) |
+| in the Decision Combinator model, ALLOW needs a basis whose hops all cover and hold, its capacity, a covering and holding mandate, no denying restriction and a matching proof for every requirement term | `Access.Combinator.allowed_only_if_explicitly_permitted` | CR-48 m.2, L0-EVAL-33 | machine-checked (Lean) |
+| in the Decision Combinator model, the decision does not depend on the order of the proofs nor on the order or repetition of the restriction results; the relied-on proof follows the earliest position | `Access.Combinator.order_and_dup_independent` | CR-48 m.2, INV-27, T14 | machine-checked (Lean) |
+| in the Decision Combinator model, dropping no_objection results and proofs that match no term keeps the decision, within the same fuel | `Access.Combinator.sound_slicing` | CR-48 m.2, CR-49 m.3 | machine-checked (Lean) |
+| in the holding episode model, the lazy since (the last false→true transition of the level) equals the eagerly replayed episode | `Access.Holding.lazy_eq_eager` | CR-48 m.3, TI-RT9, INV-31 | machine-checked (Lean) |
+| in the holding episode model, a stale proof does not close or rename the episode | `Access.Holding.staleness_keeps_episode` | CR-48 m.3, INV-31 | machine-checked (Lean) |
+| in the holding episode model, an affirmatively closed episode is never current again | `Access.Holding.close_is_terminal` | CR-48 m.3, INV-31 | machine-checked (Lean) |
+| in the holding episode model, lifting an ingest-time cutoff does not bring back the episodes it closed | `Access.Holding.cutoff_lift_never_revives` | CR-48 m.3, SI-10 | machine-checked (Lean) |
+| in the meta-action model, an allowed Exercise on a holding basis rests on a lineage whose every link holds at the trusted time, and on the pinned episode | `Access.Meta.meta_holding_sound` | OP-159 m.3 (k), L0-META-13 | machine-checked (Lean) |
+| in the meta-action model, the holding terms do not change how anchor and public bases are decided | `Access.Meta.meta_other_bases_unchanged` | OP-159 m.3 (k), L0-META-13 | machine-checked (Lean) |
 
 ## Conformance and certification
 
