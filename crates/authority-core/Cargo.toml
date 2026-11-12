@@ -33,6 +33,8 @@ access-verifier = { workspace = true, features = ["testing"] }
 suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
 access-store = { workspace = true, features = ["testing"] }
 ed25519-dalek = { workspace = true }
+# SA-T7, SA-T8, OP-159 m.3 (bb)
+proptest = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 # OP-72, OP-158 m.3 (z)
 divan = { workspace = true }

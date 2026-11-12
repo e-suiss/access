@@ -360,7 +360,12 @@ section = "14.3"
 status = "frozen"
 stage = 14
 title = "Modify::Set logic flaw allows authenticated arbitrary writes"
-tests = []
+tests = [
+  "crates/identity-scim/tests/set_changes.rs::ghsa_xxwr_a_set_change_writes_only_the_attributes_it_may",
+  "crates/identity-scim/tests/set_changes.rs::ghsa_xxwr_a_refused_request_leaves_the_resource_as_it_was",
+  "crates/authority-core/tests/metamorphic.rs::mr4_permuting_restriction_policies_never_changes_the_decision",
+  "crates/authority-core/tests/metamorphic.rs::mr4_an_added_deny_in_any_position_denies",
+]
 
 [[rule]]
 id = "GHSA-84jc-3hj2-hwc7"

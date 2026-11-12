@@ -25,6 +25,8 @@ tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+# SA-T7, OP-159 m.3 (bb)
+proptest = { workspace = true, features = ["std"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
