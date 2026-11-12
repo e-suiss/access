@@ -1,4 +1,4 @@
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use std::sync::Mutex;
@@ -160,7 +160,7 @@ mod twin {
     async fn publish_survives_a_server_that_is_down_and_coalesces() {
         let pki = Pki::new().unwrap();
         let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = free.local_addr().unwrap().to_string();
+        let addr = alloc::string::ToString::to_string(&free.local_addr().unwrap());
         drop(free);
         let cfg = pki.client(&addr, "t4").unwrap();
         let (bell, rx) = client::queue(16);
