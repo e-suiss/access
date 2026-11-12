@@ -272,7 +272,7 @@ def edges():
         "track": "core",
         "version": 1,
         "operation": "verify.ml_dsa",
-        "rules": ["CR-41", "CR-51", "SAI-44"],
+        "rules": ["L0-SIG-8"],
         "source": "conformance/vectors/tools/ml_dsa.py edges: norm and hint edge vectors under the Access profile (pure ML-DSA, empty context); Crucible is a test harness without a published vector set, so these replace it (OP-159 m.3 (n))",
         "cases": cases,
     }

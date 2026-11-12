@@ -107,8 +107,7 @@ mod vectors {
             && UnparsedPublicKey::new(verifier, pk).verify(m, sig).is_ok()
     }
 
-    // CR-41, CR-51 V9, RR-37, OP-159 m.3 (n): aws-lc agrees with the norm and hint edge
-    // vectors and with the empty-context Wycheproof and ACVP cases F0 also checks
+    // CR-41, CR-51, RR-37, L0-SIG-8, OP-159 m.3 (n)
     #[test]
     fn ml_dsa_aws_lc_agrees_with_the_vectors() {
         let mut n = 0;
@@ -200,7 +199,7 @@ mod vectors {
         })
     }
 
-    // RR-37, OP-159 m.3 (n): random ML-DSA cases labelled by aws-lc, for F0 in the nightly DRT
+    // RR-37, OP-159 m.3 (n)
     #[test]
     #[ignore = "writes vectors for the nightly DRT under ACCESS_RANDOM_VECTORS"]
     fn ml_dsa_random_inputs_for_f0() {

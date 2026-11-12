@@ -134,7 +134,7 @@ fn read_actions_are_tiered_by_name() {
     assert!(!crate::meta::is_read("access", "audit"));
 }
 
-// OP-159 m.3 (l): `audit_export` is a read and stays CT1 whatever its amounts
+// L0-EVAL-70, G28, OP-159 m.3 (l)
 #[test]
 fn audit_export_is_a_read_at_ct1() {
     let mut i = intent(Some((CT2_MAX + 1, "eur")));
@@ -145,7 +145,7 @@ fn audit_export_is_a_read_at_ct1() {
     assert_eq!(AUDIT_EXPORT_TIER, Tier::Ct1);
 }
 
-// OP-159 m.3 (m), SEC10, §13.7.2: a first payment to a payee is CT2, a seen payee keeps its tier
+// L0-EVAL-71, SEC10, OP-159 m.3 (m)
 #[test]
 fn a_new_payee_is_ct2() {
     let mut i = intent(Some((100, "eur")));
@@ -365,7 +365,7 @@ fn tier_line(c: &TierCase) -> alloc::string::String {
     line
 }
 
-// TI-RT12, OP-159 m.3 (l), (m): the tier of reads and the new-payee floor, as vectors
+// TI-RT12, OP-159 m.3 (l), (m)
 #[test]
 fn tier_vectors_match() {
     use crate::vector_rules::{field, golden};
