@@ -41,6 +41,18 @@ fn record(pos: u8, artefact: Digest) -> Disclosure {
     }
 }
 
+fn listed(name: &str, value: Value) -> Disclosure {
+    let mut r = record(1, Digest([0; 32]));
+    r.opened = BTreeMap::from([(
+        String::from(name),
+        Opened {
+            value,
+            salt: [0x5a; 32],
+        },
+    )]);
+    r
+}
+
 fn line(name: &str, id: u32, sig: &[u8]) -> String {
     let mut raw = id.to_be_bytes().to_vec();
     raw.extend_from_slice(sig);
@@ -113,7 +125,57 @@ fn inclusion_vectors_match() {
     let root3 = suiss_crypto::digest::node_hash(&root2, &h2);
     let recovered = Some((Digest(root2), Digest(root2)));
     let handed = Some((Digest(root3), Digest(root2)));
+    // OP-159 m.15 (a)
+    let member = listed(
+        ARTIFACTS_FIELD,
+        Value::Array(Vec::from([Digest([0xa9; 32]).to_value(), art.to_value()])),
+    );
+    let empty = listed(ARTIFACTS_FIELD, Value::Array(Vec::new()));
+    let missing = listed("intent", art.to_value());
+    let tree = |r: &Disclosure| {
+        let root = suiss_crypto::digest::node_hash(&h0, &r.leaf_hash().unwrap());
+        (Some((Digest(root), Digest(root))), note(2, root, true))
+    };
+    let (mb, mn) = tree(&member);
+    let (eb, en) = tree(&empty);
+    let (xb, xn) = tree(&missing);
     let cases = [
+        Case {
+            id: "artifacts-member-accepted",
+            binding: binding(mb),
+            artefact: art,
+            record: &member,
+            path: Vec::from([h0]),
+            note: mn.clone(),
+            consistency: None,
+        },
+        Case {
+            id: "artifacts-non-member-refused",
+            binding: binding(mb),
+            artefact: Digest([0xee; 32]),
+            record: &member,
+            path: Vec::from([h0]),
+            note: mn,
+            consistency: None,
+        },
+        Case {
+            id: "artifacts-empty-refused",
+            binding: binding(eb),
+            artefact: art,
+            record: &empty,
+            path: Vec::from([h0]),
+            note: en,
+            consistency: None,
+        },
+        Case {
+            id: "artifacts-missing-refused",
+            binding: binding(xb),
+            artefact: art,
+            record: &missing,
+            path: Vec::from([h0]),
+            note: xn,
+            consistency: None,
+        },
         Case {
             id: "recovery-exact-content-accepted",
             binding: binding(recovered),

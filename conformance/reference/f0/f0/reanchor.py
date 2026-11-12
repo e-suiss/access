@@ -43,8 +43,7 @@ def accept_retired(anchors, domain, origin, artefact, bundle):
         and verify(c["sign1"], COSIGN_CONTENT_TYPE, w["key"]) == body.encode("utf-8") + c["timestamp"].to_bytes(8, "big")
         for c in bundle["cosigns"] for w in anchor["witnesses"]
     )
-    field = disclosed.get("fields", {}).get("artefact")
-    committed = isinstance(field, list) and len(field) == 2 and bytes(field[1]) == artefact
+    committed = record.commits_artefact(disclosed, artefact)
     header_domain = disclosed.get("domain")
     if (cp_origin != origin or not cosigned or not committed
             or not (isinstance(header_domain, list) and bytes(header_domain[1]) == domain)

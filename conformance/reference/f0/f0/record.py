@@ -166,3 +166,12 @@ def domain_id(record):
     if record["kind"] == "genesis":
         return tagged_digest(GENESIS_CONTEXT, record)
     return record["domain"]
+
+
+def commits_artefact(disclosed, artefact):
+    # L0-SIG-80, L0-SIG-81, OP-159 m.15 (a)
+    def is_digest(value):
+        return isinstance(value, list) and len(value) == 2 and value[0] == -16 and isinstance(value[1], bytes) and bytes(value[1]) == artefact
+    fields = disclosed.get("fields", {})
+    listed = fields.get("artifacts")
+    return is_digest(fields.get("artefact")) or (isinstance(listed, list) and any(is_digest(v) for v in listed))

@@ -993,6 +993,13 @@ contribution-state = {
 
 ; ---------------------------------------------------------------- decision receipt (L2-RCP-1)
 
+; OP-159 m.15 (b), CR-42 m.4: a hybrid receipt or PAP is two separate signatures over the same
+; payload, not a composite one. Each member is the bytes of a tagged COSE_Sign1 (tag 18), the
+; classical one first and the ML-DSA one second; each has its own key excerpt, carried as for a
+; single signature. Under a "both" policy both verify; a lone component is "hybrid-missing".
+hybrid-artefact = [classic: cose-sign1-bytes, pq: cose-sign1-bytes]
+cose-sign1-bytes = bstr .size (1..131072)
+
 ; Payload of a COSE_Sign1 signed by an operational key with usage "receipt", content type
 ; "application/access-receipt+cbor".
 receipt = {

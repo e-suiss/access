@@ -393,3 +393,20 @@ def hybrid(metadata_bytes, domain_bytes, classic, pq, usage, iat, content_type, 
     if first != second:
         raise KeyScopeError("hybrid-payload")
     return first
+
+
+def decode_carrier(data):
+    # OP-159 m.15 (b)
+    from . import dcbor
+    try:
+        dcbor.check(data)
+        items = cbor2.loads(data)
+    except Exception:
+        raise KeyScopeError("hybrid-carrier")
+    if not isinstance(items, list) or len(items) != 2 or not all(isinstance(i, bytes) for i in items):
+        raise KeyScopeError("hybrid-carrier")
+    classic, pq = items
+    a, b = cose_alg(classic), cose_alg(pq)
+    if a is None or b is None or a in ML_DSA_NAMES or b not in ML_DSA_NAMES:
+        raise KeyScopeError("hybrid-carrier")
+    return classic, pq

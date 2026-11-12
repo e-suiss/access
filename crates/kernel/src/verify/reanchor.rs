@@ -10,7 +10,7 @@ use suiss_crypto::note::Checkpoint;
 
 use super::Backend;
 use super::cose::{KeySet, PublicKey, verify_sign1};
-use super::key_scope::{ARTEFACT_FIELD, KeyScopeError, thumbprint};
+use super::key_scope::{KeyScopeError, commits_artefact, thumbprint};
 use super::pq::PqAnchor;
 use crate::digest::Digest;
 use crate::record::Disclosure;
@@ -91,7 +91,7 @@ fn ml_dsa_keys(kid: [u8; 32], key: &PublicKey) -> Option<KeySet> {
 /// classical algorithm's retirement (CR-45 RA-5, RA-7, OP-159 m.3 (h)): the anchor the verifier
 /// pinned for `domain` signs the post-quantum checkpoint of log `origin`, at least one of the
 /// anchor's independent witnesses cosigned it with ML-DSA, and the committed record names the
-/// artefact under [`ARTEFACT_FIELD`] at its position in that checkpoint.
+/// artefact ([`commits_artefact`]) at its position in that checkpoint.
 ///
 /// # Errors
 /// [`KeyScopeError::PqAnchorMissing`] without an anchor for `domain`;
@@ -125,11 +125,7 @@ pub fn accept_retired(
                 })
         })
     });
-    let committed = b
-        .record
-        .opened
-        .get(ARTEFACT_FIELD)
-        .is_some_and(|f| Digest::from_value(&f.value) == Some(*artefact));
+    let committed = commits_artefact(b.record, artefact);
     if cp.origin != origin
         || b.record.header.domain != Some(*domain)
         || !cosigned

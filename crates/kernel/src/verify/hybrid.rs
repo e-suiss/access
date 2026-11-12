@@ -4,6 +4,10 @@
 //! does. There is no composite signature and a component is never accepted on its own where
 //! the policy asks for both.
 
+use alloc::vec::Vec;
+
+use suiss_crypto::dcbor::{self, Limits, Value};
+
 use super::Backend;
 use super::cose::{CoseError, Verified, verify_sign1};
 use super::key_scope::{DomainMetadata, Hybrid, KeyScopeError, KeyUsage, resolve};
@@ -45,6 +49,10 @@ pub enum HybridError {
     /// The two components sign different payloads.
     #[error("components sign different payloads")]
     Payload,
+    /// The carrier is not `[classic, pq]` of two tagged `COSE_Sign1`, classical first and
+    /// ML-DSA second (OP-159 m.15 (b)).
+    #[error("not a hybrid carrier")]
+    Carrier,
 }
 
 impl HybridError {
@@ -56,6 +64,7 @@ impl HybridError {
             Self::Key(_) => "hybrid-key",
             Self::Signature(_) => "hybrid-signature",
             Self::Payload => "hybrid-payload",
+            Self::Carrier => "hybrid-carrier",
         }
     }
 }
@@ -157,3 +166,54 @@ pub fn verify(
         }
     }
 }
+
+/// The hybrid carrier of a receipt or PAP (`kernel.cddl` `hybrid-artefact`, OP-159 m.15 (b)):
+/// `[classic, pq]`, the bytes of two tagged `COSE_Sign1` over the same payload, classical first.
+/// Two signatures, not a composite one.
+///
+/// # Errors
+/// [`HybridError::Carrier`] when a component is not a `COSE_Sign1` of its kind.
+pub fn encode_carrier(classic: &[u8], pq: &[u8]) -> Result<Vec<u8>, HybridError> {
+    check_order(classic, pq)?;
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::Bytes(classic.to_vec()),
+            Value::Bytes(pq.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .map_err(|_| HybridError::Carrier)
+}
+
+/// The classical and ML-DSA `COSE_Sign1` of a hybrid carrier, in that order; the signatures are
+/// verified by [`verify`] with their excerpts.
+///
+/// # Errors
+/// [`HybridError::Carrier`] for anything but deterministic CBOR `[bstr, bstr]` holding a
+/// classical then an ML-DSA `COSE_Sign1`.
+pub fn decode_carrier(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>), HybridError> {
+    let Ok(Value::Array(items)) = dcbor::decode(bytes, Limits::CEILING) else {
+        return Err(HybridError::Carrier);
+    };
+    let [Value::Bytes(classic), Value::Bytes(pq)] = items.as_slice() else {
+        return Err(HybridError::Carrier);
+    };
+    check_order(classic, pq)?;
+    Ok((classic.clone(), pq.clone()))
+}
+
+fn check_order(classic: &[u8], pq: &[u8]) -> Result<(), HybridError> {
+    let (Ok(c), Ok(p)) = (
+        super::ml_dsa::algorithm_of(classic),
+        super::ml_dsa::algorithm_of(pq),
+    ) else {
+        return Err(HybridError::Carrier);
+    };
+    if is_ml_dsa(c) || !is_ml_dsa(p) {
+        return Err(HybridError::Carrier);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

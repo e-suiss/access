@@ -775,6 +775,30 @@ pub fn profile_conflict(metadata: &DomainMetadata) -> bool {
 /// The record field that commits the digest of the artefact a decision produced (§13.3 rule 1).
 pub const ARTEFACT_FIELD: &str = "artefact";
 
+/// The record field that commits the digests of every artefact a decision produced, receipt
+/// and PAP included (TI-12, L2-RCP-2, L2-PAP-2).
+pub const ARTIFACTS_FIELD: &str = "artifacts";
+
+/// Whether `record` commits the exact-content digest `artefact`: as its [`ARTEFACT_FIELD`], or as
+/// a member of its [`ARTIFACTS_FIELD`] array, by exact equality (L0-SIG-80, OP-159 m.15 (a)).
+#[must_use]
+pub fn commits_artefact(record: &crate::record::Disclosure, artefact: &Digest) -> bool {
+    let single = record
+        .opened
+        .get(ARTEFACT_FIELD)
+        .is_some_and(|f| Digest::from_value(&f.value) == Some(*artefact));
+    let member = record
+        .opened
+        .get(ARTIFACTS_FIELD)
+        .is_some_and(|f| match &f.value {
+            Value::Array(items) => items
+                .iter()
+                .any(|v| Digest::from_value(v) == Some(*artefact)),
+            _ => false,
+        });
+    single || member
+}
+
 /// A consistency path to the checkpoint of `size` records with `root` (RFC 9162).
 pub type Consistency<'a> = (u64, [u8; 32], &'a [[u8; 32]]);
 
@@ -815,7 +839,7 @@ impl<'a> Inclusion<'a> {
 
 /// The superseded-at predicate (§9.10 step 1, §13.3, P18, SEC25, U12, U27): an artefact with
 /// exact-content digest `artefact`, signed under `binding` whose key is superseded, is accepted
-/// only when its record commits `artefact` under [`ARTEFACT_FIELD`], sits in the cited checkpoint
+/// only when its record commits `artefact` ([`commits_artefact`]), sits in the cited checkpoint
 /// `N_cited` (its root is `Superseded::cited`), that checkpoint verifies under `log` from
 /// `origin` with at least one cosignature of the independent `witnesses`, and, when the key is
 /// superseded at another checkpoint (a handover's `C_{h+1}`), a consistency path reaches it. The
@@ -851,11 +875,7 @@ pub fn superseded_inclusion(
                 .iter()
                 .any(|w| w.name() == a.name && w.id() == a.id)
     });
-    let committed = evidence
-        .record
-        .opened
-        .get(ARTEFACT_FIELD)
-        .is_some_and(|f| Digest::from_value(&f.value) == Some(*artefact));
+    let committed = commits_artefact(evidence.record, artefact);
     if !cosigned
         || !committed
         || cp.root != superseded.cited.0

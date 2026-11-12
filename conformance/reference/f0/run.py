@@ -14,7 +14,7 @@ from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
 from f0.combinator import evaluate_bytes
 from f0.cose import CoseError, verify_sign1
-from f0.keyscope import KeyScopeError, check_public_key, hybrid, jwk_members, operational_key, thumbprint
+from f0.keyscope import KeyScopeError, check_public_key, decode_carrier, hybrid, jwk_members, operational_key, thumbprint
 
 
 def run_evaluate(case, document):
@@ -97,6 +97,10 @@ def run_hybrid(case, document):
     # L0-SIG-75a
     part = lambda name: {k: bytes.fromhex(v) for k, v in case[name].items()} if name in case else None
     try:
+        if "carrier" in case:
+            classic_sign1, pq_sign1 = decode_carrier(bytes.fromhex(case["carrier"]))
+            case = dict(case, classic={"sign1": classic_sign1.hex(), "excerpt": case["classic_excerpt"]},
+                        pq={"sign1": pq_sign1.hex(), "excerpt": case["pq_excerpt"]})
         payload = hybrid(
             bytes.fromhex(case["metadata"]), bytes.fromhex(case["domain"]), part("classic"), part("pq"),
             document["usage"], document["iat"], document["content_type"], case["ml_dsa"],
@@ -376,8 +380,7 @@ def run_inclusion(case, document):
     except (note.NoteError, record.RecordError, Rejection):
         return refused
     cosigned = any(t is not None and any((w["name"], w["id"]) == (n, i) for w in witnesses) for n, i, t in accepted)
-    artefact = disclosed.get("fields", {}).get("artefact")
-    committed = isinstance(artefact, list) and len(artefact) == 2 and bytes(artefact[1]) == bytes.fromhex(case["artefact"])
+    committed = record.commits_artefact(disclosed, bytes.fromhex(case["artefact"]))
     path = [bytes.fromhex(h) for h in case["path"]]
     if (not cosigned or not committed or root != bytes(superseded["cited"][1])
             or not merkle.verify_inclusion(disclosed["pos"], size, leaf, path, root)):

@@ -767,6 +767,7 @@ mod hybrid {
         match e {
             HybridError::Missing => "hybrid-missing",
             HybridError::Payload => "hybrid-payload",
+            HybridError::Carrier => "hybrid-carrier",
             HybridError::Key(KeyScopeError::Algorithm)
             | HybridError::Signature(CoseError::Algorithm) => "algorithm",
             HybridError::Key(KeyScopeError::Signature(CoseError::Signature(_)))
@@ -835,8 +836,51 @@ mod hybrid {
         })
     }
 
-    fn run(metadata: &DomainMetadata, parts: &Parts, ml: bool) -> Result<Vec<u8>, &'static str> {
+    fn raw_carrier(classic: &[u8], pq: &[u8]) -> Vec<u8> {
+        dcbor::encode(
+            &Value::Array(vec![
+                Value::Bytes(classic.to_vec()),
+                Value::Bytes(pq.to_vec()),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap()
+    }
+
+    /// A case's input: a carrier with the two excerpts, or the single component it carries.
+    enum Input {
+        Carrier(Vec<u8>, Vec<u8>, Vec<u8>),
+        Single(Parts),
+    }
+
+    fn input(parts: Parts) -> Input {
+        match parts {
+            (Some((cs, ce)), Some((ps, pe))) => Input::Carrier(raw_carrier(&cs, &ps), ce, pe),
+            single => Input::Single(single),
+        }
+    }
+
+    fn read(v: &serde_json::Value) -> Input {
+        match v.get("carrier") {
+            Some(c) => Input::Carrier(
+                unhex(c.as_str().unwrap()),
+                unhex(v["classic_excerpt"].as_str().unwrap()),
+                unhex(v["pq_excerpt"].as_str().unwrap()),
+            ),
+            None => Input::Single((component(v, "classic"), component(v, "pq"))),
+        }
+    }
+
+    fn run(metadata: &DomainMetadata, input: &Input, ml: bool) -> Result<Vec<u8>, &'static str> {
+        use access_kernel::verify::hybrid::decode_carrier;
         let d = metadata.domain;
+        let parts: Parts = match input {
+            Input::Carrier(bytes, ce, pe) => {
+                let (cs, ps) = decode_carrier(bytes).map_err(name)?;
+                (Some((cs, ce.clone())), Some((ps, pe.clone())))
+            }
+            Input::Single(p) => p.clone(),
+        };
         let c = parts.0.as_ref().map(|(s, e)| Component::new(s, e));
         let p = parts.1.as_ref().map(|(s, e)| Component::new(s, e));
         let got = if ml {
@@ -862,18 +906,32 @@ mod hybrid {
                     hex(&w.metadata.to_bytes().unwrap()),
                     hex(&dcbor::encode(&w.metadata.domain.to_value(), Limits::CEILING).unwrap())
                 );
-                for (k, part) in [("classic", &parts.0), ("pq", &parts.1)] {
-                    if let Some((s, e)) = part {
+                let input = input(parts);
+                match &input {
+                    Input::Carrier(bytes, ce, pe) => {
                         let _ = write!(
                             line,
-                            ", \"{k}\": {{\"sign1\": \"{}\", \"excerpt\": \"{}\"}}",
-                            hex(s),
-                            hex(e)
+                            ", \"carrier\": \"{}\", \"classic_excerpt\": \"{}\", \"pq_excerpt\": \"{}\"",
+                            hex(bytes),
+                            hex(ce),
+                            hex(pe)
                         );
+                    }
+                    Input::Single(parts) => {
+                        for (k, part) in [("classic", &parts.0), ("pq", &parts.1)] {
+                            if let Some((s, e)) = part {
+                                let _ = write!(
+                                    line,
+                                    ", \"{k}\": {{\"sign1\": \"{}\", \"excerpt\": \"{}\"}}",
+                                    hex(s),
+                                    hex(e)
+                                );
+                            }
+                        }
                     }
                 }
                 let _ = write!(line, ", \"ml_dsa\": {ml}, ");
-                match run(&w.metadata, &parts, ml) {
+                match run(&w.metadata, &input, ml) {
                     Ok(p) => {
                         let _ = write!(line, "\"payload\": \"{}\"}}", hex(&p));
                     }
@@ -895,29 +953,20 @@ mod hybrid {
         for c in doc["cases"].as_array().unwrap() {
             let metadata =
                 DomainMetadata::from_bytes(&unhex(c["metadata"].as_str().unwrap())).unwrap();
-            let parts = (component(c, "classic"), component(c, "pq"));
-            let got = run(&metadata, &parts, c["ml_dsa"].as_bool().unwrap());
+            let input = read(c);
+            let got = run(&metadata, &input, c["ml_dsa"].as_bool().unwrap());
             let want = match c.get("payload") {
                 Some(p) => Ok(unhex(p.as_str().unwrap())),
                 None => Err(c["error"].as_str().unwrap()),
             };
             assert_eq!(got, want, "{}", c["id"]);
-            if c["ml_dsa"].as_bool().unwrap() {
-                let pure = verify(
-                    &PureBackend,
-                    &metadata,
-                    parts.0.as_ref().map(|(s, e)| Component::new(s, e)),
-                    parts.1.as_ref().map(|(s, e)| Component::new(s, e)),
-                    &expected(&metadata.domain),
+            if c["ml_dsa"].as_bool().unwrap() && metadata.hybrid.is_some() && got.is_ok() {
+                assert_eq!(
+                    run(&metadata, &input, false),
+                    Err("algorithm"),
+                    "{}",
+                    c["id"]
                 );
-                if metadata.hybrid.is_some() && got.is_ok() {
-                    assert_eq!(
-                        pure.map(|_| ()).map_err(name),
-                        Err("algorithm"),
-                        "{}",
-                        c["id"]
-                    );
-                }
             }
             n += 1;
         }
@@ -932,7 +981,9 @@ mod retired {
     use access_kernel::digest::Digest;
     use access_kernel::record::{Disclosure, Header, Opened, RecordKind};
     use access_kernel::verify::cose::{ALG, Algorithm, CONTENT_TYPE, KID, PublicKey, to_be_signed};
-    use access_kernel::verify::key_scope::{ARTEFACT_FIELD, KeyScopeError, Witness, thumbprint};
+    use access_kernel::verify::key_scope::{
+        ARTEFACT_FIELD, ARTIFACTS_FIELD, KeyScopeError, Witness, thumbprint,
+    };
     use access_kernel::verify::pq::PqAnchor;
     use access_kernel::verify::reanchor::{
         CHECKPOINT_CONTENT_TYPE, COSIGN_CONTENT_TYPE, PqBundle, PqCosign, accept_retired,
@@ -1160,18 +1211,52 @@ mod retired {
             let log = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
             let witness = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
             let rec = record(Digest([0xa1; 32]));
-            let body = Checkpoint {
-                origin: origin(),
-                size: 2,
-                root: suiss_crypto::digest::node_hash(&[0x11; 32], &rec.leaf_hash().unwrap()),
-                extensions: Vec::new(),
-            }
-            .to_body()
-            .unwrap();
-            let checkpoint = sign1(&log, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
-            let mut cosigned = body.as_bytes().to_vec();
-            cosigned.extend_from_slice(&7_u64.to_be_bytes());
-            let cosign = sign1(&witness, COSIGN_CONTENT_TYPE, &cosigned);
+            let signed = |r: &Disclosure| {
+                let body = Checkpoint {
+                    origin: origin(),
+                    size: 2,
+                    root: suiss_crypto::digest::node_hash(&[0x11; 32], &r.leaf_hash().unwrap()),
+                    extensions: Vec::new(),
+                }
+                .to_body()
+                .unwrap();
+                let mut cosigned = body.as_bytes().to_vec();
+                cosigned.extend_from_slice(&7_u64.to_be_bytes());
+                (
+                    body.clone(),
+                    sign1(&log, CHECKPOINT_CONTENT_TYPE, body.as_bytes()),
+                    sign1(&witness, COSIGN_CONTENT_TYPE, &cosigned),
+                )
+            };
+            let (body, checkpoint, cosign) = signed(&rec);
+            // OP-159 m.15 (a)
+            let listed = |value: Value| {
+                let mut r = record(Digest([0; 32]));
+                r.opened = BTreeMap::from([(
+                    String::from(ARTIFACTS_FIELD),
+                    Opened {
+                        value,
+                        salt: [0x5a; 32],
+                    },
+                )]);
+                r
+            };
+            let member = listed(Value::Array(vec![
+                Digest([0xa9; 32]).to_value(),
+                Digest([0xa1; 32]).to_value(),
+            ]));
+            let empty = listed(Value::Array(Vec::new()));
+            let mut missing = record(Digest([0; 32]));
+            missing.opened = BTreeMap::from([(
+                String::from("intent"),
+                Opened {
+                    value: Digest([0xa1; 32]).to_value(),
+                    salt: [0x5a; 32],
+                },
+            )]);
+            let (_, m_cp, m_cs) = signed(&member);
+            let (_, e_cp, e_cs) = signed(&empty);
+            let (_, x_cp, x_cs) = signed(&missing);
             let other = sign1(&witness, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
             let w = |independent| {
                 Witness::new(
@@ -1193,10 +1278,19 @@ mod retired {
                 .to_bytes()
                 .unwrap()
             };
-            let cases: Vec<(&str, Option<Vec<u8>>, &[u8], Option<&[u8]>, [u8; 32], bool)> = vec![
+            let cases: Vec<(
+                &str,
+                Option<Vec<u8>>,
+                &Disclosure,
+                &[u8],
+                Option<&[u8]>,
+                [u8; 32],
+                bool,
+            )> = vec![
                 (
                     "bundle-reaches-the-anchor",
                     Some(anchor(true)),
+                    &rec,
                     &checkpoint,
                     Some(&cosign),
                     [0xa1; 32],
@@ -1205,6 +1299,7 @@ mod retired {
                 (
                     "no-anchor",
                     None,
+                    &rec,
                     &checkpoint,
                     Some(&cosign),
                     [0xa1; 32],
@@ -1213,6 +1308,7 @@ mod retired {
                 (
                     "no-bundle",
                     Some(anchor(true)),
+                    &rec,
                     &checkpoint,
                     Some(&cosign),
                     [0xa1; 32],
@@ -1221,6 +1317,7 @@ mod retired {
                 (
                     "other-artefact",
                     Some(anchor(true)),
+                    &rec,
                     &checkpoint,
                     Some(&cosign),
                     [0xa2; 32],
@@ -1229,6 +1326,7 @@ mod retired {
                 (
                     "no-cosign",
                     Some(anchor(true)),
+                    &rec,
                     &checkpoint,
                     None,
                     [0xa1; 32],
@@ -1237,6 +1335,7 @@ mod retired {
                 (
                     "dependent-witness",
                     Some(anchor(false)),
+                    &rec,
                     &checkpoint,
                     Some(&cosign),
                     [0xa1; 32],
@@ -1245,21 +1344,58 @@ mod retired {
                 (
                     "checkpoint-not-by-the-anchor",
                     Some(anchor(true)),
+                    &rec,
                     &other,
                     Some(&cosign),
                     [0xa1; 32],
                     true,
                 ),
+                (
+                    "artifacts-member",
+                    Some(anchor(true)),
+                    &member,
+                    &m_cp,
+                    Some(&m_cs),
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "artifacts-non-member",
+                    Some(anchor(true)),
+                    &member,
+                    &m_cp,
+                    Some(&m_cs),
+                    [0xee; 32],
+                    true,
+                ),
+                (
+                    "artifacts-empty",
+                    Some(anchor(true)),
+                    &empty,
+                    &e_cp,
+                    Some(&e_cs),
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "artifacts-missing",
+                    Some(anchor(true)),
+                    &missing,
+                    &x_cp,
+                    Some(&x_cs),
+                    [0xa1; 32],
+                    true,
+                ),
             ];
             let mut lines = Vec::new();
-            for (id, a, cp, cs, art, with_bundle) in cases {
+            for (id, a, rec, cp, cs, art, with_bundle) in cases {
                 let anchors: Vec<PqAnchor> =
                     a.iter().map(|b| PqAnchor::from_bytes(b).unwrap()).collect();
                 let cosigns: Vec<PqCosign<'_>> = cs
                     .iter()
                     .map(|c| PqCosign::new("witness.example", 7, c))
                     .collect();
-                let bundle = PqBundle::new(&rec, &[[0x11; 32]], cp, &cosigns);
+                let bundle = PqBundle::new(rec, &[[0x11; 32]], cp, &cosigns);
                 let got = accept_retired(
                     &PqBackend,
                     &anchors,
