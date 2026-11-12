@@ -214,6 +214,12 @@ A checkpoint is the signed tree head of a log. Access uses the C2SP formats as p
 
 Vectors: [`exchange/1/checkpoint.json`](../../conformance/vectors/exchange/1/checkpoint.json), operation `note.checkpoint`: each case gives a note and either the checkpoint it carries (size, root, number of extension lines, cosignature timestamps) or the rejection reason.
 
+## Carrier budgets
+
+<a id="L2-BUD-1"></a>**L2-BUD-1. Carrier budgets.** An artefact travels in a carrier only within its budget: an HTTP header (such as `Authorization` or `DPoP`) and an NFC record hold at most 8192 bytes, a cookie at most 4096 bytes and only an opaque session id, and one QR code (version 40-L, byte mode) at most 2953 bytes. A producer does not emit an artefact over its carrier's budget; an offline PAP over the QR budget is refused (reason `projection-over-budget`).
+
+Vectors: [`exchange/1/pq-budgets.json`](../../conformance/vectors/exchange/1/pq-budgets.json), operation `budget.fits`: each case gives a carrier and a size and whether the size fits.
+
 ## Later parts
 
 These parts arrive with the features that produce them, each in its own version of this track:

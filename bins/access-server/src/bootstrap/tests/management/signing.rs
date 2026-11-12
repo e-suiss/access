@@ -220,7 +220,7 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     let w = client_alg(&c, &pq.0, "ML-DSA-65").await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
 
-    // MD-3: a client that does not ask keeps classical tokens
+    // MD-3
     let (media, jwt) = introspection(&c, &classic).await;
     assert_eq!(media, "application/token-introspection+jwt");
     assert_eq!(header_alg(&jwt), "ES256");
@@ -253,7 +253,7 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
     assert_eq!(signing(&c).await["kex_share"], "advertise-only");
 
-    // OP-159 m.3 (a), TI-9: closing drops every key and nothing falls back to classical
+    // OP-159 m.3 (a), TI-9
     let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({})).await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
     let closed = signing(&c).await;
@@ -319,7 +319,7 @@ async fn fips_and_the_post_quantum_profile_exclude_each_other_in_either_order() 
     );
     assert!(akp(&jwks(&c).await).keys.is_empty());
 
-    // CR-15, OP-158 m.9: a FIPS realm signs ES256 only
+    // CR-15, OP-158 m.9
     let (_, _, etag) = c.rest_read("/admin/v1/realms/acme/settings").await;
     let w = c
         .rest_write(
@@ -369,7 +369,7 @@ async fn fips_and_the_post_quantum_profile_exclude_each_other_in_either_order() 
     let s = signing(&c).await;
     assert_eq!(s["fips"], false);
     assert_eq!(s["signing_profile"], "ml-dsa-65");
-    // CR-15, OP-159 m.3 (r): this is not the FIPS build, so no validated module is declared
+    // CR-15, OP-159 m.3 (r)
     assert_eq!(s["fips_module"], false);
 }
 

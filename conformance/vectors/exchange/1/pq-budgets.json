@@ -10,72 +10,108 @@
   "cases": [
     {
       "id": "header-at-budget",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "header",
       "size": 8192,
       "fits": true
     },
     {
       "id": "header-one-over",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "header",
       "size": 8193,
       "fits": false
     },
     {
       "id": "cookie-at-budget",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "cookie",
       "size": 4096,
       "fits": true
     },
     {
       "id": "cookie-one-over",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "cookie",
       "size": 4097,
       "fits": false
     },
     {
       "id": "qr-at-budget",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "qr",
       "size": 2953,
       "fits": true
     },
     {
       "id": "qr-one-over",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "qr",
       "size": 2954,
       "fits": false
     },
     {
       "id": "nfc-at-budget",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "nfc",
       "size": 8192,
       "fits": true
     },
     {
       "id": "nfc-one-over",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "nfc",
       "size": 8193,
       "fits": false
     },
     {
       "id": "ml-dsa-44-pap-signature-alone-fits-a-qr",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "qr",
       "size": 2420,
       "fits": true
     },
     {
       "id": "ml-dsa-65-signature-in-base64url-fits-a-header",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "header",
       "size": 4412,
       "fits": true
     },
     {
       "id": "ml-dsa-87-signature-overflows-a-qr",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "qr",
       "size": 4627,
       "fits": false
     },
     {
       "id": "ml-dsa-87-signature-in-base64url-overflows-a-cookie",
+      "rules": [
+        "L2-BUD-1"
+      ],
       "carrier": "cookie",
       "size": 6170,
       "fits": false
