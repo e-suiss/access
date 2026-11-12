@@ -5140,18 +5140,18 @@ async fn identifier_first_answers_are_padded_to_one_size_class() {
 async fn an_unknown_invitation_code_answers_in_the_size_class_of_a_valid_one() {
     let e = env(0x35, "lg-pad-invite", AuthPolicy::DEFAULT).await;
     let owner = e.account("owner@acme.example").await;
-    let token = "tok-pad-0123456789abcdefghijklmnopqr";
+    let invite = "tok-pad-0123456789abcdefghijklmnopqr";
     org_with_invitation(
         &e,
         owner,
         [0x79; 16],
         "alice@acme.example",
-        (token, "PADS2345"),
+        (invite, "PADS2345"),
     )
     .await;
     let mut b = e.browser("pad-invite");
     b.app = access_http::harden(b.app.clone(), access_http::Limits::default());
-    let valid = b.get(&format!("/v1/invitations/{token}")).await;
+    let valid = b.get(&format!("/v1/invitations/{invite}")).await;
     assert_eq!(valid.status, StatusCode::OK);
     let unknown = b
         .get("/v1/invitations/tok-pad-unknown-0123456789abcdefghij")

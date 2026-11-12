@@ -14,3 +14,5 @@
 # F-13: the OpenSSH private key file writer's PEM armour line and its test assertion; no key material is committed
 8732a727e452d516e28d597a230b34cb20f2e4a1:crates/identity-ssh/src/domain/holder.rs:private-key:65
 8732a727e452d516e28d597a230b34cb20f2e4a1:crates/identity-ssh/src/domain/holder.rs:private-key:109
+# F-13: an invitation code literal in the padding test; it is a made-up code, not a key
+d614c4c98e1c5bf64ff65d72afd4b1460bc44a8f:crates/http/tests/login.rs:generic-api-key:5143
