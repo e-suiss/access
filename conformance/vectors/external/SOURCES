@@ -2,3 +2,6 @@ C2SP/wycheproof 7a325932231bd7a724c791c8b0d65ea4d6d2f435 testvectors_v1 (Apache-
 novifinancial/ed25519-speccheck 65519336fda78a3d016e947df6d82848aca0c9da cases.json (Apache-2.0)
 RFC 9901 (www.rfc-editor.org/rfc/rfc9901.txt) disclosure examples, extracted by tools/rfc9901_disclosures.py
 usnistgov/ACVP-Server 975de31eb83d87039ec88934fdc47d8c312b892d gen-val/json-files/{ECDSA-SigVer-FIPS186-5,EDDSA-SigVer-1.0,SHA2-256-1.0}/internalProjection.json (public domain, NIST); P-256/SHA2-256, Ed25519 pure and SHA2-256 AFT groups extracted by tools/acvp_extract.py, private keys dropped; upstream sha256 45f9e942…0b63, 8556b9c4…97b0, a7e0bf4f…0a6c
+C2SP/wycheproof 65ca494727a52944c204441c860b039e6786b99b testvectors_v1/mldsa_{44,65,87}_verify_test.json (Apache-2.0); publicKeyDer dropped by tools/ml_dsa.py extract; upstream sha256 f70759c9…9d0e, 1ca235f6…9034, 54adffe1…ba14
+usnistgov/ACVP-Server 975de31eb83d87039ec88934fdc47d8c312b892d gen-val/json-files/ML-DSA-sigVer-FIPS204/internalProjection.json (public domain, NIST); pure and internal groups kept, HashML-DSA groups and private keys dropped by tools/ml_dsa.py extract; upstream sha256 47cdd631…5437
+ML-DSA Crucible (symbolicsoft/crucible) is a test harness without a published vector set; core/1/ml-dsa.json carries our own norm and hint edge vectors instead (OP-159 m.3 (n))

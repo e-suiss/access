@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, projection, receipt, record, render, report, sdjwt, status, validity, version_check
+from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, mldsa, note, pap, projection, receipt, record, render, report, sdjwt, status, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -144,6 +144,37 @@ def run_ed25519(case, document):
         bytes.fromhex(case["public_key"]), bytes.fromhex(case["message"]), bytes.fromhex(case["signature"])
     )
     return {"result": result}, reason
+
+
+def run_ml_dsa(case, document):
+    # CR-41, CR-51 V9: pure ML-DSA with the empty context string
+    ok = mldsa.verify(
+        case["algorithm"], bytes.fromhex(case["public_key"]), bytes.fromhex(case["message"]), bytes.fromhex(case["signature"])
+    )
+    return {"result": "accept" if ok else "reject"}, None
+
+
+def wycheproof_ml_dsa(document):
+    name = document["algorithm"]
+    for group in document["testGroups"]:
+        key = bytes.fromhex(group["publicKey"])
+        for test in group["tests"]:
+            got = mldsa.verify(name, key, bytes.fromhex(test["msg"]), bytes.fromhex(test["sig"]), bytes.fromhex(test.get("ctx", "")))
+            yield f"tc{test['tcId']}", test["result"] == "valid", got
+
+
+def acvp_ml_dsa(document):
+    for group in document["groups"]:
+        name = group["parameterSet"]
+        for test in group["tests"]:
+            key, sig = bytes.fromhex(test["pk"]), bytes.fromhex(test["signature"])
+            if group["signatureInterface"] == "external":
+                got = mldsa.verify(name, key, bytes.fromhex(test["message"]), sig, bytes.fromhex(test["context"]))
+            elif group["externalMu"]:
+                got = mldsa.verify_internal(name, key, b"", sig, mu=bytes.fromhex(test["mu"]))
+            else:
+                got = mldsa.verify_internal(name, key, bytes.fromhex(test["message"]), sig)
+            yield f"tg{group['tgId']}-tc{test['tcId']}", test["testPassed"], got
 
 
 def run_dcbor_decode(case, document):
@@ -604,6 +635,7 @@ OPERATIONS = {
     "verify.cose_sign1": (run_cose_sign1, ("kid", "payload", "error")),
     "key_scope.operational_key": (run_operational_key, ("key", "error")),
     "verify.ed25519": (run_ed25519, ("result",)),
+    "verify.ml_dsa": (run_ml_dsa, ("result",)),
     "verify.jws_compact": (run_jws_compact, ("expect",)),
     "verify.sd_jwt": (run_sd_jwt, ("claims", "error")),
     "verify.sd_jwt.disclosure": (run_sd_jwt_disclosure, ("digest", "name", "value", "error")),
@@ -652,6 +684,14 @@ NOT_IMPLEMENTED = {
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
 RAW_DATA_DIRECTORY = "external"
+
+# Third-party ML-DSA sets F0 checks itself (OP-159 m.3 (n), RR-37).
+RAW_DATA_CHECKS = {
+    "wycheproof-mldsa_44_verify_test.json": wycheproof_ml_dsa,
+    "wycheproof-mldsa_65_verify_test.json": wycheproof_ml_dsa,
+    "wycheproof-mldsa_87_verify_test.json": wycheproof_ml_dsa,
+    "acvp-ml-dsa-sigver-fips204.json": acvp_ml_dsa,
+}
 
 
 def load_cases(path):
@@ -709,7 +749,13 @@ def run_file(path, passed, failures, skipped, root):
         "operation" in document or any("operation" in case for case in cases or [])
     )
     if not has_operation:
-        if path.relative_to(root).parts[0] == RAW_DATA_DIRECTORY and parses_as_json(path):
+        if path.relative_to(root).parts[0] == RAW_DATA_DIRECTORY and path.name in RAW_DATA_CHECKS:
+            for case_id, expected, got in RAW_DATA_CHECKS[path.name](document):
+                if got == expected:
+                    passed[path] = passed.get(path, 0) + 1
+                else:
+                    failures.append((path, case_id, expected, got, None))
+        elif path.relative_to(root).parts[0] == RAW_DATA_DIRECTORY and parses_as_json(path):
             skipped.append((path, "third-party raw data, no operation"))
         else:
             failures.append((path, None, {"vector file": "with an operation"}, {"vector file": "none"}, None))
