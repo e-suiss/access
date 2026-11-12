@@ -53,7 +53,7 @@ fn only_an_independent_declared_ml_dsa_witness_may_cosign_a_re_anchor() {
     d.witnesses.push(indep.clone());
     assert_eq!(pq_witnesses(&d, None).unwrap(), vec![&indep]);
     assert_eq!(pq_witnesses(&d, Some(&[])), Err(ReanchorError::NoPqWitness));
-    assert_eq!(pq_witnesses(&d, Some(&[indep.clone()])).unwrap().len(), 1);
+    assert_eq!(pq_witnesses(&d, Some(std::slice::from_ref(&indep))).unwrap().len(), 1);
 }
 
 // RA-3, RR-35, HL-34
