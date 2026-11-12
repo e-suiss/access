@@ -748,6 +748,6 @@ helm-check:
     set -euo pipefail
     chart=deploy/helm/access
     helm lint "$chart"
-    diff -u "$chart/rendered/default.yaml" <(helm template access "$chart" --namespace access)
-    diff -u "$chart/rendered/plane-split.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-plane-split.yaml")
-    diff -u "$chart/rendered/small-provider.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-small-provider.yaml")
+    diff -u -B "$chart/rendered/default.yaml" <(helm template access "$chart" --namespace access)
+    diff -u -B "$chart/rendered/plane-split.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-plane-split.yaml")
+    diff -u -B "$chart/rendered/small-provider.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-small-provider.yaml")
