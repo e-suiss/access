@@ -16,12 +16,18 @@ libfuzzer-sys = "=0.4.13"
 access-kernel = { package = "esuiss-access-kernel", path = "../crates/kernel" }
 suiss-crypto = { package = "esuiss-crypto", path = "../crates/suiss-crypto", default-features = false, features = ["verify"] }
 suiss-restriction = { package = "esuiss-restriction", path = "../crates/suiss-restriction" }
-access-crypto = { path = "../crates/crypto" }
+access-crypto = { path = "../crates/crypto", features = ["testing"] }
 access-edge-core = { path = "../crates/edge-core", default-features = false }
 access-internal-api = { path = "../crates/internal-api" }
 access-parse = { path = "../crates/parse" }
 miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
 quick-xml = { version = "=0.42.0", default-features = false }
+# OP-159 m.3 (cc)
+bytes = { version = "1.12.1", default-features = false }
+ldap3_proto = { version = "=0.8.1", default-features = false, features = ["strict"] }
+serde_json = { version = "1.0.151", default-features = false, features = ["std"] }
+thiserror = { version = "2.0.21", default-features = false }
+tokio-util = { version = "0.7.19", default-features = false, features = ["codec"] }
 
 [profile.release]
 debug = 1
@@ -83,5 +89,47 @@ doc = false
 [[bin]]
 name = "spnego_read"
 path = "fuzz_targets/spnego_read.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "http_request"
+path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "consistency_token"
+path = "fuzz_targets/consistency_token.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "cursor"
+path = "fuzz_targets/cursor.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "store_record_decode"
+path = "fuzz_targets/store_record_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "xml_c14n"
+path = "fuzz_targets/xml_c14n.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ldap_ber"
+path = "fuzz_targets/ldap_ber.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "scim_filter"
+path = "fuzz_targets/scim_filter.rs"
 test = false
 doc = false

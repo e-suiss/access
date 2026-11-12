@@ -1,0 +1,1 @@
+forbid when principal.tier == "basic" && context.hour < 6

@@ -1,0 +1,11 @@
+# SA-T9, CR-50 R5, OP-159 m.3 (cc)
+homepage: "https://github.com/e-suiss/access"
+main_repo: "https://github.com/e-suiss/access"
+language: rust
+primary_contact: ""
+auto_ccs: []
+sanitizers:
+  - address
+fuzzing_engines:
+  - libfuzzer
+file_github_issue: false
