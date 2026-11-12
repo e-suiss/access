@@ -7,6 +7,9 @@
 //! ```text
 //! access-witness keygen <key file> <name>   new Ed25519 key (mode 0600); prints the vkey
 //! access-witness vkey <key file> <name>     prints the vkey of an existing key
+//! access-witness pq-keygen <seed file> <ml-dsa-65|ml-dsa-87>
+//!                                           new ML-DSA cosign key (mode 0600); prints
+//!                                           `pq-key <alg> <public key, base64url>`
 //! access-witness serve <config file>        serves; prints `listening <addr>`
 //! access-witness monitor <config file>     compares the witnesses' latest cosigned heads
 //! access-witness fence <config file> <domain> <size>
@@ -34,7 +37,7 @@ use suiss_crypto::note::Verifier;
 use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::{Signer as _, SoftSigner};
 
-const USAGE: &str = "usage:\naccess-witness serve <config>\naccess-witness monitor <config>\naccess-witness keygen <key file> <name>\naccess-witness vkey <key file> <name>\naccess-witness fence <config> <domain> <size>\n";
+const USAGE: &str = "usage:\naccess-witness serve <config>\naccess-witness monitor <config>\naccess-witness keygen <key file> <name>\naccess-witness vkey <key file> <name>\naccess-witness pq-keygen <seed file> <ml-dsa-65|ml-dsa-87>\naccess-witness fence <config> <domain> <size>\n";
 
 fn out(text: &str) -> bool {
     let mut o = std::io::stdout().lock();
@@ -79,6 +82,47 @@ fn keygen(path: &Path, name: &str) -> Result<String, String> {
     Ok(format!("vkey {vkey}\n"))
 }
 
+/// The public line of an ML-DSA cosign key.
+fn pq_line(signer: &suiss_crypto::signer::MlDsaSigner) -> Result<String, String> {
+    let PublicKey::MlDsa(alg, public) = signer.public_key() else {
+        return Err("not an ML-DSA key".into());
+    };
+    Ok(format!(
+        "pq-key {} {}\n",
+        config::pq_name(alg),
+        access_kernel::json::b64url_encode(&public)
+    ))
+}
+
+/// Reads the operator's ML-DSA seed file (CR-45 RA-3, OP-159 m.3 (g)).
+fn load_pq(
+    alg: suiss_crypto::cose::Algorithm,
+    path: &Path,
+) -> Result<suiss_crypto::signer::MlDsaSigner, String> {
+    let raw = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let seed: Result<[u8; 32], _> = raw.as_slice().try_into();
+    let seed = Secret::new(seed.map_err(|_| format!("{}: not a 32-byte seed", path.display()))?);
+    drop(Secret::new(raw));
+    suiss_crypto::signer::MlDsaSigner::from_seed(alg, &seed)
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn pq_keygen(path: &Path, alg: &str) -> Result<String, String> {
+    let alg = config::pq_alg(alg).ok_or("alg: ml-dsa-65 or ml-dsa-87")?;
+    let (signer, seed) =
+        suiss_crypto::signer::MlDsaSigner::generate(alg).map_err(|e| e.to_string())?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    f.write_all(seed.expose())
+        .and_then(|()| f.sync_all())
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    pq_line(&signer)
+}
+
 async fn serve(path: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let config = config::parse(&text)?;
@@ -86,8 +130,12 @@ async fn serve(path: &Path) -> Result<(), String> {
         .map_err(|e| format!("{}: {e}", config.state.display()))?;
     let signer = load(&config.key)?;
     let vkey = vkey_of(&signer, &config.name)?;
+    let pq = match &config.pq_key {
+        Some((alg, p)) => Some(load_pq(*alg, p)?),
+        None => None,
+    };
     let listen = config.listen;
-    let witness = Arc::new(serve::Witness::open(config, signer, vkey)?);
+    let witness = Arc::new(serve::Witness::open(config, signer, vkey)?.with_pq(pq));
     let listener = tokio::net::TcpListener::bind(listen)
         .await
         .map_err(|e| format!("{listen}: {e}"))?;
@@ -141,6 +189,14 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         ["vkey", key, name] => {
             let line = format!("vkey {}\n", vkey_of(&load(Path::new(key))?, name)?);
+            Ok(if out(&line) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
+        }
+        ["pq-keygen", key, alg] => {
+            let line = pq_keygen(Path::new(key), alg)?;
             Ok(if out(&line) {
                 ExitCode::SUCCESS
             } else {

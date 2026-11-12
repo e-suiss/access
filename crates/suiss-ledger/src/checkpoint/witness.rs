@@ -665,3 +665,101 @@ impl StateEntry {
         Ok(suiss_crypto::digest::sha256(&self.to_bytes()?))
     }
 }
+
+/// Largest post-quantum checkpoint or cosign `COSE_Sign1` (`pq-checkpoint.cddl`).
+pub const MAX_PQ_SIGN1: usize = 131_072;
+
+/// Largest excerpt of an ML-DSA key (`pq-checkpoint.cddl`).
+pub const MAX_PQ_EXCERPT: usize = 16_384;
+
+/// A request to cosign a post-quantum re-anchor checkpoint (CR-45 RA-3, OP-159 m.3 (g)): the
+/// T16 note body, its ML-DSA `COSE_Sign1` and the binding-signed excerpt of its key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PqCosignRequest {
+    /// The domain.
+    pub domain: Hash,
+    /// The note body, byte-identical to the `COSE_Sign1` payload.
+    pub body: String,
+    /// The tagged `COSE_Sign1`.
+    pub sign1: Vec<u8>,
+    /// The binding-signed excerpt of the ML-DSA key.
+    pub excerpt: Vec<u8>,
+}
+
+impl PqCosignRequest {
+    /// Its deterministic CBOR.
+    ///
+    /// # Errors
+    /// [`WireError`].
+    pub fn to_bytes(&self) -> Result<Vec<u8>, WireError> {
+        encode(&map(alloc::vec![
+            ("domain", Some(Value::Bytes(self.domain.to_vec()))),
+            ("body", Some(Value::text(&self.body))),
+            ("sign1", Some(Value::Bytes(self.sign1.clone()))),
+            ("excerpt", Some(Value::Bytes(self.excerpt.clone()))),
+        ]))
+    }
+
+    /// Decodes a request.
+    ///
+    /// # Errors
+    /// [`WireError`].
+    pub fn from_bytes(b: &[u8]) -> Result<Self, WireError> {
+        let v = decode(b)?;
+        keys(&v, &["domain", "body", "sign1", "excerpt"])?;
+        Ok(Self {
+            domain: fixed::<32>(v.get("domain"))?,
+            body: text(v.get("body"), MAX_NOTE)?,
+            sign1: bytes(v.get("sign1"), MAX_PQ_SIGN1)?,
+            excerpt: bytes(v.get("excerpt"), MAX_PQ_EXCERPT)?,
+        })
+    }
+}
+
+/// A witness's post-quantum cosign (`pq-checkpoint.cddl` `pq-cosign`): its name, the cosign
+/// time in seconds and its `COSE_Sign1` over the note body and that time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PqCosign {
+    /// The witness name.
+    pub name: String,
+    /// The cosign time, Unix seconds.
+    pub timestamp: u64,
+    /// The tagged `COSE_Sign1`.
+    pub sign1: Vec<u8>,
+}
+
+impl PqCosign {
+    /// The message a cosign signs: the note body, then `timestamp` as 8 big-endian bytes.
+    #[must_use]
+    pub fn message(body: &str, timestamp: u64) -> Vec<u8> {
+        let mut m = body.as_bytes().to_vec();
+        m.extend_from_slice(&timestamp.to_be_bytes());
+        m
+    }
+
+    /// Its deterministic CBOR.
+    ///
+    /// # Errors
+    /// [`WireError`].
+    pub fn to_bytes(&self) -> Result<Vec<u8>, WireError> {
+        encode(&map(alloc::vec![
+            ("name", Some(Value::text(&self.name))),
+            ("timestamp", Some(Value::Unsigned(self.timestamp))),
+            ("sign1", Some(Value::Bytes(self.sign1.clone()))),
+        ]))
+    }
+
+    /// Decodes a cosign.
+    ///
+    /// # Errors
+    /// [`WireError`].
+    pub fn from_bytes(b: &[u8]) -> Result<Self, WireError> {
+        let v = decode(b)?;
+        keys(&v, &["name", "timestamp", "sign1"])?;
+        Ok(Self {
+            name: text(v.get("name"), 255)?,
+            timestamp: uint(v.get("timestamp"))?,
+            sign1: bytes(v.get("sign1"), MAX_PQ_SIGN1)?,
+        })
+    }
+}

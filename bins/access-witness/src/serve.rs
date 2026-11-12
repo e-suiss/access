@@ -6,6 +6,9 @@
 //!   new binding; the old one is then `fenced` above that note's size (U11).
 //! - `GET /gossip/{domain}`: the last cosigned head as a `gossip-entry` with its note, for
 //!   monitors and the log (§9.16).
+//! - `POST /pq-cosign`: a post-quantum re-anchor checkpoint (`PqCosignRequest`); a witness
+//!   with an ML-DSA key cosigns it only at a size and root it already cosigned classically,
+//!   with a `COSE_Sign1` over the note body and the time (CR-45 RA-3, OP-159 m.3 (g)).
 //! - `GET /info`: the cosigner name, its verifier key and the operator (SI-12).
 
 use std::collections::BTreeMap;
@@ -40,6 +43,7 @@ pub(crate) struct Witness {
     signer: SoftSigner,
     vkey: String,
     chains: BTreeMap<String, Mutex<Chain>>,
+    pq: Option<suiss_crypto::signer::MlDsaSigner>,
 }
 
 impl Witness {
@@ -57,7 +61,60 @@ impl Witness {
             signer,
             vkey,
             chains,
+            pq: None,
         })
+    }
+
+    /// This witness with the ML-DSA cosign key `pq`.
+    pub(crate) fn with_pq(mut self, pq: Option<suiss_crypto::signer::MlDsaSigner>) -> Self {
+        self.pq = pq;
+        self
+    }
+}
+
+// CR-45 RA-3, OP-159 m.3 (g)
+async fn pq_cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response {
+    use suiss_crypto::signer::Signer as _;
+    use suiss_ledger::checkpoint::witness::{PqCosign, PqCosignRequest};
+    let Some(pq) = w.pq.as_ref() else {
+        return (StatusCode::NOT_FOUND, "no post-quantum key").into_response();
+    };
+    let Ok(req) = PqCosignRequest::from_bytes(&body) else {
+        return refuse(Refused::Malformed);
+    };
+    let o = origin(&access_kernel::digest::Digest(req.domain));
+    let (Some(log), Some(chain)) = (w.config.logs.get(&o), w.chains.get(&o)) else {
+        return refuse(Refused::UnknownKey);
+    };
+    let chain = chain.lock().await;
+    let trusted = with_learned(log, &chain.learned);
+    let cp = match crate::verify::pq_checkpoint(&trusted, &req.body, &req.sign1, &req.excerpt) {
+        Ok(cp) => cp,
+        Err(crate::verify::Refused::Malformed) => return refuse(Refused::Malformed),
+        Err(crate::verify::Refused::Key) => return refuse(Refused::UnknownKey),
+    };
+    if chain.witnessed(cp.size) != Some(cp.root) {
+        return refuse(Refused::Inconsistent);
+    }
+    drop(chain);
+    let timestamp = now_ms() / 1000;
+    let kid = access_kernel::verify::key_scope::thumbprint(&pq.public_key());
+    let Ok(sign1) = suiss_crypto::signer::sign_sign1(
+        pq,
+        kid,
+        access_kernel::verify::reanchor::COSIGN_CONTENT_TYPE,
+        &PqCosign::message(&req.body, timestamp),
+    ) else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "cosigner unavailable").into_response();
+    };
+    let cosign = PqCosign {
+        name: w.config.name.clone(),
+        timestamp,
+        sign1,
+    };
+    match cosign.to_bytes() {
+        Ok(b) => (StatusCode::OK, [(header::CONTENT_TYPE, CBOR)], b).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -267,8 +324,13 @@ async fn info(State(w): State<Arc<Witness>>) -> Response {
     (
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         format!(
-            "name {}\nvkey {}\noperator {}\n",
-            w.config.name, w.vkey, w.config.operator
+            "name {}\nvkey {}\noperator {}\n{}",
+            w.config.name,
+            w.vkey,
+            w.config.operator,
+            w.pq.as_ref()
+                .and_then(|p| crate::pq_line(p).ok())
+                .unwrap_or_default()
         ),
     )
         .into_response()
@@ -278,6 +340,7 @@ async fn info(State(w): State<Arc<Witness>>) -> Response {
 pub(crate) fn router(w: Arc<Witness>) -> Router {
     Router::new()
         .route("/cosign", post(cosign_request))
+        .route("/pq-cosign", post(pq_cosign_request))
         .route("/gossip/{domain}", get(gossip))
         .route("/info", get(info))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY))

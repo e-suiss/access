@@ -148,6 +148,51 @@ pub(crate) fn binding_change(
     moved(&record)
 }
 
+/// Verifies a post-quantum re-anchor checkpoint of `log` (CR-45 RA-2, RA-3, OP-159 m.3 (g)):
+/// `body` is a checkpoint of the domain, `excerpt` is signed by a binding key the witness holds
+/// and declares an ML-DSA key with usage `checkpoint` whose window covers `issued_at`, and that
+/// key's `COSE_Sign1` carries `body` byte for byte.
+pub(crate) fn pq_checkpoint(
+    log: &Log,
+    body: &str,
+    sign1: &[u8],
+    excerpt: &[u8],
+) -> Result<Checkpoint, Refused> {
+    let cp = Checkpoint::parse(body).map_err(|_| Refused::Malformed)?;
+    if cp.origin != origin(&log.domain) || cp.to_body().ok().as_deref() != Some(body) {
+        return Err(Refused::Malformed);
+    }
+    let at = issued_at(&cp)?;
+    let verified = verify_sign1(&PureBackend, excerpt, &log.bindings, EXCERPT_CONTENT_TYPE)
+        .map_err(|_| Refused::Key)?;
+    let KeyExcerpt { domain, key } =
+        KeyExcerpt::from_bytes(&verified.payload).map_err(|_| Refused::Key)?;
+    let width = key
+        .valid_until
+        .checked_sub(key.valid_from)
+        .ok_or(Refused::Key)?;
+    let usable = domain == log.domain
+        && access_kernel::verify::ml_dsa::is_ml_dsa(key.alg)
+        && key.kid == thumbprint(&key.key)
+        && key.usage.contains(&KeyUsage::Checkpoint)
+        && width <= MAX_WINDOW_MS
+        && (key.valid_from..=key.valid_until).contains(&at);
+    if !usable {
+        return Err(Refused::Key);
+    }
+    let signed = access_kernel::verify::cose::verify_sign1(
+        &suiss_crypto::aws::AwsLcBackend,
+        sign1,
+        &key.key_set(),
+        access_kernel::verify::reanchor::CHECKPOINT_CONTENT_TYPE,
+    )
+    .map_err(|_| Refused::Key)?;
+    if signed.payload != body.as_bytes() {
+        return Err(Refused::Key);
+    }
+    Ok(cp)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "test code")]
 mod tests {

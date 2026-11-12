@@ -7,7 +7,10 @@
 //! listen 127.0.0.1:8484
 //! operator Example Witness Ltd
 //! log <domain, base64url> <binding public key, base64url>…
+//! pq-key ml-dsa-65 /etc/access-witness/pq.seed
 //! ```
+//!
+//! `pq-key` is optional: the 32-byte ML-DSA seed of the post-quantum cosign key (CR-45 RA-3).
 //!
 //! The key is read from the file the operator names, never from an argument or the
 //! environment.
@@ -45,6 +48,24 @@ pub(crate) struct Config {
     pub(crate) operator: String,
     /// Logs by origin.
     pub(crate) logs: BTreeMap<String, Log>,
+    pub(crate) pq_key: Option<(Algorithm, PathBuf)>,
+}
+
+/// The ML-DSA parameter set a `pq-key` line names; ML-DSA-44 is not a cosign key (CR-41 m.2).
+pub(crate) fn pq_alg(name: &str) -> Option<Algorithm> {
+    match name {
+        "ml-dsa-65" => Some(Algorithm::MlDsa65),
+        "ml-dsa-87" => Some(Algorithm::MlDsa87),
+        _ => None,
+    }
+}
+
+/// The name of an ML-DSA cosign parameter set.
+pub(crate) const fn pq_name(alg: Algorithm) -> &'static str {
+    match alg {
+        Algorithm::MlDsa87 => "ml-dsa-87",
+        _ => "ml-dsa-65",
+    }
 }
 
 /// The origin of `domain`'s checkpoints (L0-ENC-20).
@@ -62,6 +83,7 @@ fn key32(text: &str) -> Result<[u8; 32], String> {
 /// Parses `text`.
 pub(crate) fn parse(text: &str) -> Result<Config, String> {
     let (mut name, mut key, mut state, mut listen, mut operator) = (None, None, None, None, None);
+    let mut pq_key = None;
     let mut logs = BTreeMap::new();
     for (n, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or_default().trim();
@@ -86,6 +108,14 @@ pub(crate) fn parse(text: &str) -> Result<Config, String> {
                 );
             }
             "operator" if !v.is_empty() => operator = Some(v.to_owned()),
+            "pq-key" => {
+                let (alg, path) = v
+                    .split_once(' ')
+                    .and_then(|(a, p)| pq_alg(a).map(|a| (a, p.trim())))
+                    .filter(|(_, p)| !p.is_empty())
+                    .ok_or_else(|| at(format!("bad pq-key {v}")))?;
+                pq_key = Some((alg, PathBuf::from(path)));
+            }
             "log" => {
                 let mut words = v.split_whitespace();
                 let domain = Digest(key32(words.next().unwrap_or_default()).map_err(at)?);
@@ -114,6 +144,7 @@ pub(crate) fn parse(text: &str) -> Result<Config, String> {
         listen: listen.ok_or_else(|| need("listen"))?,
         operator: operator.ok_or_else(|| need("operator"))?,
         logs,
+        pq_key,
     })
 }
 
@@ -138,5 +169,10 @@ mod tests {
         assert!(parse(&text.replace("operator Ex Ltd\n", "")).is_err());
         assert!(parse(&format!("{text}log {d}\n")).is_err());
         assert!(parse(&format!("{text}secret abc\n")).is_err());
+        assert!(c.pq_key.is_none());
+        let pq = parse(&format!("{text}pq-key ml-dsa-65 /pq\n")).unwrap();
+        assert_eq!(pq.pq_key.map(|(a, _)| a), Some(Algorithm::MlDsa65));
+        assert!(parse(&format!("{text}pq-key ml-dsa-44 /pq\n")).is_err());
+        assert!(parse(&format!("{text}pq-key ml-dsa-65\n")).is_err());
     }
 }
