@@ -10,13 +10,13 @@ use std::sync::Arc;
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::Hosted;
-use access_identity_ui::app::support::{Ask, Block, MAX_ARTIFACT_BYTES, Signed, Upload};
+use access_identity_ui::app::support::{Ask, Block, Signed};
 use access_identity_ui::ports::{Clock, Kits, Messages};
 use access_internal_api::support::SupportAuthority;
 use access_kernel::json::b64url_decode;
-use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::{HeaderMap, StatusCode, Uri, header};
+use axum::body::{Body, Bytes};
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::Response;
 use axum::routing::{get, post, put};
 use axum::{Extension, Router};
@@ -35,6 +35,8 @@ struct Svc<D, K, KI, C, M, A> {
     login: Shared<D, K, KI, C, M>,
     authority: A,
     pep: String,
+    /// The streamed uploads' `Idempotency-Key` answers (OP-159 m.3 (mm)).
+    uploads: idempotency::Cache,
 }
 
 type St<D, K, KI, C, M, A> = State<Arc<Svc<D, K, KI, C, M, A>>>;
@@ -64,6 +66,7 @@ where
         },
         authority,
         pep,
+        uploads: idempotency::Cache::default(),
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
@@ -82,11 +85,6 @@ where
                 post(give::<D, K, KI, C, M, A>),
             )
             .route(
-                &format!("{prefix}/v1/support/artifacts"),
-                post(upload::<D, K, KI, C, M, A>)
-                    .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BYTES.saturating_mul(2))),
-            )
-            .route(
                 &format!("{prefix}/v1/me/support-access/{{grant}}/revoke"),
                 post(revoke::<D, K, KI, C, M, A>),
             )
@@ -95,6 +93,10 @@ where
                 put(block::<D, K, KI, C, M, A>),
             );
         reads = reads
+            .route(
+                &format!("{prefix}/v1/support/artifacts"),
+                post(upload::<D, K, KI, C, M, A>),
+            )
             .route(
                 &format!("{prefix}/v1/support/requests"),
                 get(list::<D, K, KI, C, M, A>),
@@ -368,15 +370,72 @@ where
     send(reply, &headers).await
 }
 
-/// `POST /v1/support/artifacts`: an image or video body answers 415 before anything is read
-/// (OP-157 m.3 (g)).
+/// The query member naming the support request an artifact is for.
+const REQUEST_QUERY: &str = "request";
+
+fn query_param<'a>(uri: &'a Uri, name: &str) -> Option<&'a str> {
+    uri.query()?
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .find(|(k, _)| *k == name)
+        .map(|(_, v)| v)
+        .filter(|v| !v.is_empty() && v.len() <= 64)
+}
+
+fn too_large() -> Response {
+    problem(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "artifact-too-large",
+        "Payload Too Large",
+    )
+}
+
+/// Reads `body` up to `limit` bytes as it streams in, and the SHA-256 of what it read
+/// (OP-159 m.3 (mm)); one byte more is `413` and nothing after it is read.
+#[expect(
+    clippy::result_large_err,
+    reason = "the refusal is the response itself"
+)]
+async fn stream_in(mut body: Body, limit: usize) -> Result<(Vec<u8>, [u8; 32]), Response> {
+    use http_body_util::BodyExt as _;
+    let mut out = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = match frame {
+            Ok(f) => f,
+            Err(e) => {
+                let over = std::error::Error::source(&e)
+                    .is_some_and(<dyn std::error::Error>::is::<http_body_util::LengthLimitError>)
+                    || e.to_string().contains("length limit");
+                return Err(if over { too_large() } else { bad() });
+            }
+        };
+        let Ok(data) = frame.into_data() else {
+            continue;
+        };
+        if out.len().saturating_add(data.len()) > limit {
+            return Err(too_large());
+        }
+        out.extend_from_slice(&data);
+    }
+    let digest = suiss_crypto::digest::sha256(&out);
+    Ok((out, digest))
+}
+
+/// `POST /v1/support/artifacts?request={request}` (OP-157 m.3 (g), OP-159 m.3 (mm)): the body
+/// is the artifact itself (`application/json`, `application/har+json` or `text/plain`), and the
+/// person's signed `idp.account.artifact_upload` Exercise rides in the [`EXERCISE_HEADER`]
+/// header. An image or video answers 415, and the session, the realm's artifact policy and the
+/// person's own request are checked, before a byte of the body is read
+/// (GHSA-84jc-3hj2-hwc7). The body then streams in under the realm's `max_bytes`, and the
+/// `Idempotency-Key` covers its content digest.
 async fn upload<D, K, KI, C, M, A>(
     State(s): St<D, K, KI, C, M, A>,
     Path(p): Params,
     peer: Option<Extension<Peer>>,
+    method: Method,
     uri: Uri,
     headers: HeaderMap,
-    bytes: Bytes,
+    body: Body,
 ) -> Response
 where
     D: Directory,
@@ -400,17 +459,72 @@ where
             "Unsupported Media Type",
         );
     }
-    let b: Upload = match body(&headers, &bytes, MAX_ARTIFACT_BYTES.saturating_mul(2)) {
-        Ok(b) => b,
-        Err(r) => return r,
-    };
+    if let Err(r) = idempotency::key(&headers) {
+        return r;
+    }
     let jar = Jar::of(&headers, peer);
-    let reply = s
+    // GHSA-84jc-3hj2-hwc7, OP-159 m.3 (mm)
+    let gate = match s
         .login
         .hosted
-        .upload_artifact(&s.authority, &s.pep, &entry, &jar.browser(), &b)
-        .await;
-    send(reply, &headers).await
+        .open_upload(
+            &entry,
+            &jar.browser(),
+            query_param(&uri, REQUEST_QUERY).unwrap_or_default(),
+        )
+        .await
+    {
+        Ok(g) => g,
+        Err(reply) => return send(reply, &headers).await,
+    };
+    let limit = gate.limit();
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|n| usize::try_from(n).map_or(true, |n| n > limit)) {
+        return too_large();
+    }
+    let raw_exercise = headers
+        .get(EXERCISE_HEADER)
+        .map(HeaderValue::as_bytes)
+        .unwrap_or_default();
+    let exercise: Option<Signed> = std::str::from_utf8(raw_exercise)
+        .ok()
+        .filter(|v| v.len() <= MAX_BODY)
+        .and_then(|v| b64url_decode(v).ok())
+        .and_then(|b| serde_json::from_slice(&b).ok());
+    let (content, digest) = match stream_in(body, limit).await {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+    let (Some(exercise), Ok(text)) = (exercise, String::from_utf8(content)) else {
+        return bad();
+    };
+    let content = suiss_crypto::digest::sha256(
+        &[
+            media.as_bytes(),
+            b"\n",
+            &suiss_crypto::digest::sha256(raw_exercise),
+            &digest,
+        ]
+        .concat(),
+    );
+    let run = async {
+        let reply = s
+            .login
+            .hosted
+            .finish_upload(
+                &s.authority,
+                &s.pep,
+                gate,
+                &jar.browser(),
+                (&media, &text, &exercise),
+            )
+            .await;
+        send(reply, &headers).await
+    };
+    idempotency::once(&s.uploads, (&method, &uri, &headers), content, run).await
 }
 
 /// `GET /v1/support/artifacts/{artifact}`: the reader's signed `idp.account.artifact_read`

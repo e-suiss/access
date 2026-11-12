@@ -204,40 +204,57 @@ fn replay(s: Stored) -> Response {
     response
 }
 
-/// The middleware over the login surface's `POST` routes.
-pub(super) async fn layer(
-    State(cache): State<std::sync::Arc<Cache>>,
-    req: Request,
-    next: Next,
+/// The request's `Idempotency-Key`, or the `400` that refuses it.
+#[expect(
+    clippy::result_large_err,
+    reason = "the refusal is the response itself"
+)]
+pub(super) fn key(headers: &HeaderMap) -> Result<&[u8], Response> {
+    let Some(value) = headers.get(&KEY) else {
+        return Err(key_problem("idempotency-key-required"));
+    };
+    valid_key(value).ok_or_else(|| key_problem("idempotency-key-invalid"))
+}
+
+/// Runs `run` once per `Idempotency-Key` of a request whose body the caller streamed in under
+/// its own limit and whose content digest it computed (OP-159 m.3 (mm)): the body is never
+/// buffered here, and the same key with other content is `422`.
+pub(super) async fn once(
+    cache: &Cache,
+    (method, uri, headers): (&axum::http::Method, &axum::http::Uri, &HeaderMap),
+    content: [u8; 32],
+    run: impl Future<Output = Response>,
 ) -> Response {
-    let (parts, body) = req.into_parts();
-    let Some(value) = parts.headers.get(&KEY) else {
-        return key_problem("idempotency-key-required");
+    let key = match key(headers) {
+        Ok(k) => k,
+        Err(r) => return r,
     };
-    let Some(key) = valid_key(value) else {
-        return key_problem("idempotency-key-invalid");
+    let path = uri.path().as_bytes();
+    let Some(owner) = browser(headers) else {
+        return run.await;
     };
-    let Ok(bytes) = to_bytes(body, MAX_BODY).await else {
-        return Problem::new(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "body-too-large",
-            "Payload Too Large",
-        )
-        .into_response();
-    };
-    let host = parts
-        .headers
+    let host = headers
         .get(header::HOST)
         .map(HeaderValue::as_bytes)
         .unwrap_or_default();
-    let path = parts.uri.path().as_bytes();
-    let Some(owner) = browser(&parts.headers) else {
-        return next
-            .run(Request::from_parts(parts, Body::from(bytes)))
-            .await;
-    };
+    let query = uri.query().unwrap_or_default().as_bytes();
     let scope = digest(&[b"access/login-idempotency/v1", host, path, &owner, key]);
-    let request = digest(&[parts.method.as_str().as_bytes(), path, &bytes]);
+    let request = digest(&[
+        b"access/login-idempotency/streamed/v1",
+        method.as_str().as_bytes(),
+        path,
+        query,
+        &content,
+    ]);
+    run_once(cache, scope, request, run).await
+}
+
+async fn run_once(
+    cache: &Cache,
+    scope: [u8; 32],
+    request: [u8; 32],
+    run: impl Future<Output = Response>,
+) -> Response {
     match cache.begin(scope, request) {
         Begin::Run => {}
         Begin::Replay(s) => return replay(s),
@@ -259,13 +276,11 @@ pub(super) async fn layer(
         }
     }
     let mut guard = Guard {
-        cache: &cache,
+        cache,
         scope,
         armed: true,
     };
-    let response = next
-        .run(Request::from_parts(parts, Body::from(bytes)))
-        .await;
+    let response = run.await;
     let status = response.status();
     let keep = !(status == StatusCode::BAD_REQUEST || status.is_server_error());
     let (rparts, rbody) = response.into_parts();
@@ -289,6 +304,42 @@ pub(super) async fn layer(
     guard.armed = false;
     cache.finish(scope, keep.then(|| stored.clone()));
     replay(stored)
+}
+
+/// The middleware over the login surface's `POST` routes.
+pub(super) async fn layer(
+    State(cache): State<std::sync::Arc<Cache>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let (parts, body) = req.into_parts();
+    let key = match key(&parts.headers) {
+        Ok(k) => k,
+        Err(r) => return r,
+    };
+    let Ok(bytes) = to_bytes(body, MAX_BODY).await else {
+        return Problem::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "body-too-large",
+            "Payload Too Large",
+        )
+        .into_response();
+    };
+    let host = parts
+        .headers
+        .get(header::HOST)
+        .map(HeaderValue::as_bytes)
+        .unwrap_or_default();
+    let path = parts.uri.path().as_bytes();
+    let Some(owner) = browser(&parts.headers) else {
+        return next
+            .run(Request::from_parts(parts, Body::from(bytes)))
+            .await;
+    };
+    let scope = digest(&[b"access/login-idempotency/v1", host, path, &owner, key]);
+    let request = digest(&[parts.method.as_str().as_bytes(), path, &bytes]);
+    let run = next.run(Request::from_parts(parts, Body::from(bytes)));
+    run_once(&cache, scope, request, run).await
 }
 
 #[cfg(test)]

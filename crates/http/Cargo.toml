@@ -49,6 +49,8 @@ tower = { workspace = true, features = ["limit", "util"] }
 tower-http = { workspace = true, features = ["catch-panic", "limit", "timeout", "request-id", "trace"] }
 # OP-158 m.3 (g): a Record Export Package streams as it is read
 futures-util = { workspace = true }
+# OP-159 m.3 (mm)
+http-body-util = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]

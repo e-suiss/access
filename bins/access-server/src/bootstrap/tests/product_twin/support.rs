@@ -940,11 +940,11 @@ mod front {
         correlation: "support",
     };
 
-    const HOST: &str = "access.test";
+    pub(super) const HOST: &str = "access.test";
 
     /// The realm's Frontend API with the support routes, as `main` mounts them, and the realm.
     pub(super) struct Front {
-        app: axum::Router,
+        pub(super) app: axum::Router,
         pub(super) tenant: TenantId,
         pub(super) realm: RealmId,
         pub(super) ids: Arc<access_crypto::opaque_id::IdKey>,
@@ -1011,6 +1011,14 @@ mod front {
             realm: route.realm,
             ids: crate::ids::CellIds::new(w.keys.clone()).key().unwrap(),
         }
+    }
+
+    /// One artifact upload as the route takes it (OP-159 m.3 (mm)).
+    pub(super) struct Upload {
+        pub(super) path: String,
+        pub(super) content_type: String,
+        pub(super) exercise: String,
+        pub(super) body: Vec<u8>,
     }
 
     impl Front {
@@ -1165,6 +1173,34 @@ mod front {
             let bytes = to_bytes(r.into_body(), 1 << 22).await.unwrap();
             let v = serde_json::from_slice(&bytes).unwrap_or(Json::Null);
             (status, v)
+        }
+
+        /// `who` posts the artifact `u` as the route takes it: the body is the artifact, the
+        /// Exercise rides in its header (OP-159 m.3 (mm)).
+        pub(super) async fn upload(&self, who: &Person, u: Upload) -> (u16, Json) {
+            let req = HttpRequestOf::builder()
+                .method(Method::POST)
+                .uri(format!("/realms/{SLUG}{}", u.path))
+                .header(header::HOST, HOST)
+                .header(
+                    header::COOKIE,
+                    format!("__Host-access-session={}", who.cookie),
+                )
+                .header(header::ORIGIN, format!("https://{HOST}"))
+                .header("sec-fetch-site", "same-origin")
+                .header(
+                    "idempotency-key",
+                    b64url_encode(&access_crypto::random::bytes::<16>().unwrap()),
+                )
+                .header(header::CONTENT_TYPE, u.content_type)
+                .header(access_http::login::SUPPORT_EXERCISE_HEADER, u.exercise)
+                .body(Body::from(u.body))
+                .unwrap();
+            let app = access_http::harden(self.app.clone(), access_http::Limits::default());
+            let r = app.oneshot(req).await.unwrap();
+            let status = r.status().as_u16();
+            let bytes = to_bytes(r.into_body(), 1 << 22).await.unwrap();
+            (status, serde_json::from_slice(&bytes).unwrap_or(Json::Null))
         }
 
         pub(super) async fn audited(&self, d: &Desk) -> Vec<String> {
@@ -1729,24 +1765,27 @@ async fn a_support_artifact_is_redacted_on_upload_and_read_only_under_its_own_gr
     };
     let upload = |content_type: &str, content: &str| {
         let intent = upload_intent(d.case("4411"));
-        json!({
-            "request": asked["id"],
-            "content_type": content_type,
-            "content": content,
-            "exercise": signed(&d, &person.actor, (&intent, None),
-                ExerciseBasis::Anchor(person.actor.anchor), Capacity::Own),
-        })
+        let exercise = signed(
+            &d,
+            &person.actor,
+            (&intent, None),
+            ExerciseBasis::Anchor(person.actor.anchor),
+            Capacity::Own,
+        );
+        front::Upload {
+            path: format!(
+                "/v1/support/artifacts?request={}",
+                asked["id"].as_str().unwrap()
+            ),
+            content_type: content_type.to_owned(),
+            exercise: b64url_encode(exercise.to_string().as_bytes()),
+            body: content.as_bytes().to_vec(),
+        }
     };
 
     // OP-157 m.3 (g)
     let (status, got) = f
-        .send(
-            Method::POST,
-            "/v1/support/artifacts",
-            &person,
-            Some(upload("application/har+json", &har)),
-            &[],
-        )
+        .upload(&person, upload("application/har+json", &har))
         .await;
     assert_eq!(
         (status, got["code"].as_str()),
@@ -1762,38 +1801,16 @@ async fn a_support_artifact_is_redacted_on_upload_and_read_only_under_its_own_gr
     )
     .await;
     // TN-74, OP-157 m.3 (g)
-    let (status, got) = f
-        .send(
-            Method::POST,
-            "/v1/support/artifacts",
-            &person,
-            Some(upload("image/png", "x")),
-            &[],
-        )
-        .await;
+    let (status, got) = f.upload(&person, upload("image/png", "x")).await;
     assert_eq!(
         (status, got["code"].as_str()),
         (415, Some("artifact-format-refused")),
         "{got}"
     );
-    let (status, _) = f
-        .send(
-            Method::POST,
-            "/v1/support/artifacts",
-            &person,
-            Some(upload("video/mp4", "x")),
-            &[("content-type", String::from("video/mp4"))],
-        )
-        .await;
+    let (status, _) = f.upload(&person, upload("video/mp4", "x")).await;
     assert_eq!(status, 415);
     let (status, kept) = f
-        .send(
-            Method::POST,
-            "/v1/support/artifacts",
-            &person,
-            Some(upload("application/har+json", &har)),
-            &[],
-        )
+        .upload(&person, upload("application/har+json", &har))
         .await;
     assert_eq!(status, 201, "{kept}");
     assert!(kept["redactions"].as_u64().unwrap() >= 3, "{kept}");
@@ -2071,4 +2088,125 @@ async fn support_access_that_reaches_its_end_ends_and_the_person_is_told() {
     )
     .await;
     assert_eq!(notices.len(), 2);
+}
+
+// OP-159 m.3 (mm), OP-157 m.16, GHSA-84jc-3hj2-hwc7, §13.7.4
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[allow(clippy::too_many_lines, reason = "one upload limit, both sides")]
+async fn a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_no_body() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use access_identity_admin::domain::Change;
+    use access_identity_admin::domain::support::ArtifactPolicy;
+    use axum::http::Method;
+    let d = Desk::open("support-artifact-large").await;
+    let f = front::front(&d).await;
+    f.register(&d).await;
+    let person = f.person(&d, "zeynep@access.test", None).await;
+    let operator = f.person(&d, "can@access.test", None).await;
+    f.org(&d, &operator, "Acme Support").await;
+    let (_, asked) = ask(&f, &operator, &person, ("5512", "read", 30)).await;
+    f.change(
+        &d,
+        Change::SupportArtifactPolicy(Some(ArtifactPolicy {
+            max_bytes: 10 << 20,
+            retention_days: 30,
+        })),
+    )
+    .await;
+    let upload = |body: Vec<u8>| {
+        let case = d.case("5512");
+        let mut intent = envelope(
+            IdpAction::AccountArtifactUpload.action_ref(),
+            (
+                templates::RESOURCES,
+                &[&hex(&person.actor.party), "artifacts"],
+            ),
+            BTreeMap::from([(
+                String::from("case"),
+                ParamValue::Eq(EqValue::Text(access_identity_account::app::support::hex(
+                    &case.0,
+                ))),
+            )]),
+        );
+        intent.purpose = Some(PurposeRef::Case(case));
+        let exercise = signed(
+            &d,
+            &person.actor,
+            (&intent, None),
+            ExerciseBasis::Anchor(person.actor.anchor),
+            Capacity::Own,
+        );
+        front::Upload {
+            path: format!(
+                "/v1/support/artifacts?request={}",
+                asked["id"].as_str().unwrap()
+            ),
+            content_type: String::from("text/plain"),
+            exercise: b64url_encode(exercise.to_string().as_bytes()),
+            body,
+        }
+    };
+    let line = b"2026-11-12T10:00:00Z GET /me 200 12ms\n";
+    let five_mib: Vec<u8> = line.iter().copied().cycle().take(5 << 20).collect();
+    let (status, kept) = f.upload(&person, upload(five_mib)).await;
+    assert_eq!(status, 201, "{kept}");
+    assert_eq!(kept["size"].as_u64(), Some(5 << 20), "{kept}");
+
+    // OP-159 m.3 (mm)
+    let over: Vec<u8> = line.iter().copied().cycle().take((10 << 20) + 1).collect();
+    let (status, got) = f.upload(&person, upload(over)).await;
+    assert_eq!(
+        (status, got["code"].as_str()),
+        (413, Some("artifact-too-large")),
+        "{got}"
+    );
+
+    // GHSA-84jc-3hj2-hwc7
+    let polled = Arc::new(AtomicBool::new(false));
+    let seen = polled.clone();
+    let body = {
+        use http_body_util::BodyExt as _;
+        http_body_util::Full::new(axum::body::Bytes::from(vec![b'x'; 1 << 20])).map_frame(
+            move |frame| {
+                seen.store(true, Ordering::SeqCst);
+                frame
+            },
+        )
+    };
+    let req = HttpRequestOf::builder()
+        .method(Method::POST)
+        .uri(format!(
+            "/realms/{}/v1/support/artifacts?request={}",
+            SLUG,
+            asked["id"].as_str().unwrap()
+        ))
+        .header(header::HOST, front::HOST)
+        .header(header::ORIGIN, format!("https://{}", front::HOST))
+        .header("sec-fetch-site", "same-origin")
+        .header("idempotency-key", "anonymous-upload-1")
+        .header(header::CONTENT_TYPE, "text/plain")
+        .body(Body::new(body))
+        .unwrap();
+    let app = access_http::harden(f.app.clone(), access_http::Limits::default());
+    let r = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(r.status().as_u16(), 401);
+    assert!(
+        !polled.load(Ordering::SeqCst),
+        "the body was read before authentication"
+    );
+
+    // §13.7.4
+    let big = vec![b' '; (256 << 10) + 1];
+    let req = HttpRequestOf::builder()
+        .method(Method::POST)
+        .uri(format!("/realms/{SLUG}/v1/support/requests"))
+        .header(header::HOST, front::HOST)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CONTENT_LENGTH, big.len())
+        .body(Body::from(big))
+        .unwrap();
+    let r = app.oneshot(req).await.unwrap();
+    assert_eq!(r.status().as_u16(), 413);
 }

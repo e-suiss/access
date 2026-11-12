@@ -165,18 +165,24 @@ pub struct Block {
     pub blocked: bool,
 }
 
-/// `POST /v1/support/artifacts`.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Upload {
-    /// The support request the artifact is for: its case.
-    pub request: String,
-    /// The artifact's media type.
-    pub content_type: String,
-    /// The artifact's text.
-    pub content: String,
-    /// The person's `idp.account.artifact_upload` Exercise.
-    pub exercise: Signed,
+/// An artifact upload the session, the realm's policy and the person's own support request
+/// allow, before its body is read (OP-159 m.3 (mm)).
+pub struct UploadGate {
+    kit: std::sync::Arc<RealmKit>,
+    row: SupportRequestRow,
+    policy: access_store::support_access::ArtifactPolicy,
+    now: u64,
+}
+
+impl UploadGate {
+    /// The largest body the realm takes, bytes: its policy's `max_bytes`, at most
+    /// [`MAX_ARTIFACT_BYTES`].
+    #[must_use]
+    pub fn limit(&self) -> usize {
+        usize::try_from(self.policy.max_bytes)
+            .unwrap_or(0)
+            .min(MAX_ARTIFACT_BYTES)
+    }
 }
 
 struct Parsed {
@@ -1072,33 +1078,23 @@ where
         }
     }
 
-    /// `POST /v1/support/artifacts` (§8.16 #12, TN-74, OP-157 m.3 (g)): the person's HAR, JSON or
-    /// text log for one of their support requests, under their own
-    /// `idp.account.artifact_upload` Exercise. Images and videos are refused; tokens, cookies
-    /// and `Authorization` values are redacted before anything is kept, and only the redacted
-    /// text is sealed under the artifact's own key.
-    pub async fn upload_artifact<A: SupportAuthority>(
+    /// The first half of `POST /v1/support/artifacts` (§8.16 #12, TN-74, OP-157 m.3 (g), OP-159
+    /// m.3 (mm)), before a byte of the body is read: the session, the realm's artifact policy
+    /// and the person's own support `request`. The answer names the largest body the realm
+    /// takes; a request without a session is refused here (GHSA-84jc-3hj2-hwc7).
+    ///
+    /// # Errors
+    /// The [`Reply`] that refuses the upload.
+    pub async fn open_upload(
         &self,
-        authority: &A,
-        pep: &str,
         entry: &RealmEntry,
         b: &Browser<'_>,
-        body: &Upload,
-    ) -> Reply {
-        let kit = match self.kit(entry).await {
-            Ok(k) => k,
-            Err(r) => return r,
-        };
-        let subject = match self.fresh(&kit, b, None).await {
-            Ok((s, _)) => s,
-            Err(r) => return r,
-        };
-        // TN-74, OP-157 m.3 (g)
-        let Ok(format) = artifacts::format_of(&body.content_type) else {
-            return Reply::problem(FORMAT);
-        };
-        let Ok(id) = kit.ids.decode(REQUEST_PREFIX, &body.request) else {
-            return Reply::problem(UNKNOWN);
+        request: &str,
+    ) -> Result<UploadGate, Reply> {
+        let kit = self.kit(entry).await?;
+        let (subject, _) = self.fresh(&kit, b, None).await?;
+        let Ok(id) = kit.ids.decode(REQUEST_PREFIX, request) else {
+            return Err(Reply::problem(UNKNOWN));
         };
         let read = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
@@ -1109,25 +1105,56 @@ where
             Ok::<_, access_store::StoreError>((now, policy, row))
         };
         let Ok((now, policy, row)) = read.await else {
-            return unavailable();
+            return Err(unavailable());
         };
         let Some(policy) = policy else {
-            return Reply::problem(CLOSED);
+            return Err(Reply::problem(CLOSED));
         };
         let Some(row) = row.filter(|r| r.subject == subject) else {
-            return Reply::problem(UNKNOWN);
+            return Err(Reply::problem(UNKNOWN));
         };
-        if body.content.len() > MAX_ARTIFACT_BYTES
-            || body.content.len() > usize::try_from(policy.max_bytes).unwrap_or(0)
+        Ok(UploadGate {
+            kit,
+            row,
+            policy,
+            now,
+        })
+    }
+
+    /// The second half of `POST /v1/support/artifacts`: the person's HAR, JSON or text log
+    /// `content`, streamed in under `gate`'s limit, under their own `idp.account.artifact_upload`
+    /// `exercise`. Images and videos are refused; tokens, cookies and `Authorization` values are
+    /// redacted before anything is kept, and only the redacted text is sealed under the
+    /// artifact's own key.
+    pub async fn finish_upload<A: SupportAuthority>(
+        &self,
+        authority: &A,
+        pep: &str,
+        gate: UploadGate,
+        b: &Browser<'_>,
+        (content_type, content, exercise): (&str, &str, &Signed),
+    ) -> Reply {
+        let UploadGate {
+            kit,
+            row,
+            policy,
+            now,
+        } = gate;
+        // TN-74, OP-157 m.3 (g)
+        let Ok(format) = artifacts::format_of(content_type) else {
+            return Reply::problem(FORMAT);
+        };
+        if content.len() > MAX_ARTIFACT_BYTES
+            || content.len() > usize::try_from(policy.max_bytes).unwrap_or(0)
         {
             return Reply::problem(TOO_LARGE);
         }
-        let redacted = match artifacts::redact(format, &body.content) {
+        let redacted = match artifacts::redact(format, content) {
             Ok(r) => r,
             Err(Refused::Format) => return Reply::problem(FORMAT),
             Err(Refused::Malformed) => return Reply::problem(INVALID),
         };
-        let Some(parsed) = parse(&body.exercise) else {
+        let Some(parsed) = parse(exercise) else {
             return Reply::problem(INVALID);
         };
         let person = Id(row.subject_party);

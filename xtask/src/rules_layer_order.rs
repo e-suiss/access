@@ -18,7 +18,7 @@ const HTTP_MANIFEST: &str = "crates/http/Cargo.toml";
 const ORDER: [&str; 6] = [
     "layers::lane",
     "TimeoutLayer::with_status_code",
-    "RequestBodyLimitLayer::new",
+    "layers::body_limit",
     "layers::client_rate",
     "edge::confine",
     "CatchPanicLayer::custom",
@@ -161,11 +161,11 @@ mod tests {
 
     #[test]
     fn the_stack_must_list_its_layers_in_order() {
-        let good = "pub fn harden(r) {\n layers::lane\n TimeoutLayer::with_status_code\n RequestBodyLimitLayer::new\n layers::client_rate\n edge::confine\n CatchPanicLayer::custom\n}\n";
+        let good = "pub fn harden(r) {\n layers::lane\n TimeoutLayer::with_status_code\n layers::body_limit\n layers::client_rate\n edge::confine\n CatchPanicLayer::custom\n}\n";
         assert_eq!(stack_order(good), Vec::<String>::new());
         let swapped = good.replace(
-            "TimeoutLayer::with_status_code\n RequestBodyLimitLayer::new",
-            "RequestBodyLimitLayer::new\n TimeoutLayer::with_status_code",
+            "TimeoutLayer::with_status_code\n layers::body_limit",
+            "layers::body_limit\n TimeoutLayer::with_status_code",
         );
         assert_eq!(stack_order(&swapped).len(), 1);
         let missing = good.replace(" layers::client_rate\n", "");
