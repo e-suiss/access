@@ -64,7 +64,7 @@ async fn post(router: axum::Router, uri: &str, body: &str) -> (u16, serde_json::
     (status, serde_json::from_slice(&body).unwrap_or_default())
 }
 
-fn verify(args: &[&str]) -> (bool, String) {
+pub(in crate::bootstrap::tests) fn verify(args: &[&str]) -> (bool, String) {
     let out = Command::new(bin("esuiss-access-verify", "access-verify"))
         .args(args)
         .output()
@@ -75,28 +75,29 @@ fn verify(args: &[&str]) -> (bool, String) {
     )
 }
 
-fn hex(b: &[u8]) -> String {
+pub(in crate::bootstrap::tests) fn hex(b: &[u8]) -> String {
     b.iter().fold(String::new(), |mut h, x| {
         let _ = std::fmt::Write::write_fmt(&mut h, format_args!("{x:02x}"));
         h
     })
 }
 
-// CR-42 m.4, L0-SIG-75a, L2-RCP-2, L2-RCP-3, SAI-44, OP-159 m.3 (e), m.9 (h), m.15 (b), m.16 (a)
-#[tokio::test(flavor = "multi_thread")]
-#[allow(clippy::too_many_lines, reason = "one walkthrough of a hybrid receipt")]
-async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components() {
+/// ML-DSA-65 admitted in domain `d` through the algorithm route behind its CT3 time-lock, with
+/// the authority signer on `socket` (OP-159 m.16 (a)): the Domain Metadata payload and its
+/// decoded form, `hybrid` `both`.
+pub(in crate::bootstrap::tests) async fn admit_ml_dsa(
+    socket: std::path::PathBuf,
+    (app, sequencer): (&access_store::Pool, &access_store::Pool),
+    domains: &super::super::TestDomains,
+    d: access_kernel::digest::Digest,
+) -> (Vec<u8>, DomainMetadata) {
     use suiss_crypto::cose::Algorithm;
-    let label = "j2c-hybrid";
-    let p = pdp_timed(label, Some(0)).await;
-    let d = p.domain;
-    let socket = signer_socket(label);
     let algorithms = |now: fn() -> u64| {
         access_http::algorithms::router(
             crate::algorithms::PgAlgorithms {
                 socket: socket.clone(),
-                app: p.w.db.app.clone(),
-                sequencer: p.w.db.sequencer.clone(),
+                app: app.clone(),
+                sequencer: sequencer.clone(),
                 targets: Vec::new(),
                 notify: None,
             },
@@ -112,7 +113,7 @@ async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_component
     assert_eq!((s, b["status"].as_str()), (202, Some("time-lock")), "{b}");
     let (s, b) = post(algorithms(after_lock), &admit, r#"{"alg":-49}"#).await;
     assert_eq!((s, b["status"].as_str()), (200, Some("admitted")), "{b}");
-    let signed = p.w.domains.metadata(d).await.unwrap();
+    let signed = domains.metadata(d).await.unwrap();
     let payload = suiss_crypto::cose::parse_sign1(&signed)
         .unwrap()
         .payload
@@ -120,6 +121,23 @@ async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_component
     let metadata = DomainMetadata::from_bytes(&payload).unwrap();
     assert!(metadata.algorithms.contains(&Algorithm::MlDsa65));
     assert_eq!(metadata.hybrid, Some(Hybrid::Both));
+    (payload, metadata)
+}
+
+// CR-42 m.4, L0-SIG-75a, L2-RCP-2, L2-RCP-3, SAI-44, OP-159 m.3 (e), m.9 (h), m.15 (b), m.16 (a)
+#[tokio::test(flavor = "multi_thread")]
+#[allow(clippy::too_many_lines, reason = "one walkthrough of a hybrid receipt")]
+async fn a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components() {
+    let label = "j2c-hybrid";
+    let p = pdp_timed(label, Some(0)).await;
+    let d = p.domain;
+    let (payload, metadata) = admit_ml_dsa(
+        signer_socket(label),
+        (&p.w.db.app, &p.w.db.sequencer),
+        &p.w.domains,
+        d,
+    )
+    .await;
 
     // L2-RCP-2, OP-159 m.15 (b)
     let router = routes(&p, 512);

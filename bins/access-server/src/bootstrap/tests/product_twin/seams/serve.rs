@@ -422,14 +422,9 @@ async fn meta_through_twin(
     serde_json::from_slice(&r.body).unwrap()
 }
 
-// §2.7, §8.17.5.8, §7.9.4, §9.10, §9.12, X17, OP-156 m.3 (u), Ek B 5211, 5268
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[allow(
-    clippy::too_many_lines,
-    reason = "one POS terminal from its profile to the end of its slice"
-)]
-async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
-    let p = Product::open("q17-pos", "serve").await;
+/// Bob's offline projection for the POS terminal with a void count and amount slice, under the
+/// terminal's Verifier Profile, admitted first: Bob, the profile and the decision body.
+async fn pos_projection(p: &Product) -> (Actor, VerifierProfile, Json) {
     p.s.accept_claims(
         PREDICATE_INPUT,
         &["verifier_profile", "offline_exercise_report"],
@@ -437,8 +432,8 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
     .await;
     let owner = p.s.actor().await;
     let bob = p.s.actor().await;
-    let anchor = store(&p, &owner).await;
-    let mut voids = cash(&p, &["void"], 5_000);
+    let anchor = store(p, &owner).await;
+    let mut voids = cash(p, &["void"], 5_000);
     voids.constraints.budget = BTreeSet::from([
         BudgetTerm {
             dimension: BudgetDimension::Count,
@@ -452,7 +447,7 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
         },
     ]);
     let (grant, since) = from_store(
-        &p,
+        p,
         &owner,
         anchor,
         SubjectSelector::Party(bob.party),
@@ -492,7 +487,19 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
             amounts: BTreeMap::from([(String::from(UNIT), 10_000)]),
         }),
     };
-    let answer = meta_through_twin(&p, &bob, basis, &projection).await;
+    let answer = meta_through_twin(p, &bob, basis, &projection).await;
+    (bob, profile, answer)
+}
+
+// §2.7, §8.17.5.8, §7.9.4, §9.10, §9.12, X17, OP-156 m.3 (u), Ek B 5211, 5268
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one POS terminal from its profile to the end of its slice"
+)]
+async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
+    let p = Product::open("q17-pos", "serve").await;
+    let (bob, profile, answer) = pos_projection(&p).await;
     assert_eq!(answer["decision"], true, "{answer}");
     let pap_sign1 =
         access_kernel::json::b64url_decode(answer["context"]["pap"]["sign1"].as_str().unwrap())
@@ -560,14 +567,14 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
             .unwrap(),
         )
         .unwrap();
-        let none = BTreeSet::new();
+        let unmet = BTreeSet::new();
         let verdict = pos.verify(
             &Use::new(
                 (&pap_sign1, &excerpt),
                 &presentation,
                 &intent,
                 &nonce,
-                &none,
+                &unmet,
             )
             .with_schema(&void_schema),
         );
@@ -594,6 +601,262 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
     }
     assert_eq!(voided, ["o-1", "o-2"]);
     p.s.only_public();
+}
+
+/// Bob's presentation of `pap` for `intent` to the POS terminal under `nonce` at `now`.
+fn present(bob: &Actor, pap: &[u8], intent: &IntentEnvelope, nonce: &[u8], now: u64) -> Vec<u8> {
+    sign_sign1(
+        &bob.key,
+        thumbprint(&bob.key.public_key()),
+        access_kernel::pap::PRESENTATION_CONTENT_TYPE,
+        &access_kernel::pap::Presentation {
+            pap: access_kernel::pap::pap_digest(pap),
+            intent: intent_digest(intent).unwrap(),
+            audience: String::from(POS),
+            nonce: nonce.to_vec(),
+            iat: now,
+        }
+        .to_bytes()
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+// L0-SIG-75a, L2-PAP-2, L2-PAP-3, §9.10, OP-159 m.15 (b), m.19 (g)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one hybrid PAP from its projection to the offline verifier and access-verify"
+)]
+async fn a_hybrid_pap_from_the_real_server_verifies_only_with_both_components() {
+    use crate::bootstrap::tests::durability::hybrid::{admit_ml_dsa, hex, verify};
+    use access_kernel::verify::hybrid::HybridError;
+    use access_verifier::offline::Denial;
+    let label = "c1-hybrid-pap";
+    let p = Product::open(label, "serve").await;
+    let socket = std::env::temp_dir()
+        .join(format!("abs-auth-{label}-{}", std::process::id()))
+        .join("a.sock");
+    let (payload, metadata) = admit_ml_dsa(
+        socket,
+        (&p.s.w.db.app, &p.s.w.db.sequencer),
+        &p.s.w.domains,
+        p.s.domain,
+    )
+    .await;
+
+    // L2-PAP-2, OP-159 m.15 (b)
+    let (bob, profile, answer) = pos_projection(&p).await;
+    assert_eq!(answer["decision"], true, "{answer}");
+    let member = |k: &str| {
+        access_kernel::json::b64url_decode(answer["context"]["pap"][k].as_str().unwrap()).unwrap()
+    };
+    let (carrier, excerpt, pq_excerpt) = (member("sign1"), member("excerpt"), member("pq_excerpt"));
+    let (classic, pq) = access_kernel::verify::hybrid::decode_carrier(&carrier).unwrap();
+    let pap = peek(&carrier).unwrap();
+    assert_eq!(peek(&classic).unwrap(), pap);
+    let local = LocalProfile::new(profile).unwrap();
+    assert_eq!(pap.validity.verifier_profile_ref, *local.digest());
+
+    // §9.10, EP-7
+    let named = format!("sha-256:{}", b64url_encode(&p.s.domain.0));
+    let path = access_product_twin::wire::DOMAIN_METADATA.replace("{domain}", &named);
+    let Answer::Response(m) = p.s.listener.raw("GET", &path, Vec::new()).await else {
+        panic!("no metadata");
+    };
+    assert_eq!(m.status, 200);
+    let now = server_time(&p.s.w.db.app).await.unwrap();
+    let view = witnessed(&m.body, now);
+    assert_eq!(view.metadata(), &metadata);
+    let mut pos = OfflineVerifier::new(
+        Identity {
+            audience: String::from(POS),
+            instance: None,
+            domain: p.s.domain,
+            profile: local,
+            catalog: access_kernel::algebra::Catalog::default(),
+            understood: BTreeSet::new(),
+        },
+        view,
+        EmulatedClock::new(now),
+        ClockGuard::new(DEFAULT_TOLERANCE_MS),
+    );
+    for s in &pap.validity.offline_slice {
+        pos.provision(
+            pap.projection_exercise,
+            s.budget_term,
+            s.amount,
+            EmulatedCounter::new(CounterId(access_crypto::random::bytes::<16>().unwrap())),
+        )
+        .unwrap();
+    }
+    let void_schema = p
+        .schema
+        .actions
+        .iter()
+        .find(|a| a.name == "void")
+        .unwrap()
+        .clone();
+
+    // L0-SIG-75a, OP-159 m.19 (g)
+    let intent = void_of(&p, "o-1", 4_000);
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let presentation = present(&bob, &classic, &intent, &nonce, now);
+    let unmet = BTreeSet::new();
+    let one = |sign1| {
+        Use::new((sign1, &excerpt), &presentation, &intent, &nonce, &unmet)
+            .with_schema(&void_schema)
+    };
+    let aws = suiss_crypto::aws::AwsLcBackend;
+    let missing = Denial::Hybrid(HybridError::Missing);
+    for lone in [
+        one(&classic),
+        one(&carrier),
+        one(&pq).with_pq_excerpt(&pq_excerpt),
+    ] {
+        match pos.verify_with(&aws, &lone) {
+            Verdict::Deny(d) => assert_eq!(d, missing),
+            v @ Verdict::Allow(_) => panic!("{v:?}"),
+        }
+    }
+    match pos.verify(&one(&carrier).with_pq_excerpt(&pq_excerpt)) {
+        Verdict::Deny(Denial::Hybrid(_)) => {}
+        v => panic!("{v:?}"),
+    }
+    assert_eq!(pos.unreported(), Vec::<Digest>::new());
+    let Verdict::Allow(allowed) =
+        pos.verify_with(&aws, &one(&carrier).with_pq_excerpt(&pq_excerpt))
+    else {
+        panic!("both components");
+    };
+    assert_eq!(allowed.pap, pap);
+    assert_eq!(allowed.seq, 0);
+
+    // L2-PAP-3, SAI-44
+    let root = std::env::temp_dir().join(format!("c1-hybrid-pap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let file = |name: &str, bytes: &[u8]| {
+        let path = root.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        path.to_str().unwrap().to_owned()
+    };
+    let intent = void_of(&p, "o-2", 4_000);
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let remaining = suiss_crypto::dcbor::Value::Array(
+        pap.validity
+            .offline_slice
+            .iter()
+            .map(|s| {
+                suiss_crypto::dcbor::Value::Array(vec![
+                    s.budget_term.to_value(),
+                    suiss_crypto::dcbor::Value::Unsigned(s.amount),
+                ])
+            })
+            .collect(),
+    );
+    let encode = |v: &suiss_crypto::dcbor::Value| {
+        suiss_crypto::dcbor::encode(v, suiss_crypto::dcbor::Limits::CEILING).unwrap()
+    };
+    let files = [
+        file("metadata.cbor", &payload),
+        file("carrier.cbor", &carrier),
+        file("classic.cose", &classic),
+        file("pq.cose", &pq),
+        file("excerpt.cose", &excerpt),
+        file("pq-excerpt.cose", &pq_excerpt),
+        file(
+            "presentation.cose",
+            &present(&bob, &classic, &intent, &nonce, now),
+        ),
+        file("intent.cbor", &intent.to_bytes().unwrap()),
+        file(
+            "catalog.cbor",
+            &access_kernel::algebra::Catalog::default()
+                .to_bytes()
+                .unwrap(),
+        ),
+        file(
+            "satisfied.cbor",
+            &encode(&suiss_crypto::dcbor::Value::Array(Vec::new())),
+        ),
+        file("remaining.cbor", &encode(&remaining)),
+    ];
+    let [
+        metadata_f,
+        carrier_f,
+        classic_f,
+        pq_f,
+        excerpt_f,
+        pq_excerpt_f,
+        presentation_f,
+        intent_f,
+        catalog_f,
+        satisfied_f,
+        remaining_f,
+    ] = &files;
+    let (d_hex, n_hex, now_s, cap) = (
+        hex(&p.s.domain.0),
+        hex(&nonce),
+        now.to_string(),
+        pap.validity.horizon.saturating_sub(pap.iat).to_string(),
+    );
+    let run = |sign1: &str, pq_excerpt: Option<&str>| {
+        let mut a = vec![
+            "pap",
+            "--metadata",
+            metadata_f,
+            "--pap",
+            sign1,
+            "--excerpt",
+            excerpt_f,
+            "--presentation",
+            presentation_f,
+            "--domain",
+            &d_hex,
+            "--intent",
+            intent_f,
+            "--audience",
+            POS,
+            "--nonce",
+            &n_hex,
+            "--now",
+            &now_s,
+            "--catalog",
+            catalog_f,
+            "--satisfied",
+            satisfied_f,
+            "--remaining",
+            remaining_f,
+            "--fresh",
+            "true",
+            "--online",
+            "false",
+            "--skew-ms",
+            "60000",
+            "--horizon-cap-ms",
+            &cap,
+        ];
+        if let Some(px) = pq_excerpt {
+            a.extend(["--pq-excerpt", px]);
+        }
+        verify(&a)
+    };
+    let (ok, text) = run(carrier_f, Some(pq_excerpt_f));
+    assert!(
+        ok && text.contains(&hex(&pap.to_bytes().unwrap())),
+        "{text}"
+    );
+    for (sign1, px) in [
+        (carrier_f, None),
+        (classic_f, None),
+        (classic_f, Some(pq_excerpt_f)),
+        (pq_f, Some(pq_excerpt_f)),
+    ] {
+        let (ok, text) = run(sign1, px.map(String::as_str));
+        assert!(!ok && text.contains("reject: hybrid-missing"), "{text}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The till's offline view from its PAP and its Verifier Profile (OP-156 m.3 (v), §8.17.5.8):

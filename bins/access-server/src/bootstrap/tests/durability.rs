@@ -5,7 +5,7 @@ mod checkpoint;
 mod export;
 mod failover;
 mod handover;
-mod hybrid;
+pub(super) mod hybrid;
 mod recovery;
 mod replay;
 mod replica;
