@@ -35,6 +35,9 @@ pub(crate) enum Class {
     /// `access-witness`, `access-replica`, `access-load`: open binaries on public crates only
     /// (OP-158 m.3 (dd)).
     PublicBin,
+    /// `access-policy-solver`: the restriction analysis solver on `restriction-analysis` and
+    /// `suiss-sandbox` only (OP-159 m.3 (aa), (rr)).
+    SolverBin,
     Bindings,
     Sdk,
     Service,
@@ -63,6 +66,8 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("crates", n) if n.starts_with("identity-") && !n.contains('/') => Class::Identity,
         // OP-158 m.3 (dd)
         ("bins", "access-witness" | "access-replica" | "access-load") => Class::PublicBin,
+        // OP-159 m.3 (rr)
+        ("bins", "access-policy-solver") => Class::SolverBin,
         ("bins", n) if !n.is_empty() && !n.contains('/') => Class::Bin,
         ("sdks", n) if n == "bindings" || n.starts_with("bindings/") => Class::Bindings,
         ("sdks", n) if !n.is_empty() => Class::Sdk,
@@ -80,8 +85,8 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
 fn allowed_targets(from: Class) -> Option<&'static [Class]> {
     use Class::{
         Authority, Bin, Bindings, Crypto, Edge, Http, Identity, InternalApi, Kernel, Parse, Proto,
-        PublicBin, RestrictionAnalysis, Sandbox, Sdk, Service, Store, Suiss, SuissLedger,
-        Telemetry, Testkit, Tooling,
+        PublicBin, RestrictionAnalysis, Sandbox, Sdk, Service, SolverBin, Store, Suiss,
+        SuissLedger, Telemetry, Testkit, Tooling,
     };
     let targets: &'static [Class] = match from {
         // OP-93
@@ -126,6 +131,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         Service => &[Kernel, Proto, Sdk, Bindings],
         // OP-158 m.3 (dd)
         PublicBin => &[Kernel, Sdk, Suiss, SuissLedger],
+        // OP-159 m.3 (aa), (rr)
+        SolverBin => &[RestrictionAnalysis, Sandbox],
         Sdk => &[Kernel, Proto, Bindings, Sdk],
         // OP-93, OP-62; OP-151 m.3
         Http => &[
@@ -262,6 +269,30 @@ mod tests {
             member("bins/access-server", &[("crates/store", None)]),
         ]);
         assert!(server.is_empty());
+    }
+
+    // OP-159 m.3 (rr)
+    #[test]
+    fn the_policy_solver_uses_restriction_analysis_and_the_sandbox_only() {
+        let ok = run(&[
+            member("crates/restriction-analysis", &[]),
+            member("crates/suiss-sandbox", &[]),
+            member(
+                "bins/access-policy-solver",
+                &[
+                    ("crates/restriction-analysis", None),
+                    ("crates/suiss-sandbox", None),
+                ],
+            ),
+        ]);
+        assert!(ok.is_empty(), "{ok:?}");
+        for dep in ["crates/store", "crates/kernel", "crates/http"] {
+            let bad = run(&[
+                member(dep, &[]),
+                member("bins/access-policy-solver", &[(dep, None)]),
+            ]);
+            assert_eq!(bad.len(), 1, "{dep}");
+        }
     }
 
     #[test]

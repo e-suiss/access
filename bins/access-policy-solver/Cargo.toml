@@ -1,0 +1,15 @@
+[package]
+name = "access-policy-solver"
+description = "Access policy solver (OP-157 m.8 (a), OP-159 m.3 (aa)): runs the pinned cvc5 in its own sandbox and answers the server's restriction analysis requests over a Unix socket."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# OP-159 m.3 (aa), (rr): restriction-analysis and suiss-sandbox only (`dependency-direction`)
+[dependencies]
+
+[lints]
+workspace = true

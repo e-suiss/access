@@ -150,6 +150,8 @@ missing_docs = "deny"
 unreachable_pub = "deny"
 unused_must_use = "deny"
 rust_2024_compatibility = { level = "deny", priority = -1 }
+# OP-159 m.3 (w)
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
