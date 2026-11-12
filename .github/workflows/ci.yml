@@ -273,6 +273,40 @@ jobs:
         working-directory: conformance/lean
         run: lake build --wfail drt
 
+  # OP-159 m.3 (w), (x), (rr), CR-47, CR-48 m.5, SA-T5, SA-T6, SA-59: the targeted Kani harnesses
+  # and the TLA+ models, one leg each
+  formal:
+    name: formal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [kani, tla]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        if: matrix.tool == 'kani'
+        with:
+          cache-key: kani
+      # F-2
+      - name: Install the pinned Kani and CBMC bundle
+        if: matrix.tool == 'kani'
+        run: scripts/kani-fetch.sh
+      - name: Kani harnesses CR-K1…CR-K9 (targeted set)
+        if: matrix.tool == 'kani'
+        run: just kani pr
+      # F-2, F20: a counterexample is a reopen input and fails the job
+      - name: TLC on every model; the unfenced commit model must give a counterexample
+        if: matrix.tool == 'tla'
+        run: |
+          PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          conformance/tla/check.sh "$(scripts/tla-fetch.sh "$RUNNER_TEMP/tla")"
+
   cross:
     name: cross
     runs-on: ubuntu-24.04

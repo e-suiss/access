@@ -143,6 +143,15 @@ jobs:
             cargo nextest run --locked --profile ci -p access-store -p access-server --run-ignored only \
               -E 'test(pg_ha) - test(op_57)' --no-tests=fail
           scripts/pg-ha.sh down
+      # OP-159 m.3 (w), CR-47, F-2: every Kani harness, and autoharness over the pure modules
+      - name: Install the pinned Kani and CBMC bundle
+        run: scripts/kani-fetch.sh
+      - name: Kani harnesses CR-K1…CR-K9 (all)
+        timeout-minutes: 30
+        run: just kani all
+      - name: Kani autoharness (one monomorphization per generic function)
+        timeout-minutes: 20
+        run: just kani-autoharness
 
   ios:
     name: ios-simulator

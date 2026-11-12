@@ -814,3 +814,37 @@ helm-check:
     diff -u -B "$chart/rendered/default.yaml" <(helm template access "$chart" --namespace access)
     diff -u -B "$chart/rendered/plane-split.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-plane-split.yaml")
     diff -u -B "$chart/rendered/small-provider.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-small-provider.yaml")
+
+# OP-159 m.3 (w), CR-47: the proptest mirrors of the Kani harnesses (the local gate)
+kani-mirrors:
+    cargo nextest run --locked -p esuiss-access-kernel --test proofs
+
+# OP-159 m.3 (w), CR-47, SA-T6, F-2: the Kani harnesses; `pr` is the targeted set of the `formal` job
+kani set="pr":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v cargo-kani >/dev/null || scripts/kani-fetch.sh
+    pr=(k1_acceptance_is_exact_and_overflow_is_refused k1_narrowing_is_monotone k1_ceilings_hold
+        k2_horizon_is_the_earliest_bound k2_delta_is_consumed_and_never_extends
+        k3_demand_is_the_checked_sum k3_release_never_exceeds_draw k4_recorded_at_is_monotone
+        k5_guard_is_bound_to_n_cited k5_below_r_star_is_refused k6_decoder_round_trips_up_to_8_bytes
+        k7_cose_ids_are_exact k7_hybrid_admits_one_signature)
+    nightly=(k3_report_totals_are_exact k6_decoder_round_trips_up_to_32_bytes
+        k7_alg_outside_the_set_is_refused k8_allowed_never_exceeds_budget
+        k9_lineage_of_sixteen_is_decided k9_lineage_of_seventeen_is_refused)
+    case {{ quote(set) }} in
+        pr) harnesses=("${pr[@]}") ;;
+        all) harnesses=("${pr[@]}" "${nightly[@]}") ;;
+        *) echo "kani: set is pr or all" >&2; exit 2 ;;
+    esac
+    args=()
+    for h in "${harnesses[@]}"; do args+=(--harness "$h"); done
+    cargo kani -p esuiss-access-kernel --tests -Z stubbing --output-format terse "${args[@]}"
+
+# OP-159 m.3 (w), CR-47: `cargo kani autoharness` over the Kernel's pure arithmetic modules (nightly)
+kani-autoharness:
+    cargo kani autoharness -Z autoharness -p esuiss-access-kernel --include-pattern access_kernel::validity --include-pattern access_kernel::tier --include-pattern access_kernel::verify::ml_dsa
+
+# OP-159 m.3 (x), CR-48 m.5, SA-T5, F-2: TLC on every model, and the unfenced model must fail
+tla:
+    conformance/tla/check.sh "$(scripts/tla-fetch.sh target/tla)"
