@@ -196,6 +196,12 @@ jobs:
           cache: "false"
           tools: nextest
       # OP-69, OP-140 m.4
+      # OP-158 m.3 (r): the dump test reads the server with a matching pg_dump
+      - name: PostgreSQL 18 client
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          scripts/ci/apt-install.sh postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - name: SoftHSM
         run: scripts/ci/apt-install.sh softhsm2
       - name: Tests
