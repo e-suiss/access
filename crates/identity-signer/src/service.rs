@@ -114,10 +114,10 @@ fn bytes(v: Option<&Value>) -> Option<Vec<u8>> {
     }
 }
 
-fn key_bytes(key: &PublicKey) -> Option<Vec<u8>> {
+fn key_bytes(key: &PublicKey) -> Vec<u8> {
     match key {
-        PublicKey::Ed25519(k) => Some(k.to_vec()),
-        PublicKey::P256(k) | PublicKey::MlDsa(_, k) => Some(k.clone()),
+        PublicKey::Ed25519(k) => k.to_vec(),
+        PublicKey::P256(k) | PublicKey::MlDsa(_, k) => k.clone(),
     }
 }
 
@@ -150,7 +150,7 @@ fn saved_value(s: &Saved) -> Value {
         ("signatures", Some(Value::Unsigned(r.signatures))),
         ("founding", Some(Value::Bool(r.founding))),
         ("alg", Some(Value::text(s.alg.name()))),
-        ("key", key_bytes(&s.key).map(Value::Bytes)),
+        ("key", Some(Value::Bytes(key_bytes(&s.key)))),
         ("sealed", s.sealed.clone().map(Value::Bytes)),
     ])
 }

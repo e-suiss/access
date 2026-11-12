@@ -301,13 +301,23 @@ fn unsafe_host() -> bool {
         .is_err()
 }
 
+/// The FIPS build's start-up check; any other build passes it (CR-15, OP-159 m.3 (r)).
+fn fips_ready() -> bool {
+    match suiss_crypto::fips::check() {
+        Ok(()) => true,
+        Err(error) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-identity-signer: refusing to start: {error}");
+            }
+            false
+        }
+    }
+}
+
 fn main() -> ExitCode {
     // CR-15, OP-159 m.3 (r)
-    if let Err(error) = suiss_crypto::fips::check() {
-        #[allow(clippy::print_stderr)]
-        {
-            eprintln!("access-identity-signer: refusing to start: {error}");
-        }
+    if !fips_ready() {
         return ExitCode::FAILURE;
     }
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();

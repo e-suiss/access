@@ -2707,10 +2707,10 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
-            // OP-159 m.3 (a), (o), (t)
-            Self::SigningProfile(_) | Self::KexShare(_) => Ok(()),
-            // OP-157 m.3 (m), OP-158 m.3 (o), (r)
-            Self::Rehome(_)
+            // OP-157 m.3 (m), OP-158 m.3 (o), (r), OP-159 m.3 (a), (o), (t)
+            Self::SigningProfile(_)
+            | Self::KexShare(_)
+            | Self::Rehome(_)
             | Self::Residency(_)
             | Self::DrProfile(_)
             | Self::ApprovalInline(_)

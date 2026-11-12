@@ -1803,7 +1803,10 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-157 m.3 (g)
         | "putSupportArtifactPolicy"
         | "putCryptoProfile"
-        | "putHashProfile" => (Settings, w(false)),
+        | "putHashProfile"
+        // OP-159 m.3 (a), (o), (t), m.7 (b)
+        | "putSigningProfile"
+        | "putKexShare" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1906,7 +1909,6 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getRecovery" => (ResourceKind::Recovery, Shape::Get),
         // OP-159 m.3 (a), (o), (t), m.7 (b)
         "getSigning" => (ResourceKind::Signing, Shape::Get),
-        "putSigningProfile" | "putKexShare" => (Settings, w(false)),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
