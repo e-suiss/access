@@ -1008,6 +1008,21 @@ pub enum Body {
         /// The `https` link to the export, at most 2048 bytes.
         link: Secret<String>,
     },
+    /// The domain retired a classical signature algorithm (`relay.message.algorithm_retired.v1`,
+    /// §15.16 m.3, OP-159 m.3 (f), (oo)), critical, to every root participant and domain
+    /// administrator. The name is attacker input rendered as text.
+    AlgorithmRetired {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// The retired algorithm's name, for example `EdDSA`, at most 200 characters.
+        algorithm: String,
+        /// The tree size of the post-quantum re-anchor checkpoint that covers the history.
+        reanchor_size: u64,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The `https` link to the domain's signing profile, at most 2048 bytes.
+        link: Secret<String>,
+    },
 }
 
 /// An İYS message channel (IDP-37 (4)).
@@ -1357,12 +1372,24 @@ impl fmt::Debug for Body {
                 .field("closes_at_ms", closes_at_ms)
                 .field("link", &"[redacted]")
                 .finish(),
+            Self::AlgorithmRetired {
+                reanchor_size,
+                at_ms,
+                ..
+            } => f
+                .debug_struct("AlgorithmRetired")
+                .field("domain", &"[redacted]")
+                .field("algorithm", &"[redacted]")
+                .field("reanchor_size", reanchor_size)
+                .field("at_ms", at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 50] = [
+pub const KINDS: [&str; 51] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -1413,6 +1440,7 @@ pub const KINDS: [&str; 50] = [
     "relay.message.equivocation_alarm.v1",
     "relay.message.degraded_alarm.v1",
     "relay.message.decommission_notice.v1",
+    "relay.message.algorithm_retired.v1",
 ];
 
 impl Body {
@@ -1452,6 +1480,7 @@ impl Body {
             Self::EquivocationAlarm { .. } => KINDS[47],
             Self::DegradedAlarm { .. } => KINDS[48],
             Self::DecommissionNotice { .. } => KINDS[49],
+            Self::AlgorithmRetired { .. } => KINDS[50],
         }
     }
 
@@ -1686,6 +1715,17 @@ impl Body {
             } => {
                 name(domain, "domain")?;
                 name(provider, "provider")?;
+                https_link(link.expose())
+            }
+            // OP-159 m.3 (oo)
+            Self::AlgorithmRetired {
+                domain,
+                algorithm,
+                link,
+                ..
+            } => {
+                name(domain, "domain")?;
+                name(algorithm, "algorithm")?;
                 https_link(link.expose())
             }
             Self::DivergenceNotice {
@@ -1931,7 +1971,8 @@ impl Message {
             | Body::DivergenceNotice { .. }
             | Body::EquivocationAlarm { .. }
             | Body::DegradedAlarm { .. }
-            | Body::DecommissionNotice { .. } => {
+            | Body::DecommissionNotice { .. }
+            | Body::AlgorithmRetired { .. } => {
                 match self
                     .body
                     .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
@@ -2079,6 +2120,13 @@ impl Message {
             "relay.message.decommission_notice.v1" => Body::DecommissionNotice {
                 domain: text("domain")?.to_owned(),
                 closes_at_ms: int("closes_at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.algorithm_retired.v1" => Body::AlgorithmRetired {
+                domain: text("domain")?.to_owned(),
+                algorithm: text("algorithm")?.to_owned(),
+                reanchor_size: int("reanchor_size")?,
+                at_ms: int("at_ms")?,
                 link: Secret::new(text("link")?.to_owned()),
             },
             "relay.message.review_campaign.v1" => Body::ReviewCampaign {
@@ -2304,7 +2352,8 @@ impl Message {
             | Body::DivergenceNotice { .. }
             | Body::EquivocationAlarm { .. }
             | Body::DegradedAlarm { .. }
-            | Body::DecommissionNotice { .. } => {
+            | Body::DecommissionNotice { .. }
+            | Body::AlgorithmRetired { .. } => {
                 self.body
                     .stage11_members(&mut m, "", |ms| rfc3339(ms).map(Value::from))?;
             }
@@ -2589,6 +2638,20 @@ impl Body {
             } => {
                 m.insert("domain".into(), text(domain));
                 put_time(m, "closes_at", *closes_at_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            // OP-159 m.3 (oo)
+            Self::AlgorithmRetired {
+                domain,
+                algorithm,
+                reanchor_size,
+                at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                m.insert("algorithm".into(), text(algorithm));
+                m.insert("reanchor_size".into(), (*reanchor_size).into());
+                put_time(m, "at", *at_ms)?;
                 m.insert("link".into(), text(link.expose()));
             }
             _ => {}

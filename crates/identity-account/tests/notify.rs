@@ -1094,6 +1094,7 @@ fn every_kind_matches_the_json_schema() {
     .chain(iys_messages(s))
     .chain(stage12_messages(s))
     .chain(stage13_messages(s))
+    .chain(stage14_messages(s))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
@@ -1956,6 +1957,37 @@ fn the_stage_13_bodies_validate_and_hide_their_names() {
     for hidden in ["Acme", "Northwind", "console.example"] {
         assert!(!printed.contains(hidden), "{printed}");
     }
+}
+
+fn stage14_messages(s: [u8; 16]) -> Vec<Message> {
+    vec![Message {
+        subject: s,
+        to: Address::Email(EMAIL.to_owned()),
+        locale: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
+        body: Body::AlgorithmRetired {
+            domain: "Acme Shop".to_owned(),
+            algorithm: "EdDSA".to_owned(),
+            reanchor_size: 4_096,
+            at_ms: START_MS,
+            link: Secret::new("https://console.example/signing".to_owned()),
+        },
+    }]
+}
+
+// OP-159 m.3 (f), (oo)
+#[test]
+fn the_stage_14_body_validates_and_hides_its_names() {
+    let mut m = stage14_messages([7; 16]);
+    assert!(m[0].validate().is_ok(), "{:?}", m[0]);
+    let printed = format!("{m:?}");
+    for hidden in ["Acme", "EdDSA", "console.example"] {
+        assert!(!printed.contains(hidden), "{printed}");
+    }
+    if let Body::AlgorithmRetired { algorithm, .. } = &mut m[0].body {
+        algorithm.clear();
+    }
+    assert!(m[0].validate().is_err(), "a retirement names its algorithm");
 }
 
 fn iys_messages(s: [u8; 16]) -> [Message; 1] {

@@ -80,7 +80,8 @@
         "relay.message.divergence_notice.v1",
         "relay.message.equivocation_alarm.v1",
         "relay.message.degraded_alarm.v1",
-        "relay.message.decommission_notice.v1"
+        "relay.message.decommission_notice.v1",
+        "relay.message.algorithm_retired.v1"
       ]
     },
     "subject": {
@@ -903,6 +904,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.decommission_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.algorithm_retired.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.algorithm_retired.v1"
           }
         }
       }
@@ -2775,6 +2792,57 @@
           "maxLength": 2048,
           "pattern": "^https://",
           "description": "Secret: the link to the export. Never logged."
+        }
+      }
+    },
+    "relay.message.algorithm_retired.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "algorithm",
+        "reanchor_size",
+        "at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "algorithm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The retired classical algorithm's name, for example EdDSA; new artefacts signed with it are refused (§15.16 m.3, OP-159 m.3 (f))."
+        },
+        "reanchor_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The tree size of the post-quantum re-anchor checkpoint that covers the history; records are never re-signed (CR-45 RA-4)."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the algorithm was retired."
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the domain's signing profile. Never logged."
         }
       }
     }
