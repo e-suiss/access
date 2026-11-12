@@ -39,6 +39,17 @@ pub enum SignerError {
     /// A token that would outlive the publication of the key that signs it (CR-19).
     #[error("token horizon")]
     TokenHorizon,
+    /// An algorithm the domain's declarations or binding exclude (CR-44, OP-159 m.3 (e), (r)).
+    #[error("algorithm profile conflict")]
+    AlgorithmConflict,
+    /// The binding key cannot sign once the algorithm is retired: no ML-DSA binding (OP-159
+    /// m.3 (d), (f)).
+    #[error("post-quantum key unavailable")]
+    PqKeyUnavailable,
+    /// No re-anchor checkpoint cosigned by an independent witness covers the head (RA-6,
+    /// OP-159 m.3 (f)).
+    #[error("re-anchor required")]
+    ReanchorRequired,
 }
 
 impl SignerError {
@@ -53,6 +64,9 @@ impl SignerError {
             Self::Note => "signer-note",
             Self::Token => "signer-token",
             Self::TokenHorizon => "signer-token-horizon",
+            Self::AlgorithmConflict => "algorithm-profile-conflict",
+            Self::PqKeyUnavailable => "pq-key-unavailable",
+            Self::ReanchorRequired => "reanchor-required",
         }
     }
 }

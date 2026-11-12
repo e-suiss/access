@@ -14,6 +14,10 @@ use suiss_crypto::signer::{SignError, Signer, sign_note, sign_sign1};
 use crate::SignerError;
 use crate::domain::{Template, binding, declaration, metadata};
 use crate::ports::KeyFactory;
+use access_kernel::verify::key_scope::Hybrid;
+use access_kernel::verify::ml_dsa::is_ml_dsa;
+use access_kernel::verify::reanchor::CHECKPOINT_CONTENT_TYPE as PQ_CHECKPOINT_CONTENT_TYPE;
+use suiss_crypto::cose::Algorithm;
 
 struct Entry {
     record: Key,
@@ -45,6 +49,18 @@ pub struct Signed {
     pub excerpt: Vec<u8>,
     /// The key's `kid`.
     pub kid: [u8; 32],
+    /// The ML-DSA component over the same payload while the domain signs both (CR-42 m.4,
+    /// OP-159 m.3 (e)).
+    pub pq: Option<Component>,
+}
+
+/// One more `COSE_Sign1` of a hybrid artefact and the excerpt of its key (CR-42 m.4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Component {
+    /// `COSE_Sign1` by the ML-DSA operational key.
+    pub sign1: Vec<u8>,
+    /// Binding-signed excerpt of that key.
+    pub excerpt: Vec<u8>,
 }
 
 /// What a schedule round did.
@@ -191,7 +207,42 @@ impl Keyring {
     }
 
     fn records(&self) -> Vec<Key> {
-        self.entries.iter().map(|e| e.record.clone()).collect()
+        self.records_in(false)
+    }
+
+    fn records_in(&self, pq: bool) -> Vec<Key> {
+        self.entries
+            .iter()
+            .filter(|e| is_ml_dsa(e.declared.alg) == pq)
+            .map(|e| e.record.clone())
+            .collect()
+    }
+
+    /// The ML-DSA parameter set the domain's operational keys sign with: ML-DSA-87 when the
+    /// allowlist has it (CNSA), else ML-DSA-65; ML-DSA-44 is for offline projections only
+    /// (CR-41 m.2, OP-159 m.3 (e)).
+    #[must_use]
+    pub fn pq_algorithm(&self) -> Option<Algorithm> {
+        [Algorithm::MlDsa87, Algorithm::MlDsa65]
+            .into_iter()
+            .find(|a| self.template.algorithms.contains(a))
+    }
+
+    fn classical_on(&self) -> bool {
+        self.template
+            .algorithms
+            .contains(&self.template.operational_alg)
+    }
+
+    fn lanes(&self) -> Vec<(bool, Algorithm)> {
+        let mut out = Vec::new();
+        if self.classical_on() {
+            out.push((false, self.template.operational_alg));
+        }
+        if let Some(pq) = self.pq_algorithm() {
+            out.push((true, pq));
+        }
+        out
     }
 
     fn binding_sign(&self, content_type: &str, payload: &[u8]) -> Result<Vec<u8>, SignerError> {
@@ -217,9 +268,27 @@ impl Keyring {
     ) -> Result<Round, SignerError> {
         let mut round = Round::default();
         let mut published_changed = self.metadata.is_none();
+        for (pq, alg) in self.lanes() {
+            published_changed |= self.tick_lane(factory, (pq, alg), now, draw, &mut round)?;
+        }
+        if published_changed {
+            self.metadata = Some(self.sign_metadata(now)?);
+        }
+        Ok(round)
+    }
+
+    fn tick_lane(
+        &mut self,
+        factory: &mut dyn KeyFactory,
+        (pq, alg): (bool, Algorithm),
+        now: u64,
+        draw: u64,
+        round: &mut Round,
+    ) -> Result<bool, SignerError> {
+        let mut published_changed = false;
         for _ in 0..PASSES {
             let mut progressed = false;
-            for step in rotation::plan(&self.records(), &self.policy, now, draw) {
+            for step in rotation::plan(&self.records_in(pq), &self.policy, now, draw) {
                 match &step {
                     Step::Generate {
                         valid_from,
@@ -227,7 +296,7 @@ impl Keyring {
                         jitter_permille,
                         founding,
                     } => {
-                        let Ok(generated) = factory.generate(self.template.operational_alg) else {
+                        let Ok(generated) = factory.generate(alg) else {
                             round.outage = true;
                             continue;
                         };
@@ -268,9 +337,14 @@ impl Keyring {
                     Step::Drop(_) => published_changed = true,
                     Step::Activate(_) | Step::Retire(_) => {}
                 }
-                let mut records = self.records();
+                let mut records = self.records_in(pq);
                 rotation::apply(&mut records, &step, now);
-                for (e, r) in self.entries.iter_mut().zip(records) {
+                for (e, r) in self
+                    .entries
+                    .iter_mut()
+                    .filter(|e| is_ml_dsa(e.declared.alg) == pq)
+                    .zip(records)
+                {
                     e.record = r;
                     if e.record.state == State::Dropped {
                         e.signer = None;
@@ -284,16 +358,16 @@ impl Keyring {
                 break;
             }
         }
-        if published_changed {
-            self.metadata = Some(self.sign_metadata(now)?);
-        }
-        Ok(round)
+        Ok(published_changed)
     }
 
     /// How long the active key is past its rotation time at `now`, if it is (CR-23).
     #[must_use]
     pub fn overdue(&self, now: u64) -> Option<u64> {
-        rotation::overdue(&self.records(), &self.policy, now)
+        self.lanes()
+            .into_iter()
+            .filter_map(|(pq, _)| rotation::overdue(&self.records_in(pq), &self.policy, now))
+            .max()
     }
 
     fn declared(&self, kid: &[u8; 32]) -> Result<OperationalKey, SignerError> {
@@ -426,14 +500,118 @@ impl Keyring {
         payload: &[u8],
         now: u64,
     ) -> Result<Signed, SignerError> {
-        let (sign1, excerpt, kid) = self.with_key(usage, now, |signer, kid| {
-            sign_sign1(signer, kid, content_type, payload)
-        })?;
+        let pq = self.pq_algorithm().is_some();
+        let sign = |signer: &dyn Signer, kid| sign_sign1(signer, kid, content_type, payload);
+        if !self.classical_on() {
+            let (sign1, excerpt, kid) = self.with_key_in(true, usage, now, sign)?;
+            return Ok(Signed {
+                sign1,
+                excerpt,
+                kid,
+                pq: None,
+            });
+        }
+        let (sign1, excerpt, kid) = self.with_key_in(false, usage, now, sign)?;
+        // CR-42 m.4, OP-159 m.3 (e)
+        let pq = if pq {
+            let (sign1, excerpt, _) = self.with_key_in(true, usage, now, sign)?;
+            Some(Component { sign1, excerpt })
+        } else {
+            None
+        };
         Ok(Signed {
             sign1,
             excerpt,
             kid,
+            pq,
         })
+    }
+
+    /// Signs a checkpoint body of the domain's log as a post-quantum re-anchor checkpoint: a
+    /// `COSE_Sign1` over the byte-identical note body with the ML-DSA key that may sign
+    /// `checkpoint` now (CR-45 RA-2, OP-159 m.3 (g)).
+    ///
+    /// # Errors
+    /// [`SignerError::Note`] for a body that is not a checkpoint of this domain,
+    /// [`SignerError::PqKeyUnavailable`] without an ML-DSA key, or the signer's failure.
+    pub fn sign_pq_checkpoint(&mut self, body: &str, now: u64) -> Result<Signed, SignerError> {
+        let origin = crate::domain::origin(&self.template.domain);
+        let cp = Checkpoint::parse(body).map_err(|_| SignerError::Note)?;
+        if cp.origin != origin || cp.to_body().ok().as_deref() != Some(body) {
+            return Err(SignerError::Note);
+        }
+        if self.pq_algorithm().is_none() {
+            return Err(SignerError::PqKeyUnavailable);
+        }
+        let (sign1, excerpt, kid) =
+            self.with_key_in(true, KeyUsage::Checkpoint, now, |signer, kid| {
+                sign_sign1(signer, kid, PQ_CHECKPOINT_CONTENT_TYPE, body.as_bytes())
+            })?;
+        Ok(Signed {
+            sign1,
+            excerpt,
+            kid,
+            pq: None,
+        })
+    }
+
+    /// Adds `alg` to the domain's allowlist and signs the metadata again at `now` (OP-159 m.9
+    /// (h)): a FIPS domain cannot add ML-DSA (CR-44), and adding ML-DSA makes the hybrid policy
+    /// `both` unless it is already stricter (OP-159 m.3 (e)). The next tick creates the ML-DSA
+    /// operational keys.
+    ///
+    /// # Errors
+    /// [`SignerError::AlgorithmConflict`]; the binding key's failure, with nothing changed.
+    pub fn admit(&mut self, alg: Algorithm, now: u64) -> Result<(), SignerError> {
+        access_kernel::meta::admit_algorithm(&self.template.declared, alg)
+            .map_err(|_| SignerError::AlgorithmConflict)?;
+        let before = self.template.clone();
+        self.template.algorithms.insert(alg);
+        if is_ml_dsa(alg)
+            && matches!(self.template.hybrid, None | Some(Hybrid::Classic))
+            && alg != Algorithm::MlDsa44
+        {
+            self.template.hybrid = Some(Hybrid::Both);
+        }
+        self.resign(before, now)
+    }
+
+    /// Retires the classical algorithm `alg` (§15.16 step (b), OP-159 m.3 (f)): it leaves the
+    /// allowlist and the hybrid policy becomes `pq`. Refused without an ML-DSA operational key
+    /// or a published re-anchor, and while the binding itself signs with `alg`: the metadata
+    /// could no longer be verified.
+    ///
+    /// # Errors
+    /// [`SignerError::AlgorithmConflict`] for an algorithm that is not a listed classical one,
+    /// [`SignerError::ReanchorRequired`] without a published re-anchor,
+    /// [`SignerError::PqKeyUnavailable`] without an ML-DSA key or binding.
+    pub fn retire(&mut self, alg: Algorithm, now: u64) -> Result<(), SignerError> {
+        if is_ml_dsa(alg) || !self.template.algorithms.contains(&alg) {
+            return Err(SignerError::AlgorithmConflict);
+        }
+        if self.template.declared.pq_reanchor.is_none() {
+            return Err(SignerError::ReanchorRequired);
+        }
+        if self.pq_algorithm().is_none() || !is_ml_dsa(self.declared_binding.alg) {
+            return Err(SignerError::PqKeyUnavailable);
+        }
+        let before = self.template.clone();
+        self.template.algorithms.remove(&alg);
+        self.template.hybrid = Some(Hybrid::Pq);
+        self.resign(before, now)
+    }
+
+    fn resign(&mut self, before: Template, now: u64) -> Result<(), SignerError> {
+        match self.sign_metadata(now) {
+            Ok(m) => {
+                self.metadata = Some(m);
+                Ok(())
+            }
+            Err(e) => {
+                self.template = before;
+                Err(e)
+            }
+        }
     }
 
     /// Signs a checkpoint body of the domain's log as a C2SP note with the key that may sign
@@ -505,7 +683,17 @@ impl Keyring {
         now: u64,
         sign: impl FnOnce(&dyn Signer, [u8; 32]) -> Result<T, SignError>,
     ) -> Result<(T, Vec<u8>, [u8; 32]), SignerError> {
-        let records = self.records();
+        self.with_key_in(false, usage, now, sign)
+    }
+
+    fn with_key_in<T>(
+        &mut self,
+        pq: bool,
+        usage: KeyUsage,
+        now: u64,
+        sign: impl FnOnce(&dyn Signer, [u8; 32]) -> Result<T, SignError>,
+    ) -> Result<(T, Vec<u8>, [u8; 32]), SignerError> {
+        let records = self.records_in(pq);
         let kid = rotation::signing_key(&records, &self.policy, now)
             .map(|k| k.kid)
             .ok_or(SignerError::NoKey)?;

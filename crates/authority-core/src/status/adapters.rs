@@ -67,7 +67,7 @@ impl ListSigner for SignerSocket {
         };
         for _ in 0..2 {
             match call(&self.0, &request).await {
-                Ok(Response::Signed { sign1, excerpt }) => return Ok((sign1, excerpt)),
+                Ok(Response::Signed { sign1, excerpt, .. }) => return Ok((sign1, excerpt)),
                 Ok(Response::Error(code)) if code == "signer-unknown-domain" => {
                     if !crate::adapters::open_keyring(&self.0, domain).await {
                         return Err("signer-unknown-domain");

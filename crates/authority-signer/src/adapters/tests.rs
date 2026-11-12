@@ -51,6 +51,20 @@ fn sealed_keys_open_only_under_their_kek() {
     assert!(other.load(Algorithm::Ed25519, &g.sealed).is_err());
 }
 
+// CR-21 m.3, CR-41 m.3, OP-159 m.3 (d)
+#[test]
+fn an_ml_dsa_key_is_sealed_as_its_seed_and_opens_to_the_same_key() {
+    let kek = suiss_crypto::signer::random_seed().unwrap();
+    let mut factory = SealedFactory::new(SoftKek::new("kek-pq", kek));
+    for alg in [Algorithm::MlDsa65, Algorithm::MlDsa87] {
+        let g = factory.generate(alg).unwrap();
+        assert_eq!(g.signer.algorithm(), alg);
+        let loaded = factory.load(alg, &g.sealed).unwrap();
+        assert_eq!(loaded.public_key(), g.signer.public_key());
+        assert!(factory.load(Algorithm::Ed25519, &g.sealed).is_err());
+    }
+}
+
 // CMP-22, OP-143 m.4
 #[tokio::test]
 async fn the_socket_serves_declared_callers() {

@@ -106,6 +106,26 @@ pub enum Request {
         /// The superseded binding keys.
         keys: Vec<access_kernel::verify::key_scope::BindingKey>,
     },
+    /// Signs a checkpoint body as a post-quantum re-anchor checkpoint at `at` with the ML-DSA
+    /// key of usage `checkpoint` (CR-45 RA-2, OP-159 m.3 (g)).
+    SignPqCheckpoint {
+        /// Domain.
+        domain: Digest,
+        /// Checkpoint body whose origin is the domain's.
+        body: String,
+        /// The signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
+    /// Adds `alg` to the domain's allowlist (OP-159 m.9 (h)), or with `retire` removes the
+    /// classical `alg` (§15.16 step (b), OP-159 m.3 (f)).
+    Allowlist {
+        /// Domain.
+        domain: Digest,
+        /// The algorithm.
+        alg: Algorithm,
+        /// Retire rather than admit.
+        retire: bool,
+    },
 }
 
 /// The signer's answer.
@@ -119,6 +139,8 @@ pub enum Response {
         sign1: Vec<u8>,
         /// Binding-signed excerpt.
         excerpt: Vec<u8>,
+        /// The ML-DSA component of a hybrid artefact: its `COSE_Sign1` and excerpt (CR-42 m.4).
+        pq: Option<(Vec<u8>, Vec<u8>)>,
     },
     /// Binding-signed Domain Metadata.
     Metadata(Vec<u8>),
@@ -552,6 +574,7 @@ impl Request {
                     ("transcript", transcript.to_value()),
                 ]),
             )]),
+            Self::SignPqCheckpoint { .. } | Self::Allowlist { .. } => self.pq_value(),
             Self::Supersede { domain, keys } => map(vec![(
                 "supersede",
                 map(vec![
@@ -562,6 +585,32 @@ impl Request {
                     ),
                 ]),
             )]),
+        }
+    }
+
+    fn pq_value(&self) -> Value {
+        match self {
+            Self::SignPqCheckpoint { domain, body, at } => map(vec![(
+                "sign_pq_checkpoint",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("body", Value::text(body)),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
+            Self::Allowlist {
+                domain,
+                alg,
+                retire,
+            } => map(vec![(
+                "allowlist",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("alg", Value::int(alg.cose())),
+                    ("retire", Value::Bool(*retire)),
+                ]),
+            )]),
+            _ => Value::Map(Vec::new()),
         }
     }
 
@@ -602,6 +651,20 @@ impl Request {
                             .map_err(|_| FrameError::Malformed)
                     })
                     .collect::<Result<_, _>>()?,
+            });
+        }
+        if let Some(s) = v.get("sign_pq_checkpoint") {
+            return Ok(Self::SignPqCheckpoint {
+                domain: digest(s.get("domain"))?,
+                body: text(s.get("body"))?,
+                at: uint(s.get("at"))?,
+            });
+        }
+        if let Some(a) = v.get("allowlist") {
+            return Ok(Self::Allowlist {
+                domain: digest(a.get("domain"))?,
+                alg: alg(a.get("alg").ok_or(FrameError::Malformed)?)?,
+                retire: flag(a.get("retire"))?,
             });
         }
         if let Some(d) = v.get("declare") {
@@ -653,13 +716,17 @@ impl Response {
     fn to_value(&self) -> Value {
         match self {
             Self::Opened => map(vec![("opened", Value::Bool(true))]),
-            Self::Signed { sign1, excerpt } => map(vec![(
-                "signed",
-                map(vec![
+            Self::Signed { sign1, excerpt, pq } => {
+                let mut fields = vec![
                     ("sign1", Value::Bytes(sign1.clone())),
                     ("excerpt", Value::Bytes(excerpt.clone())),
-                ]),
-            )]),
+                ];
+                if let Some((s, e)) = pq {
+                    fields.push(("pq_sign1", Value::Bytes(s.clone())));
+                    fields.push(("pq_excerpt", Value::Bytes(e.clone())));
+                }
+                map(vec![("signed", map(fields))])
+            }
             Self::Metadata(b) => map(vec![("metadata", Value::Bytes(b.clone()))]),
             Self::Noted { line, excerpt } => map(vec![(
                 "noted",
@@ -687,9 +754,14 @@ impl Response {
             return Ok(Self::Opened);
         }
         if let Some(s) = v.get("signed") {
+            let pq = match (s.get("pq_sign1"), s.get("pq_excerpt")) {
+                (None, None) => None,
+                (a, b) => Some((bytes(a)?, bytes(b)?)),
+            };
             return Ok(Self::Signed {
                 sign1: bytes(s.get("sign1"))?,
                 excerpt: bytes(s.get("excerpt"))?,
+                pq,
             });
         }
         if let Some(m) = v.get("metadata") {

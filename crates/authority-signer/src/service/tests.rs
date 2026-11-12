@@ -166,7 +166,7 @@ fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded
         Some(access_kernel::verify::key_scope::Superseded {
             at: Digest([1; 32]),
             cited: Digest([2; 32]),
-            cause: None,
+            cause: Some(access_kernel::verify::key_scope::SupersededCause::ReAnchor),
         })
     );
     assert_eq!(m.declared.ceremony_transcript, Some(Digest([3; 32])));
@@ -306,7 +306,7 @@ fn the_service_signs_and_survives_a_restart() {
         assert_eq!(s.tick(now, now), Vec::<Digest>::new());
         now += MINUTE;
     }
-    let Response::Signed { sign1, excerpt } = s.handle(sign(now), now) else {
+    let Response::Signed { sign1, excerpt, .. } = s.handle(sign(now), now) else {
         panic!("signed");
     };
     assert_eq!(
@@ -484,7 +484,7 @@ fn the_founding_key_signs_on_open_and_an_older_vault_has_none() {
         s.handle(Request::Open(Box::new(template())), 0),
         Response::Opened
     );
-    let Response::Signed { sign1, excerpt } = s.handle(sign(0), 0) else {
+    let Response::Signed { sign1, excerpt, .. } = s.handle(sign(0), 0) else {
         panic!("not signed at Genesis");
     };
     let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), 0) else {
@@ -734,4 +734,312 @@ fn a_declaration_is_published_in_newly_signed_metadata() {
     let Response::Signed { .. } = s.handle(sign(now + 1), now + 1) else {
         panic!("still signs");
     };
+}
+
+struct Pq;
+
+impl KeyFactory for Pq {
+    fn generate(&mut self, alg: Algorithm) -> Result<Generated, SignError> {
+        if access_kernel::verify::ml_dsa::is_ml_dsa(alg) {
+            let (signer, seed) = suiss_crypto::signer::MlDsaSigner::generate(alg)?;
+            return Ok(Generated {
+                signer: Box::new(signer),
+                sealed: seed.expose().to_vec(),
+            });
+        }
+        Soft.generate(alg)
+    }
+
+    fn load(&mut self, alg: Algorithm, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError> {
+        if access_kernel::verify::ml_dsa::is_ml_dsa(alg) {
+            let seed: [u8; 32] = sealed.try_into().map_err(|_| SignError::Key)?;
+            return Ok(Box::new(suiss_crypto::signer::MlDsaSigner::from_seed(
+                alg,
+                &Secret::new(seed),
+            )?));
+        }
+        Soft.load(alg, sealed)
+    }
+}
+
+fn pq_metadata(s: &mut Service<Pq, Generations, Mem>) -> (Vec<u8>, KeySet) {
+    let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), 0) else {
+        panic!("metadata");
+    };
+    let Response::Binding(b) = s.handle(
+        Request::Binding {
+            domain: Digest([7; 32]),
+            next: false,
+        },
+        0,
+    ) else {
+        panic!("binding");
+    };
+    let mut trusted = KeySet::default();
+    trusted.allowed.insert(b.alg);
+    trusted.insert(b.kid, b.key).unwrap();
+    (m, trusted)
+}
+
+fn allowlist(alg: Algorithm, retire: bool) -> Request {
+    Request::Allowlist {
+        domain: Digest([7; 32]),
+        alg,
+        retire,
+    }
+}
+
+// CR-41, CR-42 m.4, OP-159 m.3 (d), (e), m.9 (h)
+#[test]
+fn an_admitted_ml_dsa_algorithm_signs_every_artefact_twice_and_the_kernel_wants_both() {
+    use access_kernel::verify::hybrid::{self, Component, Expected, HybridError};
+    use access_kernel::verify::key_scope::Hybrid;
+    use suiss_crypto::aws::AwsLcBackend;
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let Response::Signed { pq: None, .. } = s.handle(sign(0), 0) else {
+        panic!("a classical domain signs once");
+    };
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa65, false), 0),
+        Response::Opened
+    );
+    let (bytes, trusted) = pq_metadata(&mut s);
+    let m = verify_metadata(&AwsLcBackend, &bytes, &trusted).unwrap();
+    assert!(m.algorithms.contains(&Algorithm::MlDsa65));
+    assert!(m.algorithms.contains(&Algorithm::Ed25519));
+    assert_eq!(m.hybrid, Some(Hybrid::Both));
+    assert!(
+        m.operational_keys
+            .iter()
+            .any(|k| k.alg == Algorithm::MlDsa65)
+    );
+    let Response::Signed {
+        sign1,
+        excerpt,
+        pq: Some((pq_sign1, pq_excerpt)),
+    } = s.handle(sign(0), 0)
+    else {
+        panic!("a hybrid domain signs twice");
+    };
+    let d = Digest([7; 32]);
+    let expected = Expected::new(&d, KeyUsage::Receipt, 0, CT);
+    let classic = Component::new(&sign1, &excerpt);
+    let post_quantum = Component::new(&pq_sign1, &pq_excerpt);
+    let v = hybrid::verify(
+        &AwsLcBackend,
+        &m,
+        Some(classic),
+        Some(post_quantum),
+        &expected,
+    )
+    .unwrap();
+    assert_eq!(v.payload, b"receipt");
+    // CR-42 m.2, SAI-44
+    assert_eq!(
+        hybrid::verify(&AwsLcBackend, &m, Some(classic), None, &expected).err(),
+        Some(HybridError::Missing)
+    );
+    assert_eq!(
+        hybrid::verify(&AwsLcBackend, &m, None, Some(post_quantum), &expected).err(),
+        Some(HybridError::Missing)
+    );
+    assert!(operational_key(&AwsLcBackend, &m, &d, &excerpt, KeyUsage::Receipt, 0, None).is_err());
+    // OP-159 m.3 (c)
+    assert!(
+        hybrid::verify(
+            &PureBackend,
+            &m,
+            Some(classic),
+            Some(post_quantum),
+            &expected
+        )
+        .is_err()
+    );
+}
+
+// CR-41 m.2, OP-159 m.3 (e)
+#[test]
+fn ml_dsa_87_is_the_cnsa_profile_and_ml_dsa_44_never_signs_the_domain() {
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa44, false), 0),
+        Response::Opened
+    );
+    let Response::Signed { pq: None, .. } = s.handle(sign(0), 0) else {
+        panic!("ML-DSA-44 is for offline projections only");
+    };
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa87, false), 0),
+        Response::Opened
+    );
+    let Response::Signed {
+        pq: Some((pq_sign1, _)),
+        ..
+    } = s.handle(sign(0), 0)
+    else {
+        panic!("signed");
+    };
+    let alg = access_kernel::verify::ml_dsa::algorithm_of(&pq_sign1).unwrap();
+    assert_eq!(alg, Algorithm::MlDsa87);
+}
+
+// CR-44, OP-159 m.3 (r), m.9 (h)
+#[test]
+fn a_fips_domain_cannot_admit_ml_dsa() {
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    let mut t = template();
+    t.declared.crypto_profile = Some(access_kernel::verify::key_scope::CryptoProfile::Fips);
+    assert_eq!(s.handle(Request::Open(Box::new(t)), 0), Response::Opened);
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa65, false), 0),
+        Response::Error(String::from("algorithm-profile-conflict"))
+    );
+}
+
+// §15.16, RA-6, OP-159 m.3 (d), (f)
+#[test]
+fn retiring_the_classical_algorithm_needs_a_re_anchor_and_an_ml_dsa_binding() {
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::Ed25519, true), 0),
+        Response::Error(String::from("reanchor-required"))
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa65, false), 0),
+        Response::Opened
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa65, true), 0),
+        Response::Error(String::from("algorithm-profile-conflict"))
+    );
+    let mut declared = crate::domain::declared_default();
+    declared.pq_reanchor = Some(access_kernel::verify::key_scope::PqReanchor::new(
+        3,
+        0,
+        vec![String::from("w")],
+    ));
+    assert_eq!(
+        s.handle(
+            Request::Declare {
+                domain: Digest([7; 32]),
+                declared: Box::new(declared),
+            },
+            0
+        ),
+        Response::Opened
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::Ed25519, true), 0),
+        Response::Error(String::from("pq-key-unavailable"))
+    );
+    let Response::Signed { pq: Some(_), .. } = s.handle(sign(0), 0) else {
+        panic!("the classical algorithm still signs");
+    };
+}
+
+// CR-45 RA-2, OP-159 m.3 (g)
+#[test]
+fn a_pq_re_anchor_checkpoint_is_a_cose_sign1_over_the_note_body() {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::verify::key_scope::{EXCERPT_CONTENT_TYPE, KeyExcerpt};
+    use suiss_crypto::aws::AwsLcBackend;
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let body = suiss_crypto::note::Checkpoint {
+        origin: crate::domain::origin(&Digest([7; 32])),
+        size: 3,
+        root: [5; 32],
+        extensions: vec![String::from("issued_at 0")],
+    }
+    .to_body()
+    .unwrap();
+    let request = Request::SignPqCheckpoint {
+        domain: Digest([7; 32]),
+        body: body.clone(),
+        at: 0,
+    };
+    assert_eq!(
+        s.handle(request.clone(), 0),
+        Response::Error(String::from("pq-key-unavailable"))
+    );
+    assert_eq!(
+        s.handle(allowlist(Algorithm::MlDsa65, false), 0),
+        Response::Opened
+    );
+    let Response::Signed { sign1, excerpt, .. } = s.handle(request, 0) else {
+        panic!("signed");
+    };
+    let (_, trusted) = pq_metadata(&mut s);
+    let e = verify_sign1(&AwsLcBackend, &excerpt, &trusted, EXCERPT_CONTENT_TYPE).unwrap();
+    let KeyExcerpt { key, .. } = KeyExcerpt::from_bytes(&e.payload).unwrap();
+    assert_eq!(key.alg, Algorithm::MlDsa65);
+    let v = access_kernel::verify::cose::verify_sign1(
+        &AwsLcBackend,
+        &sign1,
+        &key.key_set(),
+        access_kernel::verify::reanchor::CHECKPOINT_CONTENT_TYPE,
+    )
+    .unwrap();
+    assert_eq!(v.payload, body.as_bytes());
+    assert_eq!(
+        s.handle(
+            Request::SignPqCheckpoint {
+                domain: Digest([7; 32]),
+                body: String::from("not a checkpoint"),
+                at: 0,
+            },
+            0
+        ),
+        Response::Error(String::from("signer-note"))
+    );
 }

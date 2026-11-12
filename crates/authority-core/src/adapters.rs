@@ -2053,7 +2053,7 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
         at,
     };
     match call(path, &sign).await {
-        Ok(SignResponse::Signed { sign1, excerpt }) => Ok((sign1, excerpt)),
+        Ok(SignResponse::Signed { sign1, excerpt, .. }) => Ok((sign1, excerpt)),
         Ok(SignResponse::Error(code)) => Err(signer_reason(&code)),
         Ok(_) => Err("signer-error"),
         Err(_) => Err("signer-unreachable"),

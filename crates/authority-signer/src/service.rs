@@ -283,7 +283,7 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
         let superseded = access_kernel::verify::key_scope::Superseded {
             at,
             cited,
-            cause: None,
+            cause: Some(access_kernel::verify::key_scope::SupersededCause::ReAnchor),
         };
         match ring.rebound(
             signer,
@@ -425,6 +425,9 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
             | Request::Statement { .. }
             | Request::Rebind { .. }
             | Request::Supersede { .. }) => self.binding_request(r, now),
+            r @ (Request::Sign { .. }
+            | Request::SignPqCheckpoint { .. }
+            | Request::Allowlist { .. }) => self.signing_request(r, now),
             Request::Open(template) => {
                 let template = *template;
                 let domain = template.domain;
@@ -498,6 +501,12 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
+        }
+    }
+
+    // CR-42 m.4, CR-45 RA-2, OP-159 m.3 (f), (g), m.9 (h)
+    fn signing_request(&mut self, request: Request, now: u64) -> Response {
+        match request {
             Request::Sign {
                 domain,
                 usage,
@@ -515,10 +524,50 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                     Ok(s) => Response::Signed {
                         sign1: s.sign1,
                         excerpt: s.excerpt,
+                        pq: s.pq.map(|c| (c.sign1, c.excerpt)),
                     },
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
+            Request::SignPqCheckpoint { domain, body, at } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                let Some((_, ring)) = self.rings.get_mut(&domain) else {
+                    return Response::Error(String::from("signer-unknown-domain"));
+                };
+                match ring.sign_pq_checkpoint(&body, at) {
+                    Ok(s) => Response::Signed {
+                        sign1: s.sign1,
+                        excerpt: s.excerpt,
+                        pq: None,
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
+            Request::Allowlist {
+                domain,
+                alg,
+                retire,
+            } => {
+                let Some((template, ring)) = self.rings.get_mut(&domain) else {
+                    return Response::Error(String::from("signer-unknown-domain"));
+                };
+                let done = if retire {
+                    ring.retire(alg, now)
+                } else {
+                    ring.admit(alg, now)
+                };
+                if let Err(e) = done {
+                    return Response::Error(String::from(e.code()));
+                }
+                *template = ring.template().clone();
+                if !self.tick_one(&domain, now) {
+                    return Response::Error(String::from("signer-no-key"));
+                }
+                Response::Opened
+            }
+            _ => Response::Error(String::from("signer-usage")),
         }
     }
 

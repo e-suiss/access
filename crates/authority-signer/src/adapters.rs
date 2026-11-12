@@ -11,7 +11,9 @@ use suiss_crypto::cose::Algorithm;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use suiss_crypto::secret::Secret;
-use suiss_crypto::signer::{PagedSigner, Pager, SignError, Signer, SoftSigner};
+use suiss_crypto::signer::{
+    ML_DSA_SEED_LEN, MlDsaSigner, PagedSigner, Pager, SignError, Signer, SoftSigner, random_seed,
+};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{UnixListener, UnixStream};
 
@@ -51,7 +53,14 @@ impl<K: Kek> SealedFactory<K> {
         let ed25519 = match alg {
             Algorithm::Ed25519 => true,
             Algorithm::Esp256 | Algorithm::Es256 => false,
-            _ => return Err(SignError::Algorithm),
+            // CR-41 m.3, OP-159 m.3 (d)
+            Algorithm::MlDsa44 | Algorithm::MlDsa65 | Algorithm::MlDsa87 => {
+                let seed = Secret::new(seed_of(doc)?);
+                return Ok(match &self.pager {
+                    Some(pager) => Box::new(MlDsaSigner::paged(alg, &seed, pager.as_ref())?),
+                    None => Box::new(MlDsaSigner::from_seed(alg, &seed)?),
+                });
+            }
         };
         Ok(match &self.pager {
             Some(pager) => Box::new(PagedSigner::new(ed25519, doc, pager.as_ref())?),
@@ -63,10 +72,12 @@ impl<K: Kek> SealedFactory<K> {
 
 impl<K: Kek> KeyFactory for SealedFactory<K> {
     fn generate(&mut self, alg: Algorithm) -> Result<Generated, SignError> {
-        let (_, doc) = match alg {
-            Algorithm::Ed25519 => SoftSigner::generate_ed25519()?,
-            Algorithm::Esp256 | Algorithm::Es256 => SoftSigner::generate_p256()?,
-            _ => return Err(SignError::Algorithm),
+        let doc = match alg {
+            Algorithm::Ed25519 => SoftSigner::generate_ed25519()?.1,
+            Algorithm::Esp256 | Algorithm::Es256 => SoftSigner::generate_p256()?.1,
+            Algorithm::MlDsa44 | Algorithm::MlDsa65 | Algorithm::MlDsa87 => {
+                Secret::new(random_seed()?.to_vec())
+            }
         };
         let signer = self.signer(alg, &doc)?;
         let dek = Dek::generate().map_err(|_| SignError::Random)?;
@@ -101,6 +112,13 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
         let doc = open_body(&dek, SEAL_CONTEXT, &body).map_err(|_| SignError::Key)?;
         self.signer(alg, &Secret::new(doc.to_vec()))
     }
+}
+
+fn seed_of(doc: &Secret<Vec<u8>>) -> Result<[u8; ML_DSA_SEED_LEN], SignError> {
+    doc.expose()
+        .as_slice()
+        .try_into()
+        .map_err(|_| SignError::Key)
 }
 
 fn hex(domain: &Digest) -> String {

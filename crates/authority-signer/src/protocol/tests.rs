@@ -36,6 +36,7 @@ fn superseded() -> access_kernel::verify::key_scope::BindingKey {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "one case per message")]
 fn messages_round_trip() {
     let requests = [
         Request::Open(Box::new(template())),
@@ -120,6 +121,12 @@ fn messages_round_trip() {
         Response::Signed {
             sign1: vec![2],
             excerpt: vec![3],
+            pq: None,
+        },
+        Response::Signed {
+            sign1: vec![2],
+            excerpt: vec![3],
+            pq: Some((vec![6], vec![7])),
         },
         Response::Noted {
             line: String::from("\u{2014} origin AAAA\n"),
