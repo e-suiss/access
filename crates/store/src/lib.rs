@@ -112,6 +112,7 @@ pub mod kek;
 pub mod mds;
 // OP-158 m.3 (y)
 pub mod realm_crypto;
+pub mod realm_signing;
 // OP-158 m.3 (v)
 pub mod quota;
 // OP-158 m.3 (h), (i)

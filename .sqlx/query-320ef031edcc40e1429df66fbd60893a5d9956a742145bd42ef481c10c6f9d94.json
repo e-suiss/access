@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realms SET signing_profile = $3 WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "320ef031edcc40e1429df66fbd60893a5d9956a742145bd42ef481c10c6f9d94"
+}

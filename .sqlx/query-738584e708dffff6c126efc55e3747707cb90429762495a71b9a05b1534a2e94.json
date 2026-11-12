@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realms SET kex_share = $3 WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "738584e708dffff6c126efc55e3747707cb90429762495a71b9a05b1534a2e94"
+}
