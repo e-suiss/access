@@ -2583,6 +2583,7 @@ async fn serve(
             .merge(access_http::stage11::router())
             .merge(access_http::stage12::router())
             .merge(access_http::stage13::router())
+            .merge(access_http::stage14::router())
             .merge(access_http::proxy::router(forward_auth))
             .merge(access_http::mcp_gateway::router(mcp_gateway)),
     );

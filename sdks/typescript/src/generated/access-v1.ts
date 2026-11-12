@@ -604,6 +604,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/v1/domains/{domain}/projections/{digest}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The projection a projection_ref names, byte-identical, for the authenticated PEP in the artefact's aud only; the verifier recomputes the digest and verifies the artefact in full. An expired projection answers 410 projection-ref-expired (CR-43, projection-ref.cddl, OP-159 m.3 (q)). */
+        get: operations["getProjection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/checkpoints/pq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The domain's post-quantum re-anchor checkpoints: each a COSE_Sign1 over the C2SP note body signed with an ML-DSA operational key, with its witnesses' post-quantum cosigns, newest first (CR-45 RA-2, RA-3, pq-checkpoint.cddl, OP-159 m.3 (g)). */
+        get: operations["listPqCheckpoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/checkpoints/pq/{size}/inclusion/{position}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The inclusion bundle of the record at `position` against the post-quantum re-anchor checkpoint of `size`, with the consistency proof from each earlier checkpoint (CR-45 RA-4, RA-5, OP-159 m.3 (g)). */
+        get: operations["getPqInclusionBundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/v1/domains/{domain}/checkpoints": {
         parameters: {
             query?: never;
@@ -4633,6 +4684,129 @@ export interface operations {
                 };
             };
             /** @description `from` is past the head, or temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getProjection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                digest: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-159 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPqCheckpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-159 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getPqInclusionBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                size: string;
+                position: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-159 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
             503: {
                 headers: {
                     [name: string]: unknown;

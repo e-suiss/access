@@ -171,6 +171,7 @@ mod records;
 mod ssf;
 mod stage11;
 mod stage13;
+mod stage14;
 mod stage6;
 mod transparency;
 
@@ -544,6 +545,7 @@ pub fn openapi() -> Value {
     divergence::paths(&mut paths);
     stage11::paths(&mut paths);
     stage13::paths(&mut paths);
+    stage14::paths(&mut paths);
     transparency::paths(&mut paths);
     eligibility::paths(&mut paths, &common);
     iys::paths(&mut paths);
