@@ -1,0 +1,67 @@
+# OP-32, MD-19, B15, OP-159 m.3 (ii)
+#
+# The declared service level objectives the evidence pack carries. Every target is an
+# engineering assumption: not measured, a goal and not a guarantee (OP-32). Commercial
+# service levels are not part of the open-source release.
+#
+# plane   authority or identity
+# metric  what is measured
+# target  the goal
+# note    how it is met, or what bounds it
+
+version = 1
+status = "engineering-assumption"
+
+[[slo]]
+plane = "authority"
+metric = "online commit p99, within a cell, without witness-before-ack"
+target = "30 ms"
+note = "batched transactions and a synchronous quorum"
+
+[[slo]]
+plane = "authority"
+metric = "witness-before-ack commit p99"
+target = "750 ms"
+note = "an out-of-cycle checkpoint and the round trip to the nearest independent witness"
+
+[[slo]]
+plane = "authority"
+metric = "check p99"
+target = "10 ms"
+note = "served from a replica or derived state"
+
+[[slo]]
+plane = "authority"
+metric = "sustained commits per domain"
+target = "2000 per second"
+note = "one sequencer with group commit (OP-9)"
+
+[[slo]]
+plane = "identity"
+metric = "revocation propagation, same node"
+target = "0 ms"
+note = "synchronous"
+
+[[slo]]
+plane = "identity"
+metric = "revocation propagation p99, other nodes of the cluster"
+target = "250 ms"
+note = "outbox polling every 100 ms"
+
+[[slo]]
+plane = "identity"
+metric = "revocation propagation p99, other cluster or region"
+target = "500 ms"
+note = "a target"
+
+[[slo]]
+plane = "identity"
+metric = "revocation at a resource server that does not introspect"
+target = "the access token lifetime"
+note = "HL-22; the strict profile requires introspection"
+
+[[slo]]
+plane = "identity"
+metric = "login CPU outside password hashing"
+target = "total CPU over Argon2 CPU below 1.10"
+note = "a ratio metric (OP-33)"

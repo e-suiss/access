@@ -8,6 +8,7 @@
 
 mod catalog;
 mod civil;
+mod evidence;
 mod policy;
 mod psirt;
 mod rules;
@@ -94,6 +95,9 @@ fn usage() -> ExitCode {
         "  compliance-map     regenerate conformance/compliance/README.md; --check only compares"
     );
     eprintln!(
+        "  evidence-pack DIR  the release evidence tarball and SHA256SUMS: [--release TAG] [--commit SHA] [--sbom FILE]..."
+    );
+    eprintln!(
         "  support-policy     regenerate SECURITY.md's support and fix time sections; --check only compares"
     );
     eprintln!(
@@ -154,6 +158,11 @@ fn main() -> ExitCode {
             "compliance-map",
             rules::compliance_map::write(&root, args.get(1).is_some_and(|a| a == "--check"))
                 .map(|()| None),
+        ),
+        // OP-159 m.3 (ii), F-6
+        Some("evidence-pack") => report(
+            "evidence-pack",
+            evidence::run(&root, args.get(1..).unwrap_or_default()).map(Some),
         ),
         // OP-68, OP-159 m.3 (jj)
         Some("support-policy") => report(

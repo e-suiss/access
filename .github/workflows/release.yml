@@ -311,6 +311,20 @@ jobs:
             dist/access-server-linux-arm64
           predicate-type: https://openvex.dev/ns/v0.2.0
           predicate-path: dist/access-server.openvex.json
+      # OP-159 m.3 (ii), F-6
+      - name: Evidence pack (NIS2, DORA)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cargo xtask evidence-pack "$RUNNER_TEMP/evidence" --release "$TAG" --commit "$GITHUB_SHA" \
+            --sbom dist/access-server-linux-amd64.cdx.json --sbom dist/access-server-linux-arm64.cdx.json
+          cp "$RUNNER_TEMP/evidence/access-evidence-$TAG.tar" dist/
+          cp "$RUNNER_TEMP/evidence/SHA256SUMS" dist/SHA256SUMS-evidence
+          cat dist/SHA256SUMS-evidence
+      - name: Evidence pack attestation (F-6)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/access-evidence-${{ github.ref_name }}.tar
       # F-7
       - name: Sigstore keyless signatures (F-7)
         run: |

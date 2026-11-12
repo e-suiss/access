@@ -2,6 +2,7 @@
 
 - `alerts/access.yaml`: Prometheus alert rules for the operation signals that raise an alarm. Every rule carries a `severity` (`sev-1`, `page` or `ticket`) and a `runbook` label naming the operator runbook to follow. Load it with `rule_files`.
 - `alertmanager.example.yaml`: an example routing by `severity`. The receivers are placeholders; the paging system and the on-call rotation are the operator's choice.
+- `slo.toml`: the declared service level objectives the release evidence pack carries. Every target is an engineering assumption: a goal, not measured and not guaranteed.
 
 The local stack (`deploy/compose/compose.yaml`) loads the same rules into its Prometheus and provisions the "Access operation signals" Grafana dashboard.
 
