@@ -1050,19 +1050,13 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     if response.replayed {
         context.insert(String::from("replayed"), Out::Bool(true));
     }
-    // §9.8, L2-RCP-2
-    if let Some((sign1, excerpt)) = &response.signed_receipt {
-        context.insert(
-            String::from("receipt"),
-            serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
-        );
+    // §9.8, L2-RCP-2, OP-159 m.15 (b)
+    if let Some(signed) = &response.signed_receipt {
+        context.insert(String::from("receipt"), signed_json(signed));
     }
-    // L2-PAP-2
-    if let Some((sign1, excerpt)) = &response.signed_pap {
-        context.insert(
-            String::from("pap"),
-            serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
-        );
+    // L2-PAP-2, OP-159 m.15 (b)
+    if let Some(signed) = &response.signed_pap {
+        context.insert(String::from("pap"), signed_json(signed));
     }
     context.insert(
         String::from("versions"),
@@ -1075,6 +1069,18 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     );
     out.insert(String::from("context"), Out::Object(context));
     Out::Object(out)
+}
+
+/// A signed receipt or PAP as the ADP answer carries it: `sign1` (a `COSE_Sign1` or the hybrid
+/// carrier), `excerpt`, and `pq_excerpt` for the carrier's ML-DSA component (OP-159 m.15 (b)).
+fn signed_json((sign1, kept): &(Vec<u8>, Vec<u8>)) -> Out {
+    let (excerpt, pq) = access_authority_core::app::hybrid::split(kept);
+    let mut out =
+        serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(&excerpt) });
+    if let (Some(pq), Some(o)) = (pq, out.as_object_mut()) {
+        o.insert(String::from("pq_excerpt"), Out::from(b64url_encode(&pq)));
+    }
+    out
 }
 
 #[cfg(test)]

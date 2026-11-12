@@ -48,8 +48,9 @@ pub(super) fn components() -> Value {
                 "receipt": object(
                     &json!({
                         "payload": b64("The receipt payload, dCBOR (`application/access-receipt+cbor`). The receipt is addressed to PEPs: a client certificate caller reads it; a platform client asking with its assertion reads the record without `receipt` (OP-149 m.37)."),
-                        "cose_sign1": b64("The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."),
-                        "key_excerpt": b64("The binding-signed excerpt of the signing key (CR-58 m.1)."),
+                        "cose_sign1": b64("The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b))."),
+                        "key_excerpt": b64("The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier."),
+                        "pq_key_excerpt": b64("For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key."),
                     }),
                     &["payload"],
                 ),
@@ -82,8 +83,9 @@ pub(super) fn components() -> Value {
                 "receipt": object(
                     &json!({
                         "payload": b64("The receipt payload, dCBOR (`application/access-receipt+cbor`); its `agency` is the chain above."),
-                        "cose_sign1": b64("The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."),
-                        "key_excerpt": b64("The binding-signed excerpt of the signing key (CR-58 m.1)."),
+                        "cose_sign1": b64("The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`; under a hybrid domain the carrier `[classic, pq]` of two COSE_Sign1 over the same payload (OP-159 m.15 (b))."),
+                        "key_excerpt": b64("The binding-signed excerpt of the signing key (CR-58 m.1); of the classical component for a carrier."),
+                        "pq_key_excerpt": b64("For a hybrid carrier, the binding-signed excerpt of the ML-DSA component's key."),
                     }),
                     &["payload"],
                 ),

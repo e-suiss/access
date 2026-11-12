@@ -60,12 +60,14 @@ pub struct Response {
     /// The unsigned receipt payload of a new ALLOW; its digest is in the decision record and it
     /// is signed after the commit (§9.8, L2-RCP-2).
     pub receipt: Option<Vec<u8>>,
-    /// The signed receipt and its key excerpt, once the signer has signed it.
+    /// The signed receipt and its key excerpt, once the signer has signed it; under a hybrid
+    /// domain the carrier and the excerpt pair ([`hybrid`]).
     pub signed_receipt: Option<(Vec<u8>, Vec<u8>)>,
     /// The unsigned PAP payload of an allowed `projection.issue`; its digest is in the decision
     /// record and it is signed after the commit (L2-PAP-2).
     pub pap: Option<Vec<u8>>,
-    /// The signed PAP and its key excerpt.
+    /// The signed PAP and its key excerpt; under a hybrid domain the carrier and the excerpt
+    /// pair ([`hybrid`]).
     pub signed_pap: Option<(Vec<u8>, Vec<u8>)>,
     /// The holder Instances this commit ended (§9.9.3 k.6, P50): their live projection
     /// families are revoked at `record` once it is in. Empty for a replay.
@@ -2299,6 +2301,7 @@ pub mod faces;
 pub mod forced;
 mod holdings;
 pub mod hub;
+pub mod hybrid;
 pub mod impact;
 mod ingest;
 mod issuers;

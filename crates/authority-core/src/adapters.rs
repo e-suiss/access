@@ -2056,7 +2056,21 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
         at,
     };
     match call(path, &sign).await {
-        Ok(SignResponse::Signed { sign1, excerpt, .. }) => Ok((sign1, excerpt)),
+        Ok(SignResponse::Signed {
+            sign1,
+            excerpt,
+            pq: None,
+        }) => Ok((sign1, excerpt)),
+        // CR-42 m.4, OP-159 m.15 (b)
+        Ok(SignResponse::Signed {
+            sign1,
+            excerpt,
+            pq: Some((pq_sign1, pq_excerpt)),
+        }) => Ok((
+            access_kernel::verify::hybrid::encode_carrier(&sign1, &pq_sign1)
+                .map_err(|_| "signer-error")?,
+            crate::app::hybrid::pair(&excerpt, &pq_excerpt).map_err(|_| "signer-error")?,
+        )),
         Ok(SignResponse::Error(code)) => Err(signer_reason(&code)),
         Ok(_) => Err("signer-error"),
         Err(_) => Err("signer-unreachable"),

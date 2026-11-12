@@ -434,9 +434,14 @@ fn receipt_json(r: &access_authority_core::adapters::ExerciseRecord) -> Option<V
     let p = r.receipt.as_ref()?;
     let mut receipt = Map::new();
     receipt.insert("payload".into(), b64url_encode(p).into());
-    if let Some((sign1, excerpt)) = &r.signed_receipt {
+    if let Some((sign1, kept)) = &r.signed_receipt {
+        // OP-159 m.15 (b)
+        let (excerpt, pq) = access_authority_core::app::hybrid::split(kept);
         receipt.insert("cose_sign1".into(), b64url_encode(sign1).into());
-        receipt.insert("key_excerpt".into(), b64url_encode(excerpt).into());
+        receipt.insert("key_excerpt".into(), b64url_encode(&excerpt).into());
+        if let Some(pq) = pq {
+            receipt.insert("pq_key_excerpt".into(), b64url_encode(&pq).into());
+        }
     }
     Some(Value::Object(receipt))
 }
