@@ -242,6 +242,9 @@ pub enum ResourceKind {
     /// Whether the governing domain can be recovered, with its handover and recovery history,
     /// one resource (§8.17.9.7, §13.6, OP-158 m.4 (b) (W6)).
     Recovery,
+    /// The realm's signing profile, keys, key exchange share policy and crypto module, one
+    /// resource (OP-159 m.3 (o), (r), (t)).
+    Signing,
 }
 
 impl ResourceKind {
@@ -289,6 +292,7 @@ impl ResourceKind {
             Self::Durability => "durability",
             Self::RateLimits => "rate-limits",
             Self::Recovery => "recovery",
+            Self::Signing => "signing",
         }
     }
 }

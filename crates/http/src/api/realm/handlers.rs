@@ -71,7 +71,8 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::Placement
         | ResourceKind::Durability
         | ResourceKind::RateLimits
-        | ResourceKind::Recovery => "realm",
+        | ResourceKind::Recovery
+        | ResourceKind::Signing => "realm",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

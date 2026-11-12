@@ -249,6 +249,7 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Reviews => json!({ "name": key, "period_days": 90, "status": "live" }),
         ResourceKind::OffboardingPreviews => json!({ "party": key, "channels": [] }),
         ResourceKind::Placement => json!({ "realm": key, "cell": "pool-default" }),
+        ResourceKind::Signing => json!({ "realm": key, "profile": "classic" }),
         ResourceKind::Durability => json!({ "realm": key, "durability": "replicated" }),
         ResourceKind::Recovery => json!({ "realm": key, "recovery": "not_available",
                                           "recovery_reason": "no-recovery-entry", "history": [] }),

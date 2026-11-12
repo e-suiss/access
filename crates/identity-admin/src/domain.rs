@@ -26,6 +26,7 @@ use suiss_crypto::rotation::Policy;
 
 pub mod accounts;
 pub mod agent;
+pub mod assurance;
 pub mod breakglass;
 pub mod certificate;
 pub mod ciba;
@@ -653,6 +654,13 @@ pub enum Invalid {
     /// m.4 (b) (W9)).
     #[error("placement mismatch")]
     PlacementMismatch,
+    /// The realm's FIPS crypto profile and its post-quantum signing profile together, in
+    /// either order (CR-44, HL-27, OP-159 m.3 (r)).
+    #[error("fips and post-quantum profiles are exclusive")]
+    FipsPqExclusive,
+    /// No HSM ML-DSA mechanism for the post-quantum profile (CR-18, OP-159 m.3 (d)).
+    #[error("post-quantum key unavailable")]
+    PqKeyUnavailable,
 }
 
 impl Invalid {
@@ -804,6 +812,8 @@ impl Invalid {
             Self::HashProfileDowngrade => "hash-profile-downgrade",
             Self::RehomeIncomplete => "rehome-incomplete",
             Self::PlacementMismatch => "placement-mismatch",
+            Self::FipsPqExclusive => "fips-pq-exclusive",
+            Self::PqKeyUnavailable => "pq-key-unavailable",
         }
     }
 }
@@ -2179,6 +2189,11 @@ pub enum Change {
     HashProfileSet(resilience::HashProfileSet),
     /// `idp.realm.audit_tier` (`Some`, CT2) or `audit_tier_close` (`None`, CT1) (OP-158 m.3 (w)).
     AuditTier(Option<resilience::AuditTier>),
+    /// `idp.realm.signing_profile` (`Some`, reserved, CT3) or `signing_profile_close` (`None`,
+    /// CT1) (OP-159 m.3 (a), (o)).
+    SigningProfile(Option<assurance::SigningProfile>),
+    /// `idp.realm.kex_share` (CT2, OP-159 m.3 (a), (t)).
+    KexShare(assurance::KexShare),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2477,6 +2492,9 @@ impl Change {
             Self::CryptoProfile(_) => IdpAction::RealmCryptoProfile,
             Self::HashProfileSet(_) => IdpAction::RealmHashProfile,
             Self::AuditTier(t) => resilience::AuditTier::action(t.as_ref()),
+            // OP-159 m.3 (a)
+            Self::SigningProfile(p) => assurance::SigningProfile::action(p.as_ref()),
+            Self::KexShare(_) => IdpAction::RealmKexShare,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2683,6 +2701,8 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
+            // OP-159 m.4 (a)
+            Self::SigningProfile(_) | Self::KexShare(_) => Err(Invalid::NotYetServed),
             // OP-157 m.3 (m), OP-158 m.3 (o), (r)
             Self::Rehome(_)
             | Self::Residency(_)
@@ -2950,6 +2970,9 @@ impl Change {
             Self::CryptoProfile(c) => c.body(),
             Self::HashProfileSet(p) => p.body(),
             Self::AuditTier(t) => resilience::AuditTier::body(t.as_ref()),
+            // OP-159 m.3 (a)
+            Self::SigningProfile(p) => assurance::SigningProfile::body(p.as_ref()),
+            Self::KexShare(k) => k.body(),
         }
     }
 
@@ -3096,7 +3119,9 @@ impl Change {
             | Self::RateLimit(_)
             | Self::CryptoProfile(_)
             | Self::HashProfileSet(_)
-            | Self::AuditTier(_) => path.push(String::from("realm")),
+            | Self::AuditTier(_)
+            | Self::SigningProfile(_)
+            | Self::KexShare(_) => path.push(String::from("realm")),
             // OP-157 m.3 (a)
             Self::CaseSystem(c) => path.extend(c.path()),
             Self::Review(r) => path.extend(r.path()),

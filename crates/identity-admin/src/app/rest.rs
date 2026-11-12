@@ -358,6 +358,11 @@ pub enum Op {
     PutHashProfile,
     /// `putAuditTier`: `idp.realm.audit_tier`, or `audit_tier_close` (OP-158 m.3 (w)).
     PutAuditTier,
+    /// `putSigningProfile`: `idp.realm.signing_profile`, or `signing_profile_close` (OP-159
+    /// m.3 (a), (o)).
+    PutSigningProfile,
+    /// `putKexShare`: `idp.realm.kex_share` (OP-159 m.3 (a), (t)).
+    PutKexShare,
 }
 
 impl Op {
@@ -524,6 +529,8 @@ impl Op {
             "putCryptoProfile" => Self::PutCryptoProfile,
             "putHashProfile" => Self::PutHashProfile,
             "putAuditTier" => Self::PutAuditTier,
+            "putSigningProfile" => Self::PutSigningProfile,
+            "putKexShare" => Self::PutKexShare,
             _ => return None,
         })
     }
@@ -2279,6 +2286,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutAuditTier => {
             Change::AuditTier(crate::domain::resilience::AuditTier::parse(&own_body(m))?)
         }
+        // OP-159 m.3 (a)
+        Op::PutSigningProfile => Change::SigningProfile(
+            crate::domain::assurance::SigningProfile::parse(&own_body(m))?,
+        ),
+        Op::PutKexShare => {
+            Change::KexShare(crate::domain::assurance::KexShare::parse(&own_body(m))?)
+        }
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
@@ -2722,6 +2736,9 @@ pub enum Kind {
     /// Whether the governing domain can be recovered, and its handovers and forced recoveries
     /// (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)).
     Recovery,
+    /// The realm's signing profile, signing keys and algorithms, key exchange share policy and
+    /// crypto module (OP-159 m.3 (o), (r), (t)).
+    Signing,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3480,9 +3497,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
-                Read::default()
-            }
+            | (
+                Kind::SupportGrants
+                | Kind::ReviewItems
+                | Kind::OffboardingPreviews
+                // OP-159 m.4 (a)
+                | Kind::Signing,
+                _,
+            ) => Read::default(),
             // TI-17, CMP-26, OP-158 m.3 (o)
             (Kind::Placement, _) => Read {
                 items: vec![(super::rehome::placement_view(t).await?, 0)],

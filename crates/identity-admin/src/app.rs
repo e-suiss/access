@@ -850,6 +850,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::CryptoProfile(_)
             | Change::RateLimit(_)
             | Change::DrProfile(_) => {}
+            // OP-159 m.4 (a)
+            Change::SigningProfile(_) | Change::KexShare(_) => {
+                return Err(Invalid::NotYetServed.into());
+            }
             // E14, MD-5a, OP-158 m.3 (o)
             Change::Rehome(r) => rehome::current(t, g, r).await?,
             // CMP-26, OP-30, OP-158 m.3 (o)
@@ -1697,6 +1701,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 t.put_realm_crypto(bound, None, Some(p.profile.name()))
                     .await?;
                 true
+            }
+            // OP-159 m.4 (a)
+            Change::SigningProfile(_) | Change::KexShare(_) => {
+                return Err(Invalid::NotYetServed.into());
             }
             // OP-158 m.3 (w)
             Change::AuditTier(tier) => {

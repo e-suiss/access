@@ -904,6 +904,28 @@ const STAGE13: [Route; 10] = [
     ),
 ];
 
+/// The Stage 14 realm routes, declared before their lanes serve them (OP-159 m.4 (a)): each
+/// answers `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE14: [Route; 3] = [
+    read(
+        "/admin/v1/realms/{slug}/signing",
+        "getSigning",
+        "The realm's signing profile: its classical and ML-DSA signing keys and algorithms, the key exchange share policy, whether the FIPS module is in use and why FIPS and post-quantum profiles cannot be combined (OP-159 m.3 (o), (r), (t)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/signing-profile",
+        "putSigningProfile",
+        "Adds ML-DSA to the realm's accept and signing set {profile: ml-dsa-65 | ml-dsa-44 | ml-dsa-87} (idp.realm.signing_profile, reserved, CT3) or takes it out with {} (signing_profile_close, CT1); the classical algorithms stay. With the FIPS profile on it answers 409 fips-pq-exclusive; without an HSM ML-DSA mechanism, 409 pq-key-unavailable (CR-41, OP-159 m.3 (a), (d), (o), (r)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/kex-share",
+        "putKexShare",
+        "Sets the realm's hybrid key exchange share policy {mode: optimistic | advertise-only}: idp.realm.kex_share, CT2; both offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a), (t)).",
+    ),
+];
+
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &ALL_ROWS;
 
@@ -917,10 +939,20 @@ const BASE_LEN: usize = BASE.len();
     clippy::large_const_arrays,
     reason = "composed at compile time into the manifest, which a static cannot be"
 )]
-const ALL_ROWS: [Route;
-    BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len() + STAGE13.len()] = {
-    let mut out = [BASE[0];
-        BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len() + STAGE13.len()];
+const ALL_ROWS: [Route; BASE_LEN
+    + STAGE9.len()
+    + STAGE10.len()
+    + STAGE11.len()
+    + STAGE12.len()
+    + STAGE13.len()
+    + STAGE14.len()] = {
+    let mut out = [BASE[0]; BASE_LEN
+        + STAGE9.len()
+        + STAGE10.len()
+        + STAGE11.len()
+        + STAGE12.len()
+        + STAGE13.len()
+        + STAGE14.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];
@@ -952,11 +984,22 @@ const ALL_ROWS: [Route;
             STAGE13[n];
         n += 1;
     }
+    let mut o = 0;
+    while o < STAGE14.len() {
+        out[BASE_LEN
+            + STAGE9.len()
+            + STAGE10.len()
+            + STAGE11.len()
+            + STAGE12.len()
+            + STAGE13.len()
+            + o] = STAGE14[o];
+        o += 1;
+    }
     out
 };
 
-/// Whether a realm row is a Stage 9, 10, 11, 12 or 13 declaration (OP-154 m.4, OP-155 m.4,
-/// OP-156 m.4, OP-157 m.4, OP-158 m.4).
+/// Whether a realm row is a Stage 9, 10, 11, 12, 13 or 14 declaration (OP-154 m.4, OP-155 m.4,
+/// OP-156 m.4, OP-157 m.4, OP-158 m.4, OP-159 m.4).
 fn declared(operation_id: &str) -> bool {
     STAGE9
         .iter()
@@ -964,6 +1007,7 @@ fn declared(operation_id: &str) -> bool {
         .chain(STAGE11.iter())
         .chain(STAGE12.iter())
         .chain(STAGE13.iter())
+        .chain(STAGE14.iter())
         .any(|r| r.operation_id == operation_id)
 }
 
@@ -1857,6 +1901,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putResidency" | "putDrProfile" => (Settings, w(true)),
         // OP-158 m.4 (b) (W6)
         "getRecovery" => (ResourceKind::Recovery, Shape::Get),
+        // OP-159 m.4 (a)
+        "getSigning" => (ResourceKind::Signing, Shape::Planned("Signing")),
+        "putSigningProfile" | "putKexShare" => (Settings, Shape::Planned("WriteResult")),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
@@ -2149,6 +2196,9 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::HashProfileDowngrade => &codes::durability::HASH_PROFILE_DOWNGRADE,
             Invalid::RehomeIncomplete => &codes::durability::REHOME_INCOMPLETE,
             Invalid::PlacementMismatch => &codes::durability::PLACEMENT_MISMATCH,
+            // OP-159 m.3 (nn)
+            Invalid::FipsPqExclusive => &codes::assurance::FIPS_PQ_EXCLUSIVE,
+            Invalid::PqKeyUnavailable => &codes::assurance::PQ_KEY_UNAVAILABLE,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91

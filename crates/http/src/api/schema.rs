@@ -46,11 +46,26 @@ fn with_workload_clients(mut schemas: Value) -> Value {
     schemas
 }
 
+fn schemas() -> Value {
+    let mut out = base_schemas();
+    if let Some(m) = out.as_object_mut() {
+        // OP-159 m.4 (a)
+        m.insert(
+            String::from("Signing"),
+            json!({
+                "type": "object",
+                "description": "The realm's signing profile, its classical and ML-DSA signing keys and algorithms, the key exchange share policy and whether the FIPS module is in use (OP-159 m.3 (o), (r), (t)); its lane names its members when it serves it.",
+            }),
+        );
+    }
+    out
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "one JSON literal of the contract's component schemas"
 )]
-fn schemas() -> Value {
+fn base_schemas() -> Value {
     json!({
         "Problem": {
             "type": "object",
@@ -1008,6 +1023,8 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Durability => "Durability",
             ResourceKind::RateLimits => "RateLimits",
             ResourceKind::Recovery => "Recovery",
+            // OP-159 m.4 (a)
+            ResourceKind::Signing => "Signing",
         },
         _ => "ExerciseRef",
     }

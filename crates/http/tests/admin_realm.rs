@@ -148,8 +148,8 @@ async fn a_planned_realm_read_answers_not_yet_served_behind_its_permission() {
         .iter()
         .filter(|r| access_http::api::realm::planned(r.operation_id) && r.access != Access::Write)
         .collect();
-    // OP-155 m.4, OP-156 m.4, m.3 (c), (l), (o), (p), (q), (r), (s), OP-157 m.4 (a), m.3 (e), (h), (v), (w), OP-158 m.4 (a), m.3 (o), (p)
-    assert_eq!(planned.len(), 4);
+    // OP-155 m.4, OP-156 m.4, m.3 (c), (l), (o), (p), (q), (r), (s), OP-157 m.4 (a), m.3 (e), (h), (v), (w), OP-158 m.4 (a), m.3 (o), (p), OP-159 m.4 (a)
+    assert_eq!(planned.len(), 5);
     for row in planned {
         let (r, body) = send(&router, read(&path_of(row), &token)).await;
         assert_eq!(

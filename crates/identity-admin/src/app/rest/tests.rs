@@ -256,6 +256,47 @@ fn catalog_8_writes_compile_into_their_changes_and_are_not_yet_served() {
     );
 }
 
+// OP-159 m.3 (a), m.4 (a)
+#[test]
+fn catalog_9_writes_compile_into_their_changes_and_are_not_yet_served() {
+    let ids = ids();
+    let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
+    for (op, body, action) in [
+        (
+            Op::PutSigningProfile,
+            json!({"profile": "ml-dsa-65"}),
+            "idp.realm.signing_profile",
+        ),
+        (
+            Op::PutSigningProfile,
+            json!({}),
+            "idp.realm.signing_profile_close",
+        ),
+        (
+            Op::PutKexShare,
+            json!({"mode": "advertise-only"}),
+            "idp.realm.kex_share",
+        ),
+    ] {
+        let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
+        assert_eq!(change.action().label(), action, "{op:?}");
+        assert_eq!(
+            change.check(&declared),
+            Err(Invalid::NotYetServed),
+            "{op:?}"
+        );
+    }
+    assert_eq!(
+        compile(
+            Op::PutSigningProfile,
+            None,
+            &json!({"profile": "ed25519"}),
+            &ids
+        ),
+        Err(Invalid::Body)
+    );
+}
+
 // TN-117
 #[test]
 fn a_group_names_its_one_membership_issuer() {

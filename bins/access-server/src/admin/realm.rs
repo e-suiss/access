@@ -130,6 +130,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Durability => Kind::Durability,
         ResourceKind::RateLimits => Kind::RateLimits,
         ResourceKind::Recovery => Kind::Recovery,
+        ResourceKind::Signing => Kind::Signing,
     }
 }
 
