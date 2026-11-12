@@ -96,8 +96,7 @@ pub(crate) fn defines(src: &str, name: &str) -> bool {
             .get(at.saturating_add(needle.len())..)
             .unwrap_or_default();
         let before = src.get(..at).unwrap_or_default();
-        after.starts_with(['(', '<'])
-            && before.chars().next_back().is_none_or(|c| c.is_whitespace())
+        after.starts_with(['(', '<']) && before.chars().next_back().is_none_or(char::is_whitespace)
     })
 }
 

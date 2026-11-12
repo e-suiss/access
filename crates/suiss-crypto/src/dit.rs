@@ -45,7 +45,7 @@ impl Drop for DitGuard {
     }
 }
 
-/// Whether this host is Apple Silicon. Its data memory-dependent prefetcher (GoFetch) breaks
+/// Whether this host is Apple Silicon. Its data memory-dependent prefetcher (`GoFetch`) breaks
 /// constant-time code, so a production signer refuses to start on it (CR-39 m.6). An aarch64
 /// Linux host whose CPU cannot be read counts as Apple Silicon.
 #[must_use]

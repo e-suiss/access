@@ -24,6 +24,7 @@ pub mod agent;
 pub mod approver;
 pub mod auth;
 pub mod authorize;
+pub mod kex;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod metadata;

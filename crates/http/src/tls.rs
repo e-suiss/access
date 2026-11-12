@@ -38,10 +38,12 @@ use rustls_pki_types::pem::PemObject as _;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
-use tokio_rustls::TlsAcceptor;
 
 use crate::adp::adapters::Pep;
 use crate::forwarded::TrustedProxies;
+
+// CR-12, OP-159 m.3 (t)
+pub mod kex;
 
 /// Most TLS handshakes in progress at once (OP-36, PD).
 pub const HANDSHAKES: usize = 256;
@@ -231,6 +233,18 @@ pub enum TlsError {
     /// rustls refused the chain, the key or the versions.
     #[error("tls: {0}")]
     Rustls(#[from] rustls::Error),
+    /// A browser-facing certificate names ML-DSA (CR-12 m.5).
+    #[error("certificate chain: ML-DSA is not served to browsers (CR-12 m.5)")]
+    MlDsa,
+}
+
+/// Refuses a chain that names ML-DSA: public web PKI has no ML-DSA certificate, so a
+/// browser-facing listener keeps classic ones (CR-12 m.5, OP-159 m.3 (t)).
+fn classic(chain: &[CertificateDer<'_>]) -> Result<(), TlsError> {
+    if chain.iter().any(|c| kex::names_ml_dsa(c.as_ref())) {
+        return Err(TlsError::MlDsa);
+    }
+    Ok(())
 }
 
 /// The ALPN protocols of the public listener: HTTP, and `acme-tls/1` for TLS-ALPN-01
@@ -298,6 +312,8 @@ impl Sni {
             .first()
             .cloned()
             .ok_or_else(|| TlsError::Certificates("no certificate".to_owned()))?;
+        // CR-12 m.5
+        classic(&chain)?;
         let key =
             PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| TlsError::Key(e.to_string()))?;
         // CR-12
@@ -325,7 +341,13 @@ impl Sni {
     pub fn set_domains(&self, certs: Vec<DomainCert>) {
         let mut map = HashMap::new();
         for c in certs {
-            let chain = c.chain.into_iter().map(CertificateDer::from).collect();
+            let chain: Vec<CertificateDer<'static>> =
+                c.chain.into_iter().map(CertificateDer::from).collect();
+            // CR-12 m.5
+            if let Err(error) = classic(&chain) {
+                tracing::error!(%error, "custom domain certificate refused");
+                continue;
+            }
             let key = PrivateKeyDer::Pkcs8(c.key.to_vec().into());
             match certified(&self.provider, chain, key, true) {
                 Ok(ck) => {
@@ -448,17 +470,26 @@ pub fn sni_server_config(
     client_ca_pem: Option<&[u8]>,
 ) -> Result<Arc<ServerConfig>, TlsError> {
     let provider = sni.provider.clone();
-    let builder = ServerConfig::builder_with_provider(provider.clone())
-        .with_protocol_versions(&[&rustls::version::TLS13])?;
-    let builder = match client_ca_pem {
-        None => builder.with_no_client_auth(),
-        Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider)?),
+    let build = |kx: Arc<rustls::crypto::CryptoProvider>,
+                 resolver: Arc<Sni>|
+     -> Result<ServerConfig, TlsError> {
+        let builder = ServerConfig::builder_with_provider(kx)
+            .with_protocol_versions(&[&rustls::version::TLS13])?;
+        let builder = match client_ca_pem {
+            None => builder.with_no_client_auth(),
+            Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider.clone())?),
+        };
+        let mut config = builder.with_cert_resolver(resolver);
+        config.alpn_protocols = PUBLIC_ALPN.iter().map(|p| p.to_vec()).collect();
+        // OP-36
+        config.max_early_data_size = 0;
+        Ok(config)
     };
-    let mut config = builder.with_cert_resolver(sni);
-    config.alpn_protocols = PUBLIC_ALPN.iter().map(|p| p.to_vec()).collect();
-    // OP-36
-    config.max_early_data_size = 0;
-    Ok(Arc::new(config))
+    let twin = build(kex::pq_only(&provider), sni.clone())?;
+    let config = Arc::new(build(provider.clone(), sni)?);
+    // CR-12 m.3, OP-159 m.3 (t)
+    kex::pair(&config, twin);
+    Ok(config)
 }
 
 fn pep_or_svid(
@@ -499,20 +530,28 @@ pub fn server_config(
     if chain.is_empty() {
         return Err(TlsError::Certificates("no certificate".to_owned()));
     }
+    // CR-12 m.5
+    classic(&chain)?;
     let key = PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| TlsError::Key(e.to_string()))?;
     // CR-12
     let provider = Arc::new(aws_lc_rs::default_provider());
-    let builder = ServerConfig::builder_with_provider(provider.clone())
-        .with_protocol_versions(&[&rustls::version::TLS13])?;
-    let builder = match client_ca_pem {
-        None => builder.with_no_client_auth(),
-        Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider)?),
+    let build = |kx: Arc<rustls::crypto::CryptoProvider>| -> Result<ServerConfig, TlsError> {
+        let builder = ServerConfig::builder_with_provider(kx)
+            .with_protocol_versions(&[&rustls::version::TLS13])?;
+        let builder = match client_ca_pem {
+            None => builder.with_no_client_auth(),
+            Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider.clone())?),
+        };
+        let mut config = builder.with_single_cert(chain.clone(), key.clone_key())?;
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        // OP-36
+        config.max_early_data_size = 0;
+        Ok(config)
     };
-    let mut config = builder.with_single_cert(chain, key)?;
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    // OP-36
-    config.max_early_data_size = 0;
-    Ok(Arc::new(config))
+    let config = Arc::new(build(provider.clone())?);
+    // CR-12 m.3, OP-159 m.3 (t)
+    kex::pair(&config, build(kex::pq_only(&provider))?);
+    Ok(config)
 }
 
 /// The mTLS listener's TLS 1.3 configuration for a PEM chain and key (OP-155 m.3 (m)): it asks
@@ -528,17 +567,25 @@ pub fn mtls_server_config(chain_pem: &[u8], key_pem: &[u8]) -> Result<Arc<Server
     if chain.is_empty() {
         return Err(TlsError::Certificates("no certificate".to_owned()));
     }
+    // CR-12 m.5
+    classic(&chain)?;
     let key = PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| TlsError::Key(e.to_string()))?;
     // CR-12
     let provider = Arc::new(aws_lc_rs::default_provider());
-    let mut config = ServerConfig::builder_with_provider(provider.clone())
-        .with_protocol_versions(&[&rustls::version::TLS13])?
-        .with_client_cert_verifier(Arc::new(HandshakeProof(provider)))
-        .with_single_cert(chain, key)?;
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    // OP-36
-    config.max_early_data_size = 0;
-    Ok(Arc::new(config))
+    let build = |kx: Arc<rustls::crypto::CryptoProvider>| -> Result<ServerConfig, TlsError> {
+        let mut config = ServerConfig::builder_with_provider(kx)
+            .with_protocol_versions(&[&rustls::version::TLS13])?
+            .with_client_cert_verifier(Arc::new(HandshakeProof(provider.clone())))
+            .with_single_cert(chain.clone(), key.clone_key())?;
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        // OP-36
+        config.max_early_data_size = 0;
+        Ok(config)
+    };
+    let config = Arc::new(build(provider.clone())?);
+    // CR-12 m.3, OP-159 m.3 (t)
+    kex::pair(&config, build(kex::pq_only(&provider))?);
+    Ok(config)
 }
 
 /// A client configuration for requests to clients' own endpoints (§10.4.6, §11.3.6): the
@@ -694,8 +741,11 @@ async fn serve_as(
     (mode, proxies): (Listener, Arc<TrustedProxies>),
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
-    let acceptor = TlsAcceptor::from(config);
     let handshakes = Arc::new(Semaphore::new(HANDSHAKES));
+    let label = match mode {
+        Listener::Public => "public",
+        Listener::Mtls { .. } => "mtls",
+    };
     let graceful = GracefulShutdown::new();
     tokio::pin!(shutdown);
     loop {
@@ -707,23 +757,42 @@ async fn serve_as(
             tracing::warn!(%peer, "too many TLS handshakes in progress; connection dropped");
             continue;
         };
-        let acceptor = acceptor.clone();
+        let config = config.clone();
         let app = app.clone();
         let proxies = proxies.clone();
         let watcher = graceful.watcher();
         tokio::spawn(async move {
-            let tls = match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(tcp)).await {
+            let capture = kex::Capture::default();
+            let handshake = handshake(tcp, &config, capture.clone());
+            let tls = match tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake).await {
                 Ok(Ok(tls)) => tls,
                 Ok(Err(error)) => {
+                    // CR-12 m.3, OP-159 m.3 (t)
+                    kex::count(label, None, capture.offer().as_ref(), kex::Outcome::Failed);
                     tracing::debug!(%peer, %error, "TLS handshake failed");
                     return;
                 }
                 Err(_) => {
+                    kex::count(label, None, capture.offer().as_ref(), kex::Outcome::Failed);
                     tracing::debug!(%peer, "TLS handshake timed out");
                     return;
                 }
             };
             drop(permit);
+            let mut tls = tls;
+            tls.get_mut().0.stop();
+            // CR-12 m.3, OP-159 m.3 (t)
+            {
+                let conn = tls.get_ref().1;
+                let outcome = match conn.handshake_kind() {
+                    Some(rustls::HandshakeKind::FullWithHelloRetryRequest) => kex::Outcome::Retry,
+                    _ => kex::Outcome::Ok,
+                };
+                let group = conn
+                    .negotiated_key_exchange_group()
+                    .map(|g| u16::from(g.name()));
+                kex::count(label, group, None, outcome);
+            }
             // RFC 8737 §3
             if tls.get_ref().1.alpn_protocol() == Some(access_identity_domain::x509::ACME_TLS_ALPN)
             {
@@ -752,6 +821,20 @@ async fn serve_as(
     }
     graceful.shutdown().await;
     Ok(())
+}
+
+/// One TLS handshake on `tcp`: the `ClientHello` is read first, then the handshake finishes with
+/// the post-quantum twin of `config` when the client lists the hybrid group (CR-12 m.2, m.3).
+async fn handshake(
+    tcp: tokio::net::TcpStream,
+    config: &Arc<ServerConfig>,
+    capture: kex::Capture,
+) -> io::Result<tokio_rustls::server::TlsStream<kex::Recording<tokio::net::TcpStream>>> {
+    let io = kex::Recording::new(tcp, capture);
+    let start =
+        tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), io).await?;
+    let config = kex::for_hello(config, start.client_hello().named_groups());
+    start.into_stream(config).await
 }
 
 /// The chain a client presented on the mTLS listener.

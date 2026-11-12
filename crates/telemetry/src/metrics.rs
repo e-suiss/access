@@ -51,11 +51,15 @@ pub enum Label {
     Stage,
     /// A mode (`normal`, `degraded`, …).
     Mode,
+    /// A TLS listener (`public`, `mtls`).
+    Listener,
+    /// A TLS key exchange group (`x25519mlkem768`, `x25519`, `secp256r1`, `other`).
+    Group,
 }
 
 impl Label {
     /// Every label, for the allowlist check.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::Outcome,
         Self::Reason,
         Self::Kind,
@@ -70,6 +74,8 @@ impl Label {
         Self::Factor,
         Self::Stage,
         Self::Mode,
+        Self::Listener,
+        Self::Group,
     ];
 
     /// The label name.
@@ -90,6 +96,8 @@ impl Label {
             Self::Factor => "factor",
             Self::Stage => "stage",
             Self::Mode => "mode",
+            Self::Listener => "listener",
+            Self::Group => "group",
         }
     }
 }

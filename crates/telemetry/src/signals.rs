@@ -316,3 +316,12 @@ pub static INTEGRITY_ALARMS: Counter<1> = Counter::new(
     "Sev-1 integrity events by kind (U9, TI-RT1, FA-13)",
     [Label::Kind],
 );
+
+/// CR-12 m.3, OP-159 m.3 (t): TLS handshakes by `listener` (`public`, `mtls`), negotiated or
+/// offered `group` (`x25519mlkem768`, `x25519`, `secp256r1`, `other`) and `outcome` (`ok`,
+/// `failed`, `retry` after a `HelloRetryRequest`). No label comes from the request (TN-127).
+pub static TLS_HANDSHAKES: Counter<3> = Counter::new(
+    "access_tls_handshakes_total",
+    "TLS handshakes by listener, key exchange group and outcome (CR-12)",
+    [Label::Listener, Label::Group, Label::Outcome],
+);

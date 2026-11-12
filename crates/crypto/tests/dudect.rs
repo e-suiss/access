@@ -147,9 +147,15 @@ mod dudect {
     fn flip(real: &[u8], differ: bool, rng: &mut Rng) -> Vec<u8> {
         let mut out = real.to_vec();
         if differ && let Some(b) = out.first_mut() {
-            *b ^= u8::try_from(rng.next() % 255 + 1).unwrap_or(1);
+            *b ^= nonzero(rng);
         }
         out
+    }
+
+    fn nonzero(rng: &mut Rng) -> u8 {
+        u8::try_from(rng.next() % 255)
+            .unwrap_or(0)
+            .saturating_add(1)
     }
 
     // CR-39 m.1 (opaque token, device and user code), m.4, SAI-42
@@ -212,8 +218,9 @@ mod dudect {
         let t = leak_t(n / 4, |differ, rng| {
             let mut presented = real.clone().into_bytes();
             if differ && let Some(b) = presented.first_mut() {
-                *b = b'0'
-                    + u8::try_from((u64::from(*b - b'0') + rng.next() % 9 + 1) % 10).unwrap_or(0);
+                let digit = b.wrapping_sub(b'0');
+                let shift = u8::try_from(rng.next() % 9).unwrap_or(0).saturating_add(1);
+                *b = b'0'.wrapping_add(digit.wrapping_add(shift) % 10);
             }
             let presented = String::from_utf8(presented).unwrap();
             timed(|| {
@@ -282,7 +289,7 @@ mod dudect {
                 tampered.get_mut(12)
             };
             if let Some(b) = byte {
-                *b ^= u8::try_from(rng.next() % 255 + 1).unwrap_or(1);
+                *b ^= nonzero(rng);
             }
             let text = access_kernel::json::b64url_encode(&tampered);
             timed(|| token.open(&domain, "basis_ref", black_box(&text)).is_ok())

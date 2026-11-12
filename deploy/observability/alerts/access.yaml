@@ -166,3 +166,21 @@ groups:
           description: >-
             The signed equivocation evidence is kept. A log showed two different histories;
             treat the domain's provider as suspect.
+  - name: access-transport
+    rules:
+      # CR-12 m.3, OP-159 m.3 (t)
+      - alert: AccessHybridKexFailures
+        expr: >-
+          sum(increase(access_tls_handshakes_total{group="x25519mlkem768",outcome="failed"}[1h]))
+          / clamp_min(sum(increase(access_tls_handshakes_total{group="x25519mlkem768"}[1h])), 1)
+          > 0.005
+        labels:
+          severity: ticket
+          runbook: hybrid-kex-failures
+        annotations:
+          summary: More than 0.5% of post-quantum key exchange handshakes failed in the last hour
+          description: >-
+            Clients that offered the X25519MLKEM768 key share failed their TLS handshake ten
+            times more often than the measured middlebox breakage. A realm with affected clients
+            can move them to the advertise-only key share policy; the post-quantum group is
+            never dropped.

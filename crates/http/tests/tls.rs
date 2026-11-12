@@ -529,3 +529,169 @@ async fn x_forwarded_for_names_the_client_only_behind_a_trusted_proxy() {
     );
     let _ = elsewhere.stop.send(());
 }
+
+fn handshakes(listener: &str, group: &str, outcome: &str) -> u64 {
+    let pairs = [
+        format!("listener=\"{listener}\""),
+        format!("group=\"{group}\""),
+        format!("outcome=\"{outcome}\""),
+    ];
+    access_telemetry::metrics::render_prometheus()
+        .lines()
+        .filter(|l| l.starts_with("access_tls_handshakes_total{"))
+        .find(|l| pairs.iter().all(|p| l.contains(p.as_str())))
+        .and_then(|l| l.rsplit(' ').next())
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+fn client_groups(roots: RootCertStore, groups: &[u16]) -> TlsConnector {
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    let all = provider.kx_groups.clone();
+    provider.kx_groups = groups
+        .iter()
+        .filter_map(|g| all.iter().find(|k| u16::from(k.name()) == *g).copied())
+        .collect();
+    let config = ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    TlsConnector::from(Arc::new(config))
+}
+
+async fn wait_for(f: impl Fn() -> bool) {
+    for _ in 0..200 {
+        if f() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("the handshake was not counted");
+}
+
+// CR-12 m.2, m.3, OP-159 m.3 (t)
+#[tokio::test]
+async fn an_advertise_only_client_moves_to_the_hybrid_group_by_a_retry() {
+    let s = start().await;
+    let before = handshakes("public", "x25519mlkem768", "retry");
+    let mode = access_sdk::kex::KexShare::AdvertiseOnly;
+    assert_eq!(
+        mode.groups(),
+        [
+            access_sdk::kex::X25519,
+            access_sdk::kex::X25519MLKEM768,
+            access_sdk::kex::SECP256R1
+        ]
+    );
+    let tcp = TcpStream::connect(s.addr).await.unwrap();
+    let tls = client_groups(s.roots.clone(), &mode.groups())
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await
+        .unwrap();
+    let (_, conn) = tls.get_ref();
+    assert_eq!(
+        conn.negotiated_key_exchange_group().unwrap().name(),
+        rustls::NamedGroup::X25519MLKEM768
+    );
+    assert_eq!(
+        conn.handshake_kind(),
+        Some(rustls::HandshakeKind::FullWithHelloRetryRequest)
+    );
+    wait_for(|| handshakes("public", "x25519mlkem768", "retry") > before).await;
+    let _ = s.stop.send(());
+}
+
+// CR-12 m.3, OP-159 m.3 (t)
+#[tokio::test]
+async fn an_optimistic_client_keeps_its_hybrid_share() {
+    let s = start().await;
+    let before = handshakes("public", "x25519mlkem768", "ok");
+    let mode = access_sdk::kex::KexShare::Optimistic;
+    let tcp = TcpStream::connect(s.addr).await.unwrap();
+    let tls = client_groups(s.roots.clone(), &mode.groups())
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await
+        .unwrap();
+    assert_eq!(
+        tls.get_ref().1.handshake_kind(),
+        Some(rustls::HandshakeKind::Full)
+    );
+    wait_for(|| handshakes("public", "x25519mlkem768", "ok") > before).await;
+    let _ = s.stop.send(());
+}
+
+// CR-12 m.3, OP-159 m.3 (t)
+#[tokio::test]
+async fn a_failed_handshake_with_a_hybrid_share_is_counted_as_hybrid() {
+    let s = start().await;
+    let before = handshakes("public", "x25519mlkem768", "failed");
+    let tcp = TcpStream::connect(s.addr).await.unwrap();
+    let mut other = RootCertStore::empty();
+    let stranger = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    other.add(stranger.cert.der().clone()).unwrap();
+    let refused = client_groups(other, &access_sdk::kex::KexShare::Optimistic.groups())
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await;
+    assert!(refused.is_err());
+    wait_for(|| handshakes("public", "x25519mlkem768", "failed") > before).await;
+    let _ = s.stop.send(());
+}
+
+// CR-12 m.3, OP-159 m.3 (t)
+#[tokio::test]
+async fn a_classic_only_client_is_counted_under_its_group() {
+    let s = start().await;
+    let before = handshakes("public", "x25519", "ok");
+    let tcp = TcpStream::connect(s.addr).await.unwrap();
+    let tls = client_groups(s.roots.clone(), &[access_sdk::kex::X25519])
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await
+        .unwrap();
+    assert_eq!(
+        tls.get_ref()
+            .1
+            .negotiated_key_exchange_group()
+            .unwrap()
+            .name(),
+        rustls::NamedGroup::X25519
+    );
+    wait_for(|| handshakes("public", "x25519", "ok") > before).await;
+    let _ = s.stop.send(());
+}
+
+fn ml_dsa_cert() -> (String, String) {
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ML_DSA_65).unwrap();
+    let cert = rcgen::CertificateParams::new(vec!["localhost".to_owned()])
+        .unwrap()
+        .self_signed(&key)
+        .unwrap();
+    (cert.pem(), key.serialize_pem())
+}
+
+// CR-12 m.5, OP-159 m.3 (t), Ek B 6333
+#[test]
+fn an_ml_dsa_certificate_is_refused_at_start() {
+    let (chain, key) = ml_dsa_cert();
+    assert!(matches!(
+        server_config(chain.as_bytes(), key.as_bytes(), None),
+        Err(TlsError::MlDsa)
+    ));
+    assert!(matches!(
+        access_http::tls::Sni::new(chain.as_bytes(), key.as_bytes()),
+        Err(TlsError::MlDsa)
+    ));
+    assert!(matches!(
+        access_http::tls::mtls_server_config(chain.as_bytes(), key.as_bytes()),
+        Err(TlsError::MlDsa)
+    ));
+    let classic = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    assert!(
+        server_config(
+            classic.cert.pem().as_bytes(),
+            classic.signing_key.serialize_pem().as_bytes(),
+            None
+        )
+        .is_ok()
+    );
+}
