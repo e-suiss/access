@@ -3,8 +3,131 @@
 # [[cell]]
 # rule       R-n of MD-2
 # language   rust | typescript | c-ffi
-# mechanism  the lint, xtask rule or CI step that enforces it
+# mechanism  the lint, xtask rule or CI step that enforces it, each one of
+#            lint:<rust|clippy>::<name>   denied or forbidden in [workspace.lints]
+#            profile:<profile>.<key>      set in the root Cargo.toml [profile.<profile>]
+#            xtask:<rule>                 a cargo xtask check
+#            semgrep:<id>                 a rule of .semgrep/rules.yml
+#            recipe:<name>                a justfile recipe
+#            job:<workflow>/<job>         a job of .github/workflows/<workflow>.yml
+#            eslint:<text>                in every TypeScript package's eslint.config.js
+#            tsconfig:<option>            true in every TypeScript package's tsconfig.json
+#            npmrc:<line>                 in every TypeScript package's .npmrc
+#            file:<path>                  an existing file
+# applies    false only with a reason: the language holds no code the rule is about
+# reason     why the rule does not apply
 #
 # Lane J7 fills the cells; xtask `language-profiles` refuses an empty or missing mechanism.
 
 version = 1
+
+[[cell]]
+rule = "R-1"
+language = "rust"
+mechanism = ["lint:clippy::arithmetic_side_effects", "lint:clippy::cast_possible_truncation", "lint:clippy::cast_sign_loss", "profile:release.overflow-checks"]
+
+[[cell]]
+rule = "R-1"
+language = "typescript"
+mechanism = ["tsconfig:strict", "eslint:strictTypeChecked"]
+
+[[cell]]
+rule = "R-1"
+language = "c-ffi"
+mechanism = ["lint:clippy::arithmetic_side_effects", "xtask:unsafe-allowlist"]
+
+[[cell]]
+rule = "R-2"
+language = "rust"
+mechanism = ["lint:rust::unsafe_code", "xtask:unsafe-allowlist", "recipe:miri", "job:weekly/sanitizers"]
+
+[[cell]]
+rule = "R-2"
+language = "typescript"
+mechanism = ["eslint:strictTypeChecked", "npmrc:ignore-scripts=true"]
+
+[[cell]]
+rule = "R-2"
+language = "c-ffi"
+mechanism = ["xtask:unsafe-allowlist", "job:weekly/kerberos-asan", "job:weekly/sanitizers"]
+
+[[cell]]
+rule = "R-3"
+language = "rust"
+mechanism = ["lint:clippy::unwrap_used", "lint:clippy::expect_used", "lint:clippy::indexing_slicing", "lint:clippy::panic", "semgrep:unwrap-in-non-test-code", "xtask:panic-profile", "profile:release.panic"]
+
+[[cell]]
+rule = "R-3"
+language = "typescript"
+mechanism = ["tsconfig:noUncheckedIndexedAccess", "eslint:strictTypeChecked"]
+
+[[cell]]
+rule = "R-3"
+language = "c-ffi"
+mechanism = ["xtask:panic-profile", "job:weekly/kerberos-asan"]
+
+[[cell]]
+rule = "R-4"
+language = "rust"
+mechanism = ["recipe:fuzz-regress", "xtask:parser-preallocation", "xtask:serde-json-depth", "job:nightly/test-full"]
+
+[[cell]]
+rule = "R-4"
+language = "typescript"
+mechanism = ["job:ci/bindings-gate", "recipe:wasm"]
+
+[[cell]]
+rule = "R-4"
+language = "c-ffi"
+mechanism = ["file:fuzz/fuzz_targets/spnego_read.rs", "recipe:fuzz-regress", "job:weekly/kerberos-asan"]
+
+[[cell]]
+rule = "R-5"
+language = "rust"
+mechanism = ["file:crates/http/src/lib.rs", "file:crates/http/tests/router.rs", "job:ci/test"]
+
+[[cell]]
+rule = "R-6"
+language = "rust"
+mechanism = ["file:crates/authority-sequencer/tests/dst.rs", "recipe:dst", "job:nightly/test-full"]
+
+[[cell]]
+rule = "R-7"
+language = "rust"
+mechanism = ["xtask:sql-only-in-store", "semgrep:sql-outside-store", "file:crates/store/tests/schema.rs"]
+
+[[cell]]
+rule = "R-5"
+language = "typescript"
+applies = false
+reason = "The TypeScript packages serve no HTTP: the browser clients and the SDK call the Rust server, whose listeners carry the R-5 limits."
+
+[[cell]]
+rule = "R-5"
+language = "c-ffi"
+applies = false
+reason = "The C FFI code (Kerberos, PKCS#11, aws-lc) serves no HTTP; the Kerberos gateway reads framed tokens under the R-4 limits."
+
+[[cell]]
+rule = "R-6"
+language = "typescript"
+applies = false
+reason = "No sequencer runs in TypeScript; the pure sequencer is the Rust crate under the R-6 simulation."
+
+[[cell]]
+rule = "R-6"
+language = "c-ffi"
+applies = false
+reason = "No sequencer runs in C."
+
+[[cell]]
+rule = "R-7"
+language = "typescript"
+applies = false
+reason = "TypeScript issues no database query; every query is compiled in the Rust store."
+
+[[cell]]
+rule = "R-7"
+language = "c-ffi"
+applies = false
+reason = "C code issues no database query; every query is compiled in the Rust store."

@@ -67,6 +67,14 @@ jobs:
         env:
           SANITIZER: ${{ matrix.sanitizer }}
         run: just sanitize "$SANITIZER"
+      # R-2, SA-20, OP-159 m.3 (dd)
+      - name: Miri on the Kernel, the parsers and the pure verifier
+        if: matrix.sanitizer == 'address'
+        env:
+          NIGHTLY: ${{ steps.nightly.outputs.toolchain }}
+        run: |
+          rustup component add miri --toolchain "$NIGHTLY"
+          just miri
 
   # OP-155 m.3 (o), RR-28: the Kerberos C FFI under AddressSanitizer, and the ASN.1 fuzz target
   # of the Negotiate token reader the parser worker runs; sanitizers run in the weekly job (SA-23)
