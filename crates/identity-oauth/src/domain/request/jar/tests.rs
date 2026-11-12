@@ -125,6 +125,8 @@ fn claims_and_times_are_held() {
         &format!(r#""aud":["https://other.test","{ISS}"]"#),
     );
     assert!(verify(&es256(&k, H, &among), &keys, &rules(false)).is_ok());
+    let mixed = H.replace("oauth-authz-req+jwt", "OAutH-auThZ-REQ+jWt");
+    assert!(verify(&es256(&k, &mixed, &claims("")), &keys, &rules(false)).is_ok());
     let without = claims("").replace(
         &format!(r#""aud":"{ISS}""#),
         r#""aud":["https://other.test","invalid"]"#,

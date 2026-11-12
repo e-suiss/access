@@ -12,7 +12,7 @@ use crate::domain::request::{MAX_PARAMS, Params};
 /// at most 60 minutes).
 pub const MAX_LIFETIME_MS: u64 = 60 * 60 * 1000;
 
-/// The `typ` of a request object (RFC 9101 §10.8).
+/// The `typ` of a request object (RFC 9101 §10.8), compared without case (RFC 7515 §4.1.9).
 pub const TYP: &str = "oauth-authz-req+jwt";
 
 /// Why a request object is refused; every case answers `invalid_request_object`.
@@ -115,7 +115,7 @@ pub fn verify(token: &str, keys: &[Jwk], rules: &JarRules<'_>) -> Result<Params,
     if signed
         .typ
         .as_deref()
-        .is_some_and(|t| t != TYP && t != "JWT")
+        .is_some_and(|t| !t.eq_ignore_ascii_case(TYP) && !t.eq_ignore_ascii_case("JWT"))
     {
         return Err(JarError::Format);
     }
