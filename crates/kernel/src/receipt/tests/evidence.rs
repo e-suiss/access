@@ -102,15 +102,17 @@ fn other() -> Receipt {
 fn cases() -> (DomainMetadata, Vec<Case>) {
     let own = digest(&receipt()).unwrap();
     let theirs = digest(&other()).unwrap();
-    let r0 = record(0, &[d(0xa0)]);
-    let r1 = record(1, &[theirs, own]);
+    let r0 = record(1, &[d(0xa0)]);
+    let r1 = record(2, &[theirs, own]);
+    let genesis = suiss_crypto::digest::sha256(b"genesis leaf");
     let (h0, h1) = (r0.leaf_hash().unwrap(), r1.leaf_hash().unwrap());
-    let root = suiss_crypto::digest::node_hash(&h0, &h1);
+    let left = suiss_crypto::digest::node_hash(&genesis, &h0);
+    let root = suiss_crypto::digest::node_hash(&left, &h1);
     let good = || Ev {
         artefact: own,
         record: r1.clone(),
-        path: vec![h0],
-        note: note(2, root, true),
+        path: vec![left],
+        note: note(3, root, true),
     };
     let mut tampered = super::Case::of(&receipt());
     let last = tampered.receipt.len() - 1;
@@ -139,7 +141,7 @@ fn cases() -> (DomainMetadata, Vec<Case>) {
             base: super::Case::of(&receipt()),
             evidence: Some(Ev {
                 record: r0.clone(),
-                path: vec![h1],
+                path: vec![genesis, h1],
                 ..good()
             }),
         },
@@ -147,7 +149,7 @@ fn cases() -> (DomainMetadata, Vec<Case>) {
             id: "checkpoint-without-a-witness-refused",
             base: super::Case::of(&receipt()),
             evidence: Some(Ev {
-                note: note(2, root, false),
+                note: note(3, root, false),
                 ..good()
             }),
         },
