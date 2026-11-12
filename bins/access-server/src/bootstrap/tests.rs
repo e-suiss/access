@@ -81,17 +81,26 @@ fn schedule(signer: &AuthoritySigner) {
     assert_eq!(signer.lock().unwrap().tick(now, now), Vec::<Digest>::new());
 }
 
+/// The prefix of a world whose identity signer keeps the realm's post-quantum keys in the
+/// HSM (OP-159 m.3 (d)); every other world seals them under the realm KEK.
+pub(super) const PQ_IN_TOKEN: &str = "pq-token-";
+
 /// A real identity signer on a Unix socket in a fresh directory.
-fn identity_signer(name: &str) -> PathBuf {
+fn identity_signer(name: &str, keys: &Arc<KeyStore>) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("abs-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let service = Service::start(
-        SealedFactory::new(SoftKek::new("realm-kek", [7; 32])),
-        DirVault::new(&dir),
-        Policy::REALM,
-    )
-    .unwrap();
+    let sealed = SealedFactory::new(SoftKek::new("realm-kek", [7; 32]));
+    let factory: Box<dyn access_identity_signer::ports::KeyFactory + Send> =
+        if name.starts_with(PQ_IN_TOKEN) {
+            Box::new(access_identity_signer::adapters::token::TokenPq::new(
+                sealed,
+                keys.clone(),
+            ))
+        } else {
+            Box::new(sealed)
+        };
+    let service = Service::start(factory, DirVault::new(&dir), Policy::REALM).unwrap();
     let path = dir.join("s.sock");
     let listener = UnixListener::bind(&path).unwrap();
     let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
@@ -243,7 +252,7 @@ impl World {
             process_analysed(&db, open(), "bootstrap-test", signer, bell, analysis);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
-        let identity_signer = identity_signer(name);
+        let identity_signer = identity_signer(name, &keys);
         let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
         let world = Self {
             db,
@@ -271,7 +280,7 @@ impl World {
         let (domains, plane) = process_rung(&db, open(), "second-install", Some(path), None);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
-        let identity_signer = identity_signer(name);
+        let identity_signer = identity_signer(name, &keys);
         let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
         let world = Self {
             db,
