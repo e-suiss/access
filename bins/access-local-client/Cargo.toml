@@ -17,6 +17,7 @@ access-crypto = { workspace = true }
 access-identity-webauthn = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
+access-verifier = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 time = { workspace = true, features = ["std", "formatting", "parsing"] }
 httparse = { workspace = true, features = ["std"] }

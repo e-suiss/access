@@ -186,23 +186,64 @@ pub(crate) fn foreign(o: &Options) -> Result<Outcome, Usage> {
     })
 }
 
+/// A receipt as the decision point sends it (L2-RCP-3, OP-159 m.15 (b), m.17 (a)): a single
+/// `COSE_Sign1` or the hybrid carrier with `--pq-excerpt`, under the metadata's `hybrid`
+/// policy, and `--evidence` for a receipt signed under a superseded binding key.
 pub(crate) fn receipt(o: &Options) -> Result<Outcome, Usage> {
+    use access_kernel::receipt::{Expected, ReceiptError};
+    use access_kernel::verify::key_scope::{Hybrid, KeyScopeError};
+    use access_verifier::artefact::{self, SentError};
     let metadata = match metadata(o)? {
         Ok(m) => m,
         Err(e) => return Ok(reject(&e)),
     };
-    let result = binding::verify_receipt(
-        &metadata,
-        &o.file("receipt")?,
-        &o.file("excerpt")?,
-        &digest(o, "domain")?,
-        o.text("audience")?,
-        &digest(o, "intent")?,
-        o.uint("now")?,
-    );
+    let Ok(metadata) = DomainMetadata::from_bytes(&metadata) else {
+        return Ok(reject(&Error::Input));
+    };
+    let evidence = match crate::evidence::read(o)? {
+        Ok(e) => e,
+        Err(out) => return Ok(out),
+    };
+    let pq_excerpt = o
+        .opt("pq-excerpt")
+        .map(|_| o.file("pq-excerpt"))
+        .transpose()?;
+    let (sign1, excerpt) = (o.file("receipt")?, o.file("excerpt")?);
+    let (domain, intent) = (Digest(o.hash("domain")?), Digest(o.hash("intent")?));
+    let expected = Expected {
+        domain: &domain,
+        audience: o.text("audience")?,
+        intent: &intent,
+        now: o.uint("now")?,
+    };
+    let parts = (sign1.as_slice(), excerpt.as_slice(), pq_excerpt.as_deref());
+    let result = if matches!(metadata.hybrid, Some(Hybrid::Pq | Hybrid::Both)) {
+        artefact::receipt(
+            &suiss_crypto::aws::AwsLcBackend,
+            &metadata,
+            parts,
+            &expected,
+            evidence.as_ref(),
+        )
+    } else {
+        artefact::receipt(
+            &access_kernel::verify::PureBackend,
+            &metadata,
+            parts,
+            &expected,
+            evidence.as_ref(),
+        )
+    };
     let out = match result {
-        Ok(r) => Outcome::Accept(vec![("receipt", hex(&r))]),
-        Err(e) => reject(&e),
+        Ok(r) => match r.to_bytes() {
+            Ok(b) => Outcome::Accept(vec![("receipt", hex(&b))]),
+            Err(_) => reject(&Error::Input),
+        },
+        // L0-SIG-81
+        Err(SentError::Receipt(ReceiptError::Key(KeyScopeError::PqAnchorMissing))) => {
+            Outcome::Reject("receipt-key: pq-anchor-missing".to_owned())
+        }
+        Err(e) => Outcome::Reject(e.code().to_owned()),
     };
     // CR-45 RA-7, OP-159 m.3 (h)
     crate::pq::retired(o, out, || {

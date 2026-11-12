@@ -193,8 +193,7 @@ async fn verified_receipt(
     http: &Http,
     a: &Approve<'_>,
     intent: Digest,
-    sign1: &[u8],
-    excerpt: &[u8],
+    (sign1, excerpt, pq_excerpt): (&[u8], &[u8], Option<&[u8]>),
 ) -> Result<Value, ClientError> {
     let domain = format!("sha-256:{}", b64url_encode(&a.domain.0));
     let r = http
@@ -223,19 +222,20 @@ async fn verified_receipt(
     }
     let metadata = verify_metadata(&PureBackend, &r.body, &trusted)
         .map_err(|e| failed(&format!("metadata: {e:?}")))?;
-    let receipt = receipt::verify(
-        &PureBackend,
+    // L2-RCP-3, OP-159 m.15 (b), m.17 (a)
+    let receipt = access_verifier::artefact::receipt(
+        &suiss_crypto::aws::AwsLcBackend,
         &metadata,
-        sign1,
-        excerpt,
+        (sign1, excerpt, pq_excerpt),
         &receipt::Expected {
             domain: &a.domain,
             audience: &pep_name(a.pep_leaf_der),
             intent: &intent,
             now: now_ms(),
         },
+        None,
     )
-    .map_err(|e| failed(&format!("receipt: {e:?}")))?;
+    .map_err(|e| failed(&format!("receipt: {}", e.code())))?;
     Ok(json!({
         "verified": true,
         "exercise": b64url_encode(&receipt.exercise.0),
@@ -244,6 +244,7 @@ async fn verified_receipt(
         "iat": receipt.iat,
         "cose_sign1": b64url_encode(sign1),
         "key_excerpt": b64url_encode(excerpt),
+        "pq_key_excerpt": pq_excerpt.map(b64url_encode),
     }))
 }
 
@@ -253,7 +254,7 @@ async fn kept_receipt(
     http: &Http,
     a: &Approve<'_>,
     exercise: &str,
-) -> Result<Option<(Vec<u8>, Vec<u8>)>, ClientError> {
+) -> Result<Option<Signed>, ClientError> {
     let domain = format!("sha-256:{}", b64url_encode(&a.domain.0));
     let r = http
         .request(
@@ -276,8 +277,14 @@ async fn kept_receipt(
             .and_then(Value::as_str)
             .and_then(|s| b64url_decode(s).ok())
     };
-    Ok(part("cose_sign1").zip(part("key_excerpt")))
+    Ok(part("cose_sign1")
+        .zip(part("key_excerpt"))
+        .map(|(s, e)| (s, e, part("pq_key_excerpt"))))
 }
+
+/// A signed receipt: its `COSE_Sign1` or hybrid carrier, its key excerpt and, for a hybrid
+/// carrier, the ML-DSA component's excerpt (OP-159 m.15 (b)).
+type Signed = (Vec<u8>, Vec<u8>, Option<Vec<u8>>);
 
 const NULL: Value = Value::Null;
 
@@ -471,12 +478,14 @@ async fn allowed_receipt(
             .and_then(|s| b64url_decode(s).ok())
     };
     let signed = match kept_receipt(http, a, &exercise_id).await? {
-        Some(pair) => pair,
+        Some(kept) => kept,
         None => part("sign1")
             .zip(part("excerpt"))
+            .map(|(s, e)| (s, e, part("pq_excerpt")))
             .ok_or_else(|| ClientError::Verify(String::from("no signed receipt")))?,
     };
-    let receipt = verified_receipt(http, a, digest, &signed.0, &signed.1).await?;
+    let receipt =
+        verified_receipt(http, a, digest, (&signed.0, &signed.1, signed.2.as_deref())).await?;
     Ok((exercise_id, receipt))
 }
 

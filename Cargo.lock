@@ -961,6 +961,7 @@ dependencies = [
  "aws-lc-rs",
  "axum",
  "esuiss-access-kernel",
+ "esuiss-access-verifier",
  "esuiss-crypto",
  "httparse",
  "rcgen",

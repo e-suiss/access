@@ -22,9 +22,10 @@ use access_kernel::json::{self, Json, b64url_decode, b64url_encode};
 use access_kernel::meta::{ExerciseBasis, exercise_id};
 use access_kernel::model::{ActionRef, EqValue, Id, PurposeRef, ResourceRef, TrustedTime};
 use access_kernel::receipt::{self, Expected, Receipt, ReceiptError};
-use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::parse_sign1;
-use access_kernel::verify::key_scope::DomainMetadata;
+use access_kernel::verify::hybrid::{self, Component, HybridError};
+use access_kernel::verify::key_scope::{DomainMetadata, Hybrid, InclusionEvidence, KeyUsage};
+use access_kernel::verify::{Backend, PureBackend};
 
 use crate::transport::{Answer, Clock, Fault};
 
@@ -312,6 +313,10 @@ pub enum Denied {
     /// The receipt is not for this PEP, intent, domain or time (L2-RCP-3).
     #[error("{0}")]
     Receipt(ReceiptError),
+    /// The receipt's signatures do not meet the domain's hybrid policy (L0-SIG-75a, OP-159
+    /// m.15 (b)): under `both` a lone component is `hybrid-missing`.
+    #[error("{0}")]
+    Hybrid(HybridError),
     /// The receipt names another Exercise than this nonce's.
     #[error("receipt-exercise")]
     Exercise,
@@ -336,6 +341,7 @@ impl Denied {
             Self::Refused(_) => "refused",
             Self::NoReceipt => "receipt-missing",
             Self::Receipt(e) => e.code(),
+            Self::Hybrid(e) => e.code(),
             Self::Exercise => "receipt-exercise",
             Self::Stale => "content-position",
             Self::Body => "intent-body",
@@ -350,6 +356,7 @@ impl Denied {
             Self::Actor(_)
             | Self::NoReceipt
             | Self::Receipt(_)
+            | Self::Hybrid(_)
             | Self::Exercise
             | Self::Stale
             | Self::Body => Class::Unverified,
@@ -528,6 +535,21 @@ impl Pep {
         clock: &impl Clock,
         decisions: &impl AskDecision,
     ) -> Result<Authorized<R, A>, Denied> {
+        self.authorize_with(&PureBackend, ask, clock, decisions)
+    }
+
+    /// [`Self::authorize`] with the signature `backend`; a domain whose `hybrid` policy needs
+    /// ML-DSA needs a backend that verifies it, and every other one refuses (OP-159 m.15 (b)).
+    ///
+    /// # Errors
+    /// [`Denied`]: no effect.
+    pub fn authorize_with<R, A>(
+        &self,
+        backend: &impl Backend,
+        ask: &Ask<'_, R, A>,
+        clock: &impl Clock,
+        decisions: &impl AskDecision,
+    ) -> Result<Authorized<R, A>, Denied> {
         let now = clock.now().ok_or(Denied::Clock)?;
         let mode = if ask.continued.is_some() {
             Mode::Continue
@@ -583,15 +605,14 @@ impl Pep {
         ) else {
             return Err(Denied::NoReceipt);
         };
-        let expected = Expected {
-            domain: &self.domain,
-            audience: &self.audience,
-            intent: ask.intent.digest(),
+        let pq_excerpt = member_bytes(receipt, "pq_excerpt");
+        let receipt = self.receipt(
+            backend,
+            (&sign1, &excerpt, pq_excerpt.as_deref()),
+            ask.intent.digest(),
             now,
-        };
-        let receipt: Receipt =
-            receipt::verify(&PureBackend, &self.metadata, &sign1, &excerpt, &expected)
-                .map_err(Denied::Receipt)?;
+            None,
+        )?;
         // OP-141 m.6
         let exercise = match ask.continued {
             Some(e) => *e,
@@ -622,6 +643,76 @@ impl Pep {
             receipt.record,
             causal_binding,
         ))
+    }
+
+    /// Verifies a receipt as the decision point sends it for this PEP, `intent` and `now`
+    /// (L2-RCP-3, OP-159 m.15 (b), m.17 (a)): a single `COSE_Sign1` or the hybrid carrier
+    /// `[classic, pq]` with the ML-DSA component's `pq_excerpt`. The components the Domain
+    /// Metadata's `hybrid` policy requires verify over the same payload, a lone component under
+    /// `both` is `hybrid-missing`, and the receipt checks are the Kernel's
+    /// [`receipt::verify_with_evidence`], with `evidence` for a receipt signed under a
+    /// superseded binding key (5780).
+    ///
+    /// # Errors
+    /// [`Denied::Receipt`] or [`Denied::Hybrid`].
+    pub fn receipt(
+        &self,
+        backend: &impl Backend,
+        (sign1, excerpt, pq_excerpt): (&[u8], &[u8], Option<&[u8]>),
+        intent: &Digest,
+        now: TrustedTime,
+        evidence: Option<&InclusionEvidence<'_>>,
+    ) -> Result<Receipt, Denied> {
+        let (classic, pq) = if sign1.first() == Some(&0xd2) {
+            let ml_dsa = access_kernel::verify::ml_dsa::algorithm_of(sign1)
+                .is_ok_and(access_kernel::verify::ml_dsa::is_ml_dsa);
+            if ml_dsa {
+                (None, Some(sign1.to_vec()))
+            } else {
+                (Some(sign1.to_vec()), None)
+            }
+        } else {
+            let (c, p) = hybrid::decode_carrier(sign1).map_err(Denied::Hybrid)?;
+            (Some(c), Some(p))
+        };
+        let policy = self.metadata.hybrid.unwrap_or(Hybrid::Classic);
+        let (one, key) = match policy {
+            Hybrid::Pq => (pq.as_deref(), pq_excerpt.unwrap_or(excerpt)),
+            Hybrid::Classic | Hybrid::Both => (classic.as_deref(), excerpt),
+        };
+        let one = one.ok_or(Denied::Hybrid(HybridError::Missing))?;
+        let mut checked = self.metadata.clone();
+        if policy == Hybrid::Both {
+            let claimed = parse_sign1(one)
+                .ok()
+                .and_then(|s| s.payload)
+                .and_then(|p| Receipt::from_bytes(&p).ok())
+                .ok_or(Denied::Receipt(ReceiptError::Malformed))?;
+            hybrid::verify(
+                backend,
+                &self.metadata,
+                classic.as_deref().map(|c| Component::new(c, excerpt)),
+                pq.as_deref()
+                    .zip(pq_excerpt)
+                    .map(|(p, e)| Component::new(p, e)),
+                &hybrid::Expected::new(
+                    &claimed.domain,
+                    KeyUsage::Receipt,
+                    claimed.iat,
+                    receipt::CONTENT_TYPE,
+                ),
+            )
+            .map_err(Denied::Hybrid)?;
+            checked.hybrid = Some(Hybrid::Classic);
+        }
+        let expected = Expected {
+            domain: &self.domain,
+            audience: &self.audience,
+            intent,
+            now,
+        };
+        receipt::verify_with_evidence(backend, &checked, one, key, &expected, evidence)
+            .map_err(Denied::Receipt)
     }
 }
 

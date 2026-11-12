@@ -6,7 +6,7 @@ use access_kernel::digest::{self, Digest, ProofError};
 use access_kernel::record::{Disclosure, Header, RecordEnvelope, RecordError};
 use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::{self, KeySet};
-use access_kernel::verify::key_scope::OperationalKey;
+use access_kernel::verify::key_scope::{self, DomainMetadata, KeyUsage, OperationalKey};
 
 use crate::args::{Options, Usage, hex};
 
@@ -56,6 +56,12 @@ pub(crate) const COMMANDS: &[Command] = &[
             "pq-bundle",
             "origin",
             "artefact",
+            "evidence",
+            "log",
+            "cosigners",
+            "at-size",
+            "at-root",
+            "at-path",
         ],
         summary: "operational key for an artefact of --domain signed at --iat, from Domain Metadata and a key excerpt",
         run: key,
@@ -76,6 +82,12 @@ pub(crate) const COMMANDS: &[Command] = &[
             "pq-bundle",
             "origin",
             "artefact",
+            "evidence",
+            "log",
+            "cosigners",
+            "at-size",
+            "at-root",
+            "at-path",
         ],
         summary: "COSE_Sign1 artefact against a key-set, or against the operational key that `key` resolves",
         run: cose_sign1,
@@ -196,8 +208,15 @@ pub(crate) const COMMANDS: &[Command] = &[
             "pq-anchors",
             "pq-bundle",
             "origin",
+            "pq-excerpt",
+            "evidence",
+            "log",
+            "cosigners",
+            "at-size",
+            "at-root",
+            "at-path",
         ],
-        summary: "decision receipt for this PEP and intent (L2-RCP-3)",
+        summary: "decision receipt for this PEP and intent (L2-RCP-3), single or hybrid, with --evidence under a superseded binding key",
         run: crate::artefacts::receipt,
     },
     Command {
@@ -283,14 +302,53 @@ fn resolve(o: &Options) -> Result<Result<Vec<u8>, Error>, Usage> {
         .to_bytes()
         .map_err(|_| Usage("--domain cannot be encoded".to_owned()))?;
     let excerpt = o.file("excerpt")?;
-    Ok(binding::operational_key(
+    let Ok(evidence) = crate::evidence::read(o)? else {
+        return Ok(Err(Error::Input));
+    };
+    let Some(evidence) = evidence else {
+        return Ok(binding::operational_key(
+            &metadata,
+            &domain,
+            &excerpt,
+            o.text("usage")?,
+            o.uint("iat")?,
+        ));
+    };
+    // L0-SIG-64, L0-SIG-80, OP-159 m.17 (a)
+    let Ok(metadata) = DomainMetadata::from_bytes(&metadata) else {
+        return Ok(Err(Error::Input));
+    };
+    let named = o.text("usage")?;
+    let usage = USAGES
+        .iter()
+        .find(|(n, _)| *n == named)
+        .map(|(_, u)| *u)
+        .ok_or_else(|| Usage("--usage: not a key usage".to_owned()))?;
+    let artefact = Digest(o.hash("artefact")?);
+    Ok(key_scope::operational_key(
+        &PureBackend,
         &metadata,
-        &domain,
+        &Digest(o.hash("domain")?),
         &excerpt,
-        o.text("usage")?,
+        usage,
         o.uint("iat")?,
-    ))
+        Some(&evidence.of(artefact)),
+    )
+    .map_err(Error::KeyScope)
+    .and_then(|k| k.to_bytes().map_err(|_| Error::Input)))
 }
+
+/// The key usages by their `key-usage` names.
+const USAGES: [(&str, KeyUsage); 8] = [
+    ("receipt", KeyUsage::Receipt),
+    ("pap", KeyUsage::Pap),
+    ("token", KeyUsage::Token),
+    ("checkpoint", KeyUsage::Checkpoint),
+    ("set", KeyUsage::Set),
+    ("status-list", KeyUsage::StatusList),
+    ("key-lookup", KeyUsage::KeyLookup),
+    ("party-lookup", KeyUsage::PartyLookup),
+];
 
 fn key(o: &Options) -> Result<Outcome, Usage> {
     let out = match resolve(o)? {

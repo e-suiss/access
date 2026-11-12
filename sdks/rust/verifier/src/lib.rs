@@ -12,6 +12,7 @@
 
 extern crate alloc;
 
+pub mod artefact;
 pub mod caps;
 pub mod counter;
 pub mod metadata;

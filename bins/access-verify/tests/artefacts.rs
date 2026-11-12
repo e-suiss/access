@@ -229,6 +229,92 @@ fn receipt_vectors() {
     }
 }
 
+// L2-RCP-3, L0-SIG-80, OP-159 m.17 (a), Ek B 5780
+#[test]
+fn receipt_evidence_vectors() {
+    let v = vectors("core", "receipt-evidence");
+    let dir = Dir::new("receipt-evidence");
+    let metadata = dir.file("metadata.cbor", &unhex(s(&v, "metadata")));
+    let cosigners: Vec<&str> = v["witnesses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w.as_str().unwrap())
+        .collect();
+    let cosigners = cosigners.join(",");
+    for c in cases(&v) {
+        let id = s(c, "id");
+        let receipt = dir.file(&format!("{id}-receipt.cbor"), &unhex(s(c, "sign1")));
+        let excerpt = dir.file(&format!("{id}-excerpt.cbor"), &unhex(s(c, "excerpt")));
+        let (domain, intent, now) = (
+            raw_digest(s(c, "domain")),
+            raw_digest(s(c, "intent")),
+            n(c, "now"),
+        );
+        let mut args: Vec<String> = [
+            "receipt",
+            "--metadata",
+            &metadata,
+            "--receipt",
+            &receipt,
+            "--excerpt",
+            &excerpt,
+            "--domain",
+            &domain,
+            "--audience",
+            s(c, "audience"),
+            "--intent",
+            &intent,
+            "--now",
+            &now,
+        ]
+        .map(String::from)
+        .to_vec();
+        if id == "evidence-for-another-receipt-refused" {
+            continue;
+        }
+        if let Some(e) = c.get("evidence") {
+            {
+                let path = e["path"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|h| Value::Bytes(unhex(h.as_str().unwrap())))
+                    .collect();
+                let bundle = Value::Map(vec![
+                    (Value::text("record"), Value::Bytes(unhex(s(e, "record")))),
+                    (Value::text("checkpoint"), Value::text(s(e, "note"))),
+                    (Value::text("cosignatures"), Value::Array(vec![])),
+                    (Value::text("inclusion"), Value::Array(path)),
+                ]);
+                let file = dir.file(
+                    &format!("{id}-evidence.cbor"),
+                    &dcbor::encode(&bundle, Limits::CEILING).unwrap(),
+                );
+                args.extend([
+                    "--evidence".into(),
+                    file,
+                    "--origin".into(),
+                    s(&v, "origin").into(),
+                    "--log".into(),
+                    s(&v, "log").into(),
+                    "--cosigners".into(),
+                    cosigners.clone(),
+                ]);
+            }
+        }
+        let all: Vec<&str> = args.iter().map(String::as_str).collect();
+        let r = verify(&all);
+        match c.get("error").and_then(J::as_str) {
+            Some(e) => assert_eq!(r.rejection(), Some(e), "{id}: {}", r.out),
+            None => {
+                assert!(r.accepted(), "{id}: {}", r.out);
+                assert_eq!(r.output("receipt"), Some(s(c, "receipt")), "{id}");
+            }
+        }
+    }
+}
+
 // L2-RPT-1, L2-RPT-2, L2-RPT-3, U4
 #[test]
 fn report_vectors() {

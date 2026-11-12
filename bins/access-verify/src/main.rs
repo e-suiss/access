@@ -4,6 +4,7 @@
 mod args;
 mod artefacts;
 mod commands;
+mod evidence;
 mod export;
 mod pq;
 mod transparency;
