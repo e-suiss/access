@@ -47,3 +47,5 @@ mail-divergence_notice-subject = A recorded decision did not replay the same way
 mail-equivocation_alarm-subject = Equivocation alarm: two histories for one log
 mail-degraded_alarm-subject = Degraded mode alarm
 mail-decommission_notice-subject = Your domain is closing: export or move it
+# OP-159 m.4 (a)
+mail-algorithm_retired-subject = Your domain retired a signature algorithm

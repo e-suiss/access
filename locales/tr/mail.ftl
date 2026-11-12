@@ -47,3 +47,5 @@ mail-divergence_notice-subject = Kayıtlı bir karar yeniden değerlendirmede fa
 mail-equivocation_alarm-subject = Çift tarih alarmı: bir kayıt için iki geçmiş
 mail-degraded_alarm-subject = Bozulmuş mod alarmı
 mail-decommission_notice-subject = Alanın kapanıyor: dışa aktar ya da taşı
+# OP-159 m.4 (a)
+mail-algorithm_retired-subject = Alanın bir imza algoritmasını emekliye ayırdı

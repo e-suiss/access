@@ -572,11 +572,23 @@ pub enum TextId {
     /// lifetime, nothing new is signed in (OP-45, OP-158 m.3 (s)).
     #[serde(rename = "login.degraded")]
     DegradedSignIn,
+    /// J11: passkeys are classical; no post-quantum algorithm is offered for them (HL-19,
+    /// OP-159 m.3 (ll), (qq)).
+    #[serde(rename = "passkey.no_pqc")]
+    PasskeyNoPqc,
+    /// J11: the authenticator's attestation did not verify under the realm's direct policy
+    /// (§10.2.4, OP-159 m.3 (ll)).
+    #[serde(rename = "passkey.attestation_refused")]
+    PasskeyAttestationRefused,
+    /// J11: the attestation chain's revocation status could not be read; the registration is
+    /// refused (§10.2.4, OP-159 m.3 (ll)).
+    #[serde(rename = "passkey.attestation_unknown")]
+    PasskeyAttestationUnknown,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 188] = [
+    pub const ALL: [Self; 191] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -765,6 +777,9 @@ impl TextId {
         Self::ApprovalMore,
         Self::ApprovalNotEligibleHidden,
         Self::DegradedSignIn,
+        Self::PasskeyNoPqc,
+        Self::PasskeyAttestationRefused,
+        Self::PasskeyAttestationUnknown,
     ];
 
     /// The stable id on the wire.
@@ -960,6 +975,9 @@ impl TextId {
             Self::ApprovalMore => "approval.more",
             Self::ApprovalNotEligibleHidden => "approval.not_eligible_hidden",
             Self::DegradedSignIn => "login.degraded",
+            Self::PasskeyNoPqc => "passkey.no_pqc",
+            Self::PasskeyAttestationRefused => "passkey.attestation_refused",
+            Self::PasskeyAttestationUnknown => "passkey.attestation_unknown",
         }
     }
 
@@ -1244,6 +1262,15 @@ impl TextId {
             Self::DegradedSignIn => {
                 "Sign-in isn't available right now. Things already allowed keep working within their limits."
             }
+            // HL-19, OP-159 m.3 (qq)
+            Self::PasskeyNoPqc => "Passkeys don't use post-quantum cryptography yet.",
+            // OP-159 m.3 (ll)
+            Self::PasskeyAttestationRefused => {
+                "This security key isn't accepted here. Try a different one."
+            }
+            Self::PasskeyAttestationUnknown => {
+                "This security key can't be checked right now. Try again later."
+            }
         }
     }
 
@@ -1259,6 +1286,8 @@ impl TextId {
             self,
             Self::SecondFactorFailed
                 | Self::PasskeyNotRegistered
+                | Self::PasskeyAttestationRefused
+                | Self::PasskeyAttestationUnknown
                 | Self::RegistrationComplete
                 | Self::RecoveryCooling
                 | Self::RecoveryDenied

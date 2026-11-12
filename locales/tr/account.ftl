@@ -232,3 +232,5 @@ domain_history-changes_lost = { $time } sonrasındaki değişiklikler kaybolmuş
 domain_history-title = Geçmiş
 domain_history-handover = { $position } kayıt konumunda { $provider } sağlayıcısına taşındı
 domain_history-recovered = { $position } kayıt konumunda kurtarıldı
+# OP-159 m.4 (a)
+security-passkey_no_pqc = Geçiş anahtarları henüz kuantum sonrası kriptografi kullanmıyor.

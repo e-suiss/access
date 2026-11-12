@@ -208,3 +208,7 @@ approval-more = { $count } more
 approval-not_eligible_hidden = You can't approve this. Who can approve it isn't shown to you.
 # OP-158 m.4 (a)
 login-degraded = Sign-in isn't available right now. Things already allowed keep working within their limits.
+# OP-159 m.4 (a)
+passkey-no_pqc = Passkeys don't use post-quantum cryptography yet.
+passkey-attestation_refused = This security key isn't accepted here. Try a different one.
+passkey-attestation_unknown = This security key can't be checked right now. Try again later.

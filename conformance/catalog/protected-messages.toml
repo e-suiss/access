@@ -83,4 +83,6 @@ keys = [
   "domain_history-revoked_confirming",
   "domain_history-recovered_from",
   "domain_history-changes_lost",
+  "passkey-no_pqc",
+  "security-passkey_no_pqc",
 ]

@@ -768,7 +768,10 @@
           "breakglass.sso_refused",
           "approval.more",
           "approval.not_eligible_hidden",
-          "login.degraded"
+          "login.degraded",
+          "passkey.no_pqc",
+          "passkey.attestation_refused",
+          "passkey.attestation_unknown"
         ]
       },
       "Text": {

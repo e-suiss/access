@@ -208,3 +208,7 @@ approval-more = { $count } onay daha
 approval-not_eligible_hidden = Bunu onaylayamazsın. Kimlerin onaylayabileceği sana gösterilmiyor.
 # OP-158 m.4 (a)
 login-degraded = Giriş şu anda kullanılamıyor. Zaten izin verilmiş işler sınırları içinde çalışmaya devam ediyor.
+# OP-159 m.4 (a)
+passkey-no_pqc = Geçiş anahtarları henüz kuantum sonrası kriptografi kullanmıyor.
+passkey-attestation_refused = Bu güvenlik anahtarı burada kabul edilmiyor. Başka bir anahtar dene.
+passkey-attestation_unknown = Bu güvenlik anahtarı şu anda denetlenemiyor. Daha sonra yeniden dene.

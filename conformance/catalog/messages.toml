@@ -5006,3 +5006,42 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+# Stage 14 (OP-159 m.4 (a)): passkeys without post-quantum cryptography, attestation refusals and the algorithm retirement subject
+[[message]]
+key = "passkey-no_pqc"
+text_id = "passkey.no_pqc"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "passkey-attestation_refused"
+text_id = "passkey.attestation_refused"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "passkey-attestation_unknown"
+text_id = "passkey.attestation_unknown"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "security-passkey_no_pqc"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "mail-algorithm_retired-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

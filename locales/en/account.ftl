@@ -232,3 +232,5 @@ domain_history-changes_lost = Changes after { $time } may be lost. If you revoke
 domain_history-title = History
 domain_history-handover = Moved to { $provider } at record position { $position }
 domain_history-recovered = Recovered at record position { $position }
+# OP-159 m.4 (a)
+security-passkey_no_pqc = Passkeys don't use post-quantum cryptography yet.
