@@ -197,7 +197,10 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: test
-      - name: Kernel and F0 on random inputs
+      # F-2, OP-159 m.3 (v)
+      - name: Install the pinned Lean toolchain
+        run: scripts/lean-fetch.sh "$RUNNER_TEMP/lean" >> "$GITHUB_PATH"
+      - name: Kernel, F0 and the Lean model on random inputs
         env:
           RUN_ID: ${{ github.run_id }}
           SHARD: ${{ matrix.shard }}
@@ -211,6 +214,9 @@ jobs:
             seed=$(( 2 * (RUN_ID * 100 + SHARD * BATCHES + batch) + 1 ))
             just f0-random "$BATCH" "$seed" "$RUNNER_TEMP/drt/batch-$batch.json" || status=1
             test -s "$RUNNER_TEMP/drt/batch-$batch.json" || status=1
+            # OP-159 m.3 (v), SA-T4
+            just lean-drt "$RUNNER_TEMP/drt/lean-$batch.json" || status=1
+            test -s "$RUNNER_TEMP/drt/lean-$batch.json" || status=1
           done
           python3 -I .github/scripts/f0-drt.py shard "$SHARD" "$RUNNER_TEMP/drt" > "$RUNNER_TEMP/drt-shard-$SHARD.json"
           cat "$RUNNER_TEMP/drt-shard-$SHARD.json"

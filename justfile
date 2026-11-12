@@ -528,9 +528,33 @@ lean:
         PATH="$(scripts/lean-fetch.sh target/lean):$PATH"
     fi
     cd conformance/lean
-    lake build --wfail AccessAlgebra vectors
+    lake build --wfail AccessAlgebra vectors drt
     ./check-axioms.sh
     lake exe vectors ../vectors/core/*/*.json
+
+# OP-159 m.3 (v), CR-49 m.1, F-2
+lean-drt summary="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -x "$HOME/.elan/bin/lake" ]]; then
+        PATH="$HOME/.elan/bin:$PATH"
+    elif ! command -v lake >/dev/null; then
+        PATH="$(scripts/lean-fetch.sh target/lean):$PATH"
+    fi
+    cases="$(pwd)/target/random-vectors/lean"
+    test -s "$cases/algebra.cbor" || { echo "lean-drt: run just f0-random first" >&2; exit 1; }
+    out=()
+    summary={{ quote(summary) }}
+    if [[ -n "$summary" ]]; then
+        out=(--summary "$(cd "$(dirname "$summary")" && pwd)/$(basename "$summary")")
+    fi
+    cd conformance/lean
+    lake build --wfail drt
+    if lake exe drt "$cases/control.cbor" >/dev/null 2>&1; then
+        echo "lean-drt: the inverted control agreed with the model; the runner is blind" >&2
+        exit 1
+    fi
+    lake exe drt "${out[@]}" "$cases/algebra.cbor"
 
 # CR-39 m.5, SA-T13
 dudect:
@@ -561,10 +585,11 @@ ctgrind:
 ct-asm *args:
     python3 -I scripts/ct_asm.py {{args}}
 
-# OP-112 m.4, OP-119 m.6
+# OP-112 m.4, OP-119 m.6, OP-159 m.3 (v)
 f0-random count="10000" seed="1" summary="":
     rm -rf target/random-vectors
     ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --lib random_inputs_for_f0 -- --ignored
+    ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --test lean_drt random_algebra_for_lean -- --ignored --exact
     target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors {{ if summary != "" { "--summary " + quote(summary) } else { "" } }}
 

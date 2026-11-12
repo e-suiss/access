@@ -253,6 +253,10 @@ jobs:
       - name: Model against the Kernel algebra vectors
         working-directory: conformance/lean
         run: lake exe vectors ../vectors/core/*/*.json
+      # OP-159 m.3 (v)
+      - name: Build the Rust and Lean DRT runner
+        working-directory: conformance/lean
+        run: lake build --wfail drt
 
   cross:
     name: cross

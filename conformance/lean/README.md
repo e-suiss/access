@@ -44,9 +44,9 @@ just lean
 or, inside this directory:
 
 ```sh
-lake build --wfail AccessAlgebra vectors   # model and proofs
-./check-axioms.sh                          # fails if a `proved` theorem depends on sorry
-lake exe vectors ../vectors/core/*/*.json  # model against the Kernel algebra vectors
+lake build --wfail AccessAlgebra vectors drt  # model, proofs and runners
+./check-axioms.sh                             # fails if a `proved` theorem depends on sorry
+lake exe vectors ../vectors/core/*/*.json     # model against the Kernel algebra vectors
 ```
 
 The toolchain version is pinned in [`lean-toolchain`](lean-toolchain). With
@@ -56,6 +56,27 @@ elan, `scripts/lean-fetch.sh` downloads the pinned release and checks its SHA-25
 
 `vectors` decodes the `algebra.child_within_parent` cases (canonical CBOR) and compares the
 model's answer with the expected one. It exits non-zero on any disagreement.
+
+## Differential testing against the Kernel
+
+The model is executable, so the Rust Kernel is tested against it on random inputs:
+
+```sh
+just f0-random 100000 1   # random cases with the Kernel's answers, also run through F0
+just lean-drt             # the model on the same cases
+```
+
+`just f0-random` writes `target/random-vectors/lean/algebra.cbor`: a CBOR sequence whose first
+item holds the catalog (pinned action catalogs, reserved actions, purpose order) and whose other
+items are cases of `⊑`, `∩`, `normalize` and `child_within_parent`, each with the Kernel's answer.
+`lake exe drt` evaluates the model on every case and counts the disagreements. Sets are compared
+as sets, since the model and the Kernel order them differently. Before the real run, `just
+lean-drt` feeds the runner a control file with inverted answers and fails if the runner does not
+notice.
+
+The nightly workflow runs 10⁷ cases across its shards, and a semantic release needs a summary
+with at least 10⁷ cases and no disagreement. This is a differential test: it shows the Kernel and
+the model agree on the inputs tried, not on every input.
 
 ## Modelling choices
 

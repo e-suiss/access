@@ -12,3 +12,10 @@ name = "AccessAlgebra"
 [[lean_exe]]
 name = "vectors"
 root = "Vectors"
+
+[[lean_lib]]
+name = "Decode"
+
+[[lean_exe]]
+name = "drt"
+root = "Drt"
