@@ -512,15 +512,15 @@ impl Inputs {
     }
 
     pub(crate) fn use_(&self) -> Use<'_> {
-        Use {
-            pap: &self.pap,
-            excerpt: &self.excerpt,
-            presentation: &self.presentation,
-            intent: &self.intent,
-            nonce: &self.nonce,
-            satisfied: &self.satisfied,
-            schema: self.schema.as_ref(),
-            content_position: self.content_position,
-        }
+        let mut u = Use::new(
+            (&self.pap, &self.excerpt),
+            &self.presentation,
+            &self.intent,
+            &self.nonce,
+            &self.satisfied,
+        );
+        u.schema = self.schema.as_ref();
+        u.content_position = self.content_position;
+        u
     }
 }

@@ -22,10 +22,12 @@ use access_kernel::schema::ActionSchema;
 use access_kernel::status::StatusError;
 use access_kernel::tier::{self, Tier};
 use access_kernel::validity::{ValidityContract, ValidityError};
-use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::parse_sign1;
+use access_kernel::verify::hybrid::HybridError;
+use access_kernel::verify::{Backend, PureBackend};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
+use crate::artefact::SentError;
 use crate::counter::{CounterError, CounterReading, Draw, SliceGuard, TamperEvidentCounter};
 use crate::metadata::MetadataView;
 use crate::profile::{LocalProfile, ProfileError};
@@ -49,6 +51,9 @@ pub enum Denial {
     /// A step of L2-PAP-3.
     #[error("{0}")]
     Pap(PapError),
+    /// The hybrid policy is not met (L0-SIG-75a, OP-159 m.19 (g)).
+    #[error("{}", .0.code())]
+    Hybrid(HybridError),
     /// The Verifier Profile or the class ceilings do not admit the contract.
     #[error("{0}")]
     Profile(ProfileError),
@@ -82,6 +87,7 @@ impl Denial {
         match self {
             Self::Clock(_) => "clock",
             Self::Pap(e) => e.code(),
+            Self::Hybrid(e) => e.code(),
             Self::Profile(e) => e.code(),
             Self::Revoked => "status-revoked",
             Self::Status(e) => e.code(),
@@ -124,12 +130,16 @@ pub struct Allowed {
 
 /// One use of a PAP the holder presents.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct Use<'a> {
-    /// The PAP `COSE_Sign1`.
+    /// The PAP as sent: a `COSE_Sign1` or the hybrid carrier `[classic, pq]`.
     pub pap: &'a [u8],
-    /// Its binding-signed key excerpt (the Domain Metadata excerpt).
+    /// Its binding-signed key excerpt (the Domain Metadata excerpt); the classical one of a
+    /// hybrid carrier.
     pub excerpt: &'a [u8],
-    /// The holder's presentation `COSE_Sign1`.
+    /// The key excerpt of the carrier's ML-DSA component (OP-159 m.19 (g)).
+    pub pq_excerpt: Option<&'a [u8]>,
+    /// The holder's presentation `COSE_Sign1`, over the classical component.
     pub presentation: &'a [u8],
     /// The intent to apply.
     pub intent: &'a IntentEnvelope,
@@ -143,6 +153,53 @@ pub struct Use<'a> {
     /// The position the protected content was written at, when the verifier knows it and its
     /// profile declares the content position check (§9.10.1 step 8).
     pub content_position: Option<u64>,
+}
+
+impl<'a> Use<'a> {
+    /// A use of `pap` with its `excerpt`, the holder's `presentation` for `intent` under
+    /// `nonce`, and the local requirement terms `satisfied`; no ML-DSA excerpt, Action Schema
+    /// or content position.
+    #[must_use]
+    pub const fn new(
+        (pap, excerpt): (&'a [u8], &'a [u8]),
+        presentation: &'a [u8],
+        intent: &'a IntentEnvelope,
+        nonce: &'a [u8],
+        satisfied: &'a BTreeSet<RequirementTerm>,
+    ) -> Self {
+        Self {
+            pap,
+            excerpt,
+            pq_excerpt: None,
+            presentation,
+            intent,
+            nonce,
+            satisfied,
+            schema: None,
+            content_position: None,
+        }
+    }
+
+    /// The same use with the carrier's ML-DSA key excerpt.
+    #[must_use]
+    pub const fn with_pq_excerpt(mut self, pq_excerpt: &'a [u8]) -> Self {
+        self.pq_excerpt = Some(pq_excerpt);
+        self
+    }
+
+    /// The same use with the intent's Action Schema.
+    #[must_use]
+    pub const fn with_schema(mut self, schema: &'a ActionSchema) -> Self {
+        self.schema = Some(schema);
+        self
+    }
+
+    /// The same use with the position the protected content was written at.
+    #[must_use]
+    pub const fn with_content_position(mut self, position: u64) -> Self {
+        self.content_position = Some(position);
+        self
+    }
 }
 
 /// The outcome of a use: a decision, not an error.
@@ -189,13 +246,14 @@ pub struct OfflineVerifier<K, C> {
     reports: BTreeMap<Digest, ReportBuilder>,
 }
 
-/// Reads a PAP without verifying it: what the holder claims it is. Use it to provision slices;
-/// never to decide.
+/// Reads a PAP as sent without verifying it: what the holder claims it is. Use it to provision
+/// slices; never to decide.
 ///
 /// # Errors
 /// [`PapError::Malformed`].
-pub fn peek(sign1: &[u8]) -> Result<Pap, PapError> {
-    let payload = parse_sign1(sign1)
+pub fn peek(sent: &[u8]) -> Result<Pap, PapError> {
+    let one = crate::artefact::pap_component(sent)?;
+    let payload = parse_sign1(&one)
         .ok()
         .and_then(|s| s.payload)
         .ok_or(PapError::Malformed)?;
@@ -216,10 +274,13 @@ pub fn basis_position(contract: &ValidityContract) -> Option<u64> {
     }
 }
 
-const fn signature_passed(e: PapError) -> bool {
+const fn signature_passed(d: Denial) -> bool {
     !matches!(
-        e,
-        PapError::Malformed | PapError::Key(_) | PapError::Signature(_) | PapError::Domain
+        d,
+        Denial::Hybrid(_)
+            | Denial::Pap(
+                PapError::Malformed | PapError::Key(_) | PapError::Signature(_) | PapError::Domain
+            )
     )
 }
 
@@ -394,15 +455,22 @@ impl<K: TrustedClock, C: TamperEvidentCounter> OfflineVerifier<K, C> {
     }
 
     /// Decides one use (§9.10, L2-PAP-3), with the optional step 8 when the profile declares
-    /// it, draws the slice, and chains the use into the projection's report.
+    /// it, draws the slice, and chains the use into the projection's report. Without ML-DSA, a
+    /// PAP of a `both` or `pq` domain is refused; use [`Self::verify_with`].
     pub fn verify(&mut self, u: &Use<'_>) -> Verdict {
-        match self.decide(u) {
+        self.verify_with(&PureBackend, u)
+    }
+
+    /// [`Self::verify`] with `backend` for the signatures, one with ML-DSA for a hybrid carrier
+    /// (OP-159 m.19 (g)).
+    pub fn verify_with(&mut self, backend: &impl Backend, u: &Use<'_>) -> Verdict {
+        match self.decide(backend, u) {
             Ok(a) => Verdict::Allow(Box::new(a)),
             Err(d) => Verdict::Deny(d),
         }
     }
 
-    fn decide(&mut self, u: &Use<'_>) -> Result<Allowed, Denial> {
+    fn decide(&mut self, backend: &impl Backend, u: &Use<'_>) -> Result<Allowed, Denial> {
         let now = self.guard.now(&self.clock).map_err(Denial::Clock)?;
         let claimed = peek(u.pap).map_err(Denial::Pap)?;
         let contract = &claimed.validity;
@@ -432,15 +500,14 @@ impl<K: TrustedClock, C: TamperEvidentCounter> OfflineVerifier<K, C> {
             skew_ms: self.me.profile.skew_ms(tier),
             horizon_cap_ms,
         };
-        let checked = pap::verify(
-            &PureBackend,
+        let checked = crate::artefact::pap(
+            backend,
             self.metadata.metadata(),
-            u.pap,
-            u.excerpt,
+            (u.pap, u.excerpt, u.pq_excerpt),
             u.presentation,
             &expected,
         );
-        let verdict = checked.map_err(Denial::Pap).and_then(|p| {
+        let verdict = checked.map_err(denial).and_then(|p| {
             admitted.map_err(Denial::Profile)?;
             status?;
             self.step8(&p, u.content_position)?;
@@ -462,7 +529,7 @@ impl<K: TrustedClock, C: TamperEvidentCounter> OfflineVerifier<K, C> {
         let pap = match verdict {
             Ok(p) => p,
             Err(d) => {
-                if !matches!(d, Denial::Pap(e) if !signature_passed(e)) {
+                if signature_passed(d) {
                     self.chain(&claimed, entry)?;
                 }
                 return Err(d);
@@ -539,6 +606,14 @@ impl<K: TrustedClock, C: TamperEvidentCounter> OfflineVerifier<K, C> {
             return Ok(None);
         };
         builder.cut(now, unused).map(Some).map_err(Denial::Report)
+    }
+}
+
+const fn denial(e: SentError) -> Denial {
+    match e {
+        SentError::Hybrid(h) => Denial::Hybrid(h),
+        SentError::Pap(p) => Denial::Pap(p),
+        SentError::Receipt(_) => Denial::Pap(PapError::Malformed),
     }
 }
 

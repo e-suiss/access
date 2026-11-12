@@ -5,6 +5,7 @@ The Access offline verifier for Rust. A device, robot or resource server that ca
 It builds on the open [`esuiss-access-kernel`](https://crates.io/crates/esuiss-access-kernel) and [`esuiss-crypto`](https://crates.io/crates/esuiss-crypto) only, is `no_std` with `alloc`, and never reads a network, a file or the system clock.
 
 - **Seven steps, in the Kernel.** Key and signature against Domain Metadata and the embedded key excerpt, DomainID, validity, holder proof, bounds and local requirements, slice, freshness and must-understand items, with the optional content-position check.
+- **Hybrid proofs.** A domain that signs with ML-DSA beside its classical key sends the proof as a `[classic, pq]` pair with one key excerpt each. Under the `both` policy each half must verify before the Kernel checks the classical one, and a lone half is refused. Pass the ML-DSA excerpt with `Use::with_pq_excerpt` and a backend with ML-DSA to `verify_with`.
 - **Ceilings the artefact cannot raise.** The horizon a use is accepted for is the smallest of the class table, the Verifier Profile's `cap_horizon` and the Domain Metadata ceilings, by connectivity variant and consequence tier.
 - **Verifier Profile.** Declare what the verifier can do; contracts issued against another profile, or that it does not cover, are refused.
 - **Trusted time and counters.** Clock and tamper-evident counter are ports with a guard that refuses a clock that jumps, freezes or goes back (measured from its anchor, within a fixed term plus a drift proportional to the elapsed monotonic time) and a counter that is rolled back or wiped. A refusing clock guard, or one after a reboot, is re-anchored only on a time taken from an artefact verified online. A shared counter bounds a verifier group. An emulator ships behind the `testing` feature.
@@ -17,7 +18,8 @@ use access_verifier::offline::{OfflineVerifier, Use, Verdict};
 
 let mut verifier = OfflineVerifier::new(identity, metadata, clock, guard);
 verifier.provision(exercise, budget_term, amount, counter)?;
-match verifier.verify(&Use { pap, excerpt, presentation, intent, nonce, satisfied, schema, content_position }) {
+let one = Use::new((pap, excerpt), presentation, intent, nonce, satisfied).with_schema(schema);
+match verifier.verify(&one) {
     Verdict::Allow(allowed) => apply(allowed),
     Verdict::Deny(denial) => refuse(denial.code()),
 }

@@ -181,16 +181,7 @@ fn admit(
         v,
         dir,
         user,
-        &Use {
-            pap: &s,
-            excerpt: &pap_excerpt,
-            presentation: &presentation,
-            intent: i,
-            nonce: &nonce,
-            satisfied: &satisfied,
-            schema: None,
-            content_position: None,
-        },
+        &Use::new((&s, &pap_excerpt), &presentation, i, &nonce, &satisfied),
     )
 }
 

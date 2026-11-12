@@ -7263,16 +7263,8 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     let nonce = [5; 16];
     let proof = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW);
     let schema = schema_of("read");
-    let use_ = Use {
-        pap: &pap_sign1,
-        excerpt: &excerpt,
-        presentation: &proof,
-        intent: &read,
-        nonce: &nonce,
-        satisfied: &BTreeSet::new(),
-        schema: Some(&schema),
-        content_position: None,
-    };
+    let none = BTreeSet::new();
+    let use_ = Use::new((&pap_sign1, &excerpt), &proof, &read, &nonce, &none).with_schema(&schema);
     let Verdict::Allow(first) = device.verify(&use_) else {
         panic!("{:?}", device.verify(&use_));
     };

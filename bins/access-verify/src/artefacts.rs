@@ -17,12 +17,6 @@ fn reject(e: &Error) -> Outcome {
     Outcome::Reject(e.name())
 }
 
-fn digest(o: &Options, name: &str) -> Result<Vec<u8>, Usage> {
-    Digest(o.hash(name)?)
-        .to_bytes()
-        .map_err(|_| Usage(format!("--{name} cannot be encoded")))
-}
-
 /// The `--metadata` bytes, verified first against `--trusted` when it is given.
 fn metadata(o: &Options) -> Result<Result<Vec<u8>, Error>, Usage> {
     let metadata = o.file("metadata")?;
@@ -64,36 +58,96 @@ fn map_out(bytes: &[u8], names: &[&'static str]) -> Outcome {
     }
 }
 
+fn requirements(
+    bytes: &[u8],
+) -> Option<std::collections::BTreeSet<access_kernel::model::RequirementTerm>> {
+    let Value::Array(items) = dcbor::decode(bytes, Limits::CEILING).ok()? else {
+        return None;
+    };
+    let mut previous: Option<Vec<u8>> = None;
+    let mut out = std::collections::BTreeSet::new();
+    for item in &items {
+        let encoded = dcbor::encode(item, Limits::CEILING).ok()?;
+        if previous.as_ref().is_some_and(|p| *p >= encoded) {
+            return None;
+        }
+        previous = Some(encoded);
+        out.insert(access_kernel::model::RequirementTerm::from_value(item).ok()?);
+    }
+    Some(out)
+}
+
+/// A PAP use as the decision point sends the PAP (L2-PAP-3, OP-159 m.19 (g)): a single
+/// `COSE_Sign1` or the hybrid carrier with `--pq-excerpt`, under the metadata's `hybrid`
+/// policy, the presentation binding the classical component.
 pub(crate) fn pap(o: &Options) -> Result<Outcome, Usage> {
+    use access_kernel::verify::key_scope::Hybrid;
+    use access_verifier::artefact;
     let metadata = match metadata(o)? {
         Ok(m) => m,
         Err(e) => return Ok(reject(&e)),
     };
     let nonce = crate::args::unhex(o.text("nonce")?)
         .ok_or_else(|| Usage("--nonce is not lowercase hex".to_owned()))?;
-    let result = binding::verify_pap(
-        &metadata,
-        &o.file("pap")?,
-        &o.file("excerpt")?,
-        &o.file("presentation")?,
-        &digest(o, "domain")?,
-        &o.file("intent")?,
-        o.text("audience")?,
-        &nonce,
-        o.uint("now")?,
-        &o.file("catalog")?,
-        &o.file("satisfied")?,
-        &o.file("remaining")?,
-        o.boolean("fresh")?,
-        o.words("understood"),
-        o.opt_uint("last-refresh")?,
-        o.boolean("online")?,
-        o.uint("skew-ms")?,
-        o.uint("horizon-cap-ms")?,
-    );
+    let pq_excerpt = o
+        .opt("pq-excerpt")
+        .map(|_| o.file("pq-excerpt"))
+        .transpose()?;
+    let (sign1, excerpt, presentation) =
+        (o.file("pap")?, o.file("excerpt")?, o.file("presentation")?);
+    let domain = Digest(o.hash("domain")?);
+    let (Ok(metadata), Ok(intent), Ok(catalog), Some(satisfied), Some(remaining)) = (
+        DomainMetadata::from_bytes(&metadata),
+        access_kernel::intent::IntentEnvelope::from_bytes(&o.file("intent")?),
+        access_kernel::algebra::Catalog::from_bytes(&o.file("catalog")?),
+        requirements(&o.file("satisfied")?),
+        slices(&o.file("remaining")?),
+    ) else {
+        return Ok(reject(&Error::Input));
+    };
+    let understood: std::collections::BTreeSet<String> =
+        o.words("understood").into_iter().collect();
+    let expected = access_kernel::pap::Expected {
+        domain: &domain,
+        intent: &intent,
+        audience: o.text("audience")?,
+        nonce: &nonce,
+        now: o.uint("now")?,
+        catalog: &catalog,
+        satisfied: &satisfied,
+        remaining: &remaining,
+        metadata_fresh: o.boolean("fresh")?,
+        understood: &understood,
+        last_refresh: o.opt_uint("last-refresh")?,
+        online: o.boolean("online")?,
+        skew_ms: o.uint("skew-ms")?,
+        horizon_cap_ms: o.uint("horizon-cap-ms")?,
+    };
+    let parts = (sign1.as_slice(), excerpt.as_slice(), pq_excerpt.as_deref());
+    let result = if matches!(metadata.hybrid, Some(Hybrid::Pq | Hybrid::Both)) {
+        artefact::pap(
+            &suiss_crypto::aws::AwsLcBackend,
+            &metadata,
+            parts,
+            &presentation,
+            &expected,
+        )
+    } else {
+        artefact::pap(
+            &access_kernel::verify::PureBackend,
+            &metadata,
+            parts,
+            &presentation,
+            &expected,
+        )
+    };
     Ok(match result {
-        Ok(p) => Outcome::Accept(vec![("pap", hex(&p))]),
-        Err(e) => reject(&e),
+        Ok(p) => match p.to_bytes() {
+            Ok(bytes) => Outcome::Accept(vec![("pap", hex(&bytes))]),
+            Err(_) => reject(&Error::Input),
+        },
+        Err(artefact::SentError::Pap(e)) => reject(&Error::Pap(e)),
+        Err(e) => Outcome::Reject(e.code().to_owned()),
     })
 }
 

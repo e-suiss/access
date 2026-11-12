@@ -560,16 +560,17 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
             .unwrap(),
         )
         .unwrap();
-        let verdict = pos.verify(&Use {
-            pap: &pap_sign1,
-            excerpt: &excerpt,
-            presentation: &presentation,
-            intent: &intent,
-            nonce: &nonce,
-            satisfied: &BTreeSet::new(),
-            schema: Some(&void_schema),
-            content_position: None,
-        });
+        let none = BTreeSet::new();
+        let verdict = pos.verify(
+            &Use::new(
+                (&pap_sign1, &excerpt),
+                &presentation,
+                &intent,
+                &nonce,
+                &none,
+            )
+            .with_schema(&void_schema),
+        );
         match (verdict, expect) {
             (Verdict::Allow(_), true) => {
                 voided.push(order);

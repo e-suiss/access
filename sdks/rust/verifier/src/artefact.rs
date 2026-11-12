@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 
 use access_kernel::codec::Canonical as _;
 use access_kernel::digest::Digest;
+use access_kernel::pap::{self, Pap, PapError};
 use access_kernel::receipt::{self, Receipt, ReceiptError};
 use access_kernel::record::Disclosure;
 use access_kernel::verify::Backend;
@@ -131,6 +132,9 @@ pub enum SentError {
     /// The hybrid policy is not met (L0-SIG-75a, OP-159 m.15 (b)).
     #[error("{}", .0.code())]
     Hybrid(HybridError),
+    /// The PAP is refused (L2-PAP-3).
+    #[error("{}", .0.code())]
+    Pap(PapError),
 }
 
 impl SentError {
@@ -140,6 +144,7 @@ impl SentError {
         match self {
             Self::Receipt(e) => e.code(),
             Self::Hybrid(e) => e.code(),
+            Self::Pap(e) => e.code(),
         }
     }
 }
@@ -176,47 +181,110 @@ pub fn components(sign1: &[u8]) -> Result<Components, HybridError> {
 pub fn receipt(
     backend: &impl Backend,
     metadata: &DomainMetadata,
-    (sign1, excerpt, pq_excerpt): (&[u8], &[u8], Option<&[u8]>),
+    sent: (&[u8], &[u8], Option<&[u8]>),
     expected: &receipt::Expected<'_>,
     evidence: Option<&Evidence>,
 ) -> Result<Receipt, SentError> {
+    let c = checked_component(
+        backend,
+        metadata,
+        sent,
+        (KeyUsage::Receipt, receipt::CONTENT_TYPE),
+        |p| {
+            Receipt::from_bytes(p)
+                .ok()
+                .map(|r| (r.clone(), r.domain, r.iat))
+        },
+        SentError::Receipt(ReceiptError::Malformed),
+    )?;
+    let artefact = receipt::digest(&c.claimed).ok();
+    let own = evidence.zip(artefact).map(|(e, a)| e.of(a));
+    receipt::verify_with_evidence(backend, &c.metadata, &c.one, c.key, expected, own.as_ref())
+        .map_err(SentError::Receipt)
+}
+
+struct Checked<'a, T> {
+    one: Vec<u8>,
+    key: &'a [u8],
+    metadata: DomainMetadata,
+    claimed: T,
+}
+
+/// The component the Kernel checks under `metadata`'s `hybrid` policy and its excerpt: the
+/// classical one, or the ML-DSA one under `pq`, after both pass `hybrid::verify` under `both`.
+fn checked_component<'a, T>(
+    backend: &impl Backend,
+    metadata: &DomainMetadata,
+    (sign1, excerpt, pq_excerpt): (&[u8], &'a [u8], Option<&'a [u8]>),
+    (usage, content_type): (KeyUsage, &str),
+    claim: impl Fn(&[u8]) -> Option<(T, Digest, u64)>,
+    malformed: SentError,
+) -> Result<Checked<'a, T>, SentError> {
     let (classic, pq) = components(sign1).map_err(SentError::Hybrid)?;
     let policy = metadata.hybrid.unwrap_or(Hybrid::Classic);
     let (one, key) = match policy {
-        Hybrid::Pq => (pq.as_deref(), pq_excerpt.unwrap_or(excerpt)),
-        Hybrid::Classic | Hybrid::Both => (classic.as_deref(), excerpt),
+        Hybrid::Pq => (pq.clone(), pq_excerpt.unwrap_or(excerpt)),
+        Hybrid::Classic | Hybrid::Both => (classic.clone(), excerpt),
     };
     let one = one.ok_or(SentError::Hybrid(HybridError::Missing))?;
-    let claimed = parse_sign1(one)
+    let (claimed, domain, iat) = parse_sign1(&one)
         .ok()
         .and_then(|s| s.payload)
-        .and_then(|p| Receipt::from_bytes(&p).ok())
-        .ok_or(SentError::Receipt(ReceiptError::Malformed))?;
+        .and_then(|p| claim(&p))
+        .ok_or(malformed)?;
     let mut checked = metadata.clone();
     if policy == Hybrid::Both {
-        let pair = (
+        hybrid::verify(
+            backend,
+            metadata,
             classic.as_deref().map(|c| Component::new(c, excerpt)),
             pq.as_deref()
                 .zip(pq_excerpt)
                 .map(|(p, e)| Component::new(p, e)),
-        );
-        hybrid::verify(
-            backend,
-            metadata,
-            pair.0,
-            pair.1,
-            &hybrid::Expected::new(
-                &claimed.domain,
-                KeyUsage::Receipt,
-                claimed.iat,
-                receipt::CONTENT_TYPE,
-            ),
+            &hybrid::Expected::new(&domain, usage, iat, content_type),
         )
         .map_err(SentError::Hybrid)?;
         checked.hybrid = Some(Hybrid::Classic);
     }
-    let artefact = receipt::digest(&claimed).ok();
-    let own = evidence.zip(artefact).map(|(e, a)| e.of(a));
-    receipt::verify_with_evidence(backend, &checked, one, key, expected, own.as_ref())
-        .map_err(SentError::Receipt)
+    Ok(Checked {
+        one,
+        key,
+        metadata: checked,
+        claimed,
+    })
+}
+
+/// Verifies a PAP as the decision point sends it (L2-PAP-3, OP-159 m.19 (g)): the components
+/// the metadata's `hybrid` policy requires verify over the same payload, a lone component under
+/// `both` is `hybrid-missing`, and the PAP checks are the Kernel's on the classical component
+/// (the ML-DSA one under `pq`), which the holder's presentation binds.
+///
+/// # Errors
+/// [`SentError`].
+pub fn pap(
+    backend: &impl Backend,
+    metadata: &DomainMetadata,
+    sent: (&[u8], &[u8], Option<&[u8]>),
+    presentation: &[u8],
+    expected: &pap::Expected<'_>,
+) -> Result<Pap, SentError> {
+    let c = checked_component(
+        backend,
+        metadata,
+        sent,
+        (KeyUsage::Pap, pap::CONTENT_TYPE),
+        |p| Pap::from_bytes(p).ok().map(|c| ((), c.domain, c.iat)),
+        SentError::Pap(PapError::Malformed),
+    )?;
+    pap::verify(backend, &c.metadata, &c.one, c.key, presentation, expected).map_err(SentError::Pap)
+}
+
+/// The component of a PAP as sent that the Kernel checks and the holder's presentation binds:
+/// the classical one, or a lone ML-DSA one.
+///
+/// # Errors
+/// [`PapError::Malformed`].
+pub fn pap_component(sign1: &[u8]) -> Result<Vec<u8>, PapError> {
+    let (classic, pq) = components(sign1).map_err(|_| PapError::Malformed)?;
+    classic.or(pq).ok_or(PapError::Malformed)
 }

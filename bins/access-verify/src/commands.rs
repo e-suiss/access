@@ -170,8 +170,9 @@ pub(crate) const COMMANDS: &[Command] = &[
             "online",
             "skew-ms",
             "horizon-cap-ms",
+            "pq-excerpt",
         ],
-        summary: "use of a Portable Authority Proof for an intent, the seven steps of L2-PAP-3",
+        summary: "use of a Portable Authority Proof for an intent, the seven steps of L2-PAP-3, single or hybrid",
         run: crate::artefacts::pap,
     },
     Command {
