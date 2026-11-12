@@ -106,8 +106,25 @@ fn messages_round_trip() {
                     String::from("eu-central"),
                     access_kernel::verify::key_scope::DrClass::MultiRegionSync,
                 ));
+                // RR-35
+                d.pq_reanchor = Some(access_kernel::verify::key_scope::PqReanchor::new(
+                    9,
+                    1_000,
+                    vec![String::from("w-pq")],
+                ));
                 d
             }),
+        },
+        // OP-159 m.3 (g), m.9 (h)
+        Request::SignPqCheckpoint {
+            domain: Digest([7; 32]),
+            body: String::from("origin\n1\nAAAA\n"),
+            at: 5,
+        },
+        Request::Allowlist {
+            domain: Digest([7; 32]),
+            alg: suiss_crypto::cose::Algorithm::MlDsa87,
+            retire: false,
         },
     ];
     for r in requests {

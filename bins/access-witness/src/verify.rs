@@ -150,19 +150,20 @@ pub(crate) fn binding_change(
 
 /// Verifies a post-quantum re-anchor checkpoint of `log` (CR-45 RA-2, RA-3, OP-159 m.3 (g)):
 /// `body` is a checkpoint of the domain, `excerpt` is signed by a binding key the witness holds
-/// and declares an ML-DSA key with usage `checkpoint` whose window covers `issued_at`, and that
-/// key's `COSE_Sign1` carries `body` byte for byte.
+/// and declares an ML-DSA key with usage `checkpoint` whose window covers `now` (the re-anchor
+/// signs an earlier checkpoint's body later), and that key's `COSE_Sign1` carries `body` byte
+/// for byte.
 pub(crate) fn pq_checkpoint(
     log: &Log,
-    body: &str,
-    sign1: &[u8],
-    excerpt: &[u8],
+    (body, sign1, excerpt): (&str, &[u8], &[u8]),
+    now: u64,
 ) -> Result<Checkpoint, Refused> {
     let cp = Checkpoint::parse(body).map_err(|_| Refused::Malformed)?;
     if cp.origin != origin(&log.domain) || cp.to_body().ok().as_deref() != Some(body) {
         return Err(Refused::Malformed);
     }
-    let at = issued_at(&cp)?;
+    issued_at(&cp)?;
+    let at = now;
     let verified = verify_sign1(&PureBackend, excerpt, &log.bindings, EXCERPT_CONTENT_TYPE)
         .map_err(|_| Refused::Key)?;
     let KeyExcerpt { domain, key } =

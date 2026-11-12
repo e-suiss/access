@@ -88,7 +88,11 @@ async fn pq_cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Respon
     };
     let chain = chain.lock().await;
     let trusted = with_learned(log, &chain.learned);
-    let cp = match crate::verify::pq_checkpoint(&trusted, &req.body, &req.sign1, &req.excerpt) {
+    let cp = match crate::verify::pq_checkpoint(
+        &trusted,
+        (&req.body, &req.sign1, &req.excerpt),
+        now_ms(),
+    ) {
         Ok(cp) => cp,
         Err(crate::verify::Refused::Malformed) => return refuse(Refused::Malformed),
         Err(crate::verify::Refused::Key) => return refuse(Refused::UnknownKey),

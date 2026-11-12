@@ -60,6 +60,8 @@ mod review;
 // OP-158 m.4 (f)
 mod forced;
 mod handover;
+// OP-159 m.3 (g)
+mod reanchor;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };
@@ -69,6 +71,7 @@ pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,
 };
+pub use reanchor::reanchor;
 pub use reconcile::Reconciled;
 pub use vault::ReleaseBasis;
 

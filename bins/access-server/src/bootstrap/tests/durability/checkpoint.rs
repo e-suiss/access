@@ -856,3 +856,150 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     drop(witness);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// `declared` with `w`'s ML-DSA cosign key `public` as an independent witness (RB-0).
+fn with_pq_witness(
+    mut declared: access_kernel::verify::key_scope::Declarations,
+    name: &str,
+    public: Vec<u8>,
+) -> access_kernel::verify::key_scope::Declarations {
+    declared
+        .witnesses
+        .push(access_kernel::verify::key_scope::Witness::new(
+            name.to_owned(),
+            suiss_crypto::cose::PublicKey::MlDsa(suiss_crypto::cose::Algorithm::MlDsa65, public),
+            suiss_crypto::cose::Algorithm::MlDsa65,
+            String::from("Example Witness Ltd"),
+            true,
+        ));
+    declared
+}
+
+async fn published(socket: &Path, d: Digest) -> access_kernel::verify::key_scope::DomainMetadata {
+    let AuthorityResponse::Metadata(m) = authority_call(socket, &AuthorityRequest::Metadata(d))
+        .await
+        .unwrap()
+    else {
+        panic!("metadata");
+    };
+    let msg = suiss_crypto::cose::parse_sign1(&m).unwrap();
+    access_kernel::verify::key_scope::DomainMetadata::from_bytes(&msg.payload.unwrap()).unwrap()
+}
+
+// CR-45 RA-1, RA-2, RA-3, RA-6, RB-0, RR-35, HL-34, OP-159 m.3 (e), (g)
+#[tokio::test(flavor = "multi_thread")]
+#[allow(clippy::too_many_lines, reason = "one walkthrough of the re-anchor")]
+async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it_pending() {
+    use access_authority_core::adapters::reanchor;
+    use access_authority_core::app::reanchor::Status;
+    let db = fresh().await.unwrap();
+    let mut log = Log::create(&db).await;
+    let d = log.domain;
+    log.push(&db, 1, wall() - 30_000).await;
+    let key = binding_key(d);
+    let root = std::env::temp_dir().join(format!("aw-pq-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let mut witness = Witness::start(
+        &witness_bin(),
+        &root,
+        ("w-pq", "Example Witness Ltd"),
+        d.0,
+        key,
+    )
+    .unwrap();
+    let public = witness.enable_pq().unwrap();
+    let classical = declare(&[(&witness, "Example Witness Ltd", true)]);
+    let declared = with_pq_witness(classical.clone(), "w-pq", public);
+    let socket = wall_signer("pq", d, declared.clone()).await;
+    let (heads, signer) = (PgHeads(db.app.clone()), SocketSigner::new(socket.clone()));
+    let publisher = Publisher {
+        targets: vec![target(&witness, "Example Witness Ltd")],
+        sinks: vec![],
+    };
+    let (row, out) = domain_step(
+        (&heads, &signer, &publisher),
+        (&db.app, &db.sequencer),
+        (d, &mut Cadence::default()),
+        wall(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!((row.size, out.independent), (2, 1), "{out:?}");
+    let urls = vec![(String::from("w-pq"), witness.url.clone())];
+
+    // RR-35
+    assert!(published(&socket, d).await.declared.pq_reanchor.is_none());
+    // OP-159 m.3 (d)
+    assert_eq!(
+        reanchor(&socket, d, (&row, &declared), &urls, wall()).await,
+        Err("pq-key-unavailable")
+    );
+    // OP-159 m.3 (e), m.9 (h)
+    let admit = AuthorityRequest::Allowlist {
+        domain: d,
+        alg: suiss_crypto::cose::Algorithm::MlDsa65,
+        retire: false,
+    };
+    assert_eq!(
+        authority_call(&socket, &admit).await.unwrap(),
+        AuthorityResponse::Opened
+    );
+    // RB-0
+    assert_eq!(
+        reanchor(&socket, d, (&row, &classical), &urls, wall()).await,
+        Err("reanchor-no-pq-witness")
+    );
+    // RA-2, RA-3
+    let out = reanchor(&socket, d, (&row, &declared), &urls, wall()).await;
+    let Ok(Status::Anchored(anchored)) = out else {
+        panic!("the independent witness cosigns: {out:?}");
+    };
+    assert_eq!(anchored.size, 2);
+    assert_eq!(anchored.witnesses, vec![String::from("w-pq")]);
+    let m = published(&socket, d).await;
+    assert_eq!(m.declared.pq_reanchor, Some(anchored.clone()));
+    assert_eq!(
+        m.hybrid,
+        Some(access_kernel::verify::key_scope::Hybrid::Both)
+    );
+    // HL-34, §15.16
+    assert_eq!(
+        authority_call(
+            &socket,
+            &AuthorityRequest::Allowlist {
+                domain: d,
+                alg: suiss_crypto::cose::Algorithm::Ed25519,
+                retire: true,
+            }
+        )
+        .await
+        .unwrap(),
+        AuthorityResponse::Error(String::from("pq-key-unavailable"))
+    );
+
+    // RA-3, HL-34
+    witness.kill().unwrap();
+    let pending = with_pq_witness(classical, "w-pq", {
+        let w = m
+            .declared
+            .witnesses
+            .iter()
+            .find(|w| w.algorithm == suiss_crypto::cose::Algorithm::MlDsa65)
+            .unwrap();
+        let suiss_crypto::cose::PublicKey::MlDsa(_, k) = &w.key else {
+            panic!("ML-DSA key");
+        };
+        k.clone()
+    });
+    assert_eq!(
+        reanchor(&socket, d, (&row, &pending), &urls, wall()).await,
+        Ok(Status::Pending)
+    );
+    assert_eq!(
+        published(&socket, d).await.declared.pq_reanchor,
+        Some(anchored)
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

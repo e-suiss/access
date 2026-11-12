@@ -122,6 +122,36 @@ impl Witness {
         Ok(())
     }
 
+    /// Gives the witness an ML-DSA-65 cosign key (`pq-keygen`, a seed file beside its
+    /// configuration) and restarts it; the public key (CR-45 RA-3, OP-159 m.3 (g)).
+    ///
+    /// # Errors
+    /// [`WitnessError`].
+    pub fn enable_pq(&mut self) -> Result<Vec<u8>, WitnessError> {
+        self.kill()?;
+        let seed = self.config.with_extension("pq");
+        let out = Command::new(&self.bin)
+            .arg("pq-keygen")
+            .arg(&seed)
+            .arg("ml-dsa-65")
+            .output()?;
+        if !out.status.success() {
+            return Err(fail(String::from_utf8_lossy(&out.stderr)));
+        }
+        let line = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+        let public = line
+            .strip_prefix("pq-key ml-dsa-65 ")
+            .and_then(|k| access_kernel::json::b64url_decode(k).ok())
+            .ok_or_else(|| fail(format!("unexpected pq-keygen line: {line}")))?;
+        let mut config = std::fs::read_to_string(&self.config)?;
+        config.push_str("pq-key ml-dsa-65 ");
+        config.push_str(&seed.display().to_string());
+        config.push('\n');
+        std::fs::write(&self.config, config)?;
+        self.spawn()?;
+        Ok(public)
+    }
+
     /// `SIGKILL`s the process and waits for it.
     ///
     /// # Errors

@@ -362,6 +362,20 @@ fn declared_value(d: &Declarations) -> Value {
             }),
         ));
     }
+    // OP-159 m.3 (g), RR-35
+    if let Some(r) = &d.pq_reanchor {
+        entries.push((
+            "pq_reanchor",
+            map(vec![
+                ("size", Value::Unsigned(r.size)),
+                ("time", Value::Unsigned(r.time)),
+                (
+                    "witnesses",
+                    Value::Array(r.witnesses.iter().map(|w| Value::text(w)).collect()),
+                ),
+            ]),
+        ));
+    }
     map(entries)
 }
 
@@ -446,6 +460,20 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
         d.mmd = Some(Mmd::new(
             uint_of(m.get("authority_ms"))?,
             uint_of(m.get("identity_ms"))?,
+        ));
+    }
+    // OP-159 m.3 (g), RR-35
+    if let Some(r) = v.get("pq_reanchor") {
+        let Some(Value::Array(names)) = r.get("witnesses") else {
+            return Err(FrameError::Malformed);
+        };
+        d.pq_reanchor = Some(access_kernel::verify::key_scope::PqReanchor::new(
+            uint_of(r.get("size"))?,
+            uint_of(r.get("time"))?,
+            names
+                .iter()
+                .map(|n| text_of(Some(n)))
+                .collect::<Result<_, _>>()?,
         ));
     }
     Ok(d)

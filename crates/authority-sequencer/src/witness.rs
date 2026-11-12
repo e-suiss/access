@@ -255,6 +255,28 @@ pub async fn add_checkpoint_moving(
     }
 }
 
+/// Asks the witness at `url` for its ML-DSA cosign of the post-quantum re-anchor checkpoint
+/// `request` (CR-45 RA-3, OP-159 m.3 (g)). The caller verifies the cosign against the declared
+/// witness key; an unreachable witness leaves the re-anchor pending.
+///
+/// # Errors
+/// [`WitnessError`]; [`WitnessError::Refused`] with the witness's status.
+pub async fn pq_cosign(
+    url: &str,
+    request: &suiss_ledger::checkpoint::witness::PqCosignRequest,
+) -> Result<suiss_ledger::checkpoint::witness::PqCosign, WitnessError> {
+    let body = request.to_bytes().map_err(|_| WitnessError::Cosignature)?;
+    let (status, answer) = exchange(url, "POST", "/pq-cosign", &body).await?;
+    if status != 200 {
+        return Err(match CosignResponse::from_bytes(&answer) {
+            Ok(CosignResponse::Refused(r)) => WitnessError::Said(r, status),
+            _ => WitnessError::Refused(status),
+        });
+    }
+    suiss_ledger::checkpoint::witness::PqCosign::from_bytes(&answer)
+        .map_err(|_| WitnessError::Cosignature)
+}
+
 /// The latest head `target` cosigned for `domain`, its cosignature verified over the note it
 /// carries (gossip, §9.16): the entry and the cosigned note.
 ///
