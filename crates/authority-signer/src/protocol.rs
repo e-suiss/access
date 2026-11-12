@@ -378,21 +378,23 @@ fn declared_value(d: &Declarations) -> Value {
     }
     // OP-159 m.3 (s), m.4 (b) (J4)
     if let Some(h) = d.hosting {
-        let word = |s: access_kernel::verify::key_scope::Sharing| {
-            Value::text(match s {
-                access_kernel::verify::key_scope::Sharing::Shared => "shared",
-                access_kernel::verify::key_scope::Sharing::Dedicated => "dedicated",
-            })
-        };
-        entries.push((
-            "hosting",
-            map(vec![
-                ("hsm_partition", word(h.hsm_partition)),
-                ("compute", word(h.compute)),
-            ]),
-        ));
+        entries.push(("hosting", hosting_value(h)));
     }
     map(entries)
+}
+
+// OP-159 m.3 (s), m.4 (b) (J4)
+fn hosting_value(h: access_kernel::verify::key_scope::Hosting) -> Value {
+    let word = |s: access_kernel::verify::key_scope::Sharing| {
+        Value::text(match s {
+            access_kernel::verify::key_scope::Sharing::Shared => "shared",
+            access_kernel::verify::key_scope::Sharing::Dedicated => "dedicated",
+        })
+    };
+    map(vec![
+        ("hsm_partition", word(h.hsm_partition)),
+        ("compute", word(h.compute)),
+    ])
 }
 
 // OP-159 m.3 (s), m.4 (b) (J4)
