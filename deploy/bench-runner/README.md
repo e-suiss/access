@@ -4,8 +4,9 @@ The nightly wall-clock benchmarks (OP-72) run on one dedicated, always-on Linux
 machine registered as a GitHub Actions self-hosted runner (OP-84). Instruction-count
 benchmarks do not need it: they run on GitHub-hosted runners on every pull request.
 
-Only the `bench-wallclock` job of the `Nightly` workflow runs here, and only for
-scheduled or manually started runs of `main`. Pull requests never run on this machine:
+Three jobs of the `Nightly` workflow run here, one at a time, and only for scheduled or
+manually started runs of `main`: `bench-wallclock`, and the constant-time measurements
+`dudect` and `ctgrind`. Pull requests never run on this machine:
 the repository is public, and a pull request could otherwise execute arbitrary code on it.
 
 ## What the setup does
@@ -19,7 +20,8 @@ the repository is public, and a pull request could otherwise execute arbitrary c
   `ProtectSystem=strict`, `ProtectHome`, writable paths limited to the runner's own dirs)
   and optional CPU pinning;
 - a `systemd` oneshot `bench-cpu-tuning.service` that sets the `performance` governor and
-  switches off turbo/boost at every boot.
+  switches off turbo/boost and SMT at every boot;
+- Valgrind, which the `ctgrind` job runs under (the runner user has no sudo to install it).
 
 The registration token is typed in when the script asks for it. It is passed to the
 runner's `config.sh` and never written anywhere. The runner keeps only its own
@@ -33,16 +35,15 @@ credentials, under `/opt/actions-runner`.
 2. **Repository setting** (Settings → Actions → General): require approval for workflow runs
    from all outside collaborators. A pull request cannot run on this machine until a
    maintainer approves it.
-3. **Machine** (optional, recommended): isolate two cores from the scheduler and pin the
-   runner to them. Add to the kernel command line and reboot:
+3. **Machine** (required for the constant-time jobs): isolate two cores from the scheduler and
+   pin the runner to them. Add to the kernel command line and reboot:
 
    ```
    isolcpus=2,3 nohz_full=2,3 rcu_nocbs=2,3
    ```
 
-   Disabling SMT (`echo off > /sys/devices/system/cpu/smt/control`) removes another noise
-   source. Keep the machine otherwise idle: no desktop session, no other services that wake up
-   at night.
+   `bench-cpu-tuning.service` switches SMT off at every boot. Keep the machine otherwise idle:
+   no desktop session, no other services that wake up at night.
 4. **Install and register**:
 
    ```sh
@@ -50,7 +51,25 @@ credentials, under `/opt/actions-runner`.
    ```
 
    Create the token with `gh api -X POST repos/e-suiss/access/actions/runners/registration-token --jq .token`
-   (valid for one hour) and paste it when asked. Leave `BENCH_CPUS` unset if no cores are isolated.
+   (valid for one hour) and paste it when asked. `BENCH_CPUS` must name the isolated cores; without it the preflight refuses every constant-time measurement.
+
+## Measurement preflight
+
+`preflight.sh` runs before every `dudect` and `ctgrind` measurement and refuses to measure
+on a noisy machine. It fails when any of these does not hold, and a value it cannot read is a
+failure:
+
+- cores are isolated (`/sys/devices/system/cpu/isolated`) and the job runs exactly on them;
+- every CPU uses the `performance` governor;
+- turbo/boost is off;
+- SMT is off;
+- no other runner job is running;
+- the 1-minute load average falls below 0.30 within 10 minutes (`BENCH_IDLE_LOAD`,
+  `BENCH_IDLE_WAIT_S`).
+
+A failed preflight fails the job; the night has no constant-time measurement, and the gap is
+never filled in afterwards. The threshold of the measurement itself does not change: |t| > 5
+is a leak.
 
 ## Operation
 

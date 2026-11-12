@@ -292,8 +292,10 @@ jobs:
 
   dudect:
     name: dudect
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # CR-39 m.5, OP-84, OP-159 m.1 (a)
+    if: github.ref == 'refs/heads/main' && github.repository == 'e-suiss/access'
+    runs-on: [self-hosted, linux, bench]
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
@@ -302,15 +304,23 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
-          cache-key: test
-      # CR-39 m.5, SA-T13
+          cache-key: bench-dudect
+      # OP-159 m.1 (a)
+      - name: Build the measurement before the preflight
+        run: cargo test --locked --release -p access-crypto --test dudect --no-run
+      # OP-159 m.1 (a)
+      - name: Isolated, idle machine
+        run: deploy/bench-runner/preflight.sh
+      # CR-39 m.5, SA-T13, SAI-42
       - name: dudect leakage test
         run: just dudect
 
   ctgrind:
     name: ctgrind
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # CR-39 m.5, OP-84, OP-159 m.1 (a)
+    if: github.ref == 'refs/heads/main' && github.repository == 'e-suiss/access'
+    runs-on: [self-hosted, linux, bench]
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -319,9 +329,13 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
-          cache-key: test
-      - name: Install Valgrind
-        run: scripts/ci/apt-install.sh valgrind
+          cache-key: bench-ctgrind
+      # OP-159 m.1 (a)
+      - name: Valgrind is installed
+        run: valgrind --version
+      # OP-159 m.1 (a)
+      - name: Isolated, idle machine
+        run: deploy/bench-runner/preflight.sh
       # CR-39 m.5, SA-T13, SAI-42
       - name: Secret comparisons under Valgrind with secret bytes undefined
         run: just ctgrind

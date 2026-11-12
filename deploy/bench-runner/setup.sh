@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OP-72, OP-84
+# OP-72, OP-84, CR-39 m.5, OP-159 m.1 (a)
 set -euo pipefail
 
 REPO_URL="https://github.com/e-suiss/access"
@@ -29,7 +29,7 @@ esac
 echo "==> Packages (build tools, git, rustup)"
 apt-get update -q
 DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-  build-essential ca-certificates curl git jq pkg-config rustup linux-cpupower
+  build-essential ca-certificates curl git jq pkg-config rustup linux-cpupower util-linux valgrind
 
 echo "==> Unprivileged runner user ($RUNNER_USER, no sudo, no login shell)"
 if ! id "$RUNNER_USER" >/dev/null 2>&1; then
@@ -70,10 +70,10 @@ if [[ ! -f "$RUNNER_DIR/.runner" ]]; then
   unset token
 fi
 
-echo "==> CPU frequency: performance governor, no turbo, at every boot"
+echo "==> CPU frequency: performance governor, no turbo, no SMT, at every boot"
 cat > /etc/systemd/system/bench-cpu-tuning.service <<'UNIT'
 [Unit]
-Description=Stable CPU frequency for benchmarks (OP-72)
+Description=Stable CPU frequency and no SMT for benchmarks (OP-72, CR-39)
 After=multi-user.target
 
 [Service]
@@ -81,6 +81,7 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/cpupower frequency-set --governor performance
 ExecStart=/bin/sh -c 'if [ -w /sys/devices/system/cpu/intel_pstate/no_turbo ]; then echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo; fi; if [ -w /sys/devices/system/cpu/cpufreq/boost ]; then echo 0 > /sys/devices/system/cpu/cpufreq/boost; fi'
+ExecStart=/bin/sh -c 'if [ -w /sys/devices/system/cpu/smt/control ]; then echo off > /sys/devices/system/cpu/smt/control; fi'
 
 [Install]
 WantedBy=multi-user.target
