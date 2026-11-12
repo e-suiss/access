@@ -147,13 +147,13 @@ impl SentError {
 /// The classical and the ML-DSA `COSE_Sign1` of an artefact, each when present.
 pub type Components = (Option<Vec<u8>>, Option<Vec<u8>>);
 
-/// The classical and ML-DSA components of `sign1`: the two of a hybrid carrier, or `sign1`
-/// alone as the component of its own algorithm.
+/// The classical and ML-DSA components of `sign1`: the two of a hybrid carrier (a CBOR array of
+/// two), or `sign1` alone as the component of its own algorithm, which the Kernel then checks.
 ///
 /// # Errors
 /// [`HybridError::Carrier`] for a carrier that is not `[classic, pq]`.
 pub fn components(sign1: &[u8]) -> Result<Components, HybridError> {
-    if sign1.first() != Some(&0xd2) {
+    if sign1.first() == Some(&0x82) {
         let (c, p) = hybrid::decode_carrier(sign1)?;
         return Ok((Some(c), Some(p)));
     }

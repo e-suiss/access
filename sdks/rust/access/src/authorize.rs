@@ -663,17 +663,15 @@ impl Pep {
         now: TrustedTime,
         evidence: Option<&InclusionEvidence<'_>>,
     ) -> Result<Receipt, Denied> {
-        let (classic, pq) = if sign1.first() == Some(&0xd2) {
-            let ml_dsa = access_kernel::verify::ml_dsa::algorithm_of(sign1)
-                .is_ok_and(access_kernel::verify::ml_dsa::is_ml_dsa);
-            if ml_dsa {
-                (None, Some(sign1.to_vec()))
-            } else {
-                (Some(sign1.to_vec()), None)
-            }
-        } else {
+        let (classic, pq) = if sign1.first() == Some(&0x82) {
             let (c, p) = hybrid::decode_carrier(sign1).map_err(Denied::Hybrid)?;
             (Some(c), Some(p))
+        } else if access_kernel::verify::ml_dsa::algorithm_of(sign1)
+            .is_ok_and(access_kernel::verify::ml_dsa::is_ml_dsa)
+        {
+            (None, Some(sign1.to_vec()))
+        } else {
+            (Some(sign1.to_vec()), None)
         };
         let policy = self.metadata.hybrid.unwrap_or(Hybrid::Classic);
         let (one, key) = match policy {
