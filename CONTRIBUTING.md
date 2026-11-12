@@ -66,6 +66,11 @@ The full rules are in the project specification: repository layout (OP-62), arch
 - `TODO` comments must reference an issue.
 - Tests are named after behavior (`deny_when_grant_expired`); flaky tests are quarantined, never retried until green.
 - Pull requests that touch the Kernel or the authority core's decision paths run mutation testing on the changed lines (`just mutants-diff`); a missed mutant fails.
+- The test layers, their cadence and the recipe or CI job that runs each are listed in `conformance/catalog/test-layers.toml`; `cargo xtask check test-layers` refuses a layer whose phase has come and is not active.
+- Every fuzz target in `fuzz/` has a committed seed corpus in `fuzz/corpus/<target>/`; pull requests replay it once (`just fuzz-regress`), the nightly job fuzzes a rotating set of targets under AddressSanitizer (`just fuzz-rotate`), and a crash found later is added to the corpus with its fix.
+- The sequencer runs under a seeded deterministic simulation (`just dst`, 10⁴ seeds at night); a failing seed is replayed with `ACCESS_DST_SEED=<seed>`.
+- Only the authority core mints the write permit the sequencer's commit entry spends (`cargo xtask check write-permit`); other code, identity crates included, cannot append to a domain log.
+- The hardening rules R-1…R-7 apply to Rust, TypeScript and the C FFI code alike; `conformance/catalog/language-profiles.toml` names the lint, check or CI step that enforces each one, and the weekly job runs the Kernel, the parsers and the pure verifier under Miri (`just miri`).
 
 ## Branches, commits and pull requests
 
