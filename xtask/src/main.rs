@@ -7,7 +7,9 @@
 )]
 
 mod catalog;
+mod civil;
 mod policy;
+mod psirt;
 mod rules;
 mod supply_chain;
 
@@ -88,6 +90,16 @@ fn usage() -> ExitCode {
     eprintln!(
         "  security-model     regenerate conformance/SECURITY-MODEL.md; --check only compares"
     );
+    eprintln!(
+        "  support-policy     regenerate SECURITY.md's support and fix time sections; --check only compares"
+    );
+    eprintln!(
+        "  release-tag TAG    print the maintenance branch of a release tag of a supported minor"
+    );
+    eprintln!(
+        "  psirt deadlines    CRA Art. 14 deadlines: --aware-at T [--fixed-at T] [--notified-at T]"
+    );
+    eprintln!("  advisory new ID    write an OSV advisory record and its GHSA and RustSec drafts");
     ExitCode::FAILURE
 }
 
@@ -134,7 +146,52 @@ fn main() -> ExitCode {
                 }
             }
         }
+        // OP-68, OP-159 m.3 (jj)
+        Some("support-policy") => report(
+            "support-policy",
+            rules::support_policy::write(&root, args.get(1).is_some_and(|a| a == "--check"))
+                .map(|()| None),
+        ),
+        // B20, OP-68
+        Some("release-tag") => report(
+            "release-tag",
+            args.get(1)
+                .ok_or_else(|| String::from("usage: cargo xtask release-tag <tag>"))
+                .and_then(|tag| rules::support_policy::release_tag(&root, tag))
+                .map(Some),
+        ),
+        // SA-16, OP-159 m.3 (jj)
+        Some("psirt") => report(
+            "psirt",
+            psirt::run(&root, args.get(1..).unwrap_or_default()).map(Some),
+        ),
+        // SA-15, OP-159 m.3 (jj)
+        Some("advisory") => report(
+            "advisory",
+            match args.get(1).map(String::as_str) {
+                Some("new") => {
+                    rules::advisories::new(&root, args.get(2..).unwrap_or_default(), civil::now())
+                        .map(|written| Some(written.join("\n")))
+                }
+                _ => Err(String::from("usage: cargo xtask advisory new <id> ...")),
+            },
+        ),
         _ => usage(),
+    }
+}
+
+fn report(command: &str, result: Result<Option<String>, String>) -> ExitCode {
+    match result {
+        Ok(output) => {
+            if let Some(output) = output {
+                println!("{}", output.trim_end());
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{command}: {error}");
+            ExitCode::FAILURE
+        }
     }
 }
 
