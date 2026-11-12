@@ -89,12 +89,12 @@ async fn hl_40_a_single_node_cell_publishes_it_and_acknowledges_no_revocation_wi
         Some(small.clone())
     );
     assert!(
-        crate::cells::declare_domain(&socket(label), p.domain, &small)
+        crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small)
             .await
             .unwrap()
     );
     assert!(
-        !crate::cells::declare_domain(&socket(label), p.domain, &small)
+        !crate::cells::declare_domain((&socket(label), &p.w.db.app), p.domain, &small)
             .await
             .unwrap(),
         "a declared cell declares nothing again"
@@ -533,7 +533,7 @@ async fn a_witness_only_the_provider_declared_is_a_proposal_and_no_anchor_is_cla
     assert_eq!(answer, SignResponse::Opened);
     let published = p.w.domains.declared(p.domain).await;
     assert!(published.acknowledges(), "the operator's own statement");
-    let canonical = crate::admin::realm::canonical_sets(&p.w.db.app, p.domain).await;
+    let canonical = access_authority_core::adapters::canonical_sets(&p.w.db.app, p.domain).await;
     assert!(canonical.is_empty(), "the Genesis root approved no set");
     let view = crate::admin::realm::declared_view(&published, &canonical);
     // OP-159 m.3 (j)

@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use crate::app::reanchor::{Status, declared_with, pq_witnesses, status};
+use crate::app::reanchor::{Status, canonical_only, declared_with, pq_witnesses, status};
 use access_authority_sequencer::witness::pq_cosign;
 use access_authority_signer::adapters::call;
 use access_authority_signer::protocol::{Request, Response};
@@ -28,6 +28,27 @@ pub struct Reanchoring<'a> {
     pub sequencer: &'a access_store::Pool,
 }
 
+/// The cosigns of `body` that one of `witnesses` verifiably made, as stored (RA-3).
+fn kept(
+    witnesses: &[&access_kernel::verify::key_scope::Witness],
+    body: &str,
+    cosigns: &[suiss_ledger::checkpoint::witness::PqCosign],
+) -> Vec<PqCosignRow> {
+    cosigns
+        .iter()
+        .filter(|c| {
+            witnesses.iter().any(|w| {
+                crate::app::reanchor::cosign_verifies(&suiss_crypto::aws::AwsLcBackend, w, body, c)
+            })
+        })
+        .map(|c| PqCosignRow {
+            witness: c.name.clone(),
+            cosigned_at: c.timestamp,
+            sign1: c.sign1.clone(),
+        })
+        .collect()
+}
+
 /// One re-anchor of the witnessed checkpoint `cp` at `now` for `reason`; `urls` maps each
 /// witness name to its address. The re-anchor checkpoint and whatever cosigns arrived are kept
 /// (OP-73); the status, or the stable reason it could not start.
@@ -43,9 +64,11 @@ pub async fn reanchor(
     now: u64,
 ) -> Result<Status, &'static str> {
     let socket = at.socket;
+    // OP-159 m.3 (j), m.16 (e)
+    let canonical = canonical_sets(at.app, domain).await;
     // RB-0
-    let witnesses =
-        pq_witnesses(declared, None).map_err(crate::app::reanchor::ReanchorError::code)?;
+    let witnesses = pq_witnesses(declared, Some(&canonical.witnesses))
+        .map_err(crate::app::reanchor::ReanchorError::code)?;
     let body = suiss_crypto::note::parse_note(&cp.note)
         .map_err(|_| "reanchor-checkpoint")?
         .body;
@@ -93,24 +116,7 @@ pub async fn reanchor(
         sign1,
         excerpt,
         reason,
-        cosigns: cosigns
-            .iter()
-            .filter(|c| {
-                witnesses.iter().any(|w| {
-                    crate::app::reanchor::cosign_verifies(
-                        &suiss_crypto::aws::AwsLcBackend,
-                        w,
-                        &body,
-                        c,
-                    )
-                })
-            })
-            .map(|c| PqCosignRow {
-                witness: c.name.clone(),
-                cosigned_at: c.timestamp,
-                sign1: c.sign1.clone(),
-            })
-            .collect(),
+        cosigns: kept(&witnesses, &body, &cosigns),
     };
     // OP-73
     append(at.sequencer, &id, &kept)
@@ -119,7 +125,10 @@ pub async fn reanchor(
     if let Status::Anchored(r) = &out {
         let declare = Request::Declare {
             domain,
-            declared: Box::new(declared_with(declared, r.clone())),
+            declared: Box::new(canonical_only(
+                &declared_with(declared, r.clone()),
+                &canonical,
+            )),
         };
         if !matches!(call(socket, &declare).await, Ok(Response::Opened)) {
             return Err("signer-unreachable");
@@ -141,6 +150,25 @@ pub async fn reanchor(
         .await;
     }
     Ok(out)
+}
+
+/// The canonical witness and replica sets of `domain`'s meta-anchor root terms; empty when
+/// none were approved or the state cannot be read (OP-158 m.11, OP-159 m.3 (j)).
+pub async fn canonical_sets(
+    app: &access_store::Pool,
+    domain: Digest,
+) -> access_kernel::meta::RootSets {
+    use access_kernel::codec::Canonical as _;
+    let meta = access_kernel::meta::meta_anchor(&domain);
+    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
+    access_store::authority::state_of(app, &DomainId::from_bytes(domain.0), &[key])
+        .await
+        .ok()
+        .and_then(|rows| rows.into_iter().find_map(|r| r.value))
+        .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
+        .map(|a| a.sets)
+        .unwrap_or_default()
 }
 
 /// Admits `alg` to `domain`'s allowlist, or with `retire` retires the classical `alg`, through

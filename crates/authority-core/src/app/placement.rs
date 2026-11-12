@@ -197,13 +197,17 @@ pub fn with_cell(
 pub async fn declare_cell(
     signer: &Path,
     domain: Digest,
-    durability: Durability,
-    residency: Option<Residency>,
+    (durability, residency): (Durability, Option<Residency>),
+    canonical: &access_kernel::meta::RootSets,
 ) -> Result<bool, String> {
     use access_authority_signer::adapters::call;
     use access_authority_signer::protocol::{Request, Response};
     let declared = declared(signer, domain).await?;
-    let wanted = with_cell(declared.clone(), durability, residency);
+    // OP-159 m.3 (j), m.16 (e)
+    let wanted = crate::app::reanchor::canonical_only(
+        &with_cell(declared.clone(), durability, residency),
+        canonical,
+    );
     if wanted == declared {
         return Ok(false);
     }

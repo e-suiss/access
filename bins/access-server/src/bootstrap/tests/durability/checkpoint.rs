@@ -220,8 +220,20 @@ impl Log {
     async fn push_field(
         &mut self,
         db: &TestDb,
+        field: (&str, suiss_crypto::dcbor::Value),
+        recorded_at: u64,
+    ) {
+        self.push_approved(db, field, recorded_at, None).await;
+    }
+
+    /// [`Log::push_field`] in the record that also sets the meta-anchor's canonical witness and
+    /// replica sets to `approved`'s, as the root's `anchor_amend` does (OP-159 m.3 (j)).
+    async fn push_approved(
+        &mut self,
+        db: &TestDb,
         (name, value): (&str, suiss_crypto::dcbor::Value),
         recorded_at: u64,
+        approved: Option<&access_kernel::verify::key_scope::Declarations>,
     ) {
         use access_kernel::record::{Header, Opened, RecordKind};
         use suiss_crypto::dcbor::Value;
@@ -285,7 +297,27 @@ impl Log {
             draws: vec![],
             single_use: vec![],
             beside: vec![],
-            effects: vec![],
+            effects: approved
+                .map(|d| {
+                    let meta = access_kernel::meta::meta_anchor(&self.domain);
+                    let state = access_kernel::meta::AnchorState {
+                        scope: access_kernel::meta::AnchorScope::Domain,
+                        root: access_kernel::meta::Root::Sole(access_kernel::model::Id([1; 16])),
+                        root_terms: std::collections::BTreeSet::new(),
+                        sets: access_kernel::meta::RootSets::new(
+                            d.witnesses.clone(),
+                            d.replicas.clone(),
+                        ),
+                        since: 0,
+                        ended: None,
+                    };
+                    vec![(
+                        access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta),
+                        pos,
+                        Some(state.to_bytes().unwrap()),
+                    )]
+                })
+                .unwrap_or_default(),
         };
         commit_batch(&db.sequencer, &self.id, [0x31; 16], &batch)
             .await
@@ -915,15 +947,6 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
     let mut log = Log::create(&db).await;
     let d = log.domain;
     let artefact = Digest(suiss_crypto::digest::sha256(&wall().to_be_bytes()));
-    log.push_field(
-        &db,
-        (
-            access_kernel::verify::key_scope::ARTEFACT_FIELD,
-            artefact.to_value(),
-        ),
-        wall() - 30_000,
-    )
-    .await;
     let key = binding_key(d);
     let root = std::env::temp_dir().join(format!("aw-pq-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -939,6 +962,17 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
     let public = witness.enable_pq().unwrap();
     let classical = declare(&[(&witness, "Example Witness Ltd", true)]);
     let declared = with_pq_witness(classical.clone(), "w-pq", public);
+    // 5780, RA-7, OP-159 m.3 (j), m.15 (a)
+    log.push_approved(
+        &db,
+        (
+            "artifacts",
+            suiss_crypto::dcbor::Value::Array(vec![artefact.to_value()]),
+        ),
+        wall() - 30_000,
+        Some(&declared),
+    )
+    .await;
     let socket = wall_signer("pq", d, declared.clone()).await;
     let (heads, signer) = (PgHeads(db.app.clone()), SocketSigner::new(socket.clone()));
     let publisher = Publisher {
@@ -1236,12 +1270,6 @@ async fn the_algorithm_routes_time_lock_an_admission_and_gate_a_retirement_on_th
     let db = fresh().await.unwrap();
     let mut log = Log::create(&db).await;
     let d = log.domain;
-    log.push_field(
-        &db,
-        ("artifacts", Digest([3; 32]).to_value()),
-        wall() - 30_000,
-    )
-    .await;
     let root = std::env::temp_dir().join(format!("aw-alg-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
@@ -1256,6 +1284,14 @@ async fn the_algorithm_routes_time_lock_an_admission_and_gate_a_retirement_on_th
     let public = witness.enable_pq().unwrap();
     let classical = declare(&[(&witness, "Example Witness Ltd", true)]);
     let declared = with_pq_witness(classical, "w-alg", public);
+    // OP-159 m.3 (j)
+    log.push_approved(
+        &db,
+        ("artifacts", Digest([3; 32]).to_value()),
+        wall() - 30_000,
+        Some(&declared),
+    )
+    .await;
     let socket = wall_signer("alg", d, declared).await;
     let (heads, signer) = (PgHeads(db.app.clone()), SocketSigner::new(socket.clone()));
     let publisher = Publisher {

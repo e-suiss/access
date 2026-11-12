@@ -87,12 +87,18 @@ fn with_cell(
 /// # Errors
 /// The signer's refusal, as text.
 pub(crate) async fn declare_domain(
-    signer: &Path,
+    (signer, app): (&Path, &Pool),
     domain: Digest,
     profile: &CellProfile,
 ) -> Result<bool, String> {
-    let (durability, residency) = declared_of(profile);
-    access_authority_core::app::placement::declare_cell(signer, domain, durability, residency).await
+    let canonical = access_authority_core::adapters::canonical_sets(app, domain).await;
+    access_authority_core::app::placement::declare_cell(
+        signer,
+        domain,
+        declared_of(profile),
+        &canonical,
+    )
+    .await
 }
 
 /// The Placement Directory as the domain routes read it (TI-17): a domain placed in another

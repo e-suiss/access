@@ -122,6 +122,20 @@ pub fn declared_with(declared: &Declarations, anchored: PqReanchor) -> Declarati
     d
 }
 
+/// `declared` with only the witnesses and replicas the canonical root-term sets name: what the
+/// signer publishes (OP-158 m.11, OP-159 m.3 (j), m.16 (e)). One only the operator declares is
+/// a proposal and is never published.
+#[must_use]
+pub fn canonical_only(
+    declared: &Declarations,
+    canonical: &access_kernel::meta::RootSets,
+) -> Declarations {
+    let mut d = declared.clone();
+    d.witnesses.retain(|w| canonical.witnesses.contains(w));
+    d.replicas.retain(|r| canonical.replicas.contains(r));
+    d
+}
+
 /// The retirement gate (§15.16 step (c), RA-6, OP-159 m.3 (f)): the last anchored re-anchor
 /// covers the committed head of `head_size` and was cosigned within the cadence before `now`.
 ///

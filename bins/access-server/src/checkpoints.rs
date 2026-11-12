@@ -367,7 +367,9 @@ impl Checkpointers {
                 for domain in led() {
                     // HL-40, OP-158 m.3 (p)
                     if !declared.contains(&domain) {
-                        match crate::cells::declare_domain(&authority_signer, domain, &cell).await {
+                        match crate::cells::declare_domain((&authority_signer, &app), domain, &cell)
+                            .await
+                        {
                             Ok(_) => {
                                 declared.insert(domain);
                             }

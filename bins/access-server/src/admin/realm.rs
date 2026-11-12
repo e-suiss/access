@@ -741,7 +741,7 @@ impl<P> Realms<P> {
             .await
             .ok()?;
         // OP-158 m.11, OP-159 m.3 (j)
-        let canonical = canonical_sets(&self.app, Digest(d)).await;
+        let canonical = access_authority_core::adapters::canonical_sets(&self.app, Digest(d)).await;
         Some(declared_view(&declared, &canonical))
     }
 }
@@ -811,26 +811,6 @@ pub(crate) fn declared_view(
         }),
     );
     out
-}
-
-/// The canonical witness and replica sets of `domain`'s meta-anchor root terms; empty when
-/// none were approved or the state cannot be read (OP-158 m.11, OP-159 m.3 (j)).
-pub(crate) async fn canonical_sets(app: &Pool, domain: Digest) -> access_kernel::meta::RootSets {
-    use access_kernel::codec::Canonical as _;
-    let meta = access_kernel::meta::meta_anchor(&domain);
-    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
-    access_store::authority::state_of(
-        app,
-        &access_store::scope::DomainId::from_bytes(domain.0),
-        &[key],
-    )
-    .await
-    .ok()
-    .and_then(|rows| rows.into_iter().find_map(|r| r.value))
-    .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
-    .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
-    .map(|a| a.sets)
-    .unwrap_or_default()
 }
 
 /// A live Instance key of a governing domain, from the authority plane's key index.

@@ -123,3 +123,31 @@ fn a_pq_domain_re_anchors_the_first_checkpoint_of_each_utc_day() {
     assert!(!due(&pq, Some(day + 1), 2 * day - 1));
     assert!(due(&pq, Some(day + 1), 2 * day));
 }
+
+// OP-158 m.11, OP-159 m.3 (j), m.16 (e)
+#[test]
+fn only_the_root_approved_witnesses_are_published_or_cosign() {
+    let (approved, _) = pq_witness("w-approved", true);
+    let (proposed, _) = pq_witness("w-proposed", true);
+    let mut declared = Declarations::default();
+    declared.witnesses = vec![approved.clone(), proposed];
+    let canonical = access_kernel::meta::RootSets::new(vec![approved.clone()], vec![]);
+    let published = canonical_only(&declared, &canonical);
+    assert_eq!(published.witnesses, vec![approved]);
+    assert_eq!(
+        pq_witnesses(&declared, Some(&canonical.witnesses))
+            .unwrap()
+            .iter()
+            .map(|w| w.name.as_str())
+            .collect::<Vec<_>>(),
+        ["w-approved"]
+    );
+    assert_eq!(
+        pq_witnesses(&declared, Some(&[])).unwrap_err(),
+        ReanchorError::NoPqWitness
+    );
+    assert_eq!(
+        canonical_only(&declared, &access_kernel::meta::RootSets::default()).witnesses,
+        Vec::<Witness>::new()
+    );
+}
