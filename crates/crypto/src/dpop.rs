@@ -341,7 +341,7 @@ impl NonceRing {
             .map_err(|_| NonceError::Unavailable)?;
         let expected = expected.get(..TAG_LEN).ok_or(NonceError::Mismatch)?;
         // CR-39 m.6
-        let _dit = DitGuard::new();
+        let _dit = crate::dit::DitGuard::new();
         if bool::from(expected.ct_eq(tag)) {
             Ok(())
         } else {
