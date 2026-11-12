@@ -1,0 +1,84 @@
+{
+  "track": "exchange",
+  "version": "1",
+  "operation": "budget.fits",
+  "rule": [
+    "CR-38",
+    "CR-43"
+  ],
+  "description": "Post-quantum size budgets of the carriers (OP-159 m.3 (p)): an HTTP header and an NFC record hold 8192 bytes, a cookie 4096 and one QR code (version 40-L, byte mode) 2953. An artefact over its carrier's budget is not produced; an offline PAP over the QR budget answers 422 projection-over-budget.",
+  "cases": [
+    {
+      "id": "header-at-budget",
+      "carrier": "header",
+      "size": 8192,
+      "fits": true
+    },
+    {
+      "id": "header-one-over",
+      "carrier": "header",
+      "size": 8193,
+      "fits": false
+    },
+    {
+      "id": "cookie-at-budget",
+      "carrier": "cookie",
+      "size": 4096,
+      "fits": true
+    },
+    {
+      "id": "cookie-one-over",
+      "carrier": "cookie",
+      "size": 4097,
+      "fits": false
+    },
+    {
+      "id": "qr-at-budget",
+      "carrier": "qr",
+      "size": 2953,
+      "fits": true
+    },
+    {
+      "id": "qr-one-over",
+      "carrier": "qr",
+      "size": 2954,
+      "fits": false
+    },
+    {
+      "id": "nfc-at-budget",
+      "carrier": "nfc",
+      "size": 8192,
+      "fits": true
+    },
+    {
+      "id": "nfc-one-over",
+      "carrier": "nfc",
+      "size": 8193,
+      "fits": false
+    },
+    {
+      "id": "ml-dsa-44-pap-signature-alone-fits-a-qr",
+      "carrier": "qr",
+      "size": 2420,
+      "fits": true
+    },
+    {
+      "id": "ml-dsa-65-signature-in-base64url-fits-a-header",
+      "carrier": "header",
+      "size": 4412,
+      "fits": true
+    },
+    {
+      "id": "ml-dsa-87-signature-overflows-a-qr",
+      "carrier": "qr",
+      "size": 4627,
+      "fits": false
+    },
+    {
+      "id": "ml-dsa-87-signature-in-base64url-overflows-a-cookie",
+      "carrier": "cookie",
+      "size": 6170,
+      "fits": false
+    }
+  ]
+}

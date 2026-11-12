@@ -16,7 +16,8 @@ const PROFILE: &str = "/admin/v1/realms/acme/settings/signing-profile";
 const CRYPTO: &str = "/admin/v1/realms/acme/settings/crypto-profile";
 
 async fn put(c: &Console, op: &str, path: &str, body: serde_json::Value) -> Written {
-    c.rest_write(&Method::PUT, path, (op, None), body, None).await
+    c.rest_write(&Method::PUT, path, (op, None), body, None)
+        .await
 }
 
 async fn signing(c: &Console) -> serde_json::Value {
@@ -174,22 +175,44 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     assert_eq!(before["fips_module"], suiss_crypto::fips::BUILD);
     assert_eq!(before["pq_reanchor"], serde_json::Value::Null);
     assert!(akp(&jwks(&c).await).keys.is_empty());
-    assert!(!id_token_algs(&c).await.iter().any(|a| a.starts_with("ML-DSA")));
+    assert!(
+        !id_token_algs(&c)
+            .await
+            .iter()
+            .any(|a| a.starts_with("ML-DSA"))
+    );
     let classic = client(&c, "classic").await;
     let pq = client(&c, "quantum").await;
 
     // OP-159 m.3 (o)
     let w = client_alg(&c, &pq.0, "ML-DSA-65").await;
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
-    assert!(w.body.to_string().contains("algorithm-profile-conflict"), "{}", w.body);
+    assert!(
+        w.body.to_string().contains("algorithm-profile-conflict"),
+        "{}",
+        w.body
+    );
 
-    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-65"}),
+    )
+    .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
     let open = signing(&c).await;
     assert_eq!(open["signing_profile"], "ml-dsa-65");
-    assert_eq!(open["algorithms"], serde_json::json!(["ES256", "ML-DSA-65"]));
+    assert_eq!(
+        open["algorithms"],
+        serde_json::json!(["ES256", "ML-DSA-65"])
+    );
     let keys = akp(&jwks(&c).await);
-    assert_eq!(keys.keys.len(), 2, "the founding key and its published backup");
+    assert_eq!(
+        keys.keys.len(),
+        2,
+        "the founding key and its published backup"
+    );
     assert!(id_token_algs(&c).await.contains(&String::from("ML-DSA-65")));
 
     let w = client_alg(&c, &pq.0, "ML-DSA-87").await;
@@ -237,7 +260,12 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     assert_eq!(closed["signing_profile"], serde_json::Value::Null);
     assert_eq!(closed["algorithms"], serde_json::json!(["ES256"]));
     assert!(akp(&jwks(&c).await).keys.is_empty());
-    assert!(!id_token_algs(&c).await.iter().any(|a| a.starts_with("ML-DSA")));
+    assert!(
+        !id_token_algs(&c)
+            .await
+            .iter()
+            .any(|a| a.starts_with("ML-DSA"))
+    );
     let (media, body) = introspection(&c, &pq).await;
     assert_ne!(media, "application/token-introspection+jwt", "{body}");
     assert!(!body.starts_with("eyJ"), "{body}");
@@ -264,12 +292,31 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
 #[tokio::test]
 async fn fips_and_the_post_quantum_profile_exclude_each_other_in_either_order() {
     let c = console("signing-fips", true).await;
-    let w = put(&c, "putCryptoProfile", CRYPTO, serde_json::json!({"fips": true})).await;
+    let w = put(
+        &c,
+        "putCryptoProfile",
+        CRYPTO,
+        serde_json::json!({"fips": true}),
+    )
+    .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-65"}),
+    )
+    .await;
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
-    assert!(w.body.to_string().contains("fips-pq-exclusive"), "{}", w.body);
-    assert_eq!(signing(&c).await["signing_profile"], serde_json::Value::Null);
+    assert!(
+        w.body.to_string().contains("fips-pq-exclusive"),
+        "{}",
+        w.body
+    );
+    assert_eq!(
+        signing(&c).await["signing_profile"],
+        serde_json::Value::Null
+    );
     assert!(akp(&jwks(&c).await).keys.is_empty());
 
     // CR-15, OP-158 m.9: a FIPS realm signs ES256 only
@@ -284,15 +331,41 @@ async fn fips_and_the_post_quantum_profile_exclude_each_other_in_either_order() 
         )
         .await;
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
-    assert!(w.body.to_string().contains("algorithm-profile-conflict"), "{}", w.body);
+    assert!(
+        w.body.to_string().contains("algorithm-profile-conflict"),
+        "{}",
+        w.body
+    );
 
-    let w = put(&c, "putCryptoProfile", CRYPTO, serde_json::json!({"fips": false})).await;
+    let w = put(
+        &c,
+        "putCryptoProfile",
+        CRYPTO,
+        serde_json::json!({"fips": false}),
+    )
+    .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-65"}),
+    )
+    .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let w = put(&c, "putCryptoProfile", CRYPTO, serde_json::json!({"fips": true})).await;
+    let w = put(
+        &c,
+        "putCryptoProfile",
+        CRYPTO,
+        serde_json::json!({"fips": true}),
+    )
+    .await;
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
-    assert!(w.body.to_string().contains("fips-pq-exclusive"), "{}", w.body);
+    assert!(
+        w.body.to_string().contains("fips-pq-exclusive"),
+        "{}",
+        w.body
+    );
     let s = signing(&c).await;
     assert_eq!(s["fips"], false);
     assert_eq!(s["signing_profile"], "ml-dsa-65");
@@ -307,22 +380,52 @@ async fn without_an_hsm_ml_dsa_mechanism_the_profile_is_refused_and_nothing_fall
     let c = console(&name, true).await;
     let probe = c.w.keys.ml_dsa_mechanisms().unwrap();
     assert!(!probe.available(), "{probe:?}");
-    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-65"}),
+    )
+    .await;
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
-    assert!(w.body.to_string().contains("pq-key-unavailable"), "{}", w.body);
-    assert_eq!(signing(&c).await["signing_profile"], serde_json::Value::Null);
+    assert!(
+        w.body.to_string().contains("pq-key-unavailable"),
+        "{}",
+        w.body
+    );
+    assert_eq!(
+        signing(&c).await["signing_profile"],
+        serde_json::Value::Null
+    );
     assert!(akp(&jwks(&c).await).keys.is_empty());
-    assert!(!id_token_algs(&c).await.iter().any(|a| a.starts_with("ML-DSA")));
+    assert!(
+        !id_token_algs(&c)
+            .await
+            .iter()
+            .any(|a| a.starts_with("ML-DSA"))
+    );
 }
 
 // CR-4, RR-36, OP-159 m.3 (o), Ek B 6330
 #[tokio::test]
 async fn encrypted_identity_tokens_stay_classical_under_the_post_quantum_profile() {
     let c = console("signing-jwe", true).await;
-    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-65"}),
+    )
+    .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
     let (id, _) = client(&c, "sealed").await;
-    for alg in ["ML-KEM-768", "ML-KEM-768+A256KW", "ECDH-ES+ML-KEM-768", "HPKE-0", "HPKE-1"] {
+    for alg in [
+        "ML-KEM-768",
+        "ML-KEM-768+A256KW",
+        "ECDH-ES+ML-KEM-768",
+        "HPKE-0",
+        "HPKE-1",
+    ] {
         let w = c
             .rest_write(
                 &Method::PUT,
@@ -342,7 +445,11 @@ async fn encrypted_identity_tokens_stay_classical_under_the_post_quantum_profile
     let doc: serde_json::Value = serde_json::from_str(&doc).unwrap();
     for (k, v) in doc.as_object().unwrap() {
         if k.ends_with("_encryption_alg_values_supported") {
-            assert_eq!(v, &serde_json::json!(["ECDH-ES+A256KW", "RSA-OAEP-256"]), "{k}");
+            assert_eq!(
+                v,
+                &serde_json::json!(["ECDH-ES+A256KW", "RSA-OAEP-256"]),
+                "{k}"
+            );
         }
         if k.ends_with("_encryption_enc_values_supported") {
             assert_eq!(v, &serde_json::json!(["A256GCM"]), "{k}");
@@ -352,4 +459,37 @@ async fn encrypted_identity_tokens_stay_classical_under_the_post_quantum_profile
     for pq in ["ml-kem", "hpke"] {
         assert!(!text.contains(pq), "{pq}");
     }
+}
+
+// CR-38, CR-43, OP-159 m.3 (p), Ek B 6224
+#[tokio::test]
+async fn the_largest_ml_dsa_token_fits_the_header_budget() {
+    use access_crypto::budget::Carrier;
+    let c = console("signing-budget", true).await;
+    let w = put(
+        &c,
+        "putSigningProfile",
+        PROFILE,
+        serde_json::json!({"profile": "ml-dsa-87"}),
+    )
+    .await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let pq = client(&c, "large").await;
+    let w = client_alg(&c, &pq.0, "ML-DSA-87").await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let (media, jwt) = introspection(&c, &pq).await;
+    assert_eq!(media, "application/token-introspection+jwt");
+    assert_eq!(header_alg(&jwt), "ML-DSA-87");
+    assert_eq!(Carrier::Header.check(jwt.len()), Ok(()), "{}", jwt.len());
+    assert!(Carrier::Cookie.check(jwt.len()).is_err(), "{}", jwt.len());
+    let keys = akp(&jwks(&c).await);
+    let v = verify_compact(
+        &access_crypto::AwsLcBackend,
+        &jwt,
+        &keys,
+        "token-introspection+jwt",
+        Origin::Native,
+    )
+    .unwrap();
+    assert_eq!(v.algorithm, access_kernel::verify::cose::Algorithm::MlDsa87);
 }

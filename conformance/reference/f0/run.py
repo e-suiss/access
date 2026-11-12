@@ -742,6 +742,7 @@ OPERATIONS = {
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
 # operation F0 does not know fails the run.
 NOT_IMPLEMENTED = {
+    "budget.fits": "transport size budgets of carriers (CR-43, OP-159 m.3 (p)), not Kernel semantics; checked by crates/crypto tests/budget_vectors.rs",
     "webhook.sign": "transport signature profile (TN-136, E42), not Kernel semantics; checked by crates/crypto webhook tests",
     "meta_payload.json": "JSON transport form of Kernel meta payloads (L1-ADP-17); the CBOR semantics are checked by the core vectors, the JSON mapping by crates/http payload tests",
     "agent.answer": "agent SDK reading of an ADP answer (OP-154 m.13), not Kernel semantics; checked by the Rust and TypeScript SDK vector tests",

@@ -121,7 +121,16 @@ impl<E: Env> OAuth<E> {
                 let profile = tx.signing_profile().await?;
                 match a.ml_dsa() {
                     Some(pq) if profile == Some(pq) => {
-                        signer.sign_pq(realm.realm, pq, typ, claims, now).await?
+                        let token = signer.sign_pq(realm.realm, pq, typ, claims, now).await?;
+                        // CR-43, OP-159 m.3 (p)
+                        if access_crypto::budget::Carrier::Header
+                            .check(token.len())
+                            .is_err()
+                        {
+                            tracing::warn!("post-quantum token over the header budget");
+                            return Err(Unavailable);
+                        }
+                        token
                     }
                     _ => {
                         tracing::warn!("client ML-DSA algorithm is not the realm's profile");

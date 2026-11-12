@@ -3,6 +3,7 @@
 
 pub mod blind_rsa;
 pub mod breach;
+pub mod budget;
 pub mod client_secret_jwt;
 pub mod dpop;
 pub mod event_id;
