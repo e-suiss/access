@@ -373,7 +373,8 @@ impl MlDsaSigner {
         if PublicKey::MlDsa(self.algorithm, pair.public_key().as_ref().to_vec()) != self.public {
             return Err(SignError::Key);
         }
-        let mut sig = alloc::vec![0_u8; pair.algorithm().signature_len()];
+        let mut sig: Vec<u8> =
+            core::iter::repeat_n(0_u8, pair.algorithm().signature_len()).collect();
         let n = pair.sign(message, &mut sig).map_err(|_| SignError::Sign)?;
         sig.truncate(n);
         Ok(sig)
