@@ -1,0 +1,128 @@
+# SA-53, OP-159 m.3 (ii), §10.3.1
+# Authenticator (AAL), identity proofing (IAL) and federation (FAL) assurance levels.
+
+version = 1
+framework = "NIST SP 800-63-4"
+edition = "800-63A-4, 800-63B-4 and 800-63C-4 (2025)"
+
+[[control]]
+control = "63B AAL1"
+status = "met"
+rules = ["IDI-7"]
+tests = ["crates/identity-session/src/domain/assurance.rs::password_alone_is_aal1_and_no_ct"]
+note = "A password alone is AAL1 and meets no consequence tier."
+
+[[control]]
+control = "63B AAL2"
+status = "met"
+rules = ["SEC10"]
+tests = [
+  "crates/identity-session/src/domain/assurance.rs::password_and_totp_is_aal2_without_ct",
+  "crates/identity-session/src/domain/assurance.rs::an_sms_code_is_an_aal2_second_factor_and_meets_no_ct",
+]
+note = "Two factors are AAL2; restricted authenticators reach AAL2 and no consequence tier."
+
+[[control]]
+control = "63B AAL3"
+status = "met"
+rules = ["SEC10", "SEC17"]
+tests = [
+  "crates/identity-webauthn/tests/ceremony.rs::es256_device_bound_passkey_registers_and_authenticates_at_aal3",
+  "crates/identity-session/src/domain/assurance.rs::a_software_certificate_never_reaches_ct3",
+]
+note = "A device-bound passkey with user verification is AAL3; a software key never is."
+
+[[control]]
+control = "63B 3.1.1 passwords"
+status = "met"
+rules = ["U69"]
+tests = [
+  "crates/identity-account/src/domain/password/tests.rs::policy_counts_characters_after_nfkc",
+  "crates/identity-account/tests/accounts.rs::breached_or_unchecked_passwords_are_refused",
+]
+note = "At least 8 characters after NFKC, up to 128, no composition rules, no rotation, breached passwords refused."
+
+[[control]]
+control = "63B 3.2.2 rate limiting"
+status = "met"
+rules = ["U46", "U47"]
+tests = [
+  "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
+  "crates/identity-account/tests/accounts.rs::a_full_semaphore_sheds_with_503",
+]
+note = "At most 100 consecutive failures per account; hashing load sheds instead of starving other endpoints."
+
+[[control]]
+control = "63B 3.2.5 phishing resistance"
+status = "met"
+rules = ["HL-23", "N-41", "N-45"]
+tests = [
+  "crates/identity-session/src/domain/assurance.rs::phishing_resistance_needs_a_binding_proof",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::password_and_totp_through_a_reverse_proxy_hand_over_the_session",
+]
+note = "Only origin-bound authenticators count as phishing-resistant; codes do not resist a reverse proxy (N-45) and passkeys do not stop session theft after sign-in (N-41)."
+
+[[control]]
+control = "63B 3.2.9 restricted authenticators"
+status = "met"
+rules = ["N-45"]
+tests = [
+  "crates/http/tests/login/payment.rs::an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries",
+  "crates/http/tests/login/payment.rs::the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation",
+]
+note = "SMS codes are a second step only, six digits, five minutes and three tries, and off unless the realm turns them on."
+
+[[control]]
+control = "63B 5 session management"
+status = "met"
+rules = ["G57", "U35"]
+tests = [
+  "crates/identity-session/src/domain/session.rs::idle_absolute_epoch_and_end",
+  "crates/identity-session/tests/signin.rs::sessions_expire_when_idle_and_keep_me_signed_in_persists_the_cookie",
+]
+note = "Sessions carry idle and absolute lifetimes and end with their epoch; no token is issued after the end."
+
+[[control]]
+control = "63A IAL1"
+status = "met"
+rules = ["IDI-2"]
+tests = ["crates/http/tests/login.rs::sign_up_answers_the_same_whether_or_not_the_address_has_an_account"]
+note = "Self-asserted attributes with a verified e-mail address; sign-up hides whether an address has an account."
+
+[[control]]
+control = "63A IAL2 and IAL3"
+status = "partial"
+rules = ["IDI-3", "IDI-9"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::pid_from_a_listed_pid_provider_is_high",
+  "services/vc-verifier/tests/verifier.rs::non_pid_never_sets_loa_eidas_high",
+]
+note = "Remote proofing through a PID presentation from a listed provider is in the product; supervised proofing and document checks are not."
+
+[[control]]
+control = "63C FAL1"
+status = "met"
+rules = ["IDI-7"]
+tests = [
+  "crates/identity-federation/src/domain/token/tests.rs::a_wrong_audience_or_nonce_is_refused",
+  "crates/identity-federation/src/domain/saml/tests.rs::issuer_audience_recipient_and_time_are_checked",
+]
+note = "Assertions are signed, single-audience and time-bounded, and the relying side checks issuer, audience and nonce."
+
+[[control]]
+control = "63C FAL2"
+status = "met"
+rules = ["G58"]
+tests = [
+  "crates/identity-oauth/tests/oauth.rs::code_flow_with_pkce_and_dpop",
+  "crates/identity-oauth/tests/dpop_conformance.rs::token_endpoint_rejects_a_replayed_proof",
+]
+note = "The back-channel code flow with PKCE protects against assertion injection; DPoP binds tokens to a key."
+
+[[control]]
+control = "63C FAL3"
+status = "partial"
+rules = ["G58"]
+tests = ["crates/identity-oauth/tests/high_assurance.rs::mutual_tls_clients_bind_their_tokens_to_the_certificate"]
+note = "Holder-of-key tokens (DPoP, mutual TLS) are in the product; a bound authenticator at the relying party is the relying party's part."

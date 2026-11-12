@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:compliance-map:1",
   "title": "Access compliance mapping (OP-159 m.3 (ii), SA-53)",
-  "description": "One framework's controls, each bound to catalog rows and existing tests. A mapping adds no claim; `met` names at least one test. Files live in conformance/compliance/.",
+  "description": "One framework's controls, each bound to catalog rows and existing tests. A mapping adds no claim; `met` cites at least one catalog row and one test. Files live in conformance/compliance/.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,6 +20,28 @@
     "edition": {
       "type": "string",
       "minLength": 1
+    },
+    "milestone": {
+      "type": "array",
+      "description": "Dated milestones of the framework, such as the EUDI Wallet timeline.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "what"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "what": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
     },
     "control": {
       "type": "array",
@@ -66,20 +88,46 @@
             "minLength": 1
           }
         },
-        "if": {
-          "properties": {
-            "status": {
-              "const": "met"
+        "description": "A control. `met` cites at least one catalog row and one test; the other statuses say in `note` what is missing or why.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "met"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "rules": {
+                  "minItems": 1
+                },
+                "tests": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "partial",
+                    "not-claimed",
+                    "n/a"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "note"
+              ]
             }
           }
-        },
-        "then": {
-          "properties": {
-            "tests": {
-              "minItems": 1
-            }
-          }
-        }
+        ]
       }
     }
   }

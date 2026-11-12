@@ -1,0 +1,214 @@
+# SA-53, OP-159 m.3 (ii), §10.3.4, §17.6.7, §18.2, §18.6, H17
+# Requirement 8 (identification and authentication) and Requirement 10 (logging and monitoring).
+# `access-cli realm check --profile pci-dss-4` reports a realm's settings against 8.2.8, 8.3.4,
+# 8.3.6 and 8.4.2.
+
+version = 1
+framework = "PCI DSS"
+edition = "4.0.1, Requirements 8 and 10"
+
+[[control]]
+control = "8.2.1"
+status = "met"
+rules = ["IDI-2"]
+tests = ["crates/identity-account/tests/accounts.rs::a_taken_identifier_creates_nothing"]
+note = "Each login identifier belongs to one account of one realm; a taken identifier creates nothing."
+
+[[control]]
+control = "8.2.2"
+status = "not-claimed"
+rules = []
+tests = []
+note = "Whether people share an account is an operator practice the product does not observe."
+
+[[control]]
+control = "8.2.5"
+status = "met"
+rules = ["G57", "OPI-6"]
+tests = [
+  "crates/identity-session/tests/signin.rs::deactivation_ends_sessions_in_the_same_transaction",
+  "crates/identity-account/tests/accounts.rs::deactivation_is_one_transaction_and_idempotent",
+]
+note = "Deactivating an account ends its sessions in the same transaction."
+
+[[control]]
+control = "8.2.6"
+status = "partial"
+rules = ["G57"]
+tests = ["crates/identity-account/tests/accounts.rs::deactivation_is_one_transaction_and_idempotent"]
+note = "Deactivation is in the product; finding accounts idle for 90 days is the operator's access review."
+
+[[control]]
+control = "8.2.8"
+status = "met"
+rules = ["G57"]
+tests = [
+  "crates/http/tests/console.rs::idle_sessions_end_after_fifteen_minutes",
+  "crates/identity-session/src/domain/session.rs::idle_absolute_epoch_and_end",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+]
+note = "Console sessions end after at most 15 idle minutes; the realm check reports the realm's idle setting."
+
+[[control]]
+control = "8.3.1"
+status = "met"
+rules = ["IDI-7"]
+tests = [
+  "crates/identity-account/tests/accounts.rs::an_account_signs_in_with_its_password",
+  "crates/identity-webauthn/tests/ceremony.rs::es256_device_bound_passkey_registers_and_authenticates_at_aal3",
+]
+note = "Every sign-in presents a password, a passkey or a federated assertion before a session exists."
+
+[[control]]
+control = "8.3.2"
+status = "met"
+rules = ["U69", "SAI-8"]
+tests = [
+  "crates/identity-account/src/domain/password/tests.rs::phc_round_trip_and_rehash",
+  "crates/crypto/src/oauth.rs::secrets_match_their_digest_only",
+]
+note = "Passwords are stored as Argon2id hashes and client secrets as digests; secrets travel only over TLS."
+
+[[control]]
+control = "8.3.4"
+status = "partial"
+rules = ["U46"]
+tests = [
+  "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+]
+note = "Failures wait longer each time and lock at 100 (SA-30), not 10; a realm without password sign-in passes, which the realm check reports."
+
+[[control]]
+control = "8.3.5"
+status = "n/a"
+rules = []
+tests = []
+note = "No first-use password is issued: accounts are created by registration or an invitation link."
+
+[[control]]
+control = "8.3.6"
+status = "partial"
+rules = ["U69"]
+tests = [
+  "crates/identity-account/src/domain/password/tests.rs::policy_counts_characters_after_nfkc",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+]
+note = "The product minimum is 8 characters (NIST SP 800-63B-4), not 12; a passkey-only realm passes, which the realm check reports."
+
+[[control]]
+control = "8.3.7"
+status = "not-claimed"
+rules = []
+tests = []
+note = "No password history is kept; NIST SP 800-63B-4 asks for no rotation."
+
+[[control]]
+control = "8.3.9"
+status = "partial"
+rules = ["U69"]
+tests = ["crates/identity-account/tests/accounts.rs::breached_or_unchecked_passwords_are_refused"]
+note = "No periodic change; a password is screened against breach corpora when it is set (IDP-3)."
+
+[[control]]
+control = "8.4.1"
+status = "met"
+rules = ["SEC10", "TNI-12"]
+tests = [
+  "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
+  "crates/identity-session/tests/signin.rs::a_passkey_signs_in_phishing_resistant_and_steps_up",
+]
+note = "A realm that requires MFA signs nobody in with one factor; administrative actions of CT2 and above need a phishing-resistant step."
+
+[[control]]
+control = "8.4.2"
+status = "met"
+rules = ["SEC10"]
+tests = [
+  "crates/identity-session/tests/signin.rs::a_stored_mfa_requirement_cannot_be_skipped",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+]
+note = "MFA on every sign-in is a realm setting the realm check reports."
+
+[[control]]
+control = "8.5.1"
+status = "met"
+rules = ["SEC10", "N-45", "HL-23"]
+tests = [
+  "crates/identity-session/tests/signin.rs::totp_is_required_once_enrolled_and_cannot_be_replayed",
+  "crates/identity-session/tests/signin.rs::a_stored_mfa_requirement_cannot_be_skipped",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+]
+note = "Codes are single-use and the second step cannot be skipped; TOTP, push and SMS do not resist a reverse proxy (N-45), passkeys do."
+
+[[control]]
+control = "8.6.1"
+status = "partial"
+rules = ["G14"]
+tests = ["bins/access-gw-ldap/tests/gateway.rs::a_revoked_app_password_reads_nothing"]
+note = "Directory app passwords are scoped and revocable; whether a system account is used interactively is the operator's control."
+
+[[control]]
+control = "10.2.1"
+status = "met"
+rules = ["U53", "OPI-6"]
+tests = [
+  "crates/identity-audit/tests/audit.rs::op_44_the_operational_stream_is_a_separate_chain",
+  "bins/access-server/src/bootstrap/tests/management.rs::the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited",
+]
+note = "Every security change is written with its audit record in one transaction; audit records are never sampled."
+
+[[control]]
+control = "10.2.1.2"
+status = "met"
+rules = ["G28", "OPI-6"]
+tests = ["crates/authority-core/tests/commit.rs::ap_14_an_export_is_an_audited_exercise_that_verifies_itself"]
+note = "Administrative changes are Exercises with their audit records."
+
+[[control]]
+control = "10.2.1.3"
+status = "met"
+rules = ["U53"]
+tests = ["crates/authority-core/tests/commit.rs::u53_op_44_every_audit_read_is_one_row"]
+note = "Each read of the audit log is itself one audit row."
+
+[[control]]
+control = "10.3.2"
+status = "met"
+rules = ["U52", "U70"]
+tests = [
+  "crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change",
+  "bins/access-server/src/publication/tests.rs::an_identity_audit_row_is_in_a_signed_checkpoint_at_its_publication_target",
+]
+note = "Audit rows go into a Merkle tree whose signed checkpoints cannot fork or change."
+
+[[control]]
+control = "10.3.3"
+status = "met"
+rules = ["U52"]
+tests = ["crates/identity-export/tests/pass.rs::every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_nothing"]
+note = "The streamed export copies every row to every configured sink and keeps rows for a sink that is down."
+
+[[control]]
+control = "10.3.4"
+status = "met"
+rules = ["U70", "N-56"]
+tests = ["crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change"]
+note = "A change to the log after a published checkpoint is detected; a database change before the checkpoint is not (N-56)."
+
+[[control]]
+control = "10.5.1"
+status = "partial"
+rules = ["U52"]
+tests = [
+  "crates/identity-export/tests/cold_tier.rs::a_partition_inside_its_hot_window_is_not_due",
+  "crates/identity-export/tests/cold_tier.rs::a_due_partition_moves_to_the_cold_tier_verified_and_detached",
+]
+note = "The base window is 12 months (OP-158 m.3 (w)); three months immediately available needs a hot window of at least 90 days in the realm's audit tier, which may be a paid tier."
+
+[[control]]
+control = "10.6.1"
+status = "met"
+rules = ["SEC22"]
+tests = ["bins/access-server/src/bootstrap/tests/faults/time.rs::fo_04_a_clock_ahead_of_its_witness_stops_every_commit_until_they_agree"]
+note = "Commits stop when the clock disagrees with the witness; host time synchronisation is the operator's."

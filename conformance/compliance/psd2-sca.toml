@@ -1,0 +1,54 @@
+# SA-53, OP-159 m.3 (ii), §10.3.4, U62, N-52
+# PSD2 strong customer authentication, Commission Delegated Regulation (EU) 2018/389. The
+# `psd2-sca` regulatory template enforces the rules on the decision path; regulatory conformity
+# is not guaranteed (N-52).
+
+version = 1
+framework = "PSD2 SCA"
+edition = "Delegated Regulation (EU) 2018/389"
+
+[[control]]
+control = "Art. 4 authentication code"
+status = "met"
+rules = ["U62", "SEC10"]
+tests = ["bins/access-server/src/bootstrap/tests/product_twin/seams/pay.rs::a_regulatory_template_is_enforced_on_the_decision_path"]
+note = "A payment under the template needs a fresh authentication with two independent factors."
+
+[[control]]
+control = "Art. 5 dynamic linking"
+status = "met"
+rules = ["U62", "G13"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/product_twin/seams/pay.rs::a_regulatory_template_is_enforced_on_the_decision_path",
+  "crates/http/tests/login/payment.rs::an_spc_assertion_counts_only_for_the_canonical_render",
+  "crates/identity-ui/src/domain/spc.rs::a_different_amount_is_no_confirmation",
+]
+note = "The authentication is bound to the payment's own intent; a different amount or payee is no confirmation."
+
+[[control]]
+control = "Art. 6 to 8 independent elements"
+status = "met"
+rules = ["SEC10"]
+tests = ["crates/http/tests/login/payment.rs::a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_and_payee"]
+note = "Two elements of different categories, each checked on its own."
+
+[[control]]
+control = "Art. 9 independence of elements"
+status = "partial"
+rules = ["N-45", "HL-23"]
+tests = ["crates/identity-session/src/domain/assurance.rs::platform_biometrics_and_app_factor_are_not_strong_alone"]
+note = "The approval surface separates the elements; the security of a customer's device is outside the product."
+
+[[control]]
+control = "Art. 10 to 18 exemptions"
+status = "not-claimed"
+rules = []
+tests = []
+note = "Exemption analysis (low value, trusted beneficiaries, TRA) is the payment service provider's."
+
+[[control]]
+control = "Regulatory conformity"
+status = "not-claimed"
+rules = ["N-52"]
+tests = []
+note = "Applying the template's rules is the product's part; whether they meet the regulation is not guaranteed (N-52)."

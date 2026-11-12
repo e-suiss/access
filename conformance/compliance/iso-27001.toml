@@ -1,0 +1,100 @@
+# SA-53, OP-159 m.3 (ii), §14.4
+# ISO/IEC 27001:2022 Annex A, the technological and organizational controls the product
+# carries. Certification of an organization's ISMS is not a product property.
+
+version = 1
+framework = "ISO/IEC 27001"
+edition = "2022, Annex A"
+
+[[control]]
+control = "A.5.15 access control"
+status = "met"
+rules = ["G16", "G48"]
+tests = ["crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows"]
+note = "Access is decided per request against the domain's authority; errors never allow."
+
+[[control]]
+control = "A.5.16 identity management"
+status = "met"
+rules = ["IDI-2"]
+tests = ["bins/access-server/src/idp/tests/jml.rs::a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboarding"]
+note = "Identities are created, changed and offboarded through recorded steps."
+
+[[control]]
+control = "A.5.17 authentication information"
+status = "met"
+rules = ["U69", "SAI-8"]
+tests = [
+  "crates/identity-account/src/domain/password/tests.rs::phc_round_trip_and_rehash",
+  "crates/identity-account/tests/accounts.rs::breached_or_unchecked_passwords_are_refused",
+]
+note = "Passwords are screened and hashed; secrets never print."
+
+[[control]]
+control = "A.5.18 access rights"
+status = "met"
+rules = ["G4", "G28"]
+tests = ["crates/identity-session/tests/signin.rs::deactivation_ends_sessions_in_the_same_transaction"]
+note = "Grants and revocations are Exercises; revocation denies every later commit."
+
+[[control]]
+control = "A.5.24 to A.5.28 incident management"
+status = "partial"
+rules = ["SEC21"]
+tests = ["xtask/src/psirt.rs::deadlines_follow_article_14"]
+note = "Advisory and deadline tooling is in the repository; the incident process is the organization's."
+
+[[control]]
+control = "A.8.2 privileged access rights"
+status = "met"
+rules = ["G53", "TNI-13"]
+tests = ["bins/access-server/src/idp/tests/breakglass.rs::a_use_reaches_its_subject_whatever_the_notice_setting_and_falls_overdue", "bins/access-server/src/bootstrap/tests/operator_breakglass.rs::sec19_operator_database_sessions_are_recorded_once"]
+note = "Privileged and support access are grants, never impersonation."
+
+[[control]]
+control = "A.8.5 secure authentication"
+status = "met"
+rules = ["SEC10", "HL-23"]
+tests = [
+  "crates/identity-session/tests/signin.rs::a_passkey_signs_in_phishing_resistant_and_steps_up",
+  "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
+]
+note = "Phishing-resistant passkeys, MFA as the realm requires, and throttled failures."
+
+[[control]]
+control = "A.8.15 logging"
+status = "met"
+rules = ["U52", "U53"]
+tests = ["crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change"]
+note = "A tamper-evident audit log, never sampled."
+
+[[control]]
+control = "A.8.16 monitoring activities"
+status = "partial"
+rules = ["U53"]
+tests = ["crates/identity-export/tests/pass.rs::every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_nothing"]
+note = "The product streams its records; monitoring them is the organization's."
+
+[[control]]
+control = "A.8.24 use of cryptography"
+status = "partial"
+rules = ["SEC4", "TNI-2"]
+tests = ["crates/suiss-crypto/src/pkcs11/tests.rs::token_keys_sign_and_are_found_again"]
+note = "Classical algorithms and HSM-held keys; the post-quantum receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3."
+
+[[control]]
+control = "A.8.25 to A.8.29 secure development"
+status = "met"
+rules = ["U56", "OP-3-G3"]
+tests = [
+  "xtask/src/rules_test_layers.rs::sa_59_a_catalog_with_an_inactive_phase_one_layer_is_refused",
+  "xtask/src/supply_chain.rs::action_pinned_to_tag_is_rejected",
+]
+note = "Gated test layers, pinned dependencies and actions, and releases only after vectors and proofs pass."
+
+[[control]]
+control = "ISMS certification"
+status = "n/a"
+rules = []
+tests = []
+note = "Certification applies to an organization's management system, not to a product."

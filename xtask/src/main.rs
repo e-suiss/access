@@ -91,6 +91,9 @@ fn usage() -> ExitCode {
         "  security-model     regenerate conformance/SECURITY-MODEL.md; --check only compares"
     );
     eprintln!(
+        "  compliance-map     regenerate conformance/compliance/README.md; --check only compares"
+    );
+    eprintln!(
         "  support-policy     regenerate SECURITY.md's support and fix time sections; --check only compares"
     );
     eprintln!(
@@ -146,6 +149,12 @@ fn main() -> ExitCode {
                 }
             }
         }
+        // SA-53, OP-159 m.3 (ii)
+        Some("compliance-map") => report(
+            "compliance-map",
+            rules::compliance_map::write(&root, args.get(1).is_some_and(|a| a == "--check"))
+                .map(|()| None),
+        ),
         // OP-68, OP-159 m.3 (jj)
         Some("support-policy") => report(
             "support-policy",

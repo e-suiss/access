@@ -958,6 +958,13 @@ pub(crate) fn claims_rows(root: &Path) -> Result<Vec<(String, Vec<String>, Strin
         .collect())
 }
 
+/// The forbidden claims, and the scan that finds them in a text (SA-53).
+pub(crate) fn forbidden_claims(root: &Path) -> Result<Vec<ClaimRow>, String> {
+    Ok(claims::load(root)?.claim)
+}
+
+pub(crate) use claims::{Claim as ClaimRow, find_claims};
+
 /// Resolves a `path` or `path::function` test link.
 pub(crate) fn link_exists(root: &Path, link: &str) -> bool {
     scan::link_exists(root, link)

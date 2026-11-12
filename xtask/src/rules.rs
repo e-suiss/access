@@ -12,7 +12,7 @@ mod breakglass;
 #[path = "rules_comments.rs"]
 mod comments;
 #[path = "rules_compliance_map.rs"]
-mod compliance_map;
+pub(crate) mod compliance_map;
 #[path = "rules_conformance_profiles.rs"]
 mod conformance_profiles;
 #[path = "rules_constant_time_points.rs"]

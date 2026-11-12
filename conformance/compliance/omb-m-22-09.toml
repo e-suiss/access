@@ -1,0 +1,58 @@
+# SA-53, OP-159 m.3 (ii), §10.3.4
+# OMB M-22-09 (Federal zero trust strategy), the identity actions. `access-cli realm check
+# --profile m-22-09` reports a realm's settings against them.
+
+version = 1
+framework = "OMB M-22-09"
+edition = "January 2022, Identity"
+
+[[control]]
+control = "Identity 1 centralized identity management"
+status = "met"
+rules = ["IDI-2", "TNI-1"]
+tests = ["crates/identity-oauth/tests/oauth.rs::code_flow_with_pkce_and_dpop"]
+note = "One realm signs users into its applications through OpenID Connect and SAML."
+
+[[control]]
+control = "Identity 2 phishing-resistant MFA"
+status = "met"
+rules = ["SEC10", "HL-23"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+]
+note = "A passkey-only realm with MFA required and no SMS, voice or push factor is a realm setting the realm check reports."
+
+[[control]]
+control = "Identity 2 no SMS or voice"
+status = "met"
+rules = ["N-45"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "crates/http/tests/login/payment.rs::the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation",
+]
+note = "SMS codes are off by default and there is no voice factor; the realm check fails a realm that turns SMS on."
+
+[[control]]
+control = "Identity 3 password policies"
+status = "met"
+rules = ["U69"]
+tests = [
+  "crates/identity-account/src/domain/password/tests.rs::policy_counts_characters_after_nfkc",
+  "crates/identity-account/tests/accounts.rs::breached_or_unchecked_passwords_are_refused",
+]
+note = "No special-character rules and no periodic rotation; breached passwords are refused."
+
+[[control]]
+control = "Identity 4 authorization per request"
+status = "met"
+rules = ["G16", "G48"]
+tests = ["crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows"]
+note = "Every consequential action is decided on its own request, and no error state yields ALLOW."
+
+[[control]]
+control = "Identity 5 device signals"
+status = "partial"
+rules = ["IDI-3"]
+tests = ["crates/identity-session/src/domain/epoch.rs::fresh_hits_pass_stale_hits_ask_and_moves_deny"]
+note = "Risk and device signals narrow sessions; an inventory of agency devices is the agency's."

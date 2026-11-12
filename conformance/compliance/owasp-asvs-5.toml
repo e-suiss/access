@@ -1,0 +1,186 @@
+# SA-53, SA-55, OP-159 m.3 (ii)
+# OWASP ASVS 5.0.0, by chapter. Target level L3 for the identity plane and L2 for the other
+# components (SA-55). This file maps chapters; a requirement-level pass, each requirement to a
+# test or a reasoned n/a, is still open.
+
+version = 1
+framework = "OWASP ASVS"
+edition = "5.0.0, chapter level; target L3 identity plane, L2 other components"
+
+[[control]]
+control = "V1 encoding and sanitization"
+status = "met"
+rules = ["SA-21"]
+tests = [
+  "crates/identity-saml/src/app/binding.rs::the_post_page_escapes_and_carries_the_nonce",
+  "crates/identity-oauth/src/domain/jarm.rs::the_form_escapes_what_it_posts",
+  "bins/access-parser-worker/src/c14n.rs::text_and_attributes_are_escaped",
+]
+note = "Pages escape what they render; parsers run in an isolated worker."
+
+[[control]]
+control = "V2 validation and business logic"
+status = "met"
+rules = ["G16", "G48"]
+tests = [
+  "crates/parse/src/json.rs::depth_and_size_are_checked_before_parsing",
+  "crates/suiss-crypto/src/dcbor/tests.rs::limits_are_enforced_and_cannot_be_raised",
+]
+note = "Input size and depth are bounded before parsing; decisions never allow on error."
+
+[[control]]
+control = "V3 web frontend security"
+status = "met"
+rules = ["SA-21"]
+tests = [
+  "crates/http/tests/login.rs::n5_consent_and_approval_pages_cannot_be_framed",
+  "crates/http/tests/console.rs::writes_need_origin_and_the_sessions_csrf_token",
+  "crates/http/tests/login.rs::n5_a_csp_violation_report_is_accepted_and_rate_limited",
+]
+note = "Pages cannot be framed, carry a content security policy, and writes need the origin and the session's CSRF token."
+
+[[control]]
+control = "V4 API and web service"
+status = "met"
+rules = ["SEC28"]
+tests = [
+  "crates/http/tests/router.rs::an_address_over_its_rate_is_refused_before_its_body_is_read",
+  "crates/http/tests/authzen.rs::a_rate_limit_is_429",
+]
+note = "Rate limits refuse before the body is read; problems are RFC 9457 documents."
+
+[[control]]
+control = "V5 file handling"
+status = "met"
+rules = ["U22"]
+tests = [
+  "crates/identity-account/src/app/artifacts/tests.rs::only_text_formats_are_taken_and_every_image_or_video_is_refused",
+  "bins/access-server/src/bootstrap/tests/product_twin/support.rs::a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_no_body",
+]
+note = "Uploads are text only, redacted, bounded by the realm's limit and read under their own grant."
+
+[[control]]
+control = "V6 authentication"
+status = "met"
+rules = ["SEC10", "U69", "U46", "SAI-5"]
+tests = [
+  "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
+  "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
+  "bins/access-server/src/bootstrap/tests/redteam/enumeration.rs::as_19_the_login_identifier_and_password_steps_answer_the_same_for_every_account",
+]
+note = "NIST-aligned passwords, MFA, throttling, phishing-resistant passkeys, and answers that do not reveal accounts."
+
+[[control]]
+control = "V7 session management"
+status = "met"
+rules = ["G57", "U35"]
+tests = [
+  "crates/identity-session/src/domain/session.rs::idle_absolute_epoch_and_end",
+  "crates/identity-oauth/tests/oauth.rs::logout_ends_the_session_and_notifies_clients",
+]
+note = "Idle and absolute limits, epochs that end every token, and back-channel logout."
+
+[[control]]
+control = "V8 authorization"
+status = "met"
+rules = ["G16", "G48", "U59"]
+tests = [
+  "crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows",
+  "crates/store/tests/tenancy.rs::no_scope_no_rows",
+]
+note = "Every consequential action is decided by the Kernel; unscoped queries return nothing."
+
+[[control]]
+control = "V9 self-contained tokens"
+status = "met"
+rules = ["G46", "G61"]
+tests = [
+  "crates/identity-oauth/tests/dpop_conformance.rs::token_endpoint_rejects_a_replayed_proof",
+  "crates/crypto/src/sd_jwt/tests.rs::bad_claim_sets_are_refused",
+]
+note = "Tokens are sender-constrained and signed only with published keys."
+
+[[control]]
+control = "V10 OAuth and OIDC"
+status = "met"
+rules = ["G58"]
+tests = [
+  "crates/identity-oauth/tests/oauth.rs::code_flow_with_pkce_and_dpop",
+  "crates/identity-oauth/tests/security/fosite.rs::redirect_uri_tricks_are_never_followed",
+  "crates/identity-oauth/tests/oauth.rs::refresh_rotates_and_reuse_ends_everything",
+]
+note = "PKCE for every client, exact redirect URIs, DPoP, and refresh rotation with reuse detection."
+
+[[control]]
+control = "V11 cryptography"
+status = "partial"
+rules = ["SEC4", "U45", "SAI-42"]
+tests = [
+  "crates/crypto/tests/dudect.rs::totp_matching_step",
+  "crates/suiss-crypto/src/pkcs11/tests.rs::token_aead_seals_and_opens",
+]
+note = "Vetted primitives and constant-time comparisons by design; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3, and the timing measurements run on the bench runner."
+
+[[control]]
+control = "V12 secure communication"
+status = "met"
+rules = ["SEC4"]
+tests = [
+  "crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it",
+  "crates/identity-oauth/src/adapters/outbound/tests.rs::targets_are_https_only",
+]
+note = "TLS on every listener; outbound calls are HTTPS only."
+
+[[control]]
+control = "V13 configuration"
+status = "met"
+rules = ["OP-49", "OP-3-G3"]
+tests = [
+  "xtask/src/supply_chain.rs::committed_private_keys_are_rejected",
+  "crates/http/tests/router.rs::healthz_reports_landlock_abi",
+]
+note = "No secrets in the repository, a sandboxed process, and distroless images."
+
+[[control]]
+control = "V14 data protection"
+status = "met"
+rules = ["U58", "SAI-8"]
+tests = [
+  "crates/store/tests/accounts.rs::shredding_removes_every_key_and_keeps_the_rows",
+  "crates/identity-account/src/app/artifacts/tests.rs::a_har_keeps_no_token_cookie_or_authorization_value",
+]
+note = "Per-subject keys for personal data, redacted support artefacts, and secrets that never print."
+
+[[control]]
+control = "V15 secure coding and architecture"
+status = "met"
+rules = ["SA-21", "OP-93"]
+tests = [
+  "xtask/src/rules_write_permit.rs::inv_12_a_permit_with_a_public_field_or_a_copy_is_refused",
+  "xtask/src/policy_scan.rs::sa_23_stack_protector_flag_is_rejected",
+]
+note = "Enforced dependency direction, no request-path panics, and hardened builds."
+
+[[control]]
+control = "V16 security logging and error handling"
+status = "met"
+rules = ["U53", "OPI-6", "SAI-3"]
+tests = [
+  "crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change",
+  "crates/authority-core/tests/commit.rs::u53_op_44_every_audit_read_is_one_row",
+]
+note = "Audit records share the change's transaction, are never sampled, and failures never allow."
+
+[[control]]
+control = "V17 WebRTC"
+status = "n/a"
+rules = []
+tests = []
+note = "Access serves no WebRTC."
+
+[[control]]
+control = "Requirement-level mapping"
+status = "partial"
+rules = []
+tests = []
+note = "Each ASVS 5.0 requirement still needs its test or a reasoned n/a (SA-55); the chapters above are the first pass."

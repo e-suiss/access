@@ -1,0 +1,108 @@
+# SA-53, OP-159 m.3 (ii), §14.9
+# NIS2 Directive (EU) 2022/2555, Article 21(2) measures and Article 23 reporting, as far as a
+# product supplied to an essential or important entity carries them. The release evidence pack
+# (`cargo xtask evidence-pack`) collects the SBOMs, the security model, these mappings, the
+# advisories, the support policy, the PSIRT periods and the declared SLOs.
+
+version = 1
+framework = "NIS2"
+edition = "Directive (EU) 2022/2555"
+
+[[control]]
+control = "Art. 21(2)(a) risk analysis and security policies"
+status = "met"
+rules = ["SEC1", "SEC3"]
+tests = [
+  "xtask/src/rules_security_model.rs::rr_rows_need_owner_acceptance_and_a_real_signal_and_hl_rows_an_honest_wording",
+  "xtask/src/rules_trust_model.rs::every_component_needs_its_never_boundary_and_a_known_row",
+]
+note = "The published security model names the declared limits, residual risks with owners and signals, and the trust boundary of every component."
+
+[[control]]
+control = "Art. 21(2)(b) incident handling"
+status = "partial"
+rules = ["SEC21"]
+tests = [
+  "xtask/src/psirt.rs::deadlines_follow_article_14",
+  "xtask/src/rules_advisories.rs::a_record_without_a_cvss_v4_vector_fails",
+]
+note = "Advisory records and reporting deadlines are tooled; the entity's incident process and its CSIRT contact are its own."
+
+[[control]]
+control = "Art. 21(2)(c) business continuity and backup"
+status = "met"
+rules = ["U24", "U10", "SEC27"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/failover.rs::pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_restore",
+  "bins/access-server/src/bootstrap/tests/durability/recovery.rs::the_recovering_side_plans_from_real_witnesses_and_the_exported_records",
+]
+note = "Point-in-time restore drills and forced recovery from witnesses and exported records."
+
+[[control]]
+control = "Art. 21(2)(d) supply chain security"
+status = "met"
+rules = ["OP-3-G3", "N-44", "N-47"]
+tests = [
+  "xtask/src/supply_chain.rs::action_pinned_to_tag_is_rejected",
+  "xtask/src/supply_chain.rs::new_build_script_and_stale_entry_are_both_reported",
+]
+note = "Dependencies are vetted and denied by policy, actions pinned by digest; publisher identity and dependency bugs stay declared limits (N-44, N-47)."
+
+[[control]]
+control = "Art. 21(2)(e) secure development and vulnerability handling"
+status = "met"
+rules = ["U56", "OP-70"]
+tests = [
+  "xtask/src/rules_test_layers.rs::sa_59_a_catalog_with_an_inactive_phase_one_layer_is_refused",
+  "crates/http/tests/router.rs::security_txt_has_required_fields",
+  "xtask/src/rules_support_policy.rs::a_support_period_under_five_years_fails",
+]
+note = "Gated test layers, a published security.txt and disclosure policy, and five years of security fixes per major."
+
+[[control]]
+control = "Art. 21(2)(f) effectiveness assessment"
+status = "partial"
+rules = ["SEC1"]
+tests = ["xtask/src/rules_formal_manifest.rs::a_status_needs_its_evidence"]
+note = "Formal and test evidence is published with its scope; the crystal-box audit by an external firm waits on Adem."
+
+[[control]]
+control = "Art. 21(2)(g) cyber hygiene and training"
+status = "n/a"
+rules = []
+tests = []
+note = "Training is the entity's own measure."
+
+[[control]]
+control = "Art. 21(2)(h) cryptography"
+status = "partial"
+rules = ["SEC4", "TNI-2"]
+tests = [
+  "crates/suiss-crypto/src/pkcs11/tests.rs::token_keys_sign_and_are_found_again",
+  "crates/crypto/tests/differential.rs::a_retired_classical_artefact_needs_a_pinned_anchor_and_a_pq_bundle",
+]
+note = "Classical cryptography with HSM-held keys and a post-quantum re-anchor; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3."
+
+[[control]]
+control = "Art. 21(2)(i) access control and asset management"
+status = "met"
+rules = ["G16", "TNI-3"]
+tests = ["crates/store/tests/schema.rs::every_table_has_forced_row_level_security_and_a_restrictive_scope_policy"]
+note = "Access is decided per request; tenant rows are separated by forced row-level security."
+
+[[control]]
+control = "Art. 21(2)(j) multi-factor authentication"
+status = "met"
+rules = ["SEC10", "HL-23"]
+tests = [
+  "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+]
+note = "MFA as the realm requires, with phishing-resistant passkeys."
+
+[[control]]
+control = "Art. 23 reporting obligations"
+status = "partial"
+rules = []
+tests = ["xtask/src/psirt.rs::without_a_fix_or_notification_the_final_reports_count_from_awareness"]
+note = "The 24-hour, 72-hour and one-month deadlines are computed by the PSIRT tool; the report to the national CSIRT is the entity's."

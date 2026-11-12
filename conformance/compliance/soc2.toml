@@ -1,0 +1,111 @@
+# SA-53, OP-159 m.3 (ii), §14.4, §18.12
+# SOC 2 Trust Services Criteria (2017, revised points of focus 2022). The criteria the product
+# carries; the Type II attestation itself is an external auditor's report and waits on Adem
+# (D6, MD-16).
+
+version = 1
+framework = "SOC 2"
+edition = "Trust Services Criteria 2017 (rev. 2022)"
+
+[[control]]
+control = "CC6.1 logical access"
+status = "met"
+rules = ["G16", "TNI-3", "U59"]
+tests = [
+  "crates/store/tests/tenancy.rs::no_scope_no_rows",
+  "crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows",
+]
+note = "Queries without a tenant scope return nothing, and access is decided per request."
+
+[[control]]
+control = "CC6.2 registration and authorization of users"
+status = "met"
+rules = ["IDI-2", "G28"]
+tests = ["bins/access-server/src/idp/tests/jml.rs::a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboarding"]
+note = "Joiners, movers and leavers move through rule-shaped authority and recorded offboarding."
+
+[[control]]
+control = "CC6.3 role and attribute changes"
+status = "met"
+rules = ["G4", "G28"]
+tests = ["crates/identity-session/tests/signin.rs::deactivation_ends_sessions_in_the_same_transaction"]
+note = "A change of access is an Exercise; deactivation ends sessions in the same transaction."
+
+[[control]]
+control = "CC6.6 boundary protection"
+status = "met"
+rules = ["SEC4"]
+tests = [
+  "crates/identity-oauth/src/adapters/outbound/tests.rs::only_public_addresses_are_reached",
+  "crates/http/tests/router.rs::an_address_over_its_rate_is_refused_before_its_body_is_read",
+]
+note = "Outbound calls reach only declared public targets; inbound requests are rate limited before their bodies are read."
+
+[[control]]
+control = "CC6.7 data in transit"
+status = "met"
+rules = ["SEC4"]
+tests = ["crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it"]
+note = "Every listener serves TLS."
+
+[[control]]
+control = "CC6.8 unauthorized software"
+status = "met"
+rules = ["OP-3-G3", "OP-49"]
+tests = [
+  "xtask/src/supply_chain.rs::action_pinned_to_tag_is_rejected",
+  "xtask/src/supply_chain.rs::committed_private_keys_are_rejected",
+]
+note = "Dependencies are vetted and pinned, actions are pinned by digest, and images are distroless."
+
+[[control]]
+control = "CC7.1 detection of configuration changes"
+status = "met"
+rules = ["OPI-6", "U70"]
+tests = ["crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change"]
+note = "Every configuration change is an audited Exercise in a tamper-evident log."
+
+[[control]]
+control = "CC7.2 monitoring"
+status = "partial"
+rules = ["U53"]
+tests = ["crates/identity-export/tests/pass.rs::every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_nothing"]
+note = "Audit and telemetry stream to the operator's SIEM; watching them is the operator's."
+
+[[control]]
+control = "CC7.3 and CC7.4 incident response"
+status = "partial"
+rules = ["SEC21"]
+tests = [
+  "xtask/src/psirt.rs::deadlines_follow_article_14",
+  "xtask/src/rules_advisories.rs::a_complete_osv_record_passes",
+]
+note = "Advisories and the reporting deadlines are tooled; the PSIRT itself is people and process."
+
+[[control]]
+control = "CC8.1 change management"
+status = "met"
+rules = ["U56", "OP-70"]
+tests = ["xtask/src/rules_test_layers.rs::sa_59_a_catalog_with_an_inactive_phase_one_layer_is_refused"]
+note = "Every change passes the gated test layers before merge, and releases ship only after vectors and proofs pass."
+
+[[control]]
+control = "A1.2 recovery"
+status = "met"
+rules = ["U24", "U10"]
+tests = ["bins/access-server/src/bootstrap/tests/durability/failover.rs::pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_restore"]
+note = "The restore drill runs on a point-in-time restore; forced recovery is possible without the provider."
+
+[[control]]
+control = "C1.1 confidentiality"
+status = "met"
+rules = ["U58", "SAI-8"]
+tests = ["crates/crypto/src/webhook/tests.rs::secret_round_trips_and_never_prints"]
+note = "Secret types never print, and personal data is sealed under per-subject keys."
+
+[[control]]
+control = "Type II attestation"
+status = "partial"
+rules = []
+tests = []
+note = "The report of an external auditor; the firm and the audit period are Adem's (D6, MD-16). The evidence pack is its input."

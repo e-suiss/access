@@ -1,0 +1,75 @@
+# SA-53, OP-159 m.3 (ii), IDP-9, §10.3.4, U62, N-52
+# Türkiye ÖHY ve BS Tebliği, güçlü kimlik doğrulama (GKD). The `tr-gkd` realm template and the
+# `tr-gkd` regulatory template carry the rules; regulatory conformity is NOT GUARANTEED.
+
+version = 1
+framework = "TR ÖHY ve BS Tebliği GKD"
+edition = "6493 sayılı Kanun, Tebliğ in force 1 December 2021, amended 4 September 2026 (RG 33360)"
+
+[[control]]
+control = "m.10 two elements of different categories"
+status = "met"
+rules = ["U62", "SEC10"]
+tests = [
+  "crates/http/tests/login/payment.rs::a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_and_payee",
+  "crates/identity-session/src/domain/assurance.rs::the_app_controlled_factor_alone_meets_no_ct2_and_meets_it_with_a_passkey",
+]
+note = "A passkey and the app-controlled factor; neither alone meets CT2."
+
+[[control]]
+control = "m.10 platform biometrics alone"
+status = "met"
+rules = ["U62"]
+tests = [
+  "crates/identity-session/src/domain/assurance.rs::platform_biometrics_and_app_factor_are_not_strong_alone",
+  "crates/identity-session/src/domain/assurance.rs::the_tr_payment_profile_counts_no_biometrics_and_no_sms_sign_in",
+]
+note = "Platform biometrics alone never count as an element."
+
+[[control]]
+control = "m.10 SMS only for set-up and activation"
+status = "met"
+rules = ["U62", "N-45"]
+tests = [
+  "crates/http/tests/login/payment.rs::the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation",
+  "crates/http/tests/login/payment.rs::sms_is_refused_thirty_days_after_a_sim_change",
+]
+note = "SMS codes activate the app-controlled factor and are refused at sign-in and after a recent SIM change."
+
+[[control]]
+control = "m.10 dynamic linking of the transaction code"
+status = "met"
+rules = ["U62", "G13"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/product_twin/seams/pay.rs::under_the_tr_gkd_realm_template_a_payment_without_dynamic_linking_is_refused",
+  "crates/http/tests/login/payment.rs::a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_and_payee",
+]
+note = "A payment needs an authentication bound to its own intent, signed by the customer's own key."
+
+[[control]]
+control = "m.22/7 documentation"
+status = "partial"
+rules = []
+tests = ["bins/access-cli/src/commands/realm.rs::the_tr_gkd_template_names_its_domain_half_and_claims_no_conformity"]
+note = "A documentation template ships with the realm template (deploy/realm-templates/tr-gkd/); keeping it is the institution's."
+
+[[control]]
+control = "m.22/6 two tests a year"
+status = "partial"
+rules = []
+tests = ["bins/access-cli/src/commands/realm.rs::the_tr_gkd_template_names_its_domain_half_and_claims_no_conformity"]
+note = "A test report template ships with the realm template; running the tests is the institution's."
+
+[[control]]
+control = "SPK VII-128.10"
+status = "not-claimed"
+rules = []
+tests = []
+note = "Capital markets rules apply on their own and are not mapped here."
+
+[[control]]
+control = "Regulatory conformity"
+status = "not-claimed"
+rules = ["N-52"]
+tests = []
+note = "Regulatory conformity is NOT GUARANTEED; the legal assessment is the institution's."

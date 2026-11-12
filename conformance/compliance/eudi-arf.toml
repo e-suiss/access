@@ -1,0 +1,78 @@
+# SA-53, OP-159 m.3 (ii), §10.7.2
+# EUDI Wallet Architecture and Reference Framework, the relying party requirements only
+# (services/vc-verifier: OpenID4VP, SD-JWT VC, mdoc). Access is not a wallet; requirements
+# it does not carry are not claimed.
+
+version = 1
+framework = "EUDI Wallet ARF"
+edition = "Architecture and Reference Framework 1.x, relying party"
+
+[[milestone]]
+date = "2026-12-31"
+what = "Member states make a wallet available (Regulation (EU) 2024/1183)."
+
+[[milestone]]
+date = "2027-12-31"
+what = "Relying parties required to use strong user authentication accept the wallet (Regulation (EU) 2024/1183)."
+
+[[control]]
+control = "RP presentation protocol (OpenID4VP, HAIP)"
+status = "met"
+rules = ["IDI-9"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::same_device_and_cross_device_modes",
+  "services/vc-verifier/tests/verifier.rs::pid_from_a_listed_pid_provider_is_high",
+]
+note = "Signed request objects, direct_post.jwt responses, same-device and cross-device flows."
+
+[[control]]
+control = "RP credential formats (SD-JWT VC, mdoc)"
+status = "met"
+rules = ["IDI-9"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::an_mdoc_pid_is_verified",
+  "crates/crypto/src/sd_jwt/tests.rs::holder_bound_presentations_verify",
+]
+note = "Both PID formats are verified with holder binding."
+
+[[control]]
+control = "RP minimum disclosure"
+status = "met"
+rules = ["G37"]
+tests = ["services/vc-verifier/tests/verifier.rs::an_extra_disclosure_is_refused"]
+note = "A response that discloses more than asked is refused."
+
+[[control]]
+control = "RP trust in issuers"
+status = "met"
+rules = ["IDI-9"]
+tests = ["services/vc-verifier/tests/verifier.rs::an_issuer_outside_the_lotl_is_refused"]
+note = "Issuers chain to the EU list of trusted lists."
+
+[[control]]
+control = "RP revocation checks"
+status = "met"
+rules = ["G4"]
+tests = ["services/vc-verifier/tests/verifier.rs::a_revoked_credential_is_not_ingested"]
+note = "Token status lists and bitstring status lists are read before ingestion."
+
+[[control]]
+control = "Presentation creates no authority"
+status = "met"
+rules = ["IDI-3", "IDI-9"]
+tests = ["bins/access-server/src/bootstrap/tests/vc_verifier.rs::a_presentation_without_an_acceptance_yields_no_selection"]
+note = "A presentation's Claims stay quarantined until a domain's Acceptance names the verifier."
+
+[[control]]
+control = "RP registration certificates and access certificates"
+status = "not-claimed"
+rules = []
+tests = []
+note = "Relying party registration with a member state and its access certificate are the operator's; the request-signing certificate is configured, not issued by Access."
+
+[[control]]
+control = "Wallet-side requirements"
+status = "n/a"
+rules = []
+tests = []
+note = "Access is not a wallet."

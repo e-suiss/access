@@ -1,0 +1,54 @@
+# SA-53, OP-159 m.3 (ii)
+# WCAG 2.2 for the hosted sign-in pages, the account pages and the console. 3.3.8 Accessible
+# Authentication (Minimum) is mandatory. No catalog row states accessibility yet, so no control
+# here is `met`; the axe suites and the @live hosted-page spec are the evidence.
+
+version = 1
+framework = "WCAG"
+edition = "2.2, level AA"
+
+[[control]]
+control = "3.3.8 Accessible Authentication (Minimum)"
+status = "partial"
+rules = []
+tests = [
+  "web/login/e2e/a11y.spec.ts",
+  "web/login/e2e/login.spec.ts",
+  "web/login/e2e/live/hosted.spec.ts",
+]
+note = "Passkeys need no cognitive test, codes can be pasted into one field, and fields carry autocomplete; no catalog row states it yet."
+
+[[control]]
+control = "3.3.7 Redundant Entry"
+status = "partial"
+rules = []
+tests = ["web/login/e2e/pages.spec.ts"]
+note = "The identifier and e-mail fields carry autocomplete and are not asked twice; no catalog row states it yet."
+
+[[control]]
+control = "Level AA, login and hosted pages"
+status = "partial"
+rules = []
+tests = ["web/login/e2e/a11y.spec.ts"]
+note = "Every login step and hosted page has no axe WCAG 2.2 AA violation in each locale; automated checks cover part of the criteria."
+
+[[control]]
+control = "Level AA, account pages"
+status = "partial"
+rules = []
+tests = ["web/account/e2e/a11y-settings.spec.ts"]
+note = "The account settings pages and their open forms pass axe; automated checks cover part of the criteria."
+
+[[control]]
+control = "Level AA, console"
+status = "partial"
+rules = []
+tests = ["web/console/e2e/a11y.spec.ts"]
+note = "Sign-in, every signed-in screen and every section screen pass axe; automated checks cover part of the criteria."
+
+[[control]]
+control = "Manual audit"
+status = "not-claimed"
+rules = []
+tests = []
+note = "A manual audit with assistive technology has not been done."

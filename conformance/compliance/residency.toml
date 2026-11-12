@@ -1,0 +1,37 @@
+# SA-53, OP-159 m.3 (ii), OP-30, HL-17
+# Data residency: where a realm's data is stored and processed.
+
+version = 1
+framework = "Data residency"
+edition = "Access placement and residency settings"
+
+[[control]]
+control = "Declared region"
+status = "met"
+rules = ["TNI-3"]
+tests = ["bins/access-server/src/bootstrap/tests/management/residency.rs::op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_back"]
+note = "A realm declares residency only in its cell's region and reads it back."
+
+[[control]]
+control = "Dedicated placement"
+status = "met"
+rules = ["HL-17", "U54"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/placement.rs::tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_other_tenant_lands_there",
+  "bins/access-server/src/bootstrap/tests/management/residency.rs::hl_17_the_durability_read_shows_shared_hosting_until_dedicated_is_declared",
+]
+note = "A silo move takes a tenant to a dedicated cell; the durability read shows shared hosting until dedicated is declared."
+
+[[control]]
+control = "Cross-region copies"
+status = "partial"
+rules = ["HL-17"]
+tests = ["crates/identity-export/tests/pass.rs::every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_nothing"]
+note = "Export sinks, witnesses and replicas the operator configures may sit in other regions; choosing them is the operator's."
+
+[[control]]
+control = "Restore scope"
+status = "not-claimed"
+rules = ["N-58"]
+tests = []
+note = "Restores are whole-database; restoring one tenant or realm alone is not offered (N-58, HL-32)."

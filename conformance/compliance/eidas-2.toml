@@ -1,0 +1,61 @@
+# SA-53, OP-159 m.3 (ii), §10.7.2
+# eIDAS 2.0 Regulation (EU) 2024/1183, the relying party side. Access is not a wallet and
+# not a trust service provider.
+
+version = 1
+framework = "eIDAS 2.0"
+edition = "Regulation (EU) 2024/1183, relying party"
+
+[[control]]
+control = "Art. 5b relying party registration"
+status = "partial"
+rules = []
+tests = ["services/vc-verifier/tests/verifier.rs::same_device_and_cross_device_modes"]
+note = "The verifier identifies itself with its request-signing certificate; registration with a member state is the operator's."
+
+[[control]]
+control = "Art. 5b(9) data minimisation"
+status = "met"
+rules = ["IDI-9", "G37"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::an_extra_disclosure_is_refused",
+  "services/vc-verifier/tests/verifier.rs::dcql_outside_the_profile_is_refused",
+]
+note = "The verifier asks only the claims it names and refuses a response that discloses more."
+
+[[control]]
+control = "Art. 8 assurance levels"
+status = "met"
+rules = ["IDI-3", "IDI-9"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::pid_from_a_listed_pid_provider_is_high",
+  "services/vc-verifier/tests/verifier.rs::non_pid_never_sets_loa_eidas_high",
+]
+note = "Level high comes only from a PID presented by a listed PID provider."
+
+[[control]]
+control = "Art. 22 trusted lists"
+status = "met"
+rules = ["IDI-9"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::an_issuer_outside_the_lotl_is_refused",
+  "services/vc-verifier/tests/verifier.rs::pinned_trusted_list_snapshots_from_the_parser_worker_are_used",
+]
+note = "Issuers must chain to a granted service of a signed, current trusted list."
+
+[[control]]
+control = "Validity and revocation of attestations"
+status = "met"
+rules = ["G4"]
+tests = [
+  "services/vc-verifier/tests/verifier.rs::a_revoked_credential_is_not_ingested",
+  "services/vc-verifier/tests/verifier.rs::a_bitstring_status_list_revokes",
+]
+note = "A credential whose status is not valid, or whose status list cannot be read, is refused."
+
+[[control]]
+control = "Wallet and qualified trust services"
+status = "n/a"
+rules = []
+tests = []
+note = "Access is a relying party; it is neither a wallet nor a qualified trust service provider."

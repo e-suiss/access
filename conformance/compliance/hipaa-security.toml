@@ -1,0 +1,86 @@
+# SA-53, OP-159 m.3 (ii), §14.9
+# HIPAA Security Rule, the technical safeguards (45 CFR 164.312). A business associate
+# agreement is a commercial decision and outside this mapping.
+
+version = 1
+framework = "HIPAA Security Rule"
+edition = "45 CFR 164.312, technical safeguards"
+
+[[control]]
+control = "164.312(a)(1) access control"
+status = "met"
+rules = ["G16", "G48", "TNI-3"]
+tests = [
+  "crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows",
+  "crates/store/tests/schema.rs::every_table_has_forced_row_level_security_and_a_restrictive_scope_policy",
+]
+note = "Access is decided per request, errors never allow, and tenant rows are separated by forced row-level security."
+
+[[control]]
+control = "164.312(a)(2)(i) unique user identification"
+status = "met"
+rules = ["IDI-2"]
+tests = ["crates/identity-account/tests/accounts.rs::a_taken_identifier_creates_nothing"]
+note = "Each login identifier names one account of one realm."
+
+[[control]]
+control = "164.312(a)(2)(ii) emergency access"
+status = "met"
+rules = ["G53", "TNI-13"]
+tests = ["bins/access-server/src/idp/tests/breakglass.rs::a_use_reaches_its_subject_whatever_the_notice_setting_and_falls_overdue", "bins/access-server/src/bootstrap/tests/operator_breakglass.rs::sec19_operator_database_sessions_are_recorded_once"]
+note = "Break-glass access is a recorded, time-bounded grant, not an impersonation."
+
+[[control]]
+control = "164.312(a)(2)(iii) automatic logoff"
+status = "met"
+rules = ["G57"]
+tests = ["crates/http/tests/console.rs::idle_sessions_end_after_fifteen_minutes"]
+note = "Sessions end at their idle and absolute limits."
+
+[[control]]
+control = "164.312(a)(2)(iv) encryption and decryption"
+status = "met"
+rules = ["U58"]
+tests = ["crates/store/tests/accounts.rs::shredding_removes_every_key_and_keeps_the_rows"]
+note = "Personal data is sealed under per-subject keys; destroying a key makes the data unreadable."
+
+[[control]]
+control = "164.312(b) audit controls"
+status = "met"
+rules = ["U52", "U53", "U70"]
+tests = [
+  "crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change",
+  "crates/authority-core/tests/commit.rs::u53_op_44_every_audit_read_is_one_row",
+]
+note = "Every security change and every audit read is recorded in a tamper-evident log."
+
+[[control]]
+control = "164.312(c)(1) integrity"
+status = "met"
+rules = ["G34", "U70"]
+tests = ["crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change"]
+note = "Records are committed into Merkle trees with signed checkpoints."
+
+[[control]]
+control = "164.312(d) person or entity authentication"
+status = "met"
+rules = ["SEC10", "IDI-7"]
+tests = [
+  "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
+  "crates/identity-webauthn/tests/ceremony.rs::es256_device_bound_passkey_registers_and_authenticates_at_aal3",
+]
+note = "Users authenticate with the factors the realm requires."
+
+[[control]]
+control = "164.312(e)(1) transmission security"
+status = "met"
+rules = ["SEC4"]
+tests = ["crates/http/tests/pebble.rs::pebble_issues_a_certificate_over_tls_alpn_and_the_listener_serves_it"]
+note = "Every listener serves TLS."
+
+[[control]]
+control = "Business associate agreement"
+status = "not-claimed"
+rules = []
+tests = []
+note = "A commercial decision, outside this stage (§14.9)."

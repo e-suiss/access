@@ -1,0 +1,87 @@
+# SA-53, OP-159 m.3 (ii), §14.9
+# DORA Regulation (EU) 2022/2554, the ICT risk management articles a supplied product carries,
+# and the exit strategy of Article 28(8). The evidence pack is the same as for NIS2.
+
+version = 1
+framework = "DORA"
+edition = "Regulation (EU) 2022/2554"
+
+[[control]]
+control = "Art. 6 ICT risk management framework"
+status = "partial"
+rules = ["SEC1"]
+tests = ["xtask/src/rules_security_model.rs::rr_rows_need_owner_acceptance_and_a_real_signal_and_hl_rows_an_honest_wording"]
+note = "The security model and its declared limits are inputs; the framework is the financial entity's."
+
+[[control]]
+control = "Art. 9 protection and prevention"
+status = "met"
+rules = ["G16", "SEC10", "U58"]
+tests = [
+  "crates/kernel/src/invariants/tests/properties.rs::a_restriction_deny_never_allows",
+  "crates/identity-session/tests/signin.rs::a_stored_mfa_requirement_cannot_be_skipped",
+  "crates/store/tests/accounts.rs::shredding_removes_every_key_and_keeps_the_rows",
+]
+note = "Per-request access decisions, MFA, and personal data sealed under per-subject keys."
+
+[[control]]
+control = "Art. 9(4)(d) cryptographic controls"
+status = "partial"
+rules = ["SEC4", "TNI-2"]
+tests = ["crates/identity-signer/src/app/tests.rs::rotation_runs_without_gaps"]
+note = "Key rotation and HSM-held keys; the hybrid receipt carrier waits on lane J2c, realm post-quantum keys and the FIPS profile on lane J3."
+
+[[control]]
+control = "Art. 10 detection"
+status = "met"
+rules = ["U52", "U70"]
+tests = [
+  "crates/identity-audit/tests/audit.rs::checkpoints_cannot_fork_or_change",
+  "crates/identity-export/tests/pass.rs::every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_nothing",
+]
+note = "Tamper-evident audit records streamed to the entity's SIEM."
+
+[[control]]
+control = "Art. 11 response and recovery"
+status = "met"
+rules = ["U24", "U10", "SEC21"]
+tests = ["bins/access-server/src/bootstrap/tests/durability/recovery.rs::the_recovering_side_plans_from_real_witnesses_and_the_exported_records"]
+note = "Forced recovery from witnesses and exported records, without the provider."
+
+[[control]]
+control = "Art. 12 backup and restoration"
+status = "met"
+rules = ["U24"]
+tests = ["bins/access-server/src/bootstrap/tests/durability/failover.rs::pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_restore"]
+note = "The restore drill runs its nine items on a point-in-time restore."
+
+[[control]]
+control = "Art. 17 to 19 incident management and reporting"
+status = "partial"
+rules = []
+tests = ["xtask/src/psirt.rs::deadlines_follow_article_14"]
+note = "The product's own vulnerability deadlines are tooled; classifying and reporting a major ICT incident is the entity's."
+
+[[control]]
+control = "Art. 24 to 27 resilience testing"
+status = "partial"
+rules = ["U56"]
+tests = ["xtask/src/rules_test_layers.rs::sa_59_a_catalog_with_an_inactive_phase_one_layer_is_refused"]
+note = "The test layers, red-team suites and fault injection run in CI; threat-led penetration testing is the entity's."
+
+[[control]]
+control = "Art. 28(8) exit strategy"
+status = "met"
+rules = ["U24", "G28"]
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/export.rs::a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rate_class_closes_it",
+  "bins/access-server/src/bootstrap/tests/durability/handover.rs::a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced",
+]
+note = "A full export streams whole, and a domain moves to a second install with the old provider fenced off."
+
+[[control]]
+control = "Art. 30 contractual provisions"
+status = "not-claimed"
+rules = []
+tests = []
+note = "Service levels and contract terms are commercial; the evidence pack carries only the declared SLOs."
