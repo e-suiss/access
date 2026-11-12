@@ -43,6 +43,12 @@ fn quick(query_ms: u64, total_ms: u64) -> Timeouts {
     }
 }
 
+/// Limits no load reaches, for a fake solver that answers or exits at once: only its own answer
+/// can end the analysis, never a time limit.
+fn unhurried() -> Timeouts {
+    quick(300_000, 600_000)
+}
+
 fn run(cvc5: &Cvc5, old: &str, new: &str) -> Result<Verdict, AnalysisError> {
     analyze(cvc5, SCHEMA, old, new, Limits::default())
 }
@@ -107,7 +113,7 @@ fn whole_analysis_times_out() {
 #[test]
 fn crashing_solver_fails_closed() {
     let (path, hash) = script("crash", "exit 3");
-    let cvc5 = Cvc5::with_hash(path, hash, quick(5_000, 10_000));
+    let cvc5 = Cvc5::with_hash(path, hash, unhurried());
     assert_eq!(run(&cvc5, OLD, NEW), Err(AnalysisError::Solver));
 }
 
@@ -118,7 +124,7 @@ fn solver_answering_unknown_fails_closed() {
         "unknown",
         "while read -r line; do case \"$line\" in *check-sat*) echo unknown ;; esac; done",
     );
-    let cvc5 = Cvc5::with_hash(path, hash, quick(5_000, 10_000));
+    let cvc5 = Cvc5::with_hash(path, hash, unhurried());
     assert_eq!(run(&cvc5, OLD, NEW), Err(AnalysisError::Unknown));
 }
 
@@ -187,7 +193,7 @@ fn compare_on_solver_unknown_is_unknown() {
         "compare-unknown",
         "while read -r line; do case \"$line\" in *check-sat*) echo unknown ;; esac; done",
     );
-    let cvc5 = Cvc5::with_hash(path, hash, quick(5_000, 10_000));
+    let cvc5 = Cvc5::with_hash(path, hash, unhurried());
     assert_eq!(
         compare(&cvc5, SCHEMA, OLD, NEW, Limits::default()),
         Change::Unknown(AnalysisError::Unknown)
