@@ -146,4 +146,15 @@ mod tests {
             "http://www.w3.org/2001/04/xmlenc#sha512"
         );
     }
+
+    // §10.8.3, OP-159 m.3 (o), Ek B 6331
+    #[test]
+    fn no_post_quantum_signature_algorithm_is_named_or_produced() {
+        for name in ["ml-dsa-44", "ml-dsa-65", "ml-dsa-87", "slh-dsa-sha2-128s"] {
+            assert_eq!(SigAlg::of_name(name), None, "{name}");
+        }
+        for a in SigAlg::ALL {
+            assert!(a.uri().contains("#rsa-sha") || a.uri().contains("#ecdsa-sha"), "{a:?}");
+        }
+    }
 }

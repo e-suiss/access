@@ -122,3 +122,28 @@ fn weak_or_malformed_recipient_keys_are_refused() {
         Err(JweError::Header)
     );
 }
+
+// CR-4, RR-36, OP-159 m.3 (o), Ek B 6330
+#[test]
+fn no_post_quantum_key_management_algorithm_is_accepted() {
+    let (_, pkcs8) = rsa(KeySize::Rsa2048);
+    let key = DecryptKey::rsa(&pkcs8).unwrap();
+    for alg in [
+        "ML-KEM-512",
+        "ML-KEM-768",
+        "ML-KEM-1024",
+        "ML-KEM-768+A256KW",
+        "ECDH-ES+ML-KEM-768",
+        "HPKE-0",
+        "HPKE-1",
+        "HPKE-0-KE",
+        "HPKE-X25519-MLKEM768",
+    ] {
+        assert_eq!(KeyAlg::from_name(alg), None, "{alg}");
+        let jwe = forged(
+            &format!(r#"{{"alg":"{alg}","enc":"A256GCM"}}"#),
+            "AA.AA.AA.AA",
+        );
+        assert_eq!(decrypt(&key, &jwe), Err(JweError::Algorithm), "{alg}");
+    }
+}

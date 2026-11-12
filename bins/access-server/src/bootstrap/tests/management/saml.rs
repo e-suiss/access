@@ -903,3 +903,41 @@ async fn shibboleth_sp_accepts_a_real_response_and_refuses_a_tampered_one() {
     .await;
     counterpart("ACCESS_TEST_SHIBBOLETH_SP", vec![dir.display().to_string()]).await;
 }
+
+// §10.8.3, CR-41, MD-3, OP-159 m.3 (o), Ek B 6331
+#[tokio::test]
+async fn the_post_quantum_profile_leaves_saml_signing_and_encryption_classical() {
+    let idp = Idp::new("saml-pq").await;
+    let w = idp
+        .c
+        .rest_write(
+            &Method::PUT,
+            "/admin/v1/realms/acme/settings/signing-profile",
+            ("putSigningProfile", None),
+            serde_json::json!({"profile": "ml-dsa-65"}),
+            None,
+        )
+        .await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let (r, doc) = idp.get("/realms/acme/saml/metadata", false).await;
+    assert_eq!(r.status(), StatusCode::OK, "{doc}");
+    assert!(doc.contains("xmldsig-more#rsa-sha256"), "{doc}");
+    let lower = doc.to_ascii_lowercase();
+    for pq in ["ml-dsa", "mldsa", "ml-kem", "mlkem", "hpke"] {
+        assert!(!lower.contains(pq), "{pq}");
+    }
+    for alg in ["ml-dsa-65", "ml-dsa-44", "ml-dsa-87"] {
+        let w = idp
+            .c
+            .rest_write(
+                &Method::POST,
+                "/admin/v1/realms/acme/saml-sps",
+                ("registerSamlSp", None),
+                sp("quantum", serde_json::json!({ "signature_alg": alg })),
+                None,
+            )
+            .await;
+        assert!(w.status.is_client_error(), "{alg}: {} {}", w.status, w.body);
+    }
+    idp.c.w.domains.release().await;
+}

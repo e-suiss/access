@@ -314,3 +314,42 @@ async fn without_an_hsm_ml_dsa_mechanism_the_profile_is_refused_and_nothing_fall
     assert!(akp(&jwks(&c).await).keys.is_empty());
     assert!(!id_token_algs(&c).await.iter().any(|a| a.starts_with("ML-DSA")));
 }
+
+// CR-4, RR-36, OP-159 m.3 (o), Ek B 6330
+#[tokio::test]
+async fn encrypted_identity_tokens_stay_classical_under_the_post_quantum_profile() {
+    let c = console("signing-jwe", true).await;
+    let w = put(&c, "putSigningProfile", PROFILE, serde_json::json!({"profile": "ml-dsa-65"})).await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let (id, _) = client(&c, "sealed").await;
+    for alg in ["ML-KEM-768", "ML-KEM-768+A256KW", "ECDH-ES+ML-KEM-768", "HPKE-0", "HPKE-1"] {
+        let w = c
+            .rest_write(
+                &Method::PUT,
+                &format!("/admin/v1/realms/acme/clients/{id}/encryption"),
+                ("putClientEncryption", Some(&id)),
+                serde_json::json!({ "alg": alg, "jwks": { "keys": [] }, "id_token": true }),
+                None,
+            )
+            .await;
+        assert!(w.status.is_client_error(), "{alg}: {} {}", w.status, w.body);
+    }
+    let doc = discovery(
+        &c,
+        access_identity_oauth::domain::metadata::Document::OpenIdConfiguration,
+    )
+    .await;
+    let doc: serde_json::Value = serde_json::from_str(&doc).unwrap();
+    for (k, v) in doc.as_object().unwrap() {
+        if k.ends_with("_encryption_alg_values_supported") {
+            assert_eq!(v, &serde_json::json!(["ECDH-ES+A256KW", "RSA-OAEP-256"]), "{k}");
+        }
+        if k.ends_with("_encryption_enc_values_supported") {
+            assert_eq!(v, &serde_json::json!(["A256GCM"]), "{k}");
+        }
+    }
+    let text = doc.to_string().to_ascii_lowercase();
+    for pq in ["ml-kem", "hpke"] {
+        assert!(!text.contains(pq), "{pq}");
+    }
+}
