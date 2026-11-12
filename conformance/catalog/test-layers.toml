@@ -56,10 +56,12 @@ rules = ["SA-42", "U56"]
 
 [[layer]]
 id = "SA-T5"
-content = "Model checking: TLA+ sequencer, recovery and handover models; Tamarin and ProVerif protocol models"
+content = "Model checking: TLA+ sequencer, recovery and handover models (TLC); the Tamarin and ProVerif protocol models are planned in the formal manifest"
 cadence = "pr"
 phase = 3
-status = "planned"
+recipe = "tla"
+job = "ci/formal"
+status = "active"
 rules = ["CR-48"]
 
 [[layer]]
@@ -67,7 +69,9 @@ id = "SA-T6"
 content = "Kani harnesses on the no_std Kernel, targeted on PRs"
 cadence = "pr"
 phase = 2
-status = "planned"
+recipe = "kani"
+job = "ci/formal"
+status = "active"
 rules = ["MD-15"]
 
 [[layer]]
