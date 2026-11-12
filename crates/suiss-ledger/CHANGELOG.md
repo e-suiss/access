@@ -1,8 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+Released with `esuiss-access-kernel` 0.6.0 (Kernel 0.6.0 semantics: catalog 8, `domain_handover` and `domain_recover` with the recovery entry and rollback guard, the pre-recovery nonce closure, superseded-at bindings, version activation and algorithm retirement, self-anchor narrowing, conditional `anchor_transfer`, DistinctSurface surface paths, and the witness head the rollback guard reads). The Kernel's public structs gained fields, so the minor version moves. 0.5.0 was never published.
+
+### Added
+
+- RFC 9162 inclusion and consistency proof builders, C2SP hash tiles and the add-checkpoint body, the checkpoint `Cadence`, the witness `LogState` (base check, equivocation, fence), and the Replica Mirror frames with the signed replica ack and a `Follower`.
+
 ## 0.5.0
 
-Released with `esuiss-access-kernel` 0.5.0 (Kernel 0.4.1 semantics: catalog 7 types, `policy.set` structural polarity, the closed `derived.*` values, policy defaults, compatibility mappings, `DistinctSurface` and the actor Party exclusion, and a Mandate decided by its window, while-conditions, budget and pin). The Kernel's public structs gained fields, so the minor version moves.
+Never published (OP-158 m.21 (d)). Prepared with `esuiss-access-kernel` 0.5.0 (Kernel 0.4.1 semantics: catalog 7 types, `policy.set` structural polarity, the closed `derived.*` values, policy defaults, compatibility mappings, `DistinctSurface` and the actor Party exclusion, and a Mandate decided by its window, while-conditions, budget and pin). The Kernel's public structs gained fields, so the minor version moves.
 
 - Feature `doorbell`: the NATS JetStream doorbell. `Ring` and its CBOR payload `{domain, pos, idx}`, the durability `Gate`, the `Bell` trait, and a small NATS client (`client::Publisher` with the JetStream publish acknowledgement, `client::Listener`, `publish`, `listen`) over TLS 1.3 with a client certificate. Feature `testing`: an in-process NATS twin and a test PKI.
 

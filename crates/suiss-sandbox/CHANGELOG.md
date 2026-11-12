@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+Released with `esuiss-access-kernel` 0.6.0 (Kernel 0.6.0 semantics: catalog 8, `domain_handover` and `domain_recover` with the recovery entry and rollback guard, the pre-recovery nonce closure, superseded-at bindings, version activation and algorithm retirement, self-anchor narrowing, conditional `anchor_transfer`, DistinctSurface surface paths, and the witness head the rollback guard reads). The Kernel's public structs gained fields, so the minor version moves. 0.5.0 was never published.
 
 - `SecretBackend`, `SecretMemory::with_backend`, `SecretArena` and `SecretSlot`: key memory from a named backend (`memfd_secret` or locked, undumpable pages), allocated once and cut into slots.
 - `memlock_limit`: the process's `RLIMIT_MEMLOCK`.
 
 ## 0.5.0
 
-Released with `esuiss-access-kernel` 0.5.0 (Kernel 0.4.1 semantics: catalog 7 types, `policy.set` structural polarity, the closed `derived.*` values, policy defaults, compatibility mappings, `DistinctSurface` and the actor Party exclusion, and a Mandate decided by its window, while-conditions, budget and pin). The Kernel's public structs gained fields, so the minor version moves.
+Never published (OP-158 m.21 (d)). Prepared with `esuiss-access-kernel` 0.5.0 (Kernel 0.4.1 semantics: catalog 7 types, `policy.set` structural polarity, the closed `derived.*` values, policy defaults, compatibility mappings, `DistinctSurface` and the actor Party exclusion, and a Mandate decided by its window, while-conditions, budget and pin). The Kernel's public structs gained fields, so the minor version moves.
 
 - `Profile::ParserSupervisor`: a supervisor of parser workers. Unix sockets only, no network; it may start its workers, kill them with `SIGKILL` and make the restrict-only calls their own lockdown needs.
 - `Profile::ParserWorker` may set its own CPU time limit, so a long-lived worker can bound each request.
