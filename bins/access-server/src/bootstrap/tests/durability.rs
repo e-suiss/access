@@ -5,6 +5,7 @@ mod checkpoint;
 mod export;
 mod failover;
 mod handover;
+mod hybrid;
 mod recovery;
 mod replay;
 mod replica;
