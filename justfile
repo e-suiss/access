@@ -585,11 +585,12 @@ ctgrind:
 ct-asm *args:
     python3 -I scripts/ct_asm.py {{args}}
 
-# OP-112 m.4, OP-119 m.6, OP-159 m.3 (v)
+# OP-112 m.4, OP-119 m.6, OP-159 m.3 (n), (v)
 f0-random count="10000" seed="1" summary="":
     rm -rf target/random-vectors
     ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --lib random_inputs_for_f0 -- --ignored
     ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --test lean_drt random_algebra_for_lean -- --ignored --exact
+    ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_ML_DSA_COUNT=$(( {{count}} / 1000 + 1 )) ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p access-crypto --test differential ml_dsa_random_inputs_for_f0 -- --ignored
     target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors {{ if summary != "" { "--summary " + quote(summary) } else { "" } }}
 

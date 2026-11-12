@@ -170,4 +170,104 @@ mod vectors {
         }
         assert!(n > 600, "{n}");
     }
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn below(&mut self, n: usize) -> usize {
+            usize::try_from(self.next().checked_rem(u64::try_from(n).unwrap()).unwrap()).unwrap()
+        }
+
+        fn fill(&mut self, out: &mut [u8]) {
+            for b in out {
+                *b = self.next().to_le_bytes()[0];
+            }
+        }
+    }
+
+    fn hex(b: &[u8]) -> String {
+        use std::fmt::Write as _;
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    }
+
+    // RR-37, OP-159 m.3 (n): random ML-DSA cases labelled by aws-lc, for F0 in the nightly DRT
+    #[test]
+    #[ignore = "writes vectors for the nightly DRT under ACCESS_RANDOM_VECTORS"]
+    fn ml_dsa_random_inputs_for_f0() {
+        use aws_lc_rs::signature::{
+            KeyPair as _, ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair,
+        };
+        let Some(dir) = std::env::var_os("ACCESS_RANDOM_VECTORS") else {
+            return;
+        };
+        let count: usize = std::env::var("ACCESS_RANDOM_ML_DSA_COUNT")
+            .ok()
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(100);
+        let seed: u64 = std::env::var("ACCESS_RANDOM_SEED")
+            .ok()
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(0x005e_edac_ce55)
+            | 1;
+        let mut r = Rng(seed);
+        let algs = [
+            ("ML-DSA-44", &ML_DSA_44_SIGNING),
+            ("ML-DSA-65", &ML_DSA_65_SIGNING),
+            ("ML-DSA-87", &ML_DSA_87_SIGNING),
+        ];
+        let mut cases = Vec::new();
+        for i in 0..count {
+            let (name, alg) = algs[r.below(algs.len())];
+            let mut key_seed = vec![0x5a; 32];
+            r.fill(&mut key_seed);
+            let pair = PqdsaKeyPair::from_seed(alg, &key_seed).unwrap();
+            let mut message = vec![0x5a; r.below(64)];
+            r.fill(&mut message);
+            let mut sig = vec![0x5a; alg.signature_len()];
+            let n = pair.sign(&message, &mut sig).unwrap();
+            sig.truncate(n);
+            let pk = pair.public_key().as_ref().to_vec();
+            match r.below(5) {
+                0 => {}
+                1 => {
+                    let at = r.below(sig.len());
+                    sig[at] ^= 1 << r.below(8);
+                }
+                2 => {
+                    let at = sig.len().saturating_sub(r.below(90)).saturating_sub(1);
+                    sig[at] = r.next().to_le_bytes()[0];
+                }
+                3 => message.push(0),
+                _ => sig.truncate(r.below(sig.len())),
+            }
+            let result = if ml_dsa(name, &pk, &message, &sig) {
+                "accept"
+            } else {
+                "reject"
+            };
+            cases.push(format!(
+                "  {{\"id\": \"r{i}\", \"algorithm\": \"{name}\", \"public_key\": \"{}\", \"message\": \"{}\", \"signature\": \"{}\", \"result\": \"{result}\"}}",
+                hex(&pk),
+                hex(&message),
+                hex(&sig)
+            ));
+        }
+        let json = format!(
+            "{{\n \"rule\": \"CR-51\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.ml_dsa\",\n \"seed\": {seed},\n \"cases\": [\n{}\n ]\n}}\n",
+            cases.join(",\n")
+        );
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ml-dsa-random.json"), json).unwrap();
+    }
 }
