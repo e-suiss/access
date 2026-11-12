@@ -139,6 +139,25 @@ fn process_rung(
     signer: Option<PathBuf>,
     bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
 ) -> (Arc<TestDomains>, TestPlane) {
+    process_analysed(
+        db,
+        keys,
+        holder,
+        signer,
+        bell,
+        Arc::new(access_authority_core::ports::NoAnalysis),
+    )
+}
+
+/// [`process_rung`] with `analysis` behind the `policy.set` analysis port (OP-159 m.3 (aa)).
+fn process_analysed(
+    db: &TestDb,
+    keys: KeyStore,
+    holder: &str,
+    signer: Option<PathBuf>,
+    bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+    analysis: Arc<dyn access_authority_core::ports::PolicyAnalysis>,
+) -> (Arc<TestDomains>, TestPlane) {
     let actors = ActorBindings::default();
     let domains = Domains::new(Setup {
         sequencer: db.sequencer.clone(),
@@ -152,7 +171,7 @@ fn process_rung(
         deriver: db.deriver.clone(),
         signer,
         api_base: String::from("https://access.test"),
-        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
+        analysis,
     });
     let domains = Arc::new(match bell {
         Some(b) => domains.with_bell(b),
@@ -194,6 +213,23 @@ impl World {
         bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
         db: TestDb,
     ) -> (Self, Option<AuthoritySigner>) {
+        Self::open_analysed(
+            name,
+            with_signer,
+            bell,
+            db,
+            Arc::new(access_authority_core::ports::NoAnalysis),
+        )
+    }
+
+    /// [`World::open_on`] with `analysis` behind the `policy.set` analysis port (OP-159 m.3 (aa)).
+    fn open_analysed(
+        name: &str,
+        with_signer: bool,
+        bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+        db: TestDb,
+        analysis: Arc<dyn access_authority_core::ports::PolicyAnalysis>,
+    ) -> (Self, Option<AuthoritySigner>) {
         let (module, label) = hsm(name);
         let pin = Secret::new(String::from(PIN));
         let open = || KeyStore::open(&module, &label, &pin).unwrap();
@@ -203,7 +239,8 @@ impl World {
         } else {
             (None, None)
         };
-        let (domains, plane) = process_rung(&db, open(), "bootstrap-test", signer, bell);
+        let (domains, plane) =
+            process_analysed(&db, open(), "bootstrap-test", signer, bell, analysis);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let identity_signer = identity_signer(name);
@@ -2721,3 +2758,5 @@ mod read_path;
 mod placement;
 // OP-159 m.4 (b) (J8)
 mod aitm;
+// OP-159 m.4 (b) (J6)
+mod solver;

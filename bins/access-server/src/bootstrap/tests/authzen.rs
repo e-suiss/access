@@ -47,7 +47,21 @@ pub(super) async fn pdp(label: &str) -> Pdp {
 /// [`pdp`] whose realm has the CT3 time-lock `ct3_delay_s`; a test domain's is zero
 /// (OP-153 m.7 (a)).
 pub(super) async fn pdp_timed(label: &str, ct3_delay_s: Option<u64>) -> Pdp {
-    let (w, signer) = World::open(label, true).await;
+    pdp_with(
+        label,
+        ct3_delay_s,
+        Arc::new(access_authority_core::ports::NoAnalysis),
+    )
+    .await
+}
+
+/// [`pdp_timed`] with `analysis` behind the `policy.set` analysis port (OP-159 m.3 (aa)).
+pub(super) async fn pdp_with(
+    label: &str,
+    ct3_delay_s: Option<u64>,
+    analysis: Arc<dyn access_authority_core::ports::PolicyAnalysis>,
+) -> Pdp {
+    let (w, signer) = World::open_analysed(label, true, None, fresh().await.unwrap(), analysis);
     let signer = signer.unwrap();
     schedule(&signer);
     let (tenant, created) = w.admin_realm_timed(SLUG, ct3_delay_s).await;

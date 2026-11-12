@@ -234,6 +234,12 @@ jobs:
           SOFTHSM2_CONF="$(scripts/softhsm-local.sh)"
           export SOFTHSM2_CONF
           cargo nextest run --locked -p access-server --run-ignored only --no-tests=fail -E 'test(the_pinned_solver_answers_on_the_commit_paths_schema)'
+      # OP-157 m.8 (a), OP-159 m.3 (aa), Ek B 5660
+      - name: The sibling access-policy-solver answers with the pinned cvc5
+        run: |
+          ACCESS_CVC5="$(scripts/cvc5-fetch.sh target/cvc5)"
+          export ACCESS_CVC5
+          cargo nextest run --locked -p access-policy-solver --run-ignored only --no-tests=fail
       - name: Seccomp kills reported by the kernel
         if: failure()
         run: sudo dmesg | grep -E 'type=1326|seccomp' || true

@@ -367,6 +367,10 @@ impl Transparency {
 pub(crate) struct Policy {
     /// The cvc5 executable.
     pub(crate) analyzer: Option<PathBuf>,
+    /// The `access-policy-solver` socket (OP-159 m.3 (aa)); exclusive with `analyzer`.
+    pub(crate) solver: Option<PathBuf>,
+    /// The uid that must own the solver socket; by default the owner of its directory.
+    pub(crate) solver_owner: Option<u32>,
 }
 
 /// Where `access-breakglass` leaves this cell's signed directives, and the key they verify under.
