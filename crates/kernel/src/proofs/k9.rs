@@ -13,7 +13,7 @@ pub(crate) const DEEPEST: usize = MAX_LINEAGE + 1;
 /// and ALLOW on an active, covering lineage when the steps suffice.
 pub(crate) fn lineage_walk_terminates(n: usize, fuel: u64) -> bool {
     let n = n.min(DEEPEST);
-    match commit(&basis(vec![hop(); n]), fuel) {
+    match commit(&basis(std::iter::repeat_with(hop).take(n).collect()), fuel) {
         Err(Rejection::Input) => n > MAX_LINEAGE || n == 0,
         Err(Rejection::Fuel) => n <= MAX_LINEAGE && fuel < 10_000,
         Ok(d) => (1..=MAX_LINEAGE).contains(&n) && d.outcome == Outcome::Allow,

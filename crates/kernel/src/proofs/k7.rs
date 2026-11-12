@@ -28,7 +28,7 @@ pub(crate) const NAMES: [&str; 8] = [
     "ML-DSA-65",
     "ML-DSA-87",
     "none",
-    "HS256",
+    "ES384",
     "EdDSA",
 ];
 
