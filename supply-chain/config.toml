@@ -152,6 +152,11 @@ criteria = "safe-to-deploy"
 version = "1.5.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.aws-lc-fips-sys]]
+version = "0.14.4"
+criteria = "safe-to-deploy"
+notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
+
 [[exemptions.aws-lc-rs]]
 version = "1.18.2"
 criteria = "safe-to-deploy"
@@ -183,6 +188,11 @@ criteria = "safe-to-deploy"
 [[exemptions.bincode-next]]
 version = "3.1.1"
 criteria = "safe-to-run"
+
+[[exemptions.bindgen]]
+version = "0.73.2"
+criteria = "safe-to-deploy"
+notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
 
 [[exemptions.bitflags]]
 version = "2.13.2"
@@ -236,6 +246,11 @@ criteria = "safe-to-deploy"
 version = "0.7.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.cexpr]]
+version = "0.6.0"
+criteria = "safe-to-deploy"
+notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
+
 [[exemptions.cfg-if]]
 version = "1.0.5"
 criteria = "safe-to-deploy"
@@ -243,6 +258,11 @@ criteria = "safe-to-deploy"
 [[exemptions.chrono]]
 version = "0.4.45"
 criteria = "safe-to-deploy"
+
+[[exemptions.clang-sys]]
+version = "1.9.1"
+criteria = "safe-to-deploy"
+notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
 
 [[exemptions.clap]]
 version = "4.6.7"
@@ -957,6 +977,11 @@ criteria = "safe-to-deploy"
 [[exemptions.pretty]]
 version = "0.12.5"
 criteria = "safe-to-deploy"
+
+[[exemptions.prettyplease]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
 
 [[exemptions.primefield]]
 version = "0.14.0"

@@ -21,6 +21,8 @@ pub mod dit;
 pub mod ecdh_es;
 #[cfg(feature = "aead")]
 pub mod envelope;
+#[cfg(feature = "aws-lc")]
+pub mod fips;
 #[cfg(feature = "verify")]
 pub mod note;
 #[cfg(feature = "pkcs11")]

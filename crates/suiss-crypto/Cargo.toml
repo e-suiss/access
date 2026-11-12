@@ -19,6 +19,8 @@ aws-lc = ["std", "dep:aws-lc-rs", "dep:secrecy", "dep:subtle", "dep:zeroize"]
 aead = ["aws-lc"]
 signer = ["aws-lc"]
 pkcs11 = ["signer", "aead", "dep:cryptoki"]
+# OP-159 m.3 (r), (rr): the validated AWS-LC FIPS module; built on CI only (Go and CMake)
+fips = ["aws-lc", "aws-lc-rs/fips"]
 # OP-135 m.4: the in-process KEK, for tests of other crates
 testing = []
 
