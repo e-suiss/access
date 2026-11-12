@@ -389,6 +389,7 @@ async fn disclosure_needs_the_data_owners_contribution_and_declassify_is_ct3() {
             Some(&payload),
             false,
             None,
+            false,
         )
     };
     assert_eq!(tier(access_kernel::contribution::DISCLOSE), Tier::Ct2);

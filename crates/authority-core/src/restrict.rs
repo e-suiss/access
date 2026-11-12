@@ -47,6 +47,7 @@ action "exercise" appliesTo {
       projection_issue_count: Long,
       open_offline_paps: Long,
       threshold_adjacent: Long,
+      payee_seen: Long,
     },
   }
 };"#;

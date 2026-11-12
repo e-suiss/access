@@ -70,6 +70,7 @@ fn an_adjacent_exercise_counts_itself_and_draws_its_counters() {
     let party = Id([1; 16]);
     let now = 3 * WINDOW_MS + 5;
     let counted = Counted {
+        payee: None,
         consumption: 1_000,
         adjacent: 2,
         transitions: None,
@@ -102,6 +103,7 @@ fn a_new_holder_counts_once_per_episode() {
     let party = Id([1; 16]);
     let grant = Id([2; 16]);
     let fresh = Counted {
+        payee: None,
         transitions: Some((grant, 40, 5, false)),
         ..Counted::default()
     };
@@ -112,6 +114,7 @@ fn a_new_holder_counts_once_per_episode() {
             .contains(&(transition_seen_key(&grant, &party, 40), 1))
     );
     let seen = Counted {
+        payee: None,
         transitions: Some((grant, 40, 6, true)),
         ..Counted::default()
     };

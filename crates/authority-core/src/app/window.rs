@@ -126,6 +126,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
         }
+        // OP-159 m.3 (m)
+        if let Some(payee) = access_kernel::tier::payee(&req.intent, req.payload.as_ref()) {
+            let seen = self.counter(&derived::payee_seen_key(&payee)).await? > 0;
+            counted.payee = Some((payee, seen));
+        }
         let mut window = derived::window(&req.intent, party.as_ref(), &counted, now);
         let v = &mut window.values;
         v.mapping_pin_age_s = NONE;

@@ -23,13 +23,16 @@ use access_kernel::schema::{ActionSchema, Reversibility};
 use access_kernel::tier::Tier;
 
 /// The consequence tier of an intent (§13.7.1) with the information-flow floors (SEC30, IFC
-/// Option B): a `disclose` contribution is at least CT2 and a `declassify` one CT3.
+/// Option B): a `disclose` contribution is at least CT2 and a `declassify` one CT3; and the
+/// new-payee floor: a payment to a payee the domain has not paid is at least CT2 (OP-159
+/// m.3 (m)).
 #[must_use]
 pub fn tier_of(
     intent: &access_kernel::intent::IntentEnvelope,
     payload: Option<&access_kernel::meta::Payload>,
     expansion: bool,
     schema: Option<&ActionSchema>,
+    payee_seen: bool,
 ) -> Tier {
     use access_kernel::contribution::{DECLASSIFY, DISCLOSE};
     let tier = access_kernel::tier::of(intent, payload, expansion, schema);
@@ -42,7 +45,9 @@ pub fn tier_of(
         }
         _ => Tier::Ct0,
     };
-    tier.max(floor)
+    tier.max(floor).max(access_kernel::tier::payee_floor(
+        intent, payload, payee_seen,
+    ))
 }
 
 /// The ceiling's floors for an intent of `tier` on `schema`, with or without a Mandate the
@@ -408,7 +413,8 @@ mod tests {
                 "rollback_guard",
                 "projection_issue_count",
                 "open_offline_paps",
-                "threshold_adjacent"
+                "threshold_adjacent",
+                "payee_seen"
             ]
         );
         let opaque: BTreeMap<String, access_kernel::digest::Digest> = BTreeMap::new();

@@ -34,6 +34,9 @@ mod quota;
 // OP-158 m.17 (g)
 #[path = "commit/sync_derived.rs"]
 mod sync_derived;
+// OP-159 m.3 (m)
+#[path = "commit/payee.rs"]
+mod payee;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;

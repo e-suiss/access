@@ -1,4 +1,5 @@
-//! The closed `derived.*` whitelist (§16.5, RT26, SI-8, OP-157 m.3 (o)): eleven values computed
+//! The closed `derived.*` whitelist (§16.5, RT26, SI-8, OP-157 m.3 (o), OP-159 m.3 (m)): twelve
+//! values computed
 //! from recorded state and SYNC-DERIVED window counters, given to the restriction context as its
 //! `derived` record and cited in the decision record's `StateBasis`.
 //!
@@ -15,8 +16,8 @@ use access_kernel::model::Id;
 use access_kernel::tier::{CT1_MAX, CT2_MAX, THRESHOLD_UNIT};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
-/// The whitelist, in the order of §16.5 (RT26).
-pub const NAMES: [&str; 11] = [
+/// The whitelist, in the order of §16.5 (RT26), with `payee_seen` last (OP-159 m.3 (m)).
+pub const NAMES: [&str; 12] = [
     "party_consumption",
     "open_require_action",
     "selector_transitions",
@@ -28,6 +29,7 @@ pub const NAMES: [&str; 11] = [
     "projection_issue_count",
     "open_offline_paps",
     "threshold_adjacent",
+    "payee_seen",
 ];
 
 /// The bucket length of the window counters, 24 hours (§13.7.6).
@@ -39,7 +41,7 @@ pub const ISSUE_WINDOW_MS: u64 = 3_600_000;
 /// The value of an age whose input is absent: no Claim relied on, no mapping used.
 pub const NONE: i64 = -1;
 
-/// The eleven values of one request (§16.5 whitelist 1–11).
+/// The twelve values of one request (§16.5 whitelist 1–11, OP-159 m.3 (m)).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Derived {
     /// 1. The actor Party's consumption in the window in the threshold unit, this request
@@ -72,6 +74,9 @@ pub struct Derived {
     /// 11. Threshold-adjacent Exercises to this target in the window, this one included, when
     ///     this one is adjacent; 0 otherwise (§13.7.6).
     pub threshold_adjacent: i64,
+    /// 12. 1 when the domain has committed an ALLOW of a payment to this payment's payee, else
+    ///     0; 0 for anything that is not a payment, and when it cannot be read (OP-159 m.3 (m)).
+    pub payee_seen: i64,
 }
 
 fn long(n: u64) -> i64 {
@@ -94,12 +99,13 @@ impl Derived {
             projection_issue_count: 0,
             open_offline_paps: 0,
             threshold_adjacent: 0,
+            payee_seen: 0,
         }
     }
 
     /// Name and value, in [`NAMES`] order.
     #[must_use]
-    pub const fn entries(&self) -> [(&'static str, i64); 11] {
+    pub const fn entries(&self) -> [(&'static str, i64); 12] {
         [
             (NAMES[0], self.party_consumption),
             (NAMES[1], self.open_require_action),
@@ -112,6 +118,7 @@ impl Derived {
             (NAMES[8], self.projection_issue_count),
             (NAMES[9], self.open_offline_paps),
             (NAMES[10], self.threshold_adjacent),
+            (NAMES[11], self.payee_seen),
         ]
     }
 
@@ -170,7 +177,8 @@ impl Derived {
                 7 => &mut out.rollback_guard,
                 8 => &mut out.projection_issue_count,
                 9 => &mut out.open_offline_paps,
-                _ => &mut out.threshold_adjacent,
+                10 => &mut out.threshold_adjacent,
+                _ => &mut out.payee_seen,
             };
             *slot = n;
         }
@@ -250,6 +258,13 @@ pub fn adjacent_key(party: &Id, target: &Digest, bucket: u64) -> Vec<u8> {
     ])
 }
 
+/// Marks that the domain committed an ALLOW of a payment to `payee` (whitelist 12, OP-159
+/// m.3 (m)).
+#[must_use]
+pub fn payee_seen_key(payee: &Digest) -> Vec<u8> {
+    key(vec![Value::text(NAMES[11]), payee.to_value()])
+}
+
 /// The intent's amounts in the threshold unit: their sum and their largest.
 #[must_use]
 pub fn amounts(intent: &IntentEnvelope) -> (u64, u64) {
@@ -307,12 +322,20 @@ pub struct Counted {
     /// Whitelist 3 over both buckets, with whether this episode already counted, when the actor
     /// is a new holder of a predicate Grant.
     pub transitions: Option<(Id, u64, u64, bool)>,
+    /// Whitelist 12: the payee of a payment, with whether it was seen (OP-159 m.3 (m)).
+    pub payee: Option<(Digest, bool)>,
 }
 
-/// The window values and increments of a request by `party` (whitelist 1, 3, 11).
+/// The window values and increments of a request by `party` (whitelist 1, 3, 11, 12).
 #[must_use]
 pub fn window(intent: &IntentEnvelope, party: Option<&Id>, counted: &Counted, now: u64) -> Window {
     let mut out = Window::default();
+    if let Some((payee, seen)) = counted.payee {
+        out.values.payee_seen = i64::from(seen);
+        if !seen {
+            out.increments.push((payee_seen_key(&payee), 1));
+        }
+    }
     let Some(party) = party else {
         return out;
     };

@@ -2198,6 +2198,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         req.payload.as_ref(),
         expansion,
         schema.as_deref(),
+        derived.payee_seen > 0,
     );
     // G29, TN-93, TN-71
     let (breakglass, self_anchor) = breakglass_facts(snapshot, req);

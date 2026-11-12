@@ -573,7 +573,8 @@ state-basis = {
 
 derived-name = "party_consumption" / "open_require_action" / "selector_transitions" /
   "cited_instance_state" / "mapping_pin_age_s" / "claim_age_s" / "unreported_contracts" /
-  "rollback_guard" / "projection_issue_count" / "open_offline_paps" / "threshold_adjacent"
+  "rollback_guard" / "projection_issue_count" / "open_offline_paps" / "threshold_adjacent" /
+  "payee_seen"
 
 consumption = {
   ? draws: [+ [key: state-key, amount: uint]],

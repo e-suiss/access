@@ -653,13 +653,16 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             mappings: &pinned,
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
+        let payee_seen = derived.payee_seen > 0;
         let tier = crate::requirements::tier_of(
             &req.intent,
             req.payload.as_ref(),
             evaluation.expansion,
             evaluation.action.as_deref(),
+            payee_seen,
         );
-        self.tiered(req, &mut evaluation, opened, at).await?;
+        self.tiered(req, &mut evaluation, opened, at, payee_seen)
+            .await?;
         self.recovery_rules(req, actor, &mut evaluation, tier, at)
             .await?;
         self.throttled(&mut evaluation, actor, opened, at).await?;
@@ -1063,12 +1066,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         evaluation: &mut Evaluation,
         open: bool,
         now: u64,
+        payee_seen: bool,
     ) -> Result<(), CoreError> {
         let tier = crate::requirements::tier_of(
             &req.intent,
             req.payload.as_ref(),
             evaluation.expansion,
             evaluation.action.as_deref(),
+            payee_seen,
         );
         let validity = &req.intent.validity;
         let span = validity.until.saturating_sub(validity.from);
@@ -1698,9 +1703,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             frame.widened = raised.is_some();
             frame.mappings = &pinned;
             let (mut evaluation, snapshot) = Box::pin(self.passes(req, &frame)).await?;
-            let (tier, render, render_bytes) = rendered(req, &evaluation)?;
+            let payee_seen = window.values.payee_seen > 0;
+            let (tier, render, render_bytes) = rendered(req, &evaluation, payee_seen)?;
             self.delegation_gate(req, &mut evaluation).await?;
-            self.tiered(req, &mut evaluation, open, now).await?;
+            self.tiered(req, &mut evaluation, open, now, payee_seen)
+                .await?;
             self.pre_recovery(inc, &mut evaluation, open).await?;
             // SEC20, OP-158 m.7 (c)
             let given: Vec<_> = resolved
@@ -2159,12 +2166,14 @@ fn exercise_draws(evaluation: &Evaluation) -> Vec<meta::ExerciseDraw> {
 fn rendered(
     req: &Request,
     evaluation: &Evaluation,
+    payee_seen: bool,
 ) -> Result<(access_kernel::tier::Tier, Digest, Vec<u8>), CoreError> {
     let tier = crate::requirements::tier_of(
         &req.intent,
         req.payload.as_ref(),
         evaluation.expansion,
         evaluation.action.as_deref(),
+        payee_seen,
     );
     let render = access_kernel::render::of(
         evaluation.action.as_deref(),
