@@ -97,3 +97,11 @@ organisation = "Acme Security"
 realm = "acme"
 name = "local-review"
 period_days = 90
+
+# OP-159 m.4 (a): the sample realm's post-quantum signing profile, opened by its own
+# `idp.realm.signing_profile` and `idp.realm.kex_share` Exercises; the Signing screen's `@live`
+# spec reads it. The summary says `pq_profile` (realm, profile, kex_share).
+[pq_profile]
+realm = "acme"
+profile = "ml-dsa-65"
+kex_share = "optimistic"

@@ -747,6 +747,8 @@ pub(crate) struct Plan {
     pub(crate) support_operator: Option<governance::SupportOperatorPlan>,
     pub(crate) breakglass_account: Option<governance::BreakglassPlan>,
     pub(crate) review_schedule: Option<governance::ReviewPlan>,
+    /// OP-159 m.4 (a)
+    pub(crate) pq_profile: Option<pq_profile::PqProfilePlan>,
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
@@ -827,7 +829,7 @@ impl Plan {
         }
         .check(&file.tenants)?;
         // OP-159 m.4 (a)
-        pq_profile::check(file.pq_profile.as_ref(), &file.tenants)?;
+        let pq_profile = pq_profile::check(file.pq_profile, &file.tenants)?;
         // OP-157 m.4 (a), m.6 (i)
         let (support_operator, breakglass_account, review_schedule) = governance::Fixtures {
             support_operator: file.support_operator,
@@ -898,6 +900,7 @@ impl Plan {
             support_operator,
             breakglass_account,
             review_schedule,
+            pq_profile,
         })
     }
 }
@@ -1121,6 +1124,9 @@ pub(crate) struct Summary {
     /// Present when the plan names an access review (OP-157 m.6 (i)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) review_schedule: Option<governance::ReviewOut>,
+    /// Present when the plan names the post-quantum signing profile (OP-159 m.4 (a)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) pq_profile: Option<pq_profile::PqProfileOut>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -1390,6 +1396,7 @@ where
         let mut test_user = None;
         let mut compromise = None;
         let mut sample_agent = None;
+        let mut pq_profile = None;
         let (mut support_operator, mut breakglass_account, mut review_schedule) =
             (None, None, None);
         // OP-149 m.26 (c)
@@ -1550,6 +1557,13 @@ where
                         .await?,
                 );
             }
+            // OP-159 m.4 (a)
+            if let Some(p) = plan.pq_profile.as_ref().filter(|p| p.realm == *slug) {
+                pq_profile = Some(
+                    self.pq_profile(&admin, (tenant, realm), (domain, &root), p)
+                        .await?,
+                );
+            }
             let mut out = realm_out(
                 &ids,
                 (tenant, realm, domain),
@@ -1576,6 +1590,7 @@ where
             support_operator,
             breakglass_account,
             review_schedule,
+            pq_profile,
         })
     }
 

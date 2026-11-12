@@ -417,6 +417,7 @@ fn plan() -> Plan {
         support_operator: None,
         breakglass_account: None,
         review_schedule: None,
+        pq_profile: None,
     }
 }
 
@@ -2769,3 +2770,5 @@ mod placement;
 mod aitm;
 // OP-159 m.4 (b) (J6)
 mod solver;
+// OP-159 m.4 (b) (J3)
+mod pq_fixture;
