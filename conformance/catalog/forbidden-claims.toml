@@ -1307,3 +1307,126 @@ phrases = [
 negation = true
 sources = ["CR-15", "CR-34", "CR-36", "§10.1"]
 honest = "The FIPS profile is chosen per realm or domain; operational keys live in protected memory where the kernel supports it, and user-keyed data is sealed with keys on the user's devices."
+
+# OP-159 m.3 (qq), m.4 (a)
+
+[[claim]]
+id = "j1-one-signature-enough"
+scope = "all"
+phrases = ["either signature is enough", "composite signatures supported", "accepts the classical signature alone"]
+negation = true
+sources = ["CR-42", "SAI-44", "OP-159 m.3 (c)", "OP-159 m.3 (e)"]
+honest = "Under the both policy a verifier requires both the classical and the ML-DSA signature; composite identifiers are refused."
+
+[[claim]]
+id = "j1-ml-dsa-everywhere"
+scope = "all"
+phrases = ["the wasm verifier checks ml-dsa", "mobile verifiers accept ml-dsa", "ml-dsa on every verifier"]
+negation = true
+sources = ["CR-41", "OP-159 m.3 (c)"]
+honest = "The Wasm and mobile verifiers refuse ML-DSA artefacts and declare it in their Verifier Profile; a pq-only domain's artefacts are not accepted there."
+
+[[claim]]
+id = "j2-cnsa-compliant"
+scope = "all"
+phrases = ["cnsa 2.0 compliant", "cnsa 2.0 compliance", "cnsa-compliant"]
+negation = true
+sources = ["CR-1", "OP-159 m.3 (e)"]
+honest = "The ML-DSA-87 profile signs with ML-DSA-87; the digest base stays SHA-256, and no CNSA 2.0 conformance is claimed."
+
+[[claim]]
+id = "j2-history-resigned"
+scope = "all"
+phrases = ["records are re-signed", "history is re-signed", "old records become post-quantum"]
+negation = true
+sources = ["CR-45", "OP-159 m.3 (f)", "OP-159 m.3 (g)"]
+honest = "Records are never re-signed; a post-quantum re-anchor checkpoint covers them for verifiers that pinned its anchor before the break."
+
+[[claim]]
+id = "j3-post-quantum-login"
+scope = "all"
+phrases = ["post-quantum login", "post-quantum sign-in", "post-quantum tokens for everyone"]
+negation = true
+sources = ["HL-19", "OP-159 m.3 (o)"]
+honest = "ML-DSA tokens are issued only to clients that register for them; sign-in credentials and passkeys stay classical."
+
+[[claim]]
+id = "j3-fips-validated"
+scope = "all"
+phrases = ["fips 140-3 validated", "fips-validated build", "fips 140-3 certified"]
+allow = ["-fips image", "fips build"]
+negation = true
+sources = ["CR-15", "CR-44", "HL-27", "OP-159 m.3 (r)"]
+honest = "Only the FIPS build runs the validated module; every other build publishes fips_module false."
+
+[[claim]]
+id = "j4-no-side-channels"
+scope = "all"
+phrases = ["no side channels", "side-channel free", "timing-attack proof"]
+negation = true
+sources = ["CR-39", "CR-40", "HL-16", "OP-159 m.3 (s)"]
+honest = "Constant-time points are listed and measured on an isolated runner; padding and DIT reduce leakage, they do not remove it."
+
+[[claim]]
+id = "j4-pq-only-tls"
+scope = "all"
+phrases = ["post-quantum tls only", "classical key exchange is disabled", "pq-only tls"]
+negation = true
+sources = ["CR-12", "OP-159 m.3 (t)"]
+honest = "TLS offers the hybrid X25519MLKEM768 group and keeps the classical groups; the realm's share policy decides only their order."
+
+[[claim]]
+id = "j5-proven-kernel"
+scope = "all"
+phrases = ["the kernel is proven in lean", "lean proves the implementation", "proven kernel"]
+negation = true
+sources = ["CR-48", "CR-50", "OP-159 m.3 (v)"]
+honest = "The Lean model of the constraint algebra is machine-checked and compared with the Kernel by differential testing; the Rust code itself is not proven."
+
+[[claim]]
+id = "j6-formally-verified-access"
+scope = "all"
+phrases = ["formally verified access", "verified by kani", "model-checked system"]
+negation = true
+sources = ["CR-46", "CR-50", "MD-15", "OP-159 m.3 (y)"]
+honest = "Property P of model M is machine-checked (Lean/Kani/TLA+); see scope."
+
+[[claim]]
+id = "j7-bug-free"
+scope = "all"
+phrases = ["fuzzed and bug-free", "fuzzing proves", "memory safety guaranteed"]
+negation = true
+sources = ["SA-59", "MD-2", "OP-159 m.3 (bb)", "OP-159 m.3 (cc)"]
+honest = "Fuzzing, simulation and sanitizers find classes of bugs within their corpus and run time; they prove nothing about inputs they never saw."
+
+[[claim]]
+id = "j9-compliance-guaranteed"
+scope = "all"
+phrases = ["compliance guaranteed", "pci dss compliant", "nis2 compliant", "dora compliant", "asvs certified"]
+negation = true
+sources = ["SA-53", "IDP-9", "OP-159 m.3 (ii)"]
+honest = "A mapping lists which controls the catalog's guarantees and tests back; statutory conformity is not guaranteed."
+
+[[claim]]
+id = "j10-paid-fixes"
+scope = "all"
+phrases = ["security fixes for subscribers only", "fixes only in the paid edition", "security support is a paid add-on"]
+negation = true
+sources = ["B20", "OP-159 m.3 (jj)"]
+honest = "Security fixes ship in the open-source release from main or a release branch; paid support is early notice inside an embargo and help applying fixes."
+
+[[claim]]
+id = "j10-supported-forever"
+scope = "all"
+phrases = ["supported forever", "lifetime security updates", "every version is supported"]
+negation = true
+sources = ["OP-68", "OP-159 m.3 (jj)"]
+honest = "Each major receives security fixes for at least five years from its release; within a major, the last two minors receive them."
+
+[[claim]]
+id = "j11-attestation-proves-device"
+scope = "all"
+phrases = ["attestation proves the device is uncompromised", "attested authenticators cannot be cloned", "post-quantum attestation"]
+negation = true
+sources = ["HL-19", "OP-159 m.3 (ll)"]
+honest = "Attestation names the authenticator model and its certificate chain under the direct policy; it says nothing about the device's later state."
