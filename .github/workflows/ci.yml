@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/v*"]
   pull_request:
 
 permissions: {}
@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read # PI-18
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,6 +46,17 @@ jobs:
       # CR-39 m.5, SA-T13
       - name: Constant-time comparison assembly snapshot (difference = review)
         run: just ct-asm
+      # PI-18, OP-70, OP-159 m.3 (kk)
+      - name: Changes to the layers shared with Work carry the decision label
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/changed.txt"
+          gh api --paginate "repos/$REPOSITORY/issues/$PR/labels" --jq '.[].name' > "$RUNNER_TEMP/labels.txt"
+          python3 -I .github/scripts/decision-label.py "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/labels.txt"
 
   test:
     name: test
