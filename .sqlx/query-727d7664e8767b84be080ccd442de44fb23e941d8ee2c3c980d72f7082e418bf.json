@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT issued_at, size, root, body, sign1, excerpt, reason FROM access.pq_checkpoints\n          WHERE domain_id = $1 AND ($2::bigint IS NULL OR size = $2)\n          ORDER BY issued_at DESC LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "issued_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "issued_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "sign1",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "sign1"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "excerpt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "excerpt"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.pq_checkpoints",
+            "name": "reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "727d7664e8767b84be080ccd442de44fb23e941d8ee2c3c980d72f7082e418bf"
+}

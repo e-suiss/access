@@ -71,6 +71,7 @@ pub mod passkeys;
 pub mod payment;
 pub mod placement;
 pub mod platform;
+pub mod pq_checkpoint;
 pub mod privacy;
 pub mod projections;
 pub mod proxy;

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.witness_pq_cosign\n               (domain_id, issued_at, witness, cosigned_at, sign1)\n             VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aadc8fbb88846216d9bd35bfa7106248d52d10ee63fea1763657ceb49a857ea0"
+}
