@@ -29,6 +29,10 @@ use super::x509::{self, Cert, Reader};
 /// Most certificates in one `x5c` (PD).
 pub(crate) const MAX_CHAIN: usize = 8;
 
+/// Most CRL distribution points one registration fetches (PD); a chain naming more cannot be
+/// read as unrevoked.
+pub const MAX_FETCHES: usize = 8;
+
 /// The formats a `direct` realm verifies (WebAuthn L3 §8). `android-safetynet` was withdrawn
 /// and is not among them.
 pub const FORMATS: [&str; 5] = ["packed", "tpm", "android-key", "apple", "fido-u2f"];
@@ -105,7 +109,7 @@ pub fn revocation_points(object: &AttestationObject<'_>) -> Vec<String> {
             continue;
         };
         for p in points {
-            if !out.iter().any(|o| o == p) {
+            if out.len() < MAX_FETCHES && !out.iter().any(|o| o == p) {
                 out.push(p.to_owned());
             }
         }
