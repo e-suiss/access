@@ -73,7 +73,11 @@ fn binding(superseded: Option<(Digest, Digest)>) -> BindingKey {
         alg: crate::verify::cose::Algorithm::Ed25519,
         key: k,
         scope: BindingScope::Domain,
-        superseded: superseded.map(|(at, cited)| Superseded { at, cited }),
+        superseded: superseded.map(|(at, cited)| Superseded {
+            at,
+            cited,
+            cause: None,
+        }),
     }
 }
 
@@ -248,4 +252,52 @@ fn inclusion_vectors_match() {
         include_str!("../../../../../../conformance/vectors/handover/1/inclusion.json"),
         &json,
     );
+}
+
+// OP-159 m.3 (b), (i)
+#[test]
+fn a_superseded_binding_is_refused_even_with_valid_evidence_until_its_path_is_decided() {
+    let art = Digest([0xa1; 32]);
+    let r0 = record(0, Digest([0xa0; 32]));
+    let r1 = record(1, art);
+    let (h0, h1) = (r0.leaf_hash().unwrap(), r1.leaf_hash().unwrap());
+    let root2 = suiss_crypto::digest::node_hash(&h0, &h1);
+    let text = note(2, root2, true);
+    let path = [h0];
+    let log = Verifier::ed25519("log.example", key(1).verifying_key().to_bytes()).unwrap();
+    let witness = Verifier::cosigner("witness.example", key(2).verifying_key().to_bytes()).unwrap();
+    let witnesses = [witness];
+    let evidence = InclusionEvidence::new(
+        art,
+        Inclusion::new(&r1, &path, &text, None),
+        ORIGIN,
+        &log,
+        &witnesses,
+    );
+    let mut c = super::Case::new();
+    for cause in [
+        None,
+        Some(SupersededCause::ReAnchor),
+        Some(SupersededCause::Handover),
+        Some(SupersededCause::Recovery),
+    ] {
+        c.binding_mut().superseded = Some(Superseded {
+            at: Digest(root2),
+            cited: Digest(root2),
+            cause,
+        });
+        assert_eq!(
+            operational_key(
+                &PureBackend,
+                &c.metadata,
+                &c.domain,
+                &c.excerpt_bytes(),
+                c.usage,
+                c.iat,
+                Some(&evidence),
+            ),
+            Err(KeyScopeError::Superseded),
+            "{cause:?}"
+        );
+    }
 }

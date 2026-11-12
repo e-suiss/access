@@ -280,7 +280,11 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
         let Some((_, ring)) = self.rings.get(&domain) else {
             return Response::Error(String::from("signer-unknown-domain"));
         };
-        let superseded = access_kernel::verify::key_scope::Superseded { at, cited };
+        let superseded = access_kernel::verify::key_scope::Superseded {
+            at,
+            cited,
+            cause: None,
+        };
         match ring.rebound(
             signer,
             generation,

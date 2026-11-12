@@ -85,6 +85,7 @@ impl StatusList {
             excerpt,
             KeyUsage::StatusList,
             iat,
+            None,
         )
         .map_err(ListError::Key)?;
         let verified = verify_sign1(&PureBackend, sign1, &key.key_set(), CWT_CONTENT_TYPE)

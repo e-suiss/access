@@ -170,6 +170,7 @@ impl Case {
             &self.excerpt_bytes(),
             self.usage,
             self.iat,
+            None,
         )
     }
 
@@ -245,6 +246,7 @@ fn scenarios() -> Vec<(&'static str, Case)> {
     c.binding_mut().superseded = Some(Superseded {
         at: d(5),
         cited: d(4),
+        cause: None,
     });
     out.push(("binding-superseded", c));
     let mut c = Case::new();
@@ -301,6 +303,7 @@ fn error_name(e: KeyScopeError) -> String {
         KeyScopeError::Algorithm => "algorithm".into(),
         KeyScopeError::Usage => "usage".into(),
         KeyScopeError::Window => "window".into(),
+        KeyScopeError::PqAnchorMissing => "pq-anchor-missing".into(),
     }
 }
 
@@ -448,6 +451,7 @@ fn metadata_round_trips_and_is_signed_by_a_trusted_binding() {
     stale.binding.values_mut().next().unwrap().superseded = Some(Superseded {
         at: d(5),
         cited: d(4),
+        cause: None,
     });
     let signed = sign1(
         &Signer::Ed(1),
@@ -503,6 +507,67 @@ fn stage13_declarations_round_trip_and_nothing_declared_acknowledges_nothing() {
         entries.push((Value::text("durability"), Value::text("eventual")));
     }
     assert!(DomainMetadata::from_value(&bad).is_err());
+}
+
+// OP-159 m.3 (b), (g), (i), (r), (s)
+#[test]
+fn stage14_declarations_and_cause_round_trip_and_old_metadata_reads_the_same() {
+    let case = Case::new();
+    let plain = case.metadata.to_bytes().unwrap();
+    let old = DomainMetadata::from_bytes(&plain).unwrap();
+    assert_eq!(old.to_bytes().unwrap(), plain);
+    assert_eq!(old.declared.pq_reanchor, None);
+    assert_eq!(old.declared.hosting, None);
+    assert_eq!(old.declared.crypto_profile, None);
+    assert_eq!(old.declared.fips_module, None);
+    let mut m = case.metadata.clone();
+    m.declared.pq_reanchor = Some(PqReanchor::new(4_096, 12 * HOUR, vec!["w2".into()]));
+    m.declared.hosting = Some(Hosting::new(Sharing::Shared, Sharing::Dedicated));
+    m.declared.crypto_profile = Some(CryptoProfile::Fips);
+    m.declared.fips_module = Some(false);
+    for cause in [
+        None,
+        Some(SupersededCause::ReAnchor),
+        Some(SupersededCause::Handover),
+        Some(SupersededCause::Recovery),
+    ] {
+        m.binding.values_mut().next().unwrap().superseded = Some(Superseded {
+            at: d(5),
+            cited: d(4),
+            cause,
+        });
+        let back = DomainMetadata::from_bytes(&m.to_bytes().unwrap()).unwrap();
+        assert_eq!(back, m);
+    }
+    let mut bad = m.to_value();
+    if let Value::Map(entries) = &mut bad {
+        entries.retain(|(k, _)| k != &Value::text("crypto_profile"));
+        entries.push((Value::text("crypto_profile"), Value::text("quantum")));
+    }
+    assert!(DomainMetadata::from_value(&bad).is_err());
+}
+
+// OP-159 m.3 (b), (c), (e), CR-55 m.1
+#[test]
+fn an_ml_dsa_key_and_a_both_policy_are_refused_until_ml_dsa_is_decided() {
+    for alg in [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87] {
+        let public: Vec<u8> = (0..crate::verify::pq::PqAlgorithm::of(alg)
+            .unwrap()
+            .public_key_len())
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect();
+        let mut c = Case::new();
+        c.metadata.algorithms.insert(alg);
+        c.excerpt.key = op_key(PublicKey::MlDsa(alg, public), alg);
+        assert_eq!(c.run(), Err(KeyScopeError::Algorithm), "{alg:?}");
+    }
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Both);
+    assert_eq!(
+        c.run(),
+        Err(KeyScopeError::Algorithm),
+        "one classical signature"
+    );
 }
 
 // CR-58 m.1, m.3, T20, OP-108 m.4

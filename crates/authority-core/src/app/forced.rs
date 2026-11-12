@@ -383,6 +383,7 @@ pub fn take_over(
             b.superseded = Some(access_kernel::verify::key_scope::Superseded {
                 at: Digest(cp.root),
                 cited: Digest(cp.root),
+                cause: None,
             });
             b
         })

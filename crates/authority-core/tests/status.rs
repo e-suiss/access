@@ -252,6 +252,7 @@ async fn a_revoked_family_is_set_in_the_signed_list() {
         p.excerpt.as_deref().unwrap(),
         KeyUsage::StatusList,
         iat,
+        None,
     )
     .unwrap();
     let verified = verify_sign1(&PureBackend, &p.token, &key.key_set(), CWT_CONTENT_TYPE).unwrap();

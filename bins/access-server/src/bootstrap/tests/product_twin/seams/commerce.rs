@@ -99,6 +99,7 @@ async fn commerce_refunds_only_a_refundable_order_and_never_decides_it() {
             scope: meta::AnchorScope::Resource(structural("commerce.merchant", &["m-1"])),
             root: Root::Sole(merchant.party),
             root_terms: BTreeSet::new(),
+            sets: access_kernel::meta::RootSets::default(),
         })
         .await;
     let anchor = meta::object_id(&created, kind::ANCHOR, 0);

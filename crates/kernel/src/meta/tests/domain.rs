@@ -140,6 +140,7 @@ fn handover_vectors_match() {
             anchor: meta_anchor(&DOMAIN),
             root: None,
             root_terms: Some(BTreeSet::new()),
+            sets: None,
         },
     );
     assert!(amended.is_some());

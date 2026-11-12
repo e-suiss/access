@@ -479,6 +479,7 @@ pub fn take_over(
             b.superseded = Some(access_kernel::verify::key_scope::Superseded {
                 at: Digest(cp.root),
                 cited: Digest(received.cited.1),
+                cause: None,
             });
             b
         })

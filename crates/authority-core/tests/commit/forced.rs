@@ -1269,6 +1269,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         &excerpt,
         access_kernel::verify::key_scope::KeyUsage::Checkpoint,
         wall(),
+        None,
     );
     assert_eq!(
         refused.err(),

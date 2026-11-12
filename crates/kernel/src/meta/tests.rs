@@ -599,6 +599,7 @@ fn joint_roots_require_contributions() {
             k: 2,
         },
         root_terms: BTreeSet::new(),
+        sets: crate::meta::RootSets::default(),
     };
     let (ex, _) = r
         .act(ROOT, ROOT, ExerciseBasis::Anchor(a), &create)
@@ -619,6 +620,7 @@ fn joint_roots_require_contributions() {
         scope: AnchorScope::Resource(shop(&["eu", "fr"])),
         root: Root::Sole(BOB),
         root_terms: BTreeSet::new(),
+        sets: crate::meta::RootSets::default(),
     };
     let (_, out) = r.act(BOB, BOB, ExerciseBasis::Anchor(eu), &nested).unwrap();
     let term = out.requirements.iter().next().unwrap();
@@ -627,6 +629,7 @@ fn joint_roots_require_contributions() {
         scope: AnchorScope::Resource(shop(&[])),
         root: Root::Sole(ALICE),
         root_terms: BTreeSet::new(),
+        sets: crate::meta::RootSets::default(),
     };
     assert_eq!(
         r.act(ALICE, ALICE, ExerciseBasis::Anchor(eu), &outside),
@@ -1531,6 +1534,7 @@ fn meta_vectors_match() {
             k: 2,
         },
         root_terms: BTreeSet::new(),
+        sets: crate::meta::RootSets::default(),
     };
     let ex4 = r
         .step(
@@ -1558,6 +1562,7 @@ fn meta_vectors_match() {
             scope: AnchorScope::Resource(shop(&["eu", "fr"])),
             root: Root::Sole(BOB),
             root_terms: BTreeSet::new(),
+            sets: crate::meta::RootSets::default(),
         },
     );
     r.step(
@@ -1569,6 +1574,7 @@ fn meta_vectors_match() {
             scope: AnchorScope::Resource(shop(&[])),
             root: Root::Sole(ALICE),
             root_terms: BTreeSet::new(),
+            sets: crate::meta::RootSets::default(),
         },
     );
     r.step(
@@ -2429,6 +2435,7 @@ fn meta_vectors_match() {
                 scope: AnchorScope::Resource(shop(&["handover"])),
                 root: Root::Sole(ROOT),
                 root_terms: BTreeSet::new(),
+                sets: crate::meta::RootSets::default(),
             },
         )
         .unwrap();
@@ -2456,6 +2463,7 @@ fn meta_vectors_match() {
             anchor: handed,
             root: Some(Root::Sole(CAROL)),
             root_terms: None,
+            sets: None,
         },
     );
     // L0-META-24a, E54 (4)
@@ -2742,6 +2750,7 @@ fn transfer_steps(r: &mut Recorder) {
                 scope: AnchorScope::Resource(shop(&["xfer"])),
                 root: Root::Sole(ROOT),
                 root_terms: BTreeSet::new(),
+                sets: crate::meta::RootSets::default(),
             },
         )
         .unwrap();
@@ -2951,6 +2960,7 @@ fn every_payload_round_trips() {
                 k: 2,
             },
             root_terms: terms.clone(),
+            sets: crate::meta::RootSets::default(),
         },
         Payload::AnchorTransfer {
             anchor,
@@ -2961,6 +2971,7 @@ fn every_payload_round_trips() {
             anchor,
             root: Some(Root::Sole(ALICE)),
             root_terms: Some(BTreeSet::from([term(2)])),
+            sets: None,
         },
         Payload::AnchorRetire {
             anchor,
@@ -3176,6 +3187,7 @@ fn joint_root_requirements_count_the_other_members() {
         root_terms: BTreeSet::from([term(5)]),
         since: 0,
         ended: None,
+        sets: crate::meta::RootSets::default(),
     };
     let actor = |party: Id| Actor {
         party,
@@ -3380,6 +3392,7 @@ fn anchor_transfer_and_amend_act_on_the_named_anchor() {
             anchor: a,
             root,
             root_terms: terms,
+            sets: None,
         };
     let add = amend(None, Some(BTreeSet::from([term(1)])));
     assert_eq!(r.act(BOB, BOB, meta, &add), Err(MetaError::Basis));
@@ -3823,3 +3836,74 @@ fn kernel_0_4_0_meta_payloads_decode_unchanged() {
 }
 
 mod domain;
+
+// OP-159 m.3 (j), m.4 (a)
+#[test]
+fn root_sets_round_trip_and_are_refused_until_their_rule_is_decided() {
+    use crate::verify::cose::{Algorithm, PublicKey};
+    use crate::verify::key_scope::{Replica, Witness};
+    let sets = RootSets::new(
+        vec![Witness::new(
+            "witness.example".into(),
+            PublicKey::Ed25519(
+                ed25519_dalek::SigningKey::from_bytes(&[4; 32])
+                    .verifying_key()
+                    .to_bytes(),
+            ),
+            Algorithm::Ed25519,
+            "northwind".into(),
+            true,
+        )],
+        vec![Replica::new(
+            "replica.example".into(),
+            PublicKey::Ed25519(
+                ed25519_dalek::SigningKey::from_bytes(&[5; 32])
+                    .verifying_key()
+                    .to_bytes(),
+            ),
+            "acme".into(),
+            true,
+        )],
+    );
+    let create = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&["eu"])),
+        root: Root::Sole(BOB),
+        root_terms: BTreeSet::new(),
+        sets: sets.clone(),
+    };
+    assert_eq!(Payload::from_value(&create.to_value()).unwrap(), create);
+    let plain = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&["eu"])),
+        root: Root::Sole(BOB),
+        root_terms: BTreeSet::new(),
+        sets: RootSets::default(),
+    };
+    let Value::Map(body) = plain.to_value() else {
+        panic!("payload");
+    };
+    assert!(!body.iter().any(|(k, _)| k == &Value::text("sets")));
+    let mut r = Run::new();
+    let a = shop_anchor();
+    assert_eq!(
+        r.act(ROOT, ROOT, ExerciseBasis::Anchor(a), &create)
+            .map(|_| ()),
+        Err(MetaError::Restricted)
+    );
+    let amend = Payload::AnchorAmend {
+        anchor: a,
+        root: None,
+        root_terms: None,
+        sets: Some(sets),
+    };
+    assert_eq!(Payload::from_value(&amend.to_value()).unwrap(), amend);
+    assert_eq!(
+        r.act(ROOT, ROOT, ExerciseBasis::Anchor(a), &amend)
+            .map(|_| ()),
+        Err(MetaError::Restricted)
+    );
+    assert_eq!(MetaError::HoldingTerms.code(), "holding-terms");
+    assert_eq!(
+        MetaError::AlgorithmProfileConflict.code(),
+        "algorithm-profile-conflict"
+    );
+}

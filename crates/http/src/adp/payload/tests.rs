@@ -195,6 +195,7 @@ fn cases() -> Vec<(&'static str, Payload)> {
                     k: 2,
                 },
                 root_terms: BTreeSet::new(),
+                sets: access_kernel::meta::RootSets::default(),
             },
         ),
         (

@@ -149,6 +149,7 @@ async fn only_the_meta_anchor_root_rebinds_the_provider() {
         anchor: meta::meta_anchor(&d),
         root: None,
         root_terms: Some(BTreeSet::new()),
+        sets: None,
     };
     allowed(
         &send(&mut core, meta_request(d, 12, meta, amend), ROOT_KEY)

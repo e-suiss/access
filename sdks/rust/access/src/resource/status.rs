@@ -70,6 +70,7 @@ fn cwt(response: &Response, keys: &ListKeys<'_>) -> Result<(ListToken, Vec<u8>),
             excerpt,
             KeyUsage::StatusList,
             at,
+            None,
         )
     };
     let key = resolve(iat)

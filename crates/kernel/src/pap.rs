@@ -373,6 +373,7 @@ pub fn verify(
         excerpt,
         KeyUsage::Pap,
         claimed.iat,
+        None,
     )
     .map_err(PapError::Key)?;
     let verified = verify_sign1(backend, pap_sign1, &key.key_set(), CONTENT_TYPE)

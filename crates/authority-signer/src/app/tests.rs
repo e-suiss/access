@@ -90,6 +90,7 @@ fn verify(ring: &Keyring, signed: &Signed, now: u64) -> Result<(), KeyScopeError
         &signed.excerpt,
         KeyUsage::Receipt,
         now,
+        None,
     )?;
     let v = verify_sign1(&PureBackend, &signed.sign1, &key.key_set(), RECEIPT).unwrap();
     assert_eq!(v.payload, b"receipt");
@@ -118,7 +119,8 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
             &Digest([9; 32]),
             &signed.excerpt,
             KeyUsage::Receipt,
-            now
+            now,
+            None
         ),
         Err(KeyScopeError::OutOfScope)
     );

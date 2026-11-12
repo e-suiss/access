@@ -210,6 +210,7 @@ const fn key_scope_name(e: KeyScopeError) -> &'static str {
         KeyScopeError::Algorithm => "algorithm",
         KeyScopeError::Usage => "usage",
         KeyScopeError::Window => "window",
+        KeyScopeError::PqAnchorMissing => "pq-anchor-missing",
     }
 }
 
@@ -223,7 +224,8 @@ const fn key_scope_kind(e: KeyScopeError) -> Kind {
         KeyScopeError::OutOfScope => Kind::OutsideBindingScope,
         KeyScopeError::DomainMismatch => Kind::DomainMismatch,
         KeyScopeError::Thumbprint => Kind::Thumbprint,
-        KeyScopeError::Algorithm => Kind::Algorithm,
+        // OP-159 m.3 (h)
+        KeyScopeError::Algorithm | KeyScopeError::PqAnchorMissing => Kind::Algorithm,
         KeyScopeError::Usage => Kind::Usage,
         KeyScopeError::Window => Kind::Window,
     }
@@ -473,8 +475,9 @@ pub fn operational_key(
         .map_err(|e| Error::KeyScope(KeyScopeError::Payload(e)))?;
     let domain: Digest = decode(domain)?;
     let usage = word(&Value::text(usage), &USAGES).map_err(|_| Error::Input)?;
-    let key = key_scope::operational_key(&PureBackend, &metadata, &domain, excerpt, usage, iat)
-        .map_err(Error::KeyScope)?;
+    let key =
+        key_scope::operational_key(&PureBackend, &metadata, &domain, excerpt, usage, iat, None)
+            .map_err(Error::KeyScope)?;
     key.to_bytes().map_err(|_| Error::Input)
 }
 

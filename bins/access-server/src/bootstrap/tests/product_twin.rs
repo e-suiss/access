@@ -796,6 +796,7 @@ async fn a_product_publishes_issues_and_enforces_but_writes_no_authority() {
                 scope: meta::AnchorScope::Resource(structural("ride.trip", &[])),
                 root: Root::Sole(s.party),
                 root_terms: BTreeSet::new(),
+                sets: access_kernel::meta::RootSets::default(),
             },
             meta_anchor,
         )

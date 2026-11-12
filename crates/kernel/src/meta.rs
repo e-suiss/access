@@ -157,6 +157,70 @@ pub enum Disposition {
     Revoke,
 }
 
+/// The witness and replica sets of an Anchor's root terms (OP-158 m.11 5984, OP-159 m.3 (j)):
+/// only a witness or replica the canonical state names counts.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RootSets {
+    /// The witnesses, with their keys, operators, independence and algorithms.
+    pub witnesses: Vec<crate::verify::key_scope::Witness>,
+    /// The replicas.
+    pub replicas: Vec<crate::verify::key_scope::Replica>,
+}
+
+impl RootSets {
+    /// The sets `witnesses` and `replicas`.
+    #[must_use]
+    pub const fn new(
+        witnesses: Vec<crate::verify::key_scope::Witness>,
+        replicas: Vec<crate::verify::key_scope::Replica>,
+    ) -> Self {
+        Self {
+            witnesses,
+            replicas,
+        }
+    }
+
+    /// Whether neither set names anything.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.witnesses.is_empty() && self.replicas.is_empty()
+    }
+}
+
+fn root_sets_value(s: &RootSets) -> Value {
+    use crate::verify::key_scope::{replica_value, witness_value};
+    map([
+        (
+            "witnesses",
+            (!s.witnesses.is_empty()).then(|| set_value(s.witnesses.iter().map(witness_value))),
+        ),
+        (
+            "replicas",
+            (!s.replicas.is_empty()).then(|| set_value(s.replicas.iter().map(replica_value))),
+        ),
+    ])
+}
+
+fn root_sets(v: &Value) -> Result<RootSets, ModelError> {
+    use crate::verify::key_scope::{replica, set_of_vec, witness};
+    let mut f = Fields::of(v)?;
+    let out = RootSets {
+        witnesses: f
+            .opt("witnesses")
+            .map(|w| set_of_vec(w, true, witness))
+            .transpose()?
+            .unwrap_or_default(),
+        replicas: f
+            .opt("replicas")
+            .map(|r| set_of_vec(r, true, replica))
+            .transpose()?
+            .unwrap_or_default(),
+    };
+    f.done()?;
+    Ok(out)
+}
+
 /// The body of a core meta-action.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Payload {
@@ -168,6 +232,8 @@ pub enum Payload {
         root: Root,
         /// Root terms.
         root_terms: BTreeSet<RequirementTerm>,
+        /// The root terms' witness and replica sets (OP-159 m.3 (j)).
+        sets: RootSets,
     },
     /// `anchor_transfer`.
     AnchorTransfer {
@@ -186,6 +252,8 @@ pub enum Payload {
         root: Option<Root>,
         /// New root terms, if they change.
         root_terms: Option<BTreeSet<RequirementTerm>>,
+        /// New witness and replica sets, if they change (OP-159 m.3 (j)).
+        sets: Option<RootSets>,
     },
     /// `anchor_retire`.
     AnchorRetire {
@@ -532,6 +600,14 @@ pub enum MetaError {
     /// A recovery cites a checkpoint below R* (SEC22).
     #[error("rollback guard")]
     RollbackGuard,
+    /// A Holding-based meta-Exercise whose holding's terms are not met (L0-META-13, OP-159
+    /// m.3 (k)).
+    #[error("holding terms")]
+    HoldingTerms,
+    /// ML-DSA cannot join the allowlist of a domain that declares the FIPS profile (CR-44,
+    /// OP-159 m.3 (r)).
+    #[error("algorithm profile conflict")]
+    AlgorithmProfileConflict,
 }
 
 impl MetaError {
@@ -554,6 +630,8 @@ impl MetaError {
             Self::DefaultUnknown => "policy-default-unknown",
             Self::Restricted => "meta-restricted",
             Self::RollbackGuard => "rollback-guard",
+            Self::HoldingTerms => "holding-terms",
+            Self::AlgorithmProfileConflict => "algorithm-profile-conflict",
         }
     }
 }
@@ -836,12 +914,14 @@ impl Canonical for Payload {
                 scope,
                 root,
                 root_terms,
+                sets,
             } => (
                 "anchor_create",
                 map([
                     ("scope", Some(scope_value(scope))),
                     ("root", Some(root_value(root))),
                     ("root_terms", requirements_value(root_terms)),
+                    ("sets", (!sets.is_empty()).then(|| root_sets_value(sets))),
                 ]),
             ),
             Self::AnchorTransfer {
@@ -860,6 +940,7 @@ impl Canonical for Payload {
                 anchor,
                 root,
                 root_terms,
+                sets,
             } => (
                 "anchor_amend",
                 map([
@@ -871,6 +952,7 @@ impl Canonical for Payload {
                             .as_ref()
                             .map(|r| set_value(r.iter().map(Canonical::to_value))),
                     ),
+                    ("sets", sets.as_ref().map(root_sets_value)),
                 ]),
             ),
             Self::AnchorRetire {
@@ -1115,6 +1197,11 @@ impl Canonical for Payload {
                 scope: scope(f.req("scope")?)?,
                 root: root(f.req("root")?)?,
                 root_terms: requirements(f.opt("root_terms"))?,
+                sets: f
+                    .opt("sets")
+                    .map(root_sets)
+                    .transpose()?
+                    .unwrap_or_default(),
             },
             "anchor_transfer" => Self::AnchorTransfer {
                 anchor: id(f.req("anchor")?)?,
@@ -1128,6 +1215,7 @@ impl Canonical for Payload {
                     .opt("root_terms")
                     .map(|r| set_of(r, false, RequirementTerm::from_value))
                     .transpose()?,
+                sets: f.opt("sets").map(root_sets).transpose()?,
             },
             "anchor_retire" => Self::AnchorRetire {
                 anchor: id(f.req("anchor")?)?,
@@ -1740,6 +1828,8 @@ pub struct AnchorState {
     pub root: Root,
     /// Root terms.
     pub root_terms: BTreeSet<RequirementTerm>,
+    /// The root terms' witness and replica sets (OP-159 m.3 (j)).
+    pub sets: RootSets,
     /// Creating position.
     pub since: u64,
     /// End.
@@ -1752,6 +1842,10 @@ impl Canonical for AnchorState {
             ("scope", Some(scope_value(&self.scope))),
             ("root", Some(root_value(&self.root))),
             ("root_terms", requirements_value(&self.root_terms)),
+            (
+                "sets",
+                (!self.sets.is_empty()).then(|| root_sets_value(&self.sets)),
+            ),
             ("since", Some(Value::Unsigned(self.since))),
             ("ended", self.ended.as_ref().map(ended_value)),
         ])
@@ -1763,6 +1857,11 @@ impl Canonical for AnchorState {
             scope: scope(f.req("scope")?)?,
             root: root(f.req("root")?)?,
             root_terms: requirements(f.opt("root_terms"))?,
+            sets: f
+                .opt("sets")
+                .map(root_sets)
+                .transpose()?
+                .unwrap_or_default(),
             since: uint(f.req("since")?)?,
             ended: ended(f.opt("ended"))?,
         };
@@ -2272,6 +2371,10 @@ pub fn genesis_effects(
     let meta_terms = requirements(f.opt("root_terms"))?;
     // SEC20, OP-158 m.3 (b)
     let entry = f.opt("recovery").cloned();
+    // OP-159 m.3 (j), m.4 (a)
+    if f.opt("sets").map(root_sets).transpose()?.is_some() {
+        return Err(MetaError::Restricted);
+    }
     f.done()?;
     let keys_held = genesis_keys_held(entry.as_ref(), take("binding"), &meta_root)?;
     let mut anchors = alloc::vec![(AnchorScope::Domain, meta_root, meta_terms)];
@@ -2295,6 +2398,7 @@ pub fn genesis_effects(
                     scope,
                     root,
                     root_terms,
+                    sets: RootSets::default(),
                     since: 0,
                     ended: None,
                 }
@@ -2853,7 +2957,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             scope: s,
             root: r,
             root_terms,
+            sets,
         } => {
+            // OP-159 m.3 (j), m.4 (a)
+            if !sets.is_empty() {
+                return Err(MetaError::Restricted);
+            }
             let covering = anchor_of_basis(ctx)?;
             let (a, req) = root_power(view, &covering, &actor)?;
             let inner = scope_selector(s);
@@ -2873,6 +2982,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                     scope: s.clone(),
                     root: r.clone(),
                     root_terms: root_terms.clone(),
+                    sets: RootSets::default(),
                     since: ctx.pos,
                     ended: None,
                 }
@@ -2905,7 +3015,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             anchor,
             root: r,
             root_terms,
+            sets,
         } => {
+            // OP-159 m.3 (j), m.4 (a)
+            if sets.is_some() {
+                return Err(MetaError::Restricted);
+            }
             if anchor_of_basis(ctx)? != *anchor {
                 return Err(MetaError::Basis);
             }
@@ -2960,6 +3075,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                     scope: AnchorScope::Party(*party),
                     root: r.clone(),
                     root_terms: BTreeSet::new(),
+                    sets: RootSets::default(),
                     since: ctx.pos,
                     ended: None,
                 }

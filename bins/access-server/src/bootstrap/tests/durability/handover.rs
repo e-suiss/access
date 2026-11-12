@@ -664,6 +664,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         &old_excerpt,
         KeyUsage::Receipt,
         old_iat,
+        None,
     );
     assert_eq!(refused, Err(KeyScopeError::Superseded));
     assert!(
@@ -673,7 +674,8 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
             &d,
             &old_excerpt,
             KeyUsage::Receipt,
-            old_iat
+            old_iat,
+            None
         )
         .is_ok()
     );
@@ -831,7 +833,8 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
             &d,
             &old_excerpt,
             KeyUsage::Receipt,
-            old_iat
+            old_iat,
+            None
         )
         .is_ok()
     );
@@ -842,7 +845,8 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
             &d,
             &old_excerpt,
             KeyUsage::Receipt,
-            old_iat
+            old_iat,
+            None
         ),
         Err(KeyScopeError::Superseded)
     );
@@ -854,7 +858,8 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
             &d,
             &new_excerpt,
             KeyUsage::Receipt,
-            new_iat
+            new_iat,
+            None
         )
         .is_ok()
     );

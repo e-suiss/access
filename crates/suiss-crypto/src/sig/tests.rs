@@ -245,7 +245,10 @@ fn no_backend_verifies_ml_dsa_until_a_provider_answers_it() {
         #[cfg(feature = "aws-lc")]
         {
             assert!(!crate::aws::AwsLcBackend.supports(alg), "{alg:?}");
-            assert!(!crate::aws::AwsLcBackend.ml_dsa(alg, &[], b"m", &[]), "{alg:?}");
+            assert!(
+                !crate::aws::AwsLcBackend.ml_dsa(alg, &[], b"m", &[]),
+                "{alg:?}"
+            );
         }
     }
 }

@@ -93,6 +93,7 @@ async fn store(p: &Product, owner: &Actor) -> Id {
             scope: meta::AnchorScope::Resource(structural("serve.store", &["store-1"])),
             root: Root::Sole(owner.party),
             root_terms: BTreeSet::new(),
+            sets: access_kernel::meta::RootSets::default(),
         })
         .await;
     meta::object_id(&created, kind::ANCHOR, 0)

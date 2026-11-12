@@ -229,6 +229,7 @@ pub fn verify(
         excerpt,
         KeyUsage::Receipt,
         claimed.iat,
+        None,
     )
     .map_err(ReceiptError::Key)?;
     let verified = verify_sign1(backend, sign1, &key.key_set(), CONTENT_TYPE)

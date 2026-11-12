@@ -30,6 +30,7 @@ fn superseded() -> access_kernel::verify::key_scope::BindingKey {
     b.superseded = Some(access_kernel::verify::key_scope::Superseded {
         at: Digest([1; 32]),
         cited: Digest([2; 32]),
+        cause: None,
     });
     b
 }

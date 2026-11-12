@@ -99,6 +99,7 @@ fn state() -> State {
         root_terms: BTreeSet::new(),
         since: 0,
         ended: None,
+        sets: access_kernel::meta::RootSets::default(),
     };
     let entry = |v: Value| Entry {
         value: Some(v),

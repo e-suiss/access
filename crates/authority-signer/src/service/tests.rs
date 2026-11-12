@@ -166,6 +166,7 @@ fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded
         Some(access_kernel::verify::key_scope::Superseded {
             at: Digest([1; 32]),
             cited: Digest([2; 32]),
+            cause: None,
         })
     );
     assert_eq!(m.declared.ceremony_transcript, Some(Digest([3; 32])));
@@ -219,6 +220,7 @@ fn an_incoming_install_publishes_the_outgoing_bindings_only_as_superseded() {
     old.superseded = Some(access_kernel::verify::key_scope::Superseded {
         at: Digest([4; 32]),
         cited: Digest([5; 32]),
+        cause: None,
     });
     assert_eq!(
         s.handle(
@@ -330,6 +332,7 @@ fn the_service_signs_and_survives_a_restart() {
         &excerpt,
         KeyUsage::Receipt,
         now,
+        None,
     )
     .unwrap();
     verify_sign1(&PureBackend, &sign1, &key.key_set(), CT).unwrap();
@@ -405,6 +408,7 @@ fn the_service_signs_checkpoints_of_its_domain() {
         &excerpt,
         KeyUsage::Checkpoint,
         now,
+        None,
     )
     .unwrap();
     let suiss_crypto::cose::PublicKey::Ed25519(k) = key.key else {
@@ -494,6 +498,7 @@ fn the_founding_key_signs_on_open_and_an_older_vault_has_none() {
         &excerpt,
         KeyUsage::Receipt,
         0,
+        None,
     )
     .unwrap();
     verify_sign1(&PureBackend, &sign1, &key.key_set(), CT).unwrap();

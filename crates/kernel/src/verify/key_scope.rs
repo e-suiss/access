@@ -91,6 +91,23 @@ pub enum BindingScope {
     Provider(BTreeSet<Digest>),
 }
 
+/// Why a binding key was superseded (OP-159 m.3 (i)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SupersededCause {
+    /// A binding re-anchor (OP-60, CR-45).
+    ReAnchor,
+    /// A handover to another provider.
+    Handover,
+    /// A forced recovery.
+    Recovery,
+}
+
+const CAUSES: [(&str, SupersededCause); 3] = [
+    ("re-anchor", SupersededCause::ReAnchor),
+    ("handover", SupersededCause::Handover),
+    ("recovery", SupersededCause::Recovery),
+];
+
 /// The old binding after a handover or recovery (§9.10 recovery predicate).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Superseded {
@@ -98,6 +115,9 @@ pub struct Superseded {
     pub at: Digest,
     /// `N_cited` from the `domain.handover` / `domain.recover` record.
     pub cited: Digest,
+    /// Why it was superseded; absent in 0.6.0 metadata, which asks for evidence under every
+    /// cause (OP-159 m.3 (i)).
+    pub cause: Option<SupersededCause>,
 }
 
 /// A provider binding key.
@@ -321,6 +341,80 @@ impl Mmd {
     }
 }
 
+/// Whether a hosting resource is shared with other tenants (HL-8, HL-17, DL-10, OP-159 m.3 (s)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sharing {
+    /// Shared with other tenants; the co-tenant risk applies.
+    Shared,
+    /// Dedicated to this domain's provider install.
+    Dedicated,
+}
+
+const SHARINGS: [(&str, Sharing); 2] = [
+    ("shared", Sharing::Shared),
+    ("dedicated", Sharing::Dedicated),
+];
+
+/// The hosting the provider declares (HL-8, HL-17, DL-10, OP-159 m.3 (s)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Hosting {
+    /// The HSM partition.
+    pub hsm_partition: Sharing,
+    /// The compute.
+    pub compute: Sharing,
+}
+
+impl Hosting {
+    /// Hosting with `hsm_partition` and `compute`.
+    #[must_use]
+    pub const fn new(hsm_partition: Sharing, compute: Sharing) -> Self {
+        Self {
+            hsm_partition,
+            compute,
+        }
+    }
+}
+
+/// The crypto profile the domain declares (CR-15, CR-44, OP-159 m.3 (r)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CryptoProfile {
+    /// The standard algorithm set.
+    Standard,
+    /// FIPS-approved algorithms only; ML-DSA cannot join the allowlist.
+    Fips,
+}
+
+const CRYPTO_PROFILES: [(&str, CryptoProfile); 2] = [
+    ("standard", CryptoProfile::Standard),
+    ("fips", CryptoProfile::Fips),
+];
+
+/// The last post-quantum re-anchor checkpoint the domain published (CR-45, RR-35, OP-159
+/// m.3 (g)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PqReanchor {
+    /// Its tree size.
+    pub size: u64,
+    /// When it was cosigned.
+    pub time: TrustedTime,
+    /// The note key names of the witnesses whose post-quantum cosign it carries.
+    pub witnesses: Vec<String>,
+}
+
+impl PqReanchor {
+    /// The re-anchor checkpoint of `size` cosigned at `time` by `witnesses`.
+    #[must_use]
+    pub const fn new(size: u64, time: TrustedTime, witnesses: Vec<String>) -> Self {
+        Self {
+            size,
+            time,
+            witnesses,
+        }
+    }
+}
+
 /// Whether the domain has a recovery entry (§13.6, OP-158 m.3 (m)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recovery {
@@ -354,6 +448,15 @@ pub struct Declarations {
     pub recovery: Option<Recovery>,
     /// Digest of the binding ceremony transcript (CR-29, OP-157 m.7 (i)).
     pub ceremony_transcript: Option<Digest>,
+    /// The last post-quantum re-anchor checkpoint; absent before the first (OP-159 m.3 (g)).
+    pub pq_reanchor: Option<PqReanchor>,
+    /// The hosting; absent reads as shared (OP-159 m.3 (s)).
+    pub hosting: Option<Hosting>,
+    /// The crypto profile (OP-159 m.3 (r)).
+    pub crypto_profile: Option<CryptoProfile>,
+    /// Whether signatures come from a FIPS 140-3 validated module; absent reads as no (OP-159
+    /// m.3 (r)).
+    pub fips_module: Option<bool>,
 }
 
 impl Declarations {
@@ -395,6 +498,10 @@ pub enum KeyScopeError {
     /// The window is inverted, too long, or does not contain `iat`.
     #[error("outside the key window")]
     Window,
+    /// The domain retired its classical algorithm and the verifier pinned no post-quantum
+    /// anchor (CR-45 RA-7, OP-159 m.3 (h)).
+    #[error("post-quantum anchor missing")]
+    PqAnchorMissing,
 }
 
 /// RFC 7638 SHA-256 JWK thumbprint (CR-24). `AKP` members follow the ML-DSA JOSE draft.
@@ -469,8 +576,49 @@ pub fn verify_metadata(
     Ok(metadata)
 }
 
+/// What a verifier passes to [`operational_key`] for an artefact signed under a superseded
+/// binding key: the artefact's exact-content digest, its [`Inclusion`] and the log and
+/// independent witness keys that verify the cited checkpoint (P18, SEC25, U12, U27, OP-159
+/// m.3 (i)).
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct InclusionEvidence<'a> {
+    /// The artefact's exact-content digest.
+    pub artefact: Digest,
+    /// The record, its path and the cited checkpoint.
+    pub inclusion: Inclusion<'a>,
+    /// The log origin line.
+    pub origin: &'a str,
+    /// The log key.
+    pub log: &'a suiss_crypto::note::Verifier,
+    /// The independent witness keys.
+    pub witnesses: &'a [suiss_crypto::note::Verifier],
+}
+
+impl<'a> InclusionEvidence<'a> {
+    /// The evidence for `artefact` at `inclusion` under `log` from `origin`.
+    #[must_use]
+    pub const fn new(
+        artefact: Digest,
+        inclusion: Inclusion<'a>,
+        origin: &'a str,
+        log: &'a suiss_crypto::note::Verifier,
+        witnesses: &'a [suiss_crypto::note::Verifier],
+    ) -> Self {
+        Self {
+            artefact,
+            inclusion,
+            origin,
+            log,
+            witnesses,
+        }
+    }
+}
+
 /// Resolves the operational key that signed an artefact of `artefact_domain` at `iat`
 /// (CR-58 m.5). The artefact signature is then verified with [`OperationalKey::key_set`].
+/// `evidence` is the inclusion evidence for a superseded binding (OP-159 m.3 (i)); a binding
+/// that is superseded is refused whatever it carries until that path is decided.
 ///
 /// # Errors
 /// The first step that fails, as [`KeyScopeError`].
@@ -481,7 +629,9 @@ pub fn operational_key(
     excerpt: &[u8],
     usage: KeyUsage,
     iat: TrustedTime,
+    evidence: Option<&InclusionEvidence<'_>>,
 ) -> Result<OperationalKey, KeyScopeError> {
+    let _ = evidence;
     let bindings = key_set(
         metadata.binding.values().map(|b| (b.kid, b.key.clone())),
         &metadata.algorithms,
@@ -846,6 +996,7 @@ impl Canonical for BindingKey {
                     map([
                         ("at", Some(s.at.to_value())),
                         ("cited", Some(s.cited.to_value())),
+                        ("cause", s.cause.map(|c| word_of(c, &CAUSES))),
                     ])
                 }),
             ),
@@ -861,6 +1012,7 @@ impl Canonical for BindingKey {
                 let out = Superseded {
                     at: digest_model(g.req("at")?)?,
                     cited: digest_model(g.req("cited")?)?,
+                    cause: g.opt("cause").map(|c| word(c, &CAUSES)).transpose()?,
                 };
                 g.done()?;
                 Ok::<_, ModelError>(out)
@@ -1020,6 +1172,26 @@ impl Canonical for DomainMetadata {
                     .as_ref()
                     .map(Canonical::to_value),
             ),
+            (
+                "pq_reanchor",
+                self.declared.pq_reanchor.as_ref().map(pq_reanchor_value),
+            ),
+            (
+                "hosting",
+                self.declared.hosting.map(|h| {
+                    map([
+                        ("hsm_partition", Some(word_of(h.hsm_partition, &SHARINGS))),
+                        ("compute", Some(word_of(h.compute, &SHARINGS))),
+                    ])
+                }),
+            ),
+            (
+                "crypto_profile",
+                self.declared
+                    .crypto_profile
+                    .map(|c| word_of(c, &CRYPTO_PROFILES)),
+            ),
+            ("fips_module", self.declared.fips_module.map(Value::Bool)),
         ])
     }
 
@@ -1066,7 +1238,7 @@ fn name(v: &Value) -> Result<String, ModelError> {
     Ok(String::from(t))
 }
 
-fn witness_value(w: &Witness) -> Value {
+pub(crate) fn witness_value(w: &Witness) -> Value {
     map([
         ("name", Some(Value::text(&w.name))),
         ("key", Some(w.key.to_value())),
@@ -1076,7 +1248,7 @@ fn witness_value(w: &Witness) -> Value {
     ])
 }
 
-fn witness(v: &Value) -> Result<Witness, ModelError> {
+pub(crate) fn witness(v: &Value) -> Result<Witness, ModelError> {
     let mut f = Fields::of(v)?;
     let out = Witness {
         name: name(f.req("name")?)?,
@@ -1089,7 +1261,7 @@ fn witness(v: &Value) -> Result<Witness, ModelError> {
     Ok(out)
 }
 
-fn replica_value(r: &Replica) -> Value {
+pub(crate) fn replica_value(r: &Replica) -> Value {
     map([
         ("name", Some(Value::text(&r.name))),
         ("key", Some(r.key.to_value())),
@@ -1098,7 +1270,7 @@ fn replica_value(r: &Replica) -> Value {
     ])
 }
 
-fn replica(v: &Value) -> Result<Replica, ModelError> {
+pub(crate) fn replica(v: &Value) -> Result<Replica, ModelError> {
     let mut f = Fields::of(v)?;
     let out = Replica {
         name: name(f.req("name")?)?,
@@ -1110,7 +1282,41 @@ fn replica(v: &Value) -> Result<Replica, ModelError> {
     Ok(out)
 }
 
-// OP-158 m.3 (b)
+fn pq_reanchor_value(r: &PqReanchor) -> Value {
+    map([
+        ("size", Some(Value::Unsigned(r.size))),
+        ("time", Some(Value::Unsigned(r.time))),
+        (
+            "witnesses",
+            Some(set_value(r.witnesses.iter().map(|w| Value::text(w)))),
+        ),
+    ])
+}
+
+// OP-159 m.3 (g)
+fn pq_reanchor(v: &Value) -> Result<PqReanchor, ModelError> {
+    let mut g = Fields::of(v)?;
+    let out = PqReanchor {
+        size: uint(g.req("size")?)?,
+        time: uint(g.req("time")?)?,
+        witnesses: set_of_vec(g.req("witnesses")?, true, name)?,
+    };
+    g.done()?;
+    Ok(out)
+}
+
+// OP-159 m.3 (s)
+fn hosting(v: &Value) -> Result<Hosting, ModelError> {
+    let mut g = Fields::of(v)?;
+    let out = Hosting {
+        hsm_partition: word(g.req("hsm_partition")?, &SHARINGS)?,
+        compute: word(g.req("compute")?, &SHARINGS)?,
+    };
+    g.done()?;
+    Ok(out)
+}
+
+// OP-158 m.3 (b), OP-159 m.3 (b)
 fn declarations(f: &mut Fields<'_>) -> Result<Declarations, ModelError> {
     let residency = f
         .opt("residency")
@@ -1158,6 +1364,16 @@ fn declarations(f: &mut Fields<'_>) -> Result<Declarations, ModelError> {
             .map(|r| word(r, &RECOVERIES))
             .transpose()?,
         ceremony_transcript: f.opt("ceremony_transcript").map(digest_model).transpose()?,
+        pq_reanchor: f.opt("pq_reanchor").map(pq_reanchor).transpose()?,
+        hosting: f.opt("hosting").map(hosting).transpose()?,
+        crypto_profile: f
+            .opt("crypto_profile")
+            .map(|c| word(c, &CRYPTO_PROFILES))
+            .transpose()?,
+        fips_module: f
+            .opt("fips_module")
+            .map(crate::codec::boolean)
+            .transpose()?,
     })
 }
 
@@ -1190,7 +1406,7 @@ pub(crate) fn ct_key(ct: u8) -> Value {
 
 const CT_KEYS: [&str; 4] = ["ct0", "ct1", "ct2", "ct3"];
 
-fn set_of_vec<T>(
+pub(crate) fn set_of_vec<T>(
     v: &Value,
     non_empty: bool,
     read: impl Fn(&Value) -> Result<T, ModelError>,

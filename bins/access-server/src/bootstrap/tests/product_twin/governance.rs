@@ -279,6 +279,7 @@ async fn the_first_admins_quorum_request_waits_and_access_keeps_no_queue() {
                 k: 2,
             },
             root_terms: BTreeSet::new(),
+            sets: access_kernel::meta::RootSets::default(),
         })
         .await;
     let joint = meta::object_id(&exercise, kind::ANCHOR, 0);
@@ -290,6 +291,7 @@ async fn the_first_admins_quorum_request_waits_and_access_keeps_no_queue() {
             scope: meta::AnchorScope::Resource(structural("pay.instrument", &["eu"])),
             root: Root::Sole(first.party),
             root_terms: BTreeSet::new(),
+            sets: access_kernel::meta::RootSets::default(),
         },
     )
     .await

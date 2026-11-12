@@ -235,6 +235,7 @@ pub fn verify(
         excerpt,
         KeyUsage::Checkpoint,
         ext.issued_at,
+        None,
     )?;
     let PublicKey::Ed25519(k) = key.key else {
         return Err(CheckpointError::Note(NoteError::Unverified));

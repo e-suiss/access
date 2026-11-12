@@ -1413,6 +1413,7 @@ fn foreign_status(
         excerpt,
         KeyUsage::StatusList,
         iat,
+        None,
     )
     .map_err(|_| "foreign-status")?;
     let verified = verify_sign1(&PureBackend, sign1, &key.key_set(), CWT_CONTENT_TYPE)

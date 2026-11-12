@@ -383,6 +383,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
             )),
             root: Root::Sole(party),
             root_terms: BTreeSet::new(),
+            sets: access_kernel::meta::RootSets::default(),
         },
         party,
     )

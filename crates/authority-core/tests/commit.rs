@@ -9012,6 +9012,7 @@ async fn a_root_change_waits_for_the_new_roots_own_acceptance() {
                     })),
                     root: Root::Sole(ROOT),
                     root_terms: BTreeSet::new(),
+                    sets: access_kernel::meta::RootSets::default(),
                 },
             ),
             0xd1,
