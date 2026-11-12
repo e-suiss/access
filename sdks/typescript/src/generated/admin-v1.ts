@@ -3917,6 +3917,7 @@ export interface components {
             declared_durability?: string | null;
             /** @description Whether the domain's declarations can ever acknowledge a SEC23 write. */
             acknowledges?: boolean;
+            hosting?: components["schemas"]["Hosting"];
         };
         DeclaredParty: {
             name: string;
@@ -4052,6 +4053,12 @@ export interface components {
             key_state?: "pending" | "published" | "signing" | "unavailable";
             /** @description When its first key may sign at the latest: creation plus the publish lead, 90 minutes by default (CR-25); the founding-key exception (CR-59) may make it sooner. */
             signing_available_at?: components["schemas"]["Time"] | null;
+            /**
+             * @description Its hybrid key share policy: SDK clients send the X25519MLKEM768 key share first, or list it and let the server retry to it (CR-12 m.3, OP-159 m.3 (t)).
+             * @enum {string}
+             */
+            kex_share?: "optimistic" | "advertise-only";
+            hosting?: components["schemas"]["Hosting"];
         };
         /** @description The deployment's readiness checks by name; no addresses, keys or secrets. */
         OperatorHealth: {
@@ -4211,6 +4218,13 @@ export interface components {
             /** @description The surface's governing DomainID, unpadded base64url. */
             domain: string;
             rate_policies: string[];
+        };
+        /** @description Whether the HSM partition and the compute are shared with other tenants, as the governing domain's metadata declares; undeclared reads as shared, and on shared hardware the co-tenant side-channel risk applies (HL-8, HL-17, DL-10, OP-159 m.3 (s)). */
+        Hosting: {
+            /** @enum {string} */
+            hsm_partition: "shared" | "dedicated";
+            /** @enum {string} */
+            compute: "shared" | "dedicated";
         };
         /** @description The realm's signing profile, its classical and ML-DSA signing keys and algorithms, the key exchange share policy and whether the FIPS module is in use (OP-159 m.3 (o), (r), (t)); its lane names its members when it serves it. */
         Signing: Record<string, never>;

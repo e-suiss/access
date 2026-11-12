@@ -23511,6 +23511,9 @@
           "acknowledges": {
             "type": "boolean",
             "description": "Whether the domain's declarations can ever acknowledge a SEC23 write."
+          },
+          "hosting": {
+            "$ref": "#/components/schemas/Hosting"
           }
         }
       },
@@ -23927,6 +23930,17 @@
               }
             ],
             "description": "When its first key may sign at the latest: creation plus the publish lead, 90 minutes by default (CR-25); the founding-key exception (CR-59) may make it sooner."
+          },
+          "kex_share": {
+            "type": "string",
+            "enum": [
+              "optimistic",
+              "advertise-only"
+            ],
+            "description": "Its hybrid key share policy: SDK clients send the X25519MLKEM768 key share first, or list it and let the server retry to it (CR-12 m.3, OP-159 m.3 (t))."
+          },
+          "hosting": {
+            "$ref": "#/components/schemas/Hosting"
           }
         }
       },
@@ -24319,6 +24333,31 @@
               "type": "string",
               "description": "A `RateLimit-Policy` item of the caller's own budget."
             }
+          }
+        }
+      },
+      "Hosting": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hsm_partition",
+          "compute"
+        ],
+        "description": "Whether the HSM partition and the compute are shared with other tenants, as the governing domain's metadata declares; undeclared reads as shared, and on shared hardware the co-tenant side-channel risk applies (HL-8, HL-17, DL-10, OP-159 m.3 (s)).",
+        "properties": {
+          "hsm_partition": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "dedicated"
+            ]
+          },
+          "compute": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "dedicated"
+            ]
           }
         }
       },

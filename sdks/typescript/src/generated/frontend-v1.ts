@@ -2327,7 +2327,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Uploads a support artifact for a case: HAR, JSON or a text log only, redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (idp.account.artifact_upload, OP-157 m.3 (g)). */
+        /** Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the realm's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)). */
         post: operations["uploadSupportArtifact"];
         delete?: never;
         options?: never;
