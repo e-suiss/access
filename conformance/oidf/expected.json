@@ -37,7 +37,16 @@
       "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported": "IDI-6 (\u00a710.4): alg none is in no allowlist, so the suite skips its unsigned request object and ID token modules"
     },
     "oidcc-config-certification-test-plan": {},
-    "fapi2-security-profile-final-test-plan": {},
+    "fapi2-security-profile-final-test-plan": {
+      "fapi2-security-profile-final-ensure-invalid-client-assertions-fail": "OP-155 m.3 (k): Access's FAPI 2.0 client profile is Message Signing (signed request objects only), so this plan's unsigned client is outside it and its assertion may name the endpoint that received it (\u00a710.4.5)",
+      "fapi2-security-profile-final-ensure-signed-client-assertion-with-RS256-fails": "IDI-6 (\u00a710.4): FAPI 2.0 clients sign with ES256, since Access offers no PS256 and refuses RS256 for the profile; the suite runs its RS256 refusal only with RSA client keys",
+      "fapi2-security-profile-final-par-attempt-reuse-request_uri": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-attempt-to-use-expired-request_uri": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-attempt-to-use-request_uri-for-different-client": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-ensure-reused-request-uri-prior-to-auth-completion-succeeds": "Needs the first visit to the login page to stay unauthenticated; the target signs its user in on the first visit",
+      "fapi2-security-profile-final-refresh-token": "OP-155 m.3 (k): Access's FAPI 2.0 client profile is Message Signing (signed request objects only), so this plan's unsigned client is outside it and its refresh token rotates (TN-31)",
+      "fapi2-security-profile-final-user-rejects-authentication": "Needs the tester to press cancel on the login page; the target signs its user in without a page the suite's browser runner could cancel"
+    },
     "oidcc-dynamic-certification-test-plan": {
       "oidcc-idtoken-rs256": "OP-154 m.3 (j), \u00a711.4.5: the DCR compatibility profile registers only public clients (token_endpoint_auth_method none, no secret or fetched URL); the Dynamic plan registers private_key_jwt clients",
       "oidcc-idtoken-unsigned": "IDI-6 (\u00a710.4): alg none is in no allowlist, so the suite skips its unsigned request object and ID token modules",
@@ -153,6 +162,22 @@
       "fapi-ciba-id1-ensure-unsigned-backchannel-authorization-request-fails": "OP-155 m.20 (a), m.14 (b): CIBA answers only the invite of a REQUIRE_ACTION and binds its tokens with DPoP; FAPI-CIBA ID1 needs MTLS-bound tokens and stops at its mtls client certificate",
       "fapi-ciba-id1-refresh-token": "OP-155 m.20 (a), m.14 (b): CIBA answers only the invite of a REQUIRE_ACTION and binds its tokens with DPoP; FAPI-CIBA ID1 needs MTLS-bound tokens and stops at its mtls client certificate",
       "fapi-ciba-id1-ensure-mtls-holder-of-key-required": "OP-155 m.20 (a), m.14 (b): CIBA answers only the invite of a REQUIRE_ACTION and binds its tokens with DPoP; FAPI-CIBA ID1 needs MTLS-bound tokens and stops at its mtls client certificate"
+    },
+    "fapi2-message-signing-final-test-plan": {
+      "fapi2-security-profile-final-ensure-signed-client-assertion-with-RS256-fails": "IDI-6 (\u00a710.4): FAPI 2.0 clients sign with ES256, since Access offers no PS256 and refuses RS256 for the profile; the suite runs its RS256 refusal only with RSA client keys",
+      "fapi2-security-profile-final-ensure-signed-request-object-with-RS256-fails": "IDI-6 (\u00a710.4): FAPI 2.0 clients sign with ES256, since Access offers no PS256 and refuses RS256 for the profile; the suite runs its RS256 refusal only with RSA client keys",
+      "fapi2-security-profile-final-par-attempt-reuse-request_uri": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-attempt-to-use-expired-request_uri": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-attempt-to-use-request_uri-for-different-client": "Needs a reviewer screenshot of the error page; the suite's browser runner cannot submit it (RFC 9126 \u00a74: a request_uri that cannot be redeemed ends on the hosted error page, never at the client)",
+      "fapi2-security-profile-final-par-ensure-reused-request-uri-prior-to-auth-completion-succeeds": "Needs the first visit to the login page to stay unauthenticated; the target signs its user in on the first visit",
+      "fapi2-security-profile-final-user-rejects-authentication": "Needs the tester to press cancel on the login page; the target signs its user in without a page the suite's browser runner could cancel"
+    },
+    "openid-federation-deployed-entity-test-plan": {
+      "openid-federation-entity-configuration": "OP-155 m.3 (k), \u00a710.4.1 (RR-18): no implicit or hybrid flow; the plan checks the OP metadata against the Dynamic OP profile (id_token response types, implicit grant)",
+      "openid-federation-ensure-fetch-with-invalid-sub-fails": "OP-155 m.3 (k), \u00a710.4.1 (RR-18): no implicit or hybrid flow; the plan checks the OP metadata against the Dynamic OP profile (id_token response types, implicit grant)",
+      "openid-federation-ensure-fetch-with-iss-as-sub-fails": "OP-155 m.3 (k), \u00a710.4.1 (RR-18): no implicit or hybrid flow; the plan checks the OP metadata against the Dynamic OP profile (id_token response types, implicit grant)",
+      "openid-federation-preconfigured-keys-match-trust-anchors-keys": "OP-155 m.3 (k), \u00a710.4.1 (RR-18): no implicit or hybrid flow; the plan checks the OP metadata against the Dynamic OP profile (id_token response types, implicit grant)",
+      "openid-federation-compare-trust-chain-to-resolve": "OP-155 m.3 (k), \u00a710.4.1 (RR-18): no implicit or hybrid flow; the plan checks the OP metadata against the Dynamic OP profile (id_token response types, implicit grant); OP-155 m.3 (j): the resolve endpoint is not served, so the module skips its comparison"
     }
   }
 }
