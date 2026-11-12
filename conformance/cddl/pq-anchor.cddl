@@ -1,0 +1,24 @@
+; Post-quantum anchors, version 1 (RFC 8610; OP-159 m.3 (h), CR-45 RA-7). Deterministic CBOR.
+; Uses kernel.cddl. A verifier pins the anchor before the domain retires its classical
+; algorithm, in its Verifier Profile or with `access-verify --pq-anchors <file>`; after the
+; retirement a classical artefact is accepted only with a post-quantum inclusion bundle that
+; reaches this anchor, and a verifier without one refuses it as pq-anchor-missing. A chain of
+; classical signatures from Genesis to the post-quantum key is never accepted instead.
+
+; The ML-DSA key that signs the domain's post-quantum checkpoints; its length is exact per
+; parameter set (1 312, 1 952 or 2 592 bytes).
+pq-public-key = { ml_dsa: [-48 / -49 / -50, bstr] }
+
+pq-anchor = {
+  domain: domain-id,
+  kid: key-id,                          ; RFC 7638 thumbprint of key
+  key: pq-public-key,
+  witnesses: [+ witness-declaration],   ; their post-quantum cosign keys
+  issued_at: trusted-time,
+}
+
+; The file `access-verify --pq-anchors` reads.
+pq-anchor-file = {
+  v: 1,
+  anchors: [+ pq-anchor],
+}

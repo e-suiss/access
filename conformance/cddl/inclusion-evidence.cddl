@@ -1,0 +1,14 @@
+; Inclusion evidence, version 1 (RFC 8610; OP-159 m.3 (i), OP-158 m.14 5780, P18, SEC25, U12,
+; U27). Deterministic CBOR. What a verifier passes with an artefact signed under a superseded
+; binding key: the artefact's exact-content digest, the committed record disclosure, its
+; inclusion path into the cited checkpoint N_cited, that checkpoint's signed note with its
+; cosignatures and, after a handover, the consistency path to C_{h+1}. The log key and the
+; independent witness keys come from what the verifier already holds, never from the evidence.
+
+inclusion-evidence = {
+  artefact: bstr .size 32,
+  record: bstr .size (1..1048576),     ; the record disclosure (kernel.cddl record-disclosure)
+  path: [* bstr .size 32],
+  note: tstr .size (1..65536),
+  ? consistency: { to_size: uint, to_root: bstr .size 32, path: [* bstr .size 32] },
+}

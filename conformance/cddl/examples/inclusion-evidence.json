@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a5646e6f7465646e6f746564706174688158200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b667265636f726441a16861727465666163745820a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a16b636f6e73697374656e6379a364706174688158200d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d67746f5f726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b67746f5f73697a650c",
+      "edn": "{\"artefact\": h'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1', \"record\": h'a1', \"path\": [h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'], \"note\": \"note\", \"consistency\": {\"to_size\": 12, \"to_root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"path\": [h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d']}}",
+      "id": "after-handover",
+      "valid": true
+    },
+    {
+      "cbor": "a4646e6f7465646e6f7465647061746880667265636f726441a16861727465666163745820a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "edn": "{\"artefact\": h'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1', \"record\": h'a1', \"path\": [], \"note\": \"note\"}",
+      "id": "recovery",
+      "valid": true
+    },
+    {
+      "edn": "{\"artefact\": h'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1', \"path\": [], \"note\": \"note\"}",
+      "id": "no-record",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "inclusion-evidence.cddl"
+  ],
+  "contract": "inclusion-evidence"
+}

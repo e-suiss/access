@@ -1,0 +1,27 @@
+; Post-quantum re-anchor checkpoints, version 1 (RFC 8610; OP-159 m.3 (g), CR-45 RA-2, RA-3, RA-5).
+; Deterministic CBOR. The classical checkpoint stays a C2SP signed note (checkpoint.cddl). Its
+; post-quantum copy is a tagged COSE_Sign1 whose payload is the byte-identical T16 note body,
+; content type "application/access-pq-checkpoint", signed with an ML-DSA operational key whose
+; excerpt the ML-DSA binding signs. A witness's post-quantum cosign is a tagged COSE_Sign1 over
+; the note body followed by the cosign time as an 8-byte big-endian Unix second count, content
+; type "application/access-pq-cosign". No C2SP code point is invented for either.
+
+; One entry of GET /access/v1/domains/{domain}/checkpoints/pq, newest first.
+pq-checkpoint-entry = {
+  size: uint,
+  root: bstr .size 32,
+  checkpoint: bstr .size (1..131072),  ; the tagged COSE_Sign1
+  excerpt: bstr .size (1..16384),      ; the ML-DSA binding-signed key excerpt (kernel.cddl key-excerpt)
+  cosigns: [* pq-cosign],
+}
+
+; A witness's post-quantum cosign; only a witness the domain's root terms name counts.
+pq-cosign = {
+  name: tstr .size (1..255),
+  timestamp: uint,
+  sign1: bstr .size (1..16384),        ; the tagged COSE_Sign1
+}
+
+pq-checkpoint-list = {
+  checkpoints: [* pq-checkpoint-entry],
+}

@@ -846,3 +846,66 @@ fn validity_vectors_meet_the_cddl() {
     }
     assert!(with_status >= 1);
 }
+
+// OP-159 m.3 (g), CR-45 RA-2, RA-3
+#[test]
+fn pq_checkpoint_examples_meet_the_cddl() {
+    check_examples("pq-checkpoint.json");
+}
+
+// OP-159 m.3 (h), CR-45 RA-7
+#[test]
+fn pq_anchor_examples_meet_the_cddl() {
+    check_examples("pq-anchor.json");
+}
+
+// OP-159 m.3 (q), CR-43
+#[test]
+fn projection_ref_examples_meet_the_cddl() {
+    check_examples("projection-ref.json");
+}
+
+// OP-159 m.3 (i), P18, SEC25
+#[test]
+fn inclusion_evidence_examples_meet_the_cddl() {
+    check_examples("inclusion-evidence.json");
+}
+
+// OP-159 m.3 (b), (h), (j)
+#[test]
+fn the_kernels_stage_14_values_meet_the_cddl() {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::meta::{AnchorScope, Payload, Root, RootSets};
+    use access_kernel::verify::cose::{Algorithm, PublicKey};
+    use access_kernel::verify::key_scope::{Witness, thumbprint};
+    use access_kernel::verify::pq::{PqAlgorithm, PqAnchor};
+    let public = |alg: PqAlgorithm| -> Vec<u8> {
+        (0..alg.public_key_len())
+            .map(|i| u8::try_from(i % 251).unwrap())
+            .collect()
+    };
+    let witness = Witness::new(
+        "witness.example".into(),
+        PublicKey::MlDsa(Algorithm::MlDsa44, public(PqAlgorithm::MlDsa44)),
+        Algorithm::MlDsa44,
+        "northwind".into(),
+        true,
+    );
+    let key = PublicKey::MlDsa(Algorithm::MlDsa65, public(PqAlgorithm::MlDsa65));
+    let anchor = PqAnchor::new(
+        access_kernel::digest::Digest([3; 32]),
+        thumbprint(&key),
+        key,
+        vec![witness.clone()],
+        1_767_225_000_000,
+    );
+    let pq = Cddl::new(&[&read("cddl/kernel.cddl"), &read("cddl/pq-anchor.cddl")]);
+    pq.validate("pq-anchor", &anchor.to_value()).unwrap();
+    let create = Payload::AnchorCreate {
+        scope: AnchorScope::Domain,
+        root: Root::Sole(access_kernel::model::Id([1; 16])),
+        root_terms: std::collections::BTreeSet::new(),
+        sets: RootSets::new(vec![witness], Vec::new()),
+    };
+    kernel().validate("meta-payload", &create.to_value()).unwrap();
+}

@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {
+      "cbor": "a36473697a6519232865666574636878762f6163636573732f76312f646f6d61696e732f414141414141414141414141414141414141414141414141414141414141414141414141414141414141412f70726f6a656374696f6e732f424242424242424242424242424242424242424242424242424242424242424242424242424242424242426664696765737458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "edn": "{\"digest\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"size\": 9000, \"fetch\": \"/access/v1/domains/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/projections/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"}",
+      "id": "over-the-header-budget",
+      "valid": true
+    },
+    {
+      "edn": "{\"digest\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"size\": 4000, \"fetch\": \"/access/v1/domains/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/projections/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"}",
+      "id": "fits-a-header",
+      "valid": false
+    },
+    {
+      "edn": "{\"digest\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"size\": 9000, \"fetch\": \"https://evil.example/x\"}",
+      "id": "other-host",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "projection-ref.cddl"
+  ],
+  "contract": "projection-ref"
+}

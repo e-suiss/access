@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a261760167616e63686f727381a5636b6579a1666d6c5f64736182383058202222222222222222222222222222222222222222222222222222222222222222636b696458200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c66646f6d61696e822f58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a696973737565645f61741b0000019b76d18040697769746e657373657381a563616c67382f636b6579a1666d6c5f64736182382f58201111111111111111111111111111111111111111111111111111111111111111646e616d656f7769746e6573732e6578616d706c65686f70657261746f72696e6f72746877696e646b696e646570656e64656e74f5",
+      "edn": "{\"v\": 1, \"anchors\": [{\"domain\": [-16, h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'], \"kid\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"key\": {\"ml_dsa\": [-49, h'2222222222222222222222222222222222222222222222222222222222222222']}, \"witnesses\": [{\"name\": \"witness.example\", \"key\": {\"ml_dsa\": [-48, h'1111111111111111111111111111111111111111111111111111111111111111']}, \"alg\": -48, \"operator\": \"northwind\", \"independent\": true}], \"issued_at\": 1767225000000}]}",
+      "id": "one-anchor",
+      "valid": true
+    },
+    {
+      "edn": "{\"v\": 1, \"anchors\": [{\"domain\": [-16, h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'], \"kid\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"key\": {\"ed25519\": h'2222222222222222222222222222222222222222222222222222222222222222'}, \"witnesses\": [{\"name\": \"witness.example\", \"key\": {\"ml_dsa\": [-48, h'1111111111111111111111111111111111111111111111111111111111111111']}, \"alg\": -48, \"operator\": \"northwind\", \"independent\": true}], \"issued_at\": 1767225000000}]}",
+      "id": "classical-key",
+      "valid": false
+    },
+    {
+      "edn": "{\"v\": 1, \"anchors\": [{\"domain\": [-16, h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'], \"kid\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"key\": {\"ml_dsa\": [-49, h'2222222222222222222222222222222222222222222222222222222222222222']}, \"witnesses\": [], \"issued_at\": 1767225000000}]}",
+      "id": "no-witness",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "kernel.cddl",
+    "pq-anchor.cddl"
+  ],
+  "contract": "pq-anchor-file"
+}

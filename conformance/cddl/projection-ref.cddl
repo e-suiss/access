@@ -1,0 +1,11 @@
+; Projection reference, version 1 (RFC 8610; OP-159 m.3 (q), CR-43). Deterministic CBOR.
+; A projection whose artefact is larger than the 8 192-byte header budget is answered with this
+; reference instead. GET `fetch` returns the artefact byte-identical, only to an authenticated PEP
+; the artefact's aud names; the verifier recomputes the SHA-256 of the bytes, compares it with
+; `digest` and verifies the artefact in full. An offline PAP is never carried by reference.
+
+projection-ref = {
+  digest: bstr .size 32,
+  size: 8193..16777216,
+  fetch: tstr .regexp "/access/v1/domains/[A-Za-z0-9_-]{43}/projections/[A-Za-z0-9_-]{43}",
+}

@@ -476,7 +476,8 @@ binding-key = {
   alg: cose-alg,
   key: public-key,
   scope: binding-scope,
-  ? superseded: { at: digest, cited: digest },
+  ; OP-159 m.3 (i): absent in 0.6.0 metadata, which asks for evidence under every cause.
+  ? superseded: { at: digest, cited: digest, ? cause: "re-anchor" / "handover" / "recovery" },
 }
 
 ; Payload of a COSE_Sign1 signed by a binding key, content type "application/access-domain-metadata+cbor".
@@ -507,7 +508,16 @@ domain-metadata = {
   ? recovery: "available" / "not-available",
   ; Digest of the binding ceremony transcript (CR-29, OP-157 m.7 (i)).
   ? ceremony_transcript: digest,
+  ; OP-159 m.3 (g): the last post-quantum re-anchor checkpoint; absent before the first.
+  ? pq_reanchor: { size: uint, time: trusted-time, witnesses: [+ tstr .size (1..255)] },
+  ; OP-159 m.3 (s): absent reads as shared.
+  ? hosting: { hsm_partition: sharing, compute: sharing },
+  ; OP-159 m.3 (r)
+  ? crypto_profile: "standard" / "fips",
+  ? fips_module: bool,
 }
+
+sharing = "shared" / "dedicated"
 
 ; A witness: the note key name its cosignatures carry, its key and algorithm, its operator and
 ; whether that operator is independent of the provider (§16.6, SI-12).
@@ -792,9 +802,9 @@ disposition = [* [grant: id, "keep" / "revoke"]]
 
 ; The body of a core meta-action; its digest under "access/meta/v1" is `intent.opaque.payload`.
 meta-payload =
-    { anchor_create: { scope: anchor-scope, root: root-value, ? root_terms: requirement-set } }
+    { anchor_create: { scope: anchor-scope, root: root-value, ? root_terms: requirement-set, ? sets: root-sets } }
   / { anchor_transfer: { anchor: id, root: root-value, disposition: disposition } }
-  / { anchor_amend: { anchor: id, ? root: root-value, ? root_terms: requirement-set } }
+  / { anchor_amend: { anchor: id, ? root: root-value, ? root_terms: requirement-set, ? sets: root-sets } }
   / { anchor_retire: { anchor: id, disposition: disposition } }
   / { party_register: { party: party-ref, root: root-value, actor_kind: actor-kind } }
   / { party_depart: { party: party-ref, disposition: disposition } }
@@ -898,7 +908,7 @@ genesis-grant = {
 }
 
 genesis-fields = {
-  meta_anchor: { root: root-value, ? root_terms: requirement-set, ? recovery: recovery-entry },
+  meta_anchor: { root: root-value, ? root_terms: requirement-set, ? recovery: recovery-entry, ? sets: root-sets },
   ? anchors: [+ { scope: anchor-scope, root: root-value, ? root_terms: requirement-set }],
   ? grants: [+ genesis-grant],
   ? acceptances: [+ acceptance-content],
@@ -915,7 +925,14 @@ genesis-fields = {
 ; Status that depends on time or on other objects is derived, never stored (C2).
 ended = { at: uint, how: "revoked" / "renounced" / "retired" / "terminated" / "recovered" / "departed" }
 
-anchor-state = { scope: anchor-scope, root: root-value, ? root_terms: requirement-set, since: uint, ? ended: ended }
+anchor-state = { scope: anchor-scope, root: root-value, ? root_terms: requirement-set, ? sets: root-sets, since: uint, ? ended: ended }
+
+; OP-158 m.11 5984, OP-159 m.3 (j): the witness and replica sets of an Anchor's root terms; only
+; a witness or replica the canonical state names counts. Adding one is CT1, removing one CT3.
+root-sets = {
+  ? witnesses: [+ witness-declaration],
+  ? replicas: [+ replica-declaration],
+}
 grant-state = { content: grant-content, since: uint, revision: uint, ? ended: ended }
 party-state = { anchor: id, actor_kind: actor-kind, since: uint, ? ended: ended }
 instance-state = { party: party-ref, key: instance-key, since: uint, ? successor: instance-ref, ? ended: ended }

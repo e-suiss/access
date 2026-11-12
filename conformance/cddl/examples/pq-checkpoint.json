@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a16b636865636b706f696e747381a564726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6473697a6519100067636f7369676e7381a3646e616d656f7769746e6573732e6578616d706c65657369676e3141d26974696d657374616d701a6955b6a8676578636572707441d26a636865636b706f696e7441d2",
+      "edn": "{\"checkpoints\": [{\"size\": 4096, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"checkpoint\": h'd2', \"excerpt\": h'd2', \"cosigns\": [{\"name\": \"witness.example\", \"timestamp\": 1767225000, \"sign1\": h'd2'}]}]}",
+      "id": "one-cosigned",
+      "valid": true
+    },
+    {
+      "cbor": "a16b636865636b706f696e747380",
+      "edn": "{\"checkpoints\": []}",
+      "id": "none-yet",
+      "valid": true
+    },
+    {
+      "edn": "{\"checkpoints\": [{\"size\": 4096, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"checkpoint\": h'd2', \"excerpt\": h'd2', \"cosigns\": [{\"timestamp\": 1767225000, \"sign1\": h'd2'}]}]}",
+      "id": "cosign-without-name",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "pq-checkpoint.cddl"
+  ],
+  "contract": "pq-checkpoint-list"
+}
