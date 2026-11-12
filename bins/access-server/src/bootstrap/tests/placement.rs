@@ -494,3 +494,60 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     assert!(after.is_ok(), "{after:?}");
     w.domains.release().await;
 }
+
+fn public_key() -> suiss_crypto::cose::PublicKey {
+    let (signer, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
+    suiss_crypto::signer::Signer::public_key(&signer)
+}
+
+// SEC23, RR-35, HL-34, OP-158 m.11, OP-159 m.3 (g), (j), Ek B 5984, 6201
+#[tokio::test(flavor = "multi_thread")]
+async fn a_witness_only_the_provider_declared_is_a_proposal_and_no_anchor_is_claimed_before_one() {
+    use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+    use access_kernel::verify::key_scope::{Replica, Witness};
+    let label = "j2-canonical";
+    let p = pdp(label).await;
+    let mut declared = access_authority_signer::domain::declared_default();
+    declared.witnesses.push(Witness::new(
+        String::from("w-proposed"),
+        public_key(),
+        suiss_crypto::cose::Algorithm::Ed25519,
+        String::from("Example Witness Ltd"),
+        true,
+    ));
+    declared.replicas.push(Replica::new(
+        String::from("r-proposed"),
+        public_key(),
+        String::from("Example Replica Ltd"),
+        true,
+    ));
+    let answer = access_authority_signer::adapters::call(
+        &socket(label),
+        &SignRequest::Declare {
+            domain: p.domain,
+            declared: Box::new(declared),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(answer, SignResponse::Opened);
+    let published = p.w.domains.declared(p.domain).await;
+    assert!(published.acknowledges(), "the operator's own statement");
+    let canonical = crate::admin::realm::canonical_sets(&p.w.db.app, p.domain).await;
+    assert!(canonical.is_empty(), "the Genesis root approved no set");
+    let view = crate::admin::realm::declared_view(&published, &canonical);
+    // OP-159 m.3 (j)
+    assert_eq!(view["witnesses"][0]["canonical"], false, "{view:?}");
+    assert_eq!(view["replicas"][0]["canonical"], false, "{view:?}");
+    assert_eq!(view["acknowledges"], false);
+    // RR-35, HL-34
+    assert_eq!(view["pq_reanchor"], Json::Null);
+    let approved =
+        access_kernel::meta::RootSets::new(published.witnesses.clone(), published.replicas.clone());
+    let view = crate::admin::realm::declared_view(&published, &approved);
+    assert_eq!(view["acknowledges"], true);
+    assert_eq!(view["witnesses"][0]["canonical"], true);
+    // SEC23
+    let v = revoke(&p).await;
+    assert_eq!(v["context"]["ack"], "pending", "{v}");
+}

@@ -740,51 +740,97 @@ impl<P> Realms<P> {
         let declared = access_authority_core::app::placement::declared(signer, Digest(d))
             .await
             .ok()?;
-        let mut out = serde_json::Map::new();
-        out.insert(
-            String::from("witnesses"),
-            declared
-                .witnesses
-                .iter()
-                .map(|w| {
-                    serde_json::json!({
-                        "name": w.name,
-                        "operator": w.operator,
-                        "independent": w.independent,
-                    })
-                })
-                .collect(),
-        );
-        out.insert(
-            String::from("replicas"),
-            declared
-                .replicas
-                .iter()
-                .map(|r| {
-                    serde_json::json!({
-                        "name": r.name,
-                        "operator": r.operator,
-                        "independent": r.independent,
-                    })
-                })
-                .collect(),
-        );
-        out.insert(
-            String::from("declared_durability"),
-            declared.durability.map_or(Value::Null, |d| {
-                Value::from(match d {
-                    access_kernel::verify::key_scope::Durability::SingleNode => "single-node",
-                    access_kernel::verify::key_scope::Durability::Replicated => "replicated",
-                })
-            }),
-        );
-        // SEC23, HL-40
-        out.insert(
-            String::from("acknowledges"),
-            Value::Bool(declared.acknowledges()),
-        );
-        Some(out)
+        // OP-158 m.11, OP-159 m.3 (j)
+        let canonical = canonical_sets(&self.app, Digest(d)).await;
+        Some(declared_view(&declared, &canonical))
     }
+}
+
+/// What the governing domain declares, as members of the durability read: each witness and
+/// replica marked canonical only when the root approved it, the acknowledgement counted only
+/// over those, and the last post-quantum anchor (SEC23, HL-40, RR-35, OP-158 m.11, OP-159 m.3
+/// (g), (j)).
+pub(crate) fn declared_view(
+    declared: &access_kernel::verify::key_scope::Declarations,
+    canonical: &access_kernel::meta::RootSets,
+) -> serde_json::Map<String, Value> {
+    let mut out = serde_json::Map::new();
+    out.insert(
+        String::from("witnesses"),
+        declared
+            .witnesses
+            .iter()
+            .map(|w| {
+                serde_json::json!({
+                    "name": w.name,
+                    "operator": w.operator,
+                    "independent": w.independent,
+                    "canonical": canonical.witnesses.contains(w),
+                })
+            })
+            .collect(),
+    );
+    out.insert(
+        String::from("replicas"),
+        declared
+            .replicas
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "name": r.name,
+                    "operator": r.operator,
+                    "independent": r.independent,
+                    "canonical": canonical.replicas.contains(r),
+                })
+            })
+            .collect(),
+    );
+    out.insert(
+        String::from("declared_durability"),
+        declared.durability.map_or(Value::Null, |d| {
+            Value::from(match d {
+                access_kernel::verify::key_scope::Durability::SingleNode => "single-node",
+                access_kernel::verify::key_scope::Durability::Replicated => "replicated",
+            })
+        }),
+    );
+    // SEC23, HL-40, OP-159 m.3 (j)
+    out.insert(
+        String::from("acknowledges"),
+        Value::Bool(declared.acknowledges_with(canonical)),
+    );
+    // RR-35, OP-159 m.3 (g)
+    out.insert(
+        String::from("pq_reanchor"),
+        declared.pq_reanchor.as_ref().map_or(Value::Null, |r| {
+            serde_json::json!({
+                "size": r.size,
+                "time": r.time,
+                "witnesses": r.witnesses,
+            })
+        }),
+    );
+    out
+}
+
+/// The canonical witness and replica sets of `domain`'s meta-anchor root terms; empty when
+/// none were approved or the state cannot be read (OP-158 m.11, OP-159 m.3 (j)).
+pub(crate) async fn canonical_sets(app: &Pool, domain: Digest) -> access_kernel::meta::RootSets {
+    use access_kernel::codec::Canonical as _;
+    let meta = access_kernel::meta::meta_anchor(&domain);
+    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
+    access_store::authority::state_of(
+        app,
+        &access_store::scope::DomainId::from_bytes(domain.0),
+        &[key],
+    )
+    .await
+    .ok()
+    .and_then(|rows| rows.into_iter().find_map(|r| r.value))
+    .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
+    .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
+    .map(|a| a.sets)
+    .unwrap_or_default()
 }
 
 /// A live Instance key of a governing domain, from the authority plane's key index.

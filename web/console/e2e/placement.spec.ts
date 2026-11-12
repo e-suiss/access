@@ -70,3 +70,61 @@ test("the durability screen says single node and never shows revocations as conf
   const a11y = await new AxeBuilder({ page }).include("main").analyze();
   expect(a11y.violations).toEqual([]);
 });
+
+// RR-35, OP-159 m.3 (g), (j)
+test("the durability screen says there is no post-quantum anchor yet and marks a proposed witness", async ({
+  page,
+  bff,
+}) => {
+  bff.admin.set("realms/acme/durability", {
+    durability: "replicated",
+    class: "regional",
+    region: "eu-central",
+    dr_profile: null,
+    rpo_s: null,
+    witnesses: [
+      { name: "w-1", operator: "Example Witness Ltd", independent: true, canonical: true },
+      { name: "w-2", operator: "Other Witness Ltd", independent: true, canonical: false },
+    ],
+    replicas: [
+      { name: "r-1", operator: "Example Replica Ltd", independent: true, canonical: true },
+    ],
+    acknowledges: true,
+    pq_reanchor: null,
+  });
+  await open(page, bff, "/console/admin/durability");
+  await expect(page.getByTestId("durability-pq-anchor")).toHaveText("No post-quantum anchor yet");
+  await expect(page.getByTestId("durability-proposed")).toHaveCount(1);
+  await expect(page.getByTestId("durability-witnesses")).toContainText(
+    "Other Witness Ltd · Independent of the provider · Proposed by the provider",
+  );
+  await expect(page.getByTestId("durability-unconfirmed")).toHaveCount(0);
+  expect(bff.writes).toEqual([]);
+  const a11y = await new AxeBuilder({ page }).include("main").analyze();
+  expect(a11y.violations).toEqual([]);
+});
+
+// RR-35, HL-34, OP-159 m.3 (g)
+test("the durability screen shows the last post-quantum anchor and claims nothing more", async ({
+  page,
+  bff,
+}) => {
+  bff.admin.set("realms/acme/durability", {
+    durability: "replicated",
+    class: "regional",
+    region: "eu-central",
+    dr_profile: null,
+    rpo_s: null,
+    witnesses: [],
+    replicas: [],
+    acknowledges: false,
+    pq_reanchor: { size: 42, time: 1800000000000, witnesses: ["w-pq"] },
+  });
+  await open(page, bff, "/console/admin/durability");
+  await expect(page.getByTestId("durability-pq-anchor")).toHaveText(
+    "Post-quantum anchor at log size 42, 2027-01-15T08:00:00.000Z",
+  );
+  await expect(page.getByTestId("durability")).not.toContainText(
+    /quantum[- ]safe|continuity|proves/i,
+  );
+});

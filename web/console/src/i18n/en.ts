@@ -1071,6 +1071,9 @@ export const en = {
   hostingDedicatedHsm: "Dedicated HSM partition",
   hostingSharedCompute: "Shared compute: co-tenant risk applies",
   hostingDedicatedCompute: "Dedicated compute",
+  // OP-159 m.4 (b) (J2): a witness or replica the provider proposed and the root has not approved
+  durabilityProposed:
+    "Proposed by the provider and not yet approved by the root. It doesn't count until the root approves it.",
 } as const;
 
 export type Key = keyof typeof en;

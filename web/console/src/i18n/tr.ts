@@ -1082,4 +1082,6 @@ export const tr: Record<Key, string> = {
   hostingDedicatedHsm: "Ayrılmış HSM bölümü",
   hostingSharedCompute: "Paylaşılan işlem gücü: ortak kiracı riski geçerli",
   hostingDedicatedCompute: "Ayrılmış işlem gücü",
+  // OP-159 m.4 (b) (J2)
+  durabilityProposed: "Sağlayıcı önerdi, kök henüz onaylamadı. Kök onaylayana kadar sayılmaz.",
 };
