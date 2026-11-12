@@ -138,12 +138,23 @@ impl<E: Env> OAuth<E> {
         };
         // RFC 9126 §6, OP-155 m.3 (k)
         if client.require_par || client.profile.fapi2 {
-            return Ok(Err(Reply::Redirect(error_redirect(
-                redirect,
-                AuthError::PAR_REQUIRED,
-                params.get("state"),
-                &realm.issuer,
-            ))));
+            let mode = ResponseMode::parse(params.get("response_mode"))
+                .unwrap_or_default()
+                .max_jwt(client.profile.fapi2);
+            return Ok(Err(self
+                .answer(
+                    tx,
+                    realm,
+                    &client,
+                    Answer {
+                        redirect_uri: redirect,
+                        mode,
+                        state: params.get("state"),
+                    },
+                    Outcome::Error(AuthError::PAR_REQUIRED),
+                    now,
+                )
+                .await?));
         }
         let product = self.product_resource(realm, params).await?;
         match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {

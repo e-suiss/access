@@ -169,7 +169,10 @@ async fn fapi2_clients_are_held_to_the_profile() {
         &a.authorize(&[("client_id", a.f.keyed.as_str())], Some(&cookie))
             .await,
     );
-    assert_eq!(query(&to, "error"), "invalid_request", "{to}");
+    assert!(query_opt(&to, "error").is_none(), "{to}");
+    let refused = realm_jws(&a, &query(&to, "response"), "JWT").await;
+    assert_eq!(refused["error"], "invalid_request", "{refused}");
+    assert_eq!(refused["aud"], a.f.keyed.as_str());
 
     let plain = par(
         &a,
