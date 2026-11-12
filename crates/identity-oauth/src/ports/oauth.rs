@@ -41,6 +41,13 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<Option<ClientRow>, Unavailable>> + Send;
     /// The realm's JOSE algorithm (OP-146 m.8 (e)).
     fn jose_alg(&mut self) -> impl Future<Output = Result<JwsAlg, Unavailable>> + Send;
+    /// The ML-DSA parameter set of the realm's open post-quantum signing profile (OP-159 m.3
+    /// (o)); `None` without one.
+    fn signing_profile(
+        &mut self,
+    ) -> impl Future<Output = Result<Option<JwsAlg>, Unavailable>> + Send {
+        std::future::ready(Ok(None))
+    }
     /// The issuer stored on the realm's row (§17.9.6); `None` for a realm without one.
     fn issuer(&mut self) -> impl Future<Output = Result<Option<Issuer>, Unavailable>> + Send;
     /// Stores a pending request.
@@ -610,6 +617,20 @@ pub trait TokenSigner: Send + Sync {
     ) -> impl Future<Output = Result<String, Unavailable>> + Send;
     /// The realm's JWKS, to read back its own tokens.
     fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
+    /// Signs a JSON `payload` as a compact ML-DSA JWS of `typ` with the realm's post-quantum
+    /// key set of `alg`, opening it when the signer has none (CR-41, OP-159 m.3 (o)); a signer
+    /// without one refuses, and nothing is signed classically in its place.
+    fn sign_pq(
+        &self,
+        realm: RealmId,
+        alg: JwsAlg,
+        typ: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send {
+        let _ = (realm, alg, typ, payload, at_ms);
+        std::future::ready(Err(Unavailable))
+    }
     /// Signs a JSON `payload` as an RS256 compact JWS of `typ` with the realm's `rsa-id` key,
     /// made on first use (MD-6, OP-155 m.3 (k)); identity assertions only, never authority.
     fn sign_rs256(

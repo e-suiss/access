@@ -210,6 +210,12 @@ impl OAuthTx for PgOAuthTx {
         })
     }
 
+    // OP-159 m.3 (o)
+    async fn signing_profile(&mut self) -> Result<Option<JwsAlg>, Unavailable> {
+        let s = self.0.realm_signing().await.map_err(down)?;
+        Ok(s.profile.as_deref().and_then(profile_alg))
+    }
+
     async fn issuer(&mut self) -> Result<Option<Issuer>, Unavailable> {
         let g = idp::governance(&mut self.0).await.map_err(down)?;
         Ok(g.and_then(|g| g.issuer)
@@ -782,6 +788,37 @@ impl TokenSigner for SignerKeys {
         Keys::jwks(self, realm).await
     }
 
+    // CR-41, OP-159 m.3 (o)
+    async fn sign_pq(
+        &self,
+        realm: RealmId,
+        alg: JwsAlg,
+        typ: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> Result<String, Unavailable> {
+        use access_identity_signer::pq::{NO_PQ, PqRequest};
+        let r = Realm(*realm.as_bytes());
+        let request = Request::Pq(PqRequest::Sign {
+            realm: r,
+            typ: String::from(typ),
+            payload: payload.to_vec(),
+            at: at_ms,
+        });
+        match self.ask(&request).await? {
+            Response::Signed { token, .. } => return Ok(token),
+            Response::Error(code) if code == NO_PQ => {}
+            Response::Error(code) => return Err(refused(&code, typ)),
+            _ => return Err(Unavailable),
+        }
+        self.pq_open(realm, alg).await?;
+        match self.ask(&request).await? {
+            Response::Signed { token, .. } => Ok(token),
+            Response::Error(code) => Err(refused(&code, typ)),
+            _ => Err(Unavailable),
+        }
+    }
+
     // MD-6, OP-155 m.3 (k)
     async fn sign_rs256(
         &self,
@@ -899,5 +936,16 @@ impl Random for OsRandom {
             }
         }
         Ok(())
+    }
+}
+
+/// The JWS algorithm of a realm signing profile's stored name (OP-159 m.3 (o)).
+#[must_use]
+pub fn profile_alg(name: &str) -> Option<JwsAlg> {
+    match name {
+        "ml-dsa-44" => Some(JwsAlg::MlDsa44),
+        "ml-dsa-65" => Some(JwsAlg::MlDsa65),
+        "ml-dsa-87" => Some(JwsAlg::MlDsa87),
+        _ => None,
     }
 }

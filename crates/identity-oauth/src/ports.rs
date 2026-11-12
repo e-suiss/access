@@ -114,6 +114,9 @@ pub struct Facts {
     pub secret_post: bool,
     /// Whether an active client opted in to `client_secret_jwt` (OP-155 m.3 (k)).
     pub secret_jwt: bool,
+    /// The ML-DSA parameter set of the realm's open post-quantum signing profile (OP-159 m.3
+    /// (o)).
+    pub signing_profile: Option<access_crypto::jose::JwsAlg>,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

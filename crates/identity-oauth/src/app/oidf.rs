@@ -92,6 +92,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                 frontchannel: facts.frontchannel,
                 secret_post: facts.secret_post,
                 secret_jwt: facts.secret_jwt,
+                pq_alg: facts.signing_profile.map(access_crypto::jose::JwsAlg::name),
             },
         );
         let Ok(Json::Object(mut op)) = json::parse(op.as_bytes(), MAX_DOC) else {

@@ -152,6 +152,11 @@ pub fn parse_jwks(doc: &[u8]) -> Result<Vec<Jwk>, JwtError> {
 /// [`JwtError::Jwks`].
 pub fn realm_key_set(doc: &[u8]) -> Result<KeySet, JwtError> {
     let mut set = KeySet::default();
+    // CR-41 m.3, OP-159 m.3 (o)
+    for (kid, alg, key) in akp_keys(doc)? {
+        set.allowed.insert(alg);
+        set.insert(kid, key).map_err(|_| JwtError::Jwks)?;
+    }
     for j in parse_jwks(doc)? {
         let kid: [u8; 32] = j
             .kid
@@ -168,6 +173,42 @@ pub fn realm_key_set(doc: &[u8]) -> Result<KeySet, JwtError> {
         set.insert(kid, key).map_err(|_| JwtError::Jwks)?;
     }
     Ok(set)
+}
+
+/// The `AKP` keys of a realm JWKS with their mandatory `alg` and exact length (RFC 9964, CR-41
+/// m.3); any other key is left to [`parse_jwks`].
+fn akp_keys(doc: &[u8]) -> Result<Vec<([u8; 32], Algorithm, PublicKey)>, JwtError> {
+    let top = json::parse(doc, MAX_JWKS).map_err(|_| JwtError::Jwks)?;
+    let Some(Json::Array(keys)) = top.get("keys") else {
+        return Err(JwtError::Jwks);
+    };
+    let mut out = Vec::new();
+    for k in keys.iter().take(MAX_KEYS) {
+        let m = members(k).ok_or(JwtError::Jwks)?;
+        if text(m, "kty") != Some("AKP") {
+            continue;
+        }
+        if m.iter().any(|(k, _)| k == "priv") {
+            return Err(JwtError::Jwks);
+        }
+        let pq = text(m, "alg")
+            .and_then(|a| {
+                access_kernel::verify::pq::PqAlgorithm::ALL
+                    .into_iter()
+                    .find(|p| p.jose() == a)
+            })
+            .ok_or(JwtError::Jwks)?;
+        let public = bytes(m, "pub")?;
+        if public.len() != pq.public_key_len() {
+            return Err(JwtError::Jwks);
+        }
+        let kid: [u8; 32] = text(m, "kid")
+            .and_then(|k| b64url_decode(k).ok())
+            .and_then(|k| k.try_into().ok())
+            .ok_or(JwtError::Jwks)?;
+        out.push((kid, pq.algorithm(), PublicKey::MlDsa(pq.algorithm(), public)));
+    }
+    Ok(out)
 }
 
 struct Parts<'a> {

@@ -224,6 +224,9 @@ pub struct RealmFacts {
     /// aliases (`idp.realm.mtls_aliases`); without it `mtls_endpoint_aliases` is absent
     /// (RFC 8705 §5, OP-155 m.3 (m)).
     pub mtls_port: Option<u16>,
+    /// The JWS name of the realm's open post-quantum signing profile; without it no ML-DSA
+    /// algorithm is declared (CR-41, OP-159 m.3 (o)).
+    pub pq_alg: Option<&'static str>,
 }
 
 /// The endpoints `mtls_endpoint_aliases` names on the mTLS listener (RFC 8705 §5): those a
@@ -380,7 +383,11 @@ const ENCRYPTION_ALGS: [&str; 2] = ["ECDH-ES+A256KW", "RSA-OAEP-256"];
 /// The high-assurance members (OP-155 m.3 (k)): JAR, JARM, JWE and mutual TLS, each once
 /// served; front-channel logout only when the realm turned it on (IDP-24).
 fn assurance_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmFacts) {
-    let signing = json!(["ES256", "Ed25519", "RS256"]);
+    // OP-159 m.3 (o)
+    let signing = match facts.pq_alg {
+        Some(pq) => json!(["ES256", "Ed25519", "RS256", pq]),
+        None => json!(["ES256", "Ed25519", "RS256"]),
+    };
     if served.feature(Feature::Jar) {
         m.insert(
             "request_object_signing_alg_values_supported".into(),

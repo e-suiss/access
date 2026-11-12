@@ -116,6 +116,19 @@ impl<E: Env> OAuth<E> {
                     .sign(realm.realm, realm_alg, typ, claims, now)
                     .await?
             }
+            // CR-41, OP-159 m.3 (o)
+            Some(a) if a.ml_dsa().is_some() => {
+                let profile = tx.signing_profile().await?;
+                match a.ml_dsa() {
+                    Some(pq) if profile == Some(pq) => {
+                        signer.sign_pq(realm.realm, pq, typ, claims, now).await?
+                    }
+                    _ => {
+                        tracing::warn!("client ML-DSA algorithm is not the realm's profile");
+                        return Err(Unavailable);
+                    }
+                }
+            }
             Some(_) => {
                 tracing::warn!("client signing algorithm is not served by the realm");
                 return Err(Unavailable);

@@ -115,6 +115,14 @@ impl Directory for PgDirectory {
         let legacy = access_store::client_profiles::legacy_methods(&mut t)
             .await
             .map_err(|_| Unavailable)?;
+        // OP-159 m.3 (o)
+        let signing_profile = t
+            .realm_signing()
+            .await
+            .map_err(|_| Unavailable)?
+            .profile
+            .as_deref()
+            .and_then(oauth::profile_alg);
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Facts {
             public_sub_clients,
@@ -127,6 +135,7 @@ impl Directory for PgDirectory {
             frontchannel,
             secret_post: legacy.iter().any(|m| m == "client_secret_post"),
             secret_jwt: legacy.iter().any(|m| m == "client_secret_jwt"),
+            signing_profile,
         })
     }
 
@@ -273,6 +282,52 @@ impl SignerKeys {
         }
         match self.ask(&request).await? {
             Response::SignedCose { sign1, .. } => Ok(sign1),
+            _ => Err(Unavailable),
+        }
+    }
+}
+
+impl SignerKeys {
+    /// Whether the identity signer can hold an ML-DSA key of `alg` (OP-159 m.3 (d)).
+    ///
+    /// # Errors
+    /// [`Unavailable`] when the signer does not answer.
+    pub async fn pq_ready(&self, alg: JwsAlg) -> Result<bool, Unavailable> {
+        let request = Request::Pq(access_identity_signer::pq::PqRequest::Ready { alg });
+        match self.ask(&request).await? {
+            Response::Opened => Ok(true),
+            Response::Error(code) if code == access_identity_signer::pq::PQ_KEY_UNAVAILABLE => {
+                Ok(false)
+            }
+            _ => Err(Unavailable),
+        }
+    }
+
+    /// Opens the realm's post-quantum key set with `alg` (OP-159 m.3 (o)).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn pq_open(&self, realm: RealmId, alg: JwsAlg) -> Result<(), Unavailable> {
+        let request = Request::Pq(access_identity_signer::pq::PqRequest::Open {
+            realm: Realm(*realm.as_bytes()),
+            alg,
+        });
+        match self.ask(&request).await? {
+            Response::Opened => Ok(()),
+            _ => Err(Unavailable),
+        }
+    }
+
+    /// Drops every key of the realm's post-quantum key set (OP-159 m.3 (a)).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn pq_close(&self, realm: RealmId) -> Result<(), Unavailable> {
+        let request = Request::Pq(access_identity_signer::pq::PqRequest::Close {
+            realm: Realm(*realm.as_bytes()),
+        });
+        match self.ask(&request).await? {
+            Response::Opened => Ok(()),
             _ => Err(Unavailable),
         }
     }

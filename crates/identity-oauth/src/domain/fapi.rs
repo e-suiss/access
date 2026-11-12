@@ -114,6 +114,13 @@ pub enum IdAlg {
     Ed25519,
     /// RS256 with the realm's `rsa-id` key; identity plane only, after the opt-in (CR-2).
     Rs256,
+    /// ML-DSA-44 with the realm's post-quantum key set, while its signing profile holds it
+    /// (CR-41, OP-159 m.3 (o)).
+    MlDsa44,
+    /// ML-DSA-65, likewise.
+    MlDsa65,
+    /// ML-DSA-87, likewise.
+    MlDsa87,
 }
 
 impl IdAlg {
@@ -124,15 +131,36 @@ impl IdAlg {
             Self::Es256 => "ES256",
             Self::Ed25519 => "Ed25519",
             Self::Rs256 => "RS256",
+            Self::MlDsa44 => "ML-DSA-44",
+            Self::MlDsa65 => "ML-DSA-65",
+            Self::MlDsa87 => "ML-DSA-87",
         }
     }
 
     /// From the JOSE name.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
-        [Self::Es256, Self::Ed25519, Self::Rs256]
-            .into_iter()
-            .find(|a| a.name() == name)
+        [
+            Self::Es256,
+            Self::Ed25519,
+            Self::Rs256,
+            Self::MlDsa44,
+            Self::MlDsa65,
+            Self::MlDsa87,
+        ]
+        .into_iter()
+        .find(|a| a.name() == name)
+    }
+
+    /// The ML-DSA parameter set, for a post-quantum algorithm (OP-159 m.3 (o)).
+    #[must_use]
+    pub const fn ml_dsa(self) -> Option<access_crypto::jose::JwsAlg> {
+        match self {
+            Self::MlDsa44 => Some(access_crypto::jose::JwsAlg::MlDsa44),
+            Self::MlDsa65 => Some(access_crypto::jose::JwsAlg::MlDsa65),
+            Self::MlDsa87 => Some(access_crypto::jose::JwsAlg::MlDsa87),
+            Self::Es256 | Self::Ed25519 | Self::Rs256 => None,
+        }
     }
 }
 
