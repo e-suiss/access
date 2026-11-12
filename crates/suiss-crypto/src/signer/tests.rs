@@ -159,3 +159,38 @@ fn a_paged_signer_refuses_pages_that_changed() {
     swapped.lock().unwrap().clear();
     assert!(matches!(paged.sign(b"m"), Err(SignError::Key)));
 }
+
+// CR-41 m.3, m.4, OP-159 m.3 (c), (d)
+#[test]
+fn ml_dsa_signer_signs_from_its_seed_and_aws_lc_verifies() {
+    use crate::sig::Backend as _;
+    for alg in [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87] {
+        let (signer, seed) = MlDsaSigner::generate(alg).unwrap();
+        let again = MlDsaSigner::from_seed(alg, &seed).unwrap();
+        assert_eq!(signer.public_key(), again.public_key());
+        let PublicKey::MlDsa(a, public) = signer.public_key() else {
+            panic!("not an ML-DSA key");
+        };
+        assert_eq!(a, alg);
+        assert!(signer.public_key().check().is_ok());
+        let sig = signer.sign(b"payload").unwrap();
+        assert!(AwsLcBackend.supports(alg));
+        assert!(AwsLcBackend.ml_dsa(alg, &public, b"payload", &sig));
+        assert!(!AwsLcBackend.ml_dsa(alg, &public, b"other", &sig));
+        assert!(!PureBackend.supports(alg));
+        assert!(!PureBackend.ml_dsa(alg, &public, b"payload", &sig));
+        let cose = sign_sign1(&signer, [4; 32], "application/test+cbor", b"payload").unwrap();
+        assert_eq!(cose.first(), Some(&0xd2));
+    }
+}
+
+// CR-41 m.2
+#[test]
+fn ml_dsa_signer_refuses_a_classical_algorithm() {
+    assert!(matches!(
+        MlDsaSigner::generate(Algorithm::Ed25519),
+        Err(SignError::Algorithm)
+    ));
+    let other = Secret::new(random_seed().unwrap());
+    assert!(MlDsaSigner::from_seed(Algorithm::Esp256, &other).is_err());
+}

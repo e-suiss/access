@@ -406,3 +406,50 @@ fn not_wrappable(e: &HsmError) -> bool {
     let text = format!("{e:?}");
     text.contains("KeyNotWrappable") || text.contains("unable to wrap the key")
 }
+
+// OP-159 m.3 (d), CR-18, MD-6
+#[test]
+fn ml_dsa_probe_decides_between_a_token_key_and_a_refusal() {
+    use std::io::Write as _;
+    let s = store();
+    let probe = s.ml_dsa_mechanisms().unwrap();
+    let names = s.mechanism_names().unwrap();
+    let listed = names.iter().any(|n| n.contains("ML_DSA"));
+    let _ = writeln!(
+        std::io::stderr(),
+        "OP-159 m.3 (d) probe: {probe:?}; ML-DSA listed: {listed}; {} mechanisms",
+        names.len()
+    );
+    assert_eq!(
+        listed,
+        probe.key_pair_gen || probe.sign || probe.verify || listed
+    );
+    let label = format!("pq-binding-{}", std::process::id());
+    match s.generate_ml_dsa(&label, Algorithm::MlDsa65) {
+        Ok(signer) => {
+            assert!(probe.available());
+            assert_eq!(signer.algorithm(), Algorithm::MlDsa65);
+            let sig = signer.sign(b"suiss/pq").unwrap();
+            let PublicKey::MlDsa(alg, public) = signer.public_key() else {
+                panic!("not an ML-DSA key");
+            };
+            assert!(crate::sig::Backend::ml_dsa(
+                &crate::aws::AwsLcBackend,
+                alg,
+                &public,
+                b"suiss/pq",
+                &sig
+            ));
+        }
+        Err(e) => {
+            assert!(!probe.available());
+            assert!(matches!(e, HsmError::PqUnavailable));
+            assert_eq!(e.code(), "pq-key-unavailable");
+            assert!(s.signer(&label).is_err());
+        }
+    }
+    assert!(matches!(
+        s.generate_ml_dsa("pq-classical", Algorithm::Ed25519),
+        Err(HsmError::Encoding)
+    ));
+}

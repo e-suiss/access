@@ -7,7 +7,8 @@ use alloc::vec::Vec;
 
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{
-    ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, Ed25519KeyPair, KeyPair as _,
+    ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, Ed25519KeyPair, KeyPair as _, ML_DSA_44_SIGNING,
+    ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair, PqdsaSigningAlgorithm,
 };
 
 use crate::cose::{ALG, Algorithm, CONTENT_TYPE, KID, PublicKey, to_be_signed};
@@ -60,7 +61,8 @@ pub trait Signer {
     /// The public key.
     fn public_key(&self) -> PublicKey;
 
-    /// Signs `message`: 64 bytes, Ed25519 or ECDSA P-256 `r ‖ s` with low S (CR-9).
+    /// Signs `message`: 64 bytes, Ed25519 or ECDSA P-256 `r ‖ s` with low S (CR-9), or a pure
+    /// ML-DSA signature of its parameter set's length (CR-41).
     ///
     /// # Errors
     /// [`SignError`].
@@ -280,6 +282,135 @@ impl Signer for PagedSigner {
     }
 }
 
+/// The 32-byte ML-DSA seed `ξ` (FIPS 204 §6.1): the only private form of an ML-DSA key
+/// (CR-41 m.3).
+pub const ML_DSA_SEED_LEN: usize = 32;
+
+fn ml_dsa_signing(alg: Algorithm) -> Result<&'static PqdsaSigningAlgorithm, SignError> {
+    match alg {
+        Algorithm::MlDsa44 => Ok(&ML_DSA_44_SIGNING),
+        Algorithm::MlDsa65 => Ok(&ML_DSA_65_SIGNING),
+        Algorithm::MlDsa87 => Ok(&ML_DSA_87_SIGNING),
+        _ => Err(SignError::Algorithm),
+    }
+}
+
+fn ml_dsa_pair(alg: Algorithm, seed: &[u8]) -> Result<PqdsaKeyPair, SignError> {
+    PqdsaKeyPair::from_seed(ml_dsa_signing(alg)?, seed).map_err(|_| SignError::Key)
+}
+
+enum Seed {
+    Owned(Secret<[u8; ML_DSA_SEED_LEN]>),
+    Paged(Box<dyn KeyPages>),
+}
+
+/// An ML-DSA signer (CR-41, OP-159 m.3 (d)): the key's only long-lived form is its 32-byte
+/// seed, held in protected memory or a [`Secret`]; each signature expands the key from the
+/// seed, signs under the DIT guard and drops it.
+pub struct MlDsaSigner {
+    seed: Seed,
+    algorithm: Algorithm,
+    public: PublicKey,
+}
+
+impl MlDsaSigner {
+    /// A new key of `alg` from a fresh seed, with the seed for storage.
+    ///
+    /// # Errors
+    /// [`SignError::Algorithm`] for a classical `alg`, [`SignError::Random`] when the random
+    /// source fails.
+    pub fn generate(alg: Algorithm) -> Result<(Self, Secret<[u8; ML_DSA_SEED_LEN]>), SignError> {
+        ml_dsa_signing(alg)?;
+        let seed = Secret::new(random_seed()?);
+        Ok((Self::from_seed(alg, &seed)?, seed))
+    }
+
+    /// The key of `alg` expanded from `seed`.
+    ///
+    /// # Errors
+    /// [`SignError::Algorithm`] or [`SignError::Key`].
+    pub fn from_seed(
+        alg: Algorithm,
+        seed: &Secret<[u8; ML_DSA_SEED_LEN]>,
+    ) -> Result<Self, SignError> {
+        let public = Self::public_of(alg, seed.expose())?;
+        Ok(Self {
+            seed: Seed::Owned(seed.clone()),
+            algorithm: alg,
+            public,
+        })
+    }
+
+    /// The key of `alg` whose seed `pager` places in protected memory (CR-34, SAI-45).
+    ///
+    /// # Errors
+    /// [`SignError::Key`] for a seed of another length or when `pager` has no room.
+    pub fn paged(
+        alg: Algorithm,
+        seed: &Secret<[u8; ML_DSA_SEED_LEN]>,
+        pager: &Pager,
+    ) -> Result<Self, SignError> {
+        let public = Self::public_of(alg, seed.expose())?;
+        let placed = pager(seed.expose()).ok_or(SignError::Key)?;
+        Ok(Self {
+            seed: Seed::Paged(placed),
+            algorithm: alg,
+            public,
+        })
+    }
+
+    fn public_of(alg: Algorithm, seed: &[u8]) -> Result<PublicKey, SignError> {
+        // CR-39 m.6
+        let _dit = DitGuard::new();
+        let pair = ml_dsa_pair(alg, seed)?;
+        Ok(PublicKey::MlDsa(alg, pair.public_key().as_ref().to_vec()))
+    }
+
+    fn sign_with(&self, seed: &[u8], message: &[u8]) -> Result<Vec<u8>, SignError> {
+        // CR-39 m.6
+        let _dit = DitGuard::new();
+        let pair = ml_dsa_pair(self.algorithm, seed)?;
+        if PublicKey::MlDsa(self.algorithm, pair.public_key().as_ref().to_vec()) != self.public {
+            return Err(SignError::Key);
+        }
+        let mut sig = alloc::vec![0_u8; pair.algorithm().signature_len()];
+        let n = pair.sign(message, &mut sig).map_err(|_| SignError::Sign)?;
+        sig.truncate(n);
+        Ok(sig)
+    }
+}
+
+/// A fresh ML-DSA seed from the system random source.
+///
+/// # Errors
+/// [`SignError::Random`].
+pub fn random_seed() -> Result<[u8; ML_DSA_SEED_LEN], SignError> {
+    aws_lc_rs::rand::generate::<[u8; ML_DSA_SEED_LEN]>(&SystemRandom::new())
+        .map(aws_lc_rs::rand::Random::expose)
+        .map_err(|_| SignError::Random)
+}
+
+impl Signer for MlDsaSigner {
+    fn algorithm(&self) -> Algorithm {
+        self.algorithm
+    }
+
+    fn public_key(&self) -> PublicKey {
+        self.public.clone()
+    }
+
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, SignError> {
+        match &self.seed {
+            Seed::Owned(s) => self.sign_with(s.expose(), message),
+            Seed::Paged(pages) => {
+                let mut out = Err(SignError::Key);
+                pages.expose(&mut |seed| out = self.sign_with(seed, message));
+                out
+            }
+        }
+    }
+}
+
 /// A tagged `COSE_Sign1` over `payload` whose protected header carries exactly `alg`, the
 /// content type and `kid` (L2-SIG-1).
 ///
@@ -294,7 +425,12 @@ pub fn sign_sign1(
     let alg = signer.algorithm();
     if !matches!(
         alg,
-        Algorithm::Ed25519 | Algorithm::Esp256 | Algorithm::Es256
+        Algorithm::Ed25519
+            | Algorithm::Esp256
+            | Algorithm::Es256
+            | Algorithm::MlDsa44
+            | Algorithm::MlDsa65
+            | Algorithm::MlDsa87
     ) {
         return Err(SignError::Algorithm);
     }

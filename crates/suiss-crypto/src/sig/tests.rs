@@ -233,7 +233,7 @@ fn acvp_sigver() {
 
 // CR-41 m.4, CR-55 m.1, OP-159 m.3 (c)
 #[test]
-fn no_backend_verifies_ml_dsa_until_a_provider_answers_it() {
+fn only_a_backend_with_a_provider_verifies_ml_dsa() {
     use crate::cose::Algorithm;
     let classical = [Algorithm::Ed25519, Algorithm::Esp256, Algorithm::Es256];
     for alg in classical {
@@ -244,7 +244,7 @@ fn no_backend_verifies_ml_dsa_until_a_provider_answers_it() {
         assert!(!PureBackend.ml_dsa(alg, &[], b"m", &[]), "{alg:?}");
         #[cfg(feature = "aws-lc")]
         {
-            assert!(!crate::aws::AwsLcBackend.supports(alg), "{alg:?}");
+            assert!(crate::aws::AwsLcBackend.supports(alg), "{alg:?}");
             assert!(
                 !crate::aws::AwsLcBackend.ml_dsa(alg, &[], b"m", &[]),
                 "{alg:?}"

@@ -6,9 +6,12 @@ use std::sync::{Arc, Mutex};
 
 use cryptoki::context::{CInitializeArgs, CInitializeFlags, Pkcs11};
 use cryptoki::error::{Error as CkError, RvError};
-use cryptoki::mechanism::Mechanism;
+use cryptoki::mechanism::dsa::{HedgeType, SignAdditionalContext};
 use cryptoki::mechanism::eddsa::{EddsaParams, EddsaSignatureScheme};
-use cryptoki::object::{Attribute, AttributeType, KeyType, ObjectClass, ObjectHandle};
+use cryptoki::mechanism::{Mechanism, MechanismType};
+use cryptoki::object::{
+    Attribute, AttributeType, KeyType, MlDsaParameterSetType, ObjectClass, ObjectHandle,
+};
 use cryptoki::session::{Session, UserType};
 use cryptoki::slot::Slot;
 use cryptoki::types::AuthPin;
@@ -50,6 +53,10 @@ pub enum HsmError {
     /// Key handles still hold sessions open: drop them before finalizing (OP-94).
     #[error("{0} key handles still open")]
     Busy(usize),
+    /// The token offers no ML-DSA key generation or signing; there is no software fallback
+    /// (OP-159 m.3 (d)).
+    #[error("token has no ML-DSA mechanism")]
+    PqUnavailable,
 }
 
 impl HsmError {
@@ -63,6 +70,7 @@ impl HsmError {
             Self::Key(_) => "hsm-key",
             Self::Operation(_) => "hsm-operation",
             Self::Encoding => "hsm-encoding",
+            Self::PqUnavailable => "pq-key-unavailable",
         }
     }
 }
@@ -93,6 +101,36 @@ impl Finalizer {
             Ok(()) | Err(CkError::Pkcs11(RvError::CryptokiNotInitialized, _)) => Ok(()),
             Err(e) => Err(HsmError::Module(e)),
         }
+    }
+}
+
+/// What a token offers for ML-DSA (PKCS#11 3.2 `CKM_ML_DSA_KEY_PAIR_GEN`, `CKM_ML_DSA`),
+/// read with `C_GetMechanismList` and `C_GetMechanismInfo` (OP-159 m.3 (d)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MlDsaMechanisms {
+    /// `CKM_ML_DSA_KEY_PAIR_GEN` is listed with the key-pair generation flag.
+    pub key_pair_gen: bool,
+    /// `CKM_ML_DSA` is listed with the sign flag.
+    pub sign: bool,
+    /// `CKM_ML_DSA` is listed with the verify flag.
+    pub verify: bool,
+}
+
+impl MlDsaMechanisms {
+    /// Whether the token can hold an ML-DSA binding or realm key: it generates and signs.
+    #[must_use]
+    pub const fn available(self) -> bool {
+        self.key_pair_gen && self.sign
+    }
+}
+
+const fn parameter_set(alg: Algorithm) -> Option<MlDsaParameterSetType> {
+    match alg {
+        Algorithm::MlDsa44 => Some(MlDsaParameterSetType::ML_DSA_44),
+        Algorithm::MlDsa65 => Some(MlDsaParameterSetType::ML_DSA_65),
+        Algorithm::MlDsa87 => Some(MlDsaParameterSetType::ML_DSA_87),
+        _ => None,
     }
 }
 
@@ -398,6 +436,109 @@ impl KeyStore {
         self.generate(label, false)
     }
 
+    /// The names of every mechanism the token lists (`C_GetMechanismList`), for the startup
+    /// report of the PQ profile probe (OP-159 m.3 (d)).
+    ///
+    /// # Errors
+    /// [`HsmError::Module`].
+    pub fn mechanism_names(&self) -> Result<Vec<String>, HsmError> {
+        let list = self
+            .module
+            .get_mechanism_list(self.slot)
+            .map_err(HsmError::Module)?;
+        Ok(list.iter().map(ToString::to_string).collect())
+    }
+
+    /// Probes the token for ML-DSA (OP-159 m.3 (d)). A mechanism that is listed but whose
+    /// info cannot be read counts as absent.
+    ///
+    /// # Errors
+    /// [`HsmError::Module`] when the mechanism list cannot be read.
+    pub fn ml_dsa_mechanisms(&self) -> Result<MlDsaMechanisms, HsmError> {
+        let list = self
+            .module
+            .get_mechanism_list(self.slot)
+            .map_err(HsmError::Module)?;
+        let info = |t: MechanismType| {
+            list.contains(&t)
+                .then(|| self.module.get_mechanism_info(self.slot, t).ok())
+                .flatten()
+        };
+        let gen_info = info(MechanismType::ML_DSA_KEY_PAIR_GEN);
+        let sig_info = info(MechanismType::ML_DSA);
+        Ok(MlDsaMechanisms {
+            key_pair_gen: gen_info.is_some_and(|i| i.generate_key_pair()),
+            sign: sig_info.is_some_and(|i| i.sign()),
+            verify: sig_info.is_some_and(|i| i.verify()),
+        })
+    }
+
+    /// Generates an ML-DSA signing key of `alg` inside the token (CR-18, MD-6, OP-159 m.3
+    /// (d)). Without the mechanisms it refuses; there is no software key in its place.
+    ///
+    /// # Errors
+    /// [`HsmError::PqUnavailable`] when the probe finds no ML-DSA; [`HsmError`] otherwise,
+    /// also for a classical `alg` or an existing label.
+    pub fn generate_ml_dsa(&self, label: &str, alg: Algorithm) -> Result<HsmSigner, HsmError> {
+        let set = parameter_set(alg).ok_or(HsmError::Encoding)?;
+        if !self.ml_dsa_mechanisms()?.available() {
+            return Err(HsmError::PqUnavailable);
+        }
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::PRIVATE_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        let id = label.as_bytes().to_vec();
+        session
+            .generate_key_pair(
+                &Mechanism::MlDsaKeyPairGen,
+                &[
+                    Attribute::Token(true),
+                    Attribute::Verify(true),
+                    Attribute::ParameterSet(set.into()),
+                    Attribute::Label(id.clone()),
+                ],
+                &[
+                    Attribute::Token(true),
+                    Attribute::Private(true),
+                    Attribute::Sensitive(true),
+                    Attribute::Extractable(false),
+                    Attribute::Sign(true),
+                    Attribute::Label(id),
+                ],
+            )
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        let signer = self.signer(label)?;
+        if !signer.pairs() {
+            return Err(HsmError::Encoding);
+        }
+        Ok(signer)
+    }
+
+    fn ml_dsa_public(session: &Session, public: ObjectHandle) -> Result<PublicKey, HsmError> {
+        let attrs = session
+            .get_attributes(public, &[AttributeType::ParameterSet, AttributeType::Value])
+            .map_err(HsmError::Operation)?;
+        let (mut set, mut value) = (None, None);
+        for a in attrs {
+            match a {
+                Attribute::ParameterSet(p) => set = Some(p),
+                Attribute::Value(v) => value = Some(v),
+                _ => {}
+            }
+        }
+        let alg = [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87]
+            .into_iter()
+            .find(|a| {
+                parameter_set(*a)
+                    .zip(set)
+                    .is_some_and(|(p, s)| cryptoki::object::ParameterSetType::from(p) == s)
+            })
+            .ok_or(HsmError::Encoding)?;
+        Ok(PublicKey::MlDsa(alg, value.ok_or(HsmError::Encoding)?))
+    }
+
     /// The signing key labelled `label`.
     ///
     /// # Errors
@@ -406,6 +547,22 @@ impl KeyStore {
         let session = self.session()?;
         let private = Self::one(&session, ObjectClass::PRIVATE_KEY, label)?;
         let public = Self::one(&session, ObjectClass::PUBLIC_KEY, label)?;
+        let kind_of = session
+            .get_attributes(public, &[AttributeType::KeyType])
+            .map_err(HsmError::Operation)?;
+        if kind_of
+            .iter()
+            .any(|a| matches!(a, Attribute::KeyType(k) if *k == KeyType::ML_DSA))
+        {
+            let key = Self::ml_dsa_public(&session, public)?;
+            key.check().map_err(|_| HsmError::Encoding)?;
+            return Ok(HsmSigner {
+                session,
+                private,
+                key,
+                _lease: Arc::clone(&self.lease),
+            });
+        }
         let attrs = session
             .get_attributes(public, &[AttributeType::KeyType, AttributeType::EcPoint])
             .map_err(HsmError::Operation)?;
@@ -758,7 +915,9 @@ impl HsmSigner {
             PublicKey::P256(p) => {
                 crate::sig::p256(&crate::aws::AwsLcBackend, p, message, &sig, true).is_ok()
             }
-            PublicKey::MlDsa(..) => false,
+            PublicKey::MlDsa(alg, p) => {
+                crate::sig::Backend::ml_dsa(&crate::aws::AwsLcBackend, *alg, p, message, &sig)
+            }
         })
     }
 }
@@ -767,7 +926,8 @@ impl Signer for HsmSigner {
     fn algorithm(&self) -> Algorithm {
         match self.key {
             PublicKey::Ed25519(_) => Algorithm::Ed25519,
-            _ => Algorithm::Esp256,
+            PublicKey::MlDsa(alg, _) => alg,
+            PublicKey::P256(_) => Algorithm::Esp256,
         }
     }
 
@@ -776,6 +936,27 @@ impl Signer for HsmSigner {
     }
 
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, SignError> {
+        if let PublicKey::MlDsa(alg, _) = self.key {
+            // CR-41 m.4
+            let sig = self
+                .session
+                .sign(
+                    &Mechanism::MlDsa(SignAdditionalContext::new(HedgeType::Preferred, None)),
+                    self.private,
+                    message,
+                )
+                .map_err(|_| SignError::Sign)?;
+            let want = match alg {
+                Algorithm::MlDsa44 => 2420,
+                Algorithm::MlDsa65 => 3309,
+                _ => 4627,
+            };
+            return if sig.len() == want {
+                Ok(sig)
+            } else {
+                Err(SignError::Sign)
+            };
+        }
         let sig = if let PublicKey::Ed25519(_) = self.key {
             self.session.sign(
                 &Mechanism::Eddsa(EddsaParams::new(EddsaSignatureScheme::Pure)),
