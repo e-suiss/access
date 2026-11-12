@@ -31,7 +31,7 @@ const AUTHORITY: [&str; 4] = [
 
 /// The [ID] answers that are padded, by path under the realm's host or `/realms/{slug}`: `*`
 /// is one path segment.
-const IDENTITY: [&str; 8] = [
+const IDENTITY: [&str; 9] = [
     "/v1/login/flows",
     "/v1/login/flows/*",
     "/v1/login/link/preview",
@@ -40,6 +40,8 @@ const IDENTITY: [&str; 8] = [
     "/v1/recovery/*",
     "/v1/recovery/*/extension",
     "/v1/recovery/intents/*",
+    // OP-159 m.18 (c)
+    "/v1/invitations/*",
 ];
 
 fn matches(pattern: &str, path: &str) -> bool {
@@ -134,6 +136,8 @@ mod tests {
         assert!(padded("/v1/login/flows"));
         assert!(padded("/realms/acme/v1/login/flows/flw_1"));
         assert!(padded("/v1/recovery/rcv_1/extension"));
+        assert!(padded("/realms/acme/v1/invitations/inv_1"));
+        assert!(!padded("/v1/invitations/"));
         assert!(!padded("/v1/login/flows/flw_1/extra"));
         assert!(!padded("/v1/login/flows/"));
         assert!(!padded("/access/v1/search/subject"));

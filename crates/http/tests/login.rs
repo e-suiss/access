@@ -5134,3 +5134,46 @@ async fn identifier_first_answers_are_padded_to_one_size_class() {
     }
     assert_eq!(seen[0], seen[1]);
 }
+
+// CR-40 m.3, SAI-43, INV-27, OP-159 m.3 (s), m.18 (c), Ek B 6236
+#[tokio::test]
+async fn an_unknown_invitation_code_answers_in_the_size_class_of_a_valid_one() {
+    let e = env(0x35, "lg-pad-invite", AuthPolicy::DEFAULT).await;
+    let owner = e.account("owner@acme.example").await;
+    let token = "tok-pad-0123456789abcdefghijklmnopqr";
+    org_with_invitation(
+        &e,
+        owner,
+        [0x79; 16],
+        "alice@acme.example",
+        (token, "PADS2345"),
+    )
+    .await;
+    let mut b = e.browser("pad-invite");
+    b.app = access_http::harden(b.app.clone(), access_http::Limits::default());
+    let valid = b.get(&format!("/v1/invitations/{token}")).await;
+    assert_eq!(valid.status, StatusCode::OK);
+    let unknown = b
+        .get("/v1/invitations/tok-pad-unknown-0123456789abcdefghij")
+        .await;
+    assert_eq!(unknown.status, StatusCode::NOT_FOUND);
+    for a in [&valid, &unknown] {
+        assert!(
+            access_http::padding::CLASSES.contains(&a.body.len()),
+            "{}",
+            a.body.len()
+        );
+        assert_eq!(
+            a.headers
+                .get(header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok()),
+            Some(a.body.len().to_string().as_str())
+        );
+    }
+    assert_eq!(valid.body.len(), unknown.body.len());
+    assert_eq!(
+        valid.json()["organization"]["display_name"],
+        "Acme",
+        "padding leaves the content as it is"
+    );
+}
