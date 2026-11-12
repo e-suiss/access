@@ -7,6 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+from f0 import reanchor
 from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, mldsa, note, pap, projection, receipt, record, render, report, sdjwt, status, tier, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
@@ -103,6 +104,24 @@ def run_hybrid(case, document):
     except KeyScopeError as error:
         return {"error": error.name}, None
     return {"payload": payload.hex()}, None
+
+
+def run_accept_retired(case, document):
+    # L0-SIG-81
+    anchors = [reanchor.decode_anchor(bytes.fromhex(case["anchor"]))] if "anchor" in case else []
+    bundle = None
+    if "bundle" in case:
+        b = case["bundle"]
+        bundle = {
+            "record": bytes.fromhex(b["record"]),
+            "path": [bytes.fromhex(h) for h in b["path"]],
+            "checkpoint": bytes.fromhex(b["checkpoint"]),
+            "cosigns": [{"name": c["name"], "timestamp": c["timestamp"], "sign1": bytes.fromhex(c["sign1"])} for c in b["cosigns"]],
+        }
+    result = reanchor.accept_retired(
+        anchors, bytes.fromhex(document["domain"]), document["origin"], bytes.fromhex(case["artefact"]), bundle
+    )
+    return {"result": result}, None
 
 
 def run_receipt(case, document):
@@ -660,6 +679,7 @@ OPERATIONS = {
     "verify.cose_sign1": (run_cose_sign1, ("kid", "payload", "error")),
     "key_scope.operational_key": (run_operational_key, ("key", "error")),
     "key_scope.hybrid": (run_hybrid, ("payload", "error")),
+    "reanchor.accept_retired": (run_accept_retired, ("result",)),
     "verify.ed25519": (run_ed25519, ("result",)),
     "verify.ml_dsa": (run_ml_dsa, ("result",)),
     "tier.of": (run_tier, ("tier", "payee")),

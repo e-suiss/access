@@ -254,9 +254,9 @@ fn inclusion_vectors_match() {
     );
 }
 
-// OP-159 m.3 (b), (i)
+// L0-SIG-64, L0-SIG-80, P18, SEC25, U12, U27, OP-159 m.3 (i), Ek B 5780
 #[test]
-fn a_superseded_binding_is_refused_even_with_valid_evidence_until_its_path_is_decided() {
+fn a_superseded_binding_takes_evidence_or_a_prospective_re_anchor() {
     let art = Digest([0xa1; 32]);
     let r0 = record(0, Digest([0xa0; 32]));
     let r1 = record(1, art);
@@ -267,14 +267,33 @@ fn a_superseded_binding_is_refused_even_with_valid_evidence_until_its_path_is_de
     let log = Verifier::ed25519("log.example", key(1).verifying_key().to_bytes()).unwrap();
     let witness = Verifier::cosigner("witness.example", key(2).verifying_key().to_bytes()).unwrap();
     let witnesses = [witness];
-    let evidence = InclusionEvidence::new(
+    let good = InclusionEvidence::new(
         art,
         Inclusion::new(&r1, &path, &text, None),
         ORIGIN,
         &log,
         &witnesses,
     );
+    let other = InclusionEvidence::new(
+        Digest([0xee; 32]),
+        Inclusion::new(&r1, &path, &text, None),
+        ORIGIN,
+        &log,
+        &witnesses,
+    );
     let mut c = super::Case::new();
+    let run = |c: &super::Case, iat: u64, e: Option<&InclusionEvidence<'_>>| {
+        operational_key(
+            &PureBackend,
+            &c.metadata,
+            &c.domain,
+            &c.excerpt_bytes(),
+            c.usage,
+            iat,
+            e,
+        )
+        .map(|_| ())
+    };
     for cause in [
         None,
         Some(SupersededCause::ReAnchor),
@@ -286,16 +305,21 @@ fn a_superseded_binding_is_refused_even_with_valid_evidence_until_its_path_is_de
             cited: Digest(root2),
             cause,
         });
+        assert_eq!(run(&c, c.iat, Some(&good)), Ok(()), "{cause:?}");
         assert_eq!(
-            operational_key(
-                &PureBackend,
-                &c.metadata,
-                &c.domain,
-                &c.excerpt_bytes(),
-                c.usage,
-                c.iat,
-                Some(&evidence),
-            ),
+            run(&c, c.iat, Some(&other)),
+            Err(KeyScopeError::Superseded),
+            "{cause:?}"
+        );
+        let before = c.metadata.issued_at;
+        let bare = if cause == Some(SupersededCause::ReAnchor) {
+            Ok(())
+        } else {
+            Err(KeyScopeError::Superseded)
+        };
+        assert_eq!(run(&c, before, None), bare, "{cause:?}");
+        assert_eq!(
+            run(&c, before + 1, None),
             Err(KeyScopeError::Superseded),
             "{cause:?}"
         );

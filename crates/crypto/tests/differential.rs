@@ -685,7 +685,15 @@ mod hybrid {
         );
         for excerpt in [&ce, &pe] {
             assert_eq!(
-                operational_key(&PqBackend, &w.metadata, &d, excerpt, KeyUsage::Receipt, IAT, None),
+                operational_key(
+                    &PqBackend,
+                    &w.metadata,
+                    &d,
+                    excerpt,
+                    KeyUsage::Receipt,
+                    IAT,
+                    None
+                ),
                 Err(KeyScopeError::Algorithm),
                 "a single signature never satisfies both"
             );
@@ -713,7 +721,16 @@ mod hybrid {
             "a pq-only domain's artefact is refused by a verifier without ML-DSA"
         );
         assert!(
-            operational_key(&PqBackend, &world.metadata, &d, &pe, KeyUsage::Receipt, IAT, None).is_ok()
+            operational_key(
+                &PqBackend,
+                &world.metadata,
+                &d,
+                &pe,
+                KeyUsage::Receipt,
+                IAT,
+                None
+            )
+            .is_ok()
         );
         for policy in [None, Some(Hybrid::Classic)] {
             let mut meta = world.metadata.clone();
@@ -905,5 +922,418 @@ mod hybrid {
             n += 1;
         }
         assert_eq!(n, 21);
+    }
+}
+
+#[cfg(test)]
+mod retired {
+    use std::collections::BTreeMap;
+
+    use access_kernel::digest::Digest;
+    use access_kernel::record::{Disclosure, Header, Opened, RecordKind};
+    use access_kernel::verify::cose::{ALG, Algorithm, CONTENT_TYPE, KID, PublicKey, to_be_signed};
+    use access_kernel::verify::key_scope::{ARTEFACT_FIELD, KeyScopeError, Witness, thumbprint};
+    use access_kernel::verify::pq::PqAnchor;
+    use access_kernel::verify::reanchor::{
+        CHECKPOINT_CONTENT_TYPE, COSIGN_CONTENT_TYPE, PqBundle, PqCosign, accept_retired,
+    };
+    use access_kernel::verify::{Backend, PureBackend};
+    use aws_lc_rs::signature::{
+        KeyPair as _, ML_DSA_65, ML_DSA_65_SIGNING, PqdsaKeyPair, UnparsedPublicKey,
+    };
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    use suiss_crypto::note::{Checkpoint, base64_encode};
+
+    struct PqBackend;
+
+    impl Backend for PqBackend {
+        fn ed25519(&self, public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.ed25519(public_key, message, signature)
+        }
+
+        fn p256(&self, public_key_sec1: &[u8], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.p256(public_key_sec1, message, signature)
+        }
+
+        fn ml_dsa(
+            &self,
+            alg: Algorithm,
+            public_key: &[u8],
+            message: &[u8],
+            signature: &[u8],
+        ) -> bool {
+            alg == Algorithm::MlDsa65
+                && UnparsedPublicKey::new(&ML_DSA_65, public_key)
+                    .verify(message, signature)
+                    .is_ok()
+        }
+
+        fn supports(&self, _: Algorithm) -> bool {
+            true
+        }
+    }
+
+    const DOMAIN: Digest = Digest([0x0d; 32]);
+
+    fn origin() -> String {
+        format!("sha-256:{}", base64_encode(&DOMAIN.0))
+    }
+
+    fn public(k: &PqdsaKeyPair) -> PublicKey {
+        PublicKey::MlDsa(Algorithm::MlDsa65, k.public_key().as_ref().to_vec())
+    }
+
+    fn sign1(k: &PqdsaKeyPair, content_type: &str, payload: &[u8]) -> Vec<u8> {
+        let protected = dcbor::encode(
+            &Value::Map(vec![
+                (Value::Unsigned(ALG), Value::int(Algorithm::MlDsa65.cose())),
+                (Value::Unsigned(CONTENT_TYPE), Value::text(content_type)),
+                (
+                    Value::Unsigned(KID),
+                    Value::Bytes(thumbprint(&public(k)).to_vec()),
+                ),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap();
+        let tbs = to_be_signed(&protected, payload).unwrap();
+        let mut sig = vec![0x5a; 3309];
+        let n = k.sign(&tbs, &mut sig).unwrap();
+        sig.truncate(n);
+        let body = Value::Array(vec![
+            Value::Bytes(protected),
+            Value::Map(vec![]),
+            Value::Bytes(payload.to_vec()),
+            Value::Bytes(sig),
+        ]);
+        [vec![0xd2], dcbor::encode(&body, Limits::CEILING).unwrap()].concat()
+    }
+
+    fn record(artefact: Digest) -> Disclosure {
+        Disclosure {
+            header: Header {
+                domain: Some(DOMAIN),
+                pos: 1,
+                kind: RecordKind::Decision,
+                recorded_at: 1_000,
+                prev: Some(Digest([1; 32])),
+            },
+            opened: BTreeMap::from([(
+                String::from(ARTEFACT_FIELD),
+                Opened {
+                    value: artefact.to_value(),
+                    salt: [0x5a; 32],
+                },
+            )]),
+            withheld: BTreeMap::new(),
+        }
+    }
+
+    // CR-45 RA-5, RA-7, L0-SIG-81, OP-159 m.3 (h)
+    #[test]
+    fn a_retired_classical_artefact_needs_a_pinned_anchor_and_a_pq_bundle() {
+        let log = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
+        let witness = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
+        let artefact = Digest([0xa1; 32]);
+        let rec = record(artefact);
+        let root = rec.leaf_hash().unwrap();
+        let body = Checkpoint {
+            origin: origin(),
+            size: 2,
+            root: suiss_crypto::digest::node_hash(&[0x11; 32], &root),
+            extensions: Vec::new(),
+        }
+        .to_body()
+        .unwrap();
+        let checkpoint = sign1(&log, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
+        let mut cosigned = body.as_bytes().to_vec();
+        cosigned.extend_from_slice(&7_u64.to_be_bytes());
+        let cosign = sign1(&witness, COSIGN_CONTENT_TYPE, &cosigned);
+        let w = Witness::new(
+            "witness.example".to_owned(),
+            public(&witness),
+            Algorithm::MlDsa65,
+            "independent".to_owned(),
+            true,
+        );
+        let anchor = PqAnchor::new(DOMAIN, thumbprint(&public(&log)), public(&log), vec![w], 1);
+        let cosigns = [PqCosign::new("witness.example", 7, &cosign)];
+        let bundle = PqBundle::new(&rec, &[[0x11; 32]], &checkpoint, &cosigns);
+        let o = origin();
+        assert_eq!(
+            accept_retired(
+                &PqBackend,
+                std::slice::from_ref(&anchor),
+                (&DOMAIN, &o),
+                &artefact,
+                Some(&bundle)
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            accept_retired(&PqBackend, &[], (&DOMAIN, &o), &artefact, Some(&bundle)),
+            Err(KeyScopeError::PqAnchorMissing)
+        );
+        assert_eq!(
+            accept_retired(
+                &PqBackend,
+                std::slice::from_ref(&anchor),
+                (&DOMAIN, &o),
+                &artefact,
+                None
+            ),
+            Err(KeyScopeError::Superseded)
+        );
+        assert_eq!(
+            accept_retired(
+                &PqBackend,
+                std::slice::from_ref(&anchor),
+                (&DOMAIN, &o),
+                &Digest([0xa2; 32]),
+                Some(&bundle)
+            ),
+            Err(KeyScopeError::Superseded)
+        );
+        assert_eq!(
+            accept_retired(
+                &PureBackend,
+                std::slice::from_ref(&anchor),
+                (&DOMAIN, &o),
+                &artefact,
+                Some(&bundle)
+            ),
+            Err(KeyScopeError::Superseded)
+        );
+        let none: [PqCosign<'_>; 0] = [];
+        let uncosigned = PqBundle::new(&rec, &[[0x11; 32]], &checkpoint, &none);
+        assert_eq!(
+            accept_retired(
+                &PqBackend,
+                &[anchor],
+                (&DOMAIN, &o),
+                &artefact,
+                Some(&uncosigned)
+            ),
+            Err(KeyScopeError::Superseded)
+        );
+    }
+
+    fn hex(b: &[u8]) -> String {
+        use std::fmt::Write as _;
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    }
+
+    fn unhex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i.saturating_add(2)], 16).unwrap())
+            .collect()
+    }
+
+    fn name(r: Result<(), KeyScopeError>) -> &'static str {
+        match r {
+            Ok(()) => "ok",
+            Err(KeyScopeError::PqAnchorMissing) => "pq-anchor-missing",
+            Err(KeyScopeError::Superseded) => "superseded",
+            Err(other) => panic!("{other:?}"),
+        }
+    }
+
+    // TI-RT12, L0-SIG-81, OP-159 m.3 (h)
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        clippy::type_complexity,
+        clippy::format_push_string,
+        reason = "one generator and check of a vector file"
+    )]
+    fn pq_inclusion_vectors_hold() {
+        use access_kernel::codec::Canonical as _;
+        let path = format!(
+            "{}/../../conformance/vectors/core/1/pq-inclusion.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+            let log = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
+            let witness = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap();
+            let rec = record(Digest([0xa1; 32]));
+            let body = Checkpoint {
+                origin: origin(),
+                size: 2,
+                root: suiss_crypto::digest::node_hash(&[0x11; 32], &rec.leaf_hash().unwrap()),
+                extensions: Vec::new(),
+            }
+            .to_body()
+            .unwrap();
+            let checkpoint = sign1(&log, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
+            let mut cosigned = body.as_bytes().to_vec();
+            cosigned.extend_from_slice(&7_u64.to_be_bytes());
+            let cosign = sign1(&witness, COSIGN_CONTENT_TYPE, &cosigned);
+            let other = sign1(&witness, CHECKPOINT_CONTENT_TYPE, body.as_bytes());
+            let w = |independent| {
+                Witness::new(
+                    "witness.example".to_owned(),
+                    public(&witness),
+                    Algorithm::MlDsa65,
+                    "independent".to_owned(),
+                    independent,
+                )
+            };
+            let anchor = |independent| {
+                PqAnchor::new(
+                    DOMAIN,
+                    thumbprint(&public(&log)),
+                    public(&log),
+                    vec![w(independent)],
+                    1,
+                )
+                .to_bytes()
+                .unwrap()
+            };
+            let cases: Vec<(&str, Option<Vec<u8>>, &[u8], Option<&[u8]>, [u8; 32], bool)> = vec![
+                (
+                    "bundle-reaches-the-anchor",
+                    Some(anchor(true)),
+                    &checkpoint,
+                    Some(&cosign),
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "no-anchor",
+                    None,
+                    &checkpoint,
+                    Some(&cosign),
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "no-bundle",
+                    Some(anchor(true)),
+                    &checkpoint,
+                    Some(&cosign),
+                    [0xa1; 32],
+                    false,
+                ),
+                (
+                    "other-artefact",
+                    Some(anchor(true)),
+                    &checkpoint,
+                    Some(&cosign),
+                    [0xa2; 32],
+                    true,
+                ),
+                (
+                    "no-cosign",
+                    Some(anchor(true)),
+                    &checkpoint,
+                    None,
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "dependent-witness",
+                    Some(anchor(false)),
+                    &checkpoint,
+                    Some(&cosign),
+                    [0xa1; 32],
+                    true,
+                ),
+                (
+                    "checkpoint-not-by-the-anchor",
+                    Some(anchor(true)),
+                    &other,
+                    Some(&cosign),
+                    [0xa1; 32],
+                    true,
+                ),
+            ];
+            let mut lines = Vec::new();
+            for (id, a, cp, cs, art, with_bundle) in cases {
+                let anchors: Vec<PqAnchor> =
+                    a.iter().map(|b| PqAnchor::from_bytes(b).unwrap()).collect();
+                let cosigns: Vec<PqCosign<'_>> = cs
+                    .iter()
+                    .map(|c| PqCosign::new("witness.example", 7, c))
+                    .collect();
+                let bundle = PqBundle::new(&rec, &[[0x11; 32]], cp, &cosigns);
+                let got = accept_retired(
+                    &PqBackend,
+                    &anchors,
+                    (&DOMAIN, &origin()),
+                    &Digest(art),
+                    with_bundle.then_some(&bundle),
+                );
+                let mut line = format!("  {{\"id\": \"{id}\", \"rules\": [\"L0-SIG-81\"]");
+                if let Some(a) = &a {
+                    line.push_str(&format!(", \"anchor\": \"{}\"", hex(a)));
+                }
+                line.push_str(&format!(", \"artefact\": \"{}\"", hex(&art)));
+                if with_bundle {
+                    line.push_str(&format!(
+                        ", \"bundle\": {{\"record\": \"{}\", \"path\": [\"{}\"], \"checkpoint\": \"{}\", \"cosigns\": [{}]}}",
+                        hex(&rec.to_bytes().unwrap()),
+                        hex(&[0x11; 32]),
+                        hex(cp),
+                        cs.map(|c| format!("{{\"name\": \"witness.example\", \"timestamp\": 7, \"sign1\": \"{}\"}}", hex(c))).unwrap_or_default()
+                    ));
+                }
+                line.push_str(&format!(", \"result\": \"{}\"}}", name(got)));
+                lines.push(line);
+            }
+            let json = format!(
+                "{{\n \"rule\": \"CR-45\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"reanchor.accept_retired\",\n \"rules\": [\"L0-SIG-81\"],\n \"domain\": \"{}\",\n \"origin\": \"{}\",\n \"cases\": [\n{}\n ]\n}}\n",
+                hex(&DOMAIN.0),
+                origin(),
+                lines.join(",\n")
+            );
+            std::fs::write(&path, json).unwrap();
+        }
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        for c in doc["cases"].as_array().unwrap() {
+            let anchors: Vec<PqAnchor> = c
+                .get("anchor")
+                .map(|a| PqAnchor::from_bytes(&unhex(a.as_str().unwrap())).unwrap())
+                .into_iter()
+                .collect();
+            let artefact = Digest(unhex(c["artefact"].as_str().unwrap()).try_into().unwrap());
+            let got = match c.get("bundle") {
+                None => accept_retired(&PqBackend, &anchors, (&DOMAIN, &origin()), &artefact, None),
+                Some(b) => {
+                    let rec =
+                        Disclosure::from_bytes(&unhex(b["record"].as_str().unwrap())).unwrap();
+                    let cp = unhex(b["checkpoint"].as_str().unwrap());
+                    let raw: Vec<(String, u64, Vec<u8>)> = b["cosigns"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|x| {
+                            (
+                                x["name"].as_str().unwrap().to_owned(),
+                                x["timestamp"].as_u64().unwrap(),
+                                unhex(x["sign1"].as_str().unwrap()),
+                            )
+                        })
+                        .collect();
+                    let cosigns: Vec<PqCosign<'_>> = raw
+                        .iter()
+                        .map(|(n, t, s)| PqCosign::new(n, *t, s))
+                        .collect();
+                    let bundle = PqBundle::new(&rec, &[[0x11; 32]], &cp, &cosigns);
+                    accept_retired(
+                        &PqBackend,
+                        &anchors,
+                        (&DOMAIN, &origin()),
+                        &artefact,
+                        Some(&bundle),
+                    )
+                }
+            };
+            assert_eq!(name(got), c["result"].as_str().unwrap(), "{}", c["id"]);
+        }
     }
 }

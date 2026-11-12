@@ -263,6 +263,71 @@ fn scenarios() -> Vec<(&'static str, Case)> {
     c.content_type = METADATA_CONTENT_TYPE;
     out.push(("excerpt-content-type", c));
     out.extend(hybrid_scenarios());
+    out.extend(stage14_scenarios());
+    out
+}
+
+// L0-SIG-64, L0-SIG-81, L0-SIG-82, OP-159 m.3 (h), (i), (r)
+fn stage14_scenarios() -> Vec<(&'static str, Case)> {
+    let mut out = Vec::new();
+    for (id, cause, iat) in [
+        (
+            "superseded-re-anchor-before-metadata",
+            SupersededCause::ReAnchor,
+            10 * HOUR,
+        ),
+        (
+            "superseded-re-anchor-after-metadata",
+            SupersededCause::ReAnchor,
+            10 * HOUR + 1,
+        ),
+        (
+            "superseded-handover-without-evidence",
+            SupersededCause::Handover,
+            10 * HOUR,
+        ),
+        (
+            "superseded-recovery-without-evidence",
+            SupersededCause::Recovery,
+            10 * HOUR,
+        ),
+    ] {
+        let mut c = Case::new();
+        c.iat = iat;
+        c.binding_mut().superseded = Some(Superseded {
+            at: d(5),
+            cited: d(4),
+            cause: Some(cause),
+        });
+        out.push((id, c));
+    }
+    let reanchored = || {
+        Some(PqReanchor::new(
+            7,
+            10 * HOUR,
+            vec![String::from("witness.example")],
+        ))
+    };
+    let mut c = Case::new();
+    c.metadata.algorithms = BTreeSet::from([Algorithm::MlDsa65]);
+    c.metadata.declared.pq_reanchor = reanchored();
+    out.push(("retired-classical-binding", c));
+    let mut c = Case::new();
+    c.metadata.algorithms = BTreeSet::from([Algorithm::Ed25519, Algorithm::MlDsa65]);
+    c.metadata.declared.pq_reanchor = reanchored();
+    c.excerpt.key = op_key(p_pub(), Algorithm::Esp256);
+    out.push(("retired-classical-key", c));
+    let mut c = Case::new();
+    c.metadata.algorithms = BTreeSet::from([Algorithm::Ed25519, Algorithm::MlDsa65]);
+    c.excerpt.key = op_key(p_pub(), Algorithm::Esp256);
+    out.push(("classical-key-not-allowed-without-reanchor", c));
+    let mut c = Case::new();
+    c.metadata.declared.crypto_profile = Some(CryptoProfile::Fips);
+    out.push(("fips-profile-classical", c));
+    let mut c = Case::new();
+    c.metadata.declared.crypto_profile = Some(CryptoProfile::Fips);
+    c.metadata.algorithms.insert(Algorithm::MlDsa65);
+    out.push(("fips-profile-with-ml-dsa", c));
     out
 }
 
@@ -356,6 +421,33 @@ fn each_step_rejects_its_case() {
         ),
         ("hybrid-pq-ml-dsa-disabled", Some(KeyScopeError::Algorithm)),
         ("hybrid-both-esp256", Some(KeyScopeError::Algorithm)),
+        ("superseded-re-anchor-before-metadata", None),
+        (
+            "superseded-re-anchor-after-metadata",
+            Some(KeyScopeError::Superseded),
+        ),
+        (
+            "superseded-handover-without-evidence",
+            Some(KeyScopeError::Superseded),
+        ),
+        (
+            "superseded-recovery-without-evidence",
+            Some(KeyScopeError::Superseded),
+        ),
+        (
+            "retired-classical-binding",
+            Some(KeyScopeError::PqAnchorMissing),
+        ),
+        (
+            "retired-classical-key",
+            Some(KeyScopeError::PqAnchorMissing),
+        ),
+        (
+            "classical-key-not-allowed-without-reanchor",
+            Some(KeyScopeError::Algorithm),
+        ),
+        ("fips-profile-classical", None),
+        ("fips-profile-with-ml-dsa", Some(KeyScopeError::Algorithm)),
     ];
     let all = scenarios();
     assert_eq!(all.len(), expect.len());
@@ -669,7 +761,14 @@ fn key_scope_rules(id: &str) -> &'static [&'static str] {
         "kid-not-thumbprint" => &["L0-SIG-67"],
         "alg-not-allowed" => &["L0-SIG-2", "L0-SIG-68"],
         "alg-key-type-mismatch" | "alg-es256-on-ed25519-key" => &["L0-SIG-7", "L0-SIG-68"],
-        "binding-superseded" => &["L0-SIG-64"],
+        "binding-superseded"
+        | "superseded-re-anchor-before-metadata"
+        | "superseded-re-anchor-after-metadata"
+        | "superseded-handover-without-evidence"
+        | "superseded-recovery-without-evidence" => &["L0-SIG-64"],
+        "retired-classical-binding" | "retired-classical-key" => &["L0-SIG-81"],
+        "classical-key-not-allowed-without-reanchor" => &["L0-SIG-68", "L0-SIG-81"],
+        "fips-profile-classical" | "fips-profile-with-ml-dsa" => &["L0-SIG-82"],
         "binding-unknown" => &["L0-SIG-63"],
         "binding-wrong-signer" => &["L0-SIG-61", "L0-SIG-63"],
         "binding-alg-mismatch" => &["L0-SIG-21", "L0-SIG-63a"],

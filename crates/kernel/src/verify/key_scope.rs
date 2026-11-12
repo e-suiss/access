@@ -466,6 +466,18 @@ impl Declarations {
     pub fn acknowledges(&self) -> bool {
         !self.replicas.is_empty() && self.witnesses.iter().any(|w| w.independent)
     }
+
+    /// [`Declarations::acknowledges`] counting only the witnesses and replicas the canonical
+    /// root-term sets name: one the operator alone declares never counts (OP-158 m.11, OP-159
+    /// m.3 (j)).
+    #[must_use]
+    pub fn acknowledges_with(&self, canonical: &crate::meta::RootSets) -> bool {
+        self.replicas.iter().any(|r| canonical.replicas.contains(r))
+            && self
+                .witnesses
+                .iter()
+                .any(|w| w.independent && canonical.witnesses.contains(w))
+    }
 }
 
 /// Why a key is not accepted for an artefact. Each is a local DENY (§9.10 step 1).
@@ -563,6 +575,10 @@ pub fn verify_metadata(
 ) -> Result<DomainMetadata, KeyScopeError> {
     let verified = verify_sign1(backend, bytes, trusted, METADATA_CONTENT_TYPE)?;
     let metadata = DomainMetadata::from_bytes(&verified.payload)?;
+    // L0-SIG-82
+    if profile_conflict(&metadata) {
+        return Err(KeyScopeError::Algorithm);
+    }
     let signer = metadata
         .binding
         .get(&verified.kid)
@@ -649,7 +665,14 @@ pub(crate) fn resolve(
     evidence: Option<&InclusionEvidence<'_>>,
     admits: impl Fn(Algorithm) -> bool,
 ) -> Result<OperationalKey, KeyScopeError> {
-    let _ = evidence;
+    // L0-SIG-82, CR-44
+    if profile_conflict(metadata) {
+        return Err(KeyScopeError::Algorithm);
+    }
+    // L0-SIG-81, CR-45 RA-7
+    if super::ml_dsa::algorithm_of(excerpt).is_ok_and(|alg| classical_retired(metadata, alg)) {
+        return Err(KeyScopeError::PqAnchorMissing);
+    }
     let bindings = key_set(
         metadata.binding.values().map(|b| (b.kid, b.key.clone())),
         &metadata.algorithms,
@@ -662,8 +685,22 @@ pub(crate) fn resolve(
     if binding.alg != verified.algorithm {
         return Err(KeyScopeError::Algorithm);
     }
-    if binding.superseded.is_some() {
-        return Err(KeyScopeError::Superseded);
+    // L0-SIG-64, L0-SIG-80, OP-159 m.3 (i)
+    if let Some(s) = binding.superseded {
+        let accepted = match evidence {
+            Some(e) => superseded_inclusion(
+                backend,
+                binding,
+                &e.artefact,
+                &e.inclusion,
+                (e.origin, e.log, e.witnesses),
+            )
+            .is_ok(),
+            None => s.cause == Some(SupersededCause::ReAnchor) && iat <= metadata.issued_at,
+        };
+        if !accepted {
+            return Err(KeyScopeError::Superseded);
+        }
     }
     let in_scope = match &binding.scope {
         BindingScope::Domain => metadata.domain == *artefact_domain,
@@ -678,6 +715,10 @@ pub(crate) fn resolve(
     }
     if key.kid != thumbprint(&key.key) {
         return Err(KeyScopeError::Thumbprint);
+    }
+    // L0-SIG-81
+    if classical_retired(metadata, key.alg) {
+        return Err(KeyScopeError::PqAnchorMissing);
     }
     if !metadata.algorithms.contains(&key.alg)
         || !backend.supports(key.alg)
@@ -700,6 +741,31 @@ pub(crate) fn resolve(
         return Err(KeyScopeError::Window);
     }
     Ok(key)
+}
+
+/// Whether the domain retired the classical algorithm `alg` (§15.16, CR-45 RA-7, L0-SIG-81):
+/// `alg` is classical and left the allowlist, ML-DSA is in it, and the domain published a
+/// post-quantum re-anchor.
+#[must_use]
+pub fn classical_retired(metadata: &DomainMetadata, alg: Algorithm) -> bool {
+    !super::ml_dsa::is_ml_dsa(alg)
+        && !metadata.algorithms.contains(&alg)
+        && metadata
+            .algorithms
+            .iter()
+            .any(|a| super::ml_dsa::is_ml_dsa(*a))
+        && metadata.declared.pq_reanchor.is_some()
+}
+
+/// Whether metadata declares the FIPS profile and lists ML-DSA (CR-44, L0-SIG-82, OP-159
+/// m.3 (r)).
+#[must_use]
+pub fn profile_conflict(metadata: &DomainMetadata) -> bool {
+    metadata.declared.crypto_profile == Some(CryptoProfile::Fips)
+        && metadata
+            .algorithms
+            .iter()
+            .any(|a| super::ml_dsa::is_ml_dsa(*a))
 }
 
 /// The record field that commits the digest of the artefact a decision produced (§13.3 rule 1).

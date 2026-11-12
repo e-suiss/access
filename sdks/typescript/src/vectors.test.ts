@@ -246,7 +246,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: field(c, "key") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(29);
+    expect(v.cases).toHaveLength(38);
   });
 
   it("jose-attack-classes.json", async () => {

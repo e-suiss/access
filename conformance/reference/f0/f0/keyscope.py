@@ -297,6 +297,9 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_
     metadata = decode_payload(metadata_bytes, check_domain_metadata)
     domain = decode_payload(domain_bytes, check_digest)
     bindings = {binding["kid"]: binding for binding in metadata["binding"]}
+    # L0-SIG-82, CR-44
+    if metadata.get("crypto_profile") == "fips" and any(a in ML_DSA_NAMES for a in metadata["algorithms"]):
+        raise KeyScopeError("algorithm")
     # CR-45 RA-7, OP-159 m.3 (h)
     if classical_retired(metadata, cose_alg(excerpt_bytes)):
         raise KeyScopeError("pq-anchor-missing")

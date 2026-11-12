@@ -250,9 +250,9 @@ Vectors: `binding-unknown`, `excerpt-content-type`, `binding-wrong-signer`.
 
 Vector: `binding-alg-mismatch`.
 
-<a id="L0-SIG-64"></a>**L0-SIG-64. Step 2: not superseded.** The binding key MUST NOT carry `superseded` (reason `superseded`). Acceptance of artifacts signed by a superseded binding key with an inclusion proof is defined in a later version.
+<a id="L0-SIG-64"></a>**L0-SIG-64. Step 2: superseded binding.** A binding key that carries `superseded` is accepted only in two cases; otherwise the reason is `superseded`. With inclusion evidence, the evidence MUST satisfy [L0-SIG-80](#L0-SIG-80). Without evidence, `superseded.cause` MUST be `re-anchor` (a binding re-anchor within one provider, OP-60) and the artifact's `iat` MUST be no later than the metadata's `issued_at`: the re-anchor is prospective and the old key's window ([L0-SIG-70](#L0-SIG-70)) bounds it. A `handover` or `recovery` cause, and an absent cause, always need evidence. After the classical algorithm's retirement no cause is enough ([L0-SIG-81](#L0-SIG-81)).
 
-Vector: `binding-superseded`.
+Vectors: `binding-superseded`, `superseded-re-anchor-before-metadata`, `superseded-re-anchor-after-metadata`, `superseded-handover-without-evidence`, `superseded-recovery-without-evidence`.
 
 <a id="L0-SIG-65"></a>**L0-SIG-65. Step 3: binding scope.** The binding key's scope MUST include the artifact's domain (reason `outside-binding-scope`). Scope `"domain"` (the default) covers only the metadata's own `domain`. Scope `{provider: [DomainID…]}` covers exactly the listed domains. A key accepted outside its scope is the cross-tenant key confusion class known from the Storm-0558 incident.
 
@@ -274,7 +274,7 @@ Vector: `excerpt-domain-mismatch`.
 
 Vector: `kid-not-thumbprint`.
 
-<a id="L0-SIG-68"></a>**L0-SIG-68. Step 6: algorithm.** The excerpt key's `alg` MUST be in the metadata `algorithms` and MUST match the key type ([L0-SIG-7](#L0-SIG-7)), and the metadata `hybrid` policy MUST be one this verifier can satisfy ([L0-SIG-75a](#L0-SIG-75a)) (reason `algorithm`).
+<a id="L0-SIG-68"></a>**L0-SIG-68. Step 6: algorithm.** The excerpt key's `alg` MUST be in the metadata `algorithms` and MUST match the key type ([L0-SIG-7](#L0-SIG-7)), and the metadata `hybrid` policy MUST admit the key on its own ([L0-SIG-75a](#L0-SIG-75a)) (reason `algorithm`). A key of a retired classical algorithm is refused with `pq-anchor-missing` ([L0-SIG-81](#L0-SIG-81)).
 
 Vectors: `alg-not-allowed`, `alg-key-type-mismatch`, `alg-es256-on-ed25519-key`.
 
@@ -311,3 +311,7 @@ Vectors: `key-scope.json`: `hybrid-classic`, `hybrid-classic-esp256`, `hybrid-bo
 <a id="L0-SIG-76"></a><!-- no-vector: outside-operation: identity-plane keys are outside L0 -->**L0-SIG-76. Identity-plane keys.** Keys that sign identity tokens (OpenID Connect ID tokens, for example) are not operational keys and never sign an authority artifact. Matching their issuer, realm and `kid` is outside L0.
 
 <a id="L0-SIG-80"></a>**L0-SIG-80. Superseded-at inclusion.** An artefact signed under a binding key that Domain Metadata marks `superseded: {at, cited}` is accepted only with an inclusion bundle that shows all of: the committed record discloses the field `artefact` holding the artefact's exact-content digest (an artefact's own Exercise id, `projection_exercise` or time is never evidence); the record's leaf hash is at its `pos` in the cited checkpoint by an RFC 9162 inclusion path; that checkpoint's signed note verifies under the old log key for the domain's origin, with at least one cosignature of a declared witness other than the log, and its root is `cited`; and, when `at` differs from `cited` (a handover's `C_{h+1}`), an RFC 9162 consistency path from the cited checkpoint to a checkpoint whose root is `at`. Any failure refuses the artefact with `superseded`; a key not superseded never takes this path (§9.10, §13.3, P18, SEC25, U12, U27).
+
+<a id="L0-SIG-81"></a>**L0-SIG-81. After the classical algorithm's retirement.** A classical algorithm is retired when it is not in the metadata `algorithms`, an ML-DSA algorithm is, and the metadata declares `pq_reanchor`. An excerpt signed with a retired algorithm, or a key of a retired algorithm, is refused at step 1 or step 6 with reason `pq-anchor-missing`, never with `algorithm`. The artifact is then accepted only by a post-quantum inclusion bundle: the post-quantum checkpoint, a `COSE_Sign1` with content type `application/access-pq-checkpoint` whose payload is the T16 note body of the domain's log origin, verifies under the ML-DSA key of an anchor the verifier pinned for the domain beforehand (`pq-anchor`); at least one independent witness of that anchor cosigned it, its `COSE_Sign1` with content type `application/access-pq-cosign` covering the note body followed by the cosign time as 8 big-endian bytes; and the committed record of the domain discloses `artefact` with the artifact's exact-content digest at its position in that checkpoint (RFC 9162). A verifier without an anchor for the domain refuses with `pq-anchor-missing`; a missing or failing bundle is `superseded`. A chain of classical signatures from Genesis to the post-quantum key never replaces the anchor (CR-45 RA-5, RA-7).
+
+<a id="L0-SIG-82"></a>**L0-SIG-82. FIPS profile.** Metadata whose `crypto_profile` is `fips` and whose `algorithms` include an ML-DSA algorithm is refused (reason `algorithm`); such a domain cannot add ML-DSA (`algorithm-profile-conflict`, CR-44).

@@ -2349,6 +2349,38 @@ fn live<T>(ended: Option<Ended>, t: T) -> Result<T, MetaError> {
     }
 }
 
+/// The Genesis Anchors as effects; the first is the meta-anchor and carries `meta_sets`
+/// (OP-159 m.3 (j)).
+fn anchor_effects(
+    domain: &Digest,
+    anchors: Vec<(AnchorScope, Root, BTreeSet<RequirementTerm>)>,
+    mut meta_sets: RootSets,
+) -> Vec<Effect> {
+    let mut out = Vec::new();
+    for (seq, (scope, root, root_terms)) in (0_u64..).zip(anchors) {
+        let a = object_id(domain, kind::ANCHOR, seq);
+        out.push((
+            key(kind::ANCHOR, &a),
+            Some(
+                AnchorState {
+                    scope,
+                    root,
+                    root_terms,
+                    sets: if seq == 0 {
+                        core::mem::take(&mut meta_sets)
+                    } else {
+                        RootSets::default()
+                    },
+                    since: 0,
+                    ended: None,
+                }
+                .to_value(),
+            ),
+        ));
+    }
+    out
+}
+
 /// The objects Genesis creates, as effects (C4, OP-141 m.6). The meta-anchor is the first Anchor.
 ///
 /// # Errors
@@ -2372,10 +2404,12 @@ pub fn genesis_effects(
     let meta_terms = requirements(f.opt("root_terms"))?;
     // SEC20, OP-158 m.3 (b)
     let entry = f.opt("recovery").cloned();
-    // OP-159 m.3 (j), m.4 (a)
-    if f.opt("sets").map(root_sets).transpose()?.is_some() {
-        return Err(MetaError::Restricted);
-    }
+    // OP-158 m.11, OP-159 m.3 (j)
+    let meta_sets = f
+        .opt("sets")
+        .map(root_sets)
+        .transpose()?
+        .unwrap_or_default();
     f.done()?;
     let keys_held = genesis_keys_held(entry.as_ref(), take("binding"), &meta_root)?;
     let mut anchors = alloc::vec![(AnchorScope::Domain, meta_root, meta_terms)];
@@ -2390,23 +2424,7 @@ pub fn genesis_effects(
             f.done()?;
         }
     }
-    for (seq, (scope, root, root_terms)) in (0_u64..).zip(anchors) {
-        let a = object_id(domain, kind::ANCHOR, seq);
-        out.push((
-            key(kind::ANCHOR, &a),
-            Some(
-                AnchorState {
-                    scope,
-                    root,
-                    root_terms,
-                    sets: RootSets::default(),
-                    since: 0,
-                    ended: None,
-                }
-                .to_value(),
-            ),
-        ));
-    }
+    out.extend(anchor_effects(domain, anchors, meta_sets));
     let anchor_count = u64::try_from(out.len()).map_err(|_| MetaError::Depth)?;
     let mut children: BTreeMap<Id, BTreeSet<Id>> = BTreeMap::new();
     if let Some(list) = take("grants") {
@@ -2960,14 +2978,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             root_terms,
             sets,
         } => {
-            // OP-159 m.3 (j), m.4 (a)
-            if !sets.is_empty() {
-                return Err(MetaError::Restricted);
-            }
             let covering = anchor_of_basis(ctx)?;
             let (a, req) = root_power(view, &covering, &actor)?;
             let inner = scope_selector(s);
-            if matches!(s, AnchorScope::Domain)
+            // OP-159 m.3 (j)
+            if !sets.is_empty()
+                || matches!(s, AnchorScope::Domain)
                 || !within_scope(inner.as_ref(), scope_selector(&a.scope).as_ref())
             {
                 return Err(MetaError::NotWithin);
@@ -3018,10 +3034,6 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             root_terms,
             sets,
         } => {
-            // OP-159 m.3 (j), m.4 (a)
-            if sets.is_some() {
-                return Err(MetaError::Restricted);
-            }
             if anchor_of_basis(ctx)? != *anchor {
                 return Err(MetaError::Basis);
             }
@@ -3033,6 +3045,15 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             if let Some(t) = root_terms {
                 out.expansion = !t.is_superset(&a.root_terms);
                 a.root_terms.clone_from(t);
+            }
+            // OP-158 m.11, OP-159 m.3 (j)
+            if let Some(new) = sets {
+                if *anchor != meta_anchor(&ctx.domain) {
+                    return Err(MetaError::NotWithin);
+                }
+                out.expansion |= a.sets.witnesses.iter().any(|w| !new.witnesses.contains(w))
+                    || a.sets.replicas.iter().any(|r| !new.replicas.contains(r));
+                a.sets = new.clone();
             }
             out.expansion |= r.is_some();
             // L0-META-6

@@ -9,6 +9,7 @@ pub mod key_scope;
 pub mod ml_dsa;
 pub mod pq;
 pub mod projection;
+pub mod reanchor;
 pub mod sd_jwt;
 
 pub use suiss_crypto::sig::{

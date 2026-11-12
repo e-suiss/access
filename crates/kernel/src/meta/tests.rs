@@ -3837,9 +3837,9 @@ fn kernel_0_4_0_meta_payloads_decode_unchanged() {
 
 mod domain;
 
-// OP-159 m.3 (j), m.4 (a)
+// OP-158 m.11, OP-159 m.3 (j)
 #[test]
-fn root_sets_round_trip_and_are_refused_until_their_rule_is_decided() {
+fn root_sets_round_trip_and_live_only_on_the_meta_anchor() {
     use crate::verify::cose::{Algorithm, PublicKey};
     use crate::verify::key_scope::{Replica, Witness};
     let sets = RootSets::new(
@@ -3887,7 +3887,7 @@ fn root_sets_round_trip_and_are_refused_until_their_rule_is_decided() {
     assert_eq!(
         r.act(ROOT, ROOT, ExerciseBasis::Anchor(a), &create)
             .map(|_| ()),
-        Err(MetaError::Restricted)
+        Err(MetaError::NotWithin)
     );
     let amend = Payload::AnchorAmend {
         anchor: a,
@@ -3899,7 +3899,7 @@ fn root_sets_round_trip_and_are_refused_until_their_rule_is_decided() {
     assert_eq!(
         r.act(ROOT, ROOT, ExerciseBasis::Anchor(a), &amend)
             .map(|_| ()),
-        Err(MetaError::Restricted)
+        Err(MetaError::NotWithin)
     );
     assert_eq!(MetaError::HoldingTerms.code(), "holding-terms");
     assert_eq!(
@@ -3908,3 +3908,4 @@ fn root_sets_round_trip_and_are_refused_until_their_rule_is_decided() {
     );
 }
 mod holding_terms;
+mod root_sets;
