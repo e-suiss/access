@@ -1987,6 +1987,10 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 }
                 // L0-META-13, G29, OP-157 m.19 (b), OP-159 m.3 (k)
                 if let ExerciseBasis::Holding(h) = req.basis
+                    && !matches!(
+                        payload,
+                        Payload::GrantIssue(_) | Payload::ProjectionIssue { .. }
+                    )
                     && !read::<GrantState>(snapshot, kind::GRANT, &h.grant).is_some_and(|g| {
                         crate::app::breakglass::is_breakglass(&g.content.authority.authority)
                     })

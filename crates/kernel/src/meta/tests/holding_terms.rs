@@ -77,7 +77,7 @@ fn meta_holding_terms_vectors_match() {
     };
     let g2_ex = r
         .step(
-            "redelegation-adds-the-holding-terms",
+            "redelegation-carries-the-terms-in-the-child",
             R,
             (ALICE, ALICE_I),
             ExerciseBasis::Holding(h1),
@@ -92,7 +92,7 @@ fn meta_holding_terms_vectors_match() {
     };
     let g3_ex = r
         .step(
-            "deeper-holding-adds-the-whole-lineage",
+            "deeper-redelegation-carries-the-terms-in-the-child",
             R,
             (CAROL, CAROL_I),
             ExerciseBasis::Holding(h2),

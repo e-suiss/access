@@ -3741,7 +3741,10 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
     if let ExerciseBasis::Holding(h) = ctx.basis
         && !matches!(payload, Payload::Contribute { .. })
     {
-        out.requirements.extend(holding_terms(ctx, view, &h)?);
+        let terms = holding_terms(ctx, view, &h)?;
+        if !carries_terms(payload) {
+            out.requirements.extend(terms);
+        }
     }
     quorum(ctx, payload, view, &mut out);
     out.effects = sorted(out.effects);
@@ -3763,6 +3766,17 @@ pub fn admit_algorithm(
         return Err(MetaError::AlgorithmProfileConflict);
     }
     Ok(())
+}
+
+/// Whether the authority a meta-action creates carries its holding's requirement terms itself:
+/// a re-delegation's child and a projection's bounds must be at least as strict as the holding
+/// (L0-ALG-61, L0-META-25, L0-META-35), so the terms are met by what is created and not asked
+/// of the delegating Exercise (OP-159 m.3 (k)).
+const fn carries_terms(payload: &Payload) -> bool {
+    matches!(
+        payload,
+        Payload::GrantIssue(_) | Payload::ProjectionIssue { .. }
+    )
 }
 
 /// The terms of the holding a meta-Exercise declares (L0-META-13, OP-157 m.22 (f), OP-159

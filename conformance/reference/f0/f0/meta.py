@@ -1494,7 +1494,9 @@ def apply(state, domain_id, exercise, pos, now, party, instance, basis, capacity
     expansion = getattr(run, name)(body)
     # L0-META-13, L0-META-30, OP-159 m.3 (k)
     if "holding" in exercise_basis and name != "contribute":
-        run.requirements = run.requirements + holding_terms(run, exercise_basis["holding"])
+        terms = holding_terms(run, exercise_basis["holding"])
+        if name not in ("grant_issue", "projection_issue"):
+            run.requirements = run.requirements + terms
     # §13.7.3, SEC26, OP-141 m.43: the root the actor acts as, before the change
     if expansion and name in CT3_META and "anchor" in exercise_basis:
         anchor = before or {}
