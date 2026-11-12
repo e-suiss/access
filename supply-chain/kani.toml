@@ -1,0 +1,20 @@
+# OP-159 m.3 (w), F-2: the Kani model checker for the Kernel harnesses (CR-K1…CR-K9).
+# `crate_sha256` is the crates.io checksum of kani-verifier (cargo install --locked checks it);
+# `bundle_sha256` pins the release bundle with CBMC that `cargo kani setup` installs from.
+
+version = "0.68.0"
+release = "https://github.com/model-checking/kani/releases/tag/kani-0.68.0"
+published = "2026-09-16"
+crate_sha256 = "842fabd2ba8b13babab862e21fef2946b581d493f23062d5ce86266630f1d1ae"
+
+[platform.linux-x86_64]
+url = "https://github.com/model-checking/kani/releases/download/kani-0.68.0/kani-0.68.0-x86_64-unknown-linux-gnu.tar.gz"
+bundle_sha256 = "32e2b484d73ede0bbf64a2cf0879c4259422497d8aec4ee67d448de9ae7843d3"
+
+[platform.linux-aarch64]
+url = "https://github.com/model-checking/kani/releases/download/kani-0.68.0/kani-0.68.0-aarch64-unknown-linux-gnu.tar.gz"
+bundle_sha256 = "0042d2688bf1550270def4a79c96aaeea138631818cb4ab5480120f2d51a942c"
+
+[platform.macos-aarch64]
+url = "https://github.com/model-checking/kani/releases/download/kani-0.68.0/kani-0.68.0-aarch64-apple-darwin.tar.gz"
+bundle_sha256 = "a5d39a5d5e748253a553aa62f295c6c397287927a28e5e32691d7ff2eda0c398"
