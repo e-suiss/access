@@ -1,12 +1,147 @@
 # CR-39, CR-40, OP-159 m.3 (s)
 #
 # [[point]]
-# id        constant-time point of CR-39 m.1 ([ID] and [AU])
-# function  the function that holds the secret comparison or branch
-# secret    the Secret<N> or ct_eq use it relies on
-# measured  the dudect target or ctgrind test that measures it
+# id         constant-time point of CR-39 m.1 ([ID] and [AU])
+# functions  `path#fn`: the functions that hold the secret comparison or the hash-first lookup
+# secret     the Secret<N>, ct_eq or constant-time primitive the comparison relies on
+# measured   `dudect::<test>` (crates/crypto/tests/dudect.rs) or `ctgrind::<test>`
+#            (crates/crypto/tests/ctgrind.rs) that measures it; |t| > 5 is a leak (CR-39 m.5)
+# applies    false only for an [AU] point Access never compares; `reason` then says why
 #
-# Lane J4 fills the points; xtask `constant-time-points` refuses a point without a function or a
-# measurement.
+# xtask `constant-time-points` refuses a missing point, a function that does not exist, and a
+# point without a measurement.
 
 version = 1
+
+[[point]]
+id = "id-opaque-token"
+title = "Opaque token lookup, hash first"
+functions = [
+  "crates/crypto/src/oauth.rs#opaque_digest",
+  "crates/identity-oauth/src/domain/device.rs#device_hash",
+]
+secret = "SHA-256 digest of the presented token; the store looks the digest up (CR-39 m.4)"
+measured = ["dudect::opaque_token_digest"]
+
+[[point]]
+id = "id-hmac-jws"
+title = "HMAC and JWS verification"
+functions = [
+  "crates/crypto/src/client_secret_jwt.rs#verify",
+  "crates/crypto/src/webhook.rs#verify",
+]
+secret = "aws_lc_rs::hmac::verify"
+measured = ["dudect::hmac_jws_verify"]
+
+[[point]]
+id = "id-totp"
+title = "TOTP code"
+functions = ["crates/crypto/src/totp.rs#matching_step"]
+secret = "subtle::ConstantTimeEq over every step of the window"
+measured = ["dudect::totp_matching_step"]
+
+[[point]]
+id = "id-client-secret"
+title = "Client secret"
+functions = ["crates/crypto/src/oauth.rs#secret_matches"]
+secret = "subtle::ConstantTimeEq over the SHA-256 digest (CR-39 m.4)"
+measured = ["dudect::client_secret_match"]
+
+[[point]]
+id = "id-api-key"
+title = "API key (service account client secret)"
+functions = ["crates/crypto/src/oauth.rs#secret_matches"]
+secret = "subtle::ConstantTimeEq over the SHA-256 digest (CR-39 m.4)"
+measured = ["dudect::client_secret_match"]
+
+[[point]]
+id = "id-csrf-state"
+title = "CSRF token and OAuth state or nonce"
+functions = [
+  "crates/identity-session/src/domain/console.rs#csrf_ok",
+  "crates/http/src/account/domain.rs#csrf_ok",
+  "crates/identity-federation/src/domain/token.rs#eq_ct",
+]
+secret = "Secret<[u8; 32]>::ct_eq_bytes"
+measured = [
+  "dudect::secret_comparisons_do_not_leak",
+  "ctgrind::secret_comparisons_do_not_branch_on_secret_bytes",
+]
+
+[[point]]
+id = "id-reset-link"
+title = "Reset code and magic link"
+functions = [
+  "crates/identity-session/src/app/recovery.rs#spend_code",
+  "crates/identity-session/src/app/signin.rs#email_code",
+]
+secret = "Secret<[u8; 32]>::ct_eq_bytes over the code digest"
+measured = [
+  "dudect::secret_comparisons_do_not_leak",
+  "ctgrind::secret_comparisons_do_not_branch_on_secret_bytes",
+]
+
+[[point]]
+id = "id-pkce"
+title = "PKCE verifier"
+functions = ["crates/crypto/src/oauth.rs#pkce_matches"]
+secret = "subtle::ConstantTimeEq over the S256 challenge"
+measured = ["dudect::pkce_match"]
+
+[[point]]
+id = "id-device-code"
+title = "Device and user code (the main defence is the rate limit)"
+functions = [
+  "crates/identity-oauth/src/domain/device.rs#user_hash",
+  "crates/identity-oauth/src/domain/device.rs#device_hash",
+]
+secret = "SHA-256 digest of the code; the store looks the digest up (CR-39 m.4)"
+measured = ["dudect::opaque_token_digest"]
+
+[[point]]
+id = "id-webauthn-challenge"
+title = "WebAuthn challenge"
+functions = ["crates/identity-webauthn/src/domain/client_data.rs#check_client_data"]
+secret = "Secret<[u8; 32]>::ct_eq_bytes over the SHA-256 of both challenges"
+measured = [
+  "dudect::secret_comparisons_do_not_leak",
+  "ctgrind::secret_comparisons_do_not_branch_on_secret_bytes",
+]
+
+[[point]]
+id = "au-nonce-jti"
+title = "Nonce and jti match"
+functions = [
+  "crates/crypto/src/dpop.rs#check",
+  "crates/identity-session/src/app/dbsc.rs#challenge_matches",
+]
+secret = "subtle::ConstantTimeEq over the nonce MAC; Secret<[u8; 32]>::ct_eq_bytes over the jti digest"
+measured = [
+  "dudect::secret_comparisons_do_not_leak",
+  "ctgrind::secret_comparisons_do_not_branch_on_secret_bytes",
+]
+
+[[point]]
+id = "au-basis-ref"
+title = "basis_ref token resolution"
+functions = ["crates/crypto/src/token.rs#open"]
+secret = "AES-256-GCM open in aws-lc-rs: the tag is checked in constant time"
+measured = ["dudect::basis_ref_open"]
+
+[[point]]
+id = "au-event-id"
+title = "HMAC event id verification"
+applies = false
+reason = "Access derives event ids (crates/crypto/src/event_id.rs) and never compares a presented one; a comparison added later is a new point"
+
+[[point]]
+id = "au-status-list"
+title = "Status list bit read"
+applies = false
+reason = "The bit index is not secret and the bit is public (CR-39 m.1); no secret content is compared"
+
+[[point]]
+id = "au-proof-commit"
+title = "proof_commit digest match"
+applies = false
+reason = "Access emits proof_commit and never matches a presented one; the digest is not secret (CR-39 m.1)"

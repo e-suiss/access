@@ -23,6 +23,8 @@ subtle = { workspace = true }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+# CR-39 m.5, OP-159 m.3 (s)
+access-crypto = { path = ".", features = ["testing"] }
 serde_json = { workspace = true, features = ["std"] }
 static_assertions = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }

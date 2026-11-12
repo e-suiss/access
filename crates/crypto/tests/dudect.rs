@@ -118,6 +118,178 @@ mod dudect {
         );
     }
 
+    fn samples() -> Option<usize> {
+        std::env::var_os("ACCESS_DUDECT")?;
+        Some(
+            std::env::var("ACCESS_DUDECT_SAMPLES")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(200_000),
+        )
+    }
+
+    fn report(name: &str, t: f64) {
+        #[allow(
+            clippy::print_stdout,
+            reason = "the nightly log keeps the measured t values"
+        )]
+        {
+            println!("dudect {name} |t| = {:.2}", t.abs());
+        }
+        assert!(t.abs() < THRESHOLD, "{name} leaks: |t| = {t}");
+    }
+
+    fn key<const N: usize>() -> [u8; N] {
+        access_crypto::random::bytes::<N>().unwrap()
+    }
+
+    /// `presented` equal to `real`, or differing in its first byte.
+    fn flip(real: &[u8], differ: bool, rng: &mut Rng) -> Vec<u8> {
+        let mut out = real.to_vec();
+        if differ && let Some(b) = out.first_mut() {
+            *b ^= u8::try_from(rng.next() % 255 + 1).unwrap_or(1);
+        }
+        out
+    }
+
+    // CR-39 m.1 (opaque token, device and user code), m.4, SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn opaque_token_digest() {
+        let Some(n) = samples() else { return };
+        let real = key::<32>();
+        let t = leak_t(n, |differ, rng| {
+            let presented = flip(&real, differ, rng);
+            timed(|| {
+                access_crypto::oauth::opaque_digest("access/dudect/v1", black_box(&presented))[0]
+                    & 1
+                    == 0
+            })
+        });
+        report("opaque_digest", t);
+    }
+
+    // CR-39 m.1 (HMAC/JWS), SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn hmac_jws_verify() {
+        let Some(n) = samples() else { return };
+        let secret = key::<32>();
+        let input = key::<64>();
+        let tag = aws_lc_rs::hmac::sign(
+            &aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA256, &secret),
+            &input,
+        );
+        let t = leak_t(n, |differ, rng| {
+            let presented = flip(tag.as_ref(), differ, rng);
+            timed(|| {
+                access_crypto::client_secret_jwt::verify(&secret, &input, black_box(&presented))
+                    .is_ok()
+            })
+        });
+        report("client_secret_jwt::verify", t);
+    }
+
+    // CR-39 m.1 (TOTP), SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn totp_matching_step() {
+        let Some(n) = samples() else { return };
+        let secret = Secret::new(key::<20>().to_vec());
+        let params = access_crypto::totp::TotpParams {
+            algorithm: access_crypto::totp::TotpAlgorithm::Sha1,
+            digits: 6,
+            step_s: 30,
+            window: 1,
+        };
+        let now = 1_800_000_000;
+        let real = access_crypto::totp::hotp(
+            secret.expose(),
+            params.algorithm,
+            access_crypto::totp::step_of(now, params.step_s),
+            params.digits,
+        );
+        let t = leak_t(n / 4, |differ, rng| {
+            let mut presented = real.clone().into_bytes();
+            if differ && let Some(b) = presented.first_mut() {
+                *b = b'0'
+                    + u8::try_from((u64::from(*b - b'0') + rng.next() % 9 + 1) % 10).unwrap_or(0);
+            }
+            let presented = String::from_utf8(presented).unwrap();
+            timed(|| {
+                access_crypto::totp::matching_step(&secret, &params, now, black_box(&presented))
+                    .is_some()
+            })
+        });
+        report("totp::matching_step", t);
+    }
+
+    // CR-39 m.1 (client secret, API key), m.4, SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn client_secret_match() {
+        let Some(n) = samples() else { return };
+        let presented_real = key::<32>();
+        let stored = access_crypto::oauth::secret_digest(&presented_real);
+        let t = leak_t(n, |differ, rng| {
+            let presented = flip(&presented_real, differ, rng);
+            timed(|| access_crypto::oauth::secret_matches(&stored, black_box(&presented)))
+        });
+        report("oauth::secret_matches", t);
+    }
+
+    // CR-39 m.1 (PKCE verifier), SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn pkce_match() {
+        let Some(n) = samples() else { return };
+        let verifier = access_kernel::json::b64url_encode(&key::<32>());
+        let challenge = sha256(verifier.as_bytes());
+        let t = leak_t(n, |differ, rng| {
+            let mut presented = verifier.clone().into_bytes();
+            if differ && let Some(b) = presented.first_mut() {
+                *b = if *b == b'A' || rng.next() & 1 == 0 {
+                    b'B'
+                } else {
+                    b'A'
+                };
+            }
+            let presented = String::from_utf8(presented).unwrap();
+            timed(|| access_crypto::oauth::pkce_matches(&challenge, black_box(&presented)))
+        });
+        report("oauth::pkce_matches", t);
+    }
+
+    fn sha256(data: &[u8]) -> [u8; 32] {
+        let d = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, data);
+        <[u8; 32]>::try_from(d.as_ref()).unwrap()
+    }
+
+    // CR-39 m.1 [AU] (basis_ref token), SAI-42
+    #[test]
+    #[ignore = "nightly: just dudect"]
+    fn basis_ref_open() {
+        let Some(n) = samples() else { return };
+        let token = access_crypto::token::TokenKey::new(Secret::new(key::<32>()));
+        let domain = key::<32>();
+        let sealed = token.seal(&domain, "basis_ref", &key::<48>()).unwrap();
+        let raw = access_kernel::json::b64url_decode(&sealed).unwrap();
+        let t = leak_t(n / 4, |at_end, rng| {
+            let mut tampered = raw.clone();
+            let byte = if at_end {
+                tampered.last_mut()
+            } else {
+                tampered.get_mut(12)
+            };
+            if let Some(b) = byte {
+                *b ^= u8::try_from(rng.next() % 255 + 1).unwrap_or(1);
+            }
+            let text = access_kernel::json::b64url_encode(&tampered);
+            timed(|| token.open(&domain, "basis_ref", black_box(&text)).is_ok())
+        });
+        report("token::TokenKey::open", t);
+    }
+
     // CR-39 m.5
     #[test]
     #[ignore = "nightly: just dudect"]

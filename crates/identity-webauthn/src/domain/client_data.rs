@@ -57,7 +57,8 @@ pub fn check_client_data(
     let presented = text("challenge")
         .and_then(|c| b64url_decode(c).ok())
         .ok_or(Rejection::ClientData)?;
-    if presented != challenge {
+    // CR-39 m.1, m.4, SAI-42
+    if !access_crypto::Secret::new(sha256(challenge)).ct_eq_bytes(&sha256(&presented)) {
         return Err(Rejection::Challenge);
     }
     let origin = text("origin")

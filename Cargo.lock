@@ -120,6 +120,7 @@ dependencies = [
 name = "access-crypto"
 version = "0.6.0"
 dependencies = [
+ "access-crypto",
  "aws-lc-rs",
  "aws-lc-sys",
  "esuiss-access-kernel",
