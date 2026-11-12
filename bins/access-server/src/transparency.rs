@@ -14,11 +14,30 @@ use access_store::authority_checkpoint::AuthorityCheckpoint;
 use access_store::scope::DomainId;
 use access_store::witness::{cosigns, latest_witnessed, leaf_hashes, witnessed_through};
 use suiss_crypto::dcbor::{self, Limits, Value};
-use suiss_ledger::checkpoint::proof::{inclusion, tile, tile_width};
+use suiss_ledger::checkpoint::proof::{consistency, inclusion, tile, tile_width};
 use suiss_ledger::checkpoint::witness::Cosignature;
 
 /// The only field an inclusion bundle opens (§17.6.1 rule 5, T19).
 pub(crate) const OPENED: &str = "artifacts";
+
+/// The field a re-anchor bundle opens beside [`OPENED`]: the artefact digest the Kernel checks
+/// (CR-45 RA-5, `ARTEFACT_FIELD`).
+const PQ_OPENED: &str = access_kernel::verify::key_scope::ARTEFACT_FIELD;
+
+fn pq_cosigns(c: &access_store::pq_checkpoint::PqCheckpoint) -> Value {
+    Value::Array(
+        c.cosigns
+            .iter()
+            .map(|w| {
+                Value::Map(vec![
+                    (Value::text("name"), Value::text(&w.witness)),
+                    (Value::text("timestamp"), Value::Unsigned(w.cosigned_at)),
+                    (Value::text("sign1"), Value::Bytes(w.sign1.clone())),
+                ])
+            })
+            .collect(),
+    )
+}
 
 /// The store adapter.
 pub(crate) struct PgCheckpoints {
@@ -130,6 +149,95 @@ impl Checkpoints for PgCheckpoints {
             ),
         ]);
         dcbor::encode(&bundle, Limits::CEILING).map_err(down)
+    }
+
+    // CR-45 RA-2, RA-3, OP-159 m.13
+    async fn pq_list(&self, domain: Digest) -> Result<Vec<u8>, InclusionError> {
+        let id = DomainId::from_bytes(domain.0);
+        if read_head(&self.app, &id).await.is_err() {
+            return Err(InclusionError::Unknown);
+        }
+        let rows = access_store::pq_checkpoint::list(&self.app, &id, None, 64)
+            .await
+            .map_err(down)?;
+        let entries = rows
+            .iter()
+            .map(|c| {
+                Value::Map(vec![
+                    (Value::text("size"), Value::Unsigned(c.size)),
+                    (Value::text("root"), Value::Bytes(c.root.to_vec())),
+                    (Value::text("checkpoint"), Value::Bytes(c.sign1.clone())),
+                    (Value::text("excerpt"), Value::Bytes(c.excerpt.clone())),
+                    (Value::text("cosigns"), pq_cosigns(c)),
+                ])
+            })
+            .collect();
+        dcbor::encode(
+            &Value::Map(vec![(Value::text("checkpoints"), Value::Array(entries))]),
+            Limits::CEILING,
+        )
+        .map_err(down)
+    }
+
+    // CR-45 RA-4, RA-5, OP-159 m.13
+    async fn pq_inclusion(
+        &self,
+        domain: Digest,
+        size: u64,
+        pos: u64,
+    ) -> Result<Vec<u8>, InclusionError> {
+        let id = DomainId::from_bytes(domain.0);
+        let all = access_store::pq_checkpoint::list(&self.app, &id, None, 1024)
+            .await
+            .map_err(down)?;
+        let cp = all
+            .iter()
+            .find(|c| c.size == size)
+            .ok_or(InclusionError::Unknown)?;
+        if cp.cosigns.is_empty() {
+            return Err(InclusionError::NotWitnessed);
+        }
+        let record = read_log(&self.app, &id, pos, pos)
+            .await
+            .map_err(down)?
+            .into_iter()
+            .next()
+            .ok_or(InclusionError::Unknown)?;
+        let envelope = RecordEnvelope::from_bytes(&record.envelope).map_err(down)?;
+        // §17.6.1 rule 5
+        let disclosure = envelope
+            .disclose(|name| name == OPENED || name == PQ_OPENED)
+            .map_err(down)?;
+        let leaves = leaf_hashes(&self.app, &id, 0, size).await.map_err(down)?;
+        let path = inclusion(leaves.as_slice(), pos, size).map_err(|_| InclusionError::Unknown)?;
+        let hashes =
+            |h: &[[u8; 32]]| Value::Array(h.iter().map(|x| Value::Bytes(x.to_vec())).collect());
+        // RA-4
+        let previous = all.iter().map(|c| c.size).filter(|s| *s < size).max();
+        let mut fields = vec![
+            (Value::text("domain"), Value::Bytes(domain.0.to_vec())),
+            (Value::text("position"), Value::Unsigned(pos)),
+            (
+                Value::text("record"),
+                Value::Bytes(disclosure.to_bytes().map_err(down)?),
+            ),
+            (Value::text("path"), hashes(&path)),
+            (Value::text("checkpoint"), Value::Bytes(cp.sign1.clone())),
+            (Value::text("excerpt"), Value::Bytes(cp.excerpt.clone())),
+            (Value::text("cosigns"), pq_cosigns(cp)),
+        ];
+        if let Some(from) = previous {
+            let proof =
+                consistency(leaves.as_slice(), from, size).map_err(|_| InclusionError::Unknown)?;
+            fields.push((
+                Value::text("consistency"),
+                Value::Map(vec![
+                    (Value::text("from"), Value::Unsigned(from)),
+                    (Value::text("path"), hashes(&proof)),
+                ]),
+            ));
+        }
+        dcbor::encode(&Value::Map(fields), Limits::CEILING).map_err(down)
     }
 
     async fn tile(

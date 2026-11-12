@@ -111,3 +111,15 @@ fn retirement_needs_a_cosigned_re_anchor_of_the_head_within_a_day() {
     );
     assert_eq!(ReanchorError::Required.code(), "reanchor-required");
 }
+
+// RA-6, OP-159 m.3 (g)
+#[test]
+fn a_pq_domain_re_anchors_the_first_checkpoint_of_each_utc_day() {
+    let classic = std::collections::BTreeSet::from([Algorithm::Ed25519]);
+    let pq = std::collections::BTreeSet::from([Algorithm::Ed25519, Algorithm::MlDsa65]);
+    let day = 24 * 60 * 60 * 1000;
+    assert!(!due(&classic, None, 5));
+    assert!(due(&pq, None, 5));
+    assert!(!due(&pq, Some(day + 1), 2 * day - 1));
+    assert!(due(&pq, Some(day + 1), 2 * day));
+}

@@ -48,7 +48,11 @@ async fn re_anchor_checkpoints_are_appended_once_and_read_newest_first() {
         cosigned_at: 3,
         sign1: vec![0xd2, 9],
     };
-    assert!(append(&db.sequencer, &d, &cp(10, 2, vec![w.clone()])).await.unwrap());
+    assert!(
+        append(&db.sequencer, &d, &cp(10, 2, vec![w.clone()]))
+            .await
+            .unwrap()
+    );
     assert!(!append(&db.sequencer, &d, &cp(10, 2, vec![])).await.unwrap());
     let mut later = cp(20, 5, vec![]);
     later.reason = Reason::Retirement;

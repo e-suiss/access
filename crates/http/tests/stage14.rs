@@ -34,7 +34,7 @@ fn every_stage_14_admin_row_is_declared_with_its_kind_and_planned() {
 // OP-159 m.4 (a)
 #[tokio::test]
 async fn every_declared_stage_14_route_is_not_yet_served() {
-    assert_eq!(PLANNED.len(), 3);
+    assert_eq!(PLANNED.len(), 1);
     for p in PLANNED {
         let path = p
             .path

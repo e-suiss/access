@@ -71,7 +71,7 @@ pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,
 };
-pub use reanchor::reanchor;
+pub use reanchor::{Reanchoring, reanchor};
 pub use reconcile::Reconciled;
 pub use vault::ReleaseBasis;
 

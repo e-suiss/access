@@ -9,6 +9,12 @@
 //! - `GET /access/v1/domains/{domain}/tile/{level}/{index}[.p/{width}]`: C2SP `tlog-tiles`
 //!   hash tiles of the witnessed tree, so anyone can follow the log as a transparency log
 //!   (K15); entries are not published, they are confidential records.
+//! - `GET /access/v1/domains/{domain}/checkpoints/pq`: the post-quantum re-anchor checkpoints,
+//!   newest first, each with its witnesses' ML-DSA cosigns (`pq-checkpoint-list`, CR-45 RA-2,
+//!   RA-3).
+//! - `GET /access/v1/domains/{domain}/checkpoints/pq/{size}/inclusion/{position}`: the RA-5
+//!   bundle of one record against the re-anchor checkpoint of `size`, for an authenticated PEP,
+//!   with the consistency path from the previous re-anchor (RA-4).
 
 use std::future::Future;
 use std::sync::Arc;
@@ -30,6 +36,13 @@ pub const CHECKPOINTS_PATH: &str = "/access/v1/domains/{domain}/checkpoints";
 /// The inclusion bundle route.
 pub const INCLUSION_PATH: &str =
     "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}";
+
+/// The post-quantum re-anchor checkpoint list route (OP-159 m.3 (g), m.13).
+pub const PQ_CHECKPOINTS_PATH: &str = "/access/v1/domains/{domain}/checkpoints/pq";
+
+/// The post-quantum inclusion bundle route (CR-45 RA-5).
+pub const PQ_INCLUSION_PATH: &str =
+    "/access/v1/domains/{domain}/checkpoints/pq/{size}/inclusion/{position}";
 
 /// The hash tile route (C2SP `tlog-tiles`).
 pub const TILE_PATH: &str = "/access/v1/domains/{domain}/tile/{level}/{*index}";
@@ -114,6 +127,20 @@ pub trait Checkpoints: Send + Sync {
         index: u64,
         width: u64,
     ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send;
+
+    /// The `pq-checkpoint-list` of `domain` as deterministic CBOR (CR-45 RA-2, RA-3).
+    fn pq_list(
+        &self,
+        domain: Digest,
+    ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send;
+
+    /// The RA-5 bundle of the record at `pos` against the re-anchor checkpoint of `size`.
+    fn pq_inclusion(
+        &self,
+        domain: Digest,
+        size: u64,
+        pos: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send;
 }
 
 /// The routes over `store`.
@@ -122,6 +149,8 @@ pub fn router<C: Checkpoints + 'static>(store: C) -> Router {
         .route(CHECKPOINTS_PATH, get(listing::<C>))
         .route(INCLUSION_PATH, get(inclusion::<C>))
         .route(TILE_PATH, get(tile::<C>))
+        .route(PQ_CHECKPOINTS_PATH, get(pq_list::<C>))
+        .route(PQ_INCLUSION_PATH, get(pq_inclusion::<C>))
         .with_state(Arc::new(store))
 }
 
@@ -238,6 +267,57 @@ async fn inclusion<C: Checkpoints>(
             bundle,
         )
             .into_response(),
+        Err(e) => problem(e),
+    }
+}
+
+fn cbor(bytes: Vec<u8>) -> Response {
+    (
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(BUNDLE_CONTENT_TYPE),
+        )],
+        bytes,
+    )
+        .into_response()
+}
+
+// CR-45 RA-2, RA-3, OP-159 m.13
+async fn pq_list<C: Checkpoints>(
+    State(store): State<Arc<C>>,
+    Path(domain): Path<String>,
+) -> Response {
+    let Some(d) = crate::adp::adapters::domain_id(&domain) else {
+        return problem(InclusionError::Unknown);
+    };
+    match store.pq_list(d).await {
+        Ok(b) => cbor(b),
+        Err(e) => problem(e),
+    }
+}
+
+// CR-45 RA-4, RA-5, OP-159 m.13
+async fn pq_inclusion<C: Checkpoints>(
+    State(store): State<Arc<C>>,
+    pep: Option<axum::Extension<Pep>>,
+    Path((domain, size, pos)): Path<(String, String, String)>,
+) -> Response {
+    if pep.is_none() {
+        return Problem::new(StatusCode::UNAUTHORIZED, "pep-required", "Unauthorized")
+            .into_response();
+    }
+    let (Some(d), Some(size), Some(pos)) = (
+        crate::adp::adapters::domain_id(&domain),
+        number(&size),
+        number(&pos),
+    ) else {
+        return problem(InclusionError::Unknown);
+    };
+    if pos >= size {
+        return problem(InclusionError::Unknown);
+    }
+    match store.pq_inclusion(d, size, pos).await {
+        Ok(b) => cbor(b),
         Err(e) => problem(e),
     }
 }

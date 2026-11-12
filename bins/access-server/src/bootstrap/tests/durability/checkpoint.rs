@@ -205,6 +205,24 @@ impl Log {
 
     /// Appends one real claim record with an `artifacts` field and a withheld `secret`.
     async fn push_record(&mut self, db: &TestDb, artifact: [u8; 32], recorded_at: u64) {
+        use suiss_crypto::dcbor::Value;
+        self.push_field(
+            db,
+            (
+                "artifacts",
+                Value::Array(vec![Value::Bytes(artifact.to_vec())]),
+            ),
+            recorded_at,
+        )
+        .await;
+    }
+
+    async fn push_field(
+        &mut self,
+        db: &TestDb,
+        (name, value): (&str, suiss_crypto::dcbor::Value),
+        recorded_at: u64,
+    ) {
         use access_kernel::record::{Header, Opened, RecordKind};
         use suiss_crypto::dcbor::Value;
         let pos = self.frontier.size();
@@ -223,10 +241,10 @@ impl Log {
             },
             fields: std::collections::BTreeMap::from([
                 (
-                    String::from("artifacts"),
+                    String::from(name),
                     Opened {
-                        value: Value::Array(vec![Value::Bytes(artifact.to_vec())]),
-                        salt: salt("artifacts"),
+                        value,
+                        salt: salt(name),
                     },
                 ),
                 (
@@ -890,12 +908,22 @@ async fn published(socket: &Path, d: Digest) -> access_kernel::verify::key_scope
 #[tokio::test(flavor = "multi_thread")]
 #[allow(clippy::too_many_lines, reason = "one walkthrough of the re-anchor")]
 async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it_pending() {
-    use access_authority_core::adapters::reanchor;
+    use access_authority_core::adapters::{Reanchoring, reanchor};
     use access_authority_core::app::reanchor::Status;
+    use access_store::pq_checkpoint::Reason;
     let db = fresh().await.unwrap();
     let mut log = Log::create(&db).await;
     let d = log.domain;
-    log.push(&db, 1, wall() - 30_000).await;
+    let artefact = Digest(suiss_crypto::digest::sha256(&wall().to_be_bytes()));
+    log.push_field(
+        &db,
+        (
+            access_kernel::verify::key_scope::ARTEFACT_FIELD,
+            artefact.to_value(),
+        ),
+        wall() - 30_000,
+    )
+    .await;
     let key = binding_key(d);
     let root = std::env::temp_dir().join(format!("aw-pq-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -928,12 +956,17 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
     .unwrap();
     assert_eq!((row.size, out.independent), (2, 1), "{out:?}");
     let urls = vec![(String::from("w-pq"), witness.url.clone())];
+    let at = Reanchoring {
+        socket: &socket,
+        app: &db.app,
+        sequencer: &db.sequencer,
+    };
 
     // RR-35
     assert!(published(&socket, d).await.declared.pq_reanchor.is_none());
     // OP-159 m.3 (d)
     assert_eq!(
-        reanchor(&socket, d, (&row, &declared), &urls, wall()).await,
+        reanchor(at, d, (&row, &declared, Reason::Request), &urls, wall()).await,
         Err("pq-key-unavailable")
     );
     // OP-159 m.3 (e), m.9 (h)
@@ -948,11 +981,11 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
     );
     // RB-0
     assert_eq!(
-        reanchor(&socket, d, (&row, &classical), &urls, wall()).await,
+        reanchor(at, d, (&row, &classical, Reason::Request), &urls, wall()).await,
         Err("reanchor-no-pq-witness")
     );
     // RA-2, RA-3
-    let out = reanchor(&socket, d, (&row, &declared), &urls, wall()).await;
+    let out = reanchor(at, d, (&row, &declared, Reason::Request), &urls, wall()).await;
     let Ok(Status::Anchored(anchored)) = out else {
         panic!("the independent witness cosigns: {out:?}");
     };
@@ -964,6 +997,98 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
         m.hybrid,
         Some(access_kernel::verify::key_scope::Hybrid::Both)
     );
+    // CR-45 RA-5, RA-7, OP-159 m.13
+    let kept = access_store::pq_checkpoint::list(&db.app, &log.id, None, 8)
+        .await
+        .unwrap();
+    assert_eq!((kept.len(), kept[0].cosigns.len()), (1, 1));
+    let router = || {
+        access_http::transparency::router(crate::transparency::PgCheckpoints {
+            app: db.app.clone(),
+            witnesses: vec![],
+        })
+    };
+    let origin = access_authority_sequencer::checkpoint::origin(&d);
+    let (status, list) = http(
+        router(),
+        &format!("/access/v1/domains/{origin}/checkpoints/pq"),
+        false,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_ne!(list.len(), 0);
+    let (status, bundle) = http(
+        router(),
+        &format!("/access/v1/domains/{origin}/checkpoints/pq/2/inclusion/1"),
+        true,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let bundle_file = root.join("pq-bundle.cbor");
+    std::fs::write(&bundle_file, &bundle).unwrap();
+    let excerpt = {
+        let msg = suiss_crypto::cose::parse_sign1(&kept[0].excerpt).unwrap();
+        access_kernel::verify::key_scope::KeyExcerpt::from_bytes(&msg.payload.unwrap()).unwrap()
+    };
+    let pq_witness = m
+        .declared
+        .witnesses
+        .iter()
+        .find(|w| w.algorithm == suiss_crypto::cose::Algorithm::MlDsa65)
+        .unwrap()
+        .clone();
+    let anchor = access_kernel::verify::pq::PqAnchor::new(
+        d,
+        excerpt.key.kid,
+        excerpt.key.key.clone(),
+        vec![pq_witness],
+        wall(),
+    );
+    let anchors = suiss_crypto::dcbor::Value::Map(vec![
+        (
+            suiss_crypto::dcbor::Value::text("v"),
+            suiss_crypto::dcbor::Value::Unsigned(1),
+        ),
+        (
+            suiss_crypto::dcbor::Value::text("anchors"),
+            suiss_crypto::dcbor::Value::Array(vec![anchor.to_value()]),
+        ),
+    ]);
+    let anchors_file = root.join("pq-anchors.cbor");
+    std::fs::write(
+        &anchors_file,
+        suiss_crypto::dcbor::encode(&anchors, suiss_crypto::dcbor::Limits::CEILING).unwrap(),
+    )
+    .unwrap();
+    let hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = std::fmt::Write::write_fmt(&mut h, format_args!("{x:02x}"));
+            h
+        })
+    };
+    let (d_hex, a_hex) = (hex(&d.0), hex(&artefact.0));
+    let args = |anchored: bool| {
+        let mut a = vec![
+            "pq-bundle",
+            "--domain",
+            d_hex.as_str(),
+            "--origin",
+            origin.as_str(),
+            "--artefact",
+            a_hex.as_str(),
+            "--bundle",
+            bundle_file.to_str().unwrap(),
+        ];
+        if anchored {
+            a.extend(["--pq-anchors", anchors_file.to_str().unwrap()]);
+        }
+        a
+    };
+    let (ok, text) = verify(&args(true));
+    assert!(ok, "{text}");
+    let (ok, text) = verify(&args(false));
+    assert!(!ok && text.contains("pq-anchor-missing"), "{text}");
+
     // HL-34, §15.16
     assert_eq!(
         authority_call(
@@ -994,12 +1119,28 @@ async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it
         k.clone()
     });
     assert_eq!(
-        reanchor(&socket, d, (&row, &pending), &urls, wall()).await,
+        reanchor(at, d, (&row, &pending, Reason::Cadence), &urls, wall()).await,
         Ok(Status::Pending)
     );
     assert_eq!(
         published(&socket, d).await.declared.pq_reanchor,
         Some(anchored)
     );
+    // RA-6
+    let pools = (socket.as_path(), &db.app, &db.sequencer);
+    assert!(
+        crate::checkpoints::pq::step(pools, d, &publisher.targets, wall())
+            .await
+            .is_none()
+    );
+    assert_eq!(
+        crate::checkpoints::pq::run(pools, d, &publisher.targets, Reason::Retirement, wall()).await,
+        Ok(Status::Pending)
+    );
+    let kept = access_store::pq_checkpoint::list(&db.app, &log.id, None, 8)
+        .await
+        .unwrap();
+    assert_eq!(kept[0].reason, Reason::Retirement);
+    assert_eq!(kept[0].cosigns.len(), 0);
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -89,7 +89,6 @@ const UNPRODUCED: &[&str] = &[
     "upgrade.activated",
     "identity.degraded",
     // OP-159 m.4 (a)
-    "pq.reanchored",
     "pq.cosigned",
     "algorithm.retired",
     "signing_profile.opened",

@@ -9,6 +9,7 @@
 //! each is sent to the declared witnesses and compared with what they hold (§16.6).
 
 mod mirrored;
+pub(crate) mod pq;
 pub(crate) mod publish;
 
 use std::path::PathBuf;
@@ -385,6 +386,17 @@ impl Checkpointers {
                     .await
                     {
                         tracing::warn!(%error, "domain checkpoint not appended");
+                    }
+                    // CR-45 RA-6
+                    if let Some(Err(error)) = pq::step(
+                        (&authority_signer, &app, &sequencer),
+                        domain,
+                        &publisher.targets,
+                        now,
+                    )
+                    .await
+                    {
+                        tracing::warn!(error, "post-quantum re-anchor not run");
                     }
                 }
             }

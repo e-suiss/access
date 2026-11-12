@@ -13,21 +13,36 @@ use access_authority_signer::protocol::{Request, Response};
 use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::Declarations;
 use access_store::authority_checkpoint::AuthorityCheckpoint;
+use access_store::pq_checkpoint::{PqCheckpoint, PqCosignRow, Reason, append};
+use access_store::scope::DomainId;
 use suiss_ledger::checkpoint::witness::PqCosignRequest;
 
-/// One re-anchor of `cp` at `now` through the signer at `socket`; `urls` maps each witness
-/// name to its address. The status, or the stable reason it could not start.
+/// Where a re-anchor runs: the signer socket and the `access_app` and `access_sequencer` pools.
+#[derive(Clone, Copy)]
+pub struct Reanchoring<'a> {
+    /// The authority signer's socket.
+    pub socket: &'a Path,
+    /// `access_app`.
+    pub app: &'a access_store::Pool,
+    /// `access_sequencer`.
+    pub sequencer: &'a access_store::Pool,
+}
+
+/// One re-anchor of the witnessed checkpoint `cp` at `now` for `reason`; `urls` maps each
+/// witness name to its address. The re-anchor checkpoint and whatever cosigns arrived are kept
+/// (OP-73); the status, or the stable reason it could not start.
 ///
 /// # Errors
-/// `reanchor-no-pq-witness` (RB-0), `pq-key-unavailable`, `reanchor-checkpoint` or
-/// `signer-unreachable`.
+/// `reanchor-no-pq-witness` (RB-0), `pq-key-unavailable`, `reanchor-checkpoint`,
+/// `signer-unreachable` or `store-unavailable`.
 pub async fn reanchor(
-    socket: &Path,
+    at: Reanchoring<'_>,
     domain: Digest,
-    (cp, declared): (&AuthorityCheckpoint, &Declarations),
+    (cp, declared, reason): (&AuthorityCheckpoint, &Declarations, Reason),
     urls: &[(String, String)],
     now: u64,
 ) -> Result<Status, &'static str> {
+    let socket = at.socket;
     // RB-0
     let witnesses =
         pq_witnesses(declared, None).map_err(crate::app::reanchor::ReanchorError::code)?;
@@ -51,8 +66,8 @@ pub async fn reanchor(
     let request = PqCosignRequest {
         domain: domain.0,
         body: body.clone(),
-        sign1,
-        excerpt,
+        sign1: sign1.clone(),
+        excerpt: excerpt.clone(),
     };
     let mut cosigns = Vec::new();
     for w in &witnesses {
@@ -69,6 +84,38 @@ pub async fn reanchor(
         (cp.size, &body),
         &cosigns,
     );
+    let id = DomainId::from_bytes(domain.0);
+    let kept = PqCheckpoint {
+        issued_at: now,
+        size: cp.size,
+        root: cp.root,
+        body: body.clone(),
+        sign1,
+        excerpt,
+        reason,
+        cosigns: cosigns
+            .iter()
+            .filter(|c| {
+                witnesses.iter().any(|w| {
+                    crate::app::reanchor::cosign_verifies(
+                        &suiss_crypto::aws::AwsLcBackend,
+                        w,
+                        &body,
+                        c,
+                    )
+                })
+            })
+            .map(|c| PqCosignRow {
+                witness: c.name.clone(),
+                cosigned_at: c.timestamp,
+                sign1: c.sign1.clone(),
+            })
+            .collect(),
+    };
+    // OP-73
+    append(at.sequencer, &id, &kept)
+        .await
+        .map_err(|_| "store-unavailable")?;
     if let Status::Anchored(r) = &out {
         let declare = Request::Declare {
             domain,
@@ -77,6 +124,21 @@ pub async fn reanchor(
         if !matches!(call(socket, &declare).await, Ok(Response::Opened)) {
             return Err("signer-unreachable");
         }
+        let target = format!("{}@{}", reason.as_str(), r.size);
+        let _ = access_store::operational::record_operational(
+            at.app,
+            &access_store::operational::OperationalEvent {
+                event_type: "pq.reanchored",
+                occurred_at_ms: now,
+                tenant: None,
+                domain: Some(domain.0),
+                actor: "provider",
+                target: &target,
+                reason: "",
+                correlation: "",
+            },
+        )
+        .await;
     }
     Ok(out)
 }

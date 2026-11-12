@@ -138,5 +138,20 @@ pub fn retire_gate(
     }
 }
 
+/// One UTC day in milliseconds.
+const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// RA-6 (OP-159 m.3 (g), PD): a domain whose allowlist names ML-DSA re-anchors the first
+/// checkpoint of each UTC day; `last` is when its last re-anchor checkpoint was signed. An
+/// operator request or a retirement runs one whatever this says.
+#[must_use]
+pub fn due(
+    algorithms: &std::collections::BTreeSet<suiss_crypto::cose::Algorithm>,
+    last: Option<u64>,
+    now: u64,
+) -> bool {
+    algorithms.iter().any(|a| is_ml_dsa(*a)) && last.is_none_or(|l| l / DAY_MS < now / DAY_MS)
+}
+
 #[cfg(test)]
 mod tests;

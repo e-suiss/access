@@ -49,6 +49,23 @@ impl Checkpoints for One {
             Err(InclusionError::Unknown)
         })
     }
+
+    fn pq_list(&self, _: Digest) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send {
+        std::future::ready(Ok(vec![0xa0]))
+    }
+
+    fn pq_inclusion(
+        &self,
+        _: Digest,
+        size: u64,
+        _: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send {
+        std::future::ready(if size == 2 {
+            Ok(vec![0xa0])
+        } else {
+            Err(InclusionError::Unknown)
+        })
+    }
 }
 
 fn w(independent: bool) -> Declared {
@@ -153,4 +170,26 @@ async fn a_tile_is_served_as_concatenated_hashes() {
     )
     .await;
     assert_eq!((s, body.len()), (StatusCode::OK, 160));
+}
+
+// CR-45 RA-2, RA-5, OP-159 m.13
+#[tokio::test]
+async fn the_pq_list_is_public_and_a_pq_bundle_needs_a_pep() {
+    let r = || router(One(vec![w(true)]));
+    let (status, _) = get(
+        r(),
+        &format!("/access/v1/domains/{}/checkpoints/pq", d()),
+        false,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let uri = format!("/access/v1/domains/{}/checkpoints/pq/2/inclusion/1", d());
+    assert_eq!(get(r(), &uri, false).await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(get(r(), &uri, true).await.0, StatusCode::OK);
+    let other = format!("/access/v1/domains/{}/checkpoints/pq/3/inclusion/1", d());
+    assert_eq!(get(r(), &other, true).await.0, StatusCode::NOT_FOUND);
+    let past = format!("/access/v1/domains/{}/checkpoints/pq/2/inclusion/2", d());
+    assert_eq!(get(r(), &past, true).await.0, StatusCode::NOT_FOUND);
+    let classical = format!("/access/v1/domains/{}/checkpoints/3/inclusion/1", d());
+    assert_eq!(get(r(), &classical, true).await.0, StatusCode::OK);
 }
