@@ -186,11 +186,5 @@ pub fn algorithm_of(bytes: &[u8]) -> Result<Algorithm, CoseError> {
     Ok(header(&shared::parse_sign1(bytes)?.protected)?.alg)
 }
 
-/// The two `COSE_Sign1` of a hybrid artefact must sign the same payload (CR-42 m.4, INV-27).
-#[must_use]
-pub fn same_payload(classic: &Verified, pq: &Verified) -> bool {
-    classic.payload == pq.payload
-}
-
 #[cfg(test)]
 mod tests;

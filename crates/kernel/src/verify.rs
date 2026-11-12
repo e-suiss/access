@@ -3,6 +3,7 @@
 
 pub mod cose;
 pub mod dpop;
+pub mod hybrid;
 pub mod jws;
 pub mod key_scope;
 pub mod ml_dsa;

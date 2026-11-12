@@ -1,6 +1,6 @@
 import cbor2
 
-from . import dcbor, ed25519, p256
+from . import dcbor, ed25519, mldsa, p256
 from .codec import Rejection, check_data_model, decode_canonical, encode
 
 
@@ -89,7 +89,7 @@ def signature_input(protected, payload):
     return encode(["Signature1", protected, b"", payload])
 
 
-def verify_sign1(data, content_type, allowed, keys, access_native=True, key_algs=None):
+def verify_sign1(data, content_type, allowed, keys, access_native=True, key_algs=None, ml_dsa=False):
     # OP-117 m.14
     message = decode_tagged(data)
     protected, unprotected, payload, signature = check_shape(message)
@@ -98,8 +98,11 @@ def verify_sign1(data, content_type, allowed, keys, access_native=True, key_algs
         raise CoseError("unprotected")
     header = decode_protected(protected)
     alg = header[LABEL_ALG]
-    # CR-7, CR-55 m.1
-    if alg not in allowed or alg in ML_DSA_ALGORITHMS or alg not in ALGORITHM_KEY_TYPE:
+    # CR-7, CR-55 m.1, L0-SIG-8
+    if alg in ML_DSA_ALGORITHMS:
+        if alg not in allowed or not ml_dsa:
+            raise CoseError("algorithm")
+    elif alg not in allowed or alg not in ALGORITHM_KEY_TYPE:
         raise CoseError("algorithm")
     if header[LABEL_CONTENT_TYPE] != content_type:
         raise CoseError("content-type")
@@ -111,11 +114,18 @@ def verify_sign1(data, content_type, allowed, keys, access_native=True, key_algs
     if key_algs is not None and key_algs[kid] != alg:
         raise CoseError("key-alg")
     key = keys[kid]
+    to_be_signed = signature_input(protected, payload)
+    if alg in ML_DSA_ALGORITHMS:
+        # L0-SIG-7, L0-SIG-8
+        if not isinstance(key, dict) or "ml_dsa" not in key or key["ml_dsa"][0] != alg:
+            raise CoseError("key-type")
+        if not mldsa.verify(mldsa.COSE_ALGORITHMS[alg], key["ml_dsa"][1], to_be_signed, signature):
+            raise CoseError("signature")
+        return kid, payload
     key_type = ALGORITHM_KEY_TYPE[alg]
     # CR-56 row 4, CR-55 m.3
     if not isinstance(key, dict) or key_type not in key:
         raise CoseError("key-type")
-    to_be_signed = signature_input(protected, payload)
     if key_type == "ed25519":
         # CR-53
         result, _ = ed25519.verify(key["ed25519"], to_be_signed, signature)

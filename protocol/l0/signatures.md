@@ -65,7 +65,7 @@ Vectors: [`core/1/thumbprint.json`](../../conformance/vectors/core/1/thumbprint.
 
 <a id="L0-SIG-17"></a>**L0-SIG-17. Payload and signature input.** The payload is embedded; a detached payload is not used. `external_aad` is empty. The signed bytes are `dCBOR(["Signature1", protected, h'', payload])`, where `protected` is the protected header byte string as received. Ed25519 follows [L0-SIG-3](#L0-SIG-3); P-256 follows [L0-SIG-4](#L0-SIG-4) to [L0-SIG-6](#L0-SIG-6) (reasons `signature`, `high-s`).
 
-<a id="L0-SIG-18"></a><!-- no-vector: no-operation: ML-DSA is not enabled in core v1 -->**L0-SIG-18. Hybrid signatures.** A hybrid classical and post-quantum signature is two separate `COSE_Sign1` structures. The ML-DSA context string is empty.
+<a id="L0-SIG-18"></a>**L0-SIG-18. Hybrid signatures.** A hybrid classical and post-quantum signature is two separate `COSE_Sign1` structures over the same payload, one with a classical algorithm and one with ML-DSA ([L0-SIG-8](#L0-SIG-8)), each with its own operational key excerpt. The ML-DSA context string is empty. There is no composite signature: a composite or provisional algorithm identifier is unknown (reason `algorithm`), and a component is never accepted on its own where the policy asks for both ([L0-SIG-75a](#L0-SIG-75a)).
 
 <a id="L0-SIG-19"></a><!-- no-vector: no-operation: WebAuthn assertions are not a core v1 vector operation -->**L0-SIG-19. WebAuthn.** In a WebAuthn assertion, COSE algorithm -8 is accepted only when the COSE key's `crv` is Ed25519.
 
@@ -301,12 +301,12 @@ Vectors for this section: [`core/1/key-scope.json`](../../conformance/vectors/co
 | Value | Requires |
 |---|---|
 | `classic` | A valid classical signature. A post-quantum signature, if present, is ignored. |
-| `both` | A valid classical signature and a valid ML-DSA signature ([L0-SIG-18](#L0-SIG-18)). |
+| `both` | A valid classical signature and a valid ML-DSA signature over the same payload ([L0-SIG-18](#L0-SIG-18)). |
 | `pq` | A valid ML-DSA signature. A classical signature, if present, is ignored. |
 
-While ML-DSA is not enabled, `both` and `pq` cannot be satisfied. Resolving an operational key of a domain whose metadata says `both` or `pq` then fails at step 6 with reason `algorithm` ([L0-SIG-68](#L0-SIG-68)); the verifier fails closed.
+A required component that is absent is refused with `hybrid-missing`, and two components over different payloads with `hybrid-payload`. Each component's key is resolved by [§5](#5-operational-key-scope) and must be classical for the classical component and ML-DSA for the post-quantum one (else `algorithm`). Resolving one operational key on its own admits a classical key under `classic`, an ML-DSA key under `pq` and no key under `both`, where a single signature is never enough; that resolution fails at step 6 with reason `algorithm` ([L0-SIG-68](#L0-SIG-68)). A verifier without ML-DSA ([L0-SIG-8](#L0-SIG-8)) can satisfy neither `both` nor `pq` and fails closed.
 
-Vectors: `key-scope.json`: `hybrid-classic`, `hybrid-classic-esp256`, `hybrid-both-ml-dsa-disabled`, `hybrid-pq-ml-dsa-disabled`, `hybrid-both-esp256`.
+Vectors: `key-scope.json`: `hybrid-classic`, `hybrid-classic-esp256`, `hybrid-both-ml-dsa-disabled`, `hybrid-pq-ml-dsa-disabled`, `hybrid-both-esp256`; [`core/1/hybrid.json`](../../conformance/vectors/core/1/hybrid.json), operation `key_scope.hybrid`: each case gives the metadata, the domain, the classical and post-quantum components it carries, whether the verifier has ML-DSA (`ml_dsa`), and the verified payload or the reason.
 
 <a id="L0-SIG-76"></a><!-- no-vector: outside-operation: identity-plane keys are outside L0 -->**L0-SIG-76. Identity-plane keys.** Keys that sign identity tokens (OpenID Connect ID tokens, for example) are not operational keys and never sign an authority artifact. Matching their issuer, realm and `kid` is outside L0.
 

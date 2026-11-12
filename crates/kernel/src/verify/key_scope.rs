@@ -631,6 +631,24 @@ pub fn operational_key(
     iat: TrustedTime,
     evidence: Option<&InclusionEvidence<'_>>,
 ) -> Result<OperationalKey, KeyScopeError> {
+    resolve(
+        backend,
+        metadata,
+        (artefact_domain, excerpt, usage, iat),
+        evidence,
+        |alg| hybrid_admits(metadata.hybrid, alg),
+    )
+}
+
+/// [`operational_key`] with the hybrid check replaced by `admits`: one component of a hybrid
+/// artefact is resolved on its own and the pair is checked by [`super::hybrid`].
+pub(crate) fn resolve(
+    backend: &impl Backend,
+    metadata: &DomainMetadata,
+    (artefact_domain, excerpt, usage, iat): (&Digest, &[u8], KeyUsage, TrustedTime),
+    evidence: Option<&InclusionEvidence<'_>>,
+    admits: impl Fn(Algorithm) -> bool,
+) -> Result<OperationalKey, KeyScopeError> {
     let _ = evidence;
     let bindings = key_set(
         metadata.binding.values().map(|b| (b.kid, b.key.clone())),
@@ -662,9 +680,9 @@ pub fn operational_key(
         return Err(KeyScopeError::Thumbprint);
     }
     if !metadata.algorithms.contains(&key.alg)
-        || !key.alg.enabled()
+        || !backend.supports(key.alg)
         || !key.fits()
-        || !hybrid_satisfiable(metadata.hybrid)
+        || !admits(key.alg)
     {
         return Err(KeyScopeError::Algorithm);
     }
@@ -793,9 +811,16 @@ pub fn superseded_inclusion(
     }
 }
 
-// OP-118 m.5, CR-55 m.1
-const fn hybrid_satisfiable(policy: Option<Hybrid>) -> bool {
-    matches!(policy, None | Some(Hybrid::Classic))
+/// Whether one signature with `alg` can satisfy `policy` alone (L0-SIG-75a, OP-159 m.3 (e)):
+/// `classic` (or none) a classical algorithm, `pq` an ML-DSA one, and `both` never: under `both`
+/// a single signature is not enough, whichever it is (CR-42 m.2, SAI-44).
+#[must_use]
+pub const fn hybrid_admits(policy: Option<Hybrid>, alg: Algorithm) -> bool {
+    match policy {
+        None | Some(Hybrid::Classic) => !super::ml_dsa::is_ml_dsa(alg),
+        Some(Hybrid::Pq) => super::ml_dsa::is_ml_dsa(alg),
+        Some(Hybrid::Both) => false,
+    }
 }
 
 impl OperationalKey {

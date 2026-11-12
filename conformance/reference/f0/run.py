@@ -13,7 +13,7 @@ from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
 from f0.combinator import evaluate_bytes
 from f0.cose import CoseError, verify_sign1
-from f0.keyscope import KeyScopeError, check_public_key, jwk_members, operational_key, thumbprint
+from f0.keyscope import KeyScopeError, check_public_key, hybrid, jwk_members, operational_key, thumbprint
 
 
 def run_evaluate(case, document):
@@ -90,6 +90,19 @@ def run_operational_key(case, document):
     except KeyScopeError as error:
         return {"error": error.name}, None
     return {"key": encode(key).hex()}, None
+
+
+def run_hybrid(case, document):
+    # L0-SIG-75a
+    part = lambda name: {k: bytes.fromhex(v) for k, v in case[name].items()} if name in case else None
+    try:
+        payload = hybrid(
+            bytes.fromhex(case["metadata"]), bytes.fromhex(case["domain"]), part("classic"), part("pq"),
+            document["usage"], document["iat"], document["content_type"], case["ml_dsa"],
+        )
+    except KeyScopeError as error:
+        return {"error": error.name}, None
+    return {"payload": payload.hex()}, None
 
 
 def run_receipt(case, document):
@@ -646,6 +659,7 @@ OPERATIONS = {
     "algebra.child_within_parent": (run_child_within_parent, ("within", "rejection")),
     "verify.cose_sign1": (run_cose_sign1, ("kid", "payload", "error")),
     "key_scope.operational_key": (run_operational_key, ("key", "error")),
+    "key_scope.hybrid": (run_hybrid, ("payload", "error")),
     "verify.ed25519": (run_ed25519, ("result",)),
     "verify.ml_dsa": (run_ml_dsa, ("result",)),
     "tier.of": (run_tier, ("tier", "payee")),

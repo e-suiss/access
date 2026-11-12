@@ -467,3 +467,443 @@ mod ml_dsa_layer {
         );
     }
 }
+
+#[cfg(test)]
+mod hybrid {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::digest::Digest;
+    use access_kernel::verify::cose::{ALG, Algorithm, CONTENT_TYPE, KID, PublicKey, to_be_signed};
+    use access_kernel::verify::hybrid::{Component, Expected, HybridError, verify};
+    use access_kernel::verify::key_scope::{
+        BindingKey, BindingScope, DomainMetadata, EXCERPT_CONTENT_TYPE, Hybrid, KeyExcerpt,
+        KeyScopeError, KeyUsage, OperationalKey, SpecVersions, operational_key, thumbprint,
+    };
+    use access_kernel::verify::{Backend, PureBackend};
+    use aws_lc_rs::signature::{
+        Ed25519KeyPair, KeyPair as _, ML_DSA_65, ML_DSA_65_SIGNING, PqdsaKeyPair, UnparsedPublicKey,
+    };
+    use std::fmt::Write as _;
+    use suiss_crypto::dcbor::{self, Limits, Value};
+
+    const CT: &str = "application/access-receipt+cbor";
+    const IAT: u64 = 1_000;
+
+    struct PqBackend;
+
+    impl Backend for PqBackend {
+        fn ed25519(&self, public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.ed25519(public_key, message, signature)
+        }
+
+        fn p256(&self, public_key_sec1: &[u8], message: &[u8], signature: &[u8; 64]) -> bool {
+            PureBackend.p256(public_key_sec1, message, signature)
+        }
+
+        fn ml_dsa(
+            &self,
+            alg: Algorithm,
+            public_key: &[u8],
+            message: &[u8],
+            signature: &[u8],
+        ) -> bool {
+            alg == Algorithm::MlDsa65
+                && UnparsedPublicKey::new(&ML_DSA_65, public_key)
+                    .verify(message, signature)
+                    .is_ok()
+        }
+
+        fn supports(&self, _: Algorithm) -> bool {
+            true
+        }
+    }
+
+    enum Key {
+        Ed(Ed25519KeyPair),
+        Pq(PqdsaKeyPair),
+    }
+
+    impl Key {
+        fn public(&self) -> PublicKey {
+            match self {
+                Self::Ed(k) => PublicKey::Ed25519(k.public_key().as_ref().try_into().unwrap()),
+                Self::Pq(k) => {
+                    PublicKey::MlDsa(Algorithm::MlDsa65, k.public_key().as_ref().to_vec())
+                }
+            }
+        }
+
+        fn alg(&self) -> Algorithm {
+            match self {
+                Self::Ed(_) => Algorithm::Ed25519,
+                Self::Pq(_) => Algorithm::MlDsa65,
+            }
+        }
+
+        fn sign1(&self, content_type: &str, payload: &[u8]) -> Vec<u8> {
+            let protected = dcbor::encode(
+                &Value::Map(vec![
+                    (Value::Unsigned(ALG), Value::int(self.alg().cose())),
+                    (Value::Unsigned(CONTENT_TYPE), Value::text(content_type)),
+                    (
+                        Value::Unsigned(KID),
+                        Value::Bytes(thumbprint(&self.public()).to_vec()),
+                    ),
+                ]),
+                Limits::CEILING,
+            )
+            .unwrap();
+            let tbs = to_be_signed(&protected, payload).unwrap();
+            let sig = match self {
+                Self::Ed(k) => k.sign(&tbs).as_ref().to_vec(),
+                Self::Pq(k) => {
+                    let mut s = vec![0x5a; 3309];
+                    let n = k.sign(&tbs, &mut s).unwrap();
+                    s.truncate(n);
+                    s
+                }
+            };
+            let body = Value::Array(vec![
+                Value::Bytes(protected),
+                Value::Map(vec![]),
+                Value::Bytes(payload.to_vec()),
+                Value::Bytes(sig),
+            ]);
+            [vec![0xd2], dcbor::encode(&body, Limits::CEILING).unwrap()].concat()
+        }
+    }
+
+    struct World {
+        metadata: DomainMetadata,
+        binding: Key,
+        classic: Key,
+        pq: Key,
+    }
+
+    fn world(policy: Option<Hybrid>) -> World {
+        let binding = Key::Ed(Ed25519KeyPair::generate().unwrap());
+        let b = BindingKey {
+            kid: thumbprint(&binding.public()),
+            alg: Algorithm::Ed25519,
+            key: binding.public(),
+            scope: BindingScope::Domain,
+            superseded: None,
+        };
+        let versions = SpecVersions {
+            core: 1,
+            meta_schema: 1,
+            ..SpecVersions::default()
+        };
+        World {
+            metadata: DomainMetadata {
+                domain: Digest([1; 32]),
+                genesis: Digest([2; 32]),
+                issued_at: IAT,
+                binding: BTreeMap::from([(b.kid, b)]),
+                algorithms: BTreeSet::from([Algorithm::Ed25519, Algorithm::MlDsa65]),
+                operational_window_max_ms: 3_600_000,
+                operational_keys: Vec::new(),
+                min_versions: versions.clone(),
+                adopted: versions,
+                caps: None,
+                hybrid: policy,
+                discovery: None,
+                declared: access_kernel::verify::key_scope::Declarations::default(),
+            },
+            binding,
+            classic: Key::Ed(Ed25519KeyPair::generate().unwrap()),
+            pq: Key::Pq(PqdsaKeyPair::generate(&ML_DSA_65_SIGNING).unwrap()),
+        }
+    }
+
+    impl World {
+        fn excerpt(&self, key: &Key) -> Vec<u8> {
+            let op = OperationalKey {
+                kid: thumbprint(&key.public()),
+                alg: key.alg(),
+                key: key.public(),
+                valid_from: 0,
+                valid_until: 3_600_000,
+                usage: BTreeSet::from([KeyUsage::Receipt]),
+            };
+            let excerpt = KeyExcerpt {
+                domain: self.metadata.domain,
+                key: op,
+            };
+            self.binding
+                .sign1(EXCERPT_CONTENT_TYPE, &excerpt.to_bytes().unwrap())
+        }
+    }
+
+    fn expected(domain: &Digest) -> Expected<'_> {
+        Expected::new(domain, KeyUsage::Receipt, IAT, CT)
+    }
+
+    // CR-42 m.2, m.4, SAI-44, L0-SIG-75a, OP-159 m.3 (e)
+    #[test]
+    fn both_requires_two_valid_signatures_over_one_payload() {
+        let w = world(Some(Hybrid::Both));
+        let (ce, pe) = (w.excerpt(&w.classic), w.excerpt(&w.pq));
+        let (cs, ps) = (w.classic.sign1(CT, b"receipt"), w.pq.sign1(CT, b"receipt"));
+        let c = Some(Component::new(&cs, &ce));
+        let p = Some(Component::new(&ps, &pe));
+        let d = w.metadata.domain;
+        assert_eq!(
+            verify(&PqBackend, &w.metadata, c, p, &expected(&d))
+                .unwrap()
+                .payload,
+            b"receipt"
+        );
+        assert_eq!(
+            verify(&PqBackend, &w.metadata, c, None, &expected(&d)).map(|_| ()),
+            Err(HybridError::Missing)
+        );
+        assert_eq!(
+            verify(&PqBackend, &w.metadata, None, p, &expected(&d)).map(|_| ()),
+            Err(HybridError::Missing)
+        );
+        let other = w.pq.sign1(CT, b"another receipt");
+        assert_eq!(
+            verify(
+                &PqBackend,
+                &w.metadata,
+                c,
+                Some(Component::new(&other, &pe)),
+                &expected(&d)
+            )
+            .map(|_| ()),
+            Err(HybridError::Payload)
+        );
+        assert_eq!(
+            verify(&PqBackend, &w.metadata, p, c, &expected(&d)).map(|_| ()),
+            Err(HybridError::Key(KeyScopeError::Algorithm))
+        );
+        assert_eq!(
+            verify(&PureBackend, &w.metadata, c, p, &expected(&d)).map(|_| ()),
+            Err(HybridError::Key(KeyScopeError::Algorithm))
+        );
+        for excerpt in [&ce, &pe] {
+            assert_eq!(
+                operational_key(&PqBackend, &w.metadata, &d, excerpt, KeyUsage::Receipt, IAT, None),
+                Err(KeyScopeError::Algorithm),
+                "a single signature never satisfies both"
+            );
+        }
+    }
+
+    // L0-SIG-75a, HL-19, OP-159 m.3 (c), (e)
+    #[test]
+    fn pq_and_classic_require_their_own_component() {
+        let world = world(Some(Hybrid::Pq));
+        let (ce, pe) = (world.excerpt(&world.classic), world.excerpt(&world.pq));
+        let (cs, ps) = (world.classic.sign1(CT, b"pap"), world.pq.sign1(CT, b"pap"));
+        let d = world.metadata.domain;
+        let p = Some(Component::new(&ps, &pe));
+        let c = Some(Component::new(&cs, &ce));
+        assert!(verify(&PqBackend, &world.metadata, None, p, &expected(&d)).is_ok());
+        assert!(verify(&PqBackend, &world.metadata, c, p, &expected(&d)).is_ok());
+        assert_eq!(
+            verify(&PqBackend, &world.metadata, c, None, &expected(&d)).map(|_| ()),
+            Err(HybridError::Missing)
+        );
+        assert_eq!(
+            verify(&PureBackend, &world.metadata, None, p, &expected(&d)).map(|_| ()),
+            Err(HybridError::Key(KeyScopeError::Algorithm)),
+            "a pq-only domain's artefact is refused by a verifier without ML-DSA"
+        );
+        assert!(
+            operational_key(&PqBackend, &world.metadata, &d, &pe, KeyUsage::Receipt, IAT, None).is_ok()
+        );
+        for policy in [None, Some(Hybrid::Classic)] {
+            let mut meta = world.metadata.clone();
+            meta.hybrid = policy;
+            assert!(verify(&PqBackend, &meta, c, None, &expected(&d)).is_ok());
+            assert!(verify(&PqBackend, &meta, c, p, &expected(&d)).is_ok());
+            assert_eq!(
+                verify(&PqBackend, &meta, None, p, &expected(&d)).map(|_| ()),
+                Err(HybridError::Missing)
+            );
+            assert_eq!(
+                operational_key(&PqBackend, &meta, &d, &pe, KeyUsage::Receipt, IAT, None),
+                Err(KeyScopeError::Algorithm)
+            );
+        }
+    }
+
+    fn hex(b: &[u8]) -> String {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    }
+
+    fn unhex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i.saturating_add(2)], 16).unwrap())
+            .collect()
+    }
+
+    fn name(e: HybridError) -> &'static str {
+        use access_kernel::verify::cose::CoseError;
+        match e {
+            HybridError::Missing => "hybrid-missing",
+            HybridError::Payload => "hybrid-payload",
+            HybridError::Key(KeyScopeError::Algorithm)
+            | HybridError::Signature(CoseError::Algorithm) => "algorithm",
+            HybridError::Key(KeyScopeError::Signature(CoseError::Signature(_)))
+            | HybridError::Signature(CoseError::Signature(_)) => "signature",
+            other => panic!("{other:?}"),
+        }
+    }
+
+    type Parts = (Option<(Vec<u8>, Vec<u8>)>, Option<(Vec<u8>, Vec<u8>)>);
+
+    fn cases() -> Vec<(&'static str, World, Parts, bool)> {
+        let mut out = Vec::new();
+        for (policy, label) in [
+            (Some(Hybrid::Both), "both"),
+            (Some(Hybrid::Pq), "pq"),
+            (None, "classic"),
+        ] {
+            let w = world(policy);
+            let c = (w.classic.sign1(CT, b"receipt"), w.excerpt(&w.classic));
+            let p = (w.pq.sign1(CT, b"receipt"), w.excerpt(&w.pq));
+            let mut bad = p.clone();
+            let at = bad.0.len().saturating_sub(10);
+            bad.0[at] ^= 1;
+            let other = (w.pq.sign1(CT, b"another"), p.1.clone());
+            let id =
+                |s: &str| -> &'static str { Box::leak(format!("{label}-{s}").into_boxed_str()) };
+            let set: Vec<(&'static str, Parts, bool)> = vec![
+                (id("two-valid"), (Some(c.clone()), Some(p.clone())), true),
+                (
+                    id("two-valid-no-ml-dsa"),
+                    (Some(c.clone()), Some(p.clone())),
+                    false,
+                ),
+                (id("classic-only"), (Some(c.clone()), None), true),
+                (id("pq-only"), (None, Some(p.clone())), true),
+                (id("pq-tampered"), (Some(c.clone()), Some(bad)), true),
+                (id("payload-mismatch"), (Some(c.clone()), Some(other)), true),
+                (
+                    id("components-swapped"),
+                    (Some(p.clone()), Some(c.clone())),
+                    true,
+                ),
+            ];
+            for (id, parts, ml) in set {
+                out.push((id, world_clone(&w), parts, ml));
+            }
+        }
+        out
+    }
+
+    fn world_clone(w: &World) -> World {
+        World {
+            metadata: w.metadata.clone(),
+            binding: Key::Ed(Ed25519KeyPair::generate().unwrap()),
+            classic: Key::Ed(Ed25519KeyPair::generate().unwrap()),
+            pq: Key::Ed(Ed25519KeyPair::generate().unwrap()),
+        }
+    }
+
+    fn component(v: &serde_json::Value, k: &str) -> Option<(Vec<u8>, Vec<u8>)> {
+        v.get(k).map(|c| {
+            (
+                unhex(c["sign1"].as_str().unwrap()),
+                unhex(c["excerpt"].as_str().unwrap()),
+            )
+        })
+    }
+
+    fn run(metadata: &DomainMetadata, parts: &Parts, ml: bool) -> Result<Vec<u8>, &'static str> {
+        let d = metadata.domain;
+        let c = parts.0.as_ref().map(|(s, e)| Component::new(s, e));
+        let p = parts.1.as_ref().map(|(s, e)| Component::new(s, e));
+        let got = if ml {
+            verify(&PqBackend, metadata, c, p, &expected(&d))
+        } else {
+            verify(&PureBackend, metadata, c, p, &expected(&d))
+        };
+        got.map(|v| v.payload).map_err(name)
+    }
+
+    // TI-RT12, L0-SIG-18, L0-SIG-75a, OP-159 m.3 (e)
+    #[test]
+    fn hybrid_vectors_hold() {
+        let path = format!(
+            "{}/../../conformance/vectors/core/1/hybrid.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+            let mut lines = Vec::new();
+            for (id, w, parts, ml) in cases() {
+                let mut line = format!(
+                    "  {{\"id\": \"{id}\", \"metadata\": \"{}\", \"domain\": \"{}\"",
+                    hex(&w.metadata.to_bytes().unwrap()),
+                    hex(&dcbor::encode(&w.metadata.domain.to_value(), Limits::CEILING).unwrap())
+                );
+                for (k, part) in [("classic", &parts.0), ("pq", &parts.1)] {
+                    if let Some((s, e)) = part {
+                        let _ = write!(
+                            line,
+                            ", \"{k}\": {{\"sign1\": \"{}\", \"excerpt\": \"{}\"}}",
+                            hex(s),
+                            hex(e)
+                        );
+                    }
+                }
+                let _ = write!(line, ", \"ml_dsa\": {ml}, ");
+                match run(&w.metadata, &parts, ml) {
+                    Ok(p) => {
+                        let _ = write!(line, "\"payload\": \"{}\"}}", hex(&p));
+                    }
+                    Err(e) => {
+                        let _ = write!(line, "\"error\": \"{e}\"}}");
+                    }
+                }
+                lines.push(line);
+            }
+            let json = format!(
+                "{{\n \"rule\": \"CR-42\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"key_scope.hybrid\",\n \"rules\": [\"L0-SIG-18\", \"L0-SIG-75a\"],\n \"content_type\": \"{CT}\",\n \"usage\": \"receipt\",\n \"iat\": {IAT},\n \"cases\": [\n{}\n ]\n}}\n",
+                lines.join(",\n")
+            );
+            std::fs::write(&path, json).unwrap();
+        }
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let mut n = 0;
+        for c in doc["cases"].as_array().unwrap() {
+            let metadata =
+                DomainMetadata::from_bytes(&unhex(c["metadata"].as_str().unwrap())).unwrap();
+            let parts = (component(c, "classic"), component(c, "pq"));
+            let got = run(&metadata, &parts, c["ml_dsa"].as_bool().unwrap());
+            let want = match c.get("payload") {
+                Some(p) => Ok(unhex(p.as_str().unwrap())),
+                None => Err(c["error"].as_str().unwrap()),
+            };
+            assert_eq!(got, want, "{}", c["id"]);
+            if c["ml_dsa"].as_bool().unwrap() {
+                let pure = verify(
+                    &PureBackend,
+                    &metadata,
+                    parts.0.as_ref().map(|(s, e)| Component::new(s, e)),
+                    parts.1.as_ref().map(|(s, e)| Component::new(s, e)),
+                    &expected(&metadata.domain),
+                );
+                if metadata.hybrid.is_some() && got.is_ok() {
+                    assert_eq!(
+                        pure.map(|_| ()).map_err(name),
+                        Err("algorithm"),
+                        "{}",
+                        c["id"]
+                    );
+                }
+            }
+            n += 1;
+        }
+        assert_eq!(n, 21);
+    }
+}

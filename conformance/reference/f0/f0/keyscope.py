@@ -220,7 +220,14 @@ COSE_ERROR_NAMES = {
 }
 
 
-def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat):
+def hybrid_admits(policy, alg):
+    # L0-SIG-75a, OP-159 m.3 (e)
+    if policy == "both":
+        return False
+    return (alg in ML_DSA_NAMES) == (policy == "pq")
+
+
+def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_dsa=False, admits=None):
     metadata = decode_payload(metadata_bytes, check_domain_metadata)
     domain = decode_payload(domain_bytes, check_digest)
     bindings = {binding["kid"]: binding for binding in metadata["binding"]}
@@ -250,11 +257,15 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat):
     # CR-58 m.1
     if thumbprint(key["key"]) != key["kid"]:
         raise KeyScopeError("thumbprint")
-    # OP-118 m.5, CR-55 m.1
-    if metadata.get("hybrid", "classic") != "classic":
-        raise KeyScopeError("algorithm")
-    # SAI-40, CR-58 m.5
-    if key["alg"] not in metadata["algorithms"] or not alg_matches_key(key["alg"], key["key"]):
+    policy = metadata.get("hybrid", "classic")
+    admitted = hybrid_admits(policy, key["alg"]) if admits is None else admits(key["alg"])
+    # SAI-40, CR-58 m.5, L0-SIG-8, L0-SIG-75a
+    if (
+        key["alg"] not in metadata["algorithms"]
+        or (key["alg"] in ML_DSA_NAMES and not ml_dsa)
+        or not alg_matches_key(key["alg"], key["key"])
+        or not admitted
+    ):
         raise KeyScopeError("algorithm")
     # CR-58 m.2
     if usage not in key["usage"]:
@@ -267,3 +278,36 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat):
     if not key["valid_from"] <= iat <= key["valid_until"]:
         raise KeyScopeError("window")
     return key
+
+
+def hybrid(metadata_bytes, domain_bytes, classic, pq, usage, iat, content_type, ml_dsa):
+    # CR-42, L0-SIG-18, L0-SIG-75a, SAI-44, OP-159 m.3 (e)
+    metadata = decode_payload(metadata_bytes, check_domain_metadata)
+    policy = metadata.get("hybrid", "classic")
+
+    def component(part, post_quantum):
+        key = operational_key(
+            metadata_bytes, domain_bytes, part["excerpt"], usage, iat, ml_dsa,
+            admits=lambda alg: (alg in ML_DSA_NAMES) == post_quantum,
+        )
+        try:
+            _, payload = verify_sign1(part["sign1"], content_type, [key["alg"]], {key["kid"]: key["key"]}, ml_dsa=ml_dsa)
+        except CoseError as error:
+            raise KeyScopeError("high-s" if error.name == "high-s" else "signature" if error.name == "signature" else error.name)
+        return payload
+
+    if policy == "classic":
+        if classic is None:
+            raise KeyScopeError("hybrid-missing")
+        return component(classic, False)
+    if policy == "pq":
+        if pq is None:
+            raise KeyScopeError("hybrid-missing")
+        return component(pq, True)
+    if classic is None or pq is None:
+        raise KeyScopeError("hybrid-missing")
+    first = component(classic, False)
+    second = component(pq, True)
+    if first != second:
+        raise KeyScopeError("hybrid-payload")
+    return first
