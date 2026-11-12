@@ -12,6 +12,24 @@ pub trait Backend {
 
     /// ECDSA P-256 with SHA-256 over `message`; `signature` is `r ‖ s`.
     fn p256(&self, public_key_sec1: &[u8], message: &[u8], signature: &[u8; 64]) -> bool;
+
+    /// ML-DSA (FIPS 204, pure, empty context) of `alg` over `message`. A backend without an
+    /// ML-DSA provider answers `false` (CR-41 m.4, OP-159 m.3 (c)).
+    fn ml_dsa(
+        &self,
+        _alg: crate::cose::Algorithm,
+        _public_key: &[u8],
+        _message: &[u8],
+        _signature: &[u8],
+    ) -> bool {
+        false
+    }
+
+    /// Whether this backend verifies `alg`; ML-DSA only where a provider answers it (CR-55 m.1,
+    /// OP-159 m.3 (c)).
+    fn supports(&self, alg: crate::cose::Algorithm) -> bool {
+        alg.enabled()
+    }
 }
 
 /// Pure-Rust backend for `no_std`, Wasm and mobile (CR-54, CR-55 m.1).
