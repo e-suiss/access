@@ -588,7 +588,7 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
         vec![[9; 16]]
     );
     let mut ended = Vec::new();
-    for _ in 0..100 {
+    for _ in 0..400 {
         ended = access_store::identity::poll(
             &c.db.reader,
             access_store::identity::Cursor::default(),
