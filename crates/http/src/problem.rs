@@ -113,6 +113,7 @@ impl Code {
 pub mod codes {
     use super::Code;
 
+    pub mod assurance;
     pub mod durability;
     pub mod platform;
     pub mod realm;
@@ -557,6 +558,16 @@ pub const CODES: &[Code] = &[
     codes::durability::RESTORE_RESHRED_PENDING,
     codes::durability::DEGRADED_IDENTITY,
     codes::durability::QUOTA_EXCEEDED,
+    // OP-159 m.3 (nn)
+    codes::assurance::PQ_KEY_UNAVAILABLE,
+    codes::assurance::REANCHOR_REQUIRED,
+    codes::assurance::PQ_ANCHOR_MISSING,
+    codes::assurance::ALGORITHM_PROFILE_CONFLICT,
+    codes::assurance::FIPS_PQ_EXCLUSIVE,
+    codes::assurance::PROJECTION_OVER_BUDGET,
+    codes::assurance::PROJECTION_REF_EXPIRED,
+    codes::assurance::ATTESTATION_FORMAT,
+    codes::assurance::ATTESTATION_REVOCATION_UNKNOWN,
 ];
 
 /// The catalogued problem of `code` (OP-158 m.3 (aa)); a code not in [`CODES`] is a 400

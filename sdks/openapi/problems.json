@@ -1374,6 +1374,69 @@
       "status": 429,
       "title": "Too Many Requests",
       "description": "A tenant, realm or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v))."
+    },
+    {
+      "code": "pq-key-unavailable",
+      "type": "urn:suiss:access:problem:pq-key-unavailable",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The HSM token offers no ML-DSA mechanism, so the post-quantum profile cannot be opened; nothing changed and no software key stands in (CR-18, OP-159 m.3 (d))."
+    },
+    {
+      "code": "reanchor-required",
+      "type": "urn:suiss:access:problem:reanchor-required",
+      "status": 409,
+      "title": "Conflict",
+      "description": "No post-quantum re-anchor checkpoint covering the head with an independent witness's post-quantum cosign exists within the cadence, so the classical algorithm cannot be retired (CR-45 RA-6, OP-159 m.3 (f))."
+    },
+    {
+      "code": "pq-anchor-missing",
+      "type": "urn:suiss:access:problem:pq-anchor-missing",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The domain retired its classical algorithm and the verifier holds no pinned post-quantum anchor, so a classical artefact is refused (CR-45 RA-7, OP-159 m.3 (h))."
+    },
+    {
+      "code": "algorithm-profile-conflict",
+      "type": "urn:suiss:access:problem:algorithm-profile-conflict",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The domain declares the FIPS crypto profile, so ML-DSA cannot join its algorithm allowlist (CR-44, HL-27, OP-159 m.3 (r))."
+    },
+    {
+      "code": "fips-pq-exclusive",
+      "type": "urn:suiss:access:problem:fips-pq-exclusive",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r))."
+    },
+    {
+      "code": "projection-over-budget",
+      "type": "urn:suiss:access:problem:projection-over-budget",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The offline projection would exceed its carrier's size budget, so it is not produced (CR-43, OP-159 m.3 (p))."
+    },
+    {
+      "code": "projection-ref-expired",
+      "type": "urn:suiss:access:problem:projection-ref-expired",
+      "status": 410,
+      "title": "Gone",
+      "description": "The referenced projection expired and its blob was shredded; ask for a new projection (CR-43, OP-73, OP-159 m.3 (q))."
+    },
+    {
+      "code": "attestation-format",
+      "type": "urn:suiss:access:problem:attestation-format",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The attestation statement's format is not supported or does not verify under the realm's direct attestation policy (§10.2.4, OP-159 m.3 (ll))."
+    },
+    {
+      "code": "attestation-revocation-unknown",
+      "type": "urn:suiss:access:problem:attestation-revocation-unknown",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The revocation status of the attestation chain could not be read, so the direct attestation policy refuses the registration (§10.2.4, OP-159 m.3 (ll))."
     }
   ]
 }
