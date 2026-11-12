@@ -5,6 +5,7 @@ mod args;
 mod artefacts;
 mod commands;
 mod export;
+mod pq;
 mod transparency;
 
 use std::fmt::Write as _;

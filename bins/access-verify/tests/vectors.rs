@@ -619,3 +619,105 @@ fn usage_errors_exit_with_two_and_print_nothing() {
     assert_eq!(help.code, 0);
     assert!(help.out.contains("consistency"));
 }
+
+fn pq_bundle_file(dir: &Dir, b: &J) -> String {
+    let path = b["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| Value::Bytes(unhex(h.as_str().unwrap())))
+        .collect();
+    let cosigns = b["cosigns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            Value::Map(vec![
+                (Value::text("name"), Value::text(s(c, "name"))),
+                (
+                    Value::text("timestamp"),
+                    Value::Unsigned(c["timestamp"].as_u64().unwrap()),
+                ),
+                (Value::text("sign1"), Value::Bytes(unhex(s(c, "sign1")))),
+            ])
+        })
+        .collect();
+    let v = Value::Map(vec![
+        (Value::text("record"), Value::Bytes(unhex(s(b, "record")))),
+        (Value::text("path"), Value::Array(path)),
+        (
+            Value::text("checkpoint"),
+            Value::Bytes(unhex(s(b, "checkpoint"))),
+        ),
+        (Value::text("cosigns"), Value::Array(cosigns)),
+    ]);
+    dir.file("bundle.cbor", &dcbor::encode(&v, Limits::CEILING).unwrap())
+}
+
+// CR-45 RA-5, RA-7, L0-SIG-81, OP-159 m.3 (h)
+#[test]
+fn pq_bundle_needs_a_pinned_anchor_and_a_bundle_that_reaches_it() {
+    let v = vectors("pq-inclusion");
+    let dir = Dir::new("pq-bundle");
+    for c in cases(&v) {
+        let id = s(c, "id");
+        let mut args = vec![
+            "pq-bundle",
+            "--domain",
+            s(&v, "domain"),
+            "--origin",
+            s(&v, "origin"),
+            "--artefact",
+            s(c, "artefact"),
+        ];
+        let anchors;
+        if let Some(a) = c["anchor"].as_str() {
+            let file = Value::Map(vec![
+                (Value::text("v"), Value::Unsigned(1)),
+                (
+                    Value::text("anchors"),
+                    Value::Array(vec![dcbor::decode(&unhex(a), Limits::CEILING).unwrap()]),
+                ),
+            ]);
+            anchors = dir.file(
+                &format!("{id}-anchors.cbor"),
+                &dcbor::encode(&file, Limits::CEILING).unwrap(),
+            );
+            args.extend(["--pq-anchors", anchors.as_str()]);
+        }
+        let bundle;
+        if c.get("bundle").is_some() {
+            bundle = pq_bundle_file(&dir, &c["bundle"]);
+            args.extend(["--bundle", bundle.as_str()]);
+        }
+        let run = verify(&args);
+        match s(c, "result") {
+            "ok" => assert!(run.accepted(), "{id}: {}", run.out),
+            want => assert_eq!(run.rejection(), Some(want), "{id}: {}", run.out),
+        }
+    }
+    let empty = dir.file(
+        "empty.cbor",
+        &dcbor::encode(
+            &Value::Map(vec![
+                (Value::text("v"), Value::Unsigned(1)),
+                (Value::text("anchors"), Value::Array(vec![])),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap(),
+    );
+    let run = verify(&[
+        "pq-bundle",
+        "--pq-anchors",
+        &empty,
+        "--domain",
+        s(&v, "domain"),
+        "--origin",
+        s(&v, "origin"),
+        "--artefact",
+        s(&v, "domain"),
+    ]);
+    assert_ne!(run.code, 0);
+    assert_eq!(run.rejection(), None);
+}

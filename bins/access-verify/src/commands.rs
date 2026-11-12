@@ -217,6 +217,12 @@ pub(crate) const COMMANDS: &[Command] = &[
         run: crate::transparency::existed,
     },
     Command {
+        name: "pq-bundle",
+        options: &["pq-anchors", "domain", "origin", "artefact", "bundle"],
+        summary: "classical artefact after its algorithm's retirement: the RA-5 bundle against a post-quantum checkpoint of a pinned --pq-anchors anchor (CR-45 RA-7)",
+        run: crate::pq::pq_bundle,
+    },
+    Command {
         name: "fresh",
         options: &[
             "metadata",
