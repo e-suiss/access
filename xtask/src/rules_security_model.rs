@@ -450,6 +450,7 @@ outside it (HL-15, HL-16).\n\n",
         &["Property of AccessAlgebra", "Theorem", "Rule", "Status"],
         &fs,
     );
+    formal_manifest(&mut out, &super::formal_manifest::load(root)?);
 
     out.push_str("\n## Conformance and certification\n\n");
     out.push_str(
@@ -461,6 +462,49 @@ named vectors; conformance is not endorsement. Suiss sells no certification or a
 service, and an audit of Access is never sold as a Suiss certificate.\n",
     );
     Ok(out)
+}
+
+fn tool_name(tool: &str) -> &str {
+    match tool {
+        "lean" => "Lean",
+        "kani" => "Kani",
+        "tla" => "TLA+",
+        "drt" => "DRT",
+        other => other,
+    }
+}
+
+/// CR-46, CR-50, X41, MD-15, OP-159 m.3 (y), m.8 (g)
+fn formal_manifest(out: &mut String, m: &super::formal_manifest::Manifest) {
+    out.push_str("\n### Formal manifest\n\n");
+    out.push_str(
+        "Generated from conformance/formal/manifest.toml. A line marked machine-checked reads: \
+property P of model M is machine-checked by the named tool; see its scope. Kani and TLA+ lines \
+hold only within the bounds their scope states; a differential test is a test, not a proof; a \
+planned line is not checked yet.\n\n",
+    );
+    let rows: Vec<Vec<String>> = m
+        .target
+        .iter()
+        .map(|t| {
+            let tool = tool_name(&t.tool);
+            let status = match t.status.as_str() {
+                "proved" => format!("machine-checked ({tool})"),
+                "modelled" => format!("modelled ({tool}), not a merge gate"),
+                "DRT-linked" => "differential test, not a proof".to_owned(),
+                _ => format!("planned ({tool})"),
+            };
+            vec![cell(&t.property), cell(&t.target), status, cell(&t.scope)]
+        })
+        .collect();
+    table(out, &["Property", "Model", "Status", "Scope"], &rows);
+    out.push_str("\n### Outside every model\n\n");
+    for o in &m.out_of_scope {
+        let _ = match &o.note {
+            Some(n) => writeln!(out, "- {} ({}): {}", o.part, o.limit, n),
+            None => writeln!(out, "- {} ({})", o.part, o.limit),
+        };
+    }
 }
 
 /// The PEP conformance runner's sources and manifest (P2, B9, §9.17).
@@ -697,6 +741,26 @@ mod tests {
         let committed =
             endorsement_violations(&root).unwrap_or_else(|e| vec![violation(SUITE, "P2", e)]);
         assert!(committed.is_empty(), "{committed:?}");
+    }
+
+    // X41, CR-50, OP-159 m.3 (y), m.8 (g)
+    #[test]
+    fn the_formal_scope_is_generated_from_the_manifest() {
+        let root = crate::workspace_root();
+        let text = render(&root).unwrap_or_default();
+        let m = super::super::formal_manifest::load(&root).unwrap_or_default();
+        assert!(!m.target.is_empty() && !m.out_of_scope.is_empty());
+        for t in &m.target {
+            assert!(text.contains(&cell(&t.property)), "{}", t.target);
+        }
+        for o in &m.out_of_scope {
+            assert!(
+                text.contains(&format!("- {} ({})", o.part, o.limit)),
+                "{}",
+                o.part
+            );
+        }
+        assert!(text.contains("differential test, not a proof"));
     }
 
     // SEC1, SEC5, OP-159 m.3 (gg)
