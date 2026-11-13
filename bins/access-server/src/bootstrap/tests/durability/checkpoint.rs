@@ -936,7 +936,7 @@ async fn published(socket: &Path, d: Digest) -> access_kernel::verify::key_scope
     access_kernel::verify::key_scope::DomainMetadata::from_bytes(&msg.payload.unwrap()).unwrap()
 }
 
-// CR-45 RA-1, RA-2, RA-3, RA-6, RB-0, RR-35, HL-34, OP-159 m.3 (e), (g)
+// CR-45 RA-1, RA-2, RA-3, RA-6, RB-0, RR-35, HL-34, U68, FA-5, OP-159 m.3 (e), (g)
 #[tokio::test(flavor = "multi_thread")]
 #[allow(clippy::too_many_lines, reason = "one walkthrough of the re-anchor")]
 async fn a_real_witness_pq_cosign_anchors_the_re_anchor_and_a_dead_one_leaves_it_pending() {
