@@ -383,7 +383,7 @@ start:
     set -euo pipefail
     image="${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}"
     if ! docker image inspect "$image" >/dev/null 2>&1; then
-      if [[ -n "${ACCESS_IMAGE:-}" ]]; then docker pull "$image"; else docker build -f deploy/docker/Dockerfile -t "$image" .; fi
+      if [[ -n "${ACCESS_IMAGE:-}" ]]; then docker pull "$image"; else docker build -f deploy/docker/Dockerfile --target local -t "$image" .; fi
     fi
     mkdir -p target
     pw_file=target/local-test-password
