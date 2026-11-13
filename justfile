@@ -399,7 +399,7 @@ start:
     docker compose -f deploy/compose/access.yaml logs --no-log-prefix bootstrap
     echo
     echo "Access:          https://127.0.0.1:8443"
-    echo "Console and API: https://access-server.local:9443 (add '127.0.0.1 access-server.local' to /etc/hosts)"
+    echo "Console:         https://access-server.local:9443/console (once: echo '127.0.0.1 access-server.local' | sudo tee -a /etc/hosts)"
     echo "Test user:       the sample realm's test user above, password: $ACCESS_LOCAL_TEST_PASSWORD"
     echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
     echo "Stop:            just stop"
