@@ -22,7 +22,7 @@ Init ==
     /\ acked = {}
     /\ restored = 0
 
-Append ==
+AppendRecord ==
     /\ len < MaxLen
     /\ len' = len + 1
     /\ UNCHANGED <<witnessed, replicated, acked, restored>>
@@ -56,7 +56,7 @@ LoseProvider ==
     /\ UNCHANGED <<witnessed, replicated, acked>>
 
 Next ==
-    \/ Append
+    \/ AppendRecord
     \/ Replicate
     \/ \E s \in 1..MaxLen : Cosign(s)
     \/ \E i \in 1..MaxLen : Ack(i)

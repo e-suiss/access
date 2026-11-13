@@ -71,7 +71,7 @@ AppendTo(p) ==
     /\ local' = [local EXCEPT ![p] = Append(@, nextId)]
     /\ nextId' = nextId + 1
 
-Append(p) ==
+AppendRecord(p) ==
     /\ p = owner
     /\ ~frozen
     /\ AppendTo(p)
@@ -175,7 +175,7 @@ Recover(q) ==
 
 Next ==
     \/ \E p \in Providers :
-        \/ Append(p)
+        \/ AppendRecord(p)
         \/ ZombieAppend(p)
         \/ Freeze(p)
         \/ Crash(p)

@@ -23,7 +23,7 @@ Init ==
     /\ state = "none"
     /\ nextId = 1
 
-Append ==
+AppendRecord ==
     /\ Len(log) < MaxLen
     /\ nextId <= MaxId
     /\ log' = Append(log, nextId)
@@ -75,7 +75,7 @@ RecoveryReanchor ==
     /\ UNCHANGED <<log, wlog, pqEntry, state, nextId>>
 
 Next ==
-    \/ Append
+    \/ AppendRecord
     \/ \E s \in 1..MaxLen : Cosign(s)
     \/ Reanchor
     \/ PqCosign
@@ -84,7 +84,7 @@ Next ==
 
 Spec ==
     Init /\ [][Next]_vars /\ WF_vars(PqCosign) /\ WF_vars(RecoveryReanchor)
-        /\ WF_vars(Append) /\ WF_vars(\E s \in 1..MaxLen : Cosign(s))
+        /\ WF_vars(AppendRecord) /\ WF_vars(\E s \in 1..MaxLen : Cosign(s))
 
 \* CR-45, §15.18
 AnchorFollowsBranch ==

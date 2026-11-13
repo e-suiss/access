@@ -36,7 +36,7 @@ Elect(l) ==
     /\ UNCHANGED <<log, acked, denied>>
 
 \* §6.5 S1
-Append(l, r) ==
+AppendRecord(l, r) ==
     /\ Writer(l)
     /\ ~Logged(r)
     /\ r \notin denied
@@ -68,7 +68,7 @@ Retry(l, r) ==
 
 Next ==
     \/ \E l \in Leaders : Elect(l)
-    \/ \E l \in Leaders, r \in Requests : Append(l, r) \/ Deny(l, r) \/ Retry(l, r)
+    \/ \E l \in Leaders, r \in Requests : AppendRecord(l, r) \/ Deny(l, r) \/ Retry(l, r)
     \/ \E r \in Requests : Ack(r)
 
 Spec == Init /\ [][Next]_vars
