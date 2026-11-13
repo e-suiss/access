@@ -119,15 +119,27 @@ async fn faulty_as(
         .await
         .unwrap()
         .unwrap();
-    let log = PgLog::new(
-        p.w.db.sequencer.clone(),
-        p.domain,
-        tenant,
-        String::from("w4-faulty"),
-        Duration::from_secs(5),
-    );
-    let key = EventKey::new(Secret::new(access_crypto::random::bytes::<32>().unwrap()));
-    let mut leader = Leader::acquire(log, p.domain, key).await.unwrap();
+    // T6: the released domain's lease may still be live for a moment; wait for it to end
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let mut leader = loop {
+        let log = PgLog::new(
+            p.w.db.sequencer.clone(),
+            p.domain,
+            tenant,
+            String::from("w4-faulty"),
+            Duration::from_secs(5),
+        );
+        let key = EventKey::new(Secret::new(access_crypto::random::bytes::<32>().unwrap()));
+        match Leader::acquire(log, p.domain, key).await {
+            Ok(leader) => break leader,
+            Err(access_authority_sequencer::SequencerError::Store(
+                access_store::StoreError::LeaseHeld,
+            )) if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(error) => panic!("{error:?}"),
+        }
+    };
     let opening = item(
         RecordKind::Opening,
         vec![
