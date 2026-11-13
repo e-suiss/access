@@ -979,7 +979,7 @@ version = "0.12.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.prettyplease]]
-version = "0.3.0"
+version = "0.2.37"
 criteria = "safe-to-deploy"
 notes = "OP-159 m.3 (rr): the suiss-crypto fips feature (aws-lc-rs/fips), built on CI only"
 
