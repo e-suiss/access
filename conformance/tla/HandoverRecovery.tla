@@ -205,10 +205,11 @@ HonestFailoverNoFork == MirrorFirst => lost = {}
 \* §17.1
 MirrorBeforeWitness == MirrorFirst => Len(replica) >= Len(wlog)
 
-\* §9.13.7
+\* §9.13.7, §13.6, OP-159 m.25 (a): a witnessed cutover is never rolled back
 CutoverIsSealed ==
     \A p \in Providers :
-        (key[p] # 0 /\ ~LiveKey(p) /\ fenceAt[key[p]] > 0 /\ p # owner /\ owner # None)
+        (key[p] # 0 /\ ~LiveKey(p) /\ fenceAt[key[p]] > 0 /\ p # owner /\ owner # None
+            /\ Len(wlog) >= fenceAt[key[p]])
             => fenceAt[key[p]] <= Len(local[owner])
 
 \* §13.6, T17

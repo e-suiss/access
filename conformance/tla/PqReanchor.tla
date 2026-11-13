@@ -47,6 +47,7 @@ Reanchor ==
 \* CR-45 RA-3
 PqCosign ==
     /\ state = "pending"
+    /\ at > 0
     /\ at <= Len(wlog)
     /\ Prefix(wlog, at) = Prefix(log, at)
     /\ pqEntry' = log[at]
