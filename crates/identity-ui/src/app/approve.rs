@@ -1148,7 +1148,7 @@ pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
                 "Your sign-in could not be recorded for this approval",
             ))
         }
-        Ok(Issued::Unplaced(why)) => {
+        Ok(Issued::Unplaced(why) | Issued::Refused(why)) => {
             tracing::warn!(why, "approval claim not placed");
             Err(unavailable())
         }

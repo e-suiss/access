@@ -1124,3 +1124,11 @@ severity = "warn"
 since = "unreleased"
 fields = ["listener", "group"]
 ocsf = "detection_finding"
+
+[[event]]
+name = "claim.order.refused"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["kind", "reason", "xid", "id"]
+ocsf = "application_error"

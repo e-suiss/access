@@ -235,14 +235,22 @@ impl Opened {
         }
     }
 
-    fn sign_claim(&self, realm: RealmId, payload: &[u8], at: u64) -> Result<Vec<u8>, Unavailable> {
+    fn sign_claim(
+        &self,
+        realm: RealmId,
+        payload: &[u8],
+        at: u64,
+    ) -> Result<Vec<u8>, access_identity_account::app::claims::NotSigned> {
+        use access_identity_account::app::claims::NotSigned;
+        let refused = access_identity_signer::SignerError::Payload.code();
         match self.ask(SignerRequest::SignClaim {
             realm: SignerRealm(*realm.as_bytes()),
             payload: payload.to_vec(),
             at,
         }) {
             SignerResponse::SignedCose { sign1, .. } => Ok(sign1),
-            other => Err(Unavailable(format!("{other:?}"))),
+            SignerResponse::Error(code) if code == refused => Err(NotSigned::Refused(refused)),
+            other => Err(Unavailable(format!("{other:?}")).into()),
         }
     }
 }

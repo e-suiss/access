@@ -14,6 +14,7 @@ pub mod outbound;
 use std::path::PathBuf;
 
 use access_crypto::jose::JwsAlg;
+use access_identity_account::app::claims::NotSigned;
 use access_identity_signer::adapters::call;
 use access_identity_signer::protocol::{Realm, Request, Response};
 use access_identity_signer::service::UNKNOWN_REALM;
@@ -375,25 +376,21 @@ impl SignerKeys {
     }
 }
 
-/// The realm issuer's Claims are signed by the realm's Claim issuer key (L2-CLM-1, §10.1.7).
+/// The realm issuer's Claims are signed by the realm's Claim issuer key (L2-CLM-1, §10.1.7); a
+/// statement the key may not sign is refused, not an outage.
 impl access_identity_account::app::claims::ClaimSigner for SignerKeys {
-    async fn sign(
-        &self,
-        realm: RealmId,
-        payload: Vec<u8>,
-        at: u64,
-    ) -> Result<Vec<u8>, access_internal_api::idp::Unavailable> {
+    async fn sign(&self, realm: RealmId, payload: Vec<u8>, at: u64) -> Result<Vec<u8>, NotSigned> {
         let request = Request::SignClaim {
             realm: Realm(*realm.as_bytes()),
             payload,
             at,
         };
+        let refused = access_identity_signer::SignerError::Payload.code();
         match self.ask(&request).await {
             Ok(Response::SignedCose { sign1, .. }) => Ok(sign1),
-            Ok(Response::Error(code)) => Err(access_internal_api::idp::Unavailable(code)),
-            _ => Err(access_internal_api::idp::Unavailable(String::from(
-                "identity-signer",
-            ))),
+            Ok(Response::Error(code)) if code == refused => Err(NotSigned::Refused(refused)),
+            Ok(Response::Error(code)) => Err(access_internal_api::idp::Unavailable(code).into()),
+            _ => Err(access_internal_api::idp::Unavailable(String::from("identity-signer")).into()),
         }
     }
 }

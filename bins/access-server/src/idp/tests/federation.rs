@@ -19,7 +19,7 @@ const ENTITY: &str = "https://issuer.federation.example";
 fn verdict(i: &Issued) -> Option<&ClaimVerdict> {
     match i {
         Issued::Answered { verdict, .. } => Some(verdict),
-        Issued::Unplaced(_) => None,
+        Issued::Unplaced(_) | Issued::Refused(_) => None,
     }
 }
 

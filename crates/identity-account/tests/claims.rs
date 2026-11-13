@@ -19,7 +19,7 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::change_status;
-use access_identity_account::app::claims::{ClaimSigner, Courier, Issued, Report, emit};
+use access_identity_account::app::claims::{ClaimSigner, Courier, Issued, NotSigned, Report, emit};
 use access_identity_account::app::{Actor, Realm};
 use access_identity_account::domain::claims::{AuthFacts, Bind, RiskSignal, authentication, risk};
 use access_identity_account::domain::status::AccountStatus;
@@ -61,7 +61,7 @@ impl ClaimSigner for Plain {
         _: RealmId,
         payload: Vec<u8>,
         at: u64,
-    ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send {
+    ) -> impl Future<Output = Result<Vec<u8>, NotSigned>> + Send {
         assert_eq!(at, NOW);
         std::future::ready(Ok(payload))
     }

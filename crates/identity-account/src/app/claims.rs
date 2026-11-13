@@ -36,6 +36,22 @@ pub async fn emit<T: AccountTx>(tx: &mut T, order: &ClaimOrder) -> Result<(), Ac
     tx.outbox(&order.kind(), &bytes).await
 }
 
+/// Why a statement was not signed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NotSigned {
+    /// The signer refused the statement for what it says, by stable code; asking again gets the
+    /// same answer.
+    Refused(&'static str),
+    /// The signer could not answer; asking again may.
+    Down(Unavailable),
+}
+
+impl From<Unavailable> for NotSigned {
+    fn from(e: Unavailable) -> Self {
+        Self::Down(e)
+    }
+}
+
 /// Signs a realm issuer's Claims with the realm's Claim issuer key (CMP-22b).
 pub trait ClaimSigner: Send + Sync {
     /// The `COSE_Sign1` of the canonical statement `payload` signed at `at`.
@@ -44,7 +60,7 @@ pub trait ClaimSigner: Send + Sync {
         realm: RealmId,
         payload: Vec<u8>,
         at: u64,
-    ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send;
+    ) -> impl Future<Output = Result<Vec<u8>, NotSigned>> + Send;
 }
 
 /// What became of one order.
@@ -59,6 +75,9 @@ pub enum Issued {
     },
     /// Not a Claim: why, by stable word.
     Unplaced(&'static str),
+    /// Not a Claim: the statement can never be signed, by stable code: the signer's refusal, or
+    /// `unencodable`.
+    Refused(&'static str),
 }
 
 /// What one courier step did.
@@ -68,6 +87,8 @@ pub struct Report {
     pub answered: u32,
     /// Orders that could not become Claims.
     pub unplaced: u32,
+    /// Orders the signer refused.
+    pub refused: u32,
 }
 
 /// The realm issuer's courier.
@@ -163,11 +184,15 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
         let Ok(prepared) = order.prepare(&p) else {
             return Ok(Issued::Unplaced("bad-order"));
         };
-        let payload = prepared
-            .statement
-            .to_bytes()
-            .map_err(|_| Unavailable(String::from("claims: encode")))?;
-        let sign1 = self.signer.sign(realm, payload, p.now).await?;
+        let Ok(payload) = prepared.statement.to_bytes() else {
+            return Ok(Issued::Refused("unencodable"));
+        };
+        let sign1 = match self.signer.sign(realm, payload, p.now).await {
+            Ok(sign1) => sign1,
+            // L2-CLM-1
+            Err(NotSigned::Refused(code)) => return Ok(Issued::Refused(code)),
+            Err(NotSigned::Down(e)) => return Err(e),
+        };
         let id = claim::claim_id(&sign1);
         let verdict = self
             .ingest
@@ -209,8 +234,8 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
     }
 
     /// Issues the queued orders after the courier's cursor, at least once, and moves the cursor
-    /// past each one it finished. An unreadable order is dropped with a warning; an outage stops
-    /// the step where it is.
+    /// past each one it finished. An unreadable order or one the signer refuses is passed with a
+    /// warning and never becomes a Claim; an outage stops the step where it is.
     ///
     /// # Errors
     /// [`Unavailable`].
@@ -223,14 +248,28 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
                     Ok(order) => self.issue(e.tenant, e.realm, &order).await?,
                     Err(_) => Issued::Unplaced("unreadable"),
                 };
-                if let Issued::Answered { verdict, .. } = &issued {
-                    if let ClaimVerdict::Rejected { code } = verdict {
-                        tracing::warn!(%code, kind = %e.kind, "claim rejected");
+                match &issued {
+                    Issued::Answered { verdict, .. } => {
+                        if let ClaimVerdict::Rejected { code } = verdict {
+                            tracing::warn!(%code, kind = %e.kind, "claim rejected");
+                        }
+                        report.answered = report.answered.saturating_add(1);
                     }
-                    report.answered = report.answered.saturating_add(1);
-                } else {
-                    tracing::debug!(kind = %e.kind, ?issued, "claim order not placed");
-                    report.unplaced = report.unplaced.saturating_add(1);
+                    Issued::Refused(code) => {
+                        tracing::warn!(
+                            event = "claim.order.refused",
+                            kind = %e.kind,
+                            reason = *code,
+                            xid = e.xid,
+                            id = e.id,
+                            "claim order refused by the signer"
+                        );
+                        report.refused = report.refused.saturating_add(1);
+                    }
+                    Issued::Unplaced(_) => {
+                        tracing::debug!(kind = %e.kind, ?issued, "claim order not placed");
+                        report.unplaced = report.unplaced.saturating_add(1);
+                    }
                 }
             }
             at = access_store::identity::Cursor {

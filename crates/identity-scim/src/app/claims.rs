@@ -185,6 +185,8 @@ pub enum Issued {
     Answered(ClaimVerdict),
     /// Not a Claim: why, by stable word.
     Unplaced(&'static str),
+    /// Not a Claim: the statement can never be sent, by stable word.
+    Refused(&'static str),
 }
 
 /// The SCIM clients' courier.
@@ -263,12 +265,13 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
             return Ok(Issued::Unplaced("bad-order"));
         };
         let channel = Channel::Scim(source.secret_sha256);
-        let bytes = Unsigned {
+        let Ok(bytes) = (Unsigned {
             statement: prepared.statement,
             channel,
-        }
-        .to_bytes()
-        .map_err(|_| Unavailable(String::from("scim claims: encode")))?;
+        })
+        .to_bytes() else {
+            return Ok(Issued::Refused("unencodable"));
+        };
         let id = claim::claim_id(&bytes);
         let verdict = self
             .ingest
@@ -306,7 +309,8 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
         Ok(Issued::Answered(verdict))
     }
 
-    /// Issues the queued SCIM orders after the cursor, at least once.
+    /// Issues the queued SCIM orders after the cursor, at least once. An order that cannot
+    /// become a Claim is passed; an outage stops the step where it is.
     ///
     /// # Errors
     /// [`Unavailable`].
@@ -325,6 +329,17 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
                     Issued::Answered(_) => answered = answered.saturating_add(1),
                     Issued::Unplaced(why) => {
                         tracing::debug!(why, kind = %e.kind, "scim claim not placed");
+                        unplaced = unplaced.saturating_add(1);
+                    }
+                    Issued::Refused(why) => {
+                        tracing::warn!(
+                            event = "claim.order.refused",
+                            kind = %e.kind,
+                            reason = why,
+                            xid = e.xid,
+                            id = e.id,
+                            "scim claim order refused"
+                        );
                         unplaced = unplaced.saturating_add(1);
                     }
                 }
