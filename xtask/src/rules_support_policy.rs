@@ -523,6 +523,23 @@ mod tests {
         load(&root()).unwrap()
     }
 
+    fn fixed() -> Policy {
+        let mut p = policy();
+        let row = |version: &str, released: &str, until: &str, status: &str| Version {
+            version: version.to_owned(),
+            released: released.to_owned(),
+            security_until: until.to_owned(),
+            status: status.to_owned(),
+        };
+        p.versions = vec![
+            row("0.4", "2026-11-09", "2031-10-29", "supported"),
+            row("0.3", "2026-11-06", "2031-10-29", "supported"),
+            row("0.2", "2026-10-30", "2026-11-09", "end-of-life"),
+            row("0.1", "2026-10-29", "2026-11-06", "end-of-life"),
+        ];
+        p
+    }
+
     fn day(s: &str) -> i64 {
         civil::parse_date(s).unwrap()
     }
@@ -542,10 +559,12 @@ mod tests {
     fn a_table_that_drifts_from_the_catalog_fails() {
         let p = policy();
         let md = std::fs::read_to_string(root().join(SECURITY_MD)).unwrap();
-        let drifted = md.replace(
-            "| 0.3 | 2026-11-06 | 2031-10-29 | supported |",
-            "| 0.3 | 2026-11-06 | 2027-11-06 | supported |",
+        let row = p.versions.get(1).unwrap();
+        let shown = format!(
+            "| {} | {} | {} | {} |",
+            row.version, row.released, row.security_until, row.status
         );
+        let drifted = md.replace(&shown, &shown.replace(&row.security_until, "2027-11-06"));
         assert_ne!(drifted, md);
         assert_eq!(markdown_findings(&drifted, &p).len(), 1);
         let slower = md.replace(
@@ -587,7 +606,7 @@ mod tests {
     // OP-68
     #[test]
     fn only_the_two_newest_minors_are_supported() {
-        let mut p = policy();
+        let mut p = fixed();
         if let Some(r) = p.versions.get_mut(2) {
             r.status = String::from("supported");
             r.security_until = String::from("2031-10-29");
@@ -599,11 +618,11 @@ mod tests {
         );
         let after = day("2031-10-30");
         assert!(
-            policy_findings(&policy(), after)
+            policy_findings(&fixed(), after)
                 .iter()
                 .any(|f| f.starts_with("0.4: status is supported, expected end-of-life"))
         );
-        let mut p = policy();
+        let mut p = fixed();
         p.versions.swap(0, 1);
         assert!(!policy_findings(&p, day("2026-11-12")).is_empty());
     }
@@ -611,7 +630,7 @@ mod tests {
     // B20, OP-68
     #[test]
     fn a_tag_outside_the_supported_minors_fails() {
-        let p = policy();
+        let p = fixed();
         let today = day("2026-11-12");
         assert_eq!(
             release_branch(&p, "v0.4.1", "0.4.1", today),
