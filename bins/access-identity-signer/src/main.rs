@@ -68,9 +68,7 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
 }
 
 fn configured() -> Option<Config> {
-    if unsafe_host() {
-        return None;
-    }
+    let apple = apple_host();
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -93,6 +91,18 @@ fn configured() -> Option<Config> {
             eprintln!("access-identity-signer: {error}");
         }
         return None;
+    }
+    // CR-39 m.6, OP-150 (o), OP-159 m.26
+    if apple && !software_token(&config) {
+        tracing::error!(
+            "a production signer does not run on Apple silicon (CR-39 m.6); refusing to start"
+        );
+        return None;
+    }
+    if apple {
+        tracing::warn!(
+            "Apple silicon with a software token: local keys only, never production keys (OP-159 m.26)"
+        );
     }
     // CMP-22b, OP-143 m.14 (a), SAI-45
     if !self_tested(access_identity_signer::kat::run) {
@@ -289,16 +299,18 @@ fn audit(report: &access_identity_signer::service::Report) {
     }
 }
 
-/// CR-39, OP-150 (o): a production signer does not start on `aarch64-apple-*`.
-fn unsafe_host() -> bool {
-    access_crypto::platform::signer_host(access_crypto::platform::Target::BUILT)
-        .map_err(|error| {
-            #[allow(clippy::print_stderr)]
-            {
-                eprintln!("access-identity-signer: {error}; refusing to start");
-            }
-        })
-        .is_err()
+/// CR-39 m.6, OP-150 (o): the host is Apple silicon, natively or under Linux.
+fn apple_host() -> bool {
+    access_crypto::platform::signer_host(access_crypto::platform::Target::BUILT).is_err()
+}
+
+/// OP-159 m.26: the configured token is the `SoftHSM` local equivalent; an unreadable token or
+/// no token counts as a production one.
+fn software_token(config: &Config) -> bool {
+    config
+        .hsm
+        .as_ref()
+        .is_some_and(|hsm| KeyStore::software(&hsm.module, &hsm.token).unwrap_or(false))
 }
 
 /// The FIPS build's start-up check; any other build passes it (CR-15, OP-159 m.3 (r)).

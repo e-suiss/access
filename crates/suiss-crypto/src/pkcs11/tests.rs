@@ -453,3 +453,14 @@ fn ml_dsa_probe_decides_between_a_token_key_and_a_refusal() {
         Err(HsmError::Encoding)
     ));
 }
+
+// CR-39 m.6, OP-159 m.26
+#[test]
+fn a_softhsm_token_is_named_software_and_a_missing_token_is_an_error() {
+    let _ = store();
+    assert!(KeyStore::software(&module(), &token()).unwrap());
+    assert!(matches!(
+        KeyStore::software(&module(), "no-such-token"),
+        Err(HsmError::Token(_))
+    ));
+}

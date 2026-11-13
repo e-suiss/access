@@ -147,6 +147,33 @@ pub struct KeyStore {
 impl KeyStore {
     /// Loads `module`, finds the token labelled `token` and checks the user PIN.
     ///
+    /// CR-39 m.6, OP-159 m.26: whether the token labelled `token` is a software token
+    /// (`SoftHSM`), the local equivalent of OP-69 that never holds production keys.
+    ///
+    /// # Errors
+    /// [`HsmError`] when the module or the token cannot be read.
+    pub fn software(module: &Path, token: &str) -> Result<bool, HsmError> {
+        let ctx = Pkcs11::new(module).map_err(HsmError::Module)?;
+        match ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK)) {
+            Ok(()) | Err(CkError::Pkcs11(RvError::CryptokiAlreadyInitialized, _)) => {}
+            Err(e) => return Err(HsmError::Module(e)),
+        }
+        let slots = ctx.get_slots_with_token().map_err(HsmError::Module)?;
+        let info = slots
+            .into_iter()
+            .find_map(|s| {
+                ctx.get_token_info(s)
+                    .ok()
+                    .filter(|i| i.label().trim_end() == token)
+            })
+            .ok_or_else(|| HsmError::Token(token.to_owned()))?;
+        if let Ok(mut resident) = RESIDENT.lock() {
+            resident.push(ctx);
+        }
+        Ok(info.model().trim_end().starts_with("SoftHSM")
+            && info.manufacturer_id().trim_end().starts_with("SoftHSM"))
+    }
+
     /// # Errors
     /// [`HsmError`].
     pub fn open(module: &Path, token: &str, pin: &Secret<String>) -> Result<Self, HsmError> {
