@@ -386,7 +386,16 @@ start:
       docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
     else
       image="access-local:build"
-      docker build -f deploy/docker/Dockerfile --target local -t "$image" .
+      rev="$(git rev-parse HEAD)"
+      if ! git diff --quiet HEAD -- . ':!docs' ':!target'; then
+        rev="$rev-$(git diff HEAD -- . ':!docs' ':!target' | shasum -a 256 | cut -c1-16)"
+      fi
+      built="$(docker image inspect -f '{{ "{{" }}index .Config.Labels "access.local.revision"{{ "}}" }}' "$image" 2>/dev/null || true)"
+      if [[ "$built" != "$rev" ]]; then
+        docker build -f deploy/docker/Dockerfile --target local --label "access.local.revision=$rev" -t "$image" .
+      else
+        echo "access-local:build is current ($rev); skipping the build"
+      fi
     fi
     mkdir -p target
     pw_file=target/local-test-password
