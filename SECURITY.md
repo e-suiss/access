@@ -27,8 +27,9 @@ Every major version receives security fixes for at least 5 years from its first 
 
 | Version | Released | Security fixes until | Status |
 |---|---|---|---|
+| 0.7 | 2026-11-13 | 2031-10-29 | supported |
 | 0.4 | 2026-11-09 | 2031-10-29 | supported |
-| 0.3 | 2026-11-06 | 2031-10-29 | supported |
+| 0.3 | 2026-11-06 | 2026-11-13 | end-of-life |
 | 0.2 | 2026-10-30 | 2026-11-09 | end-of-life |
 | 0.1 | 2026-10-29 | 2026-11-06 | end-of-life |
 

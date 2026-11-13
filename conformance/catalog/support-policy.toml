@@ -51,6 +51,12 @@ final_report_vulnerability_days = 14
 final_report_incident_months = 1
 
 [[versions]]
+version = "0.7"
+released = "2026-11-13"
+security_until = "2031-10-29"
+status = "supported"
+
+[[versions]]
 version = "0.4"
 released = "2026-11-09"
 security_until = "2031-10-29"
@@ -59,8 +65,8 @@ status = "supported"
 [[versions]]
 version = "0.3"
 released = "2026-11-06"
-security_until = "2031-10-29"
-status = "supported"
+security_until = "2026-11-13"
+status = "end-of-life"
 
 [[versions]]
 version = "0.2"

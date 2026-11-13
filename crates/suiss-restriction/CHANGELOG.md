@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+Released with `esuiss-access-kernel` 0.7.0 (Kernel 0.7.0 semantics: ML-DSA-44/65/87 verification through the `Backend` port, the hybrid signature policy and the `hybrid-artefact` carrier, PQ anchors and RA-7 acceptance of retired-algorithm artefacts, the superseded cause and inclusion evidence over a record's committed `artifacts`, root-term witness and replica sets, holding terms on meta-actions, the new-payee floor and `audit_export` as a CT1 read). Public structs and enums gained fields and variants, so the minor version moves. 0.6.0 was never published.
+
 ## 0.6.0
 
-Released with `esuiss-access-kernel` 0.6.0 (Kernel 0.6.0 semantics: catalog 8, `domain_handover` and `domain_recover` with the recovery entry and rollback guard, the pre-recovery nonce closure, superseded-at bindings, version activation and algorithm retirement, self-anchor narrowing, conditional `anchor_transfer`, DistinctSurface surface paths, and the witness head the rollback guard reads). The Kernel's public structs gained fields, so the minor version moves. 0.5.0 was never published.
+Never published: the v0.6.0 release run stopped at its test job before anything was published (OP-159 m.24). Prepared with `esuiss-access-kernel` 0.6.0 (Kernel 0.6.0 semantics: catalog 8, `domain_handover` and `domain_recover` with the recovery entry and rollback guard, the pre-recovery nonce closure, superseded-at bindings, version activation and algorithm retirement, self-anchor narrowing, conditional `anchor_transfer`, DistinctSurface surface paths, and the witness head the rollback guard reads). The Kernel's public structs gained fields, so the minor version moves. 0.5.0 was never published.
 
 ## 0.5.0
 
