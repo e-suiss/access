@@ -2400,6 +2400,8 @@ async fn serve(
         domains.clone(),
         limits.max_body_bytes,
     ));
+    // CR-43, OP-159 m.3 (q)
+    let adp = adp.merge(access_http::projections::router(domains.clone()));
     // G32, OP-158 m.3 (h)
     let adp = adp.merge(access_http::divergence::router(divergence::Declarations {
         domains: domains.clone(),

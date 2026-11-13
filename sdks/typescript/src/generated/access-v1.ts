@@ -4761,8 +4761,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
+            /** @description The artefact, byte-identical: a COSE_Sign1 or the hybrid carrier. Its SHA-256 is the digest of the projection_ref. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/cbor": string;
+                };
+            };
+            /** @description pep-required: no authenticated PEP. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4770,8 +4779,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-159 m.4 (a)). */
-            501: {
+            /** @description not-found: no such projection, or the PEP is not in the artefact's aud. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description projection-ref-expired: the projection expired and its data key was destroyed; ask for a new projection. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -3031,7 +3031,6 @@
       "get": {
         "operationId": "getProjection",
         "summary": "The projection a projection_ref names, byte-identical, for the authenticated PEP in the artefact's aud only; the verifier recomputes the digest and verifies the artefact in full. An expired projection answers 410 projection-ref-expired (CR-43, projection-ref.cddl, OP-159 m.3 (q)).",
-        "x-suiss-status": "planned",
         "parameters": [
           {
             "name": "domain",
@@ -3055,8 +3054,28 @@
           }
         ],
         "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
+          "401": {
+            "description": "pep-required: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not-found: no such projection, or the PEP is not in the artefact's aud.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "projection-ref-expired: the projection expired and its data key was destroyed; ask for a new projection.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3075,12 +3094,13 @@
               }
             }
           },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-159 m.4 (a)).",
+          "200": {
+            "description": "The artefact, byte-identical: a COSE_Sign1 or the hybrid carrier. Its SHA-256 is the digest of the projection_ref.",
             "content": {
-              "application/problem+json": {
+              "application/cbor": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }

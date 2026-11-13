@@ -90,7 +90,6 @@ const UNPRODUCED: &[&str] = &[
     "identity.degraded",
     // OP-159 m.4 (a)
     "pq.cosigned",
-    "projection.fetched",
     "solver.unavailable",
 ];
 

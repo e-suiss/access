@@ -9,13 +9,9 @@ use axum::routing::{get, post};
 
 pub use crate::stage11::{Method, Planned};
 
-/// Every declared, not yet served route.
-pub const PLANNED: &[Planned] = &[Planned {
-    method: Method::Get,
-    path: "/access/v1/domains/{domain}/projections/{digest}",
-    operation: "getProjection",
-    summary: "The projection a projection_ref names, byte-identical, for the authenticated PEP in the artefact's aud only; the verifier recomputes the digest and verifies the artefact in full. An expired projection answers 410 projection-ref-expired (CR-43, projection-ref.cddl, OP-159 m.3 (q)).",
-}];
+/// Every declared, not yet served route; the projection fetch is served by
+/// [`crate::projections`] (OP-159 m.3 (q)).
+pub const PLANNED: &[Planned] = &[];
 
 async fn not_yet_served() -> Response {
     crate::problem::codes::NOT_YET_SERVED

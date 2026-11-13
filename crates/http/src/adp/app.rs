@@ -278,6 +278,13 @@ impl<P: Pdp> Service<P> {
             context: decoded.context,
         };
         match self.pdp.evaluate(inc).await {
+            // L2-BUD-1, OP-159 m.3 (p)
+            Ok(r)
+                if r.pap_carried
+                    == Some(access_authority_core::app::carry::Carried::OverBudget) =>
+            {
+                Reply::Refused("projection-over-budget")
+            }
             Ok(r) => {
                 let mut v = encode(&r, mode);
                 if upstream && let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {

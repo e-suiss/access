@@ -74,6 +74,7 @@ pub mod placement;
 pub mod platform;
 pub mod pq_checkpoint;
 pub mod privacy;
+pub mod projection_blobs;
 pub mod projections;
 pub mod proxy;
 pub mod publications;

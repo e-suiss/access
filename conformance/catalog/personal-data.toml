@@ -326,3 +326,12 @@ basis = "contract"
 portable = "observed"
 export = true
 note = "A support artifact's redacted text, sealed under its own DEK; tokens, cookies and Authorization values were removed on upload and the raw upload is never kept. Shredded after the realm's retention (TN-74, OP-73)."
+
+[[field]]
+column = "access.projection_blobs.ciphertext"
+vault = "none"
+retention = "contract"
+basis = "contract"
+portable = "derived"
+export = false
+note = "A signed projection served by reference, sealed under its own data key: it names the holder Instance and its key, not a person. The data key is destroyed at the projection's horizon and the row stays (CR-43, OP-73, OP-159 m.3 (q))."

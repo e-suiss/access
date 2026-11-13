@@ -69,6 +69,8 @@ pub struct Response {
     /// The signed PAP and its key excerpt; under a hybrid domain the carrier and the excerpt
     /// pair ([`hybrid`]).
     pub signed_pap: Option<(Vec<u8>, Vec<u8>)>,
+    /// How the signed PAP is carried (CR-43, OP-159 m.3 (p), (q)); `None` while unsigned.
+    pub pap_carried: Option<carry::Carried>,
     /// The holder Instances this commit ended (§9.9.3 k.6, P50): their live projection
     /// families are revoked at `record` once it is in. Empty for a replay.
     pub ended: Vec<Id>,
@@ -838,6 +840,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signed_receipt: None,
             pap: None,
             signed_pap: None,
+            pap_carried: None,
             ended: Vec::new(),
             explained: None,
             witnessed_through: None,
@@ -2235,6 +2238,7 @@ const fn answer(
         signed_receipt: None,
         pap: None,
         signed_pap: None,
+        pap_carried: None,
         ended: Vec::new(),
         explained: None,
         witnessed_through: None,
@@ -2338,6 +2342,7 @@ pub mod review;
 pub mod quota;
 // OP-158 m.4 (b)
 pub mod cache;
+pub mod carry;
 // OP-158 m.4 (b)
 pub mod watch;
 // OP-158 m.4 (b)

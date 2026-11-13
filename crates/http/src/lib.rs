@@ -22,6 +22,7 @@ pub mod path;
 pub mod platform;
 pub mod problem;
 pub mod product;
+pub mod projections;
 pub mod proxy;
 pub mod realm;
 pub mod relay_callback;

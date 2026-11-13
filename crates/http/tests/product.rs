@@ -1154,6 +1154,7 @@ impl Pdp for Eligible {
             signed_receipt: None,
             pap: None,
             signed_pap: None,
+            pap_carried: None,
             ended: Vec::new(),
             explained: None,
             witnessed_through: None,

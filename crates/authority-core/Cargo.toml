@@ -18,7 +18,7 @@ access-store = { workspace = true }
 access-telemetry = { workspace = true }
 miniz_oxide = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }
-suiss-crypto = { workspace = true, features = ["pkcs11"] }
+suiss-crypto = { workspace = true, features = ["pkcs11", "aead"] }
 suiss-ledger = { workspace = true, features = ["doorbell"] }
 suiss-restriction = { workspace = true }
 tracing = { workspace = true, features = ["std"] }

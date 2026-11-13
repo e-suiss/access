@@ -1054,9 +1054,9 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     if let Some(signed) = &response.signed_receipt {
         context.insert(String::from("receipt"), signed_json(signed));
     }
-    // L2-PAP-2, OP-159 m.15 (b)
+    // L2-PAP-2, OP-159 m.3 (p), (q), m.15 (b)
     if let Some(signed) = &response.signed_pap {
-        context.insert(String::from("pap"), signed_json(signed));
+        context.insert(String::from("pap"), pap_json(response, signed));
     }
     context.insert(
         String::from("versions"),
@@ -1069,6 +1069,44 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     );
     out.insert(String::from("context"), Out::Object(context));
     Out::Object(out)
+}
+
+/// A signed PAP as the ADP answer carries it: inline like a receipt, with the offline carrier
+/// that holds an offline one (`qr` or `nfc`), or, over the header budget, `projection_ref`
+/// `{digest, size, fetch}` in place of `sign1` (CR-43, OP-159 m.3 (p), (q)).
+fn pap_json(response: &Response, signed: &(Vec<u8>, Vec<u8>)) -> Out {
+    use access_authority_core::app::carry::{Carried, fetch_path};
+    let mut out = signed_json(signed);
+    let Some(o) = out.as_object_mut() else {
+        return out;
+    };
+    match response.pap_carried {
+        Some(Carried::Inline(Some(c))) => {
+            o.insert(String::from("carrier"), Out::from(c.name()));
+        }
+        Some(Carried::Reference { digest, size }) => {
+            o.remove("sign1");
+            let domain = response
+                .pap
+                .as_deref()
+                .and_then(|p| {
+                    <access_kernel::pap::Pap as access_kernel::codec::Canonical>::from_bytes(p).ok()
+                })
+                .map(|p| p.domain);
+            if let Some(d) = domain {
+                o.insert(
+                    String::from("projection_ref"),
+                    serde_json::json!({
+                        "digest": b64url_encode(&digest),
+                        "size": size,
+                        "fetch": fetch_path(&d, &digest),
+                    }),
+                );
+            }
+        }
+        Some(Carried::Inline(None) | Carried::OverBudget) | None => {}
+    }
+    out
 }
 
 /// A signed receipt or PAP as the ADP answer carries it: `sign1` (a `COSE_Sign1` or the hybrid

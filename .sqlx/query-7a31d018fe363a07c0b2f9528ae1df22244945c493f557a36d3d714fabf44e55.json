@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.projection_blobs SET wrapped_dek = NULL, expired_at = now()\n          WHERE domain_id = $1 AND digest = $2 AND expired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7a31d018fe363a07c0b2f9528ae1df22244945c493f557a36d3d714fabf44e55"
+}

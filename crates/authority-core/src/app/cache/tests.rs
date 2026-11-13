@@ -27,6 +27,7 @@ fn answer(outcome: Outcome) -> Response {
         signed_receipt: None,
         pap: None,
         signed_pap: None,
+        pap_carried: None,
         ended: Vec::new(),
         explained: None,
         causal: None,

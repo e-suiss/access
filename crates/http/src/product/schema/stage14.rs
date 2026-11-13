@@ -22,8 +22,41 @@ fn parameters(path: &str) -> Value {
     )
 }
 
-/// The declared Stage 14 paths.
+/// The served projection fetch (CR-43, OP-159 m.3 (q)).
+fn projection(paths: &mut Map<String, Value>) {
+    let mut responses = problems(&[
+        ("401", "pep-required: no authenticated PEP."),
+        (
+            "404",
+            "not-found: no such projection, or the PEP is not in the artefact's aud.",
+        ),
+        (
+            "410",
+            "projection-ref-expired: the projection expired and its data key was destroyed; ask for a new projection.",
+        ),
+        ("503", "Temporarily unavailable; retry."),
+    ]);
+    responses.insert(
+        "200".into(),
+        json!({
+            "description": "The artefact, byte-identical: a COSE_Sign1 or the hybrid carrier. Its SHA-256 is the digest of the projection_ref.",
+            "content": { crate::projections::CONTENT_TYPE: { "schema": { "type": "string", "format": "binary" } } },
+        }),
+    );
+    paths.insert(
+        crate::projections::PROJECTION_PATH.to_owned(),
+        json!({ "get": {
+            "operationId": "getProjection",
+            "summary": "The projection a projection_ref names, byte-identical, for the authenticated PEP in the artefact's aud only; the verifier recomputes the digest and verifies the artefact in full. An expired projection answers 410 projection-ref-expired (CR-43, projection-ref.cddl, OP-159 m.3 (q)).",
+            "parameters": parameters(crate::projections::PROJECTION_PATH),
+            "responses": responses,
+        }}),
+    );
+}
+
+/// The Stage 14 paths: the served ones and those declared before their lanes serve them.
 pub(super) fn paths(paths: &mut Map<String, Value>) {
+    projection(paths);
     for p in PLANNED {
         let method = match p.method {
             Method::Get => "get",

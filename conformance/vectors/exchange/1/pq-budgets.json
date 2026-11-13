@@ -6,7 +6,7 @@
     "CR-38",
     "CR-43"
   ],
-  "description": "Post-quantum size budgets of the carriers (OP-159 m.3 (p)): an HTTP header and an NFC record hold 8192 bytes, a cookie 4096 and one QR code (version 40-L, byte mode) 2953. An artefact over its carrier's budget is not produced; an offline PAP over the QR budget answers 422 projection-over-budget.",
+  "description": "Post-quantum size budgets of the carriers (OP-159 m.3 (p)): an HTTP header and an NFC record hold 8192 bytes, a cookie 4096 and one QR code (version 40-L, byte mode) 2953. An artefact over its carrier's budget is not produced; an offline PAP that neither a QR code nor an NFC record holds answers 422 projection-over-budget.",
   "cases": [
     {
       "id": "header-at-budget",

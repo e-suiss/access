@@ -33,6 +33,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
+use crate::app::carry::Carried;
 use crate::app::{Authority, Compromise, Incoming, Response};
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
@@ -476,6 +477,9 @@ impl Keys for KeyStore {
 
 /// Kind of the consistency token (OP-141 m.22 (f)).
 const CONSISTENCY: &str = "consistency";
+
+/// The token kind a kept projection's data key is wrapped under (OP-159 m.3 (q)).
+const PROJECTION_DEK: &str = "projection_dek";
 
 /// The consistency token of `head` given at `now`: the position and the trusted time it was
 /// read, sealed under the domain's token key (OP-141 m.22 (f), §9.7A.2 k.3).
@@ -1374,10 +1378,83 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if let Some(path) = &self.setup.signer
             && let Some(payload) = r.pap.clone()
         {
-            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now)
+            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload.clone(), now)
                 .await
                 .ok();
+            if let Some((sign1, _)) = &r.signed_pap {
+                let carried = crate::app::carry::plan(&payload, sign1);
+                r.pap_carried = match carried {
+                    // L2-BUD-1, OP-159 m.3 (p)
+                    Carried::OverBudget => {
+                        r.signed_pap = None;
+                        Some(carried)
+                    }
+                    // OP-159 m.3 (q)
+                    Carried::Reference { digest, size } => {
+                        let kept = self
+                            .keep_projection(led, domain, (&payload, sign1), (digest, size), now)
+                            .await;
+                        if kept.is_err() {
+                            r.signed_pap = None;
+                        }
+                        kept.ok().map(|()| carried)
+                    }
+                    Carried::Inline(_) => Some(carried),
+                };
+            }
         }
+    }
+
+    /// Keeps a PAP over the header budget for its reference (CR-43, OP-73, OP-159 m.3 (q)):
+    /// sealed under a fresh data key the domain's token key wraps, with the PEPs its `aud` names
+    /// and its horizon. The domain's projections already past their horizon are expired first.
+    async fn keep_projection(
+        &self,
+        led: &Led<B, S, C>,
+        domain: Digest,
+        (payload, sign1): (&[u8], &[u8]),
+        (digest, size): ([u8; 32], u64),
+        now: u64,
+    ) -> Result<(), CoreError> {
+        use access_kernel::codec::Canonical as _;
+        let scope = DomainId::from_bytes(domain.0);
+        let pap = access_kernel::pap::Pap::from_bytes(payload)
+            .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
+        access_store::projection_blobs::expire_due(
+            &self.setup.sequencer,
+            &scope,
+            now,
+            crate::app::carry::EXPIRE_BATCH,
+        )
+        .await?;
+        let dek = suiss_crypto::envelope::Dek::generate()
+            .map_err(|_| CoreError::Unavailable("projection-key"))?;
+        let wrapped = led
+            .tokens
+            .seal(&domain.0, PROJECTION_DEK, dek.secret().expose())
+            .map_err(|_| CoreError::Unavailable("token-key"))?;
+        let sealed = suiss_crypto::envelope::seal_body(
+            dek,
+            &crate::app::carry::aad(&domain, &digest),
+            sign1,
+        )
+        .map_err(|_| CoreError::Unavailable("projection-key"))?;
+        let audience: Vec<String> = pap.validity.audience.into_iter().collect();
+        access_store::projection_blobs::put(
+            &self.setup.sequencer,
+            &scope,
+            &access_store::projection_blobs::NewBlob {
+                digest,
+                size,
+                audience: &audience,
+                expires_at: pap.validity.horizon,
+                wrapped_dek: &wrapped,
+                nonce: sealed.nonce,
+                ciphertext: &sealed.ciphertext,
+            },
+        )
+        .await?;
+        Ok(())
     }
 
     /// After a `projection.issue` decision: the contract of an allowed one was kept in the
@@ -1394,7 +1471,11 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let Some(f) = family.filter(|f| f.opened) else {
             return;
         };
-        if matches!(&*result, Ok(r) if r.decision.outcome == Outcome::Allow && !r.replayed) {
+        // L2-BUD-1, OP-159 m.3 (p)
+        if matches!(&*result, Ok(r) if r.decision.outcome == Outcome::Allow
+            && !r.replayed
+            && r.pap_carried != Some(Carried::OverBudget))
+        {
             return;
         }
         let head = led.core.head().max(1);
@@ -1548,6 +1629,77 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Ok(Ok(SignResponse::Metadata(cose))) => Some(cose),
             _ => None,
         }
+    }
+
+    /// The projection `digest` of `domain` a `projection_ref` names, for the authenticated PEP
+    /// `pep` (CR-43, OP-159 m.3 (q)): byte-identical, only to a PEP the artefact's `aud` names;
+    /// any other PEP is told there is none. A projection past its horizon is expired first: its
+    /// data key is destroyed and the row stays (OP-73).
+    ///
+    /// # Errors
+    /// [`CoreError::Store`]; [`CoreError::Unavailable`] when the token key or the time fails.
+    pub async fn projection(
+        &self,
+        domain: Digest,
+        digest: &[u8; 32],
+        pep: &str,
+    ) -> Result<Fetched, CoreError> {
+        let scope = DomainId::from_bytes(domain.0);
+        let Some(blob) =
+            access_store::projection_blobs::get(&self.setup.sequencer, &scope, digest).await?
+        else {
+            return Ok(Fetched::None);
+        };
+        if !blob.audience.iter().any(|a| a == pep) {
+            return Ok(Fetched::None);
+        }
+        let now = self
+            .setup
+            .clock
+            .clone()
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let Some((wrapped, nonce, ciphertext)) = blob.sealed else {
+            return Ok(Fetched::Expired);
+        };
+        if now > blob.expires_at {
+            access_store::projection_blobs::expire(&self.setup.sequencer, &scope, digest).await?;
+            return Ok(Fetched::Expired);
+        }
+        let key = self.setup.keys.token_key(&domain)?;
+        let dek = key
+            .open(&domain.0, PROJECTION_DEK, &wrapped)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b).ok())
+            .ok_or(CoreError::Store(StoreError::Corrupt))?;
+        let dek = suiss_crypto::envelope::Dek::from_secret(suiss_crypto::secret::Secret::new(dek));
+        let bytes = suiss_crypto::envelope::open_body(
+            &dek,
+            &crate::app::carry::aad(&domain, digest),
+            &suiss_crypto::envelope::Sealed { nonce, ciphertext },
+        )
+        .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
+        if suiss_crypto::digest::sha256(&bytes) != *digest {
+            return Err(CoreError::Store(StoreError::Corrupt));
+        }
+        let target = access_kernel::json::b64url_encode(digest);
+        let actor = audit_text(pep);
+        access_store::operational::record_operational(
+            &self.setup.app,
+            &access_store::operational::OperationalEvent {
+                event_type: "projection.fetched",
+                occurred_at_ms: now,
+                tenant: None,
+                domain: Some(domain.0),
+                actor: &actor,
+                target: &target,
+                reason: "",
+                correlation: &target,
+            },
+        )
+        .await?;
+        Ok(Fetched::Artefact(bytes.to_vec()))
     }
 
     /// The keys `kids` of `domain` at `as_of` (OP-149 m.5): the derived index is brought up to
@@ -2143,6 +2295,17 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
 }
 
 mod ingest;
+
+/// A projection fetched by its reference (OP-159 m.3 (q)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Fetched {
+    /// No such projection for this PEP.
+    None,
+    /// The projection expired and its data key was destroyed.
+    Expired,
+    /// The artefact bytes.
+    Artefact(Vec<u8>),
+}
 
 /// What a decision point left for the approval of an intent (§9.14.1 step 1, OP-150 L6).
 #[derive(Clone, Debug, PartialEq, Eq)]
