@@ -66,11 +66,20 @@ Signing in never grants authority by itself: the identity plane passes facts, an
 
 ## Getting started
 
-Access is pre-alpha: the project foundation (workspace, CI gates, local environment) is in place and the Kernel is next. To build and test:
+Access is pre-1.0: the identity and authority planes, the Kernel and the SDKs are in place, and the interfaces may still change between minor versions. To run the whole of Access on your machine:
 
 ```sh
 git clone https://github.com/e-suiss/access.git
 cd access
+just start   # build the image, start Access with PostgreSQL and SoftHSM, create a sample tenant and test user
+just stop    # stop it; the data stays
+```
+
+`just start` prints the sample tenant, realm and client ids, the addresses and the test user's password (generated once and kept in `target/local-test-password`, or `ACCESS_LOCAL_TEST_PASSWORD` if you set it). [Run Access locally](#run-access-locally) explains what runs and how to sign in.
+
+To build and test:
+
+```sh
 just dev     # PostgreSQL, NATS, SoftHSM (PKCS#11), Mailpit, observability
 just check   # formatting, lints, repository rules, dependency policy
 just test    # the same tests CI runs on every change

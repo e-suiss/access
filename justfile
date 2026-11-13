@@ -377,6 +377,34 @@ psql:
 image tag="access-server:local":
     docker build -f deploy/docker/Dockerfile -t {{tag}} .
 
+# OP-69, OP-159 m.26: the whole local Access in one command (Docker must be running); `just stop` keeps the data
+start:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    image="${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}"
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+      if [[ -n "${ACCESS_IMAGE:-}" ]]; then docker pull "$image"; else docker build -f deploy/docker/Dockerfile -t "$image" .; fi
+    fi
+    mkdir -p target
+    pw_file=target/local-test-password
+    if [[ -z "${ACCESS_LOCAL_TEST_PASSWORD:-}" ]]; then
+      if [[ ! -s "$pw_file" ]]; then (umask 077; openssl rand -base64 18 > "$pw_file"); fi
+      ACCESS_LOCAL_TEST_PASSWORD="$(cat "$pw_file")"
+    fi
+    export ACCESS_IMAGE="$image" ACCESS_LOCAL_TEST_PASSWORD
+    docker compose -f deploy/compose/access.yaml up -d
+    docker compose -f deploy/compose/access.yaml wait bootstrap >/dev/null
+    docker compose -f deploy/compose/access.yaml logs --no-log-prefix bootstrap
+    echo
+    echo "Access:          https://127.0.0.1:8443"
+    echo "Console and API: https://access-server.local:9443 (add '127.0.0.1 access-server.local' to /etc/hosts)"
+    echo "Test user:       the sample realm's test user above, password: $ACCESS_LOCAL_TEST_PASSWORD"
+    echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
+    echo "Stop:            just stop"
+
+stop:
+    docker compose -f deploy/compose/access.yaml stop
+
 mkcert host:
     mkdir -p target/dev-certs
     mkcert -cert-file "target/dev-certs/{{host}}.pem" -key-file "target/dev-certs/{{host}}-key.pem" "{{host}}"
