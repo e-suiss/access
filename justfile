@@ -382,8 +382,10 @@ start:
     #!/usr/bin/env bash
     set -euo pipefail
     image="${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}"
-    if ! docker image inspect "$image" >/dev/null 2>&1; then
-      if [[ -n "${ACCESS_IMAGE:-}" ]]; then docker pull "$image"; else docker build -f deploy/docker/Dockerfile --target local -t "$image" .; fi
+    if [[ -n "${ACCESS_IMAGE:-}" ]]; then
+      docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+    elif ! docker run --rm --entrypoint /bin/sh "$image" -c true >/dev/null 2>&1; then
+      docker build -f deploy/docker/Dockerfile --target local -t "$image" .
     fi
     mkdir -p target
     pw_file=target/local-test-password
@@ -403,7 +405,7 @@ start:
     echo "Stop:            just stop"
 
 stop:
-    docker compose -f deploy/compose/access.yaml stop
+    ACCESS_LOCAL_TEST_PASSWORD="${ACCESS_LOCAL_TEST_PASSWORD:-unused-by-stop}" docker compose -f deploy/compose/access.yaml stop
 
 mkcert host:
     mkdir -p target/dev-certs
