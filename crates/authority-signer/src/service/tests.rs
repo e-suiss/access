@@ -1043,3 +1043,144 @@ fn a_pq_re_anchor_checkpoint_is_a_cose_sign1_over_the_note_body() {
         Response::Error(String::from("signer-note"))
     );
 }
+
+fn pap_payload(class: access_kernel::validity::ProfileVariant) -> Vec<u8> {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::combinator::Capacity;
+    use access_kernel::model::{
+        ActionRef, ActionSet, AuthoritySet, Id, ResourceSelector, Structural,
+    };
+    use access_kernel::pap::{Holder, Pap};
+    use access_kernel::validity::{Revalidation, ValidityContract};
+    let (key, _) = SoftSigner::generate_ed25519().unwrap();
+    let holder = Holder {
+        instance: Id([6; 16]),
+        key: key.public_key(),
+    };
+    let bounds = AuthoritySet {
+        actions: ActionSet {
+            exact: BTreeSet::from([ActionRef {
+                namespace: String::from("shop"),
+                name: String::from("order"),
+                major: 1,
+                schema: Digest([8; 32]),
+            }]),
+            prefix: BTreeSet::new(),
+        },
+        resource: ResourceSelector::Structural(Structural {
+            namespace: String::from("shop"),
+            prefix: vec![],
+            kind: None,
+            attrs: BTreeMap::new(),
+        }),
+        params: BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+    };
+    Pap {
+        domain: Digest([7; 32]),
+        projection_exercise: Digest([3; 32]),
+        holder: holder.clone(),
+        capacity: Capacity::Own,
+        bounds: bounds.clone(),
+        local_requirements: BTreeSet::new(),
+        validity: ValidityContract {
+            issuing_exercise: Digest([3; 32]),
+            basis_ref: vec![9],
+            holder: access_kernel::pap::holder_digest(&holder).unwrap(),
+            audience: BTreeSet::from([String::from("pos")]),
+            bounds,
+            class: class.class(),
+            variant: class,
+            profile_version: 1,
+            params: BTreeMap::new(),
+            horizon: 3_600_000,
+            max_staleness_ms: None,
+            freshness_sources: BTreeSet::new(),
+            revalidation: Revalidation::default(),
+            offline_slice: BTreeSet::new(),
+            local_requirements: BTreeSet::new(),
+            verifier_profile_ref: Digest([7; 32]),
+            clock_source: String::from("trusted"),
+            clock_skew_ms: 60_000,
+            must_understand: BTreeSet::new(),
+            status: None,
+        },
+        lineage_commitment: Digest([4; 32]),
+        iat: 0,
+    }
+    .to_bytes()
+    .unwrap()
+}
+
+fn sign_pap(payload: Vec<u8>) -> Request {
+    Request::Sign {
+        domain: Digest([7; 32]),
+        usage: KeyUsage::Pap,
+        content_type: String::from(access_kernel::pap::CONTENT_TYPE),
+        payload,
+        at: 0,
+    }
+}
+
+// CR-41 m.2, OP-159 m.21 (f)
+#[test]
+fn ml_dsa_44_has_its_own_pap_only_key_that_signs_only_offline_paps() {
+    use access_kernel::validity::ProfileVariant;
+    use access_kernel::verify::ml_dsa::algorithm_of;
+    let mut s = Service::start(
+        Pq,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    for alg in [Algorithm::MlDsa65, Algorithm::MlDsa44] {
+        assert_eq!(s.handle(allowlist(alg, false), 0), Response::Opened);
+    }
+    let (m, _) = pq_metadata(&mut s);
+    let payload = suiss_crypto::cose::parse_sign1(&m)
+        .unwrap()
+        .payload
+        .unwrap();
+    let metadata =
+        <access_kernel::verify::key_scope::DomainMetadata as access_kernel::codec::Canonical>::from_bytes(&payload)
+            .unwrap();
+    let small: Vec<_> = metadata
+        .operational_keys
+        .iter()
+        .filter(|k| k.alg == Algorithm::MlDsa44)
+        .collect();
+    assert_ne!(small.len(), 0);
+    assert!(
+        small
+            .iter()
+            .all(|k| k.usage == BTreeSet::from([KeyUsage::Pap]))
+    );
+    let pq_alg = |r: Response| {
+        let Response::Signed {
+            pq: Some((pq, _)), ..
+        } = r
+        else {
+            panic!("hybrid");
+        };
+        algorithm_of(&pq).unwrap()
+    };
+    assert_eq!(
+        pq_alg(s.handle(
+            sign_pap(pap_payload(ProfileVariant::CheckpointedOffline)),
+            0
+        )),
+        Algorithm::MlDsa44
+    );
+    assert_eq!(
+        pq_alg(s.handle(sign_pap(pap_payload(ProfileVariant::OnlineStrict)), 0)),
+        Algorithm::MlDsa65
+    );
+    assert_eq!(pq_alg(s.handle(sign(0), 0)), Algorithm::MlDsa65);
+}

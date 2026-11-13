@@ -19,6 +19,28 @@ use access_kernel::verify::ml_dsa::is_ml_dsa;
 use access_kernel::verify::reanchor::CHECKPOINT_CONTENT_TYPE as PQ_CHECKPOINT_CONTENT_TYPE;
 use suiss_crypto::cose::Algorithm;
 
+/// Which rotation lane an operational key belongs to: the classical keys, the ML-DSA keys that
+/// sign the domain's artefacts, or the ML-DSA-44 keys that sign only offline PAPs (CR-41 m.2,
+/// OP-159 m.21 (f)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Lane {
+    Classic,
+    Pq,
+    OfflinePap,
+}
+
+impl Lane {
+    fn of(alg: Algorithm) -> Self {
+        if alg == Algorithm::MlDsa44 {
+            Self::OfflinePap
+        } else if is_ml_dsa(alg) {
+            Self::Pq
+        } else {
+            Self::Classic
+        }
+    }
+}
+
 struct Entry {
     record: Key,
     declared: OperationalKey,
@@ -207,13 +229,13 @@ impl Keyring {
     }
 
     fn records(&self) -> Vec<Key> {
-        self.records_in(false)
+        self.records_in(Lane::Classic)
     }
 
-    fn records_in(&self, pq: bool) -> Vec<Key> {
+    fn records_in(&self, lane: Lane) -> Vec<Key> {
         self.entries
             .iter()
-            .filter(|e| is_ml_dsa(e.declared.alg) == pq)
+            .filter(|e| Lane::of(e.declared.alg) == lane)
             .map(|e| e.record.clone())
             .collect()
     }
@@ -234,13 +256,17 @@ impl Keyring {
             .contains(&self.template.operational_alg)
     }
 
-    fn lanes(&self) -> Vec<(bool, Algorithm)> {
+    fn lanes(&self) -> Vec<(Lane, Algorithm)> {
         let mut out = Vec::new();
         if self.classical_on() {
-            out.push((false, self.template.operational_alg));
+            out.push((Lane::Classic, self.template.operational_alg));
         }
         if let Some(pq) = self.pq_algorithm() {
-            out.push((true, pq));
+            out.push((Lane::Pq, pq));
+        }
+        // CR-41 m.2, OP-159 m.21 (f)
+        if self.template.algorithms.contains(&Algorithm::MlDsa44) {
+            out.push((Lane::OfflinePap, Algorithm::MlDsa44));
         }
         out
     }
@@ -268,8 +294,8 @@ impl Keyring {
     ) -> Result<Round, SignerError> {
         let mut round = Round::default();
         let mut published_changed = self.metadata.is_none();
-        for (pq, alg) in self.lanes() {
-            published_changed |= self.tick_lane(factory, (pq, alg), now, draw, &mut round)?;
+        for (lane, alg) in self.lanes() {
+            published_changed |= self.tick_lane(factory, (lane, alg), now, draw, &mut round)?;
         }
         if published_changed {
             self.metadata = Some(self.sign_metadata(now)?);
@@ -280,7 +306,7 @@ impl Keyring {
     fn tick_lane(
         &mut self,
         factory: &mut dyn KeyFactory,
-        (pq, alg): (bool, Algorithm),
+        (lane, alg): (Lane, Algorithm),
         now: u64,
         draw: u64,
         round: &mut Round,
@@ -288,7 +314,7 @@ impl Keyring {
         let mut published_changed = false;
         for _ in 0..PASSES {
             let mut progressed = false;
-            for step in rotation::plan(&self.records_in(pq), &self.policy, now, draw) {
+            for step in rotation::plan(&self.records_in(lane), &self.policy, now, draw) {
                 match &step {
                     Step::Generate {
                         valid_from,
@@ -313,7 +339,11 @@ impl Keyring {
                             signatures: 0,
                             founding: *founding,
                         };
-                        let declared = declaration(&record, signer.algorithm(), key);
+                        let mut declared = declaration(&record, signer.algorithm(), key);
+                        // OP-159 m.21 (f)
+                        if lane == Lane::OfflinePap {
+                            declared.usage = std::collections::BTreeSet::from([KeyUsage::Pap]);
+                        }
                         self.entries.push(Entry {
                             record,
                             declared,
@@ -337,12 +367,12 @@ impl Keyring {
                     Step::Drop(_) => published_changed = true,
                     Step::Activate(_) | Step::Retire(_) => {}
                 }
-                let mut records = self.records_in(pq);
+                let mut records = self.records_in(lane);
                 rotation::apply(&mut records, &step, now);
                 for (e, r) in self
                     .entries
                     .iter_mut()
-                    .filter(|e| is_ml_dsa(e.declared.alg) == pq)
+                    .filter(|e| Lane::of(e.declared.alg) == lane)
                     .zip(records)
                 {
                     e.record = r;
@@ -366,7 +396,7 @@ impl Keyring {
     pub fn overdue(&self, now: u64) -> Option<u64> {
         self.lanes()
             .into_iter()
-            .filter_map(|(pq, _)| rotation::overdue(&self.records_in(pq), &self.policy, now))
+            .filter_map(|(lane, _)| rotation::overdue(&self.records_in(lane), &self.policy, now))
             .max()
     }
 
@@ -501,9 +531,14 @@ impl Keyring {
         now: u64,
     ) -> Result<Signed, SignerError> {
         let pq = self.pq_algorithm().is_some();
+        let pq_lane = if self.offline_pap(usage, content_type, payload) {
+            Lane::OfflinePap
+        } else {
+            Lane::Pq
+        };
         let sign = |signer: &dyn Signer, kid| sign_sign1(signer, kid, content_type, payload);
         if !self.classical_on() {
-            let (sign1, excerpt, kid) = self.with_key_in(true, usage, now, sign)?;
+            let (sign1, excerpt, kid) = self.with_key_in(pq_lane, usage, now, sign)?;
             return Ok(Signed {
                 sign1,
                 excerpt,
@@ -511,10 +546,10 @@ impl Keyring {
                 pq: None,
             });
         }
-        let (sign1, excerpt, kid) = self.with_key_in(false, usage, now, sign)?;
+        let (sign1, excerpt, kid) = self.with_key_in(Lane::Classic, usage, now, sign)?;
         // CR-42 m.4, OP-159 m.3 (e)
         let pq = if pq {
-            let (sign1, excerpt, _) = self.with_key_in(true, usage, now, sign)?;
+            let (sign1, excerpt, _) = self.with_key_in(pq_lane, usage, now, sign)?;
             Some(Component { sign1, excerpt })
         } else {
             None
@@ -544,7 +579,7 @@ impl Keyring {
             return Err(SignerError::PqKeyUnavailable);
         }
         let (sign1, excerpt, kid) =
-            self.with_key_in(true, KeyUsage::Checkpoint, now, |signer, kid| {
+            self.with_key_in(Lane::Pq, KeyUsage::Checkpoint, now, |signer, kid| {
                 sign_sign1(signer, kid, PQ_CHECKPOINT_CONTENT_TYPE, body.as_bytes())
             })?;
         Ok(Signed {
@@ -683,17 +718,32 @@ impl Keyring {
         now: u64,
         sign: impl FnOnce(&dyn Signer, [u8; 32]) -> Result<T, SignError>,
     ) -> Result<(T, Vec<u8>, [u8; 32]), SignerError> {
-        self.with_key_in(false, usage, now, sign)
+        self.with_key_in(Lane::Classic, usage, now, sign)
+    }
+
+    /// Whether `payload` is an offline PAP that the domain's ML-DSA-44 key signs: a PAP whose
+    /// validity contract is of the offline class, while ML-DSA-44 is admitted (CR-41 m.2,
+    /// OP-159 m.21 (f)).
+    fn offline_pap(&self, usage: KeyUsage, content_type: &str, payload: &[u8]) -> bool {
+        usage == KeyUsage::Pap
+            && content_type == access_kernel::pap::CONTENT_TYPE
+            && self.template.algorithms.contains(&Algorithm::MlDsa44)
+            && access_kernel::pap::Pap::from_bytes(payload)
+                .is_ok_and(|p| p.validity.class == access_kernel::validity::ProfileClass::Offline)
     }
 
     fn with_key_in<T>(
         &mut self,
-        pq: bool,
+        lane: Lane,
         usage: KeyUsage,
         now: u64,
         sign: impl FnOnce(&dyn Signer, [u8; 32]) -> Result<T, SignError>,
     ) -> Result<(T, Vec<u8>, [u8; 32]), SignerError> {
-        let records = self.records_in(pq);
+        // OP-159 m.21 (f)
+        if lane == Lane::OfflinePap && usage != KeyUsage::Pap {
+            return Err(SignerError::Usage);
+        }
+        let records = self.records_in(lane);
         let kid = rotation::signing_key(&records, &self.policy, now)
             .map(|k| k.kid)
             .ok_or(SignerError::NoKey)?;
