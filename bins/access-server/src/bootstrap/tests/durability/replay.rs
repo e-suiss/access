@@ -119,7 +119,7 @@ async fn faulty_as(
         .await
         .unwrap()
         .unwrap();
-    // T6: the released domain's lease may still be live for a moment; wait for it to end
+    // T6
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     let mut leader = loop {
         let log = PgLog::new(
