@@ -378,8 +378,8 @@ jobs:
       - name: FIPS build of the validated AWS-LC module and its start-up check
         if: matrix.leg == 'x86_64'
         run: |
-          cargo check --locked -p suiss-crypto
-          cargo test --locked -p suiss-crypto --features fips --lib fips
+          cargo check --locked -p esuiss-crypto
+          cargo test --locked -p esuiss-crypto --features fips --lib fips
 
   supply-chain:
     name: supply-chain
