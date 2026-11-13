@@ -396,7 +396,6 @@ start:
     fi
     export ACCESS_IMAGE="$image" ACCESS_LOCAL_TEST_PASSWORD
     docker compose -f deploy/compose/access.yaml up -d
-    docker compose -f deploy/compose/access.yaml wait bootstrap >/dev/null
     docker compose -f deploy/compose/access.yaml logs --no-log-prefix bootstrap
     echo
     echo "Access:          https://127.0.0.1:8443"
