@@ -859,14 +859,8 @@ kani set="pr":
     #!/usr/bin/env bash
     set -euo pipefail
     command -v cargo-kani >/dev/null || scripts/kani-fetch.sh
-    pr=(k1_acceptance_is_exact_and_overflow_is_refused k1_narrowing_is_monotone k1_ceilings_hold
-        k2_horizon_is_the_earliest_bound k2_delta_is_consumed_and_never_extends
-        k3_demand_is_the_checked_sum k3_release_never_exceeds_draw k4_recorded_at_is_monotone
-        k5_guard_is_bound_to_n_cited k5_below_r_star_is_refused k6_decoder_round_trips_up_to_8_bytes
-        k7_cose_ids_are_exact k7_hybrid_admits_one_signature)
-    nightly=(k3_report_totals_are_exact k6_decoder_round_trips_up_to_32_bytes
-        k7_alg_outside_the_set_is_refused k8_allowed_never_exceeds_budget
-        k9_lineage_of_sixteen_is_decided k9_lineage_of_seventeen_is_refused)
+    pr=(k1_ceilings_hold k2_horizon_is_the_earliest_bound k4_recorded_at_is_monotone k7_cose_ids_are_exact k7_hybrid_admits_one_signature)
+    nightly=(k1_acceptance_is_exact_and_overflow_is_refused k1_narrowing_is_monotone k2_delta_is_consumed_and_never_extends k3_demand_is_the_checked_sum k3_release_never_exceeds_draw k5_guard_is_bound_to_n_cited k5_below_r_star_is_refused k6_decoder_round_trips_up_to_8_bytes k3_report_totals_are_exact k6_decoder_round_trips_up_to_32_bytes k7_alg_outside_the_set_is_refused k8_allowed_never_exceeds_budget k9_lineage_of_sixteen_is_decided k9_lineage_of_seventeen_is_refused)
     case {{ quote(set) }} in
         pr) harnesses=("${pr[@]}") ;;
         all) harnesses=("${pr[@]}" "${nightly[@]}") ;;
