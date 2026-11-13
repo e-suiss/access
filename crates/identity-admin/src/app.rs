@@ -540,6 +540,27 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 if t.protected_resource(&r.resource).await?.is_some() {
                     return Err(Invalid::ResourceExists.into());
                 }
+                // CR-41, OP-159 m.21 (b), (g)
+                if let Some(pq) = r
+                    .access_token_alg
+                    .and_then(access_identity_oauth::domain::fapi::IdAlg::ml_dsa)
+                {
+                    let held = t
+                        .realm_signing()
+                        .await?
+                        .profile
+                        .as_deref()
+                        .and_then(access_identity_oauth::adapters::oauth::profile_alg);
+                    if held != Some(pq) {
+                        return Err(Invalid::AlgorithmProfileConflict.into());
+                    }
+                }
+                // CR-15, OP-159 m.3 (r)
+                if r.access_token_alg == Some(access_identity_oauth::domain::fapi::IdAlg::Ed25519)
+                    && t.realm_crypto().await?.fips
+                {
+                    return Err(Invalid::AlgorithmProfileConflict.into());
+                }
             }
             // OP-154 m.3 (n), AG-28
             Change::CrossAppConnection(c) => {
@@ -2179,6 +2200,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     bound,
                     &r.resource,
                     &r.display_name,
+                    r.access_token_alg
+                        .map(access_identity_oauth::domain::fapi::IdAlg::name),
                 )
                 .await?;
                 true

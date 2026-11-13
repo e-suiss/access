@@ -1477,6 +1477,9 @@ pub struct ProtectedResource {
     pub resource: String,
     /// What administrators and the consent screen call it.
     pub display_name: String,
+    /// The algorithm its access tokens are signed with; `None` is the realm's (CR-41, OP-159
+    /// m.21 (b), (g)). RS256 signs identity assertions only (MD-6).
+    pub access_token_alg: Option<access_identity_oauth::domain::fapi::IdAlg>,
 }
 
 impl ProtectedResource {
@@ -1494,6 +1497,7 @@ impl ProtectedResource {
             || self.resource.len() > 2048
             || !(1..=128).contains(&name)
             || self.display_name.chars().any(char::is_control)
+            || self.access_token_alg == Some(access_identity_oauth::domain::fapi::IdAlg::Rs256)
         {
             return Err(Invalid::ProtectedResource);
         }
@@ -2949,13 +2953,23 @@ impl Change {
             Self::CrossAppConnectionRetire(name) => {
                 Value::Map(vec![(Value::text("name"), Value::text(name.as_str()))])
             }
-            Self::ResourceRegister(r) => Value::Map(vec![
-                (Value::text("resource"), Value::text(r.resource.as_str())),
-                (
-                    Value::text("display_name"),
-                    Value::text(r.display_name.as_str()),
-                ),
-            ]),
+            Self::ResourceRegister(r) => {
+                let mut m = vec![
+                    (Value::text("resource"), Value::text(r.resource.as_str())),
+                    (
+                        Value::text("display_name"),
+                        Value::text(r.display_name.as_str()),
+                    ),
+                ];
+                // OP-159 m.21 (g)
+                if let Some(a) = r.access_token_alg {
+                    m.push((
+                        Value::text("access_token_signed_response_alg"),
+                        Value::text(a.name()),
+                    ));
+                }
+                Value::Map(m)
+            }
             Self::CspMode { mode, .. } => {
                 Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
             }

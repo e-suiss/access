@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT resource, display_name FROM access.idp_protected_resources\n              WHERE tenant_id = $1 AND realm_id = $2 AND resource = $3",
+  "query": "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources\n              WHERE tenant_id = $1 AND realm_id = $2 AND resource = $3",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "display_name"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "access_token_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_protected_resources",
+            "name": "access_token_alg"
+          }
+        }
       }
     ],
     "parameters": {
@@ -35,8 +46,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "b53b39f43a432aa615b017d6875c25d12ae747d1c9b577388f62324a7ed5526c"
+  "hash": "69d70fc27a873bf7cd889be0a9eb7db0ea5b3372de31515f99885894851346d3"
 }

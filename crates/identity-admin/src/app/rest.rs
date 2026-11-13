@@ -2170,10 +2170,25 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::CrossAppConnectionRetire(String::from(key_of(key)?))
         }
         Op::RegisterProtectedResource => {
-            only(m, &["resource", "display_name"])?;
+            only(
+                m,
+                &[
+                    "resource",
+                    "display_name",
+                    "access_token_signed_response_alg",
+                ],
+            )?;
+            let access_token_alg = match opt_text(m, "access_token_signed_response_alg")? {
+                Some(a) => Some(
+                    access_identity_oauth::domain::fapi::IdAlg::from_name(a)
+                        .ok_or(Invalid::ProtectedResource)?,
+                ),
+                None => None,
+            };
             Change::ResourceRegister(crate::domain::ProtectedResource {
                 resource: String::from(text(m, "resource")?),
                 display_name: String::from(text(m, "display_name")?),
+                access_token_alg,
             })
         }
         Op::PutCimdPolicy => {
@@ -3180,6 +3195,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                             serde_json::json!({
                                 "resource": r.resource,
                                 "display_name": r.display_name,
+                                "access_token_signed_response_alg": r.access_token_alg,
                             }),
                             0,
                         )

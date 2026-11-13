@@ -580,6 +580,11 @@ pub fn temp(name: &str) -> PathBuf {
 /// A signer whose key sets for `realms`, the federation sets too, were opened two hours ago, so
 /// they are past their publish lead and sign now (MD-6, SAI-46).
 pub fn signer(dir: &Path, realms: &[RealmId]) -> PathBuf {
+    signer_with(dir, realms, None)
+}
+
+/// [`signer`] with each realm's post-quantum key set of `pq` opened two hours ago too.
+pub fn signer_with(dir: &Path, realms: &[RealmId], pq: Option<JwsAlg>) -> PathBuf {
     let mut service = Service::start(
         SealedFactory::new(SoftKek::new("realm-kek", [7; 32])),
         DirVault::new(dir),
@@ -602,6 +607,18 @@ pub fn signer(dir: &Path, realms: &[RealmId]) -> PathBuf {
             now_ms() - 2 * HOUR,
             7,
         );
+        // OP-159 m.3 (o)
+        if let Some(alg) = pq {
+            let opened = service.handle(
+                Request::Pq(access_identity_signer::pq::PqRequest::Open {
+                    realm: SignerRealm(*r.as_bytes()),
+                    alg,
+                }),
+                now_ms() - 2 * HOUR,
+                7,
+            );
+            assert_eq!(opened, Response::Opened);
+        }
     }
     service.tick(now_ms(), 7);
     let path = dir.join("s.sock");
@@ -786,6 +803,16 @@ impl Cluster {
     /// Realms `slugs` under the realm base `base`, with the three fixture clients and `extra`
     /// clients in every realm (the OIDF target).
     pub async fn seeded(base: &str, slugs: &[&str], extra: &[Extra]) -> Self {
+        Self::seeded_with(base, slugs, extra, None).await
+    }
+
+    /// Realms `slugs` whose post-quantum key sets of `alg` were opened in the signer two hours
+    /// ago, so they sign now (OP-159 m.3 (o)).
+    pub async fn new_pq(slugs: &[&str], alg: JwsAlg) -> Self {
+        Self::seeded_with(BASE, slugs, &[], Some(alg)).await
+    }
+
+    async fn seeded_with(base: &str, slugs: &[&str], extra: &[Extra], pq: Option<JwsAlg>) -> Self {
         let db = fresh().await.unwrap();
         let day = u32::try_from(now() / 86_400_000).unwrap();
         for d in [day - 1, day, day + 1] {
@@ -906,7 +933,7 @@ impl Cluster {
             ));
         }
         let ids: Vec<RealmId> = seeded.iter().map(|s| s.0).collect();
-        let socket = signer(&temp("c"), &ids);
+        let socket = signer_with(&temp("c"), &ids, pq);
         let rings: HashMap<RealmId, Rings> = seeded
             .iter()
             .map(|s| {
@@ -1058,13 +1085,29 @@ impl At<'_> {
     /// Registers a protected resource under a spare ALLOW
     /// (`idp.client.resource_register`).
     pub async fn register_resource(&self, resource: &str) {
+        self.register_resource_with(resource, None).await;
+    }
+
+    /// Registers a protected resource whose access tokens are signed with `alg` (OP-159 m.21
+    /// (g)).
+    pub async fn register_resource_with(&self, resource: &str, alg: Option<&str>) {
         let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
             .await
             .unwrap();
         let b = self.bound(&mut tx, "idp.client.resource_register").await;
-        access_store::clients::insert_protected_resource(&mut tx, &b, resource, "Tools")
+        access_store::clients::insert_protected_resource(&mut tx, &b, resource, "Tools", alg)
             .await
             .unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    /// Opens (`Some`) or closes the realm's post-quantum signing profile (OP-159 m.3 (o)).
+    pub async fn signing_profile(&self, profile: Option<&str>) {
+        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
+            .await
+            .unwrap();
+        let b = self.bound(&mut tx, "idp.realm.signing_profile").await;
+        tx.put_signing_profile(&b, profile).await.unwrap();
         tx.commit().await.unwrap();
     }
 

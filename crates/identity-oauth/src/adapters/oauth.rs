@@ -485,6 +485,20 @@ impl OAuthTx for PgOAuthTx {
             .is_some())
     }
 
+    // OP-159 m.21 (g)
+    async fn resource_alg(
+        &mut self,
+        resource: &str,
+    ) -> Result<Option<crate::domain::fapi::IdAlg>, Unavailable> {
+        let row = self.0.protected_resource(resource).await.map_err(down)?;
+        match row.and_then(|r| r.access_token_alg) {
+            None => Ok(None),
+            Some(name) => crate::domain::fapi::IdAlg::from_name(&name)
+                .map(Some)
+                .ok_or(Unavailable),
+        }
+    }
+
     async fn consent_record(
         &mut self,
         subject: [u8; 16],

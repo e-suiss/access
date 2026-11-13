@@ -35,6 +35,9 @@ pub struct ResourceRow {
     pub resource: String,
     /// Its display name.
     pub display_name: String,
+    /// The algorithm its access tokens are signed with; `None` is the realm's (OP-159 m.21
+    /// (g)).
+    pub access_token_alg: Option<String>,
 }
 
 /// A CIMD client as stored: the snapshot of the document it was last seen with (AG-5).
@@ -134,18 +137,20 @@ pub async fn insert_protected_resource(
     bound: &Bound,
     resource: &str,
     display_name: &str,
+    access_token_alg: Option<&str>,
 ) -> Result<(), StoreError> {
     let (tenant, realm) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_protected_resources (tenant_id, realm_id, resource, display_name,
-                domain_id, decision_pos)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+                domain_id, decision_pos, access_token_alg)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
         tenant,
         realm,
         resource,
         display_name,
         bound.domain().as_bytes().as_slice(),
         i64_of(bound.position())?,
+        access_token_alg,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -163,7 +168,7 @@ impl TenantTx {
     ) -> Result<Option<ResourceRow>, StoreError> {
         let (tenant, realm) = scope(self)?;
         let row = sqlx::query!(
-            "SELECT resource, display_name FROM access.idp_protected_resources
+            "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources
               WHERE tenant_id = $1 AND realm_id = $2 AND resource = $3",
             tenant,
             realm,
@@ -174,6 +179,7 @@ impl TenantTx {
         Ok(row.map(|r| ResourceRow {
             resource: r.resource,
             display_name: r.display_name,
+            access_token_alg: r.access_token_alg,
         }))
     }
 
@@ -184,7 +190,7 @@ impl TenantTx {
     pub async fn protected_resources(&mut self) -> Result<Vec<ResourceRow>, StoreError> {
         let (tenant, realm) = scope(self)?;
         let rows = sqlx::query!(
-            "SELECT resource, display_name FROM access.idp_protected_resources
+            "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources
               WHERE tenant_id = $1 AND realm_id = $2 ORDER BY resource",
             tenant,
             realm,
@@ -196,6 +202,7 @@ impl TenantTx {
             .map(|r| ResourceRow {
                 resource: r.resource,
                 display_name: r.display_name,
+                access_token_alg: r.access_token_alg,
             })
             .collect())
     }

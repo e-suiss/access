@@ -61,3 +61,54 @@ async fn a_protected_resource_is_registered_and_listed_by_rest() {
     }
     c.w.domains.release().await;
 }
+
+// CR-41, MD-6, OP-159 m.21 (b), (g)
+#[tokio::test]
+async fn a_resource_takes_ml_dsa_access_tokens_only_while_the_realm_profile_holds_it() {
+    let c = console("mgmt-resources-pq", true).await;
+    let register = |resource: &'static str, alg: &'static str| {
+        let c = &c;
+        async move {
+            c.rest_write(
+                &Method::POST,
+                "/admin/v1/realms/acme/resources",
+                ("registerProtectedResource", None),
+                serde_json::json!({
+                    "resource": resource,
+                    "display_name": "Quantum tools",
+                    "access_token_signed_response_alg": alg,
+                }),
+                None,
+            )
+            .await
+        }
+    };
+    let w = register("https://pq.example.com/api", "ML-DSA-65").await;
+    assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
+    assert_eq!(w.body["code"], "algorithm-profile-conflict", "{}", w.body);
+    let w = register("https://pq.example.com/api", "RS256").await;
+    assert_eq!(w.status, StatusCode::BAD_REQUEST, "{}", w.body);
+    assert_eq!(w.body["code"], "invalid-protected-resource", "{}", w.body);
+
+    let w = c
+        .rest_write(
+            &Method::PUT,
+            "/admin/v1/realms/acme/settings/signing-profile",
+            ("putSigningProfile", None),
+            serde_json::json!({"profile": "ml-dsa-65"}),
+            None,
+        )
+        .await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let w = register("https://pq.example.com/api", "ML-DSA-87").await;
+    assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
+    let w = register("https://pq.example.com/api", "ML-DSA-65").await;
+    assert!(w.status.is_success(), "{} {}", w.status, w.body);
+    let list = c.admin_get("/admin/v1/realms/acme/resources").await;
+    assert_eq!(list.status, StatusCode::OK, "{}", list.body);
+    assert_eq!(
+        list.body["items"][0]["access_token_signed_response_alg"],
+        "ML-DSA-65"
+    );
+    c.w.domains.release().await;
+}

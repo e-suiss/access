@@ -716,13 +716,16 @@ impl<E: Env> OAuth<E> {
             now_ms: now,
             rev: grant.session_epoch,
         };
-        let alg = tx.jose_alg().await?;
         let jti = b64url_encode(&self.random::<16>()?);
+        // CR-41, OP-159 m.21 (b), (g)
+        let alg = match details.resource.as_deref() {
+            Some(r) => tx.resource_alg(r).await?,
+            None => None,
+        };
         let access = self
-            .env
-            .signer()
-            .sign(
-                realm.realm,
+            .sign_as(
+                tx,
+                realm,
                 alg,
                 ACCESS_TYP,
                 &crate::domain::tokens::bound_access_token_claims(

@@ -255,6 +255,15 @@ pub trait OAuthTx: Send {
         &mut self,
         resource: &str,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The algorithm the registered protected resource `resource` takes its access tokens in;
+    /// `None` for the realm's (OP-159 m.21 (g)).
+    fn resource_alg(
+        &mut self,
+        resource: &str,
+    ) -> impl Future<Output = Result<Option<crate::domain::fapi::IdAlg>, Unavailable>> + Send {
+        let _ = resource;
+        std::future::ready(Ok(None))
+    }
     /// The live consent record of `subject` for `client` at `resource` (P58).
     fn consent_record(
         &mut self,
