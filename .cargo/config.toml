@@ -4,3 +4,6 @@ xtask = "run --locked --quiet --package xtask --"
 # OP-66: queries are checked against the committed .sqlx metadata; `just sqlx-prepare` refreshes it
 [env]
 SQLX_OFFLINE = "true"
+# SA-59, OP-159 m.25 (f): test threads get 8 MiB; debug builds keep the large async bootstrap and
+# walkthrough state machines on the stack, which overflows the default 2 MiB
+RUST_MIN_STACK = { value = "8388608", force = true }
