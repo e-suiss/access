@@ -381,11 +381,16 @@ image tag="access-server:local":
 start:
     #!/usr/bin/env bash
     set -euo pipefail
-    image="${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}"
     if [[ -n "${ACCESS_IMAGE:-}" ]]; then
+      image="$ACCESS_IMAGE"
       docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
-    elif ! docker run --rm --entrypoint /bin/sh "$image" -c true >/dev/null 2>&1; then
-      docker build -f deploy/docker/Dockerfile --target local -t "$image" .
+    else
+      image="access-local:build"
+      want="$(docker version -f '{{ "{{" }}.Server.Arch{{ "}}" }}')"
+      have="$(docker image inspect -f '{{ "{{" }}.Architecture{{ "}}" }}' "$image" 2>/dev/null || true)"
+      if [[ "$have" != "$want" ]] || ! docker run --rm --pull never --entrypoint /bin/sh "$image" -c true >/dev/null 2>&1; then
+        docker build -f deploy/docker/Dockerfile --target local -t "$image" .
+      fi
     fi
     mkdir -p target
     pw_file=target/local-test-password
