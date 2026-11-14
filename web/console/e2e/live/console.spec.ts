@@ -15,7 +15,7 @@ const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 /** The console's sign-in from its own button: the realm's authorize (`prompt=login` sends it to the hosted login),
  * then the hosted login's own page: identifier, password and the authenticator app's code. */
 async function signIn(page: Page): Promise<void> {
-  await page.goto("/console/");
+  await page.goto("/console");
   await page.getByLabel("Realm").fill("acme");
   await page.getByRole("button", { name: "Continue to sign-in" }).click();
   await page.waitForURL(/\/realms\/acme\/login\?/);
