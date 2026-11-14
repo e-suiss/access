@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "access-edge-core"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "access-internal-api",
  "esuiss-crypto",
@@ -37,7 +37,7 @@ dependencies = [
 
 [[package]]
 name = "access-internal-api"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-kernel"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -488,7 +488,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-crypto"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-sandbox"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "landlock",
  "libc",
