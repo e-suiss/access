@@ -8,17 +8,13 @@ import { linkTheme } from "./Branding.js";
 import { applyDocument, loadOverrides } from "./i18n.js";
 import "./styles.css";
 
-/** React Aria's press rule is in styles.css; the `<style>` element it would add is refused by the CSP. */
-function claimPressStyle(): void {
-  const marker = document.createElement("meta");
-  marker.id = "react-aria-pressable-style";
-  document.head.append(marker);
-}
-
 applyDocument();
 linkTheme();
 followColorScheme();
-claimPressStyle();
+// TN-131: React Aria's pressable rule is in styles.css; this marker stops its inline <style>
+const pressable = document.createElement("meta");
+pressable.id = "react-aria-pressable-style";
+document.head.append(pressable);
 const root = document.getElementById("root");
 if (root === null) {
   throw new Error("missing #root element");
