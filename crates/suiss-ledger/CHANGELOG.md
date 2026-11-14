@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.7.4
+
+Released with `esuiss-access-kernel` 0.7.4 (Kernel 0.7.0 semantics, unchanged). No API change from 0.7.0; 0.7.0 to 0.7.3 were never published.
+
 ## 0.7.3
 
-Released with `esuiss-access-kernel` 0.7.3 (Kernel 0.7.0 semantics, unchanged). No API change from 0.7.0; 0.7.0, 0.7.1 and 0.7.2 were never published.
+Never published: the v0.7.3 release run tested with SoftHSM 2.6.1, which failed the multi-process key test (OP-159 m.35). No API change from 0.7.0.
 
 ## 0.7.2
 
