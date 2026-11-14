@@ -302,6 +302,15 @@ pub async fn attach_at(url: &str, name: &str) -> Result<TestDb, TestDbError> {
     attach(PgConnectOptions::from_str(url).at("cluster URL")?, name).await
 }
 
+/// The application pool of the existing database `name` on the `DATABASE_URL` cluster, for a
+/// child test process that stands in for another server process.
+///
+/// # Errors
+/// [`TestDbError`] when `DATABASE_URL` is missing or the cluster refuses.
+pub async fn attach_app(name: &str) -> Result<PgPool, TestDbError> {
+    pool(&admin_options()?, name, "access_test_app").await
+}
+
 /// A superuser connection's single-row text answer to `sql` on `db`: the cluster checks of the
 /// failover tests (OP-158 m.3 (n)).
 ///
