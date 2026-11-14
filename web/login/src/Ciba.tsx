@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { loadKernel } from "@esuiss/access";
+import { Button } from "@suiss/access-ui/components/ui/button";
 
 import { LOGIN, under } from "./base.js";
 import { type JsonAnswer, postJson } from "./http.js";
@@ -26,6 +27,18 @@ import {
 import type { PasskeyOptions } from "./contract.js";
 import { getPasskey } from "./passkey.js";
 import { t } from "./i18n.js";
+import {
+  facts,
+  inlineLink,
+  note,
+  outcome,
+  Panel,
+  primary,
+  problem,
+  quiet,
+  stack,
+  Title,
+} from "./Layout.js";
 
 interface Holding {
   readonly holding: { readonly grant: string; readonly holder: string; readonly since: number };
@@ -246,14 +259,18 @@ export function Ciba() {
       ? state.preview
       : null;
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
-      <section aria-labelledby="ciba-heading" data-kind="ciba">
-        <h1 id="ciba-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
+      <section aria-labelledby="ciba-heading" data-kind="ciba" className={stack}>
+        <Title id="ciba-heading" ref={title}>
           {t("ciba.title", { client: preview?.client ?? "" })}
-        </h1>
-        {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+        </Title>
+        {state.phase === "loading" && (
+          <p role="status" className={note}>
+            {t("page.loading")}
+          </p>
+        )}
         {typeof preview?.binding_message === "string" && (
-          <p data-testid="binding-message">
+          <p className={outcome} data-testid="binding-message">
             {t("ciba.binding_message", {
               client: preview.client,
               code: preview.binding_message,
@@ -262,103 +279,106 @@ export function Ciba() {
         )}
         {state.phase === "ready" && (
           <>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy || state.preview.contribution_basis === null}
-              onClick={() => void approve(state.preview)}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void decline(state.preview)}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button
+                {...primary}
+                disabled={busy || state.preview.contribution_basis === null}
+                onPress={() => void approve(state.preview)}
+              >
+                {t("action.approve_access")}
+              </Button>
+              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </>
         )}
         {state.phase === "confirm" && (
-          <div role="dialog" aria-labelledby="sign-heading" data-testid="signature">
-            <h2 id="sign-heading">{t("action.approve_access")}</h2>
-            <dl>
+          <div
+            role="dialog"
+            aria-labelledby="sign-heading"
+            data-testid="signature"
+            className="flex flex-col gap-3 rounded-xl border p-4"
+          >
+            <h2 id="sign-heading" className="text-lg font-semibold">
+              {t("action.approve_access")}
+            </h2>
+            <dl className={facts}>
               <dt>{state.decoded.action}</dt>
               <dd>{state.decoded.until}</dd>
             </dl>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                confirmed.current?.(true);
-              }}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                confirmed.current?.(false);
-              }}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button
+                {...primary}
+                onPress={() => {
+                  confirmed.current?.(true);
+                }}
+              >
+                {t("action.approve_access")}
+              </Button>
+              <Button
+                {...quiet}
+                onPress={() => {
+                  confirmed.current?.(false);
+                }}
+              >
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </div>
         )}
         {state.phase === "render" && (
           <>
-            <dl data-testid="render">
+            <dl data-testid="render" className="flex flex-col gap-3">
               {state.started.render.fields.map((f) => (
-                <div key={f.name} data-material={f.material}>
+                <div key={f.name} data-material={f.material} className={facts}>
                   <dt>{f.name}</dt>
                   <dd>{f.text}</dd>
                 </div>
               ))}
             </dl>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy}
-              onClick={() => void assert(state.preview, state.started)}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void decline(state.preview)}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button
+                {...primary}
+                disabled={busy}
+                onPress={() => void assert(state.preview, state.started)}
+              >
+                {t("action.approve_access")}
+              </Button>
+              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </>
         )}
         {state.phase === "approved" && (
-          <p role="status" data-testid="approved">
+          <p role="status" className={outcome} data-testid="approved">
             {t("ciba.approved", { client: state.client })}
           </p>
         )}
         {state.phase === "denied" && (
-          <p role="status" data-testid="denied">
+          <p role="status" className={outcome} data-testid="denied">
             {t("ciba.denied")}
           </p>
         )}
         {state.phase === "expired" && (
-          <p role="alert" data-testid="expired">
+          <p role="alert" className={problem} data-testid="expired">
             {t("ciba.expired")}
           </p>
         )}
         {state.phase === "sign_in" && (
           <p role="alert">
-            <a href={LOGIN}>{t("action.sign_in")}</a>
+            <a className={inlineLink} href={LOGIN}>
+              {t("action.sign_in")}
+            </a>
           </p>
         )}
         {(state.phase === "unknown" || state.phase === "failed") && (
-          <p role="alert">{t("error.access_owner")}</p>
+          <p role="alert" className={problem}>
+            {t("error.access_owner")}
+          </p>
         )}
       </section>
-    </div>
+    </Panel>
   );
 }

@@ -33,9 +33,13 @@ function caption(node: PushNumberNode): string {
 
 export function PushWait({ node }: { readonly node: PushNumberNode }) {
   return (
-    <div className="push" data-testid="push-wait">
-      <p className="push-caption">{caption(node)}</p>
-      <p className="push-number" aria-label={String(node.number)} data-testid="push-number">
+    <div className="flex flex-col items-center gap-2 text-center" data-testid="push-wait">
+      <p className="text-sm text-muted-foreground">{caption(node)}</p>
+      <p
+        className="text-5xl font-bold tracking-widest text-(color:--link) tabular-nums"
+        aria-label={String(node.number)}
+        data-testid="push-number"
+      >
         {String(node.number)}
       </p>
     </div>

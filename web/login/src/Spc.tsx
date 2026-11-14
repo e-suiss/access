@@ -5,9 +5,12 @@
 // passkey assertion over the same statement.
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { under } from "./base.js";
 import { follow } from "./http.js";
 import { t } from "./i18n.js";
+import { note, Panel, primary, problem, stack, Title } from "./Layout.js";
 
 /** What `POST /v1/approve/flows` answers. */
 export interface SpcStarted {
@@ -127,40 +130,51 @@ export function Spc() {
     else setState({ phase: out.code === "spc-mismatch" ? "mismatch" : "failed" });
   };
 
-  if (state.phase === "loading") return <p role="status">…</p>;
+  if (state.phase === "loading") {
+    return (
+      <Panel>
+        <p role="status" className={note}>
+          …
+        </p>
+      </Panel>
+    );
+  }
   if (state.phase !== "ready") {
     return (
-      <section>
-        <h1 ref={title} tabIndex={-1}>
-          {t("spc.title")}
-        </h1>
-        <p role="alert" data-testid="spc-refused">
-          {state.phase === "mismatch" ? t("spc.mismatch") : t("error.access_owner")}
-        </p>
-      </section>
+      <Panel>
+        <section className={stack}>
+          <Title ref={title}>{t("spc.title")}</Title>
+          <p role="alert" className={problem} data-testid="spc-refused">
+            {state.phase === "mismatch" ? t("spc.mismatch") : t("error.access_owner")}
+          </p>
+        </section>
+      </Panel>
     );
   }
   const spc = state.started.spc;
   return (
-    <section>
-      <h1 ref={title} tabIndex={-1}>
-        {t("spc.title")}
-      </h1>
-      {spc !== undefined && (
-        <dl data-testid="spc-details">
-          <dt>{spc.payeeName}</dt>
-          <dd>{`${spc.total.value} ${spc.total.currency}`}</dd>
-        </dl>
-      )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          void confirm(state.started);
-        }}
-      >
-        {t("spc.title")}
-      </button>
-    </section>
+    <Panel>
+      <section className={stack}>
+        <Title ref={title}>{t("spc.title")}</Title>
+        {spc !== undefined && (
+          <dl
+            data-testid="spc-details"
+            className="flex flex-col gap-1 rounded-lg bg-muted px-4 py-3"
+          >
+            <dt className="font-medium">{spc.payeeName}</dt>
+            <dd className="text-2xl font-semibold tabular-nums">{`${spc.total.value} ${spc.total.currency}`}</dd>
+          </dl>
+        )}
+        <Button
+          {...primary}
+          disabled={busy}
+          onPress={() => {
+            void confirm(state.started);
+          }}
+        >
+          {t("spc.title")}
+        </Button>
+      </section>
+    </Panel>
   );
 }
