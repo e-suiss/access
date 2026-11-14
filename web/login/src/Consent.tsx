@@ -2,9 +2,22 @@
 // for; it never says Allow or Authorize and never grants authority (that is RAR, S1).
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { LOGIN } from "./base.js";
 import { follow, postJson } from "./http.js";
 import { maybe, t } from "./i18n.js";
+import {
+  inlineLink,
+  note,
+  outcome,
+  Panel,
+  primary,
+  problem,
+  quiet,
+  stack,
+  Title,
+} from "./Layout.js";
 
 interface Preview {
   readonly client_id: string;
@@ -93,48 +106,55 @@ export function Consent() {
 
   const app = state.phase === "ready" ? state.preview.app : "";
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
-      <section aria-labelledby="consent-heading" data-kind="consent">
-        <h1 id="consent-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
+      <section aria-labelledby="consent-heading" data-kind="consent" className={stack}>
+        <Title id="consent-heading" ref={title}>
           {state.phase === "ready" ? t("page.consent_title", { app }) : t("consent.title")}
-        </h1>
-        {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+        </Title>
+        {state.phase === "loading" && (
+          <p role="status" className={note}>
+            {t("page.loading")}
+          </p>
+        )}
         {state.phase === "ready" && (
           <>
             <p id="claims-label">{t("consent.claims")}</p>
-            <ul aria-labelledby="claims-label" className="claims">
+            <ul aria-labelledby="claims-label" className="-mt-2 list-disc space-y-1 ps-5">
               {state.preview.claims.map((c) => (
                 <li key={c} data-claim={c}>
                   {claimLabel(c)}
                 </li>
               ))}
             </ul>
-            <p className="info">{t("page.consent_stop")}</p>
-            <button type="button" className="primary" disabled={busy} onClick={() => void share()}>
-              {t("action.share")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void decline()}
-            >
-              {t("action.dont_share")}
-            </button>
+            <p className={note}>{t("page.consent_stop")}</p>
+            <div className="flex flex-col gap-2">
+              <Button {...primary} disabled={busy} onPress={() => void share()}>
+                {t("action.share")}
+              </Button>
+              <Button {...quiet} disabled={busy} onPress={() => void decline()}>
+                {t("action.dont_share")}
+              </Button>
+            </div>
           </>
         )}
         {state.phase === "declined" && (
-          <p role="status" data-testid="declined">
+          <p role="status" className={outcome} data-testid="declined">
             {t("page.access_denied")}
           </p>
         )}
         {state.phase === "sign_in" && (
           <p role="alert">
-            <a href={LOGIN}>{t("action.sign_in")}</a>
+            <a className={inlineLink} href={LOGIN}>
+              {t("action.sign_in")}
+            </a>
           </p>
         )}
-        {state.phase === "failed" && <p role="alert">{t("error.access_owner")}</p>}
+        {state.phase === "failed" && (
+          <p role="alert" className={problem}>
+            {t("error.access_owner")}
+          </p>
+        )}
       </section>
-    </div>
+    </Panel>
   );
 }

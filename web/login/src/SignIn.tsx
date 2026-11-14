@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createFlow, getFlow, stepUp, submit, type Answer } from "./api.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
 import { t } from "./i18n.js";
+import { note, Panel, problem } from "./Layout.js";
 import { pushGiveUpMs, pushOf, PUSH_POLL_MS, waitsForPush } from "./PushWait.js";
 import { StepView } from "./StepView.js";
 
@@ -174,24 +175,28 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
   );
 
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
       {state.phase === "ready" && <StepView ui={state.ui} busy={busy} onSubmit={onSubmit} />}
       {ui !== null && waitsForLink(ui) && (
-        <p role="status" className="info" data-testid="link-wait">
+        <p role="status" className={note} data-testid="link-wait">
           {t("page.email_waiting")}
         </p>
       )}
-      {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+      {state.phase === "loading" && (
+        <p role="status" className={note}>
+          {t("page.loading")}
+        </p>
+      )}
       {state.phase === "failed" && (
-        <p role="alert" data-message-id={unavailable.id}>
+        <p role="alert" className={problem} data-message-id={unavailable.id}>
           {t(unavailable.id)}
         </p>
       )}
       {state.phase === "degraded" && (
-        <p role="alert" data-message-id={degraded.id}>
+        <p role="alert" className={problem} data-message-id={degraded.id}>
           {t(degraded.id)}
         </p>
       )}
-    </div>
+    </Panel>
   );
 }

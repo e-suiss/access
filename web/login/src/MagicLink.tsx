@@ -3,8 +3,11 @@
 // that started the sign-in, which is waiting and continues on its own.
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { postJson } from "./http.js";
 import { t } from "./i18n.js";
+import { note, outcome, Panel, primary, problem, stack, Title } from "./Layout.js";
 
 interface LinkState {
   readonly state: "confirm" | "confirmed" | "needs_confirmation";
@@ -65,33 +68,40 @@ export function MagicLink() {
   };
 
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
-      <section aria-labelledby="link-heading" data-kind="magic_link">
-        <h1 id="link-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
+      <section aria-labelledby="link-heading" data-kind="magic_link" className={stack}>
+        <Title id="link-heading" ref={title}>
           {t("page.link_title")}
-        </h1>
-        {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+        </Title>
+        {state.phase === "loading" && (
+          <p role="status" className={note}>
+            {t("page.loading")}
+          </p>
+        )}
         {state.phase === "confirm" && (
           <>
-            {!state.sameDevice && <p className="info">{t("page.link_other_device")}</p>}
-            <button
-              type="button"
-              className="primary"
-              disabled={busy}
-              onClick={() => void confirm(!state.sameDevice)}
-            >
+            {!state.sameDevice && <p className={note}>{t("page.link_other_device")}</p>}
+            <Button {...primary} disabled={busy} onPress={() => void confirm(!state.sameDevice)}>
               {t("page.link_confirm")}
-            </button>
+            </Button>
           </>
         )}
         {state.phase === "done" && (
-          <p role="status" data-testid="link-done">
+          <p role="status" className={outcome} data-testid="link-done">
             {state.sameDevice ? t("page.link_done_here") : t("page.link_done_elsewhere")}
           </p>
         )}
-        {state.phase === "invalid" && <p role="alert">{t("page.link_invalid")}</p>}
-        {state.phase === "failed" && <p role="alert">{t("login.unavailable")}</p>}
+        {state.phase === "invalid" && (
+          <p role="alert" className={problem}>
+            {t("page.link_invalid")}
+          </p>
+        )}
+        {state.phase === "failed" && (
+          <p role="alert" className={problem}>
+            {t("login.unavailable")}
+          </p>
+        )}
       </section>
-    </div>
+    </Panel>
   );
 }

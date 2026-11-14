@@ -3,9 +3,24 @@
 // and an address domain the organization has not confirmed asks first (TN-89 (10)).
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { LOGIN } from "./base.js";
 import { getJson, postJson } from "./http.js";
 import { t } from "./i18n.js";
+import {
+  inlineLink,
+  note,
+  outcome,
+  Panel,
+  primary,
+  problem,
+  stack,
+  Title,
+  warning,
+} from "./Layout.js";
 
 interface Organization {
   readonly id: string;
@@ -42,6 +57,8 @@ function isInvite(body: unknown): body is Invite {
   const b = body as Partial<Invite> | null;
   return typeof b?.organization?.display_name === "string" && typeof b.invitee_domain === "string";
 }
+
+const organization = "text-lg font-semibold wrap-anywhere";
 
 export function Invitation() {
   const [code, setCode] = useState<string | null>(codeOfPath);
@@ -91,17 +108,23 @@ export function Invitation() {
   };
 
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
-      <section aria-labelledby="invitation-heading" data-kind="invitation">
-        <h1 id="invitation-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
+      <section aria-labelledby="invitation-heading" data-kind="invitation" className={stack}>
+        <Title id="invitation-heading" ref={title}>
           {t("invitation.title")}
-        </h1>
-        {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+        </Title>
+        {state.phase === "loading" && (
+          <p role="status" className={note}>
+            {t("page.loading")}
+          </p>
+        )}
         {state.phase === "ask_code" && (
-          <form onSubmit={enter}>
-            <div className="field">
-              <label htmlFor="field-invitation_code">{t("label.invitation_code")}</label>
-              <input
+          <form onSubmit={enter} className={stack}>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="field-invitation_code" className="text-sm">
+                {t("label.invitation_code")}
+              </FieldLabel>
+              <Input
                 id="field-invitation_code"
                 name="invitation_code"
                 type="text"
@@ -110,58 +133,56 @@ export function Invitation() {
                 maxLength={16}
                 spellCheck={false}
                 autoCapitalize="characters"
+                className="font-mono tracking-widest"
               />
-            </div>
-            <button type="submit" className="primary">
+            </Field>
+            <Button type="submit" {...primary}>
               {t("action.continue")}
-            </button>
+            </Button>
           </form>
         )}
         {(state.phase === "ready" || state.phase === "sign_in") && (
           <>
-            <p className="organization" data-testid="organization">
+            <p className={organization} data-testid="organization">
               {state.invite.organization.display_name}
             </p>
             {state.phase === "sign_in" && (
-              <p role="alert">
-                {t("page.invitation_sign_in")} <a href={LOGIN}>{t("action.sign_in")}</a>
+              <p role="alert" className={warning}>
+                {t("page.invitation_sign_in")}{" "}
+                <a className={inlineLink} href={LOGIN}>
+                  {t("action.sign_in")}
+                </a>
               </p>
             )}
-            <button
-              type="button"
-              className="primary"
-              disabled={busy}
-              onClick={() => void join(state.invite, false)}
-            >
+            <Button {...primary} disabled={busy} onPress={() => void join(state.invite, false)}>
               {t("action.accept_invitation")}
-            </button>
+            </Button>
           </>
         )}
         {state.phase === "confirm" && (
           <>
-            <p className="organization" data-testid="organization">
+            <p className={organization} data-testid="organization">
               {state.invite.organization.display_name}
             </p>
-            <p role="alert">
+            <p role="alert" className={warning}>
               {t("page.invitation_unconfirmed_domain", { domain: state.invite.invitee_domain })}
             </p>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy}
-              onClick={() => void join(state.invite, true)}
-            >
+            <Button {...primary} disabled={busy} onPress={() => void join(state.invite, true)}>
               {t("page.invitation_join_anyway")}
-            </button>
+            </Button>
           </>
         )}
         {state.phase === "joined" && (
-          <p role="status" data-testid="joined">
+          <p role="status" className={outcome} data-testid="joined">
             {t("page.invitation_joined", { organization: state.organization.display_name })}
           </p>
         )}
-        {state.phase === "refused" && <p role="alert">{t(state.text)}</p>}
+        {state.phase === "refused" && (
+          <p role="alert" className={problem}>
+            {t(state.text)}
+          </p>
+        )}
       </section>
-    </div>
+    </Panel>
   );
 }

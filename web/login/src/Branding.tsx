@@ -42,11 +42,16 @@ export function Branding() {
   const logo = httpsUrl(brand.logo_uri) ? brand.logo_uri : null;
   if (name === null && logo === null) return null;
   return (
-    <header className="brand" data-testid="brand">
+    <header className="flex items-center gap-2 text-lg font-semibold" data-testid="brand">
       {logo !== null && (
-        <img src={logo} alt="" className="brand-logo" referrerPolicy="no-referrer" />
+        <img
+          src={logo}
+          alt=""
+          className="brand-logo max-h-10 max-w-40"
+          referrerPolicy="no-referrer"
+        />
       )}
-      {name !== null && <span className="brand-name">{name}</span>}
+      {name !== null && <span>{name}</span>}
     </header>
   );
 }

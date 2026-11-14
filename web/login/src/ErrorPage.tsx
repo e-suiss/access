@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { t } from "./i18n.js";
+import { note, Panel, problem, stack, Title } from "./Layout.js";
 
 export type Owner = "app" | "upstream" | "access";
 
@@ -36,20 +37,20 @@ export function ErrorPage() {
     title.current?.focus();
   }, []);
   return (
-    <div className="card">
-      <section aria-labelledby="error-heading" data-kind="error">
-        <h1 id="error-heading" ref={title} tabIndex={-1}>
+    <Panel>
+      <section aria-labelledby="error-heading" data-kind="error" className={stack}>
+        <Title id="error-heading" ref={title}>
           {id === "page.access_denied" ? t("page.not_continued_title") : t("page.error_title")}
-        </h1>
-        <p role="alert" data-message-id={id}>
+        </Title>
+        <p role="alert" className={problem} data-message-id={id}>
           {t(id)}
         </p>
         {ref !== null && (
-          <p className="reference" data-testid="reference">
+          <p className={note} data-testid="reference">
             {t("error.reference")}: <span dir="ltr">{ref}</span>
           </p>
         )}
       </section>
-    </div>
+    </Panel>
   );
 }

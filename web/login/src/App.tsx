@@ -84,7 +84,10 @@ function Body({ page }: { readonly page: Page }) {
 export function App() {
   const page = pageOf(window.location.pathname, window.location.search);
   return (
-    <main data-page={page}>
+    <main
+      data-page={page}
+      className="grid min-h-dvh content-center justify-items-center gap-6 px-4 py-8"
+    >
       <Branding />
       <Body page={page} />
     </main>
