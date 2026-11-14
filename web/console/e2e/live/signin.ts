@@ -9,13 +9,11 @@ export const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.ex
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
-/** The console's sign-in: the realm's authorize, then the hosted login's own page. */
+/** The console's sign-in from its own button: the realm's authorize, then the hosted login. */
 export async function signIn(page: Page): Promise<void> {
-  const start = await page.request.get("/console/api/sign-in?realm=acme", { maxRedirects: 0 });
-  expect(start.status()).toBe(303);
-  const authorize = start.headers()["location"] ?? "";
-  expect(authorize).toContain("/realms/acme/authorize?");
-  await page.goto(authorize);
+  await page.goto("/console/");
+  await page.getByLabel("Realm").fill("acme");
+  await page.getByRole("button", { name: "Continue to sign-in" }).click();
   await page.waitForURL(/\/realms\/acme\/login\?/);
   await page.getByLabel("Email or username").fill(IDENTIFIER);
   await page.getByRole("button", { name: "Continue", exact: true }).click();

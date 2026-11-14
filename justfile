@@ -406,12 +406,21 @@ start:
     export ACCESS_IMAGE="$image" ACCESS_LOCAL_TEST_PASSWORD
     docker compose -f deploy/compose/access.yaml up -d
     docker compose -f deploy/compose/access.yaml logs --no-log-prefix bootstrap
+    (umask 077; docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/test-user-totp > target/local-test-totp)
     echo
     echo "Access:          https://127.0.0.1:8443"
     echo "Console:         https://access-server.local:9443/console (once: echo '127.0.0.1 access-server access-server.local' | sudo tee -a /etc/hosts)"
     echo "Test user:       the sample realm's test user above, password: $ACCESS_LOCAL_TEST_PASSWORD"
+    echo "Second factor:   just totp (the code of the test user's authenticator app; its key is in target/local-test-totp)"
     echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
     echo "Stop:            just stop"
+
+# OP-149 m.26 (b), OP-159 m.29: the current code of the local test user's authenticator app (RFC 6238, SHA-1, 6 digits, 30 s)
+totp:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test -s target/local-test-totp || { echo "no target/local-test-totp: run just start" >&2; exit 1; }
+    python3 -I -c 'import base64,hmac,struct,sys,time; k=base64.b32decode(sys.argv[1].strip().upper()+"="*(-len(sys.argv[1].strip())%8)); s=int(time.time())//30; h=hmac.digest(k,struct.pack(">Q",s),"sha1"); o=h[-1]&15; print("%06d (%ds left)"%((struct.unpack(">I",h[o:o+4])[0]&0x7fffffff)%1000000,30-int(time.time())%30))' "$(cat target/local-test-totp)"
 
 stop:
     ACCESS_LOCAL_TEST_PASSWORD="${ACCESS_LOCAL_TEST_PASSWORD:-unused-by-stop}" docker compose -f deploy/compose/access.yaml stop
