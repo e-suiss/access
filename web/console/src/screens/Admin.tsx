@@ -3,6 +3,18 @@
 // "stop everything" control (§8.17.7.5), and revoke is never offered as reversible (§8.10).
 import { useEffect, useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { FieldLegend, FieldSet } from "@suiss/access-ui/components/ui/field";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+
 import { type Key, t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { search, type SearchAnswer } from "../lib/adp.js";
@@ -17,6 +29,19 @@ import {
   type RevocationImpact,
   Aftermath,
 } from "./Reports.js";
+import {
+  ACTIONS,
+  BULLETS,
+  CHOICE,
+  CHOICE_LABEL,
+  FACTS,
+  FORM,
+  H4,
+  HINT,
+  MONO,
+  Notice,
+  NUMBERED,
+} from "../ui.js";
 
 /** An action reference as a role version or a holding names it (L1-ADP-17). */
 interface ActionRef {
@@ -96,15 +121,18 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const own = held.status === "done" ? held.value : [];
   return (
     <Panel id="role-editor" title={t("roleEditorTitle")}>
-      <p className="hint">{t("roleEditorIntro")}</p>
+      <p className={HINT}>{t("roleEditorIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           open();
         }}
       >
         <Field id="role-name" label={t("roleName")} value={name} onChange={setName} />
-        <button type="submit">{t("roleOpen")}</button>
+        <Button type="submit" variant="outline" className="self-start">
+          {t("roleOpen")}
+        </Button>
       </form>
       <Show l={current}>
         {(v) => (
@@ -116,13 +144,14 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 {t("roleVersionLine", { version: String(v.version), latest: String(v.latest) })}
               </p>
             )}
-            <fieldset>
-              <legend>{t("roleCovers")}</legend>
+            <FieldSet className="gap-2">
+              <FieldLegend variant="label">{t("roleCovers")}</FieldLegend>
               {options(v, own).map((a) => (
-                <p key={key(a)} className="field">
-                  <label>
+                <p key={key(a)}>
+                  <label className={CHOICE_LABEL}>
                     <input
                       type="checkbox"
+                      className={CHOICE}
                       checked={chosen.has(key(a))}
                       onChange={(e) => {
                         const next = new Set(chosen);
@@ -130,26 +159,26 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         else next.delete(key(a));
                         setChosen(next);
                       }}
-                    />{" "}
-                    <span className="mono">{`${a.namespace}.${a.name}`}</span>
+                    />
+                    <span className={MONO}>{`${a.namespace}.${a.name}`}</span>
                   </label>
                 </p>
               ))}
               {(v?.not_included.catalogs ?? []).map((c) => (
-                <p key={c.namespace} data-testid="role-covers">
+                <p key={c.namespace} data-testid="role-covers" className={HINT}>
                   {t("roleCoversLine", {
                     namespace: c.namespace,
                     version: c.catalog_version === null ? "?" : String(c.catalog_version),
                   })}
                 </p>
               ))}
-            </fieldset>
-            <h4>{t("notIncludedTitle")}</h4>
-            <ul data-testid="not-included">
+            </FieldSet>
+            <h4 className={H4}>{t("notIncludedTitle")}</h4>
+            <ul data-testid="not-included" className={BULLETS}>
               {(v?.not_included.reserved ?? []).map((a) => (
                 <li key={key(a)}>
-                  <strong>{t("protectedBadge")}</strong> {`${a.namespace}.${a.name}`} —{" "}
-                  {t("reservedOnlyNamed")}
+                  <Badge variant="outline">{t("protectedBadge")}</Badge>{" "}
+                  {`${a.namespace}.${a.name}`} — {t("reservedOnlyNamed")}
                 </li>
               ))}
               {(v?.not_included.catalogs ?? []).map((c) => (
@@ -163,15 +192,15 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
               {(v?.not_included.reserved.length ?? 0) + (v?.not_included.catalogs.length ?? 0) ===
                 0 && <li>{t("notIncludedNothing")}</li>}
             </ul>
-            <button
-              type="button"
-              disabled={name === "" || chosen.size === 0}
-              onClick={() => {
+            <Button
+              className="self-start"
+              isDisabled={name === "" || chosen.size === 0}
+              onPress={() => {
                 save(v, own);
               }}
             >
               {t("roleSave")}
-            </button>
+            </Button>
           </>
         )}
       </Show>
@@ -183,10 +212,12 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
 /** The outcome of a signed change, in words; a held change says it is held, never "done". */
 export function WriteOutcome({ r }: { readonly r: MetaResult }): ReactElement {
   if (r.decision) {
-    return <p role="status">{t("changeRecorded", { exercise: r.exercise ?? "" })}</p>;
+    return <Notice role="status">{t("changeRecorded", { exercise: r.exercise ?? "" })}</Notice>;
   }
   return (
-    <p role="status">{r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}</p>
+    <Notice role="status" tone="warning">
+      {r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}
+    </Notice>
   );
 }
 
@@ -207,8 +238,9 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, move] = useRun<readonly MetaResult[]>();
   return (
     <Panel id="impact" title={t("impactTitle")}>
-      <p className="hint">{t("impactIntro")}</p>
+      <p className={HINT}>{t("impactIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -229,21 +261,23 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
           type="number"
         />
         <Field id="impact-to" label={t("impactTo")} value={to} onChange={setTo} type="number" />
-        <button type="submit">{t("run")}</button>
+        <Button type="submit" variant="outline" className="self-start">
+          {t("run")}
+        </Button>
       </form>
       <Show l={l}>
         {(a) =>
           a.results.length === 0 ? (
-            <p>{t("resultsNone")}</p>
+            <p className={HINT}>{t("resultsNone")}</p>
           ) : (
             a.results.map((c, i) => (
-              <div key={String(i)}>
+              <div key={String(i)} className="flex flex-col gap-3">
                 <ChangeImpactView c={c} />
                 {(c.amends ?? []).length > 0 && (
-                  <button
-                    type="button"
+                  <Button
                     data-testid="move-delegations"
-                    onClick={() => {
+                    className="self-start"
+                    onPress={() => {
                       move(() =>
                         metaWrites(
                           ctx.instance,
@@ -255,7 +289,7 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
                     }}
                   >
                     {t("impactMove", { n: String(c.amends?.length ?? 0), to })}
-                  </button>
+                  </Button>
                 )}
               </div>
             ))
@@ -264,7 +298,7 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
       </Show>
       <Show l={w}>
         {(rs) => (
-          <ul data-testid="moved">
+          <ul data-testid="moved" className={BULLETS}>
             {rs.map((r, i) => (
               <li key={String(i)}>
                 <WriteOutcome r={r} />
@@ -303,8 +337,9 @@ function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [l, run] = useRun<AdminGrantView | undefined>();
   return (
     <Panel id="admin-meta" title={t("adminMetaTitle")}>
-      <p className="hint">{t("adminMetaIntro")}</p>
+      <p className={HINT}>{t("adminMetaIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -315,19 +350,21 @@ function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
         }}
       >
         <Field id="admin-grant" label={t("adminMetaGrant")} value={grant} onChange={setGrant} />
-        <button type="submit">{t("run")}</button>
+        <Button type="submit" variant="outline" className="self-start">
+          {t("run")}
+        </Button>
       </form>
       <Show l={l}>
         {(g) =>
           g === undefined ? (
-            <p>{t("resultsNone")}</p>
+            <p className={HINT}>{t("resultsNone")}</p>
           ) : (
             <>
               {g.role !== undefined && g.role !== null && (
                 <p>{t("adminMetaRole", { role: g.role.name, version: String(g.role.version) })}</p>
               )}
-              <h4>{t("adminMetaOrdinary")}</h4>
-              <ul data-testid="meta-ordinary">
+              <h4 className={H4}>{t("adminMetaOrdinary")}</h4>
+              <ul data-testid="meta-ordinary" className={BULLETS}>
                 {g.actions.map((m) => (
                   <li key={m.action}>
                     {metaLabel(m.action)} ·{" "}
@@ -335,11 +372,11 @@ function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
                   </li>
                 ))}
               </ul>
-              <h4>{t("adminMetaReserved")}</h4>
-              <ul data-testid="meta-reserved">
+              <h4 className={H4}>{t("adminMetaReserved")}</h4>
+              <ul data-testid="meta-reserved" className={BULLETS}>
                 {g.reserved.map((m) => (
                   <li key={m.action}>
-                    {metaLabel(m.action)} · <strong>{t("protectedBadge")}</strong> —{" "}
+                    {metaLabel(m.action)} · <Badge variant="outline">{t("protectedBadge")}</Badge> —{" "}
                     {t("adminMetaQuorum", { quorum: String(m.grant_quorum + m.joint_root_quorum) })}
                   </li>
                 ))}
@@ -367,25 +404,26 @@ function DelegatedAdmin({ ctx }: { readonly ctx: Ctx }): ReactElement {
   };
   return (
     <Panel id="delegated-admin" title={t("delegatedAdminTitle")}>
-      <p className="hint">{t("delegatedAdminIntro")}</p>
-      <button
-        type="button"
-        onClick={() => {
-          set(true);
-        }}
-      >
-        {t("delegatedAdminOn")}
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          set(false);
-        }}
-      >
-        {t("delegatedAdminOff")}
-      </button>
+      <p className={HINT}>{t("delegatedAdminIntro")}</p>
+      <div className={ACTIONS}>
+        <Button
+          onPress={() => {
+            set(true);
+          }}
+        >
+          {t("delegatedAdminOn")}
+        </Button>
+        <Button
+          variant="outline"
+          onPress={() => {
+            set(false);
+          }}
+        >
+          {t("delegatedAdminOff")}
+        </Button>
+      </div>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -437,49 +475,53 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <Panel id="accounts" title={t("peopleAccounts")}>
       <Show l={l}>
         {(v) => (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">{t("peopleAccount")}</th>
-                <th scope="col">{t("peopleStatus")}</th>
-                <th scope="col">{t("peopleActions")}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead scope="col">{t("peopleAccount")}</TableHead>
+                <TableHead scope="col">{t("peopleStatus")}</TableHead>
+                <TableHead scope="col">{t("peopleActions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {v.items.map((a) => (
-                <tr key={a.account_id}>
-                  <td className="mono">{a.account_id}</td>
-                  <td>{a.status}</td>
-                  <td>
+                <TableRow key={a.account_id}>
+                  <TableCell className={MONO}>{a.account_id}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{a.status}</Badge>
+                  </TableCell>
+                  <TableCell>
                     {a.status === "active" && (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onPress={() => {
                           act(a, "suspend");
                         }}
                       >
                         {t("peopleSuspend")}
-                      </button>
+                      </Button>
                     )}
                     {a.status === "suspended" && (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
                           act(a, "reactivate");
                         }}
                       >
                         {t("peopleReactivate")}
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Show>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -496,8 +538,9 @@ function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const who = others ? party : ctx.session.account;
   return (
     <Panel id="holdings" title={t("peopleHoldingsTitle")}>
-      <p className="hint">{t("peopleHoldingsOwn")}</p>
+      <p className={HINT}>{t("peopleHoldingsOwn")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -517,15 +560,17 @@ function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
             hint={t("peopleOtherHint")}
           />
         )}
-        <button type="submit">{t("run")}</button>
+        <Button type="submit" variant="outline" className="self-start">
+          {t("run")}
+        </Button>
       </form>
       <Show l={l}>
         {(a) => (
           <>
             <PageCount page={a.page} shown={a.results.length} />
-            <ul data-testid="holdings">
+            <ul data-testid="holdings" className={BULLETS}>
               {a.results.map((r, i) => (
-                <li key={String(i)} className="mono">
+                <li key={String(i)} className={MONO}>
                   {JSON.stringify(r)}
                 </li>
               ))}
@@ -543,8 +588,9 @@ function EndCopies({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [l, run] = useRun<SearchAnswer<RevocationImpact>>();
   return (
     <Panel id="end-copies" title={t("endCopiesTitle")}>
-      <p className="hint">{t("endCopiesIntro")}</p>
+      <p className={HINT}>{t("endCopiesIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() => search<RevocationImpact>(ctx.instance, "revocation-impact", { instance }));
@@ -556,7 +602,9 @@ function EndCopies({ ctx }: { readonly ctx: Ctx }): ReactElement {
           value={instance}
           onChange={setInstance}
         />
-        <button type="submit">{t("run")}</button>
+        <Button type="submit" variant="outline" className="self-start">
+          {t("run")}
+        </Button>
       </form>
       <Show l={l}>
         {(a) => (
@@ -564,7 +612,7 @@ function EndCopies({ ctx }: { readonly ctx: Ctx }): ReactElement {
             {a.results.map((r, i) => (
               <Aftermath key={String(i)} r={r} />
             ))}
-            <p className="hint">{t("endCopiesNotHere")}</p>
+            <p className={HINT}>{t("endCopiesNotHere")}</p>
           </>
         )}
       </Show>
@@ -638,12 +686,16 @@ function SourceView({ s }: { readonly s: AcceptedSource }): ReactElement {
   // INV-15: an acceptance for one use is not one for another
   const other = s.use === "actor-binding" ? t("useMembership") : t("useSignIn");
   return (
-    <li data-testid="source" data-use={s.use}>
+    <li
+      data-testid="source"
+      data-use={s.use}
+      className="flex flex-col gap-2 border-t pt-3 first:border-t-0 first:pt-0"
+    >
       <strong>{use}</strong>
       {s.protected && <> — {t("acceptedProtected")}</>}
-      <dl className="facts">
+      <dl className={FACTS}>
         <dt>{s.issuer.foreign === undefined ? t("acceptedIssuer") : t("acceptedPartner")}</dt>
-        <dd className="mono">{s.issuer.party ?? s.issuer.foreign ?? ""}</dd>
+        <dd className={MONO}>{s.issuer.party ?? s.issuer.foreign ?? ""}</dd>
       </dl>
       <p>{t("acceptedFor", { use })}</p>
       <p>{t("acceptedNotOther", { other })}</p>
@@ -661,11 +713,11 @@ export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <>
       <p>{t("sourcesIntro")}</p>
-      <dl className="facts">
+      <dl className="flex flex-col gap-2 text-sm">
         {USES.map(([label, text]) => (
           <div key={label}>
-            <dt>{t(label)}</dt>
-            <dd>{t(text)}</dd>
+            <dt className="font-medium">{t(label)}</dt>
+            <dd className="text-muted-foreground">{t(text)}</dd>
           </div>
         ))}
       </dl>
@@ -674,9 +726,9 @@ export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={accepted}>
           {(r) =>
             r === undefined || r.sources.length === 0 ? (
-              <p>{t("acceptedNone")}</p>
+              <p className={HINT}>{t("acceptedNone")}</p>
             ) : (
-              <ul data-testid="sources">
+              <ul data-testid="sources" className="flex flex-col gap-3">
                 {r.sources.map((s) => (
                   <SourceView key={s.acceptance} s={s} />
                 ))}
@@ -686,8 +738,9 @@ export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
         </Show>
       </Panel>
       <Panel id="pending" title={t("pendingTitle")}>
-        <p className="hint">{t("pendingIntro")}</p>
+        <p className={HINT}>{t("pendingIntro")}</p>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             run(() => search<Publication>(ctx.instance, "schema-publications", { namespace }));
@@ -699,7 +752,9 @@ export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={namespace}
             onChange={setNamespace}
           />
-          <button type="submit">{t("run")}</button>
+          <Button type="submit" variant="outline" className="self-start">
+            {t("run")}
+          </Button>
         </form>
         <Show l={l}>
           {(a) => (
@@ -732,7 +787,7 @@ export function Protected(): ReactElement {
     <>
       <p>{t("protectedIntro")}</p>
       <p>
-        <strong>{t("protectedBadge")}</strong> — {t("protectedText")}
+        <Badge variant="outline">{t("protectedBadge")}</Badge> — {t("protectedText")}
       </p>
       <p>{t("protectedNoKill")}</p>
     </>
@@ -753,11 +808,11 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <>
       <p>{t("domainIntro")}</p>
-      <dl className="facts">
+      <dl className={FACTS}>
         <dt>{t("domainRealm")}</dt>
-        <dd className="mono">{ctx.session.realm}</dd>
+        <dd className={MONO}>{ctx.session.realm}</dd>
         <dt>{t("domainId")}</dt>
-        <dd className="mono">{ctx.session.domain}</dd>
+        <dd className={MONO}>{ctx.session.domain}</dd>
         <dt>{t("domainProvider")}</dt>
         <dd data-testid="provider">{t("domainProviderText")}</dd>
       </dl>
@@ -776,11 +831,11 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
         {(list) =>
           list.length > 0 ? (
             <Panel id="partners" title={t("partnerTitle")}>
-              <p className="hint">{t("partnerIntro")}</p>
-              <ul data-testid="partners">
+              <p className={HINT}>{t("partnerIntro")}</p>
+              <ul data-testid="partners" className={BULLETS}>
                 {list.map((p) => (
                   <li key={p.domain}>
-                    <span className="mono">{p.domain}</span>:{" "}
+                    <span className={MONO}>{p.domain}</span>:{" "}
                     {p.ceilings.length === 0
                       ? t("partnerNoCeiling")
                       : t("partnerText", { ceiling: ceilingText(p) })}
@@ -842,13 +897,13 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Show l={l}>
         {() =>
           rows.length === 0 ? (
-            <p>{t("changesNone")}</p>
+            <p className={HINT}>{t("changesNone")}</p>
           ) : (
-            <ul data-testid="changes">
+            <ul data-testid="changes" className={BULLETS}>
               {rows.map((r) => (
                 <li key={`${r.position}/${r.kind}/${r.id}`}>
                   {at(r.at)} · {t(CHANGE_KINDS[r.kind] ?? "changeKindOther")}{" "}
-                  <span className="mono">
+                  <span className={MONO}>
                     {r.version === undefined || r.version === null
                       ? r.id
                       : `${r.id} v${String(r.version)}`}
@@ -862,14 +917,15 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
         }
       </Show>
       {token !== undefined && (
-        <button
-          type="button"
-          onClick={() => {
+        <Button
+          variant="outline"
+          className="self-start"
+          onPress={() => {
             more(token);
           }}
         >
           {t("changesOlder")}
-        </button>
+        </Button>
       )}
     </>
   );
@@ -909,20 +965,20 @@ export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Show l={l}>
         {() =>
           byRecord.size === 0 ? (
-            <p>{t("changesNone")}</p>
+            <p className={HINT}>{t("changesNone")}</p>
           ) : (
-            <ol data-testid="history">
+            <ol data-testid="history" className={NUMBERED}>
               {[...byRecord.entries()].map(([position, list]) => (
                 <li key={position}>
                   <p>
                     {t("historyRecord", { position, at: at(list[0]?.at) })}
                     {list.some((r) => r.own) && ` · ${t("changeByYou")}`}
                   </p>
-                  <ul>
+                  <ul className={BULLETS}>
                     {list.map((r) => (
                       <li key={`${r.kind}/${r.id}`}>
                         {t(CHANGE_KINDS[r.kind] ?? "changeKindOther")}{" "}
-                        <span className="mono">
+                        <span className={MONO}>
                           {r.version === undefined || r.version === null
                             ? r.id
                             : `${r.id} v${String(r.version)}`}
@@ -938,14 +994,15 @@ export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
         }
       </Show>
       {token !== undefined && (
-        <button
-          type="button"
-          onClick={() => {
+        <Button
+          variant="outline"
+          className="self-start"
+          onPress={() => {
             more(token);
           }}
         >
           {t("changesOlder")}
-        </button>
+        </Button>
       )}
     </>
   );

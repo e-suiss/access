@@ -5,8 +5,20 @@
 // the organization, never billing; nothing here changes authority without a signed change.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+
 import { type Key, t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
+import { BULLETS, FACTS, H4, HINT, MONO, REPORT } from "../ui.js";
 import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
 import { SsoEnforcement } from "./SsoEnforcement.js";
 
@@ -97,63 +109,65 @@ function domainState(d: DomainClaim): string {
 
 function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
   return (
-    <article className="report" data-testid="organization">
-      <h4>{o.display_name}</h4>
-      <dl className="facts">
+    <article className={REPORT} data-testid="organization">
+      <h4 className="text-base font-semibold">{o.display_name}</h4>
+      <dl className={FACTS}>
         <dt>{t("orgId")}</dt>
-        <dd className="mono">{o.organization}</dd>
+        <dd className={MONO}>{o.organization}</dd>
         <dt>{t("orgRoots")}</dt>
         <dd data-testid="org-roots">{t("orgRootsText", { n: String(o.roots) })}</dd>
         <dt>{t("orgHrd")}</dt>
         <dd>{o.hrd ? t("orgHrdOn") : t("orgHrdOff")}</dd>
       </dl>
-      <p className="hint">{t("orgOwnershipNotBilling")}</p>
-      <table data-testid="org-members">
-        <caption>{t("orgMembers")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("colAccount")}</th>
-            <th scope="col">{t("orgMembershipSource")}</th>
-            <th scope="col">{t("orgRole")}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <p className={HINT}>{t("orgOwnershipNotBilling")}</p>
+      <Table data-testid="org-members" className="caption-top">
+        <TableCaption className="mt-0 mb-2 text-start font-semibold text-foreground">
+          {t("orgMembers")}
+        </TableCaption>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead scope="col">{t("colAccount")}</TableHead>
+            <TableHead scope="col">{t("orgMembershipSource")}</TableHead>
+            <TableHead scope="col">{t("orgRole")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {o.members.map((m) => (
-            <tr key={m.account_id}>
-              <td className="mono">
+            <TableRow key={m.account_id}>
+              <TableCell className={MONO}>
                 {m.account_id}
                 {m.owner && ` · ${t("orgOwner")}`}
-              </td>
-              <td>{t(SOURCE[m.membership_source] ?? "orgSourceOther")}</td>
-              <td>
+              </TableCell>
+              <TableCell>{t(SOURCE[m.membership_source] ?? "orgSourceOther")}</TableCell>
+              <TableCell>
                 {roleText(m)}
                 {m.cooling_until !== undefined &&
                   m.cooling_until !== null &&
                   ` · ${t("orgCooling", { until: at(m.cooling_until) })}`}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-      <p className="hint">{t("orgSourceApart")}</p>
-      <h5>{t("orgDomains")}</h5>
+        </TableBody>
+      </Table>
+      <p className={HINT}>{t("orgSourceApart")}</p>
+      <h5 className={H4}>{t("orgDomains")}</h5>
       {o.domains.length === 0 ? (
-        <p>{t("orgNoDomains")}</p>
+        <p className={HINT}>{t("orgNoDomains")}</p>
       ) : (
-        <ul data-testid="org-domains">
+        <ul data-testid="org-domains" className={BULLETS}>
           {o.domains.map((d) => (
             <li key={d.domain}>
-              <span className="mono">{d.domain}</span> · {domainState(d)}
+              <span className={MONO}>{d.domain}</span> · {domainState(d)}
               {d.autojoin && ` · ${t("orgAutojoinOn")}`}
             </li>
           ))}
         </ul>
       )}
-      <h5>{t("orgHandovers")}</h5>
+      <h5 className={H4}>{t("orgHandovers")}</h5>
       {o.handovers.length === 0 ? (
-        <p>{t("orgNoHandovers")}</p>
+        <p className={HINT}>{t("orgNoHandovers")}</p>
       ) : (
-        <ul data-testid="org-handovers">
+        <ul data-testid="org-handovers" className={BULLETS}>
           {o.handovers.map((h) => (
             <li key={h.handover}>
               {t(HANDOVER[h.state] ?? "orgHandoverProposed")} ·{" "}
@@ -163,22 +177,22 @@ function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
           ))}
         </ul>
       )}
-      <p className="hint">{t("orgHandoverHow")}</p>
-      <p className="hint" data-testid="org-dns-recovery">
+      <p className={HINT}>{t("orgHandoverHow")}</p>
+      <p className={HINT} data-testid="org-dns-recovery">
         {t("orgNoDnsRecovery")}
       </p>
-      <h5>{t("orgDrafts")}</h5>
+      <h5 className={H4}>{t("orgDrafts")}</h5>
       {o.connection_drafts.length === 0 ? (
-        <p>{t("orgNoDrafts")}</p>
+        <p className={HINT}>{t("orgNoDrafts")}</p>
       ) : (
-        <ul data-testid="org-drafts">
+        <ul data-testid="org-drafts" className={BULLETS}>
           {o.connection_drafts.map((d) => (
             <li key={`${d.issuer ?? ""}/${d.client_id ?? ""}/${d.entity_id ?? ""}`}>
               {d.protocol === "saml" ? (
                 t("orgDraftSaml", { entity: d.entity_id ?? "" })
               ) : (
                 <>
-                  <span className="mono">{d.issuer}</span> · {d.client_id}
+                  <span className={MONO}>{d.issuer}</span> · {d.client_id}
                 </>
               )}{" "}
               · {t("orgDraftOnly")}
@@ -207,15 +221,15 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Show l={list}>
         {(l) =>
           l.items.length === 0 ? (
-            <p>{t("orgNone")}</p>
+            <p className={HINT}>{t("orgNone")}</p>
           ) : (
-            <ul data-testid="org-list">
+            <ul data-testid="org-list" className="flex flex-wrap gap-2">
               {l.items.map((o) => (
                 <li key={o.organization}>
-                  <button
-                    type="button"
+                  <Button
+                    variant={open === o.organization ? "tinted" : "outline"}
                     aria-pressed={open === o.organization}
-                    onClick={() => {
+                    onPress={() => {
                       setOpen(o.organization);
                       run(() =>
                         adminGet<Organization>(
@@ -226,7 +240,7 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                     }}
                   >
                     {o.display_name}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

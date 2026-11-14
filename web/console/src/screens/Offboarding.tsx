@@ -3,6 +3,9 @@ import { useState, type ReactElement } from "react";
 
 import { loadKernel } from "@esuiss/access";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { FieldLegend, FieldSet } from "@suiss/access-ui/components/ui/field";
+
 import { t } from "../i18n/index.js";
 import { adminGet, draftChange, type WriteResult } from "../lib/admin.js";
 import { API, b64url, call, fromB64url, json, Problem } from "../lib/api.js";
@@ -15,6 +18,7 @@ import {
   sign,
 } from "../lib/instance.js";
 import { basisCbor, basisFor, type Basis, type MetaPayload } from "../lib/meta.js";
+import { CHOICE, CHOICE_LABEL, H4, HINT, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Field, Panel, Show, useRun } from "./parts.js";
 
 interface Selects {
@@ -90,22 +94,25 @@ function Pick({
   readonly onPick: (c: string) => void;
 }): ReactElement {
   return (
-    <fieldset>
-      <legend className="mono">{legend}</legend>
+    <FieldSet className="gap-2">
+      <FieldLegend variant="label" className={`mb-1 ${MONO}`}>
+        {legend}
+      </FieldLegend>
       {choices.map((c) => (
-        <label key={c}>
+        <label key={c} className={CHOICE_LABEL}>
           <input
+            className={CHOICE}
             type="radio"
             name={name}
             checked={value === c}
             onChange={() => {
               onPick(c);
             }}
-          />{" "}
+          />
           {t(LABELS[c] ?? "offboardingMissingChoice")}
         </label>
       ))}
-    </fieldset>
+    </FieldSet>
   );
 }
 
@@ -295,20 +302,20 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
   return (
     <>
       {p.ended.map((e) => (
-        <p key={e.grant} role="note" data-testid="role-ended">
+        <Notice key={e.grant} role="note" data-testid="role-ended">
           {t("offboardingRoleEnded", {
             role: selected(e.selects),
             source: e.source ?? "",
             at: at(e.at),
           })}
-        </p>
+        </Notice>
       ))}
       {p.survive > 0 && (
-        <p role="note" data-testid="survive">
+        <Notice role="note" data-testid="survive">
           {t("offboardingSurviveCount", { n: String(p.survive) })}
-        </p>
+        </Notice>
       )}
-      <h4>{t("offboardingChannelGrants")}</h4>
+      <h4 className={H4}>{t("offboardingChannelGrants")}</h4>
       {ch.grants.map((g) => (
         <Pick
           key={g.grant}
@@ -321,7 +328,7 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
           }}
         />
       ))}
-      <h4>{t("offboardingChannelInstances")}</h4>
+      <h4 className={H4}>{t("offboardingChannelInstances")}</h4>
       {ch.instances.map((i) => (
         <Pick
           key={i.instance}
@@ -334,7 +341,7 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
           }}
         />
       ))}
-      <h4>{t("offboardingChannelRules")}</h4>
+      <h4 className={H4}>{t("offboardingChannelRules")}</h4>
       {ch.holdings.map((h) => (
         <Pick
           key={h.grant}
@@ -347,7 +354,7 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
           }}
         />
       ))}
-      <h4>{t("offboardingChannelAnchor")}</h4>
+      <h4 className={H4}>{t("offboardingChannelAnchor")}</h4>
       <Pick
         name="off-anchor"
         legend={ch.self_anchor.anchor ?? ""}
@@ -355,7 +362,7 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
         value={anchor}
         onPick={setAnchor}
       />
-      <h4>{t("offboardingChannelReentry")}</h4>
+      <h4 className={H4}>{t("offboardingChannelReentry")}</h4>
       <Pick
         name="off-reentry"
         legend={t("offboardingChannelReentry")}
@@ -363,21 +370,22 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
         value={reentry}
         onPick={setReentry}
       />
-      <button
-        type="button"
+      <Button
+        variant="destructive"
+        className="self-start"
         data-testid="depart"
-        disabled={!decided || elsewhere || offboarded}
-        onClick={() => {
+        isDisabled={!decided || elsewhere || offboarded}
+        onPress={() => {
           if (anchor === undefined || reentry === undefined) return;
           write(() => commit(ctx, p, { grants, instances, holdings, anchor, reentry }));
         }}
       >
         {t("offboardingDepart")}
-      </button>
-      {!decided && <p className="hint">{t("offboardingMissingChoice")}</p>}
-      {elsewhere && <p className="hint">{t("offboardingElsewhere")}</p>}
+      </Button>
+      {!decided && <p className={HINT}>{t("offboardingMissingChoice")}</p>}
+      {elsewhere && <p className={HINT}>{t("offboardingElsewhere")}</p>}
       <Show l={w}>{() => null}</Show>
-      {offboarded && <p data-testid="offboarded">{t("offboardingDone")}</p>}
+      {offboarded && <Notice data-testid="offboarded">{t("offboardingDone")}</Notice>}
     </>
   );
 }
@@ -401,15 +409,21 @@ export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <>
       <p>{t("offboardingIntro")}</p>
-      <p>{t("offboardingChannels")}</p>
+      <p className={HINT}>{t("offboardingChannels")}</p>
       <Panel id="offboard" title={t("offboardingTitle")}>
         <Field id="off-party" label={t("offboardingParty")} value={party} onChange={setParty} />
-        <button type="button" data-testid="preview" disabled={party === ""} onClick={preview}>
+        <Button
+          variant="outline"
+          className="self-start"
+          data-testid="preview"
+          isDisabled={party === ""}
+          onPress={preview}
+        >
           {t("offboardingPreview")}
-        </button>
+        </Button>
         <Show l={l}>{(p) => <Departure key={p.party} p={p} ctx={ctx} />}</Show>
       </Panel>
-      <p>{t("offboardingLabel")}</p>
+      <p className={HINT}>{t("offboardingLabel")}</p>
     </>
   );
 }
