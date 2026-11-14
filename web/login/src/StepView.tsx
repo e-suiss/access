@@ -13,7 +13,29 @@ import type {
   Submission,
   UiNode,
 } from "./contract.js";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Checkbox } from "@suiss/access-ui/components/ui/checkbox";
+import {
+  Field as FieldBox,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { LOGIN, under } from "./base.js";
+import {
+  link,
+  note,
+  other,
+  otherLink,
+  primary,
+  problem,
+  quiet,
+  stack,
+  Title,
+  pressable,
+} from "./Layout.js";
 import { pushOf, PushWait } from "./PushWait.js";
 import { follow, returnTo } from "./http.js";
 import { t, text } from "./i18n.js";
@@ -53,9 +75,11 @@ function Field({ node }: { readonly node: InputNode }) {
   if (node.kind === "hidden") return null;
   const id = `field-${node.name}-${node.method}`;
   return (
-    <div className="field">
-      <label htmlFor={id}>{text(node.label)}</label>
-      <input
+    <FieldBox className="gap-2">
+      <FieldLabel htmlFor={id} className="text-sm">
+        {text(node.label)}
+      </FieldLabel>
+      <Input
         id={id}
         name={node.name}
         type={htmlType[node.kind]}
@@ -68,8 +92,9 @@ function Field({ node }: { readonly node: InputNode }) {
         spellCheck={false}
         autoCapitalize="none"
         dir="auto"
+        {...(node.kind === "code" ? { className: "font-mono tracking-widest" } : {})}
       />
-    </div>
+    </FieldBox>
   );
 }
 
@@ -98,21 +123,19 @@ function MethodForm(props: {
     props.onSubmit({ method: props.method, fields: { ...fields, ...props.options } });
   };
   return (
-    <form className={`method method-${props.method}`} onSubmit={handle} noValidate={false}>
+    <form className={stack} onSubmit={handle} noValidate={false}>
       {inputs.map((node) => (
         <Field key={node.name} node={node} />
       ))}
       {buttons.map((node) => (
-        <button
+        <Button
           key={node.label.id}
           type="submit"
-          className={
-            props.method === "restart" || props.method === "skip" ? "secondary" : "primary"
-          }
+          {...(props.method === "restart" || props.method === "skip" ? quiet : primary)}
           disabled={props.busy}
         >
           {text(node.label)}
-        </button>
+        </Button>
       ))}
     </form>
   );
@@ -125,25 +148,28 @@ function Option(props: {
 }) {
   const id = `option-${props.node.name}`;
   return (
-    <div className="option">
-      <input
+    <FieldBox orientation="horizontal">
+      <Checkbox
+        className={pressable}
         id={id}
-        type="checkbox"
         name={props.node.name}
-        checked={props.checked}
-        onChange={(e) => {
-          props.onChange(props.node.name, e.currentTarget.checked);
+        aria-labelledby={`${id}-label`}
+        isSelected={props.checked}
+        onChange={(checked) => {
+          props.onChange(props.node.name, checked);
         }}
       />
-      <label htmlFor={id}>{text(props.node.label)}</label>
-    </div>
+      <FieldLabel id={`${id}-label`} htmlFor={id} className="min-h-6 text-sm font-normal">
+        {text(props.node.label)}
+      </FieldLabel>
+    </FieldBox>
   );
 }
 
 // OP-153 m.3 (l): a full-page navigation; the provider redirect is the server's
 function Provider({ node }: { readonly node: ProviderNode }) {
   return (
-    <a className="provider" href={under(node.href)} data-provider={node.provider}>
+    <a className={otherLink} href={under(node.href)} data-provider={node.provider}>
       {text(node.label)}
     </a>
   );
@@ -284,28 +310,33 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const login = ui.kind === undefined || ui.kind === "login";
 
   return (
-    <section aria-labelledby="step-heading" data-step={ui.step} data-kind={ui.kind ?? "login"}>
-      <h1 id="step-heading" ref={title} tabIndex={-1}>
+    <section
+      aria-labelledby="step-heading"
+      data-step={ui.step}
+      data-kind={ui.kind ?? "login"}
+      className={stack}
+    >
+      <Title id="step-heading" ref={title}>
         {heading(ui)}
-      </h1>
-      <div role="alert" className="messages" data-testid="errors">
+      </Title>
+      <div role="alert" className="flex flex-col gap-2 empty:-mb-4" data-testid="errors">
         {errors.map((m) => (
-          <p key={m.id} data-message-id={m.id}>
+          <p key={m.id} className={problem} data-message-id={m.id}>
             {text(m)}
           </p>
         ))}
       </div>
-      <div role="status" className="infos">
+      <div role="status" className="flex flex-col gap-2 empty:-mb-4">
         {infos.map((m) => (
-          <p key={m.id} className="info" data-message-id={m.id}>
+          <p key={m.id} className={note} data-message-id={m.id}>
             {text(m)}
           </p>
         ))}
       </div>
       {push !== undefined && <PushWait node={push} />}
       {optionNodes.length > 0 && (
-        <fieldset className="options">
-          <legend className="visually-hidden">{t("page.options")}</legend>
+        <FieldSet className="gap-3">
+          <FieldLegend className="sr-only">{t("page.options")}</FieldLegend>
           {optionNodes.map((node) => (
             <Option
               key={node.name}
@@ -314,7 +345,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
               onChange={setOption}
             />
           ))}
-        </fieldset>
+        </FieldSet>
       )}
       {methodsInOrder(ui.nodes)
         .filter((m) => m !== "restart" && m !== "skip")
@@ -329,27 +360,17 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           />
         ))}
       {passkeyButton !== undefined && (
-        <button
-          type="button"
-          className="passkey"
-          disabled={busy}
-          onClick={() => void signInWithPasskey()}
-        >
+        <Button {...other} disabled={busy} onPress={() => void signInWithPasskey()}>
           {text(passkeyButton.label)}
-        </button>
+        </Button>
       )}
       {create?.mediation === "explicit" && (
-        <button
-          type="button"
-          className="passkey"
-          disabled={busy}
-          onClick={() => void registerPasskey()}
-        >
+        <Button {...other} disabled={busy} onPress={() => void registerPasskey()}>
           {text(create.label)}
-        </button>
+        </Button>
       )}
       {providers.length > 0 && (
-        <nav className="providers" aria-label={t("page.providers")}>
+        <nav className="flex flex-col gap-2" aria-label={t("page.providers")}>
           {providers.map((node) => (
             <Provider key={node.provider} node={node} />
           ))}
@@ -368,14 +389,20 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           />
         ))}
       {login && (ui.step === "identifier" || ui.step === "authenticate") && (
-        <p className="links">
-          <a href={`${LOGIN}/recovery`}>{t("page.recover")}</a>{" "}
-          <a href={`${LOGIN}?reason=create`}>{t("page.create_account")}</a>
+        <p className="flex flex-wrap justify-between gap-2">
+          <a className={link} href={`${LOGIN}/recovery`}>
+            {t("page.recover")}
+          </a>{" "}
+          <a className={link} href={`${LOGIN}?reason=create`}>
+            {t("page.create_account")}
+          </a>
         </p>
       )}
       {ui.kind === "registration" && ui.step !== "complete" && (
-        <p className="links">
-          <a href={LOGIN}>{t("action.have_account")}</a>
+        <p>
+          <a className={link} href={LOGIN}>
+            {t("action.have_account")}
+          </a>
         </p>
       )}
     </section>

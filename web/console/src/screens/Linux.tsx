@@ -4,8 +4,12 @@
 // security key every time and never works offline.
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Host {
@@ -58,14 +62,21 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={hosts}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="linux-hosts">
+              <ul data-testid="linux-hosts" className="flex flex-col divide-y">
                 {p.items.map((h) => (
-                  <li key={h.name}>
-                    <span className="mono">{h.name}</span> · {h.host_group} ·{" "}
-                    {h.status === "live" ? t("linuxHostLive") : t("linuxHostRetired")}
-                    <dl className="facts">
+                  <li
+                    key={h.name}
+                    className="flex flex-col gap-3 py-4 text-sm first:pt-0 last:pb-0"
+                  >
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className={`${MONO} font-medium`}>{h.name}</span> · {h.host_group} ·{" "}
+                      <Badge variant={h.status === "live" ? "outline" : "secondary"}>
+                        {h.status === "live" ? t("linuxHostLive") : t("linuxHostRetired")}
+                      </Badge>
+                    </p>
+                    <dl className={FACTS}>
                       <dt>{t("linuxOffline")}</dt>
                       <dd>
                         {t("linuxOfflineLimits", {
@@ -79,10 +90,11 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <dd>{h.break_glass ? t("linuxBreakGlassOn") : t("linuxBreakGlassOff")}</dd>
                     </dl>
                     {h.status === "live" && (
-                      <p>
-                        <button
-                          type="button"
-                          onClick={() => {
+                      <p className={ACTIONS}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
                             send(
                               "putLinuxOfflinePolicy",
                               "PUT",
@@ -93,11 +105,11 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           }}
                         >
                           {t("linuxOfflineOff", { name: h.name })}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          className={h.break_glass ? "" : "danger"}
-                          onClick={() => {
+                        </Button>
+                        <Button
+                          variant={h.break_glass ? "outline" : "destructive"}
+                          size="sm"
+                          onPress={() => {
                             send(
                               "putLinuxBreakGlassPolicy",
                               "PUT",
@@ -110,15 +122,16 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           {h.break_glass
                             ? t("linuxBreakGlassDisable", { name: h.name })
                             : t("linuxBreakGlassEnable", { name: h.name })}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
                             send("retireLinuxHost", "POST", at(h, "retire"), {}, h.name);
                           }}
                         >
                           {t("linuxHostRetire", { name: h.name })}
-                        </button>
+                        </Button>
                       </p>
                     )}
                   </li>
@@ -127,10 +140,11 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
             )
           }
         </Show>
-        <p role="note" data-testid="linux-break-glass-note">
+        <Notice role="note" data-testid="linux-break-glass-note">
           {t("linuxBreakGlassNote")}
-        </p>
+        </Notice>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("registerLinuxHost", "POST", "linux-hosts", {
@@ -140,7 +154,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
             });
           }}
         >
-          <h4>{t("linuxHostRegister")}</h4>
+          <h4 className={H4}>{t("linuxHostRegister")}</h4>
           <Field
             id="linux-host-name"
             label={t("linuxHostName")}
@@ -161,21 +175,31 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setCertificate}
             hint={t("linuxHostCertificateHint")}
           />
-          <button type="submit" disabled={name === "" || group === "" || certificate === ""}>
+          <Button
+            type="submit"
+            className="self-start"
+            isDisabled={name === "" || group === "" || certificate === ""}
+          >
             {t("linuxHostRegisterSend")}
-          </button>
+          </Button>
         </form>
       </Panel>
       <Panel id="linux-setup" title={t("linuxSetupTitle")}>
-        <pre className="mono" data-testid="linux-nsswitch">
+        <pre
+          className={`${MONO} overflow-x-auto rounded-lg bg-muted p-3 text-sm whitespace-pre`}
+          data-testid="linux-nsswitch"
+        >
           {"passwd: files access\ngroup:  files access"}
         </pre>
-        <pre className="mono" data-testid="linux-pam">
+        <pre
+          className={`${MONO} overflow-x-auto rounded-lg bg-muted p-3 text-sm whitespace-pre`}
+          data-testid="linux-pam"
+        >
           {"auth required /usr/lib/access/pam_access.so"}
         </pre>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

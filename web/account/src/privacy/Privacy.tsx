@@ -2,14 +2,26 @@
 // screens over the Frontend API, with the session cookie only. Preferences are never authority;
 // a deletion says its date and what is kept; the security history shows a masked network and
 // no risk score.
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import { Actions, Check, Loading, Meta, Nothing, PageTitle, Panel, Part } from "../lib/ui.js";
 import { CloudKeys } from "./CloudKeys.js";
 
 const CHANNELS = ["email", "sms", "call", "push"] as const;
 const TOPICS = ["campaign", "newsletter", "product_news"] as const;
+
+const LIST = "divide-y text-sm";
 
 interface Preferences {
   readonly current: Readonly<Record<string, boolean>>;
@@ -36,12 +48,12 @@ interface Preferences {
 
 function IysView({ iys }: { readonly iys: NonNullable<Preferences["iys"]> }): ReactElement {
   return (
-    <section aria-label={t("iys.title")} data-testid="iys">
-      <h4>{t("iys.title")}</h4>
-      <p>{t("iys.intro")}</p>
-      <ul>
+    <Part aria-label={t("iys.title")} data-testid="iys">
+      <h4 className="font-semibold">{t("iys.title")}</h4>
+      <Meta>{t("iys.intro")}</Meta>
+      <ul className={LIST}>
         {Object.entries(iys.channels).map(([channel, c]) => (
-          <li key={channel} data-testid={`iys-${channel}`}>
+          <li key={channel} data-testid={`iys-${channel}`} className="py-2">
             {t(`privacy.channel.${channel}`)} ·{" "}
             {c.status === "recorded"
               ? t("iys.recorded", { time: c.at ?? "" })
@@ -51,7 +63,7 @@ function IysView({ iys }: { readonly iys: NonNullable<Preferences["iys"]> }): Re
           </li>
         ))}
       </ul>
-    </section>
+    </Part>
   );
 }
 
@@ -102,77 +114,90 @@ function PreferencesView(): ReactElement {
     });
   }, []);
   useEffect(load, [load]);
-  if (prefs === null) return <p>{t("shell.loading")}</p>;
+  if (prefs === null) return <Loading rows={3} />;
   return (
-    <section aria-label={t("privacy.preferences")} data-testid="preferences">
-      <h3>{t("privacy.preferences")}</h3>
-      <table>
-        <thead>
-          <tr>
-            <th />
+    <Panel
+      aria-label={t("privacy.preferences")}
+      data-testid="preferences"
+      title={t("privacy.preferences")}
+    >
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead />
             {CHANNELS.map((c) => (
-              <th key={c} scope="col">
+              <TableHead key={c} scope="col" className="text-center">
                 {t(`privacy.channel.${c}`)}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {TOPICS.map((topic) => (
-            <tr key={topic}>
-              <th scope="row">{t(`privacy.topic.${topic}`)}</th>
+            <TableRow key={topic}>
+              <TableHead scope="row" className="text-sm text-foreground">
+                {t(`privacy.topic.${topic}`)}
+              </TableHead>
               {CHANNELS.map((c) => {
                 const k = `${c}:${topic}`;
                 return (
-                  <td key={k}>
-                    <input
-                      type="checkbox"
-                      aria-label={`${t(`privacy.topic.${topic}`)} · ${t(`privacy.channel.${c}`)}`}
-                      checked={draft[k] ?? false}
-                      onChange={(e) => {
-                        setSaved(false);
-                        setDraft({ ...draft, [k]: e.target.checked });
-                      }}
-                    />
-                  </td>
+                  <TableCell key={k}>
+                    <div className="flex justify-center">
+                      <Check
+                        aria-label={`${t(`privacy.topic.${topic}`)} · ${t(`privacy.channel.${c}`)}`}
+                        checked={draft[k] ?? false}
+                        onChange={(e) => {
+                          setSaved(false);
+                          setDraft({ ...draft, [k]: e.target.checked });
+                        }}
+                      />
+                    </div>
+                  </TableCell>
                 );
               })}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-      <button
-        type="button"
-        onClick={() => {
-          const changes = Object.entries(draft)
-            .filter(([k, v]) => prefs.current[k] !== v)
-            .map(([k, granted]) => {
-              const [channel = "", topic = ""] = k.split(":");
-              return { channel, topic, granted };
+        </TableBody>
+      </Table>
+      <Actions>
+        <Button
+          onPress={() => {
+            const changes = Object.entries(draft)
+              .filter(([k, v]) => prefs.current[k] !== v)
+              .map(([k, granted]) => {
+                const [channel = "", topic = ""] = k.split(":");
+                return { channel, topic, granted };
+              });
+            void json<Preferences>(
+              frontend("/v1/account/preferences", { method: "PUT", body: { changes } }),
+            ).then((p) => {
+              setPrefs(p);
+              setDraft({ ...p.current });
+              setSaved(true);
             });
-          void json<Preferences>(
-            frontend("/v1/account/preferences", { method: "PUT", body: { changes } }),
-          ).then((p) => {
-            setPrefs(p);
-            setDraft({ ...p.current });
-            setSaved(true);
-          });
-        }}
-      >
-        {t("action.save")}
-      </button>
-      {saved && <p role="status">{t("privacy.saved")}</p>}
+          }}
+        >
+          {t("action.save")}
+        </Button>
+        {saved && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("privacy.saved")}
+          </p>
+        )}
+      </Actions>
       {prefs.iys !== undefined && <IysView iys={prefs.iys} />}
-      <h4>{t("privacy.preference_history")}</h4>
-      <ul>
-        {prefs.history.map((h) => (
-          <li key={`${h.at}:${h.channel}:${h.topic}`}>
-            {h.at} · {t(`privacy.topic.${h.topic}`)} · {t(`privacy.channel.${h.channel}`)} ·{" "}
-            {h.granted ? "✓" : "✗"}
-          </li>
-        ))}
-      </ul>
-    </section>
+      <Part>
+        <h4 className="font-semibold">{t("privacy.preference_history")}</h4>
+        <ul className={LIST}>
+          {prefs.history.map((h) => (
+            <li key={`${h.at}:${h.channel}:${h.topic}`} className="py-2">
+              {h.at} · {t(`privacy.topic.${h.topic}`)} · {t(`privacy.channel.${h.channel}`)} ·{" "}
+              {h.granted ? "✓" : "✗"}
+            </li>
+          ))}
+        </ul>
+      </Part>
+    </Panel>
   );
 }
 
@@ -187,47 +212,50 @@ function useRead(path: string): unknown {
 function DocumentsView(): ReactElement {
   const d = useRead("/v1/account/documents") as Documents | null;
   return (
-    <section aria-label={t("privacy.documents")} data-testid="documents">
-      <h3>{t("privacy.documents")}</h3>
+    <Panel
+      aria-label={t("privacy.documents")}
+      data-testid="documents"
+      title={t("privacy.documents")}
+    >
       {d === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : d.acceptances.length === 0 ? (
-        <p>{t("privacy.no_documents")}</p>
+        <Nothing>{t("privacy.no_documents")}</Nothing>
       ) : (
-        <ul>
+        <ul className={LIST}>
           {d.acceptances.map((a) => (
-            <li key={`${a.document_type}:${a.version}:${a.at}`}>
+            <li key={`${a.document_type}:${a.version}:${a.at}`} className="py-2">
               {a.document_type} {a.version} · {a.locale} · {a.at}
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }
 
 function HistoryView(): ReactElement {
   const h = useRead("/v1/account/security-history") as History | null;
   return (
-    <section
+    <Panel
       aria-label={t("privacy.security_history", { days: "90" })}
       data-testid="security-history"
+      title={t("privacy.security_history", { days: String(h?.days ?? 90) })}
     >
-      <h3>{t("privacy.security_history", { days: String(h?.days ?? 90) })}</h3>
       {h === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : h.entries.length === 0 ? (
-        <p>{t("privacy.no_history")}</p>
+        <Nothing>{t("privacy.no_history")}</Nothing>
       ) : (
-        <ul>
+        <ul className={LIST}>
           {h.entries.map((e) => (
-            <li key={`${e.at}:${e.event}`}>
+            <li key={`${e.at}:${e.event}`} className="py-2">
               {e.at} · {e.category}
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -238,59 +266,65 @@ function DeletionView(): ReactElement {
   }, []);
   useEffect(load, [load]);
   return (
-    <section aria-label={t("privacy.deletion")} data-testid="deletion">
-      <h3>{t("privacy.deletion")}</h3>
+    <Panel aria-label={t("privacy.deletion")} data-testid="deletion" title={t("privacy.deletion")}>
       {d === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading rows={1} />
       ) : !d.scheduled ? (
-        <p>{t("privacy.deletion_none")}</p>
+        <Meta>{t("privacy.deletion_none")}</Meta>
       ) : (
         <>
-          <p>{t("account.deletion_scheduled")}</p>
-          <p>{d.deleted_on}</p>
-          <p>{d.statement}</p>
+          <div className="flex flex-col gap-1 rounded-xl bg-muted p-4">
+            <p className="font-semibold">{t("account.deletion_scheduled")}</p>
+            <p>{d.deleted_on}</p>
+            <p className="text-sm text-muted-foreground">{d.statement}</p>
+          </div>
           {d.cancellable && (
-            <button
-              type="button"
-              onClick={() => {
-                void frontend("/v1/account/deletion", { method: "DELETE" }).then(load);
-              }}
-            >
-              {t("action.cancel_deletion")}
-            </button>
+            <Actions>
+              <Button
+                variant="outline"
+                onPress={() => {
+                  void frontend("/v1/account/deletion", { method: "DELETE" }).then(load);
+                }}
+              >
+                {t("action.cancel_deletion")}
+              </Button>
+            </Actions>
           )}
         </>
       )}
-    </section>
+    </Panel>
   );
 }
 
 function RequestsView(): ReactElement {
   const r = useRead("/v1/account/data-requests") as Requests | null;
   return (
-    <section aria-label={t("privacy.data_requests")} data-testid="data-requests">
-      <h3>{t("privacy.data_requests")}</h3>
+    <Panel
+      aria-label={t("privacy.data_requests")}
+      data-testid="data-requests"
+      title={t("privacy.data_requests")}
+    >
       {r === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : r.requests.length === 0 ? (
-        <p>{t("privacy.no_requests")}</p>
+        <Nothing>{t("privacy.no_requests")}</Nothing>
       ) : (
-        <ul>
+        <ul className={LIST}>
           {r.requests.map((q) => (
-            <li key={`${q.kind}:${q.received_at}`}>
+            <li key={`${q.kind}:${q.received_at}`} className="py-2">
               {q.kind} · {q.received_at} · {q.due_at}
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }
 
 export function Privacy(): ReactElement {
   return (
-    <div data-testid="privacy">
-      <h2>{t("privacy.title")}</h2>
+    <div data-testid="privacy" className="flex flex-col gap-6">
+      <PageTitle>{t("privacy.title")}</PageTitle>
       <PreferencesView />
       <CloudKeys />
       <DocumentsView />

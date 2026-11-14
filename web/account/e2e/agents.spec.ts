@@ -7,8 +7,6 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.js";
 import { type AccountMock, holding, PARTY } from "./mock.js";
 
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
-
 const HOUR = 3_600_000;
 
 async function setUp(page: Page): Promise<void> {
@@ -209,7 +207,7 @@ test("the agent screens pass axe", async ({ page, bff }) => {
   const agent = page.getByTestId("acting-for-you").locator('[data-grant="g-agent"]');
   await agent.getByRole("button", { name: "Stop" }).click();
   await expect(agent.getByTestId("stop-rows")).toBeVisible();
-  const result = await new AxeBuilder({ page: page as unknown as AxePage })
+  const result = await new AxeBuilder({ page: page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

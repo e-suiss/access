@@ -12,7 +12,7 @@
 #            job:<workflow>/<job>         a job of .github/workflows/<workflow>.yml
 #            eslint:<text>                in every TypeScript package's eslint.config.js
 #            tsconfig:<option>            true in every TypeScript package's tsconfig.json
-#            npmrc:<line>                 in every TypeScript package's .npmrc
+#            npmrc:<line>                 in sdks/typescript/.npmrc and its web/pnpm-workspace.yaml equivalent
 #            file:<path>                  an existing file
 # applies    false only with a reason: the language holds no code the rule is about
 # reason     why the rule does not apply

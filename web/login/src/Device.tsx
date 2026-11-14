@@ -4,9 +4,14 @@
 // IP-range list no country is known, and none is shown (OP-155 m.3 (l)).
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { LOGIN, under } from "./base.js";
 import { postJson } from "./http.js";
 import { t } from "./i18n.js";
+import { inlineLink, outcome, Panel, primary, problem, quiet, stack, Title } from "./Layout.js";
 
 interface DevicePreview {
   readonly client: string;
@@ -75,39 +80,44 @@ export function Device() {
   };
 
   return (
-    <div className="card" aria-busy={busy}>
-      <section aria-labelledby="device-heading" data-kind="device">
-        <h1 id="device-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={busy}>
+      <section aria-labelledby="device-heading" data-kind="device" className={stack}>
+        <Title id="device-heading" ref={title}>
           {t("device_code.title")}
-        </h1>
+        </Title>
         {(state.phase === "enter" || state.phase === "invalid" || state.phase === "wait") && (
-          <form onSubmit={(e) => void look(e)}>
-            <label htmlFor="user-code">{t("label.device_code")}</label>
-            <input
-              id="user-code"
-              name="user_code"
-              autoComplete="one-time-code"
-              autoCapitalize="characters"
-              spellCheck={false}
-              value={code}
-              aria-invalid={state.phase === "invalid"}
-              onChange={(e) => {
-                setCode(e.target.value);
-              }}
-            />
+          <form onSubmit={(e) => void look(e)} className={stack}>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="user-code" className="text-sm">
+                {t("label.device_code")}
+              </FieldLabel>
+              <Input
+                id="user-code"
+                name="user_code"
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                spellCheck={false}
+                className="font-mono tracking-widest"
+                value={code}
+                aria-invalid={state.phase === "invalid"}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                }}
+              />
+            </Field>
             {state.phase === "invalid" && (
-              <p role="alert" data-testid="invalid">
+              <p role="alert" className={problem} data-testid="invalid">
                 {t("device_code.invalid")}
               </p>
             )}
             {state.phase === "wait" && (
-              <p role="alert" data-testid="wait">
+              <p role="alert" className={problem} data-testid="wait">
                 {t("login.throttled")}
               </p>
             )}
-            <button type="submit" className="primary" disabled={busy || code.trim() === ""}>
+            <Button type="submit" {...primary} disabled={busy || code.trim() === ""}>
               {t("action.continue")}
-            </button>
+            </Button>
           </form>
         )}
         {state.phase === "ready" && (
@@ -126,41 +136,39 @@ export function Device() {
                     country: state.preview.country,
                   })}
             </p>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy}
-              onClick={() => void decide(state, true)}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void decide(state, false)}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button {...primary} disabled={busy} onPress={() => void decide(state, true)}>
+                {t("action.approve_access")}
+              </Button>
+              <Button {...quiet} disabled={busy} onPress={() => void decide(state, false)}>
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </>
         )}
         {state.phase === "approved" && (
-          <p role="status" data-testid="approved">
+          <p role="status" className={outcome} data-testid="approved">
             {t("device_code.approved")}
           </p>
         )}
         {state.phase === "denied" && (
-          <p role="status" data-testid="denied">
+          <p role="status" className={outcome} data-testid="denied">
             {t("device_code.denied")}
           </p>
         )}
         {state.phase === "sign_in" && (
           <p role="alert">
-            <a href={LOGIN}>{t("action.sign_in")}</a>
+            <a className={inlineLink} href={LOGIN}>
+              {t("action.sign_in")}
+            </a>
           </p>
         )}
-        {state.phase === "failed" && <p role="alert">{t("error.access_owner")}</p>}
+        {state.phase === "failed" && (
+          <p role="alert" className={problem}>
+            {t("error.access_owner")}
+          </p>
+        )}
       </section>
-    </div>
+    </Panel>
   );
 }

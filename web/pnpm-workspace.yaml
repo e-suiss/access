@@ -1,0 +1,14 @@
+# OP-159 m.32
+packages:
+  - components
+  - ui
+  - login
+  - account
+  - console
+
+# F-2, §14.5
+minimumReleaseAge: 10080
+savePrefix: ""
+engineStrict: true
+strictDepBuilds: true
+allowBuilds: {}

@@ -5,8 +5,13 @@
 // delayed source is stated, never hidden. Each change is one signed Exercise.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field as FieldRoot, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, FORM, H4, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Source {
@@ -52,26 +57,28 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <Panel id="signal-sources" title={t("signalSourcesTitle")}>
       <p>{t("signalSourcesIntro")}</p>
-      <p className="hint" data-testid="signal-posture-note">
+      <p className={HINT} data-testid="signal-posture-note">
         {t("signalPostureNote", { provider: "Acme MDM" })}
       </p>
       <Show l={list}>
         {(p) =>
           p.items.length === 0 ? (
-            <p>{t("none")}</p>
+            <p className={HINT}>{t("none")}</p>
           ) : (
-            <ul data-testid="signal-sources">
+            <ul data-testid="signal-sources" className={ROWLIST}>
               {p.items.map((s) => (
-                <li key={s.name}>
-                  <span className="mono">{s.name}</span> · {s.provider} · {t(KIND[s.kind])} ·{" "}
-                  <span className="mono">{s.class}</span> ·{" "}
+                <li key={s.name} className={ROW}>
+                  <span className={MONO}>{s.name}</span> · {s.provider} · {t(KIND[s.kind])} ·{" "}
+                  <span className={MONO}>{s.class}</span> ·{" "}
                   {s.status === "live" ? t("signalSourceLive") : t("signalSourceRetired")}
                   {s.status === "live" && (
                     <>
                       {" "}
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ms-auto"
+                        onPress={() => {
                           send(
                             "retireSignalSource",
                             `signal-sources/${encodeURIComponent(s.name)}/retire`,
@@ -81,7 +88,7 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         }}
                       >
                         {t("signalSourceRetire", { name: s.name })}
-                      </button>
+                      </Button>
                     </>
                   )}
                 </li>
@@ -91,12 +98,13 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
         }
       </Show>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           send("registerSignalSource", "signal-sources", { name, kind, provider, issuer });
         }}
       >
-        <h4>{t("signalSourceRegister")}</h4>
+        <h4 className={H4}>{t("signalSourceRegister")}</h4>
         <Field
           id="signal-name"
           label={t("signalSourceName")}
@@ -104,22 +112,25 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setName}
           hint={t("sshGroupNameHint")}
         />
-        <p className="field">
-          <label htmlFor="signal-kind">{t("signalSourceKind")}</label>
-          <select
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="signal-kind" className="text-sm">
+            {t("signalSourceKind")}
+          </FieldLabel>
+          <NativeSelect
             id="signal-kind"
+            size="sm"
             value={kind}
             onChange={(e) => {
               setKind(e.target.value as Source["kind"]);
             }}
           >
             {(Object.keys(KIND) as Source["kind"][]).map((k) => (
-              <option key={k} value={k}>
+              <NativeSelectOption key={k} value={k}>
                 {t(KIND[k])}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </p>
+          </NativeSelect>
+        </FieldRoot>
         <Field
           id="signal-provider"
           label={t("signalSourceProvider")}
@@ -133,12 +144,12 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setIssuer}
           hint={t("signalSourceIssuerHint")}
         />
-        <p>
-          <button type="submit">{t("signalSourceRegisterSend")}</button>
-        </p>
+        <div className={ACTIONS}>
+          <Button type="submit">{t("signalSourceRegisterSend")}</Button>
+        </div>
       </form>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );

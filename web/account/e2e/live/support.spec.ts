@@ -14,8 +14,6 @@ import { type BrowserContext, expect, request as http, test, type Page } from "@
 import { OWN_DEVICE_SESSION } from "./session.js";
 import { PASSWORD, REALM, signInWithPassword } from "./signin.js";
 
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
-
 const OPERATOR = process.env["ACCESS_LIVE_SUPPORT_OPERATOR"];
 const SUBJECT = process.env["ACCESS_LIVE_TEST_SUBJECT"];
 const CASE_SYSTEM = process.env["ACCESS_LIVE_SUPPORT_CASE_SYSTEM"] ?? "local-desk";
@@ -23,7 +21,7 @@ const CASE = process.env["ACCESS_LIVE_SUPPORT_CASE"] ?? "4411";
 const NAMED = "Mehmet Y. (Acme Support)";
 
 async function axe(page: Page): Promise<void> {
-  const result = await new AxeBuilder({ page: page as unknown as AxePage })
+  const result = await new AxeBuilder({ page: page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

@@ -5,14 +5,11 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.js";
 
 // @axe-core/playwright pins a newer playwright-core than @playwright/test; the page is the same
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 async function axe(page: Page): Promise<void> {
-  const result = await new AxeBuilder({ page: page as unknown as AxePage })
-    .withTags(TAGS)
-    .analyze();
+  const result = await new AxeBuilder({ page: page }).withTags(TAGS).analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
 }
 

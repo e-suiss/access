@@ -7,7 +7,6 @@ import { expect, test } from "@playwright/test";
 import { PASSWORD, REALM } from "./signin.js";
 
 // @axe-core/playwright pins a newer playwright-core than @playwright/test; the page is the same
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
 
 test.describe("@live sign-in methods and sign-ins", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");
@@ -57,7 +56,7 @@ test.describe("@live sign-in methods and sign-ins", () => {
   test("@live the account page passes axe with S10 and S11 drawn", async ({ page }) => {
     await page.goto(`${REALM}/account`);
     await expect(page.getByTestId("sign-in-row").first()).toBeVisible();
-    const result = await new AxeBuilder({ page: page as unknown as AxePage })
+    const result = await new AxeBuilder({ page: page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
       .analyze();
     expect(result.violations.map((v) => v.id)).toEqual([]);

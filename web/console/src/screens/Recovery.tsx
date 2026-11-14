@@ -5,8 +5,11 @@
 // nothing here starts a recovery, which only `access-cli domain recover` does.
 import type { ReactElement } from "react";
 
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+
 import { t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
+import { BULLETS, HINT, Notice } from "../ui.js";
 import { at, type Ctx, Show, useLoad } from "./parts.js";
 
 interface Entry {
@@ -27,50 +30,56 @@ export function Recovery({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const realm = encodeURIComponent(ctx.session.realm);
   const view = useLoad(() => adminGet<RecoveryView>(ctx.instance, `realms/${realm}/recovery`));
   return (
-    <div data-testid="recovery">
-      <p>{t("recoveryIntro")}</p>
+    <div data-testid="recovery" className="flex flex-col gap-4">
+      <p className="text-muted-foreground">{t("recoveryIntro")}</p>
       <Show l={view}>
         {(v) => {
           const last = [...v.history].reverse().find((e) => e.kind === "recovered");
           return (
             <>
               {last?.lost_after !== undefined && (
-                <p role="alert" data-testid="recovery-banner">
+                <Notice tone="warning" role="alert" data-testid="recovery-banner">
                   {t("recoveryRecoveredAt", { position: last.position })}.{" "}
                   {t("recoveryChangesLost", { time: at(last.lost_after) })}
-                </p>
+                </Notice>
               )}
-              {v.recovery === "not_available" ? (
-                <section data-testid="recovery-not-available">
-                  <h3>{t("recoveryNotAvailable")}</h3>
-                  <p>{t("recoveryNotAvailableWhy")}</p>
-                </section>
-              ) : (
-                <p data-testid="recovery-available">
-                  {t("recoveryAvailable", {
-                    k: String(v.recovery_threshold?.k ?? 0),
-                    n: String(v.recovery_threshold?.n ?? 0),
-                  })}
-                </p>
-              )}
-              {v.history.length === 0 ? (
-                <p>{t("none")}</p>
-              ) : (
-                <ul data-testid="recovery-history">
-                  {v.history.map((e) => (
-                    <li
-                      key={`${e.kind}-${e.position}`}
-                      data-testid="recovery-entry"
-                      data-kind={e.kind}
-                    >
-                      {e.kind === "recovered"
-                        ? t("recoveryRecoveredAt", { position: e.position })
-                        : t("recoveryHandoverAtPosition", { position: e.position })}{" "}
-                      <time dateTime={e.at}>{at(e.at)}</time>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <Card>
+                <CardContent className="flex flex-col gap-4">
+                  {v.recovery === "not_available" ? (
+                    <section data-testid="recovery-not-available" className="flex flex-col gap-1">
+                      <h3 className="text-base font-semibold">{t("recoveryNotAvailable")}</h3>
+                      <p className={HINT}>{t("recoveryNotAvailableWhy")}</p>
+                    </section>
+                  ) : (
+                    <p data-testid="recovery-available">
+                      {t("recoveryAvailable", {
+                        k: String(v.recovery_threshold?.k ?? 0),
+                        n: String(v.recovery_threshold?.n ?? 0),
+                      })}
+                    </p>
+                  )}
+                  {v.history.length === 0 ? (
+                    <p className={HINT}>{t("none")}</p>
+                  ) : (
+                    <ul data-testid="recovery-history" className={BULLETS}>
+                      {v.history.map((e) => (
+                        <li
+                          key={`${e.kind}-${e.position}`}
+                          data-testid="recovery-entry"
+                          data-kind={e.kind}
+                        >
+                          {e.kind === "recovered"
+                            ? t("recoveryRecoveredAt", { position: e.position })
+                            : t("recoveryHandoverAtPosition", { position: e.position })}{" "}
+                          <time dateTime={e.at} className="text-muted-foreground">
+                            {at(e.at)}
+                          </time>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
             </>
           );
         }}

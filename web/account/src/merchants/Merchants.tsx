@@ -4,11 +4,14 @@
 // Pay's agreements are Pay's to show and cancel, apart from this.
 import { pay } from "@esuiss/access";
 import { payment } from "@suiss/access-react";
+import { Alert } from "@suiss/access-ui/components/ui/alert";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { revoke, search, type Revoking } from "../lib/adp.js";
 import { catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
+import { Loading } from "../lib/ui.js";
 
 type Loaded =
   | { readonly kind: "loading" }
@@ -34,41 +37,43 @@ export function MerchantsPage({
       });
   }, [instance]);
   useEffect(load, [load]);
-  if (loaded.kind === "loading") return <p role="status">{t("shell.loading")}</p>;
+  if (loaded.kind === "loading") return <Loading status />;
   if (loaded.kind === "unknown") {
     return (
-      <p role="alert" data-testid="merchants-unknown">
+      <Alert variant="destructive" data-testid="merchants-unknown">
         {t("domain.unreachable")}
-      </p>
+      </Alert>
     );
   }
   const period = (p: "transaction" | "day" | "month") => t(`period.${p}`);
   return (
-    <div data-testid="merchants">
-      <payment.Merchants
-        merchants={loaded.merchants.map((m) => ({
-          grant: m.grant,
-          name: m.merchant,
-          agent: m.agent,
-          limits: payment.limitRows(m.budget, [], locale, period),
-        }))}
-        catalogue={catalogue}
-        onStop={(grant) => {
-          revoke(instance, confirm, grant)
-            .then((r) => {
-              setStopping(r);
-              if (r.shown === "outcome.confirmed") load();
-            })
-            .catch(() => {
-              setStopping(null);
-            });
-        }}
-      />
-      {stopping !== null && (
-        <p role="status" data-testid="outcome">
-          {t(stopping.shown)}
-        </p>
-      )}
-    </div>
+    <Card data-testid="merchants">
+      <CardContent className="flex flex-col gap-4">
+        <payment.Merchants
+          merchants={loaded.merchants.map((m) => ({
+            grant: m.grant,
+            name: m.merchant,
+            agent: m.agent,
+            limits: payment.limitRows(m.budget, [], locale, period),
+          }))}
+          catalogue={catalogue}
+          onStop={(grant) => {
+            revoke(instance, confirm, grant)
+              .then((r) => {
+                setStopping(r);
+                if (r.shown === "outcome.confirmed") load();
+              })
+              .catch(() => {
+                setStopping(null);
+              });
+          }}
+        />
+        {stopping !== null && (
+          <p role="status" data-testid="outcome" className="font-semibold">
+            {t(stopping.shown)}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

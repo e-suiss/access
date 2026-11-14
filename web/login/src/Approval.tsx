@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { loadKernel } from "@esuiss/access";
+import { Button } from "@suiss/access-ui/components/ui/button";
 
 import { LOGIN, under } from "./base.js";
 import { follow, postJson, returnTo } from "./http.js";
@@ -23,6 +24,19 @@ import {
   sign,
 } from "./instance.js";
 import { t } from "./i18n.js";
+import {
+  facts,
+  inlineLink,
+  note,
+  outcome,
+  Panel,
+  primary,
+  problem,
+  quiet,
+  stack,
+  Title,
+  warning,
+} from "./Layout.js";
 
 interface Draft {
   readonly domain: string;
@@ -207,21 +221,28 @@ export function Approval() {
 
   const preview = state.phase === "ready" || state.phase === "confirm" ? state.preview : null;
   return (
-    <div className="card" aria-busy={state.phase === "loading" || busy}>
-      <section aria-labelledby="approval-heading" data-kind="approval">
-        <h1 id="approval-heading" ref={title} tabIndex={-1}>
+    <Panel aria-busy={state.phase === "loading" || busy}>
+      <section aria-labelledby="approval-heading" data-kind="approval" className={stack}>
+        <Title id="approval-heading" ref={title}>
           {preview === null
             ? t("consent.title")
             : t("consent.agent_title", { client: preview.client_host })}
-        </h1>
-        {state.phase === "loading" && <p role="status">{t("page.loading")}</p>}
+        </Title>
+        {state.phase === "loading" && (
+          <p role="status" className={note}>
+            {t("page.loading")}
+          </p>
+        )}
         {preview !== null && (
           <>
             <p data-testid="client-says">
               {t("consent.client_says", { name: preview.client_says })}
             </p>
             <p data-testid="resource">{t("consent.resource", { resource: preview.resource })}</p>
-            <ul aria-label={t("consent.redirect_host", { host: "" })}>
+            <ul
+              aria-label={t("consent.redirect_host", { host: "" })}
+              className="list-disc space-y-1 ps-5"
+            >
               {preview.redirect_hosts.map((h) => (
                 <li key={h} data-testid="redirect-host">
                   {t("consent.redirect_host", { host: h })}
@@ -229,17 +250,17 @@ export function Approval() {
               ))}
             </ul>
             {preview.loopback_only && (
-              <p role="alert" className="warning" data-testid="loopback">
+              <p role="alert" className={warning} data-testid="loopback">
                 {t("consent.loopback")}
               </p>
             )}
             {preview.visual_changed && (
-              <p role="alert" className="warning" data-testid="visual-changed">
+              <p role="alert" className={warning} data-testid="visual-changed">
                 {t("consent.visual_changed")}
               </p>
             )}
             {preview.new_app && (
-              <p className="warning" data-testid="new-app">
+              <p className={warning} data-testid="new-app">
                 {t("consent.new_app")}
               </p>
             )}
@@ -247,63 +268,72 @@ export function Approval() {
         )}
         {state.phase === "ready" && (
           <>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy || state.preview.draft === null}
-              onClick={() => void approve(state.preview)}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void decline(state.preview)}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button
+                {...primary}
+                disabled={busy || state.preview.draft === null}
+                onPress={() => void approve(state.preview)}
+              >
+                {t("action.approve_access")}
+              </Button>
+              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </>
         )}
         {state.phase === "confirm" && (
-          <div role="dialog" aria-labelledby="sign-heading" data-testid="signature">
-            <h2 id="sign-heading">{t("action.approve_access")}</h2>
-            <dl>
+          <div
+            role="dialog"
+            aria-labelledby="sign-heading"
+            data-testid="signature"
+            className="flex flex-col gap-3 rounded-xl border p-4"
+          >
+            <h2 id="sign-heading" className="text-lg font-semibold">
+              {t("action.approve_access")}
+            </h2>
+            <dl className={facts}>
               <dt>{state.decoded.action}</dt>
               <dd>{state.decoded.until}</dd>
             </dl>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                confirmed.current?.(true);
-              }}
-            >
-              {t("action.approve_access")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                confirmed.current?.(false);
-              }}
-            >
-              {t("action.decline_access")}
-            </button>
+            <div className="flex flex-col gap-2">
+              <Button
+                {...primary}
+                onPress={() => {
+                  confirmed.current?.(true);
+                }}
+              >
+                {t("action.approve_access")}
+              </Button>
+              <Button
+                {...quiet}
+                onPress={() => {
+                  confirmed.current?.(false);
+                }}
+              >
+                {t("action.decline_access")}
+              </Button>
+            </div>
           </div>
         )}
         {state.phase === "sign_in" && (
           <p role="alert">
-            <a href={LOGIN}>{t("action.sign_in")}</a>
+            <a className={inlineLink} href={LOGIN}>
+              {t("action.sign_in")}
+            </a>
           </p>
         )}
         {state.phase === "declined" && (
-          <p role="status" data-testid="declined">
+          <p role="status" className={outcome} data-testid="declined">
             {t("page.access_denied")}
           </p>
         )}
-        {state.phase === "failed" && <p role="alert">{t("error.access_owner")}</p>}
+        {state.phase === "failed" && (
+          <p role="alert" className={problem}>
+            {t("error.access_owner")}
+          </p>
+        )}
       </section>
-    </div>
+    </Panel>
   );
 }

@@ -2,10 +2,12 @@
 // agents and which agent used each, by the agent's name, from the realm's own agent-connections
 // route on the session cookie; never a token. Disconnect is one click and keeps the record (OP-73).
 import { agents } from "@suiss/access-react";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { frontend, json } from "../lib/api.js";
 import { at, catalogue, t } from "../lib/i18n.js";
+import { Loading, Nothing } from "../lib/ui.js";
 import { useAnnouncer } from "./common.js";
 
 /** The names of the agents `GET /v1/account/agent-connections` lists, by agent Party. */
@@ -40,34 +42,36 @@ export function AgentAccounts(): ReactElement {
   }, [fail]);
   useEffect(reload, [reload]);
   return (
-    <div data-testid="agent-accounts">
-      {region}
-      {list === null ? (
-        <p>{t("shell.loading")}</p>
-      ) : list === "unknown" ? (
-        <p>{t("agent_connections.unavailable")}</p>
-      ) : (
-        <agents.AgentConnections
-          connections={list}
-          name={(p) => names.get(p) ?? p}
-          time={at}
-          catalogue={catalogue}
-          onDisconnect={(c) => {
-            void json(
-              frontend(`/v1/account/vault/connections/${encodeURIComponent(c)}`, {
-                method: "DELETE",
-              }),
-            )
-              .then(() => {
-                say(t("agent_connections.disconnected"));
-                reload();
-              })
-              .catch((e: unknown) => {
-                fail(e);
-              });
-          }}
-        />
-      )}
-    </div>
+    <Card data-testid="agent-accounts">
+      <CardContent className="flex flex-col gap-4">
+        {region}
+        {list === null ? (
+          <Loading />
+        ) : list === "unknown" ? (
+          <Nothing>{t("agent_connections.unavailable")}</Nothing>
+        ) : (
+          <agents.AgentConnections
+            connections={list}
+            name={(p) => names.get(p) ?? p}
+            time={at}
+            catalogue={catalogue}
+            onDisconnect={(c) => {
+              void json(
+                frontend(`/v1/account/vault/connections/${encodeURIComponent(c)}`, {
+                  method: "DELETE",
+                }),
+              )
+                .then(() => {
+                  say(t("agent_connections.disconnected"));
+                  reload();
+                })
+                .catch((e: unknown) => {
+                  fail(e);
+                });
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }

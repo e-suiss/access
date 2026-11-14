@@ -4,8 +4,14 @@
 // organization's IT administrator and is shown once. Each is one signed change.
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
 import { type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Preview {
@@ -54,11 +60,11 @@ export function SsoEnforcement({
       <Show l={preview}>
         {(p) => (
           <>
-            <p>
+            <p className="flex items-center gap-2">
               {t("ssoState")}:{" "}
-              <span data-testid="sso-state">
+              <Badge variant={p.enforced ? "default" : "outline"} data-testid="sso-state">
                 {p.enforced ? t("ssoEnforced") : t("ssoNotEnforced")}
-              </span>
+              </Badge>
             </p>
             <p data-testid="sso-preview">
               {t("ssoPreview", { members: String(p.totals.members) })}
@@ -68,27 +74,33 @@ export function SsoEnforcement({
             </p>
             <p>{t("ssoPending", { n: String(p.pending_invitations) })}</p>
             {p.enforced ? (
-              <button
-                type="button"
-                onClick={() => {
-                  send("liftOrganizationSso", "sso-enforcement/lift", {});
-                }}
-              >
-                {t("ssoLift")}
-              </button>
+              <div className={ACTIONS}>
+                <Button
+                  variant="outline"
+                  onPress={() => {
+                    send("liftOrganizationSso", "sso-enforcement/lift", {});
+                  }}
+                >
+                  {t("ssoLift")}
+                </Button>
+              </div>
             ) : (
               <form
+                className={FORM}
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (fate !== undefined)
                     send("enforceOrganizationSso", "sso-enforcement", { invitations: fate });
                 }}
               >
-                <fieldset>
-                  <legend>{t("ssoFate")}</legend>
+                <FieldSet className="gap-2">
+                  <FieldLegend variant="label" className="mb-1">
+                    {t("ssoFate")}
+                  </FieldLegend>
                   {(["cancel", "redirect_to_sso"] as const).map((f) => (
-                    <label key={f}>
+                    <label key={f} className={CHOICE_LABEL}>
                       <input
+                        className={CHOICE}
                         type="radio"
                         name="sso-fate"
                         value={f}
@@ -100,41 +112,52 @@ export function SsoEnforcement({
                       {f === "cancel" ? t("ssoFateCancel") : t("ssoFateRedirect")}
                     </label>
                   ))}
-                </fieldset>
-                <button type="submit" disabled={fate === undefined}>
-                  {t("ssoEnforce")}
-                </button>
+                </FieldSet>
+                <div className={ACTIONS}>
+                  <Button type="submit" isDisabled={fate === undefined}>
+                    {t("ssoEnforce")}
+                  </Button>
+                </div>
               </form>
             )}
           </>
         )}
       </Show>
       <form
+        className={`${FORM} border-t pt-4`}
         onSubmit={(e) => {
           e.preventDefault();
           send("createOrganizationSetupLink", "setup-links", email === "" ? {} : { email });
         }}
       >
-        <h5>{t("ssoSetupLink")}</h5>
-        <label>
-          {t("ssoSetupEmail")}{" "}
-          <input
+        <h5 className="text-sm font-semibold">{t("ssoSetupLink")}</h5>
+        <Field className="gap-2">
+          <FieldLabel htmlFor={`sso-setup-email-${org}`} className="text-sm">
+            {t("ssoSetupEmail")}
+          </FieldLabel>
+          <Input
+            id={`sso-setup-email-${org}`}
             type="email"
+            size="md"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
             }}
           />
-        </label>
-        <button type="submit">{t("ssoSetupSend")}</button>
+        </Field>
+        <div className={ACTIONS}>
+          <Button type="submit" variant="outline">
+            {t("ssoSetupSend")}
+          </Button>
+        </div>
       </form>
       <Show l={w}>
         {(r) => (
           <>
-            <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>
+            <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>
             {r.setup_link !== undefined && (
-              <p data-testid="sso-setup-link">
-                {t("ssoSetupShown")} <span className="mono">{r.setup_link}</span>
+              <p data-testid="sso-setup-link" className="text-sm">
+                {t("ssoSetupShown")} <span className={MONO}>{r.setup_link}</span>
               </p>
             )}
           </>

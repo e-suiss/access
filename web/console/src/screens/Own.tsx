@@ -2,8 +2,21 @@
 import { loadKernel } from "@esuiss/access";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+
 import { t } from "../i18n/index.js";
 import { json, type SessionInfo, type SessionRow } from "../lib/api.js";
+import { Busy, FACTS, Failure, HINT, MONO, Page } from "../ui.js";
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -12,18 +25,21 @@ function when(iso: string): string {
 
 export function Profile({ session }: { readonly session: SessionInfo }): ReactElement {
   return (
-    <main id="main" tabIndex={-1}>
-      <h1>{t("profileTitle")}</h1>
-      <dl className="facts">
-        <dt>{t("profileName")}</dt>
-        <dd data-testid="display-name">{session.display_name}</dd>
-        <dt>{t("profileAccount")}</dt>
-        <dd className="mono">{session.account}</dd>
-        <dt>{t("profileRealm")}</dt>
-        <dd className="mono">{session.realm}</dd>
-      </dl>
-      <p className="hint">{t("profileEditNote")}</p>
-    </main>
+    <Page title={t("profileTitle")}>
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          <dl className={FACTS}>
+            <dt>{t("profileName")}</dt>
+            <dd data-testid="display-name">{session.display_name}</dd>
+            <dt>{t("profileAccount")}</dt>
+            <dd className={MONO}>{session.account}</dd>
+            <dt>{t("profileRealm")}</dt>
+            <dd className={MONO}>{session.realm}</dd>
+          </dl>
+          <p className={HINT}>{t("profileEditNote")}</p>
+        </CardContent>
+      </Card>
+    </Page>
   );
 }
 
@@ -57,46 +73,51 @@ export function Sessions({ onEnded }: { readonly onEnded: () => void }): ReactEl
   };
 
   return (
-    <main id="main" tabIndex={-1}>
-      <h1>{t("sessionsTitle")}</h1>
-      <p>{t("sessionsIntro")}</p>
-      {failed && <p role="alert">{t("unavailable")}</p>}
-      {rows === null && !failed && <p aria-busy="true">{t("loading")}</p>}
+    <Page title={t("sessionsTitle")} intro={t("sessionsIntro")}>
+      {failed && <Failure>{t("unavailable")}</Failure>}
+      {rows === null && !failed && <Busy />}
       {rows !== null && (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">{t("sessionsKind")}</th>
-              <th scope="col">{t("sessionsCreated")}</th>
-              <th scope="col">{t("sessionsLastSeen")}</th>
-              <th scope="col">{t("sessionsActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <th scope="row">
-                  {r.kind === "console" ? t("sessionsConsole") : t("sessionsLogin")}
-                  {r.current && <span className="tag"> {t("sessionsCurrent")}</span>}
-                </th>
-                <td>{when(r.created_at)}</td>
-                <td>{when(r.last_seen_at)}</td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      end(r);
-                    }}
-                  >
-                    {t("sessionsEnd")}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Card className="py-2">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead scope="col">{t("sessionsKind")}</TableHead>
+                <TableHead scope="col">{t("sessionsCreated")}</TableHead>
+                <TableHead scope="col">{t("sessionsLastSeen")}</TableHead>
+                <TableHead scope="col">
+                  <span className="sr-only">{t("sessionsActions")}</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableHead scope="row" className="text-sm font-medium text-foreground">
+                    <span className="flex items-center gap-2">
+                      {r.kind === "console" ? t("sessionsConsole") : t("sessionsLogin")}
+                      {r.current && <Badge variant="outline">{t("sessionsCurrent")}</Badge>}
+                    </span>
+                  </TableHead>
+                  <TableCell>{when(r.created_at)}</TableCell>
+                  <TableCell>{when(r.last_seen_at)}</TableCell>
+                  <TableCell className="text-end">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onPress={() => {
+                        end(r);
+                      }}
+                    >
+                      {t("sessionsEnd")}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
-    </main>
+    </Page>
   );
 }
 
@@ -122,18 +143,21 @@ export function About(): ReactElement {
     );
   }, []);
   return (
-    <main id="main" tabIndex={-1}>
-      <h1>{t("aboutTitle")}</h1>
-      <dl className="facts" aria-busy={kernel === null || server === null}>
-        <dt>{t("aboutKernel")}</dt>
-        <dd className="mono" data-testid="kernel-api-version">
-          {kernel ?? t("loading")}
-        </dd>
-        <dt>{t("aboutServer")}</dt>
-        <dd className="mono" data-testid="server-version">
-          {server ?? t("loading")}
-        </dd>
-      </dl>
-    </main>
+    <Page title={t("aboutTitle")}>
+      <Card>
+        <CardContent>
+          <dl className={FACTS} aria-busy={kernel === null || server === null}>
+            <dt>{t("aboutKernel")}</dt>
+            <dd className={MONO} data-testid="kernel-api-version">
+              {kernel ?? t("loading")}
+            </dd>
+            <dt>{t("aboutServer")}</dt>
+            <dd className={MONO} data-testid="server-version">
+              {server ?? t("loading")}
+            </dd>
+          </dl>
+        </CardContent>
+      </Card>
+    </Page>
   );
 }
