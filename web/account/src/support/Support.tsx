@@ -3,12 +3,18 @@
 // own device, or doesn't. What they gave is listed with who holds it and until when, and is
 // ended with one Revoke; Block support access stops further requests.
 import { support as components } from "@suiss/access-react";
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { ItemActions, ItemContent } from "@suiss/access-ui/components/ui/item";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { useAnnouncer, when } from "../account/common.js";
 import { frontend, json } from "../lib/api.js";
 import { catalogue, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
+import { Check, Loading, Meta, Nothing, PageTitle, Panel, RowItem, Rows } from "../lib/ui.js";
 import { type Access, type Requests, type SupportRow } from "./model.js";
 import { type Drafted, signDraft } from "./sign.js";
 
@@ -61,7 +67,7 @@ export function SupportPage({
     return (
       <div data-testid="support">
         {region}
-        <p role="status">{t("shell.loading")}</p>
+        <Loading status />
       </div>
     );
   }
@@ -69,18 +75,23 @@ export function SupportPage({
   const active = access.access.filter((a) => a.state === "active");
   const past = access.access.filter((a) => a.state !== "active");
   return (
-    <div data-testid="support">
-      <h2>{t("support.title")}</h2>
-      <p>{t("support.intro")}</p>
+    <div data-testid="support" className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <PageTitle>{t("support.title")}</PageTitle>
+        <Meta>{t("support.intro")}</Meta>
+      </div>
       {region}
-      <section aria-label={t("support.requests_title")} data-testid="support-requests">
-        <h3>{t("support.requests_title")}</h3>
+      <Panel
+        aria-label={t("support.requests_title")}
+        data-testid="support-requests"
+        title={t("support.requests_title")}
+      >
         {open.map((r) => {
           const give = r.give;
           if (give === undefined) return null;
           const path = `/v1/support/requests/${encodeURIComponent(r.id)}`;
           return (
-            <div key={r.id} data-testid="support-request">
+            <div key={r.id} data-testid="support-request" className="flex flex-col gap-3">
               <components.SupportRequest
                 request={{
                   organization: r.organization,
@@ -116,87 +127,101 @@ export function SupportPage({
                 }}
               />
               {give.standing !== undefined && (
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() => {
+                <Button
+                  variant="outline"
+                  className="self-start"
+                  isDisabled={busy}
+                  onPress={() => {
                     const standing = give.standing;
                     if (standing === undefined) return;
                     signed(`${path}/give`, standing, t("support.read_only"));
                   }}
                 >
                   {t("support.standing")}
-                </button>
+                </Button>
               )}
             </div>
           );
         })}
-      </section>
+      </Panel>
       <section aria-label={t("support.title")} data-testid="support-access">
-        {active.length === 0 && <p>{t("support.none")}</p>}
-        <ul className="rows">
-          {active.map((a) => (
-            <li key={a.id} className="row" data-testid="support-active">
-              <p>
-                {t("support.active", {
-                  operator: a.operator,
-                  organization: a.organization,
-                  case: a.case,
-                  time: when(a.until),
-                })}
-              </p>
-              {a.read_only && <span className="meta">{t("support.read_only")}</span>}
-              {a.revoke !== undefined && a.basis !== undefined && (
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      const { revoke, basis } = a;
-                      if (revoke === undefined || basis === undefined) return;
-                      signed(
-                        `/v1/me/support-access/${encodeURIComponent(basis.holding.grant)}/revoke`,
-                        revoke,
-                        t("support.revoked", { time: when(Date.now()) }),
-                      );
-                    }}
-                  >
-                    {t("support.revoke")}
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-          {past.map((a) => (
-            <li key={a.id} className="row" data-testid="support-past">
-              {ended(a)} · {a.organization} · {a.case}
-            </li>
-          ))}
-        </ul>
+        <Card>
+          <CardContent className="flex flex-col gap-4">
+            {active.length === 0 && <Nothing>{t("support.none")}</Nothing>}
+            <Rows>
+              {active.map((a) => (
+                <RowItem key={a.id} data-testid="support-active">
+                  <ItemContent>
+                    <p>
+                      {t("support.active", {
+                        operator: a.operator,
+                        organization: a.organization,
+                        case: a.case,
+                        time: when(a.until),
+                      })}
+                    </p>
+                    {a.read_only && <Badge variant="outline">{t("support.read_only")}</Badge>}
+                  </ItemContent>
+                  {a.revoke !== undefined && a.basis !== undefined && (
+                    <ItemActions>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        isDisabled={busy}
+                        onPress={() => {
+                          const { revoke, basis } = a;
+                          if (revoke === undefined || basis === undefined) return;
+                          signed(
+                            `/v1/me/support-access/${encodeURIComponent(basis.holding.grant)}/revoke`,
+                            revoke,
+                            t("support.revoked", { time: when(Date.now()) }),
+                          );
+                        }}
+                      >
+                        {t("support.revoke")}
+                      </Button>
+                    </ItemActions>
+                  )}
+                </RowItem>
+              ))}
+              {past.map((a) => (
+                <RowItem key={a.id} data-testid="support-past" variant="muted">
+                  <ItemContent className="text-sm text-muted-foreground">
+                    {ended(a)} · {a.organization} · {a.case}
+                  </ItemContent>
+                </RowItem>
+              ))}
+            </Rows>
+          </CardContent>
+        </Card>
       </section>
-      <label>
-        <input
-          type="checkbox"
-          data-testid="support-block"
-          checked={requests.blocked}
-          onChange={(e) => {
-            void json(
-              frontend("/v1/me/support-block", {
-                method: "PUT",
-                body: { blocked: e.target.checked },
-              }),
-            )
-              .then(reload)
-              .catch((x: unknown) => {
-                fail(x);
-              });
-          }}
-        />{" "}
-        {t("support.block")}
-      </label>
-      {requests.blocked && <p className="notice">{t("support.block_on")}</p>}
+      <Card>
+        <CardContent className="flex flex-col gap-2">
+          <Field orientation="horizontal">
+            <Check
+              id="support-block"
+              data-testid="support-block"
+              checked={requests.blocked}
+              onChange={(e) => {
+                void json(
+                  frontend("/v1/me/support-block", {
+                    method: "PUT",
+                    body: { blocked: e.target.checked },
+                  }),
+                )
+                  .then(reload)
+                  .catch((x: unknown) => {
+                    fail(x);
+                  });
+              }}
+            />
+            <FieldLabel htmlFor="support-block" className="font-normal">
+              {t("support.block")}
+            </FieldLabel>
+          </Field>
+          {requests.blocked && <Meta>{t("support.block_on")}</Meta>}
+        </CardContent>
+      </Card>
     </div>
   );
 }

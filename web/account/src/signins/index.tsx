@@ -3,12 +3,18 @@
 // part (this device's key) are shown apart. "End this sign-in" is for another device and never
 // one button with "Sign out"; signing out everywhere says honestly what stays. Device binding is
 // "tied to this device", never a claim of trust.
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { ItemActions, ItemContent } from "@suiss/access-ui/components/ui/item";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { useSignature } from "../hub/Sign.js";
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
 import { NotSigned } from "../lib/instance.js";
+import { Actions, Check, Loading, MONO, PageTitle, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "../account/common.js";
 import { ownInstance, terminate } from "./authority.js";
 
@@ -70,55 +76,59 @@ function Row(props: {
   const current = s.current === true;
   const device = current ? t("signins.this_device") : (s.device ?? t("signins.another_device"));
   return (
-    <li className="row" data-testid="sign-in-row" data-current={current}>
-      <strong>{t("signins.on_device", { device })}</strong>
-      <dl className="facts">
-        <dt>{t("signins.identity")}</dt>
-        <dd>
-          {s.expires_at === null ? "" : t("signins.until", { date: when(s.expires_at) })}
-          {s.keep_signed_in && <span className="meta"> · {t("signins.kept")}</span>}
-          {s.bound === true && (
-            <span className="meta" data-testid="bound">
-              {" · "}
-              {current ? t("settings.tied_to_device") : t("signins.tied")}
-            </span>
-          )}
-          {props.expert && (
-            <span className="badge" data-testid="binding">
-              {s.bound === true ? t("signins.device_bound") : t("signins.not_bound")}
-            </span>
-          )}
-        </dd>
-        <dt>{t("signins.authority")}</dt>
-        <dd data-testid="authority">
-          {s.instance === null || s.instance === undefined
-            ? t("signins.no_device_key")
-            : t("signins.device_key")}
-          {props.expert && s.instance !== null && s.instance !== undefined && (
-            <span className="mono"> {s.instance}</span>
-          )}
-        </dd>
-      </dl>
-      <div className="actions">
+    <RowItem data-testid="sign-in-row" data-current={current}>
+      <ItemContent className="min-w-0">
+        <strong>{t("signins.on_device", { device })}</strong>
+        <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+          <dt className="text-muted-foreground">{t("signins.identity")}</dt>
+          <dd className="flex flex-wrap items-center gap-x-1">
+            {s.expires_at === null ? "" : t("signins.until", { date: when(s.expires_at) })}
+            {s.keep_signed_in && (
+              <span className="text-muted-foreground"> · {t("signins.kept")}</span>
+            )}
+            {s.bound === true && (
+              <span className="text-muted-foreground" data-testid="bound">
+                {" · "}
+                {current ? t("settings.tied_to_device") : t("signins.tied")}
+              </span>
+            )}
+            {props.expert && (
+              <Badge variant="outline" className="ms-1" data-testid="binding">
+                {s.bound === true ? t("signins.device_bound") : t("signins.not_bound")}
+              </Badge>
+            )}
+          </dd>
+          <dt className="text-muted-foreground">{t("signins.authority")}</dt>
+          <dd data-testid="authority">
+            {s.instance === null || s.instance === undefined
+              ? t("signins.no_device_key")
+              : t("signins.device_key")}
+            {props.expert && s.instance !== null && s.instance !== undefined && (
+              <span className={MONO}> {s.instance}</span>
+            )}
+          </dd>
+        </dl>
+      </ItemContent>
+      <ItemActions>
         {current ? (
-          <button type="button" className="secondary" disabled={props.busy} onClick={props.signOut}>
+          <Button variant="outline" size="sm" isDisabled={props.busy} onPress={props.signOut}>
             {t("action.sign_out")}
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="secondary"
-            disabled={props.busy}
+          <Button
+            variant="outline"
+            size="sm"
+            isDisabled={props.busy}
             aria-label={`${t("action.end_sign_in")}: ${device}`}
-            onClick={() => {
+            onPress={() => {
               props.end(s);
             }}
           >
             {t("action.end_sign_in")}
-          </button>
+          </Button>
         )}
-      </div>
-    </li>
+      </ItemActions>
+    </RowItem>
   );
 }
 
@@ -204,39 +214,54 @@ export function SignIns(): ReactElement {
   };
 
   return (
-    <section aria-labelledby="sign-ins-heading" data-testid="sign-ins">
-      <h2 id="sign-ins-heading">{t("settings.sign_ins")}</h2>
-      {region}
-      {everywhere ? (
-        <div role="status" data-testid="signed-out-everywhere">
-          <p>{t("signins.signed_out_everywhere")}</p>
-          <p>{t("signed_out.delegations_remain")}</p>
-        </div>
-      ) : list === null ? (
-        <p>{t("shell.loading")}</p>
-      ) : (
-        <>
-          <div className="actions">
-            <input
-              id="sign-ins-expert"
-              type="checkbox"
-              checked={expert}
-              onChange={(e) => {
-                setExpert(e.target.checked);
-              }}
-            />
-            <label htmlFor="sign-ins-expert">{t("signins.details")}</label>
-          </div>
-          <ul className="rows">
-            {list.map((s) => (
-              <Row key={s.id} s={s} expert={expert} busy={busy} end={end} signOut={signOut} />
-            ))}
-          </ul>
-          <button type="button" disabled={busy} onClick={signOutEverywhere}>
-            {t("action.sign_out_everywhere")}
-          </button>
-        </>
-      )}
+    <section
+      aria-labelledby="sign-ins-heading"
+      data-testid="sign-ins"
+      className="flex flex-col gap-6"
+    >
+      <PageTitle id="sign-ins-heading">{t("settings.sign_ins")}</PageTitle>
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          {region}
+          {everywhere ? (
+            <div
+              role="status"
+              data-testid="signed-out-everywhere"
+              className="flex flex-col gap-1 rounded-xl bg-muted p-4"
+            >
+              <p className="font-semibold">{t("signins.signed_out_everywhere")}</p>
+              <p className="text-sm">{t("signed_out.delegations_remain")}</p>
+            </div>
+          ) : list === null ? (
+            <Loading />
+          ) : (
+            <>
+              <Field orientation="horizontal">
+                <Check
+                  id="sign-ins-expert"
+                  checked={expert}
+                  onChange={(e) => {
+                    setExpert(e.target.checked);
+                  }}
+                />
+                <FieldLabel htmlFor="sign-ins-expert" className="font-normal">
+                  {t("signins.details")}
+                </FieldLabel>
+              </Field>
+              <Rows>
+                {list.map((s) => (
+                  <Row key={s.id} s={s} expert={expert} busy={busy} end={end} signOut={signOut} />
+                ))}
+              </Rows>
+              <Actions>
+                <Button variant="outline" isDisabled={busy} onPress={signOutEverywhere}>
+                  {t("action.sign_out_everywhere")}
+                </Button>
+              </Actions>
+            </>
+          )}
+        </CardContent>
+      </Card>
       {dialog}
     </section>
   );

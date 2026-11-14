@@ -5,16 +5,33 @@
 // agent is shown as an agent (XI-17); what it did is what its runtime reported (E64, X30); Stop
 // is two rows (X13) and the aftermath is honest about the horizon (§8.13, §8.17.7.4).
 import { agents, honesty, payment, WhyPanel, type Explanation } from "@suiss/access-react";
+import { Alert } from "@suiss/access-ui/components/ui/alert";
+import { Badge as UiBadge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { cn } from "@suiss/access-ui/lib/utils";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { revoke, search, type Revoking } from "../lib/adp.js";
 import { at, catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance, SignatureView } from "../lib/instance.js";
+import {
+  Actions,
+  Loading,
+  Meta,
+  MONO,
+  Nothing,
+  PageTitle,
+  Panel,
+  Rows as List,
+} from "../lib/ui.js";
 import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
 import { relayStatus } from "./relay.js";
 import { supportAccess, supportLine, type SupportRow } from "../support/model.js";
 
 export type Section = "authority" | "activity" | "changes";
+
+const ROW = "flex flex-col gap-2 rounded-xl border p-4";
+const PANEL = "flex flex-col gap-3 rounded-xl border bg-muted/50 p-4";
 
 /** IA-2: a change kind is shown only when the catalog has its text. */
 function known(kind: string): boolean {
@@ -57,7 +74,7 @@ function reportsOf(uses: readonly ActivityRow[], exercise: string): agents.Repor
 /** XI-17 */
 function Badge({ face, viewer }: { readonly face: agents.AgentFace; readonly viewer: string }) {
   return (
-    <p className="meta" data-testid="agent-badge">
+    <p className="text-sm text-muted-foreground" data-testid="agent-badge">
       <agents.AgentBadge face={face} name={namer(viewer)} catalogue={catalogue} />
     </p>
   );
@@ -83,7 +100,7 @@ function NextCheck({
   }, [instance, grant]);
   if (next === undefined) return null;
   return (
-    <p className="meta" data-testid="agent-next-check">
+    <p className="text-sm text-muted-foreground" data-testid="agent-next-check">
       {t("agent.next_check", { time: at(next) })}
     </p>
   );
@@ -103,7 +120,7 @@ function Passed({
   if (passed.length === 0 || row.who.party === undefined) return null;
   const name = namer(viewer);
   return (
-    <ul className="meta" data-testid="passed-on">
+    <ul className="text-sm text-muted-foreground" data-testid="passed-on">
       {passed.map((p) => (
         <li key={p.grant}>
           {t("subdelegation.passed", {
@@ -119,19 +136,15 @@ function Passed({
 
 function Owner({ asOf }: { readonly asOf: number }): ReactElement {
   return (
-    <p className="owner">
-      <span className="badge">{t("hub.owner", { owner: t("owner.access") })}</span>{" "}
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+      <UiBadge variant="outline">{t("hub.owner", { owner: t("owner.access") })}</UiBadge>{" "}
       {t("domain.current", { time: at(asOf) })}
     </p>
   );
 }
 
 function Capacities({ row }: { readonly row: Row }): ReactElement {
-  return (
-    <span className="capacity">
-      {row.capacity.map((c) => t(c.text, { party: c.party ?? "" })).join(" · ")}
-    </span>
-  );
+  return <span>{row.capacity.map((c) => t(c.text, { party: c.party ?? "" })).join(" · ")}</span>;
 }
 
 function Why({ row }: { readonly row: Row }): ReactElement {
@@ -157,8 +170,8 @@ function Why({ row }: { readonly row: Row }): ReactElement {
     ],
   };
   return (
-    <div className="why" data-testid="why">
-      <h4>{t("why.title")}</h4>
+    <div className="flex flex-col gap-2 rounded-xl bg-muted p-4" data-testid="why">
+      <h4 className="font-semibold">{t("why.title")}</h4>
       <WhyPanel explanation={explanation} depth={depth} onDepth={setDepth} catalogue={catalogue} />
     </div>
   );
@@ -229,20 +242,20 @@ function RevokePanel({
           )}
           catalogue={catalogue}
         />
-        <p className="notice">{t("stop.runtime_note")}</p>
+        <Meta>{t("stop.runtime_note")}</Meta>
       </div>
     ) : null;
   if (state !== null) {
     const { r: done, next, when: now } = state;
     return (
-      <section className="panel" aria-label={t("aftermath.title")} data-testid="aftermath">
-        <h4>{t("aftermath.title")}</h4>
-        <p role="status" data-testid="outcome">
+      <section aria-label={t("aftermath.title")} data-testid="aftermath" className={PANEL}>
+        <h4 className="font-semibold">{t("aftermath.title")}</h4>
+        <p role="status" data-testid="outcome" className="font-semibold">
           {t(done.shown)}
         </p>
         {stopRows}
         {recorded && row.agent !== undefined && (
-          <ul className="rows" data-testid="agent-aftermath">
+          <ul className="flex flex-col gap-2" data-testid="agent-aftermath">
             {(exposed.length === 0 ? [undefined] : exposed).map((e) => {
               const after =
                 e === undefined
@@ -256,7 +269,7 @@ function RevokePanel({
                   </p>
                   {after !== undefined && <p data-testid="agent-next">{line(after.next)}</p>}
                   {after?.containment === true && (
-                    <p className="notice" data-testid="containment">
+                    <p className="text-sm text-muted-foreground" data-testid="containment">
                       {t("aftermath.containment")}
                     </p>
                   )}
@@ -269,31 +282,33 @@ function RevokePanel({
           <p>{t("aftermath.recorded_at", { position: String(done.position) })}</p>
         )}
         {done.shown === "outcome.confirmed" && <p>{t("aftermath.past_uses")}</p>}
-        {next === "retry_same_nonce" && (
-          <button
-            type="button"
-            onClick={() => {
-              void done.retry().then((s) => {
-                const after = honesty.next(s.attempt, Date.now());
-                setState({ r: s, next: after, when: Date.now() });
-                if (after === "done") onDone();
-              });
-            }}
-          >
-            {t("action.read_again")}
-          </button>
-        )}
-        <button type="button" className="secondary" onClick={onClose}>
-          {t("action.cancel")}
-        </button>
+        <Actions>
+          {next === "retry_same_nonce" && (
+            <Button
+              size="sm"
+              onPress={() => {
+                void done.retry().then((s) => {
+                  const after = honesty.next(s.attempt, Date.now());
+                  setState({ r: s, next: after, when: Date.now() });
+                  if (after === "done") onDone();
+                });
+              }}
+            >
+              {t("action.read_again")}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onPress={onClose}>
+            {t("action.cancel")}
+          </Button>
+        </Actions>
       </section>
     );
   }
   return (
-    <section className="panel" aria-label={t("revoke.title")} data-testid="revoke">
-      <h4>{t("revoke.title")}</h4>
+    <section aria-label={t("revoke.title")} data-testid="revoke" className={PANEL}>
+      <h4 className="font-semibold">{t("revoke.title")}</h4>
       {stopRows}
-      <h5>{t("revoke.impact")}</h5>
+      <h5 className="text-sm font-semibold">{t("revoke.impact")}</h5>
       <p data-testid="impact">
         {impact === null
           ? t("shell.loading")
@@ -302,40 +317,42 @@ function RevokePanel({
             : t("revoke.impact_count", { count: String(impact) })}
       </p>
       {view !== null && (
-        <dl className="facts">
+        <dl className="flex flex-col gap-2">
           {view.v.intents.map((i) => (
             <div key={i.digest}>
-              <dt>{t("sign.action", { action: `${i.action.namespace}.${i.action.name}` })}</dt>
-              <dd className="mono">
+              <dt className="text-sm font-semibold">
+                {t("sign.action", { action: `${i.action.namespace}.${i.action.name}` })}
+              </dt>
+              <dd className={MONO}>
                 {i.resources.map((r) => `${r.namespace}:${r.path.join("/")}`).join(", ")}
               </dd>
             </div>
           ))}
         </dl>
       )}
-      {failed && <p role="alert">{t("shell.unavailable")}</p>}
-      <div className="actions">
-        <button
-          type="button"
-          disabled={view === null}
-          onClick={() => {
+      {failed && <Alert variant="destructive">{t("shell.unavailable")}</Alert>}
+      <Actions>
+        <Button
+          size="sm"
+          isDisabled={view === null}
+          onPress={() => {
             view?.resolve(true);
             setView(null);
           }}
         >
           {t("action.revoke")}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => {
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => {
             view?.resolve(false);
             onClose();
           }}
         >
           {t("action.keep")}
-        </button>
-      </div>
+        </Button>
+      </Actions>
     </section>
   );
 }
@@ -359,17 +376,16 @@ function Rows({
 }): ReactElement {
   const [open, setOpen] = useState<{ grant: string; what: "why" | "revoke" | "stop" } | null>(null);
   return (
-    <section aria-label={title} data-testid={testid}>
-      <h3>{title}</h3>
-      {rows.length === 0 && <p>{t("hub.empty")}</p>}
-      <ul className="rows">
+    <Panel aria-label={title} data-testid={testid} title={title}>
+      {rows.length === 0 && <Nothing>{t("hub.empty")}</Nothing>}
+      <List>
         {rows.map((r) => {
           const revokeOffer = r.offers.find((o) => o.action === "revoke");
           return (
-            <li key={`${testid}:${r.grant}`} className="row" data-grant={r.grant}>
+            <li key={`${testid}:${r.grant}`} className={cn("row", ROW)} data-grant={r.grant}>
               {r.agent !== undefined && <Badge face={r.agent} viewer={instance.party} />}
               <p>
-                <span className="mono">{r.what.join(", ")}</span> · <Capacities row={r} />
+                <span className={MONO}>{r.what.join(", ")}</span> · <Capacities row={r} />
               </p>
               {r.agent !== undefined && <NextCheck instance={instance} grant={r.grant} />}
               <Passed row={r} rows={all} viewer={instance.party} />
@@ -380,11 +396,11 @@ function Rows({
               />
               {/* §8.17.9.8 */}
               {r.hrSource !== undefined && (
-                <p className="meta" data-testid="hr-source">
+                <p className="text-sm text-muted-foreground" data-testid="hr-source">
                   {t("source.sync_from_hr", { issuer: r.hrSource })}
                 </p>
               )}
-              <p className="meta">
+              <p className="text-sm text-muted-foreground">
                 {r.selection?.at === undefined
                   ? t(r.status)
                   : t(r.status, { time: at(r.selection.at) })}
@@ -405,44 +421,44 @@ function Rows({
                 )}
               </p>
               <Owner asOf={r.asOf} />
-              <div className="actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
+              <Actions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
                     setOpen({ grant: r.grant, what: "why" });
                   }}
                 >
                   {t("action.why")}
-                </button>
+                </Button>
                 {revokeOffer?.available === true ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <Button
+                      size="sm"
+                      onPress={() => {
                         setOpen({ grant: r.grant, what: "revoke" });
                       }}
                     >
                       {t("action.revoke")}
-                    </button>
+                    </Button>
                     {r.agent !== undefined && (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
                           setOpen({ grant: r.grant, what: "stop" });
                         }}
                       >
                         {t("action.stop_agent")}
-                      </button>
+                      </Button>
                     )}
                   </>
                 ) : (
                   revokeOffer?.whoCan !== undefined && (
-                    <span className="meta">{t(revokeOffer.whoCan)}</span>
+                    <span className="text-sm text-muted-foreground">{t(revokeOffer.whoCan)}</span>
                   )
                 )}
-              </div>
+              </Actions>
               {open?.grant === r.grant && open.what === "why" && <Why row={r} />}
               {open?.grant === r.grant && open.what !== "why" && (
                 <RevokePanel
@@ -459,8 +475,8 @@ function Rows({
             </li>
           );
         })}
-      </ul>
-    </section>
+      </List>
+    </Panel>
   );
 }
 
@@ -492,34 +508,37 @@ export function Hub({
     });
   }, [instance]);
   useEffect(load, [load]);
-  if (hub === null) return <p role="status">{t("shell.loading")}</p>;
+  if (hub === null) return <Loading status rows={3} />;
   const all = [...hub.yourAuthority, ...hub.actingForYou, ...hub.sharedFromYou];
   return (
-    <div className="hub" data-testid="hub">
-      <p className="meta" data-testid="domain-status">
+    <div className="flex flex-col gap-6" data-testid="hub">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {section === "authority" ? <PageTitle>{t("nav.authority")}</PageTitle> : <span />}
+        <Button variant="outline" size="sm" onPress={load}>
+          {t("action.read_again")}
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground" data-testid="domain-status">
         {hub.status === "domain.current"
           ? t("domain.current", { time: at(hub.asOf) })
           : t("domain.unreachable")}
       </p>
       {hub.notices.map((n) => (
-        <p key={n} className="notice">
+        <Alert key={n} role="note">
           {t(n)}
-        </p>
+        </Alert>
       ))}
       {/* §8.13, OP-156 m.6 (d) */}
       {hub.status === "domain.unreachable" && (
-        <p className="notice" role="alert" data-testid="access-unavailable">
+        <Alert variant="destructive" data-testid="access-unavailable">
           {t("status.access_unavailable")}
-        </p>
+        </Alert>
       )}
       {delayed && (
-        <p className="notice" data-testid="notifications-delayed">
+        <Alert role="note" data-testid="notifications-delayed">
           {t("status.notifications_delayed")}
-        </p>
+        </Alert>
       )}
-      <button type="button" className="secondary" onClick={load}>
-        {t("action.read_again")}
-      </button>
       {section === "authority" && (
         <>
           <Rows
@@ -550,27 +569,29 @@ export function Hub({
             testid="shared-from-you"
           />
           {hub.roots.length > 0 && (
-            <section aria-label={t("hub.roots")}>
-              <h3>{t("hub.roots")}</h3>
-              <ul>
+            <Panel aria-label={t("hub.roots")} title={t("hub.roots")}>
+              <ul className="divide-y text-sm">
                 {hub.roots.map((r) => (
-                  <li key={r.anchor}>
-                    <span className="mono">{r.anchor}</span> · {t(r.confirm)}
+                  <li key={r.anchor} className="py-2">
+                    <span className={MONO}>{r.anchor}</span> · {t(r.confirm)}
                   </li>
                 ))}
               </ul>
-            </section>
+            </Panel>
           )}
         </>
       )}
       {section === "activity" && (
-        <section aria-label={t("hub.activity")} data-testid="activity">
-          <h3>{t("hub.activity")}</h3>
-          <p className="notice">{t("hub.activity_note")}</p>
-          {hub.activity.length === 0 && <p>{t("hub.empty")}</p>}
-          <ul className="rows">
+        <Panel
+          aria-label={t("hub.activity")}
+          data-testid="activity"
+          title={t("hub.activity")}
+          description={t("hub.activity_note")}
+        >
+          {hub.activity.length === 0 && <Nothing>{t("hub.empty")}</Nothing>}
+          <List>
             {hub.activity.map((a) => (
-              <li key={a.pos} className="row" data-testid="use">
+              <li key={a.pos} className={cn("row", ROW)} data-testid="use">
                 {a.agent !== undefined && <Badge face={a.agent} viewer={instance.party} />}
                 {supportLine(a.grant, given, a.at === undefined ? "" : at(a.at)) ?? (
                   <>
@@ -589,37 +610,46 @@ export function Hub({
                 <Owner asOf={hub.asOf} />
               </li>
             ))}
-          </ul>
-        </section>
+          </List>
+        </Panel>
       )}
       {section === "changes" && (
-        <section aria-label={t("hub.changes")} data-testid="changes">
-          <h3>{t("hub.changes")}</h3>
-          <p className="notice">{t("hub.changes_note")}</p>
+        <Panel
+          aria-label={t("hub.changes")}
+          data-testid="changes"
+          title={t("hub.changes")}
+          description={t("hub.changes_note")}
+        >
           {hub.hygiene.length > 0 && (
-            <section data-testid="hygiene" aria-label={t("hygiene.suggestion")}>
-              <p className="notice">{t("hygiene.suggestion")}</p>
-              <ul className="rows">
+            <section
+              data-testid="hygiene"
+              aria-label={t("hygiene.suggestion")}
+              className="flex flex-col gap-3 rounded-xl bg-muted p-4"
+            >
+              <p className="text-sm font-semibold">{t("hygiene.suggestion")}</p>
+              <List>
                 {hub.hygiene.map((h) => (
-                  <li key={h.kind} className="row">
+                  <li key={h.kind} className={cn("row", ROW, "bg-background")}>
                     {t(h.text, { count: String(h.count) })}
                     <Owner asOf={hub.asOf} />
                   </li>
                 ))}
-              </ul>
+              </List>
             </section>
           )}
-          {hub.changes.length === 0 && <p>{t("hub.empty")}</p>}
-          <ul className="rows">
+          {hub.changes.length === 0 && <Nothing>{t("hub.empty")}</Nothing>}
+          <List>
             {hub.changes.map((c) => (
-              <li key={`${String(c.pos)}:${c.about}`} className="row">
-                {t(c.text)} <span className="mono">{c.about}</span>
-                {c.at !== undefined && <> · {at(c.at)}</>}
+              <li key={`${String(c.pos)}:${c.about}`} className={cn("row", ROW)}>
+                <p>
+                  {t(c.text)} <span className={MONO}>{c.about}</span>
+                  {c.at !== undefined && <> · {at(c.at)}</>}
+                </p>
                 <Owner asOf={hub.asOf} />
               </li>
             ))}
-          </ul>
-        </section>
+          </List>
+        </Panel>
       )}
     </div>
   );

@@ -46,14 +46,24 @@ export function useAnnouncer(): {
     if (text !== null) setSaid({ text, alert: true });
   }, []);
   const region = (
-    <>
-      <p aria-live="polite" aria-atomic="true" className="notice" data-testid="said">
+    <div className="flex flex-col gap-1 not-has-[p:not(:empty)]:absolute">
+      <p
+        aria-live="polite"
+        aria-atomic="true"
+        className="text-sm text-muted-foreground"
+        data-testid="said"
+      >
         {said !== null && !said.alert ? said.text : ""}
       </p>
-      <p aria-live="assertive" aria-atomic="true" className="notice" data-testid="said-alert">
+      <p
+        aria-live="assertive"
+        aria-atomic="true"
+        className="text-sm font-semibold text-destructive"
+        data-testid="said-alert"
+      >
         {said?.alert === true ? said.text : ""}
       </p>
-    </>
+    </div>
   );
   return { say, fail, region };
 }

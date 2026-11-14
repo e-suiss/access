@@ -3,10 +3,14 @@
 // only as Access recorded it.
 import type { pay } from "@esuiss/access";
 import { honesty, payment } from "@suiss/access-react";
+import { Alert } from "@suiss/access-ui/components/ui/alert";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
 import { useEffect, useState, type ReactElement } from "react";
 
 import { catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
+import { Actions, Loading, Panel } from "../lib/ui.js";
 import { decode, payOnce, type Paying, requestOf } from "./pay.js";
 
 export function OneTimePaymentPage({
@@ -28,53 +32,61 @@ export function OneTimePaymentPage({
     if (request === undefined) return;
     void decode(request).then(setDecoded);
   }, [request]);
-  if (request === undefined) return <p role="alert">{t("shell.unavailable")}</p>;
-  if (decoded === null) return <p role="status">{t("shell.loading")}</p>;
+  if (request === undefined) {
+    return <Alert variant="destructive">{t("shell.unavailable")}</Alert>;
+  }
+  if (decoded === null) return <Loading status />;
   if (paid !== null) {
     const { p: paying, next } = paid;
     return (
-      <section className="panel" aria-label={t("payment.one_time_title")} data-testid="paid">
-        <h3>{t("payment.one_time_title")}</h3>
-        <p role="status" data-testid="outcome">
+      <Panel
+        aria-label={t("payment.one_time_title")}
+        data-testid="paid"
+        title={t("payment.one_time_title")}
+      >
+        <p role="status" data-testid="outcome" className="font-semibold">
           {t(paying.shown)}
         </p>
         {next === "retry_same_nonce" && (
-          <button
-            type="button"
-            onClick={() => {
-              void paying.retry().then(setPaying);
-            }}
-          >
-            {t("action.read_again")}
-          </button>
+          <Actions>
+            <Button
+              onPress={() => {
+                void paying.retry().then(setPaying);
+              }}
+            >
+              {t("action.read_again")}
+            </Button>
+          </Actions>
         )}
-      </section>
+      </Panel>
     );
   }
   return (
-    <div data-testid="payment">
-      <payment.OneTimePayment
-        payment={decoded}
-        merchant={request.merchant}
-        locale={locale}
-        busy={busy}
-        catalogue={catalogue}
-        onPay={() => {
-          setBusy(true);
-          payOnce(instance, confirm, request)
-            .then(setPaying)
-            .catch(() => {
-              setFailed(true);
-            })
-            .finally(() => {
-              setBusy(false);
-            });
-        }}
-        onCancel={() => {
-          history.back();
-        }}
-      />
-      {failed && <p role="alert">{t("outcome.not_recorded")}</p>}
-    </div>
+    <Card data-testid="payment">
+      <CardContent className="flex flex-col gap-4">
+        <payment.OneTimePayment
+          payment={decoded}
+          merchant={request.merchant}
+          locale={locale}
+          busy={busy}
+          catalogue={catalogue}
+          onPay={() => {
+            setBusy(true);
+            payOnce(instance, confirm, request)
+              .then(setPaying)
+              .catch(() => {
+                setFailed(true);
+              })
+              .finally(() => {
+                setBusy(false);
+              });
+          }}
+          onCancel={() => {
+            history.back();
+          }}
+        />
+        {failed && <Alert variant="destructive">{t("outcome.not_recorded")}</Alert>}
+      </CardContent>
+    </Card>
   );
 }
