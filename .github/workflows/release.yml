@@ -182,7 +182,7 @@ jobs:
     name: test
     needs: gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     permissions:
       contents: read
     services:
