@@ -3,8 +3,20 @@
 // What a sink holds is a copy, never the record: the audit records answer every question.
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Field as FieldRoot,
+  FieldDescription,
+  FieldLabel,
+} from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+import { Textarea } from "@suiss/access-ui/components/ui/textarea";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { FORM, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Delivery {
@@ -102,26 +114,40 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <Panel id="export-sinks" title={t("exportSinksTitle")}>
         <p>{t("exportSinksIntro")}</p>
-        <p role="note" data-testid="export-copy-note">
-          {t("exportCopyNote")} <a href="/console/audit/records">{t("exportRecordsLink")}</a>
-        </p>
+        <Notice role="note" data-testid="export-copy-note">
+          {t("exportCopyNote")}{" "}
+          <a
+            href="/console/audit/records"
+            className="text-primary underline underline-offset-2 hover:text-foreground"
+          >
+            {t("exportRecordsLink")}
+          </a>
+        </Notice>
         <Show l={sinks}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="export-sinks">
+              <ul data-testid="export-sinks" className="flex flex-col divide-y">
                 {p.items.map((s) => (
-                  <li key={s.name}>
-                    <span className="mono">{s.name}</span> · {kindLabel(s)} ·{" "}
-                    <span className="mono">{s.endpoint}</span> · {status(s)}
+                  <li
+                    key={s.name}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 py-3 text-sm first:pt-0 last:pb-0"
+                  >
+                    <span className={`${MONO} font-medium`}>{s.name}</span> · {kindLabel(s)} ·{" "}
+                    <span className={MONO}>{s.endpoint}</span> ·{" "}
+                    <Badge variant={s.status === "live" ? "outline" : "secondary"}>
+                      {status(s)}
+                    </Badge>
                     {s.has_secret ? ` · ${t("exportSecretStored")}` : ""}
                     {s.status === "live" && (
                       <>
                         {" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ms-auto"
+                          onPress={() => {
                             send(
                               "retireExportSink",
                               `export-sinks/${encodeURIComponent(s.name)}/retire`,
@@ -131,7 +157,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           }}
                         >
                           {t("exportRetire", { name: s.name })}
-                        </button>
+                        </Button>
                       </>
                     )}
                   </li>
@@ -143,6 +169,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
       </Panel>
       <Panel id="export-register" title={t("exportRegister")}>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             register();
@@ -155,22 +182,25 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setName}
             hint={t("exportNameHint")}
           />
-          <p className="field">
-            <label htmlFor="export-kind">{t("exportKind")}</label>
-            <select
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="export-kind" className="text-sm">
+              {t("exportKind")}
+            </FieldLabel>
+            <NativeSelect
               id="export-kind"
+              size="sm"
               value={kind}
               onChange={(e) => {
                 setKind(e.target.value as KindValue);
               }}
             >
               {KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
+                <NativeSelectOption key={k.value} value={k.value}>
                   {k.value.replace(":", " · ")}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
-          </p>
+            </NativeSelect>
+          </FieldRoot>
           <Field
             id="export-endpoint"
             label={t("exportEndpoint")}
@@ -178,22 +208,27 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setEndpoint}
             hint={t("exportEndpointHint")}
           />
-          <p className="field">
-            <label htmlFor="export-settings">{t("exportSettings")}</label>
-            <textarea
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="export-settings" className="text-sm">
+              {t("exportSettings")}
+            </FieldLabel>
+            <Textarea
               id="export-settings"
-              className="mono"
+              className={`${MONO} text-sm`}
               value={settings}
               onChange={(e) => {
                 setSettings(e.target.value);
               }}
             />
-          </p>
-          <p className="field">
-            <label htmlFor="export-secret">{t("exportSecret")}</label>
-            <input
+          </FieldRoot>
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="export-secret" className="text-sm">
+              {t("exportSecret")}
+            </FieldLabel>
+            <Input
               id="export-secret"
               type="password"
+              size="md"
               autoComplete="off"
               value={secret}
               aria-describedby="export-secret-hint"
@@ -201,17 +236,15 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 setSecret(e.target.value);
               }}
             />
-            <span id="export-secret-hint" className="hint">
-              {t("exportSecretHint")}
-            </span>
-          </p>
-          <button type="submit" disabled={name === "" || endpoint === ""}>
+            <FieldDescription id="export-secret-hint">{t("exportSecretHint")}</FieldDescription>
+          </FieldRoot>
+          <Button type="submit" className="self-start" isDisabled={name === "" || endpoint === ""}>
             {t("exportRegisterSend")}
-          </button>
+          </Button>
         </form>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

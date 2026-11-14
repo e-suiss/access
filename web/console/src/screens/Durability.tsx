@@ -8,9 +8,15 @@
 // undeclared hosting reads as shared and shows the co-tenant risk.
 import type { ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+
 import { t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
+import { BULLETS, HINT, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Show, useLoad } from "./parts.js";
+
+const H3 = "text-base font-semibold";
 
 interface Declared {
   readonly name: string;
@@ -49,17 +55,19 @@ function Parties({
   readonly testid: string;
 }): ReactElement {
   return items.length === 0 ? (
-    <p>{t("none")}</p>
+    <p className={HINT}>{t("none")}</p>
   ) : (
-    <ul data-testid={testid}>
+    <ul data-testid={testid} className={BULLETS}>
       {items.map((w) => (
         <li key={w.name}>
-          <span className="mono">{w.name}</span> · {w.operator} ·{" "}
+          <span className={MONO}>{w.name}</span> · {w.operator} ·{" "}
           {w.independent ? t("durabilityWitnessIndependent") : t("durabilityWitnessNotIndependent")}
           {w.canonical === false && (
             <>
               {" · "}
-              <span data-testid="durability-proposed">{t("durabilityProposed")}</span>
+              <Badge variant="outline" data-testid="durability-proposed">
+                {t("durabilityProposed")}
+              </Badge>
             </>
           )}
         </li>
@@ -73,55 +81,57 @@ export function Durability({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const realm = encodeURIComponent(ctx.session.realm);
   const view = useLoad(() => adminGet<DurabilityView>(ctx.instance, `realms/${realm}/durability`));
   return (
-    <div data-testid="durability">
-      <p>{t("durabilityIntro")}</p>
+    <div data-testid="durability" className="flex flex-col gap-4">
+      <p className="text-muted-foreground">{t("durabilityIntro")}</p>
       <Show l={view}>
         {(v) => (
-          <>
-            <p data-testid="durability-profile" data-durability={v.durability ?? "unknown"}>
-              {v.durability === "single-node"
-                ? t("durabilitySingleNode")
-                : t("durabilityReplicated")}
-            </p>
-            <p data-testid="durability-dr">
-              {v.dr_profile === null
-                ? t("durabilityDrSync")
-                : t("durabilityDr", {
-                    class: v.class ?? "regional",
-                    rpo: `${String(v.dr_profile.rpo_s)} s`,
-                  })}
-            </p>
-            <h3>{t("durabilityWitnesses")}</h3>
-            <Parties items={v.witnesses ?? []} testid="durability-witnesses" />
-            <h3>{t("durabilityReplicas")}</h3>
-            <Parties items={v.replicas ?? []} testid="durability-replicas" />
-            <p data-testid="durability-pq-anchor">
-              {v.pq_reanchor === undefined || v.pq_reanchor === null
-                ? t("signingNoAnchor")
-                : t("signingAnchor", {
-                    size: String(v.pq_reanchor.size),
-                    time: at(v.pq_reanchor.time),
-                  })}
-            </p>
-            <p
-              data-testid="durability-hosting"
-              data-hsm={v.hosting?.hsm_partition === "dedicated" ? "dedicated" : "shared"}
-              data-compute={v.hosting?.compute === "dedicated" ? "dedicated" : "shared"}
-            >
-              {v.hosting?.hsm_partition === "dedicated"
-                ? t("hostingDedicatedHsm")
-                : t("hostingSharedHsm")}
-              {" · "}
-              {v.hosting?.compute === "dedicated"
-                ? t("hostingDedicatedCompute")
-                : t("hostingSharedCompute")}
-            </p>
-            {v.acknowledges !== true && (
-              <p role="status" data-testid="durability-unconfirmed">
-                {t("durabilityNoWitness")}
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <p data-testid="durability-profile" data-durability={v.durability ?? "unknown"}>
+                {v.durability === "single-node"
+                  ? t("durabilitySingleNode")
+                  : t("durabilityReplicated")}
               </p>
-            )}
-          </>
+              <p data-testid="durability-dr">
+                {v.dr_profile === null
+                  ? t("durabilityDrSync")
+                  : t("durabilityDr", {
+                      class: v.class ?? "regional",
+                      rpo: `${String(v.dr_profile.rpo_s)} s`,
+                    })}
+              </p>
+              <h3 className={H3}>{t("durabilityWitnesses")}</h3>
+              <Parties items={v.witnesses ?? []} testid="durability-witnesses" />
+              <h3 className={H3}>{t("durabilityReplicas")}</h3>
+              <Parties items={v.replicas ?? []} testid="durability-replicas" />
+              <p data-testid="durability-pq-anchor">
+                {v.pq_reanchor === undefined || v.pq_reanchor === null
+                  ? t("signingNoAnchor")
+                  : t("signingAnchor", {
+                      size: String(v.pq_reanchor.size),
+                      time: at(v.pq_reanchor.time),
+                    })}
+              </p>
+              <p
+                data-testid="durability-hosting"
+                data-hsm={v.hosting?.hsm_partition === "dedicated" ? "dedicated" : "shared"}
+                data-compute={v.hosting?.compute === "dedicated" ? "dedicated" : "shared"}
+              >
+                {v.hosting?.hsm_partition === "dedicated"
+                  ? t("hostingDedicatedHsm")
+                  : t("hostingSharedHsm")}
+                {" · "}
+                {v.hosting?.compute === "dedicated"
+                  ? t("hostingDedicatedCompute")
+                  : t("hostingSharedCompute")}
+              </p>
+              {v.acknowledges !== true && (
+                <Notice tone="warning" role="status" data-testid="durability-unconfirmed">
+                  {t("durabilityNoWitness")}
+                </Notice>
+              )}
+            </CardContent>
+          </Card>
         )}
       </Show>
     </div>

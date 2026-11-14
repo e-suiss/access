@@ -3,8 +3,13 @@
 // on runs the setup check, and its refusal is shown as the change's answer.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field as FieldRoot, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, FORM, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface ProxyRow {
@@ -74,21 +79,24 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={proxies}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="proxies">
+              <ul data-testid="proxies" className="flex flex-col divide-y">
                 {p.items.map((r) => (
-                  <li key={r.name}>
-                    <span className="mono">{r.name}</span> · <span className="mono">{r.host}</span>{" "}
-                    · {r.engine} · {r.status === "live" ? t("proxyLive") : t("proxyRetired")} ·{" "}
-                    {r.plain_headers ? t("proxyPlainOn") : t("proxyPlainOff")} ·{" "}
-                    {t("proxyCache", { s: String(r.decision_cache_s) })}
+                  <li key={r.name} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                    <span>
+                      <span className={MONO}>{r.name}</span> ·{" "}
+                      <span className={MONO}>{r.host}</span> · {r.engine} ·{" "}
+                      {r.status === "live" ? t("proxyLive") : t("proxyRetired")} ·{" "}
+                      {r.plain_headers ? t("proxyPlainOn") : t("proxyPlainOff")} ·{" "}
+                      {t("proxyCache", { s: String(r.decision_cache_s) })}
+                    </span>
                     {r.status === "live" && (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                      <span className={ACTIONS}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
                             send(
                               "putProxyPlainHeaders",
                               "PUT",
@@ -101,10 +109,11 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           {r.plain_headers
                             ? t("proxyPlainClose", { name: r.name })
                             : t("proxyPlainOpen", { name: r.name })}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onPress={() => {
                             send(
                               "retireProxy",
                               "POST",
@@ -115,8 +124,8 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           }}
                         >
                           {t("proxyRetire", { name: r.name })}
-                        </button>
-                      </>
+                        </Button>
+                      </span>
                     )}
                   </li>
                 ))}
@@ -124,12 +133,13 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
             )
           }
         </Show>
-        <p role="note" data-testid="proxy-plain-note">
+        <Notice role="note" data-testid="proxy-plain-note">
           {t("proxyPlainNote")}
-        </p>
+        </Notice>
       </Panel>
       <Panel id="proxy-register" title={t("proxyRegisterTitle")}>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("registerProxy", "POST", "proxies", {
@@ -160,22 +170,25 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setName}
             hint={t("proxyNameHint")}
           />
-          <p className="field">
-            <label htmlFor="proxy-engine">{t("proxyEngine")}</label>
-            <select
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="proxy-engine" className="text-sm">
+              {t("proxyEngine")}
+            </FieldLabel>
+            <NativeSelect
               id="proxy-engine"
+              size="sm"
               value={engine}
               onChange={(e) => {
                 setEngine(e.target.value);
               }}
             >
               {ENGINES.map((x) => (
-                <option key={x} value={x}>
+                <NativeSelectOption key={x} value={x}>
                   {x}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
-          </p>
+            </NativeSelect>
+          </FieldRoot>
           <Field id="proxy-host" label={t("proxyHost")} value={host} onChange={setHost} />
           <Field
             id="proxy-upstream"
@@ -236,13 +249,15 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setRoutes}
             hint={t("proxyRoutesHint")}
           />
-          <button type="submit" disabled={!ready}>
-            {t("proxyRegisterSend")}
-          </button>
+          <div className={ACTIONS}>
+            <Button type="submit" isDisabled={!ready}>
+              {t("proxyRegisterSend")}
+            </Button>
+          </div>
         </form>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

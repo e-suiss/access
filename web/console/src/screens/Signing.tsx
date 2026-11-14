@@ -1,9 +1,12 @@
 // CR-41, CR-44, HL-27, OP-159 m.3 (g), (o), (r), (t)
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
+import { CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
 
 type Profile = "ml-dsa-65" | "ml-dsa-44" | "ml-dsa-87";
@@ -68,23 +71,25 @@ function ProfilePanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }
           : t("signingPqOn", { alg: ALG[v.signing_profile] })
       }
     >
-      <p data-testid="signing-algorithms" className="mono">
+      <p data-testid="signing-algorithms" className={`${MONO} text-sm`}>
         {v.algorithms.join(", ")}
       </p>
       {v.fips ? (
-        <p role="note" data-testid="signing-fips-exclusive">
+        <Notice role="note" data-testid="signing-fips-exclusive">
           {t("signingFipsPqExclusive")}
-        </p>
+        </Notice>
       ) : v.signing_profile === null ? (
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             submit({ profile });
           }}
         >
           {PROFILES.map((p) => (
-            <label key={p}>
+            <label key={p} className={CHOICE_LABEL}>
               <input
+                className={CHOICE}
                 type="radio"
                 name="signing-profile"
                 value={p}
@@ -92,30 +97,33 @@ function ProfilePanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }
                 onChange={() => {
                   setProfile(p);
                 }}
-              />{" "}
+              />
               {ALG[p]}
             </label>
           ))}
-          <button type="submit">{t("settingsSave")}</button>
+          <Button type="submit" className="self-start">
+            {t("settingsSave")}
+          </Button>
         </form>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="destructive"
+          className="self-start"
           data-testid="signing-turn-off"
-          onClick={() => {
+          onPress={() => {
             submit({});
           }}
         >
           {t("signingPqTurnOff")}
-        </button>
+        </Button>
       )}
       {refused !== undefined && (
-        <p role="alert" data-testid="signing-refused">
+        <Notice tone="danger" role="alert" data-testid="signing-refused">
           {refused}
-        </p>
+        </Notice>
       )}
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -129,6 +137,7 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
   return (
     <Panel id="signing-kex" title={t("signingKexShare", { mode: label(v.kex_share) })}>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
@@ -142,8 +151,9 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
         }}
       >
         {(["optimistic", "advertise-only"] as const).map((m) => (
-          <label key={m}>
+          <label key={m} className={CHOICE_LABEL}>
             <input
+              className={CHOICE}
               type="radio"
               name="kex-share"
               value={m}
@@ -151,16 +161,16 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
               onChange={() => {
                 setMode(m);
               }}
-            />{" "}
+            />
             {label(m)}
           </label>
         ))}
-        <button type="submit" disabled={mode === v.kex_share}>
+        <Button type="submit" className="self-start" isDisabled={mode === v.kex_share}>
           {t("settingsSave")}
-        </button>
+        </Button>
       </form>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -171,19 +181,23 @@ export function Signing({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const realm = encodeURIComponent(ctx.session.realm);
   const view = useLoad(() => adminGet<SigningView>(ctx.instance, `realms/${realm}/signing`));
   return (
-    <div data-testid="signing">
+    <div data-testid="signing" className="flex flex-col gap-6">
       <p>{t("signingIntro")}</p>
       <Show l={view}>
         {(v) => (
           <>
             <ProfilePanel ctx={ctx} v={v} />
             <KexPanel ctx={ctx} v={v} />
-            <p data-testid="signing-fips-module" data-module={v.fips_module ? "true" : "false"}>
+            <p
+              data-testid="signing-fips-module"
+              className="text-sm text-muted-foreground"
+              data-module={v.fips_module ? "true" : "false"}
+            >
               {t("signingFipsModule", {
                 state: v.fips_module ? t("signingFipsModuleInUse") : t("signingFipsModuleNotInUse"),
               })}
             </p>
-            <p data-testid="signing-pq-anchor">
+            <p data-testid="signing-pq-anchor" className="text-sm text-muted-foreground">
               {v.pq_reanchor === null
                 ? t("signingNoAnchor")
                 : t("signingAnchor", {
