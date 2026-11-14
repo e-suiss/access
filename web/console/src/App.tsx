@@ -3,6 +3,20 @@
 // device key nothing is probed and nothing appears.
 import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  useSidebar,
+} from "@suiss/access-ui/components/ui/sidebar";
+
 import { t, type Key } from "./i18n/index.js";
 import { json, Problem, type SessionInfo } from "./lib/api.js";
 import { find, type Instance } from "./lib/instance.js";
@@ -18,6 +32,7 @@ import { About, Profile, Sessions } from "./screens/Own.js";
 import { SectionPage } from "./screens/Section.js";
 import { SignIn } from "./screens/SignIn.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
+import { Busy, Failure, MONO } from "./ui.js";
 
 const BASE = "/console/";
 
@@ -63,15 +78,103 @@ type State =
   | { readonly status: "unavailable" }
   | { readonly status: "signed-in"; readonly session: SessionInfo };
 
-const NAV: readonly { readonly route: Route; readonly key: Key }[] = [
+interface NavItem {
+  readonly route: Route;
+  readonly key: Key;
+}
+
+const NAV: readonly NavItem[] = [
   { route: "", key: "navAuthority" },
   { route: "admin", key: "navAdmin" },
   { route: "developer", key: "navDeveloper" },
   { route: "audit", key: "navAudit" },
+];
+
+const OWN: readonly NavItem[] = [
   { route: "profile", key: "navProfile" },
   { route: "sessions", key: "navSessions" },
   { route: "about", key: "navAbout" },
 ];
+
+/** The sidebar's toggle on narrow screens, where the sidebar is a sheet. */
+function NavToggle(): ReactElement {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="md:hidden"
+      aria-label={t("navLabel")}
+      onPress={toggleSidebar}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+        <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
+      </svg>
+    </Button>
+  );
+}
+
+function NavGroup({
+  items,
+  current,
+  go,
+  onNavigate,
+}: {
+  readonly items: readonly NavItem[];
+  readonly current: Route;
+  readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
+  readonly onNavigate: () => void;
+}): ReactElement {
+  return (
+    <SidebarGroup>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((n) => (
+            <SidebarMenuItem key={n.route}>
+              <SidebarMenuButton
+                isActive={current === n.route}
+                render={(p) => (
+                  <a
+                    {...p}
+                    href={hrefOf(n.route)}
+                    aria-current={current === n.route ? "page" : undefined}
+                    onClick={(e) => {
+                      go(n.route)(e);
+                      onNavigate();
+                    }}
+                  />
+                )}
+              >
+                {t(n.key)}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+function Nav({
+  items,
+  current,
+  go,
+}: {
+  readonly items: readonly NavItem[];
+  readonly current: Route;
+  readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
+}): ReactElement {
+  const { setOpenMobile } = useSidebar();
+  const close = () => {
+    setOpenMobile(false);
+  };
+  return (
+    <nav aria-label={t("navLabel")} className="flex flex-col">
+      <NavGroup items={items} current={current} go={go} onNavigate={close} />
+      <NavGroup items={OWN} current={current} go={go} onNavigate={close} />
+    </nav>
+  );
+}
 
 const SECTIONS: ReadonlySet<Route> = new Set<Route>(["admin", "developer", "audit"]);
 
@@ -152,16 +255,16 @@ export function App(): ReactElement {
 
   if (state.status === "loading") {
     return (
-      <main id="main" aria-busy="true">
-        <p>{t("loading")}</p>
+      <main id="main" className="mx-auto flex w-full max-w-md flex-col p-8">
+        <Busy />
       </main>
     );
   }
   if (state.status === "unavailable") {
     return (
-      <main id="main">
-        <h1>{t("brand")}</h1>
-        <p role="alert">{t("unavailable")}</p>
+      <main id="main" className="mx-auto flex w-full max-w-md flex-col gap-4 p-8">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("brand")}</h1>
+        <Failure>{t("unavailable")}</Failure>
       </main>
     );
   }
@@ -204,36 +307,37 @@ export function App(): ReactElement {
     );
 
   return (
-    <>
-      <a className="skip" href="#main">
+    <SidebarProvider>
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm font-medium ring-3 ring-ring/50 focus:not-sr-only focus:fixed focus:start-4 focus:top-4"
+      >
         {t("skipToContent")}
       </a>
-      <header>
-        <p className="brand">{t("brand")}</p>
-        <p className="who">
-          <span data-testid="who">{s.display_name}</span> · <span className="mono">{s.realm}</span>
-        </p>
-        <button type="button" onClick={signOut}>
-          {t("signOut")}
-        </button>
-      </header>
-      <nav aria-label={t("navLabel")}>
-        <ul>
-          {shown.map((n) => (
-            <li key={n.route}>
-              <a
-                href={hrefOf(n.route)}
-                aria-current={current === n.route ? "page" : undefined}
-                onClick={go(n.route)}
-              >
-                {t(n.key)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      {page}
+      <Sidebar>
+        <SidebarHeader>
+          <p className="px-3 py-2 text-base font-semibold">{t("brand")}</p>
+        </SidebarHeader>
+        <SidebarContent>
+          <Nav items={shown} current={current} go={go} />
+        </SidebarContent>
+      </Sidebar>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background px-4 md:px-8">
+          <NavToggle />
+          <p className="font-semibold md:hidden">{t("brand")}</p>
+          <p className="ms-auto min-w-0 truncate text-sm">
+            <span data-testid="who">{s.display_name}</span>
+            <span className="text-muted-foreground"> · </span>
+            <span className={`${MONO} text-muted-foreground`}>{s.realm}</span>
+          </p>
+          <Button variant="outline" size="sm" onPress={signOut}>
+            {t("signOut")}
+          </Button>
+        </header>
+        {page}
+      </div>
       {signatureScreen}
-    </>
+    </SidebarProvider>
   );
 }

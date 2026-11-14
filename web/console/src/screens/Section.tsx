@@ -3,7 +3,10 @@
 // authority administration, and billing is not part of the console.
 import type { MouseEvent, ReactElement } from "react";
 
+import { cn } from "@suiss/access-ui/lib/utils";
+
 import { t, type Key } from "../i18n/index.js";
+import { Page } from "../ui.js";
 import { type Screen, SCREENS, type Section } from "../lib/sections.js";
 import * as A from "./Admin.js";
 import { Agents } from "./Agents.js";
@@ -173,17 +176,21 @@ export function SectionPage({
   const shown = screensOf(section, ctx.screens);
   const current = screen !== undefined && shown.includes(screen) ? screen : shown[0];
   return (
-    <main id="main" tabIndex={-1}>
-      <h1>{t(SECTION_TITLE[section])}</h1>
-      <p className="hint">{t(SECTION_INTRO[section])}</p>
-      <nav aria-label={t("sectionScreens")} className="subnav">
-        <ul>
+    <Page title={t(SECTION_TITLE[section])} intro={t(SECTION_INTRO[section])}>
+      <nav aria-label={t("sectionScreens")} className="-mx-1 overflow-x-auto">
+        <ul className="flex flex-wrap gap-1 px-1 py-1">
           {shown.map((s) => (
             <li key={s}>
               <a
                 href={`/console/${section}/${s}`}
                 aria-current={s === current ? "page" : undefined}
                 onClick={go(`${section}/${s}`)}
+                className={cn(
+                  "inline-flex h-8 items-center rounded-full px-3 text-sm whitespace-nowrap transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
+                  s === current
+                    ? "bg-primary/10 font-semibold text-[color-mix(in_oklab,var(--primary)_70%,var(--foreground))]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {t(SCREEN_TITLE[s])}
               </a>
@@ -192,11 +199,13 @@ export function SectionPage({
         </ul>
       </nav>
       {current !== undefined && (
-        <section aria-labelledby="screen-title" key={current}>
-          <h2 id="screen-title">{t(SCREEN_TITLE[current])}</h2>
+        <section aria-labelledby="screen-title" key={current} className="flex flex-col gap-6">
+          <h2 id="screen-title" className="text-xl font-semibold tracking-tight">
+            {t(SCREEN_TITLE[current])}
+          </h2>
           {body(current, ctx)}
         </section>
       )}
-    </main>
+    </Page>
   );
 }
