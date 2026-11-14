@@ -4,8 +4,12 @@
 // projections of ssh.login Grants and show in the audit log.
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface HostGroup {
@@ -50,54 +54,55 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <Panel id="ssh-ca" title={t("sshCaTitle")}>
         <p>{t("sshCaIntro")}</p>
-        <p>
-          <button
-            type="button"
-            onClick={() => {
+        <p className={ACTIONS}>
+          <Button
+            onPress={() => {
               send("putSshCa", "PUT", "settings/ssh-ca", { enabled: true });
             }}
           >
             {t("sshCaOn")}
-          </button>{" "}
-          <button
-            type="button"
-            onClick={() => {
+          </Button>
+          <Button
+            variant="outline"
+            onPress={() => {
               send("putSshCa", "PUT", "settings/ssh-ca", { enabled: false });
             }}
           >
             {t("sshCaOff")}
-          </button>{" "}
-          <button
-            type="button"
-            onClick={() => {
+          </Button>
+          <Button
+            variant="outline"
+            onPress={() => {
               send("rotateSshCa", "POST", "settings/ssh-ca/rotate", {});
             }}
           >
             {t("sshCaRotate")}
-          </button>
+          </Button>
         </p>
-        <p role="note" data-testid="ssh-replace-warning">
+        <Notice tone="warning" role="note" data-testid="ssh-replace-warning">
           {t("sshCaReplaceWarning")}
-        </p>
-        <p>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => {
+        </Notice>
+        <p className={ACTIONS}>
+          <Button
+            variant="destructive"
+            onPress={() => {
               send("replaceSshCa", "POST", "settings/ssh-ca/replace", {});
             }}
           >
             {t("sshCaReplace")}
-          </button>
+          </Button>
         </p>
-        <h4>{t("sshServerSetup")}</h4>
-        <dl className="facts">
+        <h4 className={H4}>{t("sshServerSetup")}</h4>
+        <dl className={FACTS}>
           <dt>{t("sshCaKeyAt")}</dt>
-          <dd className="mono" data-testid="ssh-ca-url">{`${base}/ssh/ca.pub`}</dd>
+          <dd className={MONO} data-testid="ssh-ca-url">{`${base}/ssh/ca.pub`}</dd>
           <dt>{t("sshKrlAt")}</dt>
-          <dd className="mono" data-testid="ssh-krl-url">{`${base}/ssh/krl`}</dd>
+          <dd className={MONO} data-testid="ssh-krl-url">{`${base}/ssh/krl`}</dd>
         </dl>
-        <pre className="mono" data-testid="ssh-sshd-config">
+        <pre
+          className={`${MONO} overflow-x-auto rounded-lg bg-muted p-3 text-sm whitespace-pre`}
+          data-testid="ssh-sshd-config"
+        >
           {"TrustedUserCAKeys /etc/ssh/access-ca.pub\nRevokedKeys /etc/ssh/access.krl"}
         </pre>
       </Panel>
@@ -106,20 +111,27 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={groups}>
           {(g) =>
             g.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="ssh-groups">
+              <ul data-testid="ssh-groups" className="flex flex-col divide-y">
                 {g.items.map((h) => (
-                  <li key={h.name}>
-                    <span className="mono">{h.name}</span>
+                  <li
+                    key={h.name}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 py-3 text-sm first:pt-0 last:pb-0"
+                  >
+                    <span className={`${MONO} font-medium`}>{h.name}</span>
                     {h.description === "" ? "" : ` · ${h.description}`} ·{" "}
-                    {h.status === "live" ? t("sshGroupLive") : t("sshGroupRetired")}
+                    <Badge variant={h.status === "live" ? "outline" : "secondary"}>
+                      {h.status === "live" ? t("sshGroupLive") : t("sshGroupRetired")}
+                    </Badge>
                     {h.status === "live" && (
                       <>
                         {" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ms-auto"
+                          onPress={() => {
                             send(
                               "retireSshHostGroup",
                               "POST",
@@ -130,7 +142,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           }}
                         >
                           {t("sshGroupRetire", { name: h.name })}
-                        </button>
+                        </Button>
                       </>
                     )}
                   </li>
@@ -140,12 +152,13 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
           }
         </Show>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("registerSshHostGroup", "POST", "ssh-host-groups", { name, description });
           }}
         >
-          <h4>{t("sshGroupRegister")}</h4>
+          <h4 className={H4}>{t("sshGroupRegister")}</h4>
           <Field
             id="ssh-group-name"
             label={t("sshGroupName")}
@@ -159,18 +172,24 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={description}
             onChange={setDescription}
           />
-          <button type="submit" disabled={name === ""}>
+          <Button type="submit" className="self-start" isDisabled={name === ""}>
             {t("sshGroupRegisterSend")}
-          </button>
+          </Button>
         </form>
       </Panel>
       <Panel id="ssh-certificates" title={t("sshCertificatesTitle")}>
         <p data-testid="ssh-certificates-note">
-          {t("sshCertificatesNote")} <a href="/console/audit/records">{t("sshAuditLink")}</a>
+          {t("sshCertificatesNote")}{" "}
+          <a
+            href="/console/audit/records"
+            className="text-primary underline underline-offset-2 hover:text-foreground"
+          >
+            {t("sshAuditLink")}
+          </a>
         </p>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

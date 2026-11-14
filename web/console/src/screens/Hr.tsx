@@ -4,9 +4,20 @@
 // acceptance of its issuer, so a role a rule over them holds shows "Sync from HR".
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Field as FieldRoot,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { search } from "../lib/adp.js";
+import { ACTIONS, CHOICE, CHOICE_LABEL, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface HrSource {
@@ -154,17 +165,24 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={sources}>
           {(s) =>
             s.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="hr-sources">
+              <ul data-testid="hr-sources" className="flex flex-col divide-y">
                 {s.items.map((src) => (
-                  <li key={src.name} data-testid="hr-source" data-name={src.name}>
-                    <strong className="mono">{src.name}</strong> ·{" "}
-                    {src.status === "live" ? t("hrLive") : t("hrRetired")} ·{" "}
-                    {t("hrPeople", { n: String(src.people) })}
-                    <dl className="facts">
+                  <li
+                    key={src.name}
+                    data-testid="hr-source"
+                    data-name={src.name}
+                    className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0"
+                  >
+                    <p>
+                      <strong className={MONO}>{src.name}</strong> ·{" "}
+                      {src.status === "live" ? t("hrLive") : t("hrRetired")} ·{" "}
+                      {t("hrPeople", { n: String(src.people) })}
+                    </p>
+                    <dl className={FACTS}>
                       <dt>{t("acceptedIssuer")}</dt>
-                      <dd className="mono">{src.issuer}</dd>
+                      <dd className={MONO}>{src.issuer}</dd>
                       <dt>{t("hrRoleSource")}</dt>
                       <dd data-testid="hr-sync">
                         {report.status === "done" && accepted(report.value, src.issuer)
@@ -173,9 +191,11 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       </dd>
                     </dl>
                     {src.status === "live" && (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="self-start"
+                        onPress={() => {
                           send(
                             "retireHrSource",
                             `hr-sources/${encodeURIComponent(src.name)}/retire`,
@@ -185,7 +205,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         }}
                       >
                         {t("hrRetire", { name: src.name })}
-                      </button>
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -194,12 +214,13 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
           }
         </Show>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("registerHrSource", "hr-sources", { name });
           }}
         >
-          <h4>{t("hrSourceRegister")}</h4>
+          <h4 className={H4}>{t("hrSourceRegister")}</h4>
           <Field
             id="hr-source-name"
             label={t("hrSourceName")}
@@ -207,14 +228,17 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setName}
             hint={t("hrNameHint")}
           />
-          <button type="submit" disabled={name === ""}>
-            {t("hrRegisterSend")}
-          </button>
+          <div className={ACTIONS}>
+            <Button type="submit" isDisabled={name === ""}>
+              {t("hrRegisterSend")}
+            </Button>
+          </div>
         </form>
       </Panel>
       <Panel id="hr-import" title={t("hrImportTitle")}>
         <p>{t("hrImportIntro")}</p>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             upload();
@@ -226,84 +250,98 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={into}
             onChange={setInto}
           />
-          <fieldset>
-            <legend>{t("hrImportFormat")}</legend>
-            <label>
-              <input
-                type="radio"
-                name="hr-format"
-                checked={format === "csv"}
-                onChange={() => {
-                  setFormat("csv");
-                }}
-              />{" "}
-              {t("hrCsv")}
-            </label>{" "}
-            <label>
-              <input
-                type="radio"
-                name="hr-format"
-                checked={format === "jsonl"}
-                onChange={() => {
-                  setFormat("jsonl");
-                }}
-              />{" "}
-              {t("hrJsonl")}
-            </label>
-          </fieldset>
-          <p className="mono" data-testid="hr-columns">
+          <FieldSet className="gap-2">
+            <FieldLegend variant="label" className="mb-1">
+              {t("hrImportFormat")}
+            </FieldLegend>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              <label className={CHOICE_LABEL}>
+                <input
+                  type="radio"
+                  name="hr-format"
+                  className={CHOICE}
+                  checked={format === "csv"}
+                  onChange={() => {
+                    setFormat("csv");
+                  }}
+                />
+                {t("hrCsv")}
+              </label>
+              <label className={CHOICE_LABEL}>
+                <input
+                  type="radio"
+                  name="hr-format"
+                  className={CHOICE}
+                  checked={format === "jsonl"}
+                  onChange={() => {
+                    setFormat("jsonl");
+                  }}
+                />
+                {t("hrJsonl")}
+              </label>
+            </div>
+          </FieldSet>
+          <p className={`${MONO} rounded-lg bg-muted p-3 text-sm`} data-testid="hr-columns">
             employee_id,email,department,title,manager,start_date,end_date,employment_status
           </p>
-          <label htmlFor="hr-import-file">{t("hrImportFile")}</label>{" "}
-          <input
-            id="hr-import-file"
-            type="file"
-            accept={format === "csv" ? ".csv,text/csv" : ".jsonl,application/jsonl"}
-            onChange={(e) => {
-              setFile(e.target.files?.[0]);
-            }}
-          />
-          <p>
-            <button type="submit" disabled={file === undefined || into === ""}>
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="hr-import-file" className="text-sm">
+              {t("hrImportFile")}
+            </FieldLabel>
+            <Input
+              id="hr-import-file"
+              type="file"
+              size="md"
+              accept={format === "csv" ? ".csv,text/csv" : ".jsonl,application/jsonl"}
+              onChange={(e) => {
+                setFile(e.target.files?.[0]);
+              }}
+            />
+          </FieldRoot>
+          <div className={ACTIONS}>
+            <Button type="submit" isDisabled={file === undefined || into === ""}>
               {t("hrImportSend")}
-            </button>
-          </p>
+            </Button>
+          </div>
         </form>
-        <p role="note" data-testid="hr-lifecycle">
+        <Notice role="note" data-testid="hr-lifecycle">
           {t("hrLifecycle")}
-        </p>
+        </Notice>
       </Panel>
       <Panel id="hr-connectors" title={t("hrConnectorsTitle")}>
         <p>{t("hrConnectorsIntro")}</p>
         <Show l={connectors}>
           {(c) =>
             c.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="hr-connectors">
+              <ul data-testid="hr-connectors" className="flex flex-col divide-y">
                 {c.items.map((k) => (
-                  <li key={k.name}>
-                    <span className="mono">{k.name}</span> ·{" "}
-                    {VENDORS.find(([v]) => v === k.vendor)?.[1] ?? k.vendor} →{" "}
-                    <span className="mono">{k.source}</span> ·{" "}
-                    {k.status === "live" ? t("hrLive") : t("hrRetired")}
+                  <li
+                    key={k.name}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span>
+                      <span className={MONO}>{k.name}</span> ·{" "}
+                      {VENDORS.find(([v]) => v === k.vendor)?.[1] ?? k.vendor} →{" "}
+                      <span className={MONO}>{k.source}</span> ·{" "}
+                      {k.status === "live" ? t("hrLive") : t("hrRetired")}
+                    </span>
                     {k.status === "live" && (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            send(
-                              "retireHrConnector",
-                              `hr-connectors/${encodeURIComponent(k.name)}/retire`,
-                              {},
-                              k.name,
-                            );
-                          }}
-                        >
-                          {t("hrRetire", { name: k.name })}
-                        </button>
-                      </>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onPress={() => {
+                          send(
+                            "retireHrConnector",
+                            `hr-connectors/${encodeURIComponent(k.name)}/retire`,
+                            {},
+                            k.name,
+                          );
+                        }}
+                      >
+                        {t("hrRetire", { name: k.name })}
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -312,6 +350,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
           }
         </Show>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("registerHrConnector", "hr-connectors", {
@@ -321,7 +360,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             });
           }}
         >
-          <h4>{t("hrConnectorRegister")}</h4>
+          <h4 className={H4}>{t("hrConnectorRegister")}</h4>
           <Field
             id="hr-connector-name"
             label={t("hrConnectorName")}
@@ -335,29 +374,34 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={target}
             onChange={setTarget}
           />
-          <label htmlFor="hr-connector-vendor">{t("hrVendor")}</label>{" "}
-          <select
-            id="hr-connector-vendor"
-            value={vendor}
-            onChange={(e) => {
-              setVendor(e.target.value);
-            }}
-          >
-            {VENDORS.map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <p>
-            <button type="submit" disabled={connector === "" || target === ""}>
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="hr-connector-vendor" className="text-sm">
+              {t("hrVendor")}
+            </FieldLabel>
+            <NativeSelect
+              id="hr-connector-vendor"
+              size="sm"
+              value={vendor}
+              onChange={(e) => {
+                setVendor(e.target.value);
+              }}
+            >
+              {VENDORS.map(([v, label]) => (
+                <NativeSelectOption key={v} value={v}>
+                  {label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FieldRoot>
+          <div className={ACTIONS}>
+            <Button type="submit" isDisabled={connector === "" || target === ""}>
               {t("hrRegisterSend")}
-            </button>
-          </p>
+            </Button>
+          </div>
         </form>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );
