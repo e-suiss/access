@@ -1,14 +1,1 @@
 @import "@suiss/access-ui/theme.css";
-
-/* TN-131: React Aria's pressable rule, kept out of an inline <style> */
-@layer base {
-  [data-react-aria-pressable] {
-    touch-action: pan-x pan-y pinch-zoom;
-  }
-}
-
-/* OP-83: the suiss primary gives white text 4.44:1, and its hover (80%) 3.8:1; darker meets AA */
-:root {
-  --primary: oklch(0.46 0.1933 256.16);
-  --sidebar-primary: oklch(0.46 0.1933 256.16);
-}
