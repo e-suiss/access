@@ -20,10 +20,10 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-# CR-15, OP-159 m.3 (r), (rr)
+# CR-15, OP-159 m.3 (r), (rr), OP-159 m.28
 ARG FIPS=
 RUN if [ -n "$FIPS" ]; then \
-      apt-get update && apt-get install -y --no-install-recommends golang-go cmake clang libclang-dev \
+      apt-get update && apt-get install -y --no-install-recommends golang-go cmake make perl clang libclang-dev \
       && rm -rf /var/lib/apt/lists/*; \
     fi
 COPY --from=planner /src/recipe.json recipe.json
