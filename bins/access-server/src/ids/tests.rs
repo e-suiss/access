@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, reason = "test code")]
 
 use std::fmt::Write as _;
-use std::io::{Read as _, Write as _};
+use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -31,7 +31,8 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// One server start in a process of its own, as in production: its own module instance and
-/// sessions on the shared token, and its own connections to the shared database.
+/// sessions on the shared token, and its own connections to the shared database. It opens the
+/// token, says `ids-ready`, and starts when a line arrives on its stdin.
 fn start(db: &str, module: &Path, label: &str) -> std::process::Child {
     Command::new(std::env::current_exe().unwrap())
         .args([
@@ -43,36 +44,53 @@ fn start(db: &str, module: &Path, label: &str) -> std::process::Child {
         .env(DB, db)
         .env(MODULE, module)
         .env(TOKEN, label)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap()
 }
 
-/// The id key a start derived, read from its output once it exited.
-fn derived(mut child: std::process::Child) -> String {
-    let started = Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
+/// Opens every start's token first, then lets them all start together, and returns the id key
+/// each derived. The token opens before any start writes: `SoftHSM` 2.6.1 can miss a token
+/// whose directory another process is writing to.
+fn run_starts(mut children: Vec<std::process::Child>) -> Vec<String> {
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, String)>();
+    for (i, child) in children.iter_mut().enumerate() {
+        let out = child.stdout.take().unwrap();
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(out).lines() {
+                let Ok(line) = line else { break };
+                if tx.send((i, line)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    drop(tx);
+    let deadline = Instant::now().checked_add(Duration::from_secs(60)).unwrap();
+    let wait = |want: &str, n: usize, rx: &std::sync::mpsc::Receiver<(usize, String)>| {
+        let mut got = vec![None; n];
+        while got.iter().any(Option::is_none) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let (i, line) = rx.recv_timeout(left).expect("a start went quiet");
+            if let Some((_, rest)) = line.split_once(want) {
+                got[i] = Some(rest.trim().to_owned());
+            }
         }
-        if started.elapsed() > Duration::from_secs(60) {
-            let _ = child.kill();
-            panic!("a start did not exit");
-        }
-        std::thread::sleep(Duration::from_millis(20));
+        got.into_iter().map(Option::unwrap).collect::<Vec<_>>()
     };
-    let mut out = String::new();
-    child
-        .stdout
-        .take()
-        .unwrap()
-        .read_to_string(&mut out)
-        .unwrap();
-    assert!(status.success(), "{status}: {out}");
-    out.lines()
-        .find_map(|l| l.strip_prefix("id-key "))
-        .unwrap()
-        .to_owned()
+    let n = children.len();
+    wait("ids-ready", n, &rx);
+    for child in &mut children {
+        writeln!(child.stdin.take().unwrap(), "go").unwrap();
+    }
+    let keys = wait("id-key ", n, &rx);
+    for mut child in children {
+        let status = child.wait().unwrap();
+        assert!(status.success(), "{status}");
+    }
+    keys
 }
 
 // OP-137, OP-149 m.22 (g)
@@ -81,14 +99,9 @@ async fn concurrent_starts_make_one_opaque_id_root() {
     let db = fresh().await.unwrap();
     let (module, label) = hsm("ids-root");
     let starts: Vec<_> = (0..6).map(|_| start(&db.name, &module, &label)).collect();
-    let mut keys_derived = Vec::new();
-    for s in starts {
-        keys_derived.push(
-            tokio::task::spawn_blocking(move || derived(s))
-                .await
-                .unwrap(),
-        );
-    }
+    let keys_derived = tokio::task::spawn_blocking(move || run_starts(starts))
+        .await
+        .unwrap();
     assert!(keys_derived.windows(2).all(|w| w[0] == w[1]));
     let keys = open(&module, &label);
     assert!(keys.mac(ID_KEY_ROOT).is_ok());
@@ -111,6 +124,10 @@ async fn one_start() {
     };
     let app = attach_app(db.to_str().unwrap()).await.unwrap();
     let keys = open(Path::new(&module), &label);
+    writeln!(std::io::stdout(), "ids-ready").unwrap();
+    std::io::stdout().flush().unwrap();
+    let mut go = String::new();
+    std::io::stdin().read_line(&mut go).unwrap();
     open_root(&app, keys).await.unwrap();
     writeln!(
         std::io::stdout(),
