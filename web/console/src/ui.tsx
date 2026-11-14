@@ -17,6 +17,15 @@ export const HINT = "text-sm text-muted-foreground";
 export const FACTS =
   "grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(8rem,max-content)_minmax(0,1fr)] [&>dd]:mb-2 sm:[&>dd]:mb-0 [&>dt]:font-medium [&>dt]:text-muted-foreground";
 
+/** A list of label and value pairs, each pair in its own row. */
+export const ROWS =
+  "flex flex-col gap-2 text-sm [&>div]:grid [&>div]:gap-x-6 sm:[&>div]:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)] [&_dt]:font-medium [&_dt]:text-muted-foreground";
+
+/** A list whose entries carry their own actions. */
+export const ROWLIST = "flex flex-col divide-y text-sm";
+
+export const ROW = "flex flex-wrap items-center gap-x-2 gap-y-2 py-3 first:pt-0 last:pb-0";
+
 export const BULLETS = "flex list-disc flex-col gap-1 ps-5";
 
 export const NUMBERED = "flex list-decimal flex-col gap-2 ps-5";
