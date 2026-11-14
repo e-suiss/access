@@ -7,6 +7,7 @@ import type { ReactElement } from "react";
 import { t } from "../i18n/index.js";
 import type { Explained } from "../lib/adp.js";
 import { blockerText } from "../lib/text.js";
+import { BULLETS, FACTS, H4, MONO, NUMBERED } from "../ui.js";
 import { Advisory, at } from "./parts.js";
 
 interface Named {
@@ -64,22 +65,22 @@ export function Explanation({
   const selection = c["selection"] !== undefined;
   const admin = c["reason_admin"] as ReasonAdmin | undefined;
   return (
-    <div className="explanation" data-testid="explanation">
-      <h4>
+    <div className="flex flex-col gap-3 border-t pt-4" data-testid="explanation">
+      <h4 className={H4}>
         {record === undefined
           ? t("explainNow")
           : t("explainRecorded", { position: String(record) })}
       </h4>
       {c["advisory"] === true && <Advisory />}
-      <p data-testid="decision">
+      <p data-testid="decision" className="font-medium">
         {answer.decision === true ? t("explainAllowed") : t("explainNotAllowed")}
       </p>
       {blockers.length > 0 && (
-        <dl>
+        <dl className="flex flex-col gap-2 text-sm">
           {blockers.map((b) => (
             <div key={b.what}>
-              <dt>{b.what}</dt>
-              <dd>
+              <dt className="font-medium">{b.what}</dt>
+              <dd className="text-muted-foreground">
                 {t("explainNeeds")}: {b.fix}
               </dd>
             </div>
@@ -88,16 +89,16 @@ export function Explanation({
       )}
       {lineage.length > 0 && (
         <>
-          <h5>{t("explainPath")}</h5>
-          <ol data-testid="lineage">
+          <h5 className={H4}>{t("explainPath")}</h5>
+          <ol data-testid="lineage" className={NUMBERED}>
             {lineage.map((h) => (
               <li key={h.hop}>
                 {t("explainHop", { hop: String(h.hop) })}:{" "}
-                <span className="mono">{named(h.grant)}</span>
+                <span className={MONO}>{named(h.grant)}</span>
                 {h.holder !== undefined && (
                   <>
                     {" → "}
-                    <span className="mono">{named(h.holder)}</span>
+                    <span className={MONO}>{named(h.holder)}</span>
                   </>
                 )}
               </li>
@@ -107,26 +108,30 @@ export function Explanation({
       )}
       {selection && (
         <>
-          <h5>{t("explainSelection")}</h5>
+          <h5 className={H4}>{t("explainSelection")}</h5>
           <p data-testid="selection">{t("explainSelectionText")}</p>
         </>
       )}
       {admin !== undefined && (
-        <section aria-label={t("explainBasis")} data-testid="reason-admin">
-          <h5>{t("explainBasis")}</h5>
-          <dl>
+        <section
+          aria-label={t("explainBasis")}
+          data-testid="reason-admin"
+          className="flex flex-col gap-2"
+        >
+          <h5 className={H4}>{t("explainBasis")}</h5>
+          <dl className={FACTS}>
             {admin.basis_ref?.position_q_minus_1 !== undefined && (
               <>
                 <dt>
                   {t("explainBasisPosition", { n: String(admin.basis_ref.position_q_minus_1) })}
                 </dt>
-                <dd className="mono">{admin.basis_ref.domain}</dd>
+                <dd className={MONO}>{admin.basis_ref.domain}</dd>
               </>
             )}
             {admin.basis_ref?.version_vector_digest !== undefined && (
               <>
                 <dt>{t("explainBasisDigest")}</dt>
-                <dd className="mono">{admin.basis_ref.version_vector_digest}</dd>
+                <dd className={MONO}>{admin.basis_ref.version_vector_digest}</dd>
               </>
             )}
             {admin.state_basis?.evaluated_at !== undefined && (
@@ -134,11 +139,11 @@ export function Explanation({
                 <dt>{t("explainEvaluatedAt", { at: at(admin.state_basis.evaluated_at) })}</dt>
                 <dd>
                   {t("explainReads")}
-                  <ul>
+                  <ul className={BULLETS}>
                     {(
                       arr(admin.state_basis.reads) as readonly { key: string; version: number }[]
                     ).map((r) => (
-                      <li key={r.key} className="mono">
+                      <li key={r.key} className={MONO}>
                         {r.key} v{r.version}
                       </li>
                     ))}
@@ -150,9 +155,9 @@ export function Explanation({
               <>
                 <dt>{t("explainAdminReasons")}</dt>
                 <dd>
-                  <ul>
+                  <ul className={BULLETS}>
                     {(arr(admin.reasons) as readonly AdminReason[]).map((r) => (
-                      <li key={`${r.category}/${r.code}/${r.subcode ?? ""}`} className="mono">
+                      <li key={`${r.category}/${r.code}/${r.subcode ?? ""}`} className={MONO}>
                         {r.category} · {r.code}
                         {r.subcode === undefined ? "" : ` · ${r.subcode}`}
                       </li>
@@ -165,9 +170,9 @@ export function Explanation({
               <>
                 <dt>{t("explainCited")}</dt>
                 <dd>
-                  <ul>
+                  <ul className={BULLETS}>
                     {(arr(admin.cited) as readonly string[]).map((x) => (
-                      <li key={x} className="mono">
+                      <li key={x} className={MONO}>
                         {x}
                       </li>
                     ))}

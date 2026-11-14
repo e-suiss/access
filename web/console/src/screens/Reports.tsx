@@ -2,9 +2,20 @@
 // renders an action: there is no accept, move or stop button in any report (X21, §8.17.7.5).
 import type { ReactElement } from "react";
 
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+
 import { t } from "../i18n/index.js";
 import { type Ability, compatKey, impactSentence, relationKey } from "../lib/text.js";
 import { Advisory, at, List } from "./parts.js";
+import { BULLETS, FACTS, H4, HINT, MONO, REPORT } from "../ui.js";
 
 export interface Publication {
   readonly type: "schema_publication";
@@ -41,9 +52,9 @@ export function PublicationView({ p }: { readonly p: Publication }): ReactElemen
         ? t("standingPending")
         : t("standingUnreferenced");
   return (
-    <article className="report" aria-label={`${p.namespace} v${String(p.catalog_version)}`}>
-      <h4>
-        <span className="mono">{p.namespace}</span> ·{" "}
+    <article className={REPORT} aria-label={`${p.namespace} v${String(p.catalog_version)}`}>
+      <h4 className={H4}>
+        <span className={MONO}>{p.namespace}</span> ·{" "}
         {t("pubCatalog", { version: String(p.catalog_version) })}
       </h4>
       <Advisory />
@@ -51,13 +62,13 @@ export function PublicationView({ p }: { readonly p: Publication }): ReactElemen
       {p.accepted_version !== undefined && p.accepted_version !== null && (
         <p>{t("pubAcceptedVersion", { version: String(p.accepted_version) })}</p>
       )}
-      <dl>
+      <dl className={FACTS}>
         <dt>{t("pubFingerprint")}</dt>
-        <dd className="mono" data-testid="fingerprint">
+        <dd className={MONO} data-testid="fingerprint">
           {p.fingerprint}
         </dd>
         <dt>{t("pubPublisher")}</dt>
-        <dd className="mono">{p.publisher}</dd>
+        <dd className={MONO}>{p.publisher}</dd>
         <dt>{t("diffAdded")}</dt>
         <dd>
           <List items={p.diff.added} />
@@ -84,10 +95,10 @@ export function PublicationView({ p }: { readonly p: Publication }): ReactElemen
         </dd>
         <dt>{t("pubParameters")}</dt>
         <dd>
-          <ul>
+          <ul className={BULLETS}>
             {(p.parameters ?? []).map((x) => (
               <li key={`${x.action}/${x.parameter}`}>
-                <span className="mono">
+                <span className={MONO}>
                   {x.action}.{x.parameter}
                 </span>
                 {": "}
@@ -146,7 +157,7 @@ export interface ChangeImpact {
 export function ChangeImpactView({ c }: { readonly c: ChangeImpact }): ReactElement {
   const upper = c.holders?.upper_bound === true || c.capped === true;
   return (
-    <article className="report" data-testid="change-impact">
+    <article className={REPORT} data-testid="change-impact">
       <Advisory />
       {c.role !== undefined && (
         <p data-testid="impact-sentence">
@@ -211,30 +222,34 @@ export interface RevocationImpact {
 export function Acknowledgements({ r }: { readonly r: RevocationImpact }): ReactElement {
   const acks = r.acknowledged ?? [];
   return (
-    <section aria-label={t("revocationAcks")} data-testid="acknowledged">
-      <h5>{t("revocationAcks")}</h5>
-      <p className="hint">{t("revocationAcksIntro")}</p>
+    <section
+      aria-label={t("revocationAcks")}
+      data-testid="acknowledged"
+      className="flex flex-col gap-2"
+    >
+      <h5 className={H4}>{t("revocationAcks")}</h5>
+      <p className={HINT}>{t("revocationAcksIntro")}</p>
       {acks.length === 0 ? (
         <p>{t("revocationAcksNone")}</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">{t("colPep")}</th>
-              <th scope="col">{t("colAppliedAt")}</th>
-              <th scope="col">{t("colBasis")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead scope="col">{t("colPep")}</TableHead>
+              <TableHead scope="col">{t("colAppliedAt")}</TableHead>
+              <TableHead scope="col">{t("colBasis")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {acks.map((a) => (
-              <tr key={a.pep}>
-                <td className="mono">{a.pep}</td>
-                <td>{at(a.applied_at)}</td>
-                <td className="mono">{a.basis}</td>
-              </tr>
+              <TableRow key={a.pep}>
+                <TableCell className={`${MONO} whitespace-normal`}>{a.pep}</TableCell>
+                <TableCell className="whitespace-normal">{at(a.applied_at)}</TableCell>
+                <TableCell className={`${MONO} whitespace-normal`}>{a.basis}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </section>
   );
@@ -245,7 +260,7 @@ export function Aftermath({ r }: { readonly r: RevocationImpact }): ReactElement
   const horizon = r.exposed.reduce((m, e) => Math.max(m, e.horizon_ms), 0);
   const a = r.aftermath;
   return (
-    <ul className="aftermath" data-testid="aftermath">
+    <ul className={BULLETS} data-testid="aftermath">
       <li>{t("aftermathAuthority")}</li>
       <li>{horizon > 0 ? t("aftermathWindow", { until: at(horizon) }) : t("aftermathNoWindow")}</li>
       {a.grants_ending > 0 && <li>{t("aftermathEnding", { n: String(a.grants_ending) })}</li>}
@@ -269,37 +284,39 @@ export function Aftermath({ r }: { readonly r: RevocationImpact }): ReactElement
 
 export function RevocationView({ r }: { readonly r: RevocationImpact }): ReactElement {
   return (
-    <article className="report" data-testid="revocation-impact">
-      <h4>{t("revocationRevoke")}</h4>
+    <article className={REPORT} data-testid="revocation-impact">
+      <h4 className={H4}>{t("revocationRevoke")}</h4>
       <Advisory />
       <Aftermath r={r} />
       <p>{t("revocationSubtree", { n: String(r.subtree.length) })}</p>
       {r.exposed.length > 0 && (
-        <table>
-          <caption>{t("revocationExposed")}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t("unknownPosition")}</th>
-              <th scope="col">{t("colHolder")}</th>
-              <th scope="col">{t("unknownUntil")}</th>
-              <th scope="col">{t("colPep")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableCaption className="mt-0 mb-2 caption-top text-start">
+            {t("revocationExposed")}
+          </TableCaption>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead scope="col">{t("unknownPosition")}</TableHead>
+              <TableHead scope="col">{t("colHolder")}</TableHead>
+              <TableHead scope="col">{t("unknownUntil")}</TableHead>
+              <TableHead scope="col">{t("colPep")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {r.exposed.map((e) => (
-              <tr key={e.exercise}>
-                <td className="mono">{e.exercise}</td>
-                <td className="mono">{e.holder}</td>
-                <td>{at(e.horizon_ms)}</td>
-                <td>
+              <TableRow key={e.exercise}>
+                <TableCell className={`${MONO} whitespace-normal`}>{e.exercise}</TableCell>
+                <TableCell className={`${MONO} whitespace-normal`}>{e.holder}</TableCell>
+                <TableCell className="whitespace-normal">{at(e.horizon_ms)}</TableCell>
+                <TableCell className="whitespace-normal">
                   {e.applied_at === undefined || e.applied_at === null
                     ? t("exposedUnknown")
                     : t("exposedApplied", { at: at(e.applied_at) })}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
       {r.max_exposure_ms !== undefined && (
         <p>{t("revocationMax", { s: String(Math.ceil(r.max_exposure_ms / 1000)) })}</p>
@@ -329,29 +346,31 @@ export interface CompromiseImpact {
 /** EI-22, §8.10: a missing report is "Result unknown", never "Failed". */
 export function CompromiseView({ c }: { readonly c: CompromiseImpact }): ReactElement {
   return (
-    <article className="report" data-testid="compromise-impact">
+    <article className={REPORT} data-testid="compromise-impact">
       <Advisory />
-      <table>
-        <caption>{t("unknownExercises")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("unknownPosition")}</th>
-            <th scope="col">{t("unknownOutcome")}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableCaption className="mt-0 mb-2 caption-top text-start">
+          {t("unknownExercises")}
+        </TableCaption>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead scope="col">{t("unknownPosition")}</TableHead>
+            <TableHead scope="col">{t("unknownOutcome")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {c.exercises.map((e) => (
-            <tr key={e.pos}>
-              <td className="mono">{e.pos}</td>
-              <td>
+            <TableRow key={e.pos}>
+              <TableCell className={`${MONO} whitespace-normal`}>{e.pos}</TableCell>
+              <TableCell className="whitespace-normal">
                 {e.outcome === undefined || e.outcome === null || e.outcome === "unknown"
                   ? t("outcomeUnknown")
                   : e.outcome}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       <p>{t("unknownGrants", { n: String(c.grants.length) })}</p>
       <p>{t("unknownContributions", { n: String(c.contributions.length) })}</p>
       <p>{t("unknownProjections", { n: String(c.projections.length) })}</p>
