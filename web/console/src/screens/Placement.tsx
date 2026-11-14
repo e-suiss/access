@@ -3,8 +3,11 @@
 // rehome waiting for its second governing domain. Placement only routes requests.
 import type { ReactElement } from "react";
 
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
+
 import { t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
+import { BULLETS, HINT, MONO, ROWS } from "../ui.js";
 import { type Ctx, Show, useLoad } from "./parts.js";
 
 interface Placed {
@@ -39,48 +42,53 @@ export function Placement({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const realm = encodeURIComponent(ctx.session.realm);
   const view = useLoad(() => adminGet<PlacementView>(ctx.instance, `realms/${realm}/placement`));
   return (
-    <div data-testid="placement">
-      <p>{t("placementIntro")}</p>
+    <div data-testid="placement" className="flex flex-col gap-4">
+      <p className="text-muted-foreground">{t("placementIntro")}</p>
       <Show l={view}>
         {(v) => (
-          <>
-            <dl className="facts" data-testid="placement-cells">
-              <div>
-                <dt>{t("placementCell")}</dt>
-                <dd className="mono" data-testid="placement-realm-cell">
-                  {cellOf(v, v.realm)}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("domainId")}</dt>
-                <dd className="mono" data-testid="placement-domain-cell">
-                  {v.governing_domain} · {cellOf(v, v.domain)}
-                </dd>
-              </div>
-              {(v.dedicated_cell || v.tenant?.dedicated === true) && (
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <dl className={ROWS} data-testid="placement-cells">
                 <div>
-                  <dt>{t("placementDedicated")}</dt>
-                  <dd data-testid="placement-dedicated">{cellOf(v, v.tenant)}</dd>
+                  <dt>{t("placementCell")}</dt>
+                  <dd className={MONO} data-testid="placement-realm-cell">
+                    {cellOf(v, v.realm)}
+                  </dd>
                 </div>
+                <div>
+                  <dt>{t("domainId")}</dt>
+                  <dd className={MONO} data-testid="placement-domain-cell">
+                    {v.governing_domain} · {cellOf(v, v.domain)}
+                  </dd>
+                </div>
+                {(v.dedicated_cell || v.tenant?.dedicated === true) && (
+                  <div>
+                    <dt>{t("placementDedicated")}</dt>
+                    <dd data-testid="placement-dedicated">{cellOf(v, v.tenant)}</dd>
+                  </div>
+                )}
+              </dl>
+              {v.residency !== null && (
+                <p data-testid="placement-residency">
+                  {t("placementResidency", {
+                    region: v.residency.region,
+                    class: v.residency.class,
+                  })}
+                </p>
               )}
-            </dl>
-            {v.residency !== null && (
-              <p data-testid="placement-residency">
-                {t("placementResidency", { region: v.residency.region, class: v.residency.class })}
-              </p>
-            )}
-            <h3>{t("placementRehome")}</h3>
-            <p>{t("placementRehomeBoth")}</p>
-            {v.pending_rehome.length > 0 && (
-              <ul data-testid="placement-pending">
-                {v.pending_rehome.map((e) => (
-                  <li key={`${e.side}-${e.position}`} className="mono">
-                    {e.side} → {e.to}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
+              <h3 className="text-base font-semibold">{t("placementRehome")}</h3>
+              <p className={HINT}>{t("placementRehomeBoth")}</p>
+              {v.pending_rehome.length > 0 && (
+                <ul data-testid="placement-pending" className={BULLETS}>
+                  {v.pending_rehome.map((e) => (
+                    <li key={`${e.side}-${e.position}`} className={MONO}>
+                      {e.side} → {e.to}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         )}
       </Show>
     </div>

@@ -2,11 +2,21 @@
 // and nothing else; nothing is ever guessed or shown as allowed. Strings render as text nodes.
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@suiss/access-ui/components/ui/card";
+import {
+  Field as FieldRoot,
+  FieldDescription,
+  FieldLabel,
+} from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { t, type Key } from "../i18n/index.js";
 import { Problem, type SessionInfo } from "../lib/api.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { NotSigned } from "../lib/instance.js";
 import type { Screen } from "../lib/sections.js";
+import { BULLETS, Busy, Failure, HINT, MONO } from "../ui.js";
 
 /** What a section screen works with. */
 export interface Ctx {
@@ -68,8 +78,8 @@ export function Show<T>({
   readonly children: (value: T) => ReactNode;
 }): ReactElement | null {
   if (l.status === "idle") return null;
-  if (l.status === "busy") return <p aria-busy="true">{t("loading")}</p>;
-  if (l.status === "failed") return <p role="alert">{t(l.key)}</p>;
+  if (l.status === "busy") return <Busy />;
+  if (l.status === "failed") return <Failure>{t(l.key)}</Failure>;
   return <>{children(l.value)}</>;
 }
 
@@ -83,9 +93,15 @@ export function Panel({
   readonly children: ReactNode;
 }): ReactElement {
   return (
-    <section aria-labelledby={`${id}-title`} className="panel">
-      <h3 id={`${id}-title`}>{title}</h3>
-      {children}
+    <section aria-labelledby={`${id}-title`}>
+      <Card className="gap-4">
+        <CardHeader>
+          <h3 id={`${id}-title`} className="text-base font-semibold">
+            {title}
+          </h3>
+        </CardHeader>
+        <CardContent className="flex min-w-0 flex-col gap-4">{children}</CardContent>
+      </Card>
     </section>
   );
 }
@@ -93,9 +109,9 @@ export function Panel({
 /** E-2, §8.17.10.4: every advisory answer says so. */
 export function Advisory(): ReactElement {
   return (
-    <p className="badge" data-testid="advisory">
+    <Badge variant="outline" className="self-start" data-testid="advisory">
       {t("advisory")}
-    </p>
+    </Badge>
   );
 }
 
@@ -115,23 +131,22 @@ export function Field({
   readonly type?: "text" | "number";
 }): ReactElement {
   return (
-    <p className="field">
-      <label htmlFor={id}>{label}</label>
-      <input
+    <FieldRoot className="max-w-xl gap-2">
+      <FieldLabel htmlFor={id} className="text-sm">
+        {label}
+      </FieldLabel>
+      <Input
         id={id}
         type={type}
+        size="md"
         value={value}
         aria-describedby={hint === undefined ? undefined : `${id}-hint`}
         onChange={(e) => {
           onChange(e.target.value);
         }}
       />
-      {hint !== undefined && (
-        <span id={`${id}-hint`} className="hint">
-          {hint}
-        </span>
-      )}
-    </p>
+      {hint !== undefined && <FieldDescription id={`${id}-hint`}>{hint}</FieldDescription>}
+    </FieldRoot>
   );
 }
 
@@ -152,25 +167,30 @@ export function PageCount({
 }): ReactElement {
   if (page.total !== undefined) {
     return (
-      <p data-testid="result-count">
+      <p data-testid="result-count" className={HINT}>
         {page.total === 0 ? t("resultsNone") : t("resultsTotal", { n: String(page.total) })}
       </p>
     );
   }
-  if (page.has_more === true) return <p data-testid="result-count">{t("resultsMore")}</p>;
+  if (page.has_more === true)
+    return (
+      <p data-testid="result-count" className={HINT}>
+        {t("resultsMore")}
+      </p>
+    );
   return (
-    <p data-testid="result-count">
+    <p data-testid="result-count" className={HINT}>
       {shown === 0 ? t("resultsNone") : t("resultsTotal", { n: String(shown) })}
     </p>
   );
 }
 
 export function List({ items }: { readonly items: readonly string[] }): ReactElement {
-  if (items.length === 0) return <p>{t("none")}</p>;
+  if (items.length === 0) return <p className={HINT}>{t("none")}</p>;
   return (
-    <ul>
+    <ul className={BULLETS}>
       {items.map((i) => (
-        <li key={i} className="mono">
+        <li key={i} className={MONO}>
           {i}
         </li>
       ))}

@@ -5,8 +5,12 @@
 // change that can't be reversed. Each change is one signed Exercise.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Input } from "@suiss/access-ui/components/ui/input";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, H4, HINT, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Domain {
@@ -25,10 +29,10 @@ interface Domain {
 
 function Steps({ d }: { readonly d: Domain }): ReactElement {
   return (
-    <ol className="steps">
+    <ol className="flex flex-col gap-2">
       <li>
         {t("domainStepTxt", { host: d.host })}{" "}
-        <span className="mono" data-testid="domain-txt">
+        <span className={MONO} data-testid="domain-txt">
           {d.txt_value}
         </span>
       </li>
@@ -73,22 +77,23 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <Panel id="custom-domains" title={t("domainsTitle")}>
       <p>{t("domainsIntro")}</p>
-      <p className="hint">{t("domainRpIdNote")}</p>
+      <p className={HINT}>{t("domainRpIdNote")}</p>
       <Show l={list}>
         {(p) => (
-          <ul data-testid="domain-list">
+          <ul data-testid="domain-list" className="flex flex-col divide-y">
             {p.items
               .filter((d) => d.status !== "retired" && d.status !== "expired")
               .map((d) => (
-                <li key={d.host}>
-                  <h4 className="mono">{d.host}</h4>
+                <li key={d.host} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
+                  <h4 className={`${H4} ${MONO}`}>{d.host}</h4>
                   {!d.served && <Steps d={d} />}
                   <State d={d} />
                   {d.served && (d.bound_as ?? null) === null && (
-                    <p>
-                      <button
-                        type="button"
-                        onClick={() => {
+                    <p className={ACTIONS}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
                           send(
                             "bindDomainIssuer",
                             `domains/${encodeURIComponent(d.host)}/issuer-bind`,
@@ -98,10 +103,11 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         }}
                       >
                         {t("domainBindRpId")}
-                      </button>{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
                           send(
                             "bindDomainIssuer",
                             `domains/${encodeURIComponent(d.host)}/issuer-bind`,
@@ -111,13 +117,15 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         }}
                       >
                         {t("domainBindIssuer")}
-                      </button>
+                      </Button>
                     </p>
                   )}
                   {(d.bound_as ?? null) === null && (
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="self-start"
+                      onPress={() => {
                         send(
                           "retireDomain",
                           `domains/${encodeURIComponent(d.host)}/retire`,
@@ -127,7 +135,7 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       }}
                     >
                       {t("domainRetire")}
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}
@@ -135,14 +143,17 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
         )}
       </Show>
       <form
+        className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (host !== "") send("registerDomain", "domains", { host });
         }}
       >
-        <label>
-          {t("domainHost")}{" "}
-          <input
+        <label className="flex min-w-64 flex-1 flex-col gap-2 text-sm font-semibold">
+          {t("domainHost")}
+          <Input
+            size="md"
+            className="font-normal"
             type="text"
             inputMode="url"
             autoComplete="off"
@@ -152,13 +163,13 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
               setHost(e.target.value.trim().toLowerCase());
             }}
           />
-        </label>{" "}
-        <button type="submit" disabled={host === ""}>
+        </label>
+        <Button type="submit" isDisabled={host === ""}>
           {t("domainRegister")}
-        </button>
+        </Button>
       </form>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );

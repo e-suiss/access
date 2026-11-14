@@ -5,11 +5,14 @@ import { useState, type ReactElement } from "react";
 
 import { loadKernel } from "@esuiss/access";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, draftChange, type WriteResult } from "../lib/admin.js";
 import { b64url, call, fromB64url, Problem } from "../lib/api.js";
 import { decodedStatement, nonce, NotSigned, sign } from "../lib/instance.js";
 import { type Basis, metaWrite, type MetaResult } from "../lib/meta.js";
+import { ACTIONS, Failure, FORM, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
 import { at, type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
 interface Review {
@@ -90,27 +93,30 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
   const subject = ctx.instance.party ?? "";
   return (
     <>
-      <p className="hint">{t("reviewsEachOnItsOwn")}</p>
+      <p className={HINT}>{t("reviewsEachOnItsOwn")}</p>
       <Show l={items}>
         {(p) =>
           p.items.length === 0 ? (
-            <p>{t("none")}</p>
+            <p className={HINT}>{t("none")}</p>
           ) : (
-            <ul data-testid="review-items">
+            <ul data-testid="review-items" className={ROWLIST}>
               {p.items.map((i) => (
-                <li key={i.grant}>
-                  <span className="mono">{holderText(i.holder)}</span> ·{" "}
+                <li key={i.grant} className={ROW}>
+                  <span className={MONO}>{holderText(i.holder)}</span> ·{" "}
                   {i.actions.map((a) => `${a.namespace}:${a.name}`).join(", ")}
                   {i.valid_until !== null && i.valid_until !== undefined && (
                     <> · {at(i.valid_until)}</>
                   )}{" "}
                   {kept.has(i.grant) ? (
-                    <span role="status">{t("reviewsKept")}</span>
+                    <span role="status" className="ms-auto font-medium text-primary">
+                      {t("reviewsKept")}
+                    </span>
                   ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
+                    <span className="ms-auto flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
                           runKeep(async () => {
                             const done = await keep(ctx, review, i.grant);
                             if (done) setKept(new Set([...kept, i.grant]));
@@ -119,10 +125,11 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
                         }}
                       >
                         {t("reviewsKeep")}
-                      </button>{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
+                      </Button>{" "}
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onPress={() => {
                           runRemove(() =>
                             metaWrite(
                               ctx.instance,
@@ -135,8 +142,8 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
                         }}
                       >
                         {t("reviewsRemove")}
-                      </button>
-                    </>
+                      </Button>
+                    </span>
                   )}
                 </li>
               ))}
@@ -148,9 +155,9 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
       <Show l={removed}>
         {(r) =>
           r.decision && r.exercise !== undefined ? (
-            <p role="status">{t("changeRecorded", { exercise: r.exercise })}</p>
+            <Notice role="status">{t("changeRecorded", { exercise: r.exercise })}</Notice>
           ) : (
-            <p role="alert">{t("notChanged")}</p>
+            <Failure>{t("notChanged")}</Failure>
           )
         }
       </Show>
@@ -179,33 +186,35 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
   };
   return (
     <>
-      <p>{t("reviewsIntro")}</p>
+      <p className="text-muted-foreground">{t("reviewsIntro")}</p>
       <Panel id="reviews-list" title={t("screenReviews")}>
         <Show l={reviews}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="reviews">
+              <ul data-testid="reviews" className={ROWLIST}>
                 {p.items.map((r) => (
-                  <li key={r.name}>
-                    <span className="mono">{r.name}</span> ·{" "}
+                  <li key={r.name} className={ROW}>
+                    <span className={MONO}>{r.name}</span> ·{" "}
                     {r.status === "live" && r.next_run !== null && r.next_run !== undefined
                       ? t("reviewsNext", { date: at(r.next_run) })
                       : r.status}{" "}
                     {r.status === "live" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
+                      <span className="ms-auto flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
                             setOpen(r.name);
                           }}
                         >
                           {t("reviewsItems")}
-                        </button>{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
+                        </Button>{" "}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
                             send(
                               "closeReview",
                               `reviews/${encodeURIComponent(r.name)}/close`,
@@ -215,8 +224,8 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           }}
                         >
                           {t("reviewsClose")}
-                        </button>
-                      </>
+                        </Button>
+                      </span>
                     )}
                   </li>
                 ))}
@@ -232,6 +241,7 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
       )}
       <Panel id="reviews-schedule" title={t("reviewsSchedule")}>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("scheduleReview", "reviews", {
@@ -249,16 +259,18 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
             onChange={setPeriod}
             type="number"
           />
-          <p className="field">
-            <span>{t("reviewsScope")}</span> {t("reviewsScopeTeam")}
+          <p className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">{t("reviewsScope")}</span> {t("reviewsScopeTeam")}
           </p>
-          <button type="submit" disabled={name === "" || !(Number(period) >= 7)}>
-            {t("reviewsSchedule")}
-          </button>
+          <div className={ACTIONS}>
+            <Button type="submit" isDisabled={name === "" || !(Number(period) >= 7)}>
+              {t("reviewsSchedule")}
+            </Button>
+          </div>
         </form>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

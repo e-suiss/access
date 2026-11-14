@@ -3,8 +3,12 @@
 // and a drill runs at least every 90 days.
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { FORM, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, at, useLoad, useRun } from "./parts.js";
 
 interface Account {
@@ -33,7 +37,7 @@ const CLASSES = ["drill", "emergency", "misuse"] as const;
 
 const DRILL_EVERY_MS = 90 * 86_400_000;
 
-const className = (c: (typeof CLASSES)[number]): string =>
+const classOf = (c: (typeof CLASSES)[number]): string =>
   c === "drill"
     ? t("breakglassClassDrill")
     : c === "emergency"
@@ -72,16 +76,21 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Show l={accounts}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("none")}</p>
+              <p className={HINT}>{t("none")}</p>
             ) : (
-              <ul data-testid="breakglass-accounts">
+              <ul data-testid="breakglass-accounts" className="flex flex-col divide-y">
                 {p.items.map((a) => (
-                  <li key={`${a.organization}/${a.member}`}>
-                    <span className="mono">{a.account_id}</span> ·{" "}
+                  <li
+                    key={`${a.organization}/${a.member}`}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 py-3 text-sm first:pt-0 last:pb-0"
+                  >
+                    <span className={MONO}>{a.account_id}</span> ·{" "}
                     {t("breakglassMarkedAt", { name: a.organization_name, date: at(a.marked_at) })}{" "}
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ms-auto"
+                      onPress={() => {
                         send(
                           "clearBreakglassAccount",
                           `breakglass/accounts/${encodeURIComponent(a.member)}/clear`,
@@ -91,7 +100,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       }}
                     >
                       {t("breakglassClear")}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -99,6 +108,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
           }
         </Show>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             send("markBreakglassAccount", "breakglass/accounts", { organization, member });
@@ -116,42 +126,50 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={member}
             onChange={setMember}
           />
-          <button type="submit" disabled={organization === "" || member === ""}>
+          <Button
+            type="submit"
+            className="self-start"
+            isDisabled={organization === "" || member === ""}
+          >
             {t("breakglassMark")}
-          </button>
+          </Button>
         </form>
       </Panel>
       <Panel id="breakglass-grants" title={t("breakglassGrantsTitle")}>
-        <p role="note" data-testid="breakglass-minimum-two">
+        <Notice role="note" data-testid="breakglass-minimum-two">
           {t("breakglassMinimumTwo")}
-        </p>
+        </Notice>
       </Panel>
       <Panel id="breakglass-reviews" title={t("breakglassReviewsTitle")}>
         <Show l={reviews}>
           {(p) =>
             p.items.length === 0 ? (
-              <p>{t("breakglassNoReviews")}</p>
+              <p className={HINT}>{t("breakglassNoReviews")}</p>
             ) : (
-              <ul data-testid="breakglass-reviews">
+              <ul data-testid="breakglass-reviews" className="flex flex-col divide-y">
                 {p.items.map((u) => (
-                  <li key={u.exercise}>
-                    <span className="mono">{u.exercise.slice(0, 12)}</span> ·{" "}
+                  <li
+                    key={u.exercise}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 py-3 text-sm first:pt-0 last:pb-0"
+                  >
+                    <span className={MONO}>{u.exercise.slice(0, 12)}</span> ·{" "}
                     {t("breakglassUsed", { date: at(u.used_at) })}
                     {u.drill && <> · {t("breakglassDrill")}</>} ·{" "}
                     {u.state === "reviewed" && u.classification !== null ? (
-                      t("breakglassReviewedAs", { class: className(u.classification) })
+                      t("breakglassReviewedAs", { class: classOf(u.classification) })
                     ) : (
                       <>
                         {u.state === "overdue" ? (
-                          <strong>{t("breakglassReviewOverdue")}</strong>
+                          <Badge variant="destructive">{t("breakglassReviewOverdue")}</Badge>
                         ) : (
                           t("breakglassReviewDue", { date: at(u.due_at) })
                         )}{" "}
                         {CLASSES.map((c) => (
-                          <button
+                          <Button
                             key={c}
-                            type="button"
-                            onClick={() => {
+                            variant="outline"
+                            size="sm"
+                            onPress={() => {
                               send(
                                 "reviewBreakglassUse",
                                 `breakglass/reviews/${encodeURIComponent(u.exercise)}`,
@@ -160,8 +178,8 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
                               );
                             }}
                           >
-                            {t("breakglassReviewAs", { class: className(c) })}
-                          </button>
+                            {t("breakglassReviewAs", { class: classOf(c) })}
+                          </Button>
                         ))}
                       </>
                     )}
@@ -178,7 +196,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
             const since = accounts.status === "done" ? accounts.value.items : [];
             const last = p.items.filter((u) => u.drill).map((u) => u.used_at);
             if (since.length === 0) {
-              return <p>{t("none")}</p>;
+              return <p className={HINT}>{t("none")}</p>;
             }
             const from =
               last.length > 0 ? Math.max(...last) : Math.min(...since.map((a) => a.marked_at));
@@ -194,7 +212,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
         </Show>
       </Panel>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </>
   );

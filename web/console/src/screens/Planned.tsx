@@ -3,7 +3,8 @@
 import type { ReactElement } from "react";
 
 import { t } from "../i18n/index.js";
+import { Notice } from "../ui.js";
 
 export function Planned(): ReactElement {
-  return <p role="status">{t("screenPlanned")}</p>;
+  return <Notice role="status">{t("screenPlanned")}</Notice>;
 }
