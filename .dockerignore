@@ -24,6 +24,7 @@ sdks/typescript
 !web/pnpm-lock.yaml
 !web/pnpm-workspace.yaml
 !web/tsconfig.base.json
+!web/turbo.json
 !sdks/typescript
 **/node_modules
 **/dist

@@ -10,9 +10,10 @@
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --if-present test",
-    "build": "pnpm -r --if-present build"
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "build": "turbo run build",
+    "check": "turbo run //#lint //#format:check typecheck"
   },
   "engines": {
     "node": ">=24",
@@ -25,6 +26,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
     "prettier": "3.9.9",
+    "turbo": "2.11.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0"
   }

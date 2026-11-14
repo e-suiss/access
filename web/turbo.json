@@ -1,0 +1,49 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "agentGuidance": false,
+  "envMode": "strict",
+  "remoteCache": {
+    "enabled": false
+  },
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/../locales/**",
+        "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
+        "$TURBO_ROOT$/../sdks/typescript/src/**",
+        "$TURBO_ROOT$/../sdks/typescript/wasm/**",
+        "$TURBO_ROOT$/../sdks/typescript/package.json"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/../locales/**",
+        "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
+        "$TURBO_ROOT$/../sdks/typescript/src/**",
+        "$TURBO_ROOT$/../sdks/typescript/wasm/**",
+        "$TURBO_ROOT$/../sdks/typescript/package.json"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/../locales/**",
+        "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
+        "$TURBO_ROOT$/../sdks/typescript/src/**",
+        "$TURBO_ROOT$/../sdks/typescript/wasm/**",
+        "$TURBO_ROOT$/../sdks/typescript/package.json"
+      ]
+    },
+    "//#lint": {},
+    "//#format:check": {}
+  }
+}

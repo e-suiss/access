@@ -250,6 +250,9 @@ uniffi-test-swift:
       "$out/access_kernel_uniffi.swift" sdks/bindings/uniffi/tests/vectors.swift
     "$out/vectors" conformance/vectors/core/1
 
+# OP-159 m.34: Turborepo runs the web tasks; no telemetry, no remote cache
+export TURBO_TELEMETRY_DISABLED := "1"
+
 # OP-83, §14.5, OP-159 m.32: the SDK is its own npm package; web/ is one pnpm workspace
 web-install:
     cd sdks/typescript && npm ci
@@ -261,11 +264,11 @@ web-audit:
 
 web-check: wasm
     cd sdks/typescript && npm run lint && npm run typecheck && npm run format:check
-    cd web && pnpm run lint && pnpm run typecheck && pnpm run format:check
+    cd web && pnpm run check
 
 web-test: wasm
     cd sdks/typescript && npm test
-    cd web/components && pnpm test
+    cd web && pnpm run test
 
 # OP-151 m.3 (g), TN-112 item 8: the SDK types are generated from the contracts and committed
 sdk-types-check:

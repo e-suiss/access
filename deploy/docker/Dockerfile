@@ -59,11 +59,12 @@ COPY --from=wasm /src/sdks/typescript/wasm sdks/typescript/wasm
 COPY web web
 COPY locales locales
 COPY conformance/catalog/protected-messages.toml conformance/catalog/protected-messages.toml
-# OP-159 m.32: pnpm at the version and hash web/package.json pins
+# OP-159 m.32, m.34: pnpm at the version and hash web/package.json pins; Turborepo builds
+ENV TURBO_TELEMETRY_DISABLED=1
 RUN corepack enable \
  && cd sdks/typescript && npm ci --ignore-scripts \
  && cd /src/web && pnpm install --frozen-lockfile \
- && pnpm --filter ./console --filter ./login --filter ./account run build
+ && pnpm exec turbo run build --filter=@esuiss/access-console --filter=@esuiss/access-login --filter=@esuiss/access-account
 
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
 # local deployment (deploy/compose/access.yaml), the database administrator's setup and the
