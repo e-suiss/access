@@ -41,7 +41,7 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: `npx vite build && npx vite preview --host 127.0.0.1 --port ${String(port)} --strictPort`,
+          command: `pnpm exec vite build && pnpm exec vite preview --host 127.0.0.1 --port ${String(port)} --strictPort`,
           url: `http://127.0.0.1:${String(port)}/console/`,
           reuseExistingServer: false,
         },

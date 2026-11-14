@@ -18,14 +18,25 @@ pub(crate) const LANGUAGES: [&str; 3] = ["rust", "typescript", "c-ffi"];
 
 pub(crate) const RULES: u32 = 7;
 
-/// The TypeScript packages an `eslint:`, `tsconfig:` or `npmrc:` mechanism must hold in.
-pub(crate) const TS_PACKAGES: [&str; 5] = [
-    "web/account",
-    "web/components",
-    "web/console",
-    "web/login",
-    "sdks/typescript",
-];
+/// The TypeScript projects an `eslint:`, `tsconfig:` or `npmrc:` mechanism must hold in: the
+/// `web/` pnpm workspace, whose packages share its settings (OP-159 m.32), and the SDK, an
+/// independent npm package (OP-97).
+pub(crate) const TS_PACKAGES: [&str; 2] = ["web", "sdks/typescript"];
+
+/// The `web/` workspace keeps the shared TypeScript settings in `tsconfig.base.json` and the
+/// install settings in `pnpm-workspace.yaml`.
+const WORKSPACE: &str = "web";
+
+/// The `pnpm-workspace.yaml` lines that do what an `.npmrc` line does.
+fn pnpm_lines(npmrc: &str) -> Option<&'static [&'static str]> {
+    match npmrc {
+        "ignore-scripts=true" => Some(&["strictDepBuilds: true", "allowBuilds: {}"]),
+        "min-release-age=7" => Some(&["minimumReleaseAge: 10080"]),
+        "save-exact=true" => Some(&["savePrefix: \"\""]),
+        "engine-strict=true" => Some(&["engineStrict: true"]),
+        _ => None,
+    }
+}
 
 /// One cell of the profile table.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -159,11 +170,37 @@ impl Repo {
             .iter()
             .copied()
             .filter(|p| {
+                let file = if *p == WORKSPACE && file == "tsconfig.json" {
+                    "tsconfig.base.json"
+                } else {
+                    file
+                };
                 self.read(&format!("{p}/{file}"))
                     .is_none_or(|text| !holds(&text))
             })
             .collect();
         (!lacking.is_empty()).then(|| format!("is not in {file} of {lacking:?}"))
+    }
+
+    fn npmrc(&self, line: &str) -> Option<String> {
+        let lacking: Vec<&str> = TS_PACKAGES
+            .iter()
+            .copied()
+            .filter(|p| {
+                if *p == WORKSPACE {
+                    let Some(wanted) = pnpm_lines(line) else {
+                        return true;
+                    };
+                    self.read(&format!("{p}/pnpm-workspace.yaml"))
+                        .is_none_or(|t| !wanted.iter().all(|w| t.lines().any(|l| l.trim() == *w)))
+                } else {
+                    self.read(&format!("{p}/.npmrc"))
+                        .is_none_or(|t| !t.lines().any(|l| l.trim() == line))
+                }
+            })
+            .collect();
+        (!lacking.is_empty())
+            .then(|| format!("is not in .npmrc or pnpm-workspace.yaml of {lacking:?}"))
     }
 }
 
@@ -201,9 +238,7 @@ impl Mechanisms for Repo {
                 let wanted = format!("\"{what}\": true");
                 return self.in_every_package("tsconfig.json", &|t| t.contains(&wanted));
             }
-            "npmrc" => {
-                return self.in_every_package(".npmrc", &|t| t.lines().any(|l| l.trim() == what));
-            }
+            "npmrc" => return self.npmrc(what),
             "file" => self.root.join(what).is_file(),
             _ => return Some(format!("has an unknown kind {kind:?}")),
         };

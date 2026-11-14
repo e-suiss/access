@@ -25,5 +25,6 @@
 /deny.toml                      @ademceper
 /Cargo.lock                     @ademceper
 **/package-lock.json            @ademceper
+**/pnpm-lock.yaml               @ademceper
 **/.npmrc                       @ademceper
 /deploy/                        @ademceper

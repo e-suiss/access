@@ -250,23 +250,22 @@ uniffi-test-swift:
       "$out/access_kernel_uniffi.swift" sdks/bindings/uniffi/tests/vectors.swift
     "$out/vectors" conformance/vectors/core/1
 
-# OP-97
-npm_packages :="sdks/typescript web/components web/ui web/console web/login web/account"
-
-# OP-83, §14.5
+# OP-83, §14.5, OP-159 m.32: the SDK is its own npm package; web/ is one pnpm workspace
 web-install:
-    for p in {{npm_packages}}; do (cd "$p" && npm ci); done
+    cd sdks/typescript && npm ci
+    cd web && pnpm install --frozen-lockfile
 
 # F-1, §14.7: known high or critical advisories in any npm package's lockfile, development tools included
 web-audit:
-    status=0; for p in {{npm_packages}} conformance/mcp; do echo "$p"; (cd "$p" && npm audit --audit-level=high) || status=1; done; exit "$status"
+    status=0; for p in sdks/typescript conformance/mcp; do echo "$p"; (cd "$p" && npm audit --audit-level=high) || status=1; done; echo web; (cd web && pnpm audit --audit-level high) || status=1; exit "$status"
 
 web-check: wasm
-    for p in {{npm_packages}}; do (cd "$p" && npm run lint && npm run typecheck && npm run format:check); done
+    cd sdks/typescript && npm run lint && npm run typecheck && npm run format:check
+    cd web && pnpm run lint && pnpm run typecheck && pnpm run format:check
 
 web-test: wasm
     cd sdks/typescript && npm test
-    cd web/components && npm test
+    cd web/components && pnpm test
 
 # OP-151 m.3 (g), TN-112 item 8: the SDK types are generated from the contracts and committed
 sdk-types-check:
@@ -282,11 +281,11 @@ bindings-row:
     echo "| ${version} | uniffi (Python, Kotlin, Swift), Wasm (Node) | core/1 \`${vectors}\` |"
 
 web-e2e: wasm login-e2e
-    cd web/console && npm run e2e
+    cd web/console && pnpm run e2e
 
 # OP-146 m.4 (g): hosted login against the mocked node endpoints, passkeys on a CDP virtual authenticator
 login-e2e:
-    cd web/login && npm run e2e
+    cd web/login && pnpm run e2e
 
 # OP-65: rewrite sdks/openapi/login.json, frontend.json and their examples from crates/identity-ui
 login-contract:
@@ -330,9 +329,9 @@ admin-contract:
 
 web-e2e-update-snapshots: wasm
     docker run --rm --ipc=host -v "{{justfile_directory()}}:/work" \
-      -v /work/web/console/node_modules -v /work/sdks/typescript/node_modules -w /work \
+      -v /work/web/node_modules -v /work/web/console/node_modules -v /work/sdks/typescript/node_modules -w /work \
       "mcr.microsoft.com/playwright:v$(cd web/console && node -p 'require("@playwright/test/package.json").version')-noble" \
-      bash -c 'cd sdks/typescript && npm ci && cd ../../web/console && npm ci && npx playwright test --update-snapshots'
+      bash -c 'corepack enable && cd sdks/typescript && npm ci && cd ../../web && pnpm install --frozen-lockfile && cd console && pnpm exec playwright test --update-snapshots'
 
 # OP-69, RAUTHY-008
 

@@ -56,19 +56,14 @@ FROM ${NODE_IMAGE} AS web
 WORKDIR /src
 COPY sdks/typescript sdks/typescript
 COPY --from=wasm /src/sdks/typescript/wasm sdks/typescript/wasm
-COPY web/components web/components
-COPY web/ui web/ui
-COPY web/console web/console
-COPY web/login web/login
-COPY web/account web/account
+COPY web web
 COPY locales locales
 COPY conformance/catalog/protected-messages.toml conformance/catalog/protected-messages.toml
-RUN cd sdks/typescript && npm ci --ignore-scripts \
- && cd /src/web/components && npm ci --ignore-scripts \
- && cd /src/web/ui && npm ci --ignore-scripts \
- && cd /src/web/console && npm ci --ignore-scripts && npm run build \
- && cd /src/web/login && npm ci --ignore-scripts && npm run build \
- && cd /src/web/account && npm ci --ignore-scripts && npm run build
+# OP-159 m.32: pnpm at the version and hash web/package.json pins
+RUN corepack enable \
+ && cd sdks/typescript && npm ci --ignore-scripts \
+ && cd /src/web && pnpm install --frozen-lockfile \
+ && pnpm --filter ./console --filter ./login --filter ./account run build
 
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
 # local deployment (deploy/compose/access.yaml), the database administrator's setup and the
