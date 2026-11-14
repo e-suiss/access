@@ -5,9 +5,23 @@
 // CSP mode, the DBSC switch and the Related Origins are set here too (OP-153 m.22 (c), (g), (k)).
 import { useState, type ReactElement } from "react";
 
+import { Badge } from "@suiss/access-ui/components/ui/badge";
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field as FieldRoot, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+import { Textarea } from "@suiss/access-ui/components/ui/textarea";
+
 import { t } from "../i18n/index.js";
 import { adminGet, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
+import { BULLETS, CHOICE, CHOICE_LABEL, FACTS, FORM, Failure, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 import { Domains } from "./Domains.js";
 import { Signals as SignalSources } from "./Signals.js";
@@ -71,24 +85,24 @@ function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
   if (l.status !== "done") return <></>;
   const s = l.value;
   return (
-    <div data-testid="signal-status">
+    <div data-testid="signal-status" className="flex flex-col gap-3 empty:hidden">
       {(s.transmitters ?? [])
         .filter((x) => x.delayed_since !== undefined && x.delayed_since !== null)
         .map((x) => (
-          <p key={x.name} role="status" className="banner">
+          <Notice key={x.name} role="status" tone="warning">
             {t("signalsDelayed", { provider: x.name, since: at(x.delayed_since) })}
-          </p>
+          </Notice>
         ))}
       {/* OP-151 m.3 (o): a source that is missing or cannot be read is stated */}
       {s.geoip !== undefined && s.geoip !== "configured" && (
-        <p role="status" className="banner">
+        <Notice role="status" tone="warning">
           <strong>{t("geoipMissing")}</strong> — {t("geoipMissingText")}
-        </p>
+        </Notice>
       )}
       {(s.verifiers ?? []).map((v) => (
-        <p key={v.name} role="status" className="banner">
+        <Notice key={v.name} role="status" tone="warning">
           {t("verifierMissing", { verifier: v.name, until: at(v.declared_until) })}
-        </p>
+        </Notice>
       ))}
     </div>
   );
@@ -137,9 +151,13 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
   return (
     <Panel id="csp-mode" title={t("settingsCspMode")}>
       <p>
-        {t("settingsCspCurrent")}: <span data-testid="csp-current">{label(current)}</span>
+        {t("settingsCspCurrent")}:{" "}
+        <Badge variant="outline" data-testid="csp-current">
+          {label(current)}
+        </Badge>
       </p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
@@ -154,8 +172,9 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
         }}
       >
         {(["enforce", "report_only"] as const).map((m) => (
-          <label key={m}>
+          <label key={m} className={CHOICE_LABEL}>
             <input
+              className={CHOICE}
               type="radio"
               name="csp-mode"
               value={m}
@@ -163,21 +182,21 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
               onChange={() => {
                 setMode(m);
               }}
-            />{" "}
+            />
             {label(m)}
           </label>
         ))}
         {mode === "report_only" && current === "enforce" && (
-          <p role="note" className="banner" data-testid="csp-loosens">
+          <Notice role="note" tone="warning" data-testid="csp-loosens">
             {t("settingsCspLoosens")}
-          </p>
+          </Notice>
         )}
-        <button type="submit" disabled={mode === current}>
+        <Button type="submit" className="self-start" isDisabled={mode === current}>
           {t("settingsSave")}
-        </button>
+        </Button>
       </form>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -193,9 +212,10 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
     <Panel id="signin-policy" title={t("settingsSignin")}>
       <p data-testid="dbsc-state">{current ? t("settingsDbscOn") : t("settingsDbscOff")}</p>
       {managed ? (
-        <p className="hint">{t("settingsGitops")}</p>
+        <p className={HINT}>{t("settingsGitops")}</p>
       ) : (
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
@@ -209,23 +229,24 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
             );
           }}
         >
-          <label>
+          <label className={CHOICE_LABEL}>
             <input
+              className={CHOICE}
               type="checkbox"
               checked={dbsc}
               onChange={(e) => {
                 setDbsc(e.target.checked);
               }}
-            />{" "}
+            />
             {t("settingsDbsc")}
           </label>
-          <button type="submit" disabled={dbsc === current}>
+          <Button type="submit" className="self-start" isDisabled={dbsc === current}>
             {t("settingsSave")}
-          </button>
+          </Button>
         </form>
       )}
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -244,6 +265,7 @@ function RelatedOrigins({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): React
       <p data-testid="related-origins">{t("settingsRelatedText")}</p>
       {!(s.managed ?? []).includes("related_origins") && (
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
@@ -257,19 +279,26 @@ function RelatedOrigins({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): React
             );
           }}
         >
-          <label htmlFor="related-list">{t("settingsRelatedList")}</label>
-          <textarea
-            id="related-list"
-            value={list}
-            onChange={(e) => {
-              setList(e.target.value);
-            }}
-          />
-          <button type="submit">{t("settingsSave")}</button>
+          <FieldRoot className="gap-2">
+            <FieldLabel htmlFor="related-list" className="text-sm">
+              {t("settingsRelatedList")}
+            </FieldLabel>
+            <Textarea
+              id="related-list"
+              className={`${MONO} text-sm`}
+              value={list}
+              onChange={(e) => {
+                setList(e.target.value);
+              }}
+            />
+          </FieldRoot>
+          <Button type="submit" className="self-start">
+            {t("settingsSave")}
+          </Button>
         </form>
       )}
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -283,11 +312,12 @@ function Branding({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElemen
     <Panel id="branding" title={t("settingsBranding")}>
       {managed ? (
         <>
-          <p className="hint">{t("settingsGitops")}</p>
+          <p className={HINT}>{t("settingsGitops")}</p>
           <p data-testid="branding-name">{s.branding?.display_name ?? ""}</p>
         </>
       ) : (
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
@@ -302,11 +332,13 @@ function Branding({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElemen
           }}
         >
           <Field id="brand-name" label={t("settingsBrandName")} value={name} onChange={setName} />
-          <button type="submit">{t("settingsSave")}</button>
+          <Button type="submit" className="self-start">
+            {t("settingsSave")}
+          </Button>
         </form>
       )}
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
@@ -321,17 +353,18 @@ function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
   const [mismatch, setMismatch] = useState(false);
   return (
     <Panel id="rp-id" title={t("settingsRpTitle")}>
-      <dl className="facts">
+      <dl className={FACTS}>
         <dt>{t("settingsRpCurrent")}</dt>
-        <dd className="mono">{s.rp_id ?? ""}</dd>
+        <dd className={MONO}>{s.rp_id ?? ""}</dd>
       </dl>
-      <p role="note" className="banner" data-testid="rp-warning">
+      <Notice role="note" tone="warning" data-testid="rp-warning">
         {t("settingsRpWarning")}
-      </p>
+      </Notice>
       {managed ? (
-        <p className="hint">{t("settingsGitops")}</p>
+        <p className={HINT}>{t("settingsGitops")}</p>
       ) : (
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             setMismatch(false);
@@ -360,15 +393,15 @@ function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
             hint={t("settingsRpCountHint")}
             type="number"
           />
-          <button type="submit" disabled={rp === "" || count === ""}>
+          <Button type="submit" className="self-start" isDisabled={rp === "" || count === ""}>
             {t("settingsSave")}
-          </button>
+          </Button>
         </form>
       )}
       {mismatch ? (
-        <p role="alert">{t("settingsRpMismatch")}</p>
+        <Failure>{t("settingsRpMismatch")}</Failure>
       ) : (
-        <Show l={w}>{() => <p role="status">{t("settingsRpIrreversible")}</p>}</Show>
+        <Show l={w}>{() => <Notice role="status">{t("settingsRpIrreversible")}</Notice>}</Show>
       )}
     </Panel>
   );
@@ -399,12 +432,12 @@ function Listing({
     <Panel id={id} title={title}>
       <Show l={l}>
         {(v) => (
-          <ul>
+          <ul className={BULLETS}>
             {v.items.map((c) => {
               const key = c.client_id ?? c.name ?? "";
               return (
                 <li key={key}>
-                  <span className="mono">{key}</span>
+                  <span className={MONO}>{key}</span>
                   {c.display_name !== undefined && ` — ${c.display_name}`}
                   {c.status === "retired" && ` (${t("statusRetired")})`}
                 </li>
@@ -448,16 +481,18 @@ function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <Panel id="social" title={t("settingsSocial")}>
       <Show l={l}>
         {(v) => (
-          <ul data-testid="social-providers">
+          <ul data-testid="social-providers" className="flex flex-col gap-3">
             {v.items.map((s) => (
-              <li key={s.preset}>
-                <span className="mono">{s.preset}</span>
-                {s.status === "disabled" && ` (${t("socialDisabled")})`}
-                {s.shared_development_client && ` — ${t("socialSharedClient")}`}
+              <li key={s.preset} className="flex flex-col gap-2">
+                <span>
+                  <span className={MONO}>{s.preset}</span>
+                  {s.status === "disabled" && ` (${t("socialDisabled")})`}
+                  {s.shared_development_client && ` — ${t("socialSharedClient")}`}
+                </span>
                 {s.warnings.map((w) => (
-                  <p key={w.code} role="status" className="banner" data-testid="social-warning">
+                  <Notice key={w.code} role="status" tone="warning" data-testid="social-warning">
                     {socialWarning(w)}
-                  </p>
+                  </Notice>
                 ))}
               </li>
             ))}
@@ -473,9 +508,9 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(() => adminGet<Analytics>(ctx.instance, realmPath(ctx, "/analytics")));
   return (
     <Panel id="analytics" title={t("analyticsTitle")}>
-      <p className="badge" data-testid="analytics-note">
+      <Badge variant="outline" className="self-start" data-testid="analytics-note">
         {t("analyticsNote")}
-      </p>
+      </Badge>
       <Show l={l}>
         {(a) => (
           <>
@@ -487,40 +522,40 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
               </p>
             )}
             {(a.surges ?? []).map((s) => (
-              <p key={s.day} role="status" className="banner">
+              <Notice key={s.day} role="status" tone="warning">
                 {t("analyticsSurge", { day: s.day, count: String(s.failed) })}
-              </p>
+              </Notice>
             ))}
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t("analyticsDay")}</th>
-                  <th scope="col">{t("analyticsStarted")}</th>
-                  <th scope="col">{t("analyticsCompleted")}</th>
-                  <th scope="col">{t("analyticsFailed")}</th>
-                  <th scope="col">{t("analyticsPasskey")}</th>
-                  <th scope="col">{t("analyticsMfa")}</th>
-                  <th scope="col">{t("analyticsMethods")}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead scope="col">{t("analyticsDay")}</TableHead>
+                  <TableHead scope="col">{t("analyticsStarted")}</TableHead>
+                  <TableHead scope="col">{t("analyticsCompleted")}</TableHead>
+                  <TableHead scope="col">{t("analyticsFailed")}</TableHead>
+                  <TableHead scope="col">{t("analyticsPasskey")}</TableHead>
+                  <TableHead scope="col">{t("analyticsMfa")}</TableHead>
+                  <TableHead scope="col">{t("analyticsMethods")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {a.days.map((d) => (
-                  <tr key={d.day}>
-                    <td>{d.day}</td>
-                    <td>{d.started}</td>
-                    <td>{d.completed}</td>
-                    <td>{d.failed}</td>
-                    <td>{d.passkey_accounts}</td>
-                    <td>{d.mfa_setup}</td>
-                    <td className="mono">
+                  <TableRow key={d.day}>
+                    <TableCell>{d.day}</TableCell>
+                    <TableCell>{d.started}</TableCell>
+                    <TableCell>{d.completed}</TableCell>
+                    <TableCell>{d.failed}</TableCell>
+                    <TableCell>{d.passkey_accounts}</TableCell>
+                    <TableCell>{d.mfa_setup}</TableCell>
+                    <TableCell className={MONO}>
                       {Object.entries(d.methods ?? {})
                         .map(([m, n]) => `${m}: ${String(n)}`)
                         .join(", ")}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </>
         )}
       </Show>

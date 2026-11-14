@@ -1,8 +1,11 @@
 // OP-152 m.7 (d), §9.16.2 k.4, TN-42
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+
 import { t } from "../i18n/index.js";
 import { change, type WriteResult } from "../lib/admin.js";
+import { ACTIONS, FORM, HINT, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useRun } from "./parts.js";
 
 /** Links an upstream provider's subject to an account: one `idp.upstream.link` Exercise. */
@@ -13,8 +16,9 @@ export function UpstreamLink({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, write] = useRun<WriteResult>();
   return (
     <Panel id="upstream-link" title={t("upstreamLinkTitle")}>
-      <p className="hint">{t("upstreamLinkIntro")}</p>
+      <p className={HINT}>{t("upstreamLinkIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
@@ -46,12 +50,14 @@ export function UpstreamLink({ ctx }: { readonly ctx: Ctx }): ReactElement {
           value={account}
           onChange={setAccount}
         />
-        <button type="submit" disabled={upstream === "" || sub === "" || account === ""}>
-          {t("upstreamLinkSave")}
-        </button>
+        <div className={ACTIONS}>
+          <Button type="submit" isDisabled={upstream === "" || sub === "" || account === ""}>
+            {t("upstreamLinkSave")}
+          </Button>
+        </div>
       </form>
       <Show l={w}>
-        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+        {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
       </Show>
     </Panel>
   );
