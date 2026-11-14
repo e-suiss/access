@@ -251,7 +251,7 @@ uniffi-test-swift:
     "$out/vectors" conformance/vectors/core/1
 
 # OP-97
-npm_packages :="sdks/typescript web/components web/console web/login web/account"
+npm_packages :="sdks/typescript web/components web/ui web/console web/login web/account"
 
 # OP-83, §14.5
 web-install:
