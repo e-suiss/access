@@ -302,7 +302,8 @@ pub struct Hosted<K, C, M> {
     pub gate: LoginGate,
     /// The Argon2id service.
     pub hasher: Hasher,
-    /// Where a completed sign-in goes (`redirect_to`).
+    /// Where a completed sign-in with no request to return to goes: a path under the realm's
+    /// issuer (`redirect_to`; OP-159 m.29 (d)).
     pub redirect_to: String,
     /// The realms' inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
@@ -524,6 +525,11 @@ where
     C: Clock + Sync,
     M: Messages,
 {
+    /// OP-159 m.29 (d)
+    pub(crate) fn done_to(&self, kit: &RealmKit) -> String {
+        format!("{}{}", kit.issuer, self.redirect_to)
+    }
+
     pub(crate) async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Reply> {
         self.kits.kit(entry).await.map_err(|_| {
             Reply::problem(Problem {
@@ -1035,13 +1041,10 @@ where
             Outcome::Suspended { .. } => Current::Email(EmailWait::Code),
             Outcome::SignedIn(s) => {
                 let flow = flow_id(fref.handle)?;
-                let reply = Reply::ui(
-                    200,
-                    Ui::complete(flow, self.redirect_to.clone(), &policy(kit)),
-                )
-                .cookie(s.set_cookie)
-                .cookie(s.marker_cookie)
-                .cookie(Some(clear_cookie(LOGIN_COOKIE)));
+                let reply = Reply::ui(200, Ui::complete(flow, self.done_to(kit), &policy(kit)))
+                    .cookie(s.set_cookie)
+                    .cookie(s.marker_cookie)
+                    .cookie(Some(clear_cookie(LOGIN_COOKIE)));
                 // TN-33, OP-153 m.3 (y)
                 Current::Done(self.offer_dbsc(auth, kit, s.session, reply).await)
             }
@@ -1225,13 +1228,10 @@ where
                 Ok(Reply::ui(200, Ui::email_sent(flow.clone(), wait, &reqs)))
             }
             Outcome::SignedIn(s) => {
-                let reply = Reply::ui(
-                    200,
-                    Ui::complete(flow.clone(), self.redirect_to.clone(), &reqs),
-                )
-                .cookie(s.set_cookie)
-                .cookie(s.marker_cookie)
-                .cookie(Some(clear_cookie(LOGIN_COOKIE)));
+                let reply = Reply::ui(200, Ui::complete(flow.clone(), self.done_to(kit), &reqs))
+                    .cookie(s.set_cookie)
+                    .cookie(s.marker_cookie)
+                    .cookie(Some(clear_cookie(LOGIN_COOKIE)));
                 // TN-33, OP-153 m.3 (y)
                 Ok(self.offer_dbsc(auth, kit, s.session, reply).await)
             }

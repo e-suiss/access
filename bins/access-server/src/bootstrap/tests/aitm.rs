@@ -79,7 +79,7 @@ async fn lab(name: &str) -> Lab {
             cores(),
             cgroup_memory_budget(),
         )),
-        redirect_to: String::from("/"),
+        redirect_to: String::from("/account"),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
@@ -319,6 +319,15 @@ async fn password_and_totp_through_a_reverse_proxy_hand_over_the_session() {
     .await
     .unwrap();
     assert_eq!(step_of(&done), "complete", "{}", done.text());
+    // OP-159 m.29 (d)
+    let to = done.json()["redirect_to"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        to.starts_with("https://") && to.ends_with("/realms/acme/account"),
+        "{to}"
+    );
 
     let loot = proxy.captured(SESSION);
     assert!(!loot.is_empty(), "{:?}", proxy.loot);

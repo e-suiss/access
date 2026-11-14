@@ -745,7 +745,8 @@ pub(crate) struct Login {
     /// The built `web/login/dist`; read once before the lockdown. Without it only the login
     /// API is served.
     pub(crate) dist_dir: Option<PathBuf>,
-    /// Where a completed sign-in goes: a path on the realm's origin.
+    /// Where a completed sign-in with no request to return to goes: a path under the realm's
+    /// issuer (OP-159 m.29 (d)).
     pub(crate) redirect_to: String,
     /// Session idle lifetime, seconds (TN-36; OP-146 m.14 (c): 7 days).
     pub(crate) session_idle_s: u64,
@@ -760,7 +761,7 @@ impl Default for Login {
     fn default() -> Self {
         Self {
             dist_dir: None,
-            redirect_to: "/".to_owned(),
+            redirect_to: "/account".to_owned(),
             session_idle_s: 7 * 86_400,
             session_absolute_s: 30 * 86_400,
             hash_mean_ms: 0,

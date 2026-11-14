@@ -210,12 +210,10 @@ where
             .await
         {
             Ok(opened) => match opened.step {
-                Outcome::SignedIn(signed) => {
-                    Reply::new(303, Body::Redirect(self.redirect_to.clone()))
-                        .cookie(signed.set_cookie)
-                        .cookie(signed.marker_cookie)
-                        .cookie(opened.set_cookie)
-                }
+                Outcome::SignedIn(signed) => Reply::new(303, Body::Redirect(self.done_to(&kit)))
+                    .cookie(signed.set_cookie)
+                    .cookie(signed.marker_cookie)
+                    .cookie(opened.set_cookie),
                 Outcome::Continue { .. } => Reply::new(
                     303,
                     Body::Redirect(format!("{}/login?flow={}", kit.issuer, opened.handle)),

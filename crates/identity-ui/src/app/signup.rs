@@ -376,7 +376,7 @@ where
                 let reqs = super::policy(&kit);
                 match opened.step {
                     Outcome::SignedIn(s) => {
-                        Reply::ui(200, Ui::complete(next, self.redirect_to.clone(), &reqs))
+                        Reply::ui(200, Ui::complete(next, self.done_to(&kit), &reqs))
                             .cookie(s.set_cookie)
                             .cookie(s.marker_cookie)
                     }

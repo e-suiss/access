@@ -463,7 +463,7 @@ where
         signin!(self, kit, auth, Some(b.ip));
         match auth.federated(subject, now, b.flow, b.correlation).await {
             Ok(opened) => match opened.step {
-                Outcome::SignedIn(s) => redirect(self.redirect_to.clone())
+                Outcome::SignedIn(s) => redirect(self.done_to(&kit))
                     .cookie(s.set_cookie)
                     .cookie(s.marker_cookie),
                 Outcome::Continue { .. } => {
