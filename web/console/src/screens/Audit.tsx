@@ -4,6 +4,15 @@
 // signed Exercise of its own.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import {
+  Field as FieldRoot,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@suiss/access-ui/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+
 import { t } from "../i18n/index.js";
 import {
   explain,
@@ -22,6 +31,17 @@ import {
   type RevocationImpact,
   RevocationView,
 } from "./Reports.js";
+import {
+  ACTIONS,
+  BULLETS,
+  CHOICE,
+  CHOICE_LABEL,
+  FORM,
+  Failure,
+  HINT,
+  MONO,
+  Notice,
+} from "../ui.js";
 
 function split(action: string): { namespace: string; name: string } {
   const i = action.lastIndexOf(".");
@@ -62,6 +82,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <p>{t("recordsIntro")}</p>
       <Panel id="record" title={t("recordsPosition")}>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             const a = split(action);
@@ -95,37 +116,40 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={resource}
             onChange={setResource}
           />
-          <button type="submit">{t("run")}</button>
-          <button
-            type="button"
-            onClick={() => {
-              searchPage();
-            }}
-          >
-            {t("recordsSearchTitle")}
-          </button>
+          <p className={ACTIONS}>
+            <Button type="submit">{t("run")}</Button>
+            <Button
+              variant="outline"
+              onPress={() => {
+                searchPage();
+              }}
+            >
+              {t("recordsSearchTitle")}
+            </Button>
+          </p>
         </form>
         <Show l={record}>{(a) => <Explanation answer={a} record={Number(position)} />}</Show>
         <Show l={found}>
           {(a) => (
             <>
               <PageCount page={a.page} shown={a.results.length} />
-              <ul data-testid="search-results">
+              <ul data-testid="search-results" className={BULLETS}>
                 {a.results.map((r, i) => (
-                  <li key={String(i)} className="mono">
+                  <li key={String(i)} className={MONO}>
                     {JSON.stringify(r)}
                   </li>
                 ))}
               </ul>
               {token !== undefined && token !== "" && (
-                <button
-                  type="button"
-                  onClick={() => {
+                <Button
+                  variant="outline"
+                  className="self-start"
+                  onPress={() => {
                     searchPage(token);
                   }}
                 >
                   {t("nextPage")}
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -144,6 +168,7 @@ export function Revocation({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("revocationIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -162,7 +187,9 @@ export function Revocation({ ctx }: { readonly ctx: Ctx }): ReactElement {
           value={instance}
           onChange={setInstance}
         />
-        <button type="submit">{t("run")}</button>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("run")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(a) => (
@@ -190,6 +217,7 @@ export function Unknown({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("unknownIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -200,20 +228,23 @@ export function Unknown({ ctx }: { readonly ctx: Ctx }): ReactElement {
           );
         }}
       >
-        <p className="field">
-          <label htmlFor="unk-kind">{t("unknownKind")}</label>
-          <select
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="unk-kind" className="text-sm">
+            {t("unknownKind")}
+          </FieldLabel>
+          <NativeSelect
             id="unk-kind"
+            size="sm"
             value={kind}
             onChange={(e) => {
               setKind(e.target.value as Compromised);
             }}
           >
-            <option value="instance">{t("unknownKindInstance")}</option>
-            <option value="issuer">{t("unknownKindIssuer")}</option>
-            <option value="key">{t("unknownKindKey")}</option>
-          </select>
-        </p>
+            <NativeSelectOption value="instance">{t("unknownKindInstance")}</NativeSelectOption>
+            <NativeSelectOption value="issuer">{t("unknownKindIssuer")}</NativeSelectOption>
+            <NativeSelectOption value="key">{t("unknownKindKey")}</NativeSelectOption>
+          </NativeSelect>
+        </FieldRoot>
         <Field id="unk-value" label={t("unknownValue")} value={value} onChange={setValue} />
         <Field
           id="unk-from"
@@ -229,7 +260,9 @@ export function Unknown({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setUntil}
           type="number"
         />
-        <button type="submit">{t("run")}</button>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("run")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(a) => (
@@ -254,6 +287,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("exportIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -273,10 +307,13 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
           type="number"
         />
         <Field id="exp-to" label={t("exportTo")} value={to} onChange={setTo} type="number" />
-        <fieldset>
-          <legend>{t("exportDisclosure")}</legend>
-          <label>
+        <FieldSet className="gap-2">
+          <FieldLegend variant="label" className="mb-1">
+            {t("exportDisclosure")}
+          </FieldLegend>
+          <label className={CHOICE_LABEL}>
             <input
+              className={CHOICE}
               type="radio"
               name="disclosure"
               checked={disclosure === "redacted"}
@@ -286,8 +323,9 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
             />
             {t("exportRedacted")}
           </label>
-          <label>
+          <label className={CHOICE_LABEL}>
             <input
+              className={CHOICE}
               type="radio"
               name="disclosure"
               checked={disclosure === "full"}
@@ -297,17 +335,21 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
             />
             {t("exportFull")}
           </label>
-        </fieldset>
-        <button type="submit" className="primary">
-          {t("exportStart")}
-        </button>
+        </FieldSet>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("exportStart")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(r) => (
           <>
-            <p role="status">{t("exportDone", { exercise: r.exercise })}</p>
+            <Notice role="status">{t("exportDone", { exercise: r.exercise })}</Notice>
             <p>
-              <a href={URL.createObjectURL(r.package)} download="audit-export.cbor">
+              <a
+                href={URL.createObjectURL(r.package)}
+                download="audit-export.cbor"
+                className="font-medium text-primary underline underline-offset-4"
+              >
                 {t("exportDownload")}
               </a>
             </p>
@@ -345,10 +387,16 @@ function proposals(c: CompromiseImpact): readonly Proposal[] {
 
 function ContainResult({ r }: { readonly r: MetaResult }): ReactElement {
   if (r.decision) {
-    return <p role="status">{t("containRecorded", { exercise: r.exercise ?? "" })}</p>;
+    return (
+      <span role="status" className="text-sm">
+        {t("containRecorded", { exercise: r.exercise ?? "" })}
+      </span>
+    );
   }
   return (
-    <p role="status">{r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}</p>
+    <span role="status" className="text-sm">
+      {r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}
+    </span>
   );
 }
 
@@ -377,6 +425,7 @@ export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("containIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           setDone({});
@@ -408,7 +457,9 @@ export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setUntil}
           type="number"
         />
-        <button type="submit">{t("run")}</button>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("run")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(a) => (
@@ -419,23 +470,24 @@ export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 <Panel key={String(i)} id={`contain-${String(i)}`} title={t("containSteps")}>
                   <CompromiseView c={c} />
                   {steps.length === 0 ? (
-                    <p>{t("containNothing")}</p>
+                    <p className={HINT}>{t("containNothing")}</p>
                   ) : (
-                    <ul data-testid="containment">
+                    <ul data-testid="containment" className="flex flex-col divide-y">
                       {steps.map((p) => {
                         const r = done[p.key];
                         return (
-                          <li key={p.key}>
-                            <span>{p.label}</span>{" "}
+                          <li key={p.key} className="flex flex-wrap items-center gap-3 py-2">
+                            <span>{p.label}</span>
                             {r === undefined ? (
-                              <button
-                                type="button"
-                                onClick={() => {
+                              <Button
+                                size="sm"
+                                className="ms-auto"
+                                onPress={() => {
                                   sign(p);
                                 }}
                               >
                                 {t("containPropose")}
-                              </button>
+                              </Button>
                             ) : (
                               <ContainResult r={r} />
                             )}
@@ -444,15 +496,15 @@ export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       })}
                     </ul>
                   )}
-                  <p className="hint">{t("containRestriction")}</p>
-                  <p className="hint">{t("containIgnored")}</p>
+                  <p className={HINT}>{t("containRestriction")}</p>
+                  <p className={HINT}>{t("containIgnored")}</p>
                 </Panel>
               );
             })}
           </>
         )}
       </Show>
-      {w.status === "failed" && <p role="alert">{t(w.key)}</p>}
+      {w.status === "failed" && <Failure>{t(w.key)}</Failure>}
     </>
   );
 }

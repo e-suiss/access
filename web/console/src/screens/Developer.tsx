@@ -4,6 +4,19 @@
 // in the domain list, never a switch.
 import { useState, type ReactElement } from "react";
 
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field as FieldRoot, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@suiss/access-ui/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@suiss/access-ui/components/ui/table";
+import { Textarea } from "@suiss/access-ui/components/ui/textarea";
+
 import { t, type Key } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
 import { check, explain, type Explained, search, type SearchAnswer } from "../lib/adp.js";
@@ -18,6 +31,7 @@ import {
 import { Explanation } from "./Explanation.js";
 import { Advisory, type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 import { type Publication, PublicationView } from "./Reports.js";
+import { ACTIONS, BULLETS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 
 function lines(text: string): string[] {
   return text
@@ -48,9 +62,9 @@ function PrePublish(): ReactElement {
       <Field id="param-affects" label={t("paramAffects")} value={affects} onChange={setAffects} />
       <Field id="param-type" label={t("paramType")} value={type} onChange={setType} />
       {warnings.map((w) => (
-        <p key={w.name} role="alert" data-testid="e12-warning">
+        <Notice key={w.name} tone="danger" role="alert" data-testid="e12-warning">
           {t("schemasUnmapped", { param: w.name, affects: w.affects })}
-        </p>
+        </Notice>
       ))}
     </Panel>
   );
@@ -125,8 +139,9 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const name = (d: string) => (d === ctx.session.domain ? ctx.session.realm : d);
   return (
     <Panel id="publish" title={t("publishTitle")}>
-      <p className="hint">{t("publishIntro")}</p>
+      <p className={HINT}>{t("publishIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           if (pkg === undefined) return;
@@ -156,39 +171,50 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setVersion}
           type="number"
         />
-        <p className="field">
-          <label htmlFor="publish-actions">{t("publishActions")}</label>
-          <textarea
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="publish-actions" className="text-sm">
+            {t("publishActions")}
+          </FieldLabel>
+          <Textarea
             id="publish-actions"
+            className={MONO}
             value={actionsText}
             onChange={(e) => {
               setActions(e.target.value);
             }}
           />
-        </p>
-        <p className="field">
-          <label htmlFor="publish-params">{t("publishParams")}</label>
-          <textarea
+        </FieldRoot>
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="publish-params" className="text-sm">
+            {t("publishParams")}
+          </FieldLabel>
+          <Textarea
             id="publish-params"
+            className={MONO}
             value={paramsText}
             onChange={(e) => {
               setParams(e.target.value);
             }}
           />
-        </p>
-        <p className="field">
-          <label htmlFor="publish-domains">{t("publishDomains")}</label>
-          <textarea
+        </FieldRoot>
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="publish-domains" className="text-sm">
+            {t("publishDomains")}
+          </FieldLabel>
+          <Textarea
             id="publish-domains"
+            className={MONO}
             value={domainsText}
             onChange={(e) => {
               setDomains(e.target.value);
             }}
           />
+        </FieldRoot>
+        <p className={ACTIONS}>
+          <Button type="submit" isDisabled={pkg === undefined || domains.length === 0}>
+            {t("publishButton")}
+          </Button>
         </p>
-        <button type="submit" disabled={pkg === undefined || domains.length === 0}>
-          {t("publishButton")}
-        </button>
       </form>
       <Show l={l}>
         {({ published, status }) =>
@@ -196,7 +222,7 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
             <>
               <p>
                 {t("publishKept")}{" "}
-                <span className="mono" data-testid="published-fingerprint">
+                <span className={MONO} data-testid="published-fingerprint">
                   {published.fingerprint}
                 </span>
               </p>
@@ -225,9 +251,13 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
               )}
             </>
           ) : (
-            <ul data-testid="publish-warnings">
+            <ul data-testid="publish-warnings" className="flex flex-col gap-2">
               {published.warnings.map((w) => (
-                <li key={w.parameter} role="alert">
+                <li
+                  key={w.parameter}
+                  role="alert"
+                  className="rounded-xl bg-red-50 p-3 text-sm text-red-900 ring-1 ring-red-700/25 dark:bg-red-950/40 dark:text-red-50"
+                >
                   {t("schemasUnmapped", {
                     param: w.parameter,
                     affects: w.reason.replace("affects_", ""),
@@ -253,6 +283,7 @@ export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Publish ctx={ctx} />
       <Panel id="publications" title={t("pendingNamespace")}>
         <form
+          className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
             run(() => search<Publication>(ctx.instance, "schema-publications", { namespace }));
@@ -264,7 +295,11 @@ export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={namespace}
             onChange={setNamespace}
           />
-          <button type="submit">{t("run")}</button>
+          <p className={ACTIONS}>
+            <Button type="submit" variant="outline">
+              {t("run")}
+            </Button>
+          </p>
         </form>
         <Show l={l}>
           {(a) => {
@@ -345,12 +380,12 @@ function Deliveries({
     <Show l={l}>
       {(v) =>
         v.items.length === 0 ? (
-          <p>{t("webhookDeliveriesNone")}</p>
+          <p className={HINT}>{t("webhookDeliveriesNone")}</p>
         ) : (
-          <ul data-testid="deliveries">
+          <ul data-testid="deliveries" className={BULLETS}>
             {v.items.map((d) => (
               <li key={d.event_id}>
-                <span className="mono">{d.event}</span> · {d.state} ·{" "}
+                <span className={MONO}>{d.event}</span> · {d.state} ·{" "}
                 {t("deliveryAttempts", { n: String(d.attempts) })}
                 {d.last_status !== undefined && d.last_status !== null
                   ? ` · HTTP ${String(d.last_status)}`
@@ -377,41 +412,47 @@ export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Panel id="clients" title={t("settingsClients")}>
         <Show l={clients}>
           {(v) => (
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{t("settingsClients")}</th>
-                  <th scope="col">{t("clientAuth")}</th>
-                  <th scope="col">{t("oauthGrantType")}</th>
-                  <th scope="col">{t("clientRedirects")}</th>
-                  <th scope="col">{t("clientStatus")}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead scope="col">{t("settingsClients")}</TableHead>
+                  <TableHead scope="col">{t("clientAuth")}</TableHead>
+                  <TableHead scope="col">{t("oauthGrantType")}</TableHead>
+                  <TableHead scope="col">{t("clientRedirects")}</TableHead>
+                  <TableHead scope="col">{t("clientStatus")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {v.items.map((c) => (
-                  <tr key={c.client_id}>
-                    <td>
-                      <span className="mono">{c.client_id}</span>
+                  <TableRow key={c.client_id}>
+                    <TableCell className="whitespace-normal">
+                      <span className={MONO}>{c.client_id}</span>
                       {c.display_name !== undefined && ` — ${c.display_name}`}
-                    </td>
-                    <td className="mono">{c.token_endpoint_auth_method ?? ""}</td>
-                    <td className="mono">{(c.grant_types ?? []).join(", ")}</td>
-                    <td className="mono">{(c.redirect_uris ?? []).join(" ")}</td>
-                    <td>{c.status === "retired" ? t("statusRetired") : t("statusActive")}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className={MONO}>{c.token_endpoint_auth_method ?? ""}</TableCell>
+                    <TableCell className={`${MONO} whitespace-normal`}>
+                      {(c.grant_types ?? []).join(", ")}
+                    </TableCell>
+                    <TableCell className={`${MONO} whitespace-normal`}>
+                      {(c.redirect_uris ?? []).join(" ")}
+                    </TableCell>
+                    <TableCell>
+                      {c.status === "retired" ? t("statusRetired") : t("statusActive")}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </Show>
       </Panel>
       <Panel id="hooks" title={t("hooksTitle")}>
         <Show l={hooks}>
           {(v) => (
-            <ul>
+            <ul className={BULLETS}>
               {v.items.map((h) => (
                 <li key={h.hook_id}>
-                  <span className="mono">{h.point}</span> · <span className="mono">{h.url}</span> ·{" "}
+                  <span className={MONO}>{h.point}</span> · <span className={MONO}>{h.url}</span> ·{" "}
                   {t("hookOnNoAnswer")}:{" "}
                   {h.on_no_answer === "continue_without_claims"
                     ? t("hookContinue")
@@ -426,12 +467,14 @@ export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Panel id="webhooks" title={t("webhooksTitle")}>
         <Show l={webhooks}>
           {(v) => (
-            <ul>
+            <ul className="flex flex-col gap-4">
               {v.items.map((h) => (
-                <li key={h.webhook_id}>
-                  <span className="mono">{h.url}</span> · {t("webhookEvents")}:{" "}
-                  <span className="mono">{h.events.join(", ")}</span>
-                  <h4>{t("webhookDeliveries")}</h4>
+                <li key={h.webhook_id} className="flex flex-col gap-2">
+                  <p>
+                    <span className={MONO}>{h.url}</span> · {t("webhookEvents")}:{" "}
+                    <span className={MONO}>{h.events.join(", ")}</span>
+                  </p>
+                  <h4 className={H4}>{t("webhookDeliveries")}</h4>
                   <Deliveries ctx={ctx} base={base} webhook={h.webhook_id} />
                 </li>
               ))}
@@ -503,26 +546,30 @@ function Connectors(): ReactElement {
   return (
     <Panel id="connectors" title={t("connectorsTitle")}>
       <p>{t("connectorsIntro")}</p>
-      <table data-testid="connectors">
-        <thead>
-          <tr>
-            <th scope="col">{t("connectorsKind")}</th>
-            <th scope="col">{t("connectorsReady")}</th>
-            <th scope="col">{t("connectorsGives")}</th>
-            <th scope="col">{t("connectorsWhere")}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table data-testid="connectors">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead scope="col">{t("connectorsKind")}</TableHead>
+            <TableHead scope="col">{t("connectorsReady")}</TableHead>
+            <TableHead scope="col">{t("connectorsGives")}</TableHead>
+            <TableHead scope="col">{t("connectorsWhere")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {CONNECTORS.map((c) => (
-            <tr key={c.kind}>
-              <th scope="row">{t(c.kind)}</th>
-              <td>{c.ready.length > 0 ? c.ready.join(", ") : t("connectorsAny")}</td>
-              <td>{t(c.gives)}</td>
-              <td>{where(c.where)}</td>
-            </tr>
+            <TableRow key={c.kind}>
+              <TableHead scope="row" className="text-sm font-medium text-foreground">
+                {t(c.kind)}
+              </TableHead>
+              <TableCell className="whitespace-normal">
+                {c.ready.length > 0 ? c.ready.join(", ") : t("connectorsAny")}
+              </TableCell>
+              <TableCell className="whitespace-normal">{t(c.gives)}</TableCell>
+              <TableCell>{where(c.where)}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </Panel>
   );
 }
@@ -577,10 +624,13 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("labIntro")}</p>
       <Panel id="lab-ask" title={t("labCheck")}>
-        <p className="field">
-          <label htmlFor="lab-domain">{t("labDomain")}</label>
-          <select
+        <FieldRoot className="max-w-xl gap-2">
+          <FieldLabel htmlFor="lab-domain" className="text-sm">
+            {t("labDomain")}
+          </FieldLabel>
+          <NativeSelect
             id="lab-domain"
+            size="sm"
             value={domain}
             onChange={(e) => {
               setDomain(e.target.value);
@@ -590,13 +640,13 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
               ? domains.value
               : [{ slug: ctx.session.realm, domain: ctx.session.domain }]
             ).map((d) => (
-              <option key={d.slug} value={d.slug}>
+              <NativeSelectOption key={d.slug} value={d.slug}>
                 {d.slug}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </p>
-        {!here && <p className="hint">{t("labOtherDomain", { realm: domain })}</p>}
+          </NativeSelect>
+        </FieldRoot>
+        {!here && <p className={HINT}>{t("labOtherDomain", { realm: domain })}</p>}
         <Field id="lab-subject" label={t("labSubject")} value={subject} onChange={setSubject} />
         <Field id="lab-ns" label={t("labNamespace")} value={ns} onChange={setNs} />
         <Field id="lab-name" label={t("labAction")} value={name} onChange={setName} />
@@ -609,29 +659,28 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
         />
         <Field id="lab-rns" label={t("labResourceNs")} value={rns} onChange={setRns} />
         <Field id="lab-rpath" label={t("labResourcePath")} value={rpath} onChange={setRpath} />
-        <p className="actions">
-          <button
-            type="button"
-            disabled={!here}
-            onClick={() => {
+        <p className={ACTIONS}>
+          <Button
+            isDisabled={!here}
+            onPress={() => {
               runCheck(() => check(ctx.instance, subject, wanted()));
             }}
           >
             {t("labCheck")}
-          </button>
-          <button
-            type="button"
-            disabled={!here}
-            onClick={() => {
+          </Button>
+          <Button
+            variant="outline"
+            isDisabled={!here}
+            onPress={() => {
               runExplain(() => explain(ctx.instance, subject, wanted()));
             }}
           >
             {t("labExplain")}
-          </button>
+          </Button>
         </p>
         <Show l={checked}>
           {(ok) => (
-            <div data-testid="lab-check">
+            <div data-testid="lab-check" className="flex flex-col gap-2">
               <Advisory />
               <p>{ok ? t("labWouldAllow") : t("labWouldNot")}</p>
             </div>
@@ -655,6 +704,7 @@ export function Replay({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("replayIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -681,7 +731,9 @@ export function Replay({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Field id="replay-name" label={t("labAction")} value={name} onChange={setName} />
         <Field id="replay-rns" label={t("labResourceNs")} value={rns} onChange={setRns} />
         <Field id="replay-rpath" label={t("labResourcePath")} value={rpath} onChange={setRpath} />
-        <button type="submit">{t("labReplay")}</button>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("labReplay")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(a) => {
@@ -689,9 +741,13 @@ export function Replay({ ctx }: { readonly ctx: Ctx }): ReactElement {
           return (
             <>
               {replay !== undefined && typeof replay.match === "boolean" && (
-                <p role="status" data-testid="replay-result">
+                <Notice
+                  role="status"
+                  tone={replay.match ? "info" : "warning"}
+                  data-testid="replay-result"
+                >
                   {replay.match ? t("replayMatch") : t("replayMismatch")}
-                </p>
+                </Notice>
               )}
               <Explanation answer={a} record={Number(position)} />
             </>
@@ -714,6 +770,7 @@ export function Logs({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("logsIntro")}</p>
       <form
+        className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
@@ -740,15 +797,17 @@ export function Logs({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Field id="log-name" label={t("labAction")} value={name} onChange={setName} />
         <Field id="log-rns" label={t("labResourceNs")} value={rns} onChange={setRns} />
         <Field id="log-rpath" label={t("labResourcePath")} value={rpath} onChange={setRpath} />
-        <button type="submit">{t("run")}</button>
+        <p className={ACTIONS}>
+          <Button type="submit">{t("run")}</Button>
+        </p>
       </form>
       <Show l={l}>
         {(a) => (
           <>
             {a.context?.["causal_binding"] === "audit-only" && (
-              <p role="note" className="banner" data-testid="causal-warning">
+              <Notice role="note" tone="warning" data-testid="causal-warning">
                 {t("causalAuditOnly")}
-              </p>
+              </Notice>
             )}
             <Explanation answer={a} record={Number(position)} />
           </>
