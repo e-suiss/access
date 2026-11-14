@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "access-crypto"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "aws-lc-rs",
  "aws-lc-sys 0.46.0",
@@ -18,7 +18,7 @@ dependencies = [
 
 [[package]]
 name = "access-edge-core"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "access-internal-api",
  "esuiss-crypto",
@@ -50,7 +50,7 @@ dependencies = [
 
 [[package]]
 name = "access-internal-api"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "access-parse"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "thiserror",
 ]
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-kernel"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-crypto"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "aws-lc-rs",
  "cryptoki",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "cedar-policy",
  "serde_json",

@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.7.2
+
+Released with `esuiss-access-kernel` 0.7.2 (Kernel 0.7.0 semantics, unchanged). No API change from 0.7.0; 0.7.0 and 0.7.1 were never published.
+
 ## 0.7.1
 
-Released with `esuiss-access-kernel` 0.7.1 (Kernel 0.7.0 semantics, unchanged). No API change from 0.7.0, which was never published.
+Never published: the v0.7.1 release run stopped at its test job's time limit before anything was published (OP-159 m.30). No API change from 0.7.0.
 
 ## 0.7.0
 

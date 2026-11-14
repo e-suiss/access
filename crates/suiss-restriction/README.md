@@ -11,7 +11,7 @@ The Access Restriction Profile: a forbid-only subset of [Cedar](https://www.ceda
 
 ```toml
 [dependencies]
-esuiss-restriction = "=0.7.1"
+esuiss-restriction = "=0.7.2"
 ```
 
 ```rust
