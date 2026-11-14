@@ -6,3 +6,9 @@
     touch-action: pan-x pan-y pinch-zoom;
   }
 }
+
+/* OP-83: the suiss primary gives white text 4.44:1, and its hover (80%) 3.8:1; darker meets AA */
+:root {
+  --primary: oklch(0.46 0.1933 256.16);
+  --sidebar-primary: oklch(0.46 0.1933 256.16);
+}
