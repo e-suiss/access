@@ -105,7 +105,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 
 | Key | Default | Meaning |
 |---|---|---|
-| `dist_dir` | none | The built `web/login/dist`. Without it only the login API is served. |
+| `dist_dir` | none | The built `web/apps/login/dist`. Without it only the login API is served. |
 | `redirect_to` | `/` | Where a completed sign-in goes: a path on the realm's origin. |
 | `session_idle_s` | `604800` | Session idle lifetime. |
 | `session_absolute_s` | `2592000` | Session absolute lifetime. |
@@ -115,7 +115,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 
 | Key | Default | Meaning |
 |---|---|---|
-| `dist_dir` | none | The built `web/console/dist`. Without it only the console API is served. |
+| `dist_dir` | none | The built `web/apps/console/dist`. Without it only the console API is served. |
 
 ### `[suiss]` (required)
 

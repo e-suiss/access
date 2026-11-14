@@ -23,8 +23,9 @@ pub(crate) const RULES: u32 = 7;
 /// independent npm package (OP-97).
 pub(crate) const TS_PACKAGES: [&str; 2] = ["web", "sdks/typescript"];
 
-/// The `web/` workspace keeps the shared TypeScript settings in `tsconfig.base.json` and the
-/// install settings in `pnpm-workspace.yaml`.
+/// The `web/` workspace keeps the shared TypeScript and lint settings in its
+/// `packages/typescript-config` and `packages/eslint-config`, and the install settings in
+/// `pnpm-workspace.yaml` (OP-159 m.36).
 const WORKSPACE: &str = "web";
 
 /// The `pnpm-workspace.yaml` lines that do what an `.npmrc` line does.
@@ -170,10 +171,10 @@ impl Repo {
             .iter()
             .copied()
             .filter(|p| {
-                let file = if *p == WORKSPACE && file == "tsconfig.json" {
-                    "tsconfig.base.json"
-                } else {
-                    file
+                let file = match (*p == WORKSPACE, file) {
+                    (true, "tsconfig.json") => "packages/typescript-config/base.json",
+                    (true, "eslint.config.js") => "packages/eslint-config/index.js",
+                    _ => file,
                 };
                 self.read(&format!("{p}/{file}"))
                     .is_none_or(|text| !holds(&text))

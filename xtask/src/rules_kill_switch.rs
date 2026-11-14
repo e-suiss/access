@@ -256,7 +256,7 @@ mod tests {
         ] {
             assert_eq!(check_switches(fine), Vec::<String>::new(), "{fine}");
         }
-        assert!(switch_scope("web/console/src/screens/Audit.tsx"));
+        assert!(switch_scope("web/apps/console/src/screens/Audit.tsx"));
         assert!(switch_scope("sdks/openapi/admin-v1.json"));
         assert!(!switch_scope("crates/http/tests/router.rs"));
         assert!(!switch_scope("xtask/src/rules_kill_switch.rs"));

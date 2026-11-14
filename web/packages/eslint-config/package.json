@@ -1,0 +1,20 @@
+{
+  "name": "@access/eslint-config",
+  "version": "0.0.0",
+  "description": "The lint profile every Access web package uses (OP-83, TN-131).",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./index.js"
+  },
+  "peerDependencies": {
+    "eslint": "10.11.0"
+  },
+  "dependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "typescript-eslint": "8.71.0"
+  }
+}

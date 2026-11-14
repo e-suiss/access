@@ -15,15 +15,11 @@ node_modules
 **/dist
 web
 sdks/typescript
-!web/console
-!web/login
-!web/account
-!web/components
-!web/ui
+!web/apps
+!web/packages
 !web/package.json
 !web/pnpm-lock.yaml
 !web/pnpm-workspace.yaml
-!web/tsconfig.base.json
 !web/turbo.json
 !sdks/typescript
 **/node_modules

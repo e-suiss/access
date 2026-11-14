@@ -12,7 +12,7 @@
       "outputs": ["dist/**"],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/packages/typescript-config/base.json",
         "$TURBO_ROOT$/../locales/**",
         "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
         "$TURBO_ROOT$/../sdks/typescript/src/**",
@@ -24,7 +24,7 @@
       "dependsOn": ["^typecheck"],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/packages/typescript-config/base.json",
         "$TURBO_ROOT$/../locales/**",
         "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
         "$TURBO_ROOT$/../sdks/typescript/src/**",
@@ -35,7 +35,7 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/tsconfig.base.json",
+        "$TURBO_ROOT$/packages/typescript-config/base.json",
         "$TURBO_ROOT$/../locales/**",
         "$TURBO_ROOT$/../conformance/catalog/protected-messages.toml",
         "$TURBO_ROOT$/../sdks/typescript/src/**",
@@ -43,7 +43,9 @@
         "$TURBO_ROOT$/../sdks/typescript/package.json"
       ]
     },
-    "//#lint": {},
-    "//#format:check": {}
+    "//#format:check": {},
+    "lint": {
+      "dependsOn": ["^lint"]
+    }
   }
 }

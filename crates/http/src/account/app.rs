@@ -612,7 +612,7 @@ async fn headers_layer(request: Request, next: Next) -> Response {
 
 /// The account routes: the pages, their assets and `…/account/api/*`, at the realm's host and
 /// under `/realms/{slug}`, every answer with the account's security headers. `adp` is ADP's
-/// router in this process; `assets` the built `web/account`.
+/// router in this process; `assets` the built `web/apps/account`.
 pub fn router<D, KI, C, M, A, I, P, Q>(
     directory: D,
     hosted: Arc<Hosted<KI, C, M>>,

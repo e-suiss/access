@@ -614,21 +614,21 @@ jobs:
       - name: Account pages (@live)
         run: |
           echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
-          cd web/account
+          cd web/apps/account
           pnpm exec playwright install --with-deps chromium
           pnpm run e2e:live
       - name: Console (@live)
         if: ${{ !cancelled() && steps.totp.outcome == 'success' }}
         run: |
           echo "127.0.0.1 access-server access-server.local" | sudo tee -a /etc/hosts
-          cd web/console
+          cd web/apps/console
           pnpm exec playwright install --with-deps chromium
           pnpm run e2e:live
       - name: Hosted login (@live)
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: |
           echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
-          cd web/login
+          cd web/apps/login
           pnpm exec playwright install --with-deps chromium
           pnpm run e2e:live
       - name: Logs
@@ -640,9 +640,9 @@ jobs:
         with:
           name: web-live-report
           path: |
-            web/account/playwright-report
-            web/console/playwright-report
-            web/login/playwright-report
+            web/apps/account/playwright-report
+            web/apps/console/playwright-report
+            web/apps/login/playwright-report
           retention-days: 7
       - name: Stop
         if: always()

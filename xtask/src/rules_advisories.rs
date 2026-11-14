@@ -490,7 +490,7 @@ mod tests {
     }
 
     fn pkgs() -> BTreeSet<String> {
-        ["esuiss-access-kernel", "@esuiss/access-login"]
+        ["esuiss-access-kernel", "@access/login"]
             .iter()
             .map(|s| (*s).to_owned())
             .collect()

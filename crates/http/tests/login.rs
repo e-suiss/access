@@ -1341,7 +1341,7 @@ async fn the_login_app_carries_its_security_headers() {
     );
     let ts = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../web/login/security-headers.ts"),
+            .join("../../web/apps/login/security-headers.ts"),
     )
     .unwrap();
     let list = ts

@@ -1,0 +1,10 @@
+{
+  "extends": "@access/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@access/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

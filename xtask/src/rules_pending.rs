@@ -137,6 +137,6 @@ mod tests {
         );
         assert!(scope("crates/store/migrations/20260101000000_x.sql"));
         assert!(scope("crates/http/src/api/realm.rs"));
-        assert!(!scope("web/console/src/screens/Admin.tsx"));
+        assert!(!scope("web/apps/console/src/screens/Admin.tsx"));
     }
 }

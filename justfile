@@ -284,11 +284,11 @@ bindings-row:
     echo "| ${version} | uniffi (Python, Kotlin, Swift), Wasm (Node) | core/1 \`${vectors}\` |"
 
 web-e2e: wasm login-e2e
-    cd web/console && pnpm run e2e
+    cd web/apps/console && pnpm run e2e
 
 # OP-146 m.4 (g): hosted login against the mocked node endpoints, passkeys on a CDP virtual authenticator
 login-e2e:
-    cd web/login && pnpm run e2e
+    cd web/apps/login && pnpm run e2e
 
 # OP-65: rewrite sdks/openapi/login.json, frontend.json and their examples from crates/identity-ui
 login-contract:
@@ -332,8 +332,8 @@ admin-contract:
 
 web-e2e-update-snapshots: wasm
     docker run --rm --ipc=host -v "{{justfile_directory()}}:/work" \
-      -v /work/web/node_modules -v /work/web/console/node_modules -v /work/sdks/typescript/node_modules -w /work \
-      "mcr.microsoft.com/playwright:v$(cd web/console && node -p 'require("@playwright/test/package.json").version')-noble" \
+      -v /work/web/node_modules -v /work/web/apps/console/node_modules -v /work/sdks/typescript/node_modules -w /work \
+      "mcr.microsoft.com/playwright:v$(cd web/apps/console && node -p 'require("@playwright/test/package.json").version')-noble" \
       bash -c 'corepack enable && cd sdks/typescript && npm ci && cd ../../web && pnpm install --frozen-lockfile && cd console && pnpm exec playwright test --update-snapshots'
 
 # OP-69, RAUTHY-008

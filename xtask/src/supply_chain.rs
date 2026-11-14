@@ -486,7 +486,7 @@ mod tests {
     fn npm_package_without_lockfile_is_rejected() {
         let files = vec![
             "Cargo.lock".to_owned(),
-            "web/console/package.json".to_owned(),
+            "web/apps/console/package.json".to_owned(),
         ];
         assert_eq!(missing_lockfiles(&files).len(), 1);
         let mut with_root_lock = files;
@@ -494,7 +494,7 @@ mod tests {
         assert!(missing_lockfiles(&with_root_lock).is_empty());
         let workspace = vec![
             "Cargo.lock".to_owned(),
-            "web/console/package.json".to_owned(),
+            "web/apps/console/package.json".to_owned(),
             "web/pnpm-lock.yaml".to_owned(),
         ];
         assert!(missing_lockfiles(&workspace).is_empty());

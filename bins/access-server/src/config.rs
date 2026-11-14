@@ -724,7 +724,7 @@ impl Suiss {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub(crate) struct Console {
-    /// The built `web/console/dist`; read once before the lockdown. Without it only the
+    /// The built `web/apps/console/dist`; read once before the lockdown. Without it only the
     /// console's API is served.
     pub(crate) dist_dir: Option<PathBuf>,
 }
@@ -733,7 +733,7 @@ pub(crate) struct Console {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub(crate) struct Account {
-    /// The built `web/account/dist`; read once before the lockdown. Without it only the
+    /// The built `web/apps/account/dist`; read once before the lockdown. Without it only the
     /// account's API is served.
     pub(crate) dist_dir: Option<PathBuf>,
 }
@@ -742,7 +742,7 @@ pub(crate) struct Account {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub(crate) struct Login {
-    /// The built `web/login/dist`; read once before the lockdown. Without it only the login
+    /// The built `web/apps/login/dist`; read once before the lockdown. Without it only the login
     /// API is served.
     pub(crate) dist_dir: Option<PathBuf>,
     /// Where a completed sign-in with no request to return to goes: a path under the realm's

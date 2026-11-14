@@ -8,21 +8,12 @@ importers:
 
   .:
     devDependencies:
-      '@eslint/js':
-        specifier: 10.0.1
-        version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
       '@types/node':
         specifier: 25.9.9
         version: 25.9.9
       eslint:
         specifier: 10.11.0
         version: 10.11.0(jiti@2.7.0)
-      eslint-plugin-react-hooks:
-        specifier: 7.1.1
-        version: 7.1.1(eslint@10.11.0(jiti@2.7.0))
-      globals:
-        specifier: 17.13.0
-        version: 17.13.0
       prettier:
         specifier: 3.9.9
         version: 3.9.9
@@ -32,21 +23,18 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
-      typescript-eslint:
-        specifier: 8.71.0
-        version: 8.71.0(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
 
-  account:
+  apps/account:
     dependencies:
+      '@access/components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@access/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@esuiss/access':
-        specifier: link:../../sdks/typescript
-        version: link:../../sdks/typescript
-      '@suiss/access-react':
-        specifier: workspace:*
-        version: link:../components
-      '@suiss/access-ui':
-        specifier: workspace:*
-        version: link:../ui
+        specifier: link:../../../sdks/typescript
+        version: link:../../../sdks/typescript
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -54,6 +42,12 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@access/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@access/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
       '@axe-core/playwright':
         specifier: 4.13.0
         version: 4.13.0(playwright-core@1.63.0)
@@ -79,8 +73,109 @@ importers:
         specifier: 8.3.5
         version: 8.3.5(@types/node@25.9.9)(jiti@2.7.0)
 
-  components:
+  apps/console:
+    dependencies:
+      '@access/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@esuiss/access':
+        specifier: link:../../../sdks/typescript
+        version: link:../../../sdks/typescript
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@access/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@access/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@axe-core/playwright':
+        specifier: 4.13.0
+        version: 4.13.0(playwright-core@1.63.0)
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      '@tailwindcss/vite':
+        specifier: 4.3.5
+        version: 4.3.5(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: 6.1.1
+        version: 6.1.1(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
+      tailwindcss:
+        specifier: 4.3.5
+        version: 4.3.5
+      vite:
+        specifier: 8.3.5
+        version: 8.3.5(@types/node@25.9.9)(jiti@2.7.0)
+
+  apps/login:
+    dependencies:
+      '@access/components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@access/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@esuiss/access':
+        specifier: link:../../../sdks/typescript
+        version: link:../../../sdks/typescript
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@access/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@access/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@axe-core/playwright':
+        specifier: 4.13.0
+        version: 4.13.0(playwright-core@1.63.0)
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      '@tailwindcss/vite':
+        specifier: 4.3.5
+        version: 4.3.5(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: 6.1.1
+        version: 6.1.1(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
+      tailwindcss:
+        specifier: 4.3.5
+        version: 4.3.5
+      vite:
+        specifier: 8.3.5
+        version: 8.3.5(@types/node@25.9.9)(jiti@2.7.0)
+
+  packages/components:
+    devDependencies:
+      '@access/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@access/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0
@@ -97,90 +192,27 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@25.9.9)(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
 
-  console:
+  packages/eslint-config:
     dependencies:
-      '@esuiss/access':
-        specifier: link:../../sdks/typescript
-        version: link:../../sdks/typescript
-      '@suiss/access-ui':
-        specifier: workspace:*
-        version: link:../ui
-      react:
-        specifier: 19.3.0
-        version: 19.3.0
-      react-dom:
-        specifier: 19.3.0
-        version: 19.3.0(react@19.3.0)
-    devDependencies:
-      '@axe-core/playwright':
-        specifier: 4.13.0
-        version: 4.13.0(playwright-core@1.63.0)
-      '@playwright/test':
-        specifier: 1.63.0
-        version: 1.63.0
-      '@tailwindcss/vite':
-        specifier: 4.3.5
-        version: 4.3.5(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
-      '@types/react':
-        specifier: 19.3.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: 19.3.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: 6.1.1
-        version: 6.1.1(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
-      tailwindcss:
-        specifier: 4.3.5
-        version: 4.3.5
-      vite:
-        specifier: 8.3.5
-        version: 8.3.5(@types/node@25.9.9)(jiti@2.7.0)
+      '@eslint/js':
+        specifier: 10.0.1
+        version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
+      eslint:
+        specifier: 10.11.0
+        version: 10.11.0(jiti@2.7.0)
+      eslint-plugin-react-hooks:
+        specifier: 7.1.1
+        version: 7.1.1(eslint@10.11.0(jiti@2.7.0))
+      globals:
+        specifier: 17.13.0
+        version: 17.13.0
+      typescript-eslint:
+        specifier: 8.71.0
+        version: 8.71.0(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
 
-  login:
-    dependencies:
-      '@esuiss/access':
-        specifier: link:../../sdks/typescript
-        version: link:../../sdks/typescript
-      '@suiss/access-react':
-        specifier: workspace:*
-        version: link:../components
-      '@suiss/access-ui':
-        specifier: workspace:*
-        version: link:../ui
-      react:
-        specifier: 19.3.0
-        version: 19.3.0
-      react-dom:
-        specifier: 19.3.0
-        version: 19.3.0(react@19.3.0)
-    devDependencies:
-      '@axe-core/playwright':
-        specifier: 4.13.0
-        version: 4.13.0(playwright-core@1.63.0)
-      '@playwright/test':
-        specifier: 1.63.0
-        version: 1.63.0
-      '@tailwindcss/vite':
-        specifier: 4.3.5
-        version: 4.3.5(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
-      '@types/react':
-        specifier: 19.3.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: 19.3.0
-        version: 19.3.0(@types/react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: 6.1.1
-        version: 6.1.1(vite@8.3.5(@types/node@25.9.9)(jiti@2.7.0))
-      tailwindcss:
-        specifier: 4.3.5
-        version: 4.3.5
-      vite:
-        specifier: 8.3.5
-        version: 8.3.5(@types/node@25.9.9)(jiti@2.7.0)
+  packages/typescript-config: {}
 
-  ui:
+  packages/ui:
     dependencies:
       '@base-ui/react':
         specifier: 1.9.0
@@ -213,6 +245,12 @@ importers:
         specifier: 1.4.0
         version: 1.4.0
     devDependencies:
+      '@access/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@access/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0

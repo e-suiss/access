@@ -271,6 +271,6 @@ fn the_image_carries_the_hosted_login_and_the_configuration_points_at_it() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../deploy/docker/Dockerfile");
     let dockerfile = std::fs::read_to_string(root).unwrap();
     let runtime = dockerfile.split("AS runtime").nth(1).unwrap();
-    assert!(runtime.contains("COPY --from=web /src/web/login/dist /usr/share/access/login"));
+    assert!(runtime.contains("COPY --from=web /src/web/apps/login/dist /usr/share/access/login"));
     assert!(read("configmap.yaml").contains(r#"dist_dir = "/usr/share/access/login""#));
 }

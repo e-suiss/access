@@ -378,7 +378,7 @@ fn scanned(rel_path: &str) -> bool {
     let ext = rel_path.rsplit_once('.').map_or("", |(_, e)| e);
     let name = rel_path.rsplit('/').next().unwrap_or_default();
     let in_root = ROOTS.iter().any(|r| rel_path.starts_with(r))
-        && (rel_path.starts_with("sdks/") || rel_path.split('/').nth(2) == Some("src"));
+        && (rel_path.starts_with("sdks/") || rel_path.split('/').nth(3) == Some("src"));
     in_root
         && SCRIPT.contains(&ext)
         && !SKIP
@@ -502,27 +502,27 @@ mod tests {
     #[test]
     fn session_is_refused_in_catalogues_only() {
         let src = "export const en = {\n  sessionsTitle: \"Your sessions\",\n};\n";
-        let v = scan("web/console/src/i18n/en.ts", src, &[]);
+        let v = scan("web/apps/console/src/i18n/en.ts", src, &[]);
         let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
-        assert_eq!(lines, ["web/console/src/i18n/en.ts:2"]);
+        assert_eq!(lines, ["web/apps/console/src/i18n/en.ts:2"]);
         assert!(
             scan(
-                "web/console/src/i18n/en.ts",
+                "web/apps/console/src/i18n/en.ts",
                 "const k = { sessionsTitle: \"Your sign-ins\" };\n",
                 &[]
             )
             .is_empty()
         );
         let code = "const r = await frontend(\"/v1/sessions/current\");\nconst s = \"session\";\n";
-        assert!(scan("web/account/src/signins/index.tsx", code, &[]).is_empty());
+        assert!(scan("web/apps/account/src/signins/index.tsx", code, &[]).is_empty());
         let v = scan_fluent(
             "locales/tr/login.ftl",
             "keep = Bu cihazda oturumumu açık tut\n",
             &[],
         );
         assert_eq!(v.len(), 1);
-        assert!(catalogue("web/login/src/i18n/tr.ts"));
-        assert!(!catalogue("web/console/src/screens/Own.tsx"));
+        assert!(catalogue("web/apps/login/src/i18n/tr.ts"));
+        assert!(!catalogue("web/apps/console/src/screens/Own.tsx"));
     }
 
     // OP-151 m.3 (r)
@@ -548,14 +548,14 @@ mod tests {
     #[test]
     fn literals_and_jsx_text_are_scanned() {
         let src = "// pause here is a comment\nconst a = \"Pause\";\nconst b = <p>Undo it</p>;\nconst c = `trusted ${x}`;\n";
-        let v = scan("web/console/src/App.tsx", src, &[]);
+        let v = scan("web/apps/console/src/App.tsx", src, &[]);
         let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
         assert_eq!(
             lines,
             [
-                "web/console/src/App.tsx:2",
-                "web/console/src/App.tsx:4",
-                "web/console/src/App.tsx:3"
+                "web/apps/console/src/App.tsx:2",
+                "web/apps/console/src/App.tsx:4",
+                "web/apps/console/src/App.tsx:3"
             ]
         );
     }
@@ -564,23 +564,25 @@ mod tests {
     #[test]
     fn html_sinks_are_refused() {
         let v = scan(
-            "web/console/src/x.tsx",
+            "web/apps/console/src/x.tsx",
             "const a = <div dangerouslySetInnerHTML={{ __html: s }} />;\nel.innerHTML = s;\n// innerHTML in a comment\n",
             &[],
         );
         assert_eq!(v.len(), 2);
         assert!(v.iter().all(|v| v.rule == TEXT_RULE));
-        assert!(scan("web/console/src/x.ts", "const s = \"innerHTML\";\n", &[]).is_empty());
+        assert!(scan("web/apps/console/src/x.ts", "const s = \"innerHTML\";\n", &[]).is_empty());
     }
 
     #[test]
     fn scanned_paths() {
-        assert!(scanned("web/console/src/App.tsx"));
-        assert!(scanned("web/login/src/i18n/en.ts"));
+        assert!(scanned("web/apps/console/src/App.tsx"));
+        assert!(scanned("web/apps/login/src/i18n/en.ts"));
+        assert!(scanned("web/packages/components/src/WhyPanel.tsx"));
+        assert!(!scanned("web/apps/console/src.ts"));
         assert!(scanned("sdks/typescript/src/index.ts"));
-        assert!(!scanned("web/console/e2e/a11y.spec.ts"));
-        assert!(!scanned("web/console/dist/assets/x.js"));
-        assert!(!scanned("web/console/vite.config.ts"));
+        assert!(!scanned("web/apps/console/e2e/a11y.spec.ts"));
+        assert!(!scanned("web/apps/console/dist/assets/x.js"));
+        assert!(!scanned("web/apps/console/vite.config.ts"));
         assert!(!scanned("sdks/typescript/src/index.test.ts"));
         assert!(!scanned("sdks/typescript/wasm/x.js"));
         assert!(!scanned("sdks/typescript/src/generated/access-v1.ts"));
@@ -595,6 +597,6 @@ mod tests {
         let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
         assert_eq!(lines, ["locales/en/x.ftl:3", "locales/en/x.ftl:4"]);
         assert!(fluent("locales/tr/login.ftl"));
-        assert!(!fluent("web/login/src/x.ftl"));
+        assert!(!fluent("web/apps/login/src/x.ftl"));
     }
 }

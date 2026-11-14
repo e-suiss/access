@@ -1,0 +1,10 @@
+{
+  "name": "@access/typescript-config",
+  "version": "0.0.0",
+  "description": "The strict TypeScript profile every Access web package extends (OP-8).",
+  "private": true,
+  "license": "Apache-2.0",
+  "exports": {
+    "./base.json": "./base.json"
+  }
+}

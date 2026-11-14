@@ -1,6 +1,6 @@
-//! The hosted login's built web assets (`web/login/dist`, OP-146 m.12 (a), (f)). They are read
+//! The hosted login's built web assets (`web/apps/login/dist`, OP-146 m.12 (a), (f)). They are read
 //! once at start-up, before the lockdown closes the file system, and served from memory with
-//! the security headers of `web/login/security-headers.ts`.
+//! the security headers of `web/apps/login/security-headers.ts`.
 
 use std::collections::HashMap;
 use std::path::Path;

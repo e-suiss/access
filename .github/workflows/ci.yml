@@ -676,17 +676,17 @@ jobs:
           (cd sdks/typescript && npm ci)
           corepack enable
           (cd web && pnpm install --frozen-lockfile)
-          cd web/console
+          cd web/apps/console
           pnpm run e2e
       # OP-146 m.4 (g), TN-106
       - name: Hosted login end-to-end, passkey (virtual authenticator), CSP and WCAG 2.2 AA tests
         run: |
-          cd web/login
+          cd web/apps/login
           pnpm run e2e
       # OP-153 m.3 (w): the account shell and the Authority hub over a mocked BFF
       - name: Account pages end-to-end
         run: |
-          cd web/account
+          cd web/apps/account
           pnpm run e2e
       - name: Upload the Playwright report on failure
         if: failure()
@@ -694,9 +694,9 @@ jobs:
         with:
           name: playwright-report
           path: |
-            web/console/playwright-report
-            web/login/playwright-report
-            web/account/playwright-report
+            web/apps/console/playwright-report
+            web/apps/login/playwright-report
+            web/apps/account/playwright-report
           retention-days: 7
 
   # OP-155 m.3 (n), (q), Ek B 4664: the edge gateways against their counterparts (OpenLDAP and its

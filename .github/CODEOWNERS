@@ -8,7 +8,7 @@
 /crates/identity-oauth/         @ademceper
 # OP-98
 /crates/identity-ui/            @ademceper
-/web/login/                     @ademceper
+/web/apps/login/                     @ademceper
 /sdks/openapi/                  @ademceper
 /crates/identity-session/       @ademceper
 /crates/identity-webauthn/      @ademceper
