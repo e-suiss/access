@@ -1,129 +1,81 @@
-/* OP-153 m.3 (w), WCAG 2.2 AA: plain, readable, high-contrast; the realm's brand is its name. */
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
-  --fg: #111;
-  --bg: #fff;
-  --muted: #555;
-  --line: #ccc;
-  --accent: #0b57d0;
+@import "@suiss/access-ui/theme.css";
+
+/* WCAG 2.2 AA (TN-107): white on the dark theme's primary is 3:1, so its buttons take dark text. */
+.dark {
+  --primary-foreground: oklch(0.2316 0.0038 286.09);
+  --sidebar-primary-foreground: oklch(0.2316 0.0038 286.09);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #eee;
-    --bg: #121212;
-    --muted: #bbb;
-    --line: #444;
-    --accent: #8ab4f8;
+/* §14.5: React Aria's pressable rule, which it would otherwise add as a <style> element. */
+@layer base {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
   }
 }
 
-body {
-  margin: 0;
-  color: var(--fg);
-  background: var(--bg);
-}
+/* TN-107, TN-108: the shared Access components (@suiss/access-react) render plain markup with
+   their own class names; utilities cannot reach it, so it takes the suiss/ui look here. */
+@layer components {
+  :where([class^="access-"]) {
+    & h2,
+    & h3 {
+      @apply text-base font-semibold;
+    }
 
-.shell {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: 1rem;
-}
+    & ul,
+    & ol {
+      @apply flex flex-col gap-1;
+    }
 
-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: baseline;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0.5rem;
-}
+    & .rows,
+    & > ul:has(> li[data-connection]) {
+      @apply gap-2;
+    }
 
-nav {
-  display: flex;
-  gap: 1rem;
-}
+    & .row,
+    & li[data-connection] {
+      @apply flex flex-col gap-2 rounded-xl border p-4;
+    }
 
-nav a {
-  color: var(--accent);
-}
+    & .meta,
+    & .notice,
+    & .access-note,
+    & .access-scopes {
+      @apply text-sm text-muted-foreground;
+    }
 
-nav a[aria-current="page"] {
-  font-weight: 700;
-}
+    & .mono {
+      @apply font-mono text-sm wrap-anywhere;
+    }
 
-button {
-  font: inherit;
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.4rem;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--bg);
-  cursor: pointer;
-}
+    & .actions,
+    & .access-why-depths {
+      @apply flex flex-wrap items-center gap-2;
+    }
 
-button.secondary {
-  background: transparent;
-  color: var(--accent);
-}
+    & .access-owner-badge {
+      @apply inline-flex h-5 items-center rounded-full border border-border px-2 text-xs font-semibold whitespace-nowrap text-foreground;
+    }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+    & button {
+      @apply inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-transparent bg-primary px-4 text-sm whitespace-nowrap text-primary-foreground transition-colors outline-none select-none hover:bg-primary/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50;
+    }
 
-.rows {
-  list-style: none;
-  padding: 0;
-}
+    & button.secondary,
+    & .access-why-depths button {
+      @apply border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground;
+    }
 
-.row,
-.panel,
-.dialog {
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  margin: 0.5rem 0;
-}
+    & .access-why-depths button[aria-pressed="true"] {
+      @apply bg-accent;
+    }
+  }
 
-.dialog {
-  position: fixed;
-  inset: 10% 10% auto;
-  background: var(--bg);
-}
+  :where(.access-why, .access-payment, .access-save-card, .access-support-request) {
+    @apply flex flex-col items-start gap-3;
+  }
 
-.actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.meta,
-.owner,
-.notice {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.badge {
-  border: 1px solid var(--line);
-  border-radius: 0.3rem;
-  padding: 0 0.3rem;
-}
-
-.mono {
-  font-family: ui-monospace, monospace;
-  overflow-wrap: anywhere;
-}
-
-table {
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 0.3rem 0.6rem;
-  text-align: center;
+  .access-support-request {
+    @apply w-full rounded-xl border p-4;
+  }
 }

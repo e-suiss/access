@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -7,8 +8,8 @@ import { securityHeaders } from "./security-headers.js";
 // Fluent catalogs come from the repository's locales/
 export default defineConfig({
   base: "/account/",
-  plugins: [react()],
-  resolve: { dedupe: ["react", "react-dom"] },
+  plugins: [react(), tailwindcss()],
+  resolve: { dedupe: ["react", "react-dom", "react-aria-components"] },
   server: { fs: { allow: ["../.."] } },
   build: { target: "es2024", modulePreload: { polyfill: false } },
   preview: { headers: securityHeaders },

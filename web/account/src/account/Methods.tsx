@@ -3,6 +3,11 @@
 // sign-in fallback stays on the hosted login). The authenticator app's key is shown as text with
 // a copy button, so a QR code is never the only path; its code is one pasteable field. Removing
 // the last way to sign in is refused by the server and said plainly.
+import { Button, buttonVariants } from "@suiss/access-ui/components/ui/button";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+import { ItemActions, ItemContent } from "@suiss/access-ui/components/ui/item";
+import { cn } from "@suiss/access-ui/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -14,6 +19,7 @@ import {
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import { Actions, Loading, Meta, MONO, Panel, Part, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
 
 /** What `GET /v1/account/methods` answers. */
@@ -101,53 +107,59 @@ function Passkeys(props: {
       });
   };
   return (
-    <section aria-labelledby="passkeys-heading" data-testid="passkeys">
-      <h4 id="passkeys-heading">{t("methods.passkeys")}</h4>
+    <Part aria-labelledby="passkeys-heading" data-testid="passkeys">
+      <h4 id="passkeys-heading" className="font-semibold">
+        {t("methods.passkeys")}
+      </h4>
       {/* HL-19 */}
-      <p className="meta" data-testid="passkey-no-pqc">
-        {t("security.passkey_no_pqc")}
-      </p>
-      <ul className="rows">
-        {props.methods.passkeys.map((p) => (
-          <li key={p.id} className="row" data-testid="passkey-row">
-            <strong>{p.name ?? t("methods.passkey_unnamed")}</strong>
-            <span className="meta">
-              {" · "}
-              {p.synced ? t("methods.passkey_synced") : t("methods.passkey_this_device")}
-              {" · "}
-              {t("methods.added_on", { date: when(p.created_at) })}
-            </span>
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary"
-                aria-label={`${t("action.remove")}: ${p.name ?? t("methods.passkey_unnamed")}`}
-                onClick={() => {
-                  props.remove(p.id);
-                }}
-              >
-                {t("action.remove")}
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={add} className="actions">
-        <label htmlFor="passkey-name">{t("methods.passkey_name")}</label>
-        <input
-          id="passkey-name"
-          value={name}
-          maxLength={64}
-          autoComplete="off"
-          onChange={(e) => {
-            setName(e.target.value);
-          }}
-        />
-        <button type="submit" disabled={busy}>
+      <Meta data-testid="passkey-no-pqc">{t("security.passkey_no_pqc")}</Meta>
+      {props.methods.passkeys.length > 0 && (
+        <Rows>
+          {props.methods.passkeys.map((p) => (
+            <RowItem key={p.id} data-testid="passkey-row">
+              <ItemContent>
+                <strong>{p.name ?? t("methods.passkey_unnamed")}</strong>
+                <Meta>
+                  {p.synced ? t("methods.passkey_synced") : t("methods.passkey_this_device")}
+                  {" · "}
+                  {t("methods.added_on", { date: when(p.created_at) })}
+                </Meta>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${t("action.remove")}: ${p.name ?? t("methods.passkey_unnamed")}`}
+                  onPress={() => {
+                    props.remove(p.id);
+                  }}
+                >
+                  {t("action.remove")}
+                </Button>
+              </ItemActions>
+            </RowItem>
+          ))}
+        </Rows>
+      )}
+      <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <Field className="flex-1">
+          <FieldLabel htmlFor="passkey-name">{t("methods.passkey_name")}</FieldLabel>
+          <Input
+            id="passkey-name"
+            size="md"
+            value={name}
+            maxLength={64}
+            autoComplete="off"
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
+          />
+        </Field>
+        <Button type="submit" isDisabled={busy}>
           {t("action.passkey_create")}
-        </button>
+        </Button>
       </form>
-    </section>
+    </Part>
   );
 }
 
@@ -177,45 +189,51 @@ function Password(props: {
       });
   };
   return (
-    <section aria-labelledby="password-heading" data-testid="password">
-      <h4 id="password-heading">{t("methods.password")}</h4>
-      <p>{props.set ? t("methods.password_set") : t("methods.password_none")}</p>
+    <Part aria-labelledby="password-heading" data-testid="password">
+      <h4 id="password-heading" className="font-semibold">
+        {t("methods.password")}
+      </h4>
+      <Meta>{props.set ? t("methods.password_set") : t("methods.password_none")}</Meta>
       {open ? (
-        <form onSubmit={save}>
-          <label htmlFor="new-password">{t("label.new_password")}</label>
-          <input
-            id="new-password"
-            ref={field}
-            name="new_password"
-            type="password"
-            autoComplete="new-password"
-            maxLength={128}
-            required
-          />
-          <div className="actions">
-            <button type="submit">{t("action.save")}</button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
+        <form onSubmit={save} className="flex flex-col gap-3">
+          <Field>
+            <FieldLabel htmlFor="new-password">{t("label.new_password")}</FieldLabel>
+            <Input
+              id="new-password"
+              ref={field}
+              size="md"
+              name="new_password"
+              type="password"
+              autoComplete="new-password"
+              maxLength={128}
+              required
+            />
+          </Field>
+          <Actions>
+            <Button type="submit">{t("action.save")}</Button>
+            <Button
+              variant="outline"
+              onPress={() => {
                 setOpen(false);
               }}
             >
               {t("action.cancel")}
-            </button>
-          </div>
+            </Button>
+          </Actions>
         </form>
       ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(true);
-          }}
-        >
-          {props.set ? t("action.change_password") : t("action.set_password")}
-        </button>
+        <Actions>
+          <Button
+            variant="outline"
+            onPress={() => {
+              setOpen(true);
+            }}
+          >
+            {props.set ? t("action.change_password") : t("action.set_password")}
+          </Button>
+        </Actions>
       )}
-    </section>
+    </Part>
   );
 }
 
@@ -268,45 +286,61 @@ function Authenticator(props: {
       });
   };
   return (
-    <section aria-labelledby="totp-heading" data-testid="authenticator">
-      <h4 id="totp-heading">{t("methods.authenticator")}</h4>
+    <Part aria-labelledby="totp-heading" data-testid="authenticator">
+      <h4 id="totp-heading" className="font-semibold">
+        {t("methods.authenticator")}
+      </h4>
       {props.methods.totp.length === 0 && pending === null && (
-        <p>{t("methods.authenticator_none")}</p>
+        <Meta>{t("methods.authenticator_none")}</Meta>
       )}
-      <ul className="rows">
-        {props.methods.totp.map((m) => (
-          <li key={m.id} className="row" data-testid="totp-row">
-            {t("methods.added_on", { date: when(m.created_at) })}
-            <div className="actions">
-              <button
-                type="button"
-                className="secondary"
-                aria-label={`${t("action.remove")}: ${t("methods.authenticator")}`}
-                onClick={() => {
-                  props.remove(m.id);
-                }}
-              >
-                {t("action.remove")}
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {props.methods.totp.length > 0 && (
+        <Rows>
+          {props.methods.totp.map((m) => (
+            <RowItem key={m.id} data-testid="totp-row">
+              <ItemContent>{t("methods.added_on", { date: when(m.created_at) })}</ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${t("action.remove")}: ${t("methods.authenticator")}`}
+                  onPress={() => {
+                    props.remove(m.id);
+                  }}
+                >
+                  {t("action.remove")}
+                </Button>
+              </ItemActions>
+            </RowItem>
+          ))}
+        </Rows>
+      )}
       {pending === null ? (
-        <button type="button" onClick={begin}>
-          {t("action.add_authenticator")}
-        </button>
+        <Actions>
+          <Button variant="outline" onPress={begin}>
+            {t("action.add_authenticator")}
+          </Button>
+        </Actions>
       ) : (
-        <form onSubmit={confirm} className="panel" data-testid="totp-enrollment">
-          <p id="totp-key-label">{t("methods.authenticator_key")}</p>
-          <p className="mono" aria-labelledby="totp-key-label" data-testid="totp-secret">
+        <form
+          onSubmit={confirm}
+          className="flex flex-col gap-3 rounded-xl border p-4"
+          data-testid="totp-enrollment"
+        >
+          <p id="totp-key-label" className="text-sm">
+            {t("methods.authenticator_key")}
+          </p>
+          <p
+            className={cn(MONO, "rounded-lg bg-muted px-3 py-2 text-base")}
+            aria-labelledby="totp-key-label"
+            data-testid="totp-secret"
+          >
             {pending.secret}
           </p>
-          <div className="actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
+          <Actions>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => {
                 void navigator.clipboard.writeText(pending.secret).then(
                   () => {
                     props.say(t("methods.key_copied"));
@@ -316,24 +350,38 @@ function Authenticator(props: {
               }}
             >
               {t("action.copy_key")}
-            </button>
-            <a href={pending.uri}>{t("methods.authenticator_link")}</a>
-          </div>
-          <label htmlFor="totp-code">{t("label.totp_code")}</label>
-          <input
-            id="totp-code"
-            ref={code}
-            name="code"
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            maxLength={10}
-            spellCheck={false}
-            required
-          />
-          <button type="submit">{t("action.verify")}</button>
+            </Button>
+            <a
+              href={pending.uri}
+              className={buttonVariants({
+                variant: "link",
+                size: "sm",
+                className: "h-auto min-h-8 px-0 whitespace-normal",
+              })}
+            >
+              {t("methods.authenticator_link")}
+            </a>
+          </Actions>
+          <Field>
+            <FieldLabel htmlFor="totp-code">{t("label.totp_code")}</FieldLabel>
+            <Input
+              id="totp-code"
+              ref={code}
+              size="md"
+              name="code"
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              maxLength={10}
+              spellCheck={false}
+              required
+            />
+          </Field>
+          <Actions>
+            <Button type="submit">{t("action.verify")}</Button>
+          </Actions>
         </form>
       )}
-    </section>
+    </Part>
   );
 }
 
@@ -352,64 +400,75 @@ function RecoveryCodes(props: {
   }, [codes]);
   const state = props.methods.recovery_codes;
   return (
-    <section aria-labelledby="codes-heading" data-testid="recovery-codes">
-      <h4 id="codes-heading">{t("recovery_codes.title")}</h4>
+    <Part aria-labelledby="codes-heading" data-testid="recovery-codes">
+      <h4 id="codes-heading" className="font-semibold">
+        {t("recovery_codes.title")}
+      </h4>
       {codes === null ? (
         <>
-          <p>
+          <Meta>
             {!state.set
               ? t("methods.recovery_codes_none")
               : state.acknowledged
                 ? t("methods.recovery_codes_set")
                 : t("methods.recovery_codes_unsaved")}
-          </p>
-          {state.set && <p className="notice">{t("methods.recovery_codes_replace")}</p>}
-          <button
-            type="button"
-            onClick={() => {
-              void json<{ recovery_codes: string[] }>(
-                frontend("/v1/account/recovery-codes", { method: "POST" }),
-              )
-                .then((r) => {
-                  setCodes(r.recovery_codes);
-                })
-                .catch((err: unknown) => {
-                  props.fail(err);
-                });
-            }}
-          >
-            {t("action.new_recovery_codes")}
-          </button>
+          </Meta>
+          {state.set && <Meta>{t("methods.recovery_codes_replace")}</Meta>}
+          <Actions>
+            <Button
+              variant="outline"
+              onPress={() => {
+                void json<{ recovery_codes: string[] }>(
+                  frontend("/v1/account/recovery-codes", { method: "POST" }),
+                )
+                  .then((r) => {
+                    setCodes(r.recovery_codes);
+                  })
+                  .catch((err: unknown) => {
+                    props.fail(err);
+                  });
+              }}
+            >
+              {t("action.new_recovery_codes")}
+            </Button>
+          </Actions>
         </>
       ) : (
-        <div className="panel">
-          <h5 tabIndex={-1} ref={list}>
+        <div className="flex flex-col gap-3 rounded-xl bg-muted p-4">
+          <h5
+            tabIndex={-1}
+            ref={list}
+            className="rounded-sm text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
             {t("recovery_codes.save")}
           </h5>
-          <ul className="mono" data-testid="code-list">
+          <ul className={cn(MONO, "grid gap-1 sm:grid-cols-2")} data-testid="code-list">
             {codes.map((c) => (
               <li key={c}>{c}</li>
             ))}
           </ul>
-          <button
-            type="button"
-            onClick={() => {
-              void json(frontend("/v1/account/recovery-codes/acknowledgement", { method: "POST" }))
-                .then(() => {
-                  setCodes(null);
-                  props.say(t("methods.codes_saved"));
-                  props.reload();
-                })
-                .catch((err: unknown) => {
-                  props.fail(err);
-                });
-            }}
-          >
-            {t("action.codes_saved")}
-          </button>
+          <Actions>
+            <Button
+              onPress={() => {
+                void json(
+                  frontend("/v1/account/recovery-codes/acknowledgement", { method: "POST" }),
+                )
+                  .then(() => {
+                    setCodes(null);
+                    props.say(t("methods.codes_saved"));
+                    props.reload();
+                  })
+                  .catch((err: unknown) => {
+                    props.fail(err);
+                  });
+              }}
+            >
+              {t("action.codes_saved")}
+            </Button>
+          </Actions>
         </div>
       )}
-    </section>
+    </Part>
   );
 }
 
@@ -437,11 +496,15 @@ export function SignInMethods(): ReactElement {
       });
   };
   return (
-    <section aria-labelledby="methods-heading" data-testid="sign-in-methods">
-      <h3 id="methods-heading">{t("settings.sign_in_methods")}</h3>
+    <Panel
+      aria-labelledby="methods-heading"
+      data-testid="sign-in-methods"
+      title={t("settings.sign_in_methods")}
+      titleId="methods-heading"
+    >
       {region}
       {methods === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading rows={4} />
       ) : (
         <>
           <Passkeys methods={methods} reload={reload} say={say} fail={fail} remove={remove} />
@@ -464,6 +527,6 @@ export function SignInMethods(): ReactElement {
           />
         </>
       )}
-    </section>
+    </Panel>
   );
 }
