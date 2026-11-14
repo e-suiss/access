@@ -1,16 +1,23 @@
 @import "@suiss/access-ui/theme.css";
 
-/* WCAG 2.2 AA (TN-107): white on the dark theme's primary is 3:1, so its buttons take dark text. */
-.dark {
-  --primary-foreground: oklch(0.2316 0.0038 286.09);
-  --sidebar-primary-foreground: oklch(0.2316 0.0038 286.09);
-}
-
-/* §14.5: React Aria's pressable rule, which it would otherwise add as a <style> element. */
+/* TN-131: React Aria's pressable rule, kept out of an inline <style> */
 @layer base {
   [data-react-aria-pressable] {
     touch-action: pan-x pan-y pinch-zoom;
   }
+}
+
+/* OP-83: the suiss primary gives white text 4.44:1, and its hover (80%) 3.8:1; darker meets AA.
+   :not(.dark), since :root and the theme's .dark tie and this file comes later. */
+:root:not(.dark) {
+  --primary: oklch(0.46 0.1933 256.16);
+  --sidebar-primary: oklch(0.46 0.1933 256.16);
+}
+
+/* OP-83: white on the dark theme's primary is 3:1, so its buttons take dark text */
+.dark {
+  --primary-foreground: oklch(0.2316 0.0038 286.09);
+  --sidebar-primary-foreground: oklch(0.2316 0.0038 286.09);
 }
 
 /* TN-107, TN-108: the shared Access components (@suiss/access-react) render plain markup with
