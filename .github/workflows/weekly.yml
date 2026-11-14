@@ -62,7 +62,7 @@ jobs:
           components: rust-src
       # OP-69, OP-140 m.4
       - name: SoftHSM
-        run: scripts/ci/apt-install.sh softhsm2
+        run: scripts/ci/softhsm.sh
       - name: Test suite under the sanitizer
         env:
           SANITIZER: ${{ matrix.sanitizer }}

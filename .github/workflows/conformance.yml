@@ -138,7 +138,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: SoftHSM
-        run: scripts/ci/apt-install.sh softhsm2
+        run: scripts/ci/softhsm.sh
       - name: The target's host name on the runner
         run: echo "127.0.0.1 acme.id.test" | sudo tee -a /etc/hosts
       - name: Build and start the conformance target
@@ -205,7 +205,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: SoftHSM
-        run: scripts/ci/apt-install.sh softhsm2
+        run: scripts/ci/softhsm.sh
       - name: The lab matrix, its table and every named test
         run: |
           cargo xtask check interop-lab

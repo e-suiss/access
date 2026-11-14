@@ -115,7 +115,7 @@ jobs:
           tools: nextest
       # OP-69, OP-140 m.4
       - name: SoftHSM
-        run: scripts/ci/apt-install.sh softhsm2
+        run: scripts/ci/softhsm.sh
       - name: Full suite, including long-running tests
         run: just test-full
       # SA-T14, R-6, OP-159 m.3 (bb)

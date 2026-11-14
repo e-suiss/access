@@ -218,7 +218,7 @@ jobs:
           scripts/ci/apt-install.sh postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - name: SoftHSM
-        run: scripts/ci/apt-install.sh softhsm2
+        run: scripts/ci/softhsm.sh
       - name: Tests
         run: just test
       - name: Test-result predicate
