@@ -445,7 +445,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         messages: Outbox(notices.clone()),
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(config),
-        redirect_to: "/".into(),
+        redirect_to: "/account".into(),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),

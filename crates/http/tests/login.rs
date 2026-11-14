@@ -635,7 +635,7 @@ async fn env_tweaked(
             Some(idp) => Hasher::new(config).with_legacy_idp(idp),
             None => Hasher::new(config),
         },
-        redirect_to: "/".into(),
+        redirect_to: "/account".into(),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup,
@@ -1138,7 +1138,7 @@ async fn identifier_then_password_signs_in_with_a_host_cookie() {
         .await;
     assert_eq!(done.status, StatusCode::OK);
     assert_eq!(done.step(), "complete");
-    assert_eq!(done.json()["redirect_to"], "/");
+    assert_eq!(done.json()["redirect_to"], "https://acme.example/account");
     let set: Vec<&str> = done
         .headers
         .get_all(header::SET_COOKIE)

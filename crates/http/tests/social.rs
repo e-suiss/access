@@ -505,7 +505,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         messages: Outbox,
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(config),
-        redirect_to: "/".into(),
+        redirect_to: "/account".into(),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
@@ -913,7 +913,7 @@ async fn a_social_sign_in_creates_the_account_once_and_then_finds_it_by_its_key(
     let mut w = e.browser(1);
     let first = w.social(&e).await;
     assert_eq!(first.status, StatusCode::SEE_OTHER, "{}", first.code());
-    assert_eq!(first.location(), "/");
+    assert_eq!(first.location(), format!("https://{HOST}/account"));
     assert!(w.jar.contains_key("__Host-access-session"));
     let form = e.provider.says.lock().unwrap().forms[0].clone();
     assert!(form.contains("client_id=own-client") && form.contains("client_secret=s3cret"));
@@ -962,7 +962,7 @@ async fn a_matching_verified_address_never_links_and_the_answer_does_not_tell() 
     let a = w.social(&e).await;
     assert_eq!(
         (a.status, a.location()),
-        (StatusCode::SEE_OTHER, String::from("/"))
+        (StatusCode::SEE_OTHER, format!("https://{HOST}/account"))
     );
     let new = e.link_of("g-2").await.unwrap();
     assert_ne!(new, ada, "an address is never a key");
