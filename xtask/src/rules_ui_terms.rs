@@ -570,7 +570,14 @@ mod tests {
         );
         assert_eq!(v.len(), 2);
         assert!(v.iter().all(|v| v.rule == TEXT_RULE));
-        assert!(scan("web/apps/console/src/x.ts", "const s = \"innerHTML\";\n", &[]).is_empty());
+        assert!(
+            scan(
+                "web/apps/console/src/x.ts",
+                "const s = \"innerHTML\";\n",
+                &[]
+            )
+            .is_empty()
+        );
     }
 
     #[test]
