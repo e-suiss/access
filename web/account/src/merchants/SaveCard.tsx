@@ -5,6 +5,8 @@
 // after the signature screen. It is shown done only once Access recorded it.
 import { pay } from "@esuiss/access";
 import { payment } from "@suiss/access-react";
+import { Alert } from "@suiss/access-ui/components/ui/alert";
+import { Card, CardContent } from "@suiss/access-ui/components/ui/card";
 import { useState, type ReactElement } from "react";
 
 import { commitMeta, type Revoking } from "../lib/adp.js";
@@ -48,49 +50,57 @@ export function SaveCardPage({
   const [request] = useState(() => requestOf(location.hash));
   const [done, setDone] = useState<Revoking | null>(null);
   const [failed, setFailed] = useState(false);
-  if (request === undefined) return <p role="alert">{t("shell.unavailable")}</p>;
+  if (request === undefined) {
+    return <Alert variant="destructive">{t("shell.unavailable")}</Alert>;
+  }
   const card = pay.saveCardOf(request.authority, request.party);
   if (typeof card === "string") {
     return (
-      <p role="alert" data-refused={card}>
+      <Alert variant="destructive" data-refused={card}>
         {t("merchants.save_card_refused", { merchant: request.merchant })}
-      </p>
+      </Alert>
     );
   }
   if (done !== null) {
     return (
-      <p role="status" data-testid="outcome">
-        {t(done.shown)}
-      </p>
+      <Card>
+        <CardContent>
+          <p role="status" data-testid="outcome" className="font-semibold">
+            {t(done.shown)}
+          </p>
+        </CardContent>
+      </Card>
     );
   }
   return (
-    <div data-testid="save-card-page">
-      <payment.SaveCard
-        merchant={request.merchant}
-        perOrder={card.perOrder}
-        until={at(card.until)}
-        locale={locale}
-        catalogue={catalogue}
-        onConfirm={() => {
-          commitMeta(instance, confirm, "grant_issue", {
-            grant_issue: {
-              basis: { anchor: request.anchor },
-              holder: { party: request.party },
-              authority: request.authority,
-              agency: ["own"],
-            },
-          })
-            .then(setDone)
-            .catch(() => {
-              setFailed(true);
-            });
-        }}
-        onCancel={() => {
-          history.back();
-        }}
-      />
-      {failed && <p role="alert">{t("outcome.not_recorded")}</p>}
-    </div>
+    <Card data-testid="save-card-page">
+      <CardContent className="flex flex-col gap-4">
+        <payment.SaveCard
+          merchant={request.merchant}
+          perOrder={card.perOrder}
+          until={at(card.until)}
+          locale={locale}
+          catalogue={catalogue}
+          onConfirm={() => {
+            commitMeta(instance, confirm, "grant_issue", {
+              grant_issue: {
+                basis: { anchor: request.anchor },
+                holder: { party: request.party },
+                authority: request.authority,
+                agency: ["own"],
+              },
+            })
+              .then(setDone)
+              .catch(() => {
+                setFailed(true);
+              });
+          }}
+          onCancel={() => {
+            history.back();
+          }}
+        />
+        {failed && <Alert variant="destructive">{t("outcome.not_recorded")}</Alert>}
+      </CardContent>
+    </Card>
   );
 }

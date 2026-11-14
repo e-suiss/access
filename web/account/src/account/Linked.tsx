@@ -2,10 +2,13 @@
 // the apps it shares identity details with. A linked sign-in is never called "merged"; linking
 // proves control of the other sign-in at its provider. Sharing details with an app is not
 // authority: stopping it keeps the record and the app receives no details until asked again.
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { ItemActions, ItemContent } from "@suiss/access-ui/components/ui/item";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import { Loading, Meta, Nothing, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
 
 interface LinkedList {
@@ -44,28 +47,31 @@ export function LinkedSignIns(): ReactElement {
   }, [fail]);
   useEffect(reload, [reload]);
   return (
-    <section aria-labelledby="linked-heading" data-testid="linked-sign-ins">
-      <h3 id="linked-heading">{t("settings.linked_sign_ins")}</h3>
+    <Panel
+      aria-labelledby="linked-heading"
+      data-testid="linked-sign-ins"
+      title={t("settings.linked_sign_ins")}
+      titleId="linked-heading"
+    >
       {region}
       {list === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : list.linked.length === 0 ? (
-        <p>{t("linked.none")}</p>
+        <Nothing>{t("linked.none")}</Nothing>
       ) : (
-        <ul className="rows">
+        <Rows>
           {list.linked.map((l) => (
-            <li key={l.link} className="row" data-testid="linked-row">
-              <strong>{l.provider}</strong>
-              <span className="meta">
-                {" · "}
-                {t("linked.since", { date: when(l.linked_at_ms) })}
-              </span>
-              <div className="actions">
-                <button
-                  type="button"
-                  className="secondary"
+            <RowItem key={l.link} data-testid="linked-row">
+              <ItemContent>
+                <strong>{l.provider}</strong>
+                <Meta>{t("linked.since", { date: when(l.linked_at_ms) })}</Meta>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
                   aria-label={`${t("action.remove")}: ${l.provider}`}
-                  onClick={() => {
+                  onPress={() => {
                     void json(
                       frontend(`/v1/account/linked/${encodeURIComponent(l.link)}`, {
                         method: "DELETE",
@@ -81,13 +87,13 @@ export function LinkedSignIns(): ReactElement {
                   }}
                 >
                   {t("action.remove")}
-                </button>
-              </div>
-            </li>
+                </Button>
+              </ItemActions>
+            </RowItem>
           ))}
-        </ul>
+        </Rows>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -104,26 +110,32 @@ export function ConnectedApps(): ReactElement {
   }, [fail]);
   useEffect(reload, [reload]);
   return (
-    <section aria-labelledby="apps-heading" data-testid="connected-apps">
-      <h3 id="apps-heading">{t("settings.connected_apps")}</h3>
+    <Panel
+      aria-labelledby="apps-heading"
+      data-testid="connected-apps"
+      title={t("settings.connected_apps")}
+      titleId="apps-heading"
+    >
       {region}
       {apps === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : apps.apps.length === 0 ? (
-        <p>{t("apps.none")}</p>
+        <Nothing>{t("apps.none")}</Nothing>
       ) : (
-        <ul className="rows">
+        <Rows>
           {apps.apps.map((a) => (
-            <li key={a.client_id} className="row" data-testid="app-row">
-              <strong>{a.app}</strong>
-              <p className="meta">{t("apps.claims", { claims: a.claims.join(", ") })}</p>
-              <p className="meta">{t("apps.since", { date: when(a.since_ms) })}</p>
-              <div className="actions">
-                <button
-                  type="button"
-                  className="secondary"
+            <RowItem key={a.client_id} data-testid="app-row">
+              <ItemContent>
+                <strong>{a.app}</strong>
+                <Meta>{t("apps.claims", { claims: a.claims.join(", ") })}</Meta>
+                <Meta>{t("apps.since", { date: when(a.since_ms) })}</Meta>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
                   aria-label={`${t("action.stop_sharing")}: ${a.app}`}
-                  onClick={() => {
+                  onPress={() => {
                     void json(
                       frontend(`/v1/account/connected-apps/${encodeURIComponent(a.client_id)}`, {
                         method: "DELETE",
@@ -139,12 +151,12 @@ export function ConnectedApps(): ReactElement {
                   }}
                 >
                   {t("action.stop_sharing")}
-                </button>
-              </div>
-            </li>
+                </Button>
+              </ItemActions>
+            </RowItem>
           ))}
-        </ul>
+        </Rows>
       )}
-    </section>
+    </Panel>
   );
 }

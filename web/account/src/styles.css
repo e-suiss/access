@@ -1,129 +1,88 @@
-/* OP-153 m.3 (w), WCAG 2.2 AA: plain, readable, high-contrast; the realm's brand is its name. */
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
-  --fg: #111;
-  --bg: #fff;
-  --muted: #555;
-  --line: #ccc;
-  --accent: #0b57d0;
-}
+@import "@suiss/access-ui/theme.css";
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #eee;
-    --bg: #121212;
-    --muted: #bbb;
-    --line: #444;
-    --accent: #8ab4f8;
+/* TN-131: React Aria's pressable rule, kept out of an inline <style> */
+@layer base {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
   }
 }
 
-body {
-  margin: 0;
-  color: var(--fg);
-  background: var(--bg);
+/* OP-83: the suiss primary gives white text 4.44:1, and its hover (80%) 3.8:1; darker meets AA.
+   :not(.dark), since :root and the theme's .dark tie and this file comes later. */
+:root:not(.dark) {
+  --primary: oklch(0.46 0.1933 256.16);
+  --sidebar-primary: oklch(0.46 0.1933 256.16);
 }
 
-.shell {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: 1rem;
+/* OP-83: white on the dark theme's primary is 3:1, so its buttons take dark text */
+.dark {
+  --primary-foreground: oklch(0.2316 0.0038 286.09);
+  --sidebar-primary-foreground: oklch(0.2316 0.0038 286.09);
 }
 
-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: baseline;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0.5rem;
-}
+/* TN-107, TN-108: the shared Access components (@suiss/access-react) render plain markup with
+   their own class names; utilities cannot reach it, so it takes the suiss/ui look here. */
+@layer components {
+  :where([class^="access-"]) {
+    & h2,
+    & h3 {
+      @apply text-base font-semibold;
+    }
 
-nav {
-  display: flex;
-  gap: 1rem;
-}
+    & ul,
+    & ol {
+      @apply flex flex-col gap-1;
+    }
 
-nav a {
-  color: var(--accent);
-}
+    & .rows,
+    & > ul:has(> li[data-connection]) {
+      @apply gap-2;
+    }
 
-nav a[aria-current="page"] {
-  font-weight: 700;
-}
+    & .row,
+    & li[data-connection] {
+      @apply flex flex-col gap-2 rounded-xl border p-4;
+    }
 
-button {
-  font: inherit;
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.4rem;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--bg);
-  cursor: pointer;
-}
+    & .meta,
+    & .notice,
+    & .access-note,
+    & .access-scopes {
+      @apply text-sm text-muted-foreground;
+    }
 
-button.secondary {
-  background: transparent;
-  color: var(--accent);
-}
+    & .mono {
+      @apply font-mono text-sm wrap-anywhere;
+    }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+    & .actions,
+    & .access-why-depths {
+      @apply flex flex-wrap items-center gap-2;
+    }
 
-.rows {
-  list-style: none;
-  padding: 0;
-}
+    & .access-owner-badge {
+      @apply inline-flex h-5 items-center rounded-full border border-border px-2 text-xs font-semibold whitespace-nowrap text-foreground;
+    }
 
-.row,
-.panel,
-.dialog {
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  margin: 0.5rem 0;
-}
+    & button {
+      @apply inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-transparent bg-primary px-4 text-sm whitespace-nowrap text-primary-foreground transition-colors outline-none select-none hover:bg-primary/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50;
+    }
 
-.dialog {
-  position: fixed;
-  inset: 10% 10% auto;
-  background: var(--bg);
-}
+    & button.secondary,
+    & .access-why-depths button {
+      @apply border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground;
+    }
 
-.actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
+    & .access-why-depths button[aria-pressed="true"] {
+      @apply bg-accent;
+    }
+  }
 
-.meta,
-.owner,
-.notice {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
+  :where(.access-why, .access-payment, .access-save-card, .access-support-request) {
+    @apply flex flex-col items-start gap-3;
+  }
 
-.badge {
-  border: 1px solid var(--line);
-  border-radius: 0.3rem;
-  padding: 0 0.3rem;
-}
-
-.mono {
-  font-family: ui-monospace, monospace;
-  overflow-wrap: anywhere;
-}
-
-table {
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 0.3rem 0.6rem;
-  text-align: center;
+  .access-support-request {
+    @apply w-full rounded-xl border p-4;
+  }
 }

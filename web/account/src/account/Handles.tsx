@@ -1,10 +1,15 @@
 // E56, OP-156 m.4 (Q20): the person's names beside their permanent ID, a Suiss subdomain or a
 // domain they own. A name shows only once the site points back to the person; until then it
 // waits and can be checked again. A removed name is never handed to anyone else.
+import { Button } from "@suiss/access-ui/components/ui/button";
+import { Field, FieldLabel } from "@suiss/access-ui/components/ui/field";
+import { Input } from "@suiss/access-ui/components/ui/input";
+import { ItemActions, ItemContent } from "@suiss/access-ui/components/ui/item";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import { Loading, Meta, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer } from "./common.js";
 
 /** What `GET /v1/me/handles` answers. */
@@ -42,68 +47,74 @@ export function Handles(): ReactElement {
       });
   };
   return (
-    <section aria-labelledby="handles-heading" data-testid="handles">
-      <h3 id="handles-heading">{t("handle.title")}</h3>
-      <p className="meta">{t("handle.intro")}</p>
+    <Panel
+      aria-labelledby="handles-heading"
+      data-testid="handles"
+      title={t("handle.title")}
+      titleId="handles-heading"
+      description={t("handle.intro")}
+    >
       {region}
       {list === null ? (
-        <p>{t("shell.loading")}</p>
+        <Loading />
       ) : (
-        <ul className="rows">
-          {list.handles.map((h) => (
-            <li key={h.id} className="row" data-testid="handle-row">
-              <strong>{h.handle}</strong>
-              {h.shown ? null : (
-                <span className="meta">
-                  {" · "}
-                  {t("handle.pending", { site: h.handle })}
-                </span>
-              )}
-              <div className="actions">
-                {h.shown ? null : (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      post(`/v1/me/handles/${encodeURIComponent(h.id)}/verify`);
+        list.handles.length > 0 && (
+          <Rows>
+            {list.handles.map((h) => (
+              <RowItem key={h.id} data-testid="handle-row">
+                <ItemContent>
+                  <strong className="wrap-anywhere">{h.handle}</strong>
+                  {h.shown ? null : <Meta>{t("handle.pending", { site: h.handle })}</Meta>}
+                </ItemContent>
+                <ItemActions>
+                  {h.shown ? null : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onPress={() => {
+                        post(`/v1/me/handles/${encodeURIComponent(h.id)}/verify`);
+                      }}
+                    >
+                      {t("handle.check")}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${t("handle.remove")}: ${h.handle}`}
+                    onPress={() => {
+                      post(`/v1/me/handles/${encodeURIComponent(h.id)}/retire`);
                     }}
                   >
-                    {t("handle.check")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="secondary"
-                  aria-label={`${t("handle.remove")}: ${h.handle}`}
-                  onClick={() => {
-                    post(`/v1/me/handles/${encodeURIComponent(h.id)}/retire`);
-                  }}
-                >
-                  {t("handle.remove")}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                    {t("handle.remove")}
+                  </Button>
+                </ItemActions>
+              </RowItem>
+            ))}
+          </Rows>
+        )
       )}
       <form
+        className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           post("/v1/me/handles", { handle: draft });
           setDraft("");
         }}
       >
-        <label>
-          {t("handle.add")}
-          <input
+        <Field className="flex-1">
+          <FieldLabel htmlFor="handle-new">{t("handle.add")}</FieldLabel>
+          <Input
+            id="handle-new"
+            size="md"
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
             }}
           />
-        </label>
-        <button type="submit">{t("handle.add")}</button>
+        </Field>
+        <Button type="submit">{t("handle.add")}</Button>
       </form>
-    </section>
+    </Panel>
   );
 }
