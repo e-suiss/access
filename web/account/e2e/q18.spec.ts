@@ -8,10 +8,8 @@ import { encode } from "./cbor.js";
 import { expect, test } from "./fixtures.js";
 import { type AccountMock, holding } from "./mock.js";
 
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
-
 async function axe(page: Page): Promise<void> {
-  const result = await new AxeBuilder({ page: page as unknown as AxePage })
+  const result = await new AxeBuilder({ page: page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

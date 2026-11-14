@@ -10,10 +10,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { PASSWORD, REALM, signIn } from "./signin.js";
 
-type AxePage = ConstructorParameters<typeof AxeBuilder>[0]["page"];
-
 async function axe(page: Page): Promise<void> {
-  const result = await new AxeBuilder({ page: page as unknown as AxePage })
+  const result = await new AxeBuilder({ page: page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(result.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

@@ -528,11 +528,12 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: |
-            web/account/package-lock.json
-            web/console/package-lock.json
-            web/login/package-lock.json
+          package-manager-cache: false
+      # OP-159 m.32: pnpm at the version and hash web/package.json pins
+      - name: Install the web workspace
+        run: |
+          corepack enable
+          cd web && pnpm install --frozen-lockfile
       - name: Start
         run: $COMPOSE up --detach --quiet-pull
       - name: Ready
@@ -614,25 +615,22 @@ jobs:
         run: |
           echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
           cd web/account
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run e2e:live
+          pnpm exec playwright install --with-deps chromium
+          pnpm run e2e:live
       - name: Console (@live)
         if: ${{ !cancelled() && steps.totp.outcome == 'success' }}
         run: |
           echo "127.0.0.1 access-server access-server.local" | sudo tee -a /etc/hosts
           cd web/console
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run e2e:live
+          pnpm exec playwright install --with-deps chromium
+          pnpm run e2e:live
       - name: Hosted login (@live)
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: |
           echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
           cd web/login
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run e2e:live
+          pnpm exec playwright install --with-deps chromium
+          pnpm run e2e:live
       - name: Logs
         if: failure()
         run: $COMPOSE logs --no-color

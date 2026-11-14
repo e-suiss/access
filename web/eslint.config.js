@@ -1,12 +1,20 @@
-// OP-83
+// OP-83, OP-159 m.32
 import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
+  // OP-159 m.31
   {
-    ignores: ["node_modules/**", "dist/**", "test-results/**", "playwright-report/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/test-results/**",
+      "**/playwright-report/**",
+      "ui/src/components/ui/**",
+      "ui/src/hooks/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -29,7 +37,7 @@ export default tseslint.config(
     plugins: { "react-hooks": reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      // TN-131: tenant-controlled strings render as text nodes only
+      // TN-131
       "no-restricted-syntax": [
         "error",
         {

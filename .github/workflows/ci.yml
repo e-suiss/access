@@ -603,16 +603,12 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          # OP-97
-          cache-dependency-path: |
-            sdks/typescript/package-lock.json
-            web/console/package-lock.json
-            web/login/package-lock.json
-            web/components/package-lock.json
-            web/ui/package-lock.json
-            web/account/package-lock.json
+          cache-dependency-path: sdks/typescript/package-lock.json
+      # OP-159 m.32: pnpm at the version and hash web/package.json pins
       - name: Install (lockfile only, no install scripts)
-        run: just web-install
+        run: |
+          corepack enable
+          just web-install
       - name: Lint, type check, format (OP-83)
         run: just web-check
       # OP-151 m.3 (g)
@@ -670,13 +666,7 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          cache-dependency-path: |
-            sdks/typescript/package-lock.json
-            web/console/package-lock.json
-            web/login/package-lock.json
-            web/components/package-lock.json
-            web/ui/package-lock.json
-            web/account/package-lock.json
+          cache-dependency-path: sdks/typescript/package-lock.json
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: kernel-wasm
@@ -684,23 +674,20 @@ jobs:
       - name: Browser end-to-end, visual and WCAG 2.2 AA tests
         run: |
           (cd sdks/typescript && npm ci)
-          (cd web/ui && npm ci)
+          corepack enable
+          (cd web && pnpm install --frozen-lockfile)
           cd web/console
-          npm ci
-          npm run e2e
+          pnpm run e2e
       # OP-146 m.4 (g), TN-106
       - name: Hosted login end-to-end, passkey (virtual authenticator), CSP and WCAG 2.2 AA tests
         run: |
           cd web/login
-          npm ci
-          npm run e2e
+          pnpm run e2e
       # OP-153 m.3 (w): the account shell and the Authority hub over a mocked BFF
       - name: Account pages end-to-end
         run: |
-          (cd web/components && npm ci)
           cd web/account
-          npm ci
-          npm run e2e
+          pnpm run e2e
       - name: Upload the Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

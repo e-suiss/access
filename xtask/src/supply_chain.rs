@@ -328,8 +328,8 @@ fn check_actions_pinned(root: &Path) -> Result<Vec<Violation>, String> {
     Ok(out)
 }
 
-/// `Cargo.lock` is committed; every npm package has a `package-lock.json` in
-/// its directory or an ancestor (npm workspaces keep one at the root, OP-83).
+/// `Cargo.lock` is committed; every npm package has a `package-lock.json` or a
+/// `pnpm-lock.yaml` in its directory or an ancestor (OP-83, OP-159 m.32).
 pub(crate) fn missing_lockfiles(files: &[String]) -> Vec<Violation> {
     let mut out = Vec::new();
     if !files.iter().any(|f| f == "Cargo.lock") {
@@ -345,12 +345,15 @@ pub(crate) fn missing_lockfiles(files: &[String]) -> Vec<Violation> {
     {
         let mut dir = pkg.rsplit_once('/').map_or("", |(d, _)| d);
         let found = loop {
-            let lock = if dir.is_empty() {
-                "package-lock.json".to_owned()
+            let prefix = if dir.is_empty() {
+                String::new()
             } else {
-                format!("{dir}/package-lock.json")
+                format!("{dir}/")
             };
-            if files.contains(&lock) {
+            if ["package-lock.json", "pnpm-lock.yaml"]
+                .iter()
+                .any(|name| files.contains(&format!("{prefix}{name}")))
+            {
                 break true;
             }
             if dir.is_empty() {
@@ -362,7 +365,8 @@ pub(crate) fn missing_lockfiles(files: &[String]) -> Vec<Violation> {
             out.push(v(
                 "lockfiles",
                 pkg,
-                "package.json without a package-lock.json (OP-83, F-1)".to_owned(),
+                "package.json without a package-lock.json or pnpm-lock.yaml (OP-83, F-1)"
+                    .to_owned(),
             ));
         }
     }
@@ -488,6 +492,12 @@ mod tests {
         let mut with_root_lock = files;
         with_root_lock.push("package-lock.json".to_owned());
         assert!(missing_lockfiles(&with_root_lock).is_empty());
+        let workspace = vec![
+            "Cargo.lock".to_owned(),
+            "web/console/package.json".to_owned(),
+            "web/pnpm-lock.yaml".to_owned(),
+        ];
+        assert!(missing_lockfiles(&workspace).is_empty());
     }
 
     #[test]

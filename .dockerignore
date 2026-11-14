@@ -19,6 +19,11 @@ sdks/typescript
 !web/login
 !web/account
 !web/components
+!web/ui
+!web/package.json
+!web/pnpm-lock.yaml
+!web/pnpm-workspace.yaml
+!web/tsconfig.base.json
 !sdks/typescript
 **/node_modules
 **/dist
