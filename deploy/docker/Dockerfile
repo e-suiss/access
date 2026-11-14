@@ -57,6 +57,7 @@ WORKDIR /src
 COPY sdks/typescript sdks/typescript
 COPY --from=wasm /src/sdks/typescript/wasm sdks/typescript/wasm
 COPY web/components web/components
+COPY web/ui web/ui
 COPY web/console web/console
 COPY web/login web/login
 COPY web/account web/account
@@ -64,6 +65,7 @@ COPY locales locales
 COPY conformance/catalog/protected-messages.toml conformance/catalog/protected-messages.toml
 RUN cd sdks/typescript && npm ci --ignore-scripts \
  && cd /src/web/components && npm ci --ignore-scripts \
+ && cd /src/web/ui && npm ci --ignore-scripts \
  && cd /src/web/console && npm ci --ignore-scripts && npm run build \
  && cd /src/web/login && npm ci --ignore-scripts && npm run build \
  && cd /src/web/account && npm ci --ignore-scripts && npm run build

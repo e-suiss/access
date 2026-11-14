@@ -1,3 +1,5 @@
+@import "@suiss/access-ui/theme.css";
+
 /* TN-106, TN-107, TN-108: the realm's theme is two colours from /login/theme.css; logical
    properties only, so right-to-left pages mirror; visible focus; 24px targets at least. */
 :root {

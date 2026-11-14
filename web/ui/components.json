@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "aria-suiss",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/theme.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "phosphor",
+  "aliases": {
+    "components": "@suiss/access-ui/components",
+    "ui": "@suiss/access-ui/components/ui",
+    "lib": "@suiss/access-ui/lib",
+    "utils": "@suiss/access-ui/lib/utils",
+    "hooks": "@suiss/access-ui/hooks"
+  },
+  "registries": {
+    "@esuiss": "https://suiss.app/ui/r/aria-suiss/{name}.json"
+  }
+}
