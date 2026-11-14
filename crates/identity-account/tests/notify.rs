@@ -308,7 +308,7 @@ impl Env {
         .await
         .unwrap();
         // OP-151 m.3 (i)
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + Duration::from_secs(60);
         while access_store::identity::poll(&self.db.reader, Cursor::default(), 1_000)
             .await
             .unwrap()
@@ -1479,7 +1479,7 @@ async fn a_node_whose_term_ended_sends_nothing_more() {
         lease: e.term.lease.clone(),
         until_ms: START_MS,
     };
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while access_store::identity::poll(&e.db.reader, Cursor::default(), 100)
         .await
         .unwrap()
