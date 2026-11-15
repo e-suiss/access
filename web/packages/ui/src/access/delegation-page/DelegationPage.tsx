@@ -5,6 +5,11 @@
 // capacity, status and limits (Access's authority limit and Pay's financial limit as two rows),
 // the notices Access and Relay gave, and the one link to the coordinator's queue. Revoke goes
 // back to the host, which sends the viewer's own signed Exercise; this page decides nothing.
+import { Alert, AlertDescription } from "@access/ui/components/alert";
+import { Badge } from "@access/ui/components/badge";
+import { Button } from "@access/ui/components/button";
+import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
+
 import { type Attention, AttentionLink } from "../work/Work.js";
 import { type LimitRow, type PayLimit, limitRows } from "../payment/model.js";
 import { LimitRows, say } from "../payment/Payment.js";
@@ -104,79 +109,101 @@ export function DelegationPage({
   catalogue,
 }: DelegationPageProps) {
   return (
-    <div className="access-delegation-page">
+    <div className="access-delegation-page flex flex-col gap-6">
       {hub.notices.map((n) => (
-        <p
+        <Alert
           key={n}
-          className="notice"
+          className="py-3"
           role={n === "status.access_unavailable" ? "alert" : undefined}
         >
-          {say({ text: n }, catalogue)}
-        </p>
+          <AlertDescription className="text-sm">{say({ text: n }, catalogue)}</AlertDescription>
+        </Alert>
       ))}
       {hub.attention !== undefined && (
         <AttentionLink attention={hub.attention} catalogue={catalogue} />
       )}
       {SECTIONS.map(([key, title]) => (
-        <section key={key} aria-label={say({ text: title }, catalogue)} data-section={key}>
-          <h3>{say({ text: title }, catalogue)}</h3>
-          <ul className="rows">
+        <section
+          key={key}
+          className="flex flex-col gap-3"
+          aria-label={say({ text: title }, catalogue)}
+          data-section={key}
+        >
+          <h3 className="text-base font-semibold">{say({ text: title }, catalogue)}</h3>
+          <ul className="flex flex-col gap-2">
             {hub[key].map((r) => {
               const revoke = r.offers.find((o) => o.action === "revoke");
               return (
-                <li key={r.grant} className="row" data-grant={r.grant}>
-                  <p>
-                    <span className="access-owner-badge">
-                      {say({ text: `owner.${r.owner}` }, catalogue)}
-                    </span>{" "}
-                    {r.who.party === undefined ? r.who.kind : name(r.who.party)} ·{" "}
-                    <span className="mono">{r.what.join(", ")}</span> ·{" "}
-                    {r.capacity
-                      .map((c) =>
-                        say(
-                          {
-                            text: c.text,
-                            args: { party: c.party === undefined ? "" : name(c.party) },
-                          },
+                <Item
+                  key={r.grant}
+                  variant="outline"
+                  size="sm"
+                  className="items-start"
+                  render={(p) => <li {...p} />}
+                  data-grant={r.grant}
+                >
+                  <ItemContent className="min-w-0 gap-2">
+                    <p className="text-sm">
+                      <Badge variant="outline" className="access-owner-badge me-0.5 align-middle">
+                        {say({ text: `owner.${r.owner}` }, catalogue)}
+                      </Badge>{" "}
+                      {r.who.party === undefined ? r.who.kind : name(r.who.party)} ·{" "}
+                      <span className="font-mono text-sm wrap-anywhere">{r.what.join(", ")}</span> ·{" "}
+                      {r.capacity
+                        .map((c) =>
+                          say(
+                            {
+                              text: c.text,
+                              args: { party: c.party === undefined ? "" : name(c.party) },
+                            },
+                            catalogue,
+                          ),
+                        )
+                        .join(" · ")}
+                    </p>
+                    {r.source !== undefined && (
+                      <p className="text-sm text-muted-foreground" data-testid="source">
+                        {say(
+                          { text: r.source.text, args: { issuer: name(r.source.issuer) } },
                           catalogue,
-                        ),
-                      )
-                      .join(" · ")}
-                  </p>
-                  {r.source !== undefined && (
-                    <p className="meta" data-testid="source">
+                        )}
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {say({ text: r.status }, catalogue)} ·{" "}
                       {say(
-                        { text: r.source.text, args: { issuer: name(r.source.issuer) } },
+                        {
+                          text: "validity.valid_until",
+                          args: { time: time(r.validity.valid_until) },
+                        },
                         catalogue,
                       )}
                     </p>
-                  )}
-                  <p className="meta">
-                    {say({ text: r.status }, catalogue)} ·{" "}
-                    {say(
-                      {
-                        text: "validity.valid_until",
-                        args: { time: time(r.validity.valid_until) },
-                      },
-                      catalogue,
-                    )}
-                  </p>
-                  <LimitRows rows={rowLimits(r, locale, catalogue)} catalogue={catalogue} />
+                    <LimitRows rows={rowLimits(r, locale, catalogue)} catalogue={catalogue} />
+                  </ItemContent>
                   {revoke?.available === true && onRevoke !== undefined ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onRevoke(r.grant);
-                      }}
-                    >
-                      {say({ text: "action.revoke" }, catalogue)}
-                    </button>
+                    <ItemActions>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          onRevoke(r.grant);
+                        }}
+                      >
+                        {say({ text: "action.revoke" }, catalogue)}
+                      </Button>
+                    </ItemActions>
                   ) : (
                     revoke?.who_can !== undefined && (
-                      <span className="meta">{say({ text: revoke.who_can }, catalogue)}</span>
+                      <ItemActions>
+                        <span className="text-sm text-muted-foreground">
+                          {say({ text: revoke.who_can }, catalogue)}
+                        </span>
+                      </ItemActions>
                     )
                   )}
-                </li>
+                </Item>
               );
             })}
           </ul>

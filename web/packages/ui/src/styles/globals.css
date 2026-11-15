@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./shadcn.css";
+@import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
 @source "../";
@@ -15,7 +15,7 @@
   --card-foreground: oklch(0.2316 0.0038 286.09);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2316 0.0038 286.09);
-  --primary: oklch(0.46 0.1933 256.16);
+  --primary: oklch(0.5629 0.1933 256.16);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0 0 0 / 4%);
   --secondary-foreground: oklch(0.2316 0.0038 286.09);
@@ -34,7 +34,7 @@
   --chart-5: oklch(0.6483 0.0073 286.18);
   --sidebar: oklch(0.9707 0.0026 286.29);
   --sidebar-foreground: oklch(0.2316 0.0038 286.09);
-  --sidebar-primary: oklch(0.46 0.1933 256.16);
+  --sidebar-primary: oklch(0.5629 0.1933 256.16);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0 0 0 / 6%);
   --sidebar-accent-foreground: oklch(0.2316 0.0038 286.09);
@@ -50,7 +50,7 @@
   --popover: oklch(0.2316 0.0038 286.09);
   --popover-foreground: oklch(0.9707 0.0026 286.29);
   --primary: oklch(0.669 0.1808 251.84);
-  --primary-foreground: oklch(0.2316 0.0038 286.09);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(1 0 0 / 10%);
   --secondary-foreground: oklch(0.9707 0.0026 286.29);
   --muted: oklch(0.2006 0.002 286.21);
@@ -69,7 +69,7 @@
   --sidebar: oklch(0.2006 0.002 286.21);
   --sidebar-foreground: oklch(0.9707 0.0026 286.29);
   --sidebar-primary: oklch(0.669 0.1808 251.84);
-  --sidebar-primary-foreground: oklch(0.2316 0.0038 286.09);
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(1 0 0 / 10%);
   --sidebar-accent-foreground: oklch(0.9707 0.0026 286.29);
   --sidebar-border: oklch(0.3802 0.005 286.15);
@@ -118,7 +118,6 @@
   --radius-xl: calc(var(--radius) * 1.2);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.8);
-  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
@@ -141,9 +140,9 @@
       transition-duration: 0.01ms !important;
     }
     :is([data-slot], [data-slot] [class*="animate-"]):not(
-      [data-slot="spinner"],
-      [data-slot="spinner"] *
-    ),
+        [data-slot="spinner"],
+        [data-slot="spinner"] *
+      ),
     :is([data-slot], [data-slot] [class*="animate-"]):not(
         [data-slot="spinner"],
         [data-slot="spinner"] *
@@ -156,12 +155,4 @@
       animation-iteration-count: 1 !important;
     }
   }
-}
-
-/* OP-159 m.37 (c) */
-.base-ui-disable-scrollbar {
-  scrollbar-width: none;
-}
-.base-ui-disable-scrollbar::-webkit-scrollbar {
-  display: none;
 }

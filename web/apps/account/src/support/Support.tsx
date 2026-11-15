@@ -2,7 +2,7 @@
 // request only invites; the person opens this page, reads what is asked and gives it with their
 // own device, or doesn't. What they gave is listed with who holds it and until when, and is
 // ended with one Revoke; Block support access stops further requests.
-import { support as components } from "@access/components";
+import { support as components } from "@access/ui";
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";

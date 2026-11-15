@@ -1,4 +1,14 @@
 // OP-157 m.3 (f), §8.16, TN-137 (1), XI-7
+import { Button } from "@access/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@access/ui/components/card";
+
 import { EN } from "../texts.js";
 import { type Opener, type Request, mayOpen, say, termsArgs, titleArgs } from "./model.js";
 
@@ -30,17 +40,40 @@ export function SupportRequest({
   }
   const title = say(EN, "support.give_title", catalogue, titleArgs(request));
   return (
-    <section className="access-support-request" role="dialog" aria-label={title}>
-      <h3>{title}</h3>
-      <p>{say(EN, "support.give_terms", catalogue, termsArgs(request))}</p>
-      {request.readOnly ? <p>{say(EN, "support.read_only", catalogue)}</p> : null}
-      <button type="button" disabled={busy === true} onClick={onGive}>
-        {say(EN, "action.give_access", catalogue)}
-      </button>
-      <button type="button" className="secondary" disabled={busy === true} onClick={onDecline}>
-        {say(EN, "support.decline", catalogue)}
-      </button>
-    </section>
+    <Card className="access-support-request" role="dialog" aria-label={title}>
+      <CardHeader>
+        <CardTitle>
+          <h3>{title}</h3>
+        </CardTitle>
+        <CardDescription>
+          {say(EN, "support.give_terms", catalogue, termsArgs(request))}
+        </CardDescription>
+      </CardHeader>
+      {request.readOnly ? (
+        <CardContent>
+          <p className="text-sm text-muted-foreground">{say(EN, "support.read_only", catalogue)}</p>
+        </CardContent>
+      ) : null}
+      <CardFooter className="flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+        <Button
+          type="button"
+          className="w-full sm:w-auto"
+          disabled={busy === true}
+          onClick={onGive}
+        >
+          {say(EN, "action.give_access", catalogue)}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full sm:w-auto"
+          disabled={busy === true}
+          onClick={onDecline}
+        >
+          {say(EN, "support.decline", catalogue)}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -56,14 +89,14 @@ export interface SupportActionsProps {
  * where declared, "Emergency access (break-glass)". There is no way to become the person. */
 export function SupportActions({ onRequest, onEmergency, catalogue }: SupportActionsProps) {
   return (
-    <div className="access-support-actions">
-      <button type="button" onClick={onRequest}>
+    <div className="access-support-actions flex flex-wrap gap-2">
+      <Button type="button" onClick={onRequest}>
         {say(EN, "support.request", catalogue)}
-      </button>
+      </Button>
       {onEmergency === undefined ? null : (
-        <button type="button" className="secondary" onClick={onEmergency}>
+        <Button type="button" variant="destructive" onClick={onEmergency}>
           {say(EN, "support.emergency", catalogue)}
-        </button>
+        </Button>
       )}
     </div>
   );

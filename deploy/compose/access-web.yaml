@@ -1,0 +1,8 @@
+# OP-69, OP-159 m.40: `just web-dev` lays this over access.yaml; the server serves the web apps
+# built from the working tree instead of the copies in the image. Same server, same headers.
+services:
+  access-server:
+    volumes:
+      - ../../web/apps/login/dist:/usr/share/access/login:ro
+      - ../../web/apps/console/dist:/usr/share/access/console:ro
+      - ../../web/apps/account/dist:/usr/share/access/account:ro

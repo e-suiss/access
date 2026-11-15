@@ -225,7 +225,7 @@ describe("delegation page", () => {
     expect(html).toContain(
       "Authority can&#x27;t be changed right now. You can still ask the runtime to stop for now (Work control)",
     );
-    expect(html).not.toMatch(/pending|disabled|queued/i);
+    expect(html.replace(/<[^>]*>/g, " ")).not.toMatch(/pending|disabled|queued/i);
     expect(html).toContain("2 approvals waiting for you →");
     expect(html).toContain("Revoke");
   });

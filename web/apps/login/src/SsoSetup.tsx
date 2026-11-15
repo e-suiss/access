@@ -5,28 +5,14 @@
 import { useEffect, useState } from "react";
 
 import { sso as client } from "@esuiss/access";
-import { sso } from "@access/components";
-import { cn } from "@access/ui/lib/utils";
+import { sso } from "@access/ui";
 
 import { REALM } from "./base.js";
 import { maybe, t } from "./i18n.js";
 import { note, outcome, Panel, problem } from "./Layout.js";
 
 /** The embedded component's own markup, drawn in the suiss/ui look. */
-const portal = cn(
-  "max-w-xl",
-  "[&_section]:flex [&_section]:flex-col [&_section]:gap-4 [&_form]:flex [&_form]:flex-col [&_form]:gap-4",
-  "[&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h3]:text-lg [&_h3]:font-semibold",
-  "[&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:font-semibold",
-  "[&_fieldset]:flex [&_fieldset]:flex-col [&_fieldset]:gap-2 [&_legend]:mb-2 [&_legend]:text-sm [&_legend]:font-semibold",
-  "[&_fieldset_label]:min-h-6 [&_fieldset_label]:flex-row [&_fieldset_label]:items-center [&_fieldset_label]:font-normal",
-  "[&_input:not([type=radio])]:h-11 [&_input:not([type=radio])]:rounded-lg [&_input:not([type=radio])]:bg-secondary [&_input:not([type=radio])]:px-3 [&_input:not([type=radio])]:text-base [&_input:not([type=radio])]:font-normal",
-  "[&_select]:h-11 [&_select]:rounded-lg [&_select]:bg-secondary [&_select]:px-3 [&_select]:text-base [&_select]:font-normal",
-  "[&_input[type=radio]]:size-5 [&_input[type=radio]]:accent-primary",
-  "[&_input]:outline-none [&_input:focus-visible]:ring-3 [&_input:focus-visible]:ring-ring/50 [&_select]:outline-none [&_select:focus-visible]:ring-3 [&_select:focus-visible]:ring-ring/50",
-  "[&_ol]:flex [&_ol]:list-decimal [&_ol]:flex-col [&_ol]:gap-3 [&_ol]:ps-5 [&_ul]:list-disc [&_ul]:ps-5 [&_code]:font-mono [&_code]:text-sm [&_code]:wrap-anywhere",
-  "[&_button]:h-11 [&_button]:w-full [&_button]:cursor-pointer [&_button]:rounded-lg [&_button]:bg-primary [&_button]:px-5 [&_button]:text-base [&_button]:text-primary-foreground [&_button]:outline-none [&_button:focus-visible]:ring-3 [&_button:focus-visible]:ring-ring/50 [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50",
-);
+const portal = "max-w-xl";
 
 type State =
   | { readonly phase: "loading" }

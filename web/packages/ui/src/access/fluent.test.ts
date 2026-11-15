@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { Catalogs, FluentError, idOf, keyOf, parse, parseProtected, tag } from "./fluent.js";
 
-const root = join(import.meta.dirname, "..", "..", "..", "..");
+const root = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 function sources(): Record<string, string[]> {
   const out: Record<string, string[]> = {};

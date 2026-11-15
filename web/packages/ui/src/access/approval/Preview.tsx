@@ -3,6 +3,8 @@
 // from the exact intent bytes, each parameter under the type the accepted Action Schema declares.
 // A parameter with no declared type is never shown as a value, and the preview is then not
 // complete: a widening is signed only from a complete preview.
+import { Card, CardContent, CardHeader, CardTitle } from "@access/ui/components/card";
+
 import { text } from "../texts.js";
 
 /** What the Kernel's `describeIntent` answers for an intent envelope. */
@@ -47,6 +49,11 @@ export function complete(
   return untyped(intent, types).length === 0;
 }
 
+const DL = "grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm";
+const ROW = "col-span-2 grid grid-cols-subgrid";
+const DT = "text-muted-foreground";
+const DD = "font-mono break-all";
+
 function resourceText(r: DescribedIntent["resources"][number]): string {
   const path = [r.namespace, ...r.path].join("/");
   return r.incarnation === "0" ? path : `${path}@${r.incarnation}`;
@@ -57,41 +64,54 @@ export function Preview({ intent, types, catalogue }: PreviewProps) {
   const missing = new Set(untyped(intent, types));
   const names = Object.keys(intent.params).sort();
   return (
-    <section
+    <Card
+      size="sm"
+      variant="filled"
+      role="region"
       className="access-approval-preview"
       aria-label={text("approval.preview_title", catalogue)}
     >
-      <h2>{text("approval.preview_title", catalogue)}</h2>
-      <dl>
-        <dt>action</dt>
-        <dd>{`${intent.action.namespace}/${intent.action.name}@${String(intent.action.major)}`}</dd>
-        {intent.resources.map((r, i) => (
-          <div key={`resource-${String(i)}`}>
-            <dt>resource</dt>
-            <dd>{resourceText(r)}</dd>
-          </div>
-        ))}
-        {names.map((name) => (
-          <div key={name} data-type={missing.has(name) ? undefined : types[name]}>
-            <dt>{name}</dt>
-            {missing.has(name) ? (
-              <dd className="access-approval-untyped" role="note">
-                {text("approval.preview_untyped", catalogue)}
-              </dd>
-            ) : (
-              <dd>{intent.params[name]}</dd>
-            )}
-          </div>
-        ))}
-        {intent.recipient === null ? null : (
-          <div>
-            <dt>recipient</dt>
-            <dd>{intent.recipient}</dd>
-          </div>
-        )}
-        <dt>validity</dt>
-        <dd>{`${String(intent.validity.from)}..${String(intent.validity.until)}`}</dd>
-      </dl>
-    </section>
+      <CardHeader>
+        <CardTitle>
+          <h2>{text("approval.preview_title", catalogue)}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className={DL}>
+          <dt className={DT}>action</dt>
+          <dd className={DD}>
+            {`${intent.action.namespace}/${intent.action.name}@${String(intent.action.major)}`}
+          </dd>
+          {intent.resources.map((r, i) => (
+            <div key={`resource-${String(i)}`} className={ROW}>
+              <dt className={DT}>resource</dt>
+              <dd className={DD}>{resourceText(r)}</dd>
+            </div>
+          ))}
+          {names.map((name) => (
+            <div key={name} data-type={missing.has(name) ? undefined : types[name]} className={ROW}>
+              <dt className={DT}>{name}</dt>
+              {missing.has(name) ? (
+                <dd className="access-approval-untyped text-destructive" role="note">
+                  {text("approval.preview_untyped", catalogue)}
+                </dd>
+              ) : (
+                <dd className={DD}>{intent.params[name]}</dd>
+              )}
+            </div>
+          ))}
+          {intent.recipient === null ? null : (
+            <div className={ROW}>
+              <dt className={DT}>recipient</dt>
+              <dd className={DD}>{intent.recipient}</dd>
+            </div>
+          )}
+          <dt className={DT}>validity</dt>
+          <dd className={DD}>
+            {`${String(intent.validity.from)}..${String(intent.validity.until)}`}
+          </dd>
+        </dl>
+      </CardContent>
+    </Card>
   );
 }

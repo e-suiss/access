@@ -1,5 +1,9 @@
 // XI-17, A-12, §8.7, §8.13, §8.17.5.8, §8.17.7.4, §8.17.7.5, §8.17.11.1, §12.4.1, X8, X13,
 // X30, XI-19, TN-133
+import { Badge } from "@access/ui/components/badge";
+import { Button } from "@access/ui/components/button";
+import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
+
 import { text } from "../texts.js";
 import {
   type AgentFace,
@@ -34,11 +38,15 @@ export interface AgentBadgeProps {
  * badge for an agent. */
 export function AgentBadge({ face, name, catalogue }: AgentBadgeProps) {
   return (
-    <span className="access-agent-badge" data-party-kind="agent">
+    <Badge
+      variant="outline"
+      className="access-agent-badge h-auto whitespace-normal py-0.5 text-start"
+      data-party-kind="agent"
+    >
       {badge(face, name)
         .map((l) => say(l, catalogue))
         .join(" · ")}
-    </span>
+    </Badge>
   );
 }
 
@@ -52,7 +60,7 @@ export interface OutcomeLabelsProps {
  * an agent's own account of what it did is never shown as the outcome (X30). */
 export function OutcomeLabels({ lines, name, catalogue }: OutcomeLabelsProps) {
   return (
-    <ul className="access-outcomes">
+    <ul className="access-outcomes flex flex-col gap-1 text-sm">
       {lines.map((l, i) => (
         <li key={`${l.text}:${String(i)}`} data-outcome={l.text}>
           {say(
@@ -60,7 +68,7 @@ export function OutcomeLabels({ lines, name, catalogue }: OutcomeLabelsProps) {
             catalogue,
           )}
           {l.evidence.length > 0 && (
-            <span className="access-evidence">
+            <span className="access-evidence text-muted-foreground">
               {" · "}
               {l.evidence.map((e) => text(e, catalogue)).join(", ")}
             </span>
@@ -79,10 +87,12 @@ export interface StopRowsProps {
 /** "Stop" as two rows, each with its owner (§8.17.7.5, X13): never one "Stopped". */
 export function StopRows({ rows, catalogue }: StopRowsProps) {
   return (
-    <ul className="access-stop-rows">
+    <ul className="access-stop-rows flex flex-col gap-1.5 text-sm">
       {rows.map((r) => (
         <li key={r.owner} data-owner={r.owner}>
-          <span className="access-owner-badge">{text(`owner.${r.owner}`, catalogue)}</span>{" "}
+          <Badge variant="outline" className="access-owner-badge me-0.5 align-middle">
+            {text(`owner.${r.owner}`, catalogue)}
+          </Badge>{" "}
           {say(r.line, catalogue)}
         </li>
       ))}
@@ -110,53 +120,81 @@ export function AgentConnections({
 }: AgentConnectionsProps) {
   const title = text("agent_connections.title", catalogue);
   return (
-    <section className="access-agent-connections" aria-label={title}>
-      <h3>{title}</h3>
-      {connections.length === 0 && <p>{text("agent_connections.empty", catalogue)}</p>}
-      <ul>
+    <section className="access-agent-connections flex flex-col gap-4" aria-label={title}>
+      <h3 className="text-base font-semibold">{title}</h3>
+      {connections.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {text("agent_connections.empty", catalogue)}
+        </p>
+      )}
+      <ul className="flex flex-col gap-2">
         {connections.map((c) => (
-          <li key={c.connection} data-connection={c.connection}>
-            <p>
-              <strong>{c.upstream}</strong> · {text(connectionText(c), catalogue)}
-            </p>
-            {c.scopes.length > 0 && <p className="access-scopes">{c.scopes.join(", ")}</p>}
-            {c.used.length === 0 ? (
-              <p>{text("agent_connections.not_used", catalogue)}</p>
-            ) : (
-              <ul>
-                {c.used.map((u) => (
-                  <li key={u.agent}>
-                    <span className="access-agent-badge" data-party-kind="agent">
-                      {text("agent.badge", catalogue)}
-                    </span>{" "}
-                    {say(
-                      {
-                        text:
-                          u.atMs === undefined
-                            ? "agent_connections.used_by"
-                            : "agent_connections.used_by_at",
-                        args: {
-                          agent: name(u.agent),
-                          ...(u.atMs === undefined ? {} : { time: time(u.atMs) }),
+          <Item
+            key={c.connection}
+            variant="outline"
+            size="sm"
+            className="items-start"
+            render={(p) => <li {...p} />}
+            data-connection={c.connection}
+          >
+            <ItemContent className="min-w-0">
+              <p className="text-sm">
+                <strong className="font-semibold">{c.upstream}</strong> ·{" "}
+                {text(connectionText(c), catalogue)}
+              </p>
+              {c.scopes.length > 0 && (
+                <p className="access-scopes font-mono text-xs text-muted-foreground">
+                  {c.scopes.join(", ")}
+                </p>
+              )}
+              {c.used.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {text("agent_connections.not_used", catalogue)}
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-1 text-sm">
+                  {c.used.map((u) => (
+                    <li key={u.agent}>
+                      <Badge
+                        variant="outline"
+                        className="access-agent-badge me-0.5 align-middle"
+                        data-party-kind="agent"
+                      >
+                        {text("agent.badge", catalogue)}
+                      </Badge>{" "}
+                      {say(
+                        {
+                          text:
+                            u.atMs === undefined
+                              ? "agent_connections.used_by"
+                              : "agent_connections.used_by_at",
+                          args: {
+                            agent: name(u.agent),
+                            ...(u.atMs === undefined ? {} : { time: time(u.atMs) }),
+                          },
                         },
-                      },
-                      catalogue,
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+                        catalogue,
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ItemContent>
             {c.status !== "disconnected" && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDisconnect(c.connection);
-                }}
-              >
-                {text("action.disconnect", catalogue)}
-              </button>
+              <ItemActions>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onDisconnect(c.connection);
+                  }}
+                >
+                  {text("action.disconnect", catalogue)}
+                </Button>
+              </ItemActions>
             )}
-          </li>
+          </Item>
         ))}
       </ul>
     </section>
@@ -182,8 +220,11 @@ export function DelegationSuggestion({
   catalogue,
 }: DelegationSuggestionProps) {
   return (
-    <section className="access-suggestion" aria-label={text("suggestion.title", catalogue)}>
-      <p>
+    <section
+      className="access-suggestion flex flex-col gap-3 rounded-xl border p-4"
+      aria-label={text("suggestion.title", catalogue)}
+    >
+      <p className="text-sm">
         {say(
           {
             text: "suggestion.repeated",
@@ -196,18 +237,22 @@ export function DelegationSuggestion({
           catalogue,
         )}
       </p>
-      <p className="access-note">{text("suggestion.not_applied", catalogue)}</p>
-      <button
-        type="button"
-        onClick={() => {
-          onReview(suggestion);
-        }}
-      >
-        {text("action.review_delegation", catalogue)}
-      </button>
-      <button type="button" onClick={onDismiss}>
-        {text("action.not_now", catalogue)}
-      </button>
+      <p className="access-note text-sm text-muted-foreground">
+        {text("suggestion.not_applied", catalogue)}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          onClick={() => {
+            onReview(suggestion);
+          }}
+        >
+          {text("action.review_delegation", catalogue)}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onDismiss}>
+          {text("action.not_now", catalogue)}
+        </Button>
+      </div>
     </section>
   );
 }

@@ -3,7 +3,7 @@
 // device key. Stop charges is the person's own grant.revoke, shown done only once recorded;
 // Pay's agreements are Pay's to show and cancel, apart from this.
 import { pay } from "@esuiss/access";
-import { payment } from "@access/components";
+import { payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Card, CardContent } from "@access/ui/components/card";
 import { useCallback, useEffect, useState, type ReactElement } from "react";

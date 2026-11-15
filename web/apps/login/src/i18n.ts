@@ -1,7 +1,7 @@
 // OP-153 m.3 (s), TN-108: the hosted pages' texts are Access's Fluent catalogs, resolved by the
 // five-step chain; `ui_locales` wins over the browser's languages; `ar-XB` is the right-to-left
 // pseudo-locale that draws the English texts mirrored. The runtime is the shared one of
-// web/packages/components, taken from its source so the login bundle carries no React components of it.
+// web/packages/ui/src/access, taken from its source so the login bundle carries no React components.
 // The realm's own texts for unprotected keys (`idp.realm.locale_overrides`) are read once before
 // the first render and come first in the chain; a protected key never takes one (X35, m.22 (k)).
 import {
@@ -9,7 +9,7 @@ import {
   keyOf,
   type Overrides,
   parseProtected,
-} from "../../../packages/components/src/fluent.js";
+} from "../../../packages/ui/src/access/fluent.js";
 
 import enLogin from "../../../../locales/en/login.ftl?raw";
 import trLogin from "../../../../locales/tr/login.ftl?raw";

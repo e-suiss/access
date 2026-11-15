@@ -3,7 +3,7 @@
 // write is a `commit` the viewer signs after the signature screen; the page shows it done only
 // once Access answers with the recorded Exercise.
 import { loadKernel } from "@esuiss/access";
-import { honesty } from "@access/components";
+import { honesty } from "@access/ui";
 
 import { API, b64url, call, fromB64url, json, Problem } from "./api.js";
 import {

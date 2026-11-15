@@ -3,6 +3,8 @@
 // inventory row, the hub's one "N approvals waiting for you →" link and the honest line of an
 // approval whose Gate is not updated yet. They show what Access and the coordinator reported
 // and decide nothing: a Gate cleared is never shown as allowed.
+import { Badge } from "@access/ui/components/badge";
+
 import { text } from "../texts.js";
 
 /** The coordinator's Needs Attention link, as the hub's `attention` carries it. */
@@ -38,7 +40,11 @@ export function safeHref(href: string): string | undefined {
 
 /** The owner badge of a Work-owned line (IA-3). */
 export function WorkBadge({ catalogue }: WorkTextsProps) {
-  return <span className="access-work-badge">{say("work.badge", catalogue)}</span>;
+  return (
+    <Badge variant="outline" className="access-work-badge">
+      {say("work.badge", catalogue)}
+    </Badge>
+  );
 }
 
 export interface CommitmentLinkProps extends WorkTextsProps {
@@ -53,9 +59,15 @@ export function CommitmentLink({ commitment, href, catalogue }: CommitmentLinkPr
   const label = say("work.ends_with_commitment", catalogue, { commitment });
   const target = href === undefined ? undefined : safeHref(href);
   return (
-    <span className="access-work-commitment">
+    <span className="access-work-commitment inline-flex flex-wrap items-center gap-1.5 text-sm">
       <WorkBadge catalogue={catalogue} />{" "}
-      {target === undefined ? label : <a href={target}>{label}</a>}
+      {target === undefined ? (
+        label
+      ) : (
+        <a href={target} className="text-primary underline-offset-4 hover:underline">
+          {label}
+        </a>
+      )}
     </span>
   );
 }
@@ -70,7 +82,10 @@ export function AttentionLink({ attention, catalogue }: AttentionLinkProps) {
   const target = safeHref(attention.href);
   if (target === undefined) return null;
   return (
-    <a className="access-work-attention" href={target}>
+    <a
+      className="access-work-attention inline-flex items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
+      href={target}
+    >
       {say("attention.approvals_waiting", catalogue, { count: String(attention.count) })}
     </a>
   );
@@ -86,5 +101,9 @@ export interface GateStatusProps extends WorkTextsProps {
 /** The honest line after one ceremony (§8.17.6.1): never "approved and proceeding". */
 export function GateStatus({ recorded, gateUpdated, catalogue }: GateStatusProps) {
   if (!recorded || gateUpdated) return null;
-  return <p className="access-work-gate">{say("work.gate_not_updated", catalogue)}</p>;
+  return (
+    <p className="access-work-gate text-sm text-muted-foreground">
+      {say("work.gate_not_updated", catalogue)}
+    </p>
+  );
 }

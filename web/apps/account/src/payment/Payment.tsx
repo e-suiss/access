@@ -2,7 +2,7 @@
 // "Pay 300 TRY to M, once" from the Kernel's decoding of the request's bytes, and the outcome
 // only as Access recorded it.
 import type { pay } from "@esuiss/access";
-import { honesty, payment } from "@access/components";
+import { honesty, payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";

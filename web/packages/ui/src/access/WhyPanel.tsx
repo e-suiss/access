@@ -1,4 +1,8 @@
 // S5, XI-9, X18, §8.5, §8.17.8.3, §8.17.8.4, X25
+import { Badge } from "@access/ui/components/badge";
+import { Button } from "@access/ui/components/button";
+import { Card, CardContent, CardFooter } from "@access/ui/components/card";
+
 import { text } from "./texts.js";
 
 export type Depth = "default" | "expert" | "audit";
@@ -41,53 +45,71 @@ export function WhyPanel({ explanation: e, depth, onDepth, catalogue }: WhyPanel
   if (e.expert) depths.push("expert");
   if (e.audit) depths.push("audit");
   return (
-    <section className="access-why" aria-label={text("why.could_change", catalogue)}>
-      <p className="access-why-source">
-        {text(e.source === "decision_record" ? "why.derived" : "why.advisory", catalogue)}
-        {" · "}
-        {text(e.when === "past" ? "why.past" : "why.hypothetical", catalogue)}
-      </p>
-      <p className="access-why-summary">{e.summary}</p>
-      <ul className="access-why-owners">
-        {e.owners.map((o) => (
-          <li key={`${o.owner}:${o.line}`}>
-            <span className="access-owner-badge">{o.owner}</span> {o.line}
-          </li>
-        ))}
-      </ul>
-      {e.couldChange.length > 0 && (
-        <>
-          <h3>{text("why.could_change", catalogue)}</h3>
-          <ol className="access-why-change">
-            {e.couldChange.map((c) => (
-              <li key={c}>{c}</li>
+    <Card
+      size="sm"
+      variant="filled"
+      role="region"
+      className="access-why"
+      aria-label={text("why.could_change", catalogue)}
+    >
+      <CardContent className="flex flex-col gap-3">
+        <p className="access-why-source text-sm text-muted-foreground">
+          {text(e.source === "decision_record" ? "why.derived" : "why.advisory", catalogue)}
+          {" · "}
+          {text(e.when === "past" ? "why.past" : "why.hypothetical", catalogue)}
+        </p>
+        <p className="access-why-summary text-base">{e.summary}</p>
+        <ul className="access-why-owners flex flex-col gap-2">
+          {e.owners.map((o) => (
+            <li key={`${o.owner}:${o.line}`} className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="outline" className="access-owner-badge">
+                {o.owner}
+              </Badge>{" "}
+              {o.line}
+            </li>
+          ))}
+        </ul>
+        {e.couldChange.length > 0 && (
+          <>
+            <h3 className="text-sm font-semibold">{text("why.could_change", catalogue)}</h3>
+            <ol className="access-why-change list-decimal ps-5 text-sm">
+              {e.couldChange.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ol>
+          </>
+        )}
+        {depth !== "default" && e.expert && (
+          <ul className="access-why-expert list-disc ps-5 text-sm text-muted-foreground">
+            {e.expert.map((l) => (
+              <li key={l}>{l}</li>
             ))}
-          </ol>
-        </>
-      )}
-      {depth !== "default" && e.expert && (
-        <ul className="access-why-expert">
-          {e.expert.map((l) => (
-            <li key={l}>{l}</li>
-          ))}
-        </ul>
-      )}
-      {depth === "audit" && e.audit && (
-        <ul className="access-why-audit">
-          {e.audit.map((l) => (
-            <li key={l}>{l}</li>
-          ))}
-        </ul>
-      )}
+          </ul>
+        )}
+        {depth === "audit" && e.audit && (
+          <ul className="access-why-audit list-disc ps-5 font-mono text-xs text-muted-foreground">
+            {e.audit.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
       {depths.length > 1 && (
-        <div role="group" className="access-why-depths">
+        <CardFooter role="group" className="access-why-depths gap-2">
           {depths.map((d) => (
-            <button key={d} type="button" aria-pressed={d === depth} onClick={() => onDepth?.(d)}>
+            <Button
+              key={d}
+              type="button"
+              size="sm"
+              variant={d === depth ? "secondary" : "ghost"}
+              aria-pressed={d === depth}
+              onClick={() => onDepth?.(d)}
+            >
               {text(`why.depth.${d}`, catalogue)}
-            </button>
+            </Button>
           ))}
-        </div>
+        </CardFooter>
       )}
-    </section>
+    </Card>
   );
 }

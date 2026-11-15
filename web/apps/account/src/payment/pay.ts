@@ -4,7 +4,7 @@
 // payload would leave the merchant a Grant), and sends the customer's own commit, signed in this
 // browser after the signature screen. It is shown paid only once Access answers with the record.
 import { loadKernel, pay } from "@esuiss/access";
-import { honesty } from "@access/components";
+import { honesty } from "@access/ui";
 
 import { API, b64url, fromB64url } from "../lib/api.js";
 import {

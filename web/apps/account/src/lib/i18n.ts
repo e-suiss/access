@@ -1,6 +1,6 @@
 // OP-153 m.3 (s), m.9 (c): the account pages' texts are Access's Fluent catalogs, resolved by the
 // five-step chain; a key no catalog has shows as itself, never as an invented text.
-import { Catalogs, keyOf, parseProtected } from "@access/components";
+import { Catalogs, keyOf, parseProtected } from "@access/ui";
 
 import enAccount from "../../../../../locales/en/account.ftl?raw";
 import enHub from "../../../../../locales/en/hub.ftl?raw";

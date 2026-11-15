@@ -3,6 +3,9 @@
 // `@esuiss/access` `offline.stateAt` reads them. The window is shown with the condition it rests
 // on (the till follows its declared profile); after it ends the till must go online, and nothing
 // reads as "allowed offline".
+import { Alert, AlertDescription } from "@access/ui/components/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@access/ui/components/card";
+
 import { type Money, money } from "../payment/model.js";
 import { say } from "../payment/Payment.js";
 
@@ -36,28 +39,38 @@ export function OfflineStatus({ state, time, locale, catalogue }: OfflineStatusP
   if (state.kind === "ended") {
     return (
       <section className="access-offline" aria-label={title} data-state="ended">
-        <p role="alert">
-          {say({ text: "offline.ended", args: { time: time(r.until) } }, catalogue)}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription className="text-foreground">
+            {say({ text: "offline.ended", args: { time: time(r.until) } }, catalogue)}
+          </AlertDescription>
+        </Alert>
       </section>
     );
   }
   return (
     <section className="access-offline" aria-label={title} data-state="offline">
-      <h3>{title}</h3>
-      <p>{say({ text: "offline.since", args: { time: time(r.since) } }, catalogue)}</p>
-      <p>{say({ text: "offline.until", args: { time: time(r.until) } }, catalogue)}</p>
-      {r.voidsLeft !== undefined && r.amountLeft !== undefined && (
-        <p data-testid="offline-left">
-          {say(
-            {
-              text: "offline.remaining",
-              args: { voids: String(r.voidsLeft), amount: money(r.amountLeft, locale) },
-            },
-            catalogue,
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>
+            <h3>{title}</h3>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1 text-sm">
+          <p>{say({ text: "offline.since", args: { time: time(r.since) } }, catalogue)}</p>
+          <p>{say({ text: "offline.until", args: { time: time(r.until) } }, catalogue)}</p>
+          {r.voidsLeft !== undefined && r.amountLeft !== undefined && (
+            <p data-testid="offline-left" className="text-muted-foreground">
+              {say(
+                {
+                  text: "offline.remaining",
+                  args: { voids: String(r.voidsLeft), amount: money(r.amountLeft, locale) },
+                },
+                catalogue,
+              )}
+            </p>
           )}
-        </p>
-      )}
+        </CardContent>
+      </Card>
     </section>
   );
 }

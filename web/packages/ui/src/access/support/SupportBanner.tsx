@@ -1,4 +1,5 @@
 // OP-157 m.3 (f), §8.16, X37
+import { Alert, AlertDescription } from "@access/ui/components/alert";
 import type { ReactNode } from "react";
 
 import { EN } from "../texts.js";
@@ -18,9 +19,11 @@ export function SupportBanner({ banner, catalogue }: SupportBannerProps) {
   }
   const mode = say(EN, banner.readOnly ? "support.read_only" : "support.can_change", catalogue);
   return (
-    <div className="access-support-banner" role="status" aria-live="polite">
-      {say(EN, "support.banner", catalogue, bannerArgs(banner, mode))}
-    </div>
+    <Alert className="access-support-banner p-4" role="status" aria-live="polite">
+      <AlertDescription className="text-sm text-foreground">
+        {say(EN, "support.banner", catalogue, bannerArgs(banner, mode))}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -38,7 +41,7 @@ export function SupportView({ banner, children, catalogue }: SupportViewProps) {
     return null;
   }
   return (
-    <section className="access-support-view">
+    <section className="access-support-view flex flex-col gap-4">
       <SupportBanner banner={banner} catalogue={catalogue} />
       {children}
     </section>

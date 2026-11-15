@@ -584,7 +584,7 @@ mod tests {
     fn scanned_paths() {
         assert!(scanned("web/apps/console/src/App.tsx"));
         assert!(scanned("web/apps/login/src/i18n/en.ts"));
-        assert!(scanned("web/packages/components/src/WhyPanel.tsx"));
+        assert!(scanned("web/packages/ui/src/access/WhyPanel.tsx"));
         assert!(!scanned("web/apps/console/src.ts"));
         assert!(scanned("sdks/typescript/src/index.ts"));
         assert!(!scanned("web/apps/console/e2e/a11y.spec.ts"));

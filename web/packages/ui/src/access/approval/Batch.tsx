@@ -1,6 +1,9 @@
 // OP-157 m.3 (m), §13.7.3, §8.17.6.3, SEC26
 // A CT1 batch: every item is listed with its own render and gets its own assertion; the action is
 // labelled with the server's count, and there is no way to approve the items unseen.
+import { Button } from "@access/ui/components/button";
+import { Card, CardContent, CardFooter } from "@access/ui/components/card";
+import { Item, ItemContent, ItemDescription } from "@access/ui/components/item";
 
 /** One field of an item's canonical render. */
 export interface BatchField {
@@ -32,25 +35,35 @@ export function offerable(items: readonly BatchEntry[]): boolean {
 export function Batch({ title, items, busy, onApprove }: BatchProps) {
   if (!offerable(items)) return null;
   return (
-    <section aria-label={title}>
-      <ol>
-        {items.map((item) => (
-          <li key={item.flow}>
-            <dl>
-              {item.render.fields.map((f) => (
-                <div key={f.name} data-material={f.material ? "true" : undefined}>
-                  <dt>{f.name}</dt>
-                  <dd>{f.text}</dd>
-                </div>
-              ))}
-            </dl>
-            <p>{item.render.reason}</p>
-          </li>
-        ))}
-      </ol>
-      <button type="button" disabled={busy === true} onClick={onApprove}>
-        {title}
-      </button>
-    </section>
+    <Card size="sm" variant="filled" role="region" aria-label={title}>
+      <CardContent>
+        <ol className="flex flex-col gap-2">
+          {items.map((item) => (
+            <Item key={item.flow} render={<li />} variant="outline" size="sm" className="bg-card">
+              <ItemContent>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  {item.render.fields.map((f) => (
+                    <div
+                      key={f.name}
+                      data-material={f.material ? "true" : undefined}
+                      className="col-span-2 grid grid-cols-subgrid data-[material=true]:font-semibold"
+                    >
+                      <dt className="text-muted-foreground">{f.name}</dt>
+                      <dd className="break-words">{f.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <ItemDescription>{item.render.reason}</ItemDescription>
+              </ItemContent>
+            </Item>
+          ))}
+        </ol>
+      </CardContent>
+      <CardFooter>
+        <Button type="button" disabled={busy === true} onClick={onApprove}>
+          {title}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }

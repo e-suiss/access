@@ -3,6 +3,11 @@
 // with their owners, the one-time payment, "save my card", a merchant that can charge the
 // viewer, and Pay's agreements and consents linked to the delegation they rest on. They show
 // what Access and Pay reported and hand requests back; they sign and decide nothing.
+import { Alert, AlertDescription } from "@access/ui/components/alert";
+import { Badge } from "@access/ui/components/badge";
+import { Button } from "@access/ui/components/button";
+import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
+
 import { text } from "../texts.js";
 import { type Line, type LimitRow, type Money, money } from "./model.js";
 
@@ -26,10 +31,12 @@ export interface LimitRowsProps {
 export function LimitRows({ rows, catalogue }: LimitRowsProps) {
   if (rows.length === 0) return null;
   return (
-    <ul className="access-limits">
+    <ul className="access-limits flex flex-col gap-1.5 text-sm">
       {rows.map((r, i) => (
         <li key={`${r.owner}:${String(i)}`} data-owner={r.owner}>
-          <span className="access-owner-badge">{say({ text: `owner.${r.owner}` }, catalogue)}</span>{" "}
+          <Badge variant="outline" className="access-owner-badge me-0.5 align-middle">
+            {say({ text: `owner.${r.owner}` }, catalogue)}
+          </Badge>{" "}
           {say(r.line, catalogue)}
         </li>
       ))}
@@ -72,21 +79,25 @@ export function OneTimePayment({
   const title = say({ text: "payment.one_time_title" }, catalogue);
   if (typeof payment === "string") {
     return (
-      <section className="access-payment" aria-label={title}>
-        <h3>{title}</h3>
-        <p role="alert" data-refused={payment}>
-          {say({ text: "payment.not_one_time", args: { merchant } }, catalogue)}
-        </p>
-        <button type="button" className="secondary" onClick={onCancel}>
-          {say({ text: "action.cancel" }, catalogue)}
-        </button>
+      <section className="access-payment flex flex-col gap-4" aria-label={title}>
+        <h3 className="text-base font-semibold">{title}</h3>
+        <Alert variant="destructive" data-refused={payment}>
+          <AlertDescription>
+            {say({ text: "payment.not_one_time", args: { merchant } }, catalogue)}
+          </AlertDescription>
+        </Alert>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            {say({ text: "action.cancel" }, catalogue)}
+          </Button>
+        </div>
       </section>
     );
   }
   return (
-    <section className="access-payment" aria-label={title}>
-      <h3>{title}</h3>
-      <p data-testid="one-time">
+    <section className="access-payment flex flex-col gap-4" aria-label={title}>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="text-base" data-testid="one-time">
         {say(
           {
             text: "payment.one_time_confirm",
@@ -95,16 +106,16 @@ export function OneTimePayment({
           catalogue,
         )}
       </p>
-      <p className="meta">
+      <p className="text-sm text-muted-foreground">
         {say({ text: "payment.purpose", args: { purpose: payment.purpose } }, catalogue)}
       </p>
-      <div className="actions">
-        <button type="button" onClick={onPay} disabled={busy === true}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={onPay} disabled={busy === true}>
           {say({ text: "payment.pay" }, catalogue)}
-        </button>
-        <button type="button" className="secondary" onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           {say({ text: "action.cancel" }, catalogue)}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -133,8 +144,8 @@ export function SaveCard({
   catalogue,
 }: SaveCardProps) {
   return (
-    <section className="access-save-card">
-      <p data-testid="save-card">
+    <section className="access-save-card flex flex-col gap-4">
+      <p className="text-base" data-testid="save-card">
         {say(
           {
             text: "merchants.save_card",
@@ -143,13 +154,13 @@ export function SaveCard({
           catalogue,
         )}
       </p>
-      <div className="actions">
-        <button type="button" onClick={onConfirm}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={onConfirm}>
           {say({ text: "merchants.save_card_confirm", args: { merchant } }, catalogue)}
-        </button>
-        <button type="button" className="secondary" onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           {say({ text: "action.cancel" }, catalogue)}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -199,39 +210,63 @@ export interface MerchantsProps {
 export function Merchants({ merchants, onStop, catalogue }: MerchantsProps) {
   const title = say({ text: "merchants.title" }, catalogue);
   return (
-    <section className="access-merchants" aria-label={title}>
-      <h3>{title}</h3>
-      {merchants.length === 0 && <p>{say({ text: "merchants.none" }, catalogue)}</p>}
-      <ul className="rows">
+    <section className="access-merchants flex flex-col gap-4" aria-label={title}>
+      <h3 className="text-base font-semibold">{title}</h3>
+      {merchants.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {say({ text: "merchants.none" }, catalogue)}
+        </p>
+      )}
+      <ul className="flex flex-col gap-2">
         {merchants.map((m) => {
           const limit = m.limits.find((l) => l.owner === "access")?.line.args?.["limit"] ?? "";
           return (
-            <li key={m.grant} className="row" data-grant={m.grant}>
-              <p>
-                <strong>{m.name}</strong>
-                {m.agent && (
-                  <>
-                    {" · "}
-                    <span className="access-agent-badge" data-party-kind="agent">
-                      {say(
-                        { text: "merchants.agent_badge", args: { merchant: m.name } },
-                        catalogue,
-                      )}
-                    </span>
-                  </>
-                )}
-              </p>
-              <LimitRows rows={m.limits} catalogue={catalogue} />
-              <button
-                type="button"
-                onClick={() => {
-                  onStop(m.grant);
-                }}
-              >
-                {say({ text: "merchants.stop" }, catalogue)}
-              </button>
+            <Item
+              key={m.grant}
+              variant="outline"
+              size="sm"
+              className="items-start"
+              render={(p) => <li {...p} />}
+              data-grant={m.grant}
+            >
+              <ItemContent className="min-w-0 gap-2">
+                <p className="text-sm">
+                  <strong className="font-semibold">{m.name}</strong>
+                  {m.agent && (
+                    <>
+                      {" · "}
+                      <Badge
+                        variant="outline"
+                        className="access-agent-badge align-middle"
+                        data-party-kind="agent"
+                      >
+                        {say(
+                          { text: "merchants.agent_badge", args: { merchant: m.name } },
+                          catalogue,
+                        )}
+                      </Badge>
+                    </>
+                  )}
+                </p>
+                <LimitRows rows={m.limits} catalogue={catalogue} />
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    onStop(m.grant);
+                  }}
+                >
+                  {say({ text: "merchants.stop" }, catalogue)}
+                </Button>
+              </ItemActions>
               {(m.pay ?? []).length > 0 && (
-                <ul className="access-pay-objects" data-owner="pay">
+                <ul
+                  className="access-pay-objects flex basis-full flex-col gap-1 border-t pt-3 text-sm"
+                  data-owner="pay"
+                >
                   {(m.pay ?? []).map((o) => {
                     const href = https(o.href);
                     const line =
@@ -256,21 +291,26 @@ export function Merchants({ merchants, onStop, catalogue }: MerchantsProps) {
                         {href !== undefined && (
                           <>
                             {" · "}
-                            <a href={href}>{say({ text: "merchants.agreement" }, catalogue)}</a>
+                            <a
+                              className="text-primary underline-offset-4 hover:underline"
+                              href={href}
+                            >
+                              {say({ text: "merchants.agreement" }, catalogue)}
+                            </a>
                           </>
                         )}
                       </li>
                     );
                   })}
-                  <li className="meta">
+                  <li className="text-muted-foreground">
                     {say({ text: "merchants.cancel_separately" }, catalogue)}
                   </li>
                 </ul>
               )}
-              <p className="meta">
+              <p className="basis-full text-sm text-muted-foreground">
                 {say({ text: "merchants.not_explained", args: { merchant: m.name } }, catalogue)}
               </p>
-            </li>
+            </Item>
           );
         })}
       </ul>

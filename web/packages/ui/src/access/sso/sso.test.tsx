@@ -53,7 +53,7 @@ describe("OrganizationSSO", () => {
       <sso.OrganizationSSO setup={setup} onSubmit={() => undefined} />,
     );
     expect(html).toMatch(
-      /<button type="button" disabled="">Sign in once to test the connection.<\/button>/,
+      /<button type="button"[^>]* disabled=""[^>]*>Sign in once to test the connection.<\/button>/,
     );
     const ready = renderToStaticMarkup(
       <sso.OrganizationSSO setup={{ ...setup, test: "ready" }} onSubmit={() => undefined} />,

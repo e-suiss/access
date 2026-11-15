@@ -1,4 +1,9 @@
 // §8.5 S1, §8.17.5.1, §8.17.4.3, §9.9, §9.14.1 B, X3, X9, X27, X32, XI-4, XI-7
+import { Alert } from "@access/ui/components/alert";
+import { cn } from "@access/ui/lib/utils";
+import { Button } from "@access/ui/components/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@access/ui/components/card";
+
 import {
   type Draft,
   type GiveRequest,
@@ -48,49 +53,68 @@ export function DelegationSheet(p: DelegationSheetProps) {
   const title = p.app === undefined ? "Give access" : `Connect ${p.app}`;
   if (p.created === true) {
     return (
-      <section className="access-delegation" role="dialog" aria-label={title}>
-        <h2>Delegation created</h2>
-      </section>
+      <Card className="access-delegation" role="dialog" aria-label={title}>
+        <CardHeader>
+          <CardTitle>
+            <h2>Delegation created</h2>
+          </CardTitle>
+        </CardHeader>
+      </Card>
     );
   }
   const pv = preview(p.draft, p.viewer, p.nowMs);
   const request = giveRequest(p.draft, p.viewer, p.nowMs, p.amend === true);
   return (
-    <section className="access-delegation" role="dialog" aria-label={title}>
-      <h2>{title}</h2>
-      <dl>
-        {pv.blocks
-          .filter((b) => b.block !== "interpretation" || b.lines.length > 0)
-          .map((b) => (
-            <div key={b.block} className={`access-delegation-${b.block}`}>
-              <dt>{TITLES[b.block]}</dt>
-              {b.lines.map((l) => (
-                <dd key={l}>{l}</dd>
+    <Card className="access-delegation" role="dialog" aria-label={title}>
+      <CardHeader>
+        <CardTitle>
+          <h2>{title}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <dl className="flex flex-col gap-3">
+          {pv.blocks
+            .filter((b) => b.block !== "interpretation" || b.lines.length > 0)
+            .map((b) => (
+              <div
+                key={b.block}
+                className={cn(`access-delegation-${b.block}`, "flex flex-col gap-0.5")}
+              >
+                <dt className="text-sm text-muted-foreground">{TITLES[b.block]}</dt>
+                {b.lines.map((l) => (
+                  <dd key={l} className="text-base">
+                    {l}
+                  </dd>
+                ))}
+              </div>
+            ))}
+        </dl>
+        {pv.blockers.length > 0 ? (
+          <Alert variant="destructive" className="access-delegation-blockers">
+            <ul className="list-disc ps-5 text-sm">
+              {pv.blockers.map((b) => (
+                <li key={b}>{b}</li>
               ))}
-            </div>
-          ))}
-      </dl>
-      {pv.blockers.length > 0 ? (
-        <ul className="access-delegation-blockers" role="alert">
-          {pv.blockers.map((b) => (
-            <li key={b}>{b}</li>
-          ))}
-        </ul>
-      ) : null}
-      <button
-        type="button"
-        disabled={request === null}
-        onClick={() => {
-          if (request !== null) {
-            p.onGive(request);
-          }
-        }}
-      >
-        Give access
-      </button>
-      <button type="button" onClick={p.onCancel}>
-        Cancel
-      </button>
-    </section>
+            </ul>
+          </Alert>
+        ) : null}
+      </CardContent>
+      <CardFooter className="flex-wrap gap-2">
+        <Button
+          type="button"
+          disabled={request === null}
+          onClick={() => {
+            if (request !== null) {
+              p.onGive(request);
+            }
+          }}
+        >
+          Give access
+        </Button>
+        <Button type="button" variant="outline" onClick={p.onCancel}>
+          Cancel
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }

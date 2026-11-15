@@ -417,6 +417,10 @@ start:
     echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
     echo "Stop:            just stop"
 
+# OP-69, OP-159 m.40: after `just start`, the running server serves the web apps built from the working tree; a save rebuilds the app and restarts the server
+web-dev: wasm
+    node scripts/web-dev.mjs
+
 # OP-149 m.26 (b), OP-159 m.29: the current code of the local test user's authenticator app (RFC 6238, SHA-1, 6 digits, 30 s)
 totp:
     #!/usr/bin/env bash

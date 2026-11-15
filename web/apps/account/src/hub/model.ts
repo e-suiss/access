@@ -2,7 +2,7 @@
 // from the domain's own answers, by the rules of services/experience (domain::hub). Every row
 // names its owner and when it was read; a domain that did not answer is unknown, never empty.
 
-import { agents } from "@access/components";
+import { agents } from "@access/ui";
 
 type Json = Readonly<Record<string, unknown>>;
 

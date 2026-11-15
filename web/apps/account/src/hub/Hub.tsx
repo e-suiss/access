@@ -4,7 +4,7 @@
 // answer is "Not confirmed — checking", retried with the same signed request (G39, HL-5). An
 // agent is shown as an agent (XI-17); what it did is what its runtime reported (E64, X30); Stop
 // is two rows (X13) and the aftermath is honest about the horizon (§8.13, §8.17.7.4).
-import { agents, honesty, payment, WhyPanel, type Explanation } from "@access/components";
+import { agents, honesty, payment, WhyPanel, type Explanation } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Badge as UiBadge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
