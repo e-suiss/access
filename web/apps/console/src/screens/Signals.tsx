@@ -78,7 +78,7 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         variant="outline"
                         size="sm"
                         className="ms-auto"
-                        onPress={() => {
+                        onClick={() => {
                           send(
                             "retireSignalSource",
                             `signal-sources/${encodeURIComponent(s.name)}/retire`,

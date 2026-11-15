@@ -61,7 +61,7 @@ export function Authority({
           </CardContent>
           {canRegister && (
             <CardFooter>
-              <Button isDisabled={busy} onPress={start}>
+              <Button disabled={busy} onClick={start}>
                 {t("deviceRegister")}
               </Button>
             </CardFooter>

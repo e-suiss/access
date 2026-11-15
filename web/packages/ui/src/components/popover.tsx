@@ -1,63 +1,13 @@
-import * as React from "react";
-import {
-  Button as ButtonPrimitive,
-  type ButtonProps as ButtonPrimitiveProps,
-  DialogTrigger as DialogTriggerPrimitive,
-  type DialogTriggerProps as DialogTriggerPrimitiveProps,
-  type Placement,
-  Popover as PopoverPrimitive,
-  type PopoverProps as PopoverPrimitiveProps,
-} from "react-aria-components";
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import type * as React from "react";
 import { cn } from "@access/ui/lib/utils";
 
-type Side = "top" | "right" | "bottom" | "left" | "inline-start" | "inline-end";
-type Align = "start" | "center" | "end";
-
-const AXES = {
-  top: "top",
-  right: "right",
-  bottom: "bottom",
-  left: "left",
-  "inline-start": "start",
-  "inline-end": "end",
-} as const;
-
-function toPlacement(side: Side, align: Align): Placement {
-  const axis = AXES[side];
-  if (align === "center") return axis;
-  if (axis === "top" || axis === "bottom") return `${axis} ${align}`;
-  return `${axis} ${align === "start" ? "top" : "bottom"}`;
+function Popover({ ...props }: PopoverPrimitive.Root.Props) {
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
-function useLabelling<T extends HTMLElement>(attribute: "aria-labelledby" | "aria-describedby") {
-  const id = React.useId();
-  const ref = React.useRef<T>(null);
-
-  React.useLayoutEffect(() => {
-    const popup = ref.current?.closest('[data-trigger="DialogTrigger"]');
-    if (!popup) return;
-    popup.setAttribute(attribute, id);
-    return () => popup.removeAttribute(attribute);
-  }, [attribute, id]);
-
-  return { id, ref };
-}
-
-function Popover({ ...props }: DialogTriggerPrimitiveProps) {
-  return <DialogTriggerPrimitive {...props} />;
-}
-
-function PopoverTrigger({
-  className,
-  ...props
-}: Omit<ButtonPrimitiveProps, "className"> & { className?: string }) {
-  return (
-    <ButtonPrimitive
-      data-slot="popover-trigger"
-      {...(className === undefined ? {} : { className })}
-      {...props}
-    />
-  );
+function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
 function PopoverContent({
@@ -66,33 +16,28 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
-  children,
   ...props
-}: Omit<
-  PopoverPrimitiveProps,
-  "className" | "children" | "placement" | "offset" | "crossOffset"
-> & {
-  className?: string;
-  children?: React.ReactNode;
-  align?: Align;
-  alignOffset?: number;
-  side?: Side;
-  sideOffset?: number;
-}) {
+}: PopoverPrimitive.Popup.Props &
+  Pick<PopoverPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
   return (
-    <PopoverPrimitive
-      data-slot="popover-content"
-      placement={toPlacement(side, align)}
-      offset={sideOffset}
-      crossOffset={alignOffset}
-      className={cn(
-        "gap-4 rounded-2xl bg-popover p-4 text-base text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-[placement=bottom]:slide-in-from-top-2 data-[placement=left]:slide-in-from-right-2 data-[placement=right]:slide-in-from-left-2 data-[placement=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 flex flex-col z-50 w-72 origin-(--trigger-anchor-point) outline-hidden",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </PopoverPrimitive>
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        side={side}
+        sideOffset={sideOffset}
+        className="isolate z-50"
+      >
+        <PopoverPrimitive.Popup
+          data-slot="popover-content"
+          className={cn(
+            "flex flex-col gap-4 rounded-2xl bg-popover p-4 text-base text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-start-2 data-[side=inline-start]:slide-in-from-end-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 w-72 origin-(--transform-origin) outline-hidden",
+            className,
+          )}
+          {...props}
+        />
+      </PopoverPrimitive.Positioner>
+    </PopoverPrimitive.Portal>
   );
 }
 
@@ -106,13 +51,9 @@ function PopoverHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
-  const { id, ref } = useLabelling<HTMLHeadingElement>("aria-labelledby");
-
+function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
   return (
-    <h2
-      ref={ref}
-      id={id}
+    <PopoverPrimitive.Title
       data-slot="popover-title"
       className={cn("text-base font-semibold", className)}
       {...props}
@@ -120,13 +61,9 @@ function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
   );
 }
 
-function PopoverDescription({ className, ...props }: React.ComponentProps<"p">) {
-  const { id, ref } = useLabelling<HTMLParagraphElement>("aria-describedby");
-
+function PopoverDescription({ className, ...props }: PopoverPrimitive.Description.Props) {
   return (
-    <p
-      ref={ref}
-      id={id}
+    <PopoverPrimitive.Description
       data-slot="popover-description"
       className={cn("text-muted-foreground", className)}
       {...props}

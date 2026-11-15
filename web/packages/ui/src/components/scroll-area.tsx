@@ -1,29 +1,47 @@
-"use client";
-
-import type * as React from "react";
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import { cn } from "@access/ui/lib/utils";
 
-function ScrollArea({ className, children, ...props }: React.ComponentProps<"div">) {
+function ScrollArea({ className, children, ...props }: ScrollAreaPrimitive.Root.Props) {
   return (
-    <div data-slot="scroll-area" className={cn("relative", className)} {...props}>
-      <div
+    <ScrollAreaPrimitive.Root
+      data-slot="scroll-area"
+      className={cn("relative", className)}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable viewport is reachable by keyboard
-        tabIndex={0}
-        className="[scrollbar-color:var(--color-border)_transparent] [scrollbar-width:thin] focus-visible:ring-3 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-ring/50 focus-visible:outline-1 overflow-auto"
+        className="focus-visible:ring-3 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
-      </div>
-    </div>
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
   );
 }
 
-function ScrollBar(
-  _props: React.ComponentProps<"div"> & {
-    orientation?: "vertical" | "horizontal";
-  },
-) {
-  return null;
+function ScrollBar({
+  className,
+  orientation = "vertical",
+  ...props
+}: ScrollAreaPrimitive.Scrollbar.Props) {
+  return (
+    <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
+      data-orientation={orientation}
+      orientation={orientation}
+      className={cn(
+        "z-10 data-horizontal:mx-2 data-horizontal:mb-1 data-horizontal:h-2.25 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:my-2 data-vertical:me-1 data-vertical:w-2.25 data-vertical:border-s data-vertical:border-s-transparent flex touch-none p-px transition-colors select-none",
+        className,
+      )}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Thumb
+        data-slot="scroll-area-thumb"
+        className="rounded-full relative flex-1 bg-border"
+      />
+    </ScrollAreaPrimitive.Scrollbar>
+  );
 }
 
 export { ScrollArea, ScrollBar };

@@ -1,5 +1,6 @@
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
 import { cn } from "@access/ui/lib/utils";
 
 const badgeVariants = cva(
@@ -29,17 +30,21 @@ function Badge({
   variant = "default",
   render,
   ...props
-}: React.ComponentProps<"span"> & {
-  render?: (props: React.HTMLAttributes<HTMLElement>) => React.ReactNode;
-} & VariantProps<typeof badgeVariants>) {
-  const merged = {
-    "data-slot": "badge",
-    "data-variant": variant,
-    className: cn(badgeVariants({ variant }), className),
-    ...props,
-  };
-  if (render) return render(merged as React.HTMLAttributes<HTMLElement>);
-  return <span {...merged} />;
+}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+  return useRender({
+    defaultTagName: "span",
+    props: mergeProps<"span">(
+      {
+        className: cn(badgeVariants({ variant }), className),
+      },
+      props,
+    ),
+    render,
+    state: {
+      slot: "badge",
+      variant,
+    },
+  });
 }
 
 export { Badge };

@@ -96,7 +96,7 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="outline"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "putProxyPlainHeaders",
                               "PUT",
@@ -113,7 +113,7 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "retireProxy",
                               "POST",
@@ -250,7 +250,7 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
             hint={t("proxyRoutesHint")}
           />
           <div className={ACTIONS}>
-            <Button type="submit" isDisabled={!ready}>
+            <Button type="submit" disabled={!ready}>
               {t("proxyRegisterSend")}
             </Button>
           </div>

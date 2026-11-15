@@ -1,5 +1,3 @@
-"use client";
-
 import { cva, type VariantProps } from "class-variance-authority";
 import { createContext, useContext, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { Label } from "@access/ui/components/label";

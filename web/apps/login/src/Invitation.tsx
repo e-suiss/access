@@ -154,7 +154,7 @@ export function Invitation() {
                 </a>
               </p>
             )}
-            <Button {...primary} disabled={busy} onPress={() => void join(state.invite, false)}>
+            <Button {...primary} disabled={busy} onClick={() => void join(state.invite, false)}>
               {t("action.accept_invitation")}
             </Button>
           </>
@@ -167,7 +167,7 @@ export function Invitation() {
             <p role="alert" className={warning}>
               {t("page.invitation_unconfirmed_domain", { domain: state.invite.invitee_domain })}
             </p>
-            <Button {...primary} disabled={busy} onPress={() => void join(state.invite, true)}>
+            <Button {...primary} disabled={busy} onClick={() => void join(state.invite, true)}>
               {t("page.invitation_join_anyway")}
             </Button>
           </>

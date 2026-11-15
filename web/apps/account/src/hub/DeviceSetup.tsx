@@ -33,8 +33,8 @@ export function DeviceSetup({
       )}
       <Actions>
         <Button
-          isDisabled={!supported || busy}
-          onPress={() => {
+          disabled={!supported || busy}
+          onClick={() => {
             setBusy(true);
             setMessage(null);
             register(session.realm, session.account, session.pep, confirm)

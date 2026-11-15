@@ -81,7 +81,7 @@ export function MagicLink() {
         {state.phase === "confirm" && (
           <>
             {!state.sameDevice && <p className={note}>{t("page.link_other_device")}</p>}
-            <Button {...primary} disabled={busy} onPress={() => void confirm(!state.sameDevice)}>
+            <Button {...primary} disabled={busy} onClick={() => void confirm(!state.sameDevice)}>
               {t("page.link_confirm")}
             </Button>
           </>

@@ -283,11 +283,11 @@ export function Ciba() {
               <Button
                 {...primary}
                 disabled={busy || state.preview.contribution_basis === null}
-                onPress={() => void approve(state.preview)}
+                onClick={() => void approve(state.preview)}
               >
                 {t("action.approve_access")}
               </Button>
-              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+              <Button {...quiet} disabled={busy} onClick={() => void decline(state.preview)}>
                 {t("action.decline_access")}
               </Button>
             </div>
@@ -310,7 +310,7 @@ export function Ciba() {
             <div className="flex flex-col gap-2">
               <Button
                 {...primary}
-                onPress={() => {
+                onClick={() => {
                   confirmed.current?.(true);
                 }}
               >
@@ -318,7 +318,7 @@ export function Ciba() {
               </Button>
               <Button
                 {...quiet}
-                onPress={() => {
+                onClick={() => {
                   confirmed.current?.(false);
                 }}
               >
@@ -341,11 +341,11 @@ export function Ciba() {
               <Button
                 {...primary}
                 disabled={busy}
-                onPress={() => void assert(state.preview, state.started)}
+                onClick={() => void assert(state.preview, state.started)}
               >
                 {t("action.approve_access")}
               </Button>
-              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+              <Button {...quiet} disabled={busy} onClick={() => void decline(state.preview)}>
                 {t("action.decline_access")}
               </Button>
             </div>

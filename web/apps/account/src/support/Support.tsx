@@ -130,8 +130,8 @@ export function SupportPage({
                 <Button
                   variant="outline"
                   className="self-start"
-                  isDisabled={busy}
-                  onPress={() => {
+                  disabled={busy}
+                  onClick={() => {
                     const standing = give.standing;
                     if (standing === undefined) return;
                     signed(`${path}/give`, standing, t("support.read_only"));
@@ -167,8 +167,8 @@ export function SupportPage({
                       <Button
                         variant="outline"
                         size="sm"
-                        isDisabled={busy}
-                        onPress={() => {
+                        disabled={busy}
+                        onClick={() => {
                           const { revoke, basis } = a;
                           if (revoke === undefined || basis === undefined) return;
                           signed(

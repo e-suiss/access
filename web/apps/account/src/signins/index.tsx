@@ -111,16 +111,16 @@ function Row(props: {
       </ItemContent>
       <ItemActions>
         {current ? (
-          <Button variant="outline" size="sm" isDisabled={props.busy} onPress={props.signOut}>
+          <Button variant="outline" size="sm" disabled={props.busy} onClick={props.signOut}>
             {t("action.sign_out")}
           </Button>
         ) : (
           <Button
             variant="outline"
             size="sm"
-            isDisabled={props.busy}
+            disabled={props.busy}
             aria-label={`${t("action.end_sign_in")}: ${device}`}
-            onPress={() => {
+            onClick={() => {
               props.end(s);
             }}
           >
@@ -254,7 +254,7 @@ export function SignIns(): ReactElement {
                 ))}
               </Rows>
               <Actions>
-                <Button variant="outline" isDisabled={busy} onPress={signOutEverywhere}>
+                <Button variant="outline" disabled={busy} onClick={signOutEverywhere}>
                   {t("action.sign_out_everywhere")}
                 </Button>
               </Actions>

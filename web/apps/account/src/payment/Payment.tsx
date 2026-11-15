@@ -50,7 +50,7 @@ export function OneTimePaymentPage({
         {next === "retry_same_nonce" && (
           <Actions>
             <Button
-              onPress={() => {
+              onClick={() => {
                 void paying.retry().then(setPaying);
               }}
             >

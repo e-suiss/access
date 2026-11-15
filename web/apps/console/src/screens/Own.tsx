@@ -104,7 +104,7 @@ export function Sessions({ onEnded }: { readonly onEnded: () => void }): ReactEl
                     <Button
                       variant="destructive"
                       size="sm"
-                      onPress={() => {
+                      onClick={() => {
                         end(r);
                       }}
                     >

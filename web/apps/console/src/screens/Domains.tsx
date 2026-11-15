@@ -93,7 +93,7 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <Button
                         variant="outline"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           send(
                             "bindDomainIssuer",
                             `domains/${encodeURIComponent(d.host)}/issuer-bind`,
@@ -107,7 +107,7 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <Button
                         variant="outline"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           send(
                             "bindDomainIssuer",
                             `domains/${encodeURIComponent(d.host)}/issuer-bind`,
@@ -125,7 +125,7 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       variant="destructive"
                       size="sm"
                       className="self-start"
-                      onPress={() => {
+                      onClick={() => {
                         send(
                           "retireDomain",
                           `domains/${encodeURIComponent(d.host)}/retire`,
@@ -164,7 +164,7 @@ export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
             }}
           />
         </label>
-        <Button type="submit" isDisabled={host === ""}>
+        <Button type="submit" disabled={host === ""}>
           {t("domainRegister")}
         </Button>
       </form>

@@ -26,12 +26,12 @@ test("a checked option goes with every submission of its step, an unchecked one 
   mock.identifierExtras = [keep];
   mock.authenticateExtras = [remember];
   await page.goto("/");
-  await page.getByLabel("Keep me signed in on this device").check();
+  await page.getByRole("checkbox", { name: "Keep me signed in on this device" }).check();
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Password")).toBeVisible();
   await expect(
-    page.getByLabel("Don't ask for a second step on this device for 30 days"),
+    page.getByRole("checkbox", { name: "Don't ask for a second step on this device for 30 days" }),
   ).not.toBeChecked();
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -207,7 +207,7 @@ test("recovery: the same start for everyone, then the waiting period's end date"
   );
   await page.goto("/login/recovery");
   await page.getByLabel("Email or username").fill("ada@example.org");
-  await page.getByLabel("With a code sent to my email").check();
+  await page.getByRole("radio", { name: "With a code sent to my email" }).check();
   await page.getByRole("button", { name: "Start recovery" }).click();
   await expect(
     page.getByText("If an account exists for these details, we've sent instructions."),

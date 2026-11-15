@@ -51,7 +51,7 @@ export function UpstreamLink({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onChange={setAccount}
         />
         <div className={ACTIONS}>
-          <Button type="submit" isDisabled={upstream === "" || sub === "" || account === ""}>
+          <Button type="submit" disabled={upstream === "" || sub === "" || account === ""}>
             {t("upstreamLinkSave")}
           </Button>
         </div>

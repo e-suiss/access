@@ -115,7 +115,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
             <Button type="submit">{t("run")}</Button>
             <Button
               variant="outline"
-              onPress={() => {
+              onClick={() => {
                 searchPage();
               }}
             >
@@ -139,7 +139,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 <Button
                   variant="outline"
                   className="self-start"
-                  onPress={() => {
+                  onClick={() => {
                     searchPage(token);
                   }}
                 >
@@ -477,7 +477,7 @@ export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
                               <Button
                                 size="sm"
                                 className="ms-auto"
-                                onPress={() => {
+                                onClick={() => {
                                   sign(p);
                                 }}
                               >

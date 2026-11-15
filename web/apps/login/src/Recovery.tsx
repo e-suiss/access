@@ -224,7 +224,7 @@ export function Recovery() {
             </p>
             <Button
               {...quiet}
-              onPress={() => {
+              onClick={() => {
                 setState({ phase: "start" });
               }}
             >
@@ -274,7 +274,7 @@ function AttemptView(props: {
         )}
       </div>
       {proving && sentCode && !props.sent && (
-        <Button {...primary} disabled={props.busy} onPress={props.onSend}>
+        <Button {...primary} disabled={props.busy} onClick={props.onSend}>
           {t("page.recovery_send_code")}
         </Button>
       )}
@@ -300,17 +300,17 @@ function AttemptView(props: {
         </form>
       )}
       {proving && contact && (
-        <Button {...quiet} disabled={props.busy} onPress={props.onExtend}>
+        <Button {...quiet} disabled={props.busy} onClick={props.onExtend}>
           {t("page.recovery_extend")}
         </Button>
       )}
       {a.state === "cooling_down" && (
-        <Button {...primary} disabled={props.busy} onPress={props.onContinue}>
+        <Button {...primary} disabled={props.busy} onClick={props.onContinue}>
           {t("page.recovery_continue")}
         </Button>
       )}
       {(a.state === "evidence_met" || a.state === "cooling_down") && (
-        <Button {...quiet} disabled={props.busy} onPress={props.onRefresh}>
+        <Button {...quiet} disabled={props.busy} onClick={props.onRefresh}>
           {t("page.recovery_refresh")}
         </Button>
       )}

@@ -71,7 +71,7 @@ export function Handles(): ReactElement {
                     <Button
                       variant="outline"
                       size="sm"
-                      onPress={() => {
+                      onClick={() => {
                         post(`/v1/me/handles/${encodeURIComponent(h.id)}/verify`);
                       }}
                     >
@@ -82,7 +82,7 @@ export function Handles(): ReactElement {
                     variant="outline"
                     size="sm"
                     aria-label={`${t("handle.remove")}: ${h.handle}`}
-                    onPress={() => {
+                    onClick={() => {
                       post(`/v1/me/handles/${encodeURIComponent(h.id)}/retire`);
                     }}
                   >

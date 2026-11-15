@@ -143,7 +143,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           variant="outline"
                           size="sm"
                           className="ms-auto"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "retireExportSink",
                               `export-sinks/${encodeURIComponent(s.name)}/retire`,
@@ -234,7 +234,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
             />
             <FieldDescription id="export-secret-hint">{t("exportSecretHint")}</FieldDescription>
           </FieldRoot>
-          <Button type="submit" className="self-start" isDisabled={name === "" || endpoint === ""}>
+          <Button type="submit" className="self-start" disabled={name === "" || endpoint === ""}>
             {t("exportRegisterSend")}
           </Button>
         </form>

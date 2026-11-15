@@ -128,10 +128,10 @@ export function Consent() {
             </ul>
             <p className={note}>{t("page.consent_stop")}</p>
             <div className="flex flex-col gap-2">
-              <Button {...primary} disabled={busy} onPress={() => void share()}>
+              <Button {...primary} disabled={busy} onClick={() => void share()}>
                 {t("action.share")}
               </Button>
-              <Button {...quiet} disabled={busy} onPress={() => void decline()}>
+              <Button {...quiet} disabled={busy} onClick={() => void decline()}>
                 {t("action.dont_share")}
               </Button>
             </div>

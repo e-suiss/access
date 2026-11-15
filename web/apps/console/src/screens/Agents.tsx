@@ -158,7 +158,7 @@ function AgentView({ a, ctx }: { readonly a: Agent; readonly ctx: Ctx }): ReactE
                 <Button
                   variant="destructive"
                   size="sm"
-                  onPress={() => {
+                  onClick={() => {
                     end(i);
                   }}
                 >
@@ -208,7 +208,7 @@ export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           variant={open === a.agent ? "tinted" : "outline"}
                           size="sm"
                           aria-pressed={open === a.agent}
-                          onPress={() => {
+                          onClick={() => {
                             setOpen(a.agent);
                             run(() =>
                               adminGet<Agent>(

@@ -1,146 +1,40 @@
-"use client";
-
-import * as React from "react";
+import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar";
+import type * as React from "react";
 import { cn } from "@access/ui/lib/utils";
-
-type ImageStatus = "idle" | "loading" | "loaded" | "error";
-
-const AvatarContext = React.createContext<{
-  status: ImageStatus;
-  setStatus: (status: ImageStatus) => void;
-} | null>(null);
 
 function Avatar({
   className,
   size = "default",
   ...props
-}: React.ComponentProps<"span"> & {
+}: AvatarPrimitive.Root.Props & {
   size?: "default" | "sm" | "lg" | "xl";
 }) {
-  const [status, setStatus] = React.useState<ImageStatus>("idle");
-
   return (
-    <AvatarContext.Provider value={{ status, setStatus }}>
-      <span
-        data-slot="avatar"
-        data-size={size}
-        className={cn(
-          "size-8 rounded-full data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=xl]:size-16 group/avatar relative flex shrink-0 select-none",
-          className,
-        )}
-        {...props}
-      />
-    </AvatarContext.Provider>
+    <AvatarPrimitive.Root
+      data-slot="avatar"
+      data-size={size}
+      className={cn(
+        "size-8 rounded-full data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=xl]:size-16 group/avatar relative flex shrink-0 select-none",
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
-const loadedImages = new Set<string>();
-const loadedListeners = new Set<() => void>();
-
-function markImageLoaded(key: string) {
-  if (loadedImages.has(key)) return;
-  loadedImages.add(key);
-  for (const listener of loadedListeners) listener();
-}
-
-function subscribeLoadedImages(listener: () => void) {
-  loadedListeners.add(listener);
-  return () => {
-    loadedListeners.delete(listener);
-  };
-}
-
-function AvatarImage({
-  alt,
-  className,
-  src,
-  srcSet,
-  sizes,
-  crossOrigin,
-  referrerPolicy,
-  ...props
-}: React.ComponentProps<"img">) {
-  const context = React.useContext(AvatarContext);
-  const [result, setResult] = React.useState<{
-    key: string;
-    status: ImageStatus;
-  } | null>(null);
-  const report = context?.setStatus;
-  const key = JSON.stringify([src, srcSet, sizes, crossOrigin, referrerPolicy]);
-  const cached = React.useSyncExternalStore(
-    subscribeLoadedImages,
-    () => loadedImages.has(key),
-    () => false,
-  );
-  let status: ImageStatus = cached ? "loaded" : "loading";
-  if (result?.key === key) status = result.status;
-  if (!src && !srcSet) status = "error";
-
-  React.useLayoutEffect(() => {
-    if (!src && !srcSet) {
-      report?.("error");
-      return;
-    }
-    let active = true;
-    const image = new window.Image();
-    const update = (next: ImageStatus) => {
-      if (!active) return;
-      if (next === "loaded") markImageLoaded(key);
-      setResult({ key, status: next });
-      report?.(next);
-    };
-    report?.("loading");
-    image.onload = () => update("loaded");
-    image.onerror = () => update("error");
-    if (crossOrigin !== undefined) image.crossOrigin = crossOrigin;
-    if (referrerPolicy) image.referrerPolicy = referrerPolicy;
-    if (sizes) image.sizes = sizes;
-    if (srcSet) image.srcset = srcSet;
-    if (typeof src === "string") image.src = src;
-    if (image.complete && image.naturalWidth > 0) {
-      markImageLoaded(key);
-      report?.("loaded");
-    }
-    return () => {
-      active = false;
-    };
-  }, [key, src, srcSet, sizes, crossOrigin, referrerPolicy, report]);
-
-  if (status !== "loaded") return null;
-
+function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
   return (
-    <img
-      alt={alt}
+    <AvatarPrimitive.Image
       data-slot="avatar-image"
-      src={src}
-      srcSet={srcSet}
-      sizes={sizes}
-      crossOrigin={crossOrigin}
-      referrerPolicy={referrerPolicy}
       className={cn("rounded-full aspect-square size-full object-cover", className)}
       {...props}
     />
   );
 }
 
-function AvatarFallback({
-  className,
-  delay,
-  ...props
-}: React.ComponentProps<"span"> & { delay?: number }) {
-  const context = React.useContext(AvatarContext);
-  const [ready, setReady] = React.useState(delay === undefined);
-
-  React.useEffect(() => {
-    if (delay === undefined) return;
-    const timeout = window.setTimeout(() => setReady(true), delay);
-    return () => window.clearTimeout(timeout);
-  }, [delay]);
-
-  if (context?.status === "loaded" || !ready) return null;
-
+function AvatarFallback({ className, ...props }: AvatarPrimitive.Fallback.Props) {
   return (
-    <span
+    <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
         "size-full group-data-[size=sm]/avatar:text-xs rounded-full bg-linear-to-b from-muted-foreground/90 to-muted-foreground text-xs font-semibold text-primary-foreground uppercase group-data-[size=lg]/avatar:text-base group-data-[size=xl]/avatar:text-2xl dark:from-muted-foreground/70 dark:to-muted-foreground/50 flex items-center justify-center *:[svg]:size-3/5",

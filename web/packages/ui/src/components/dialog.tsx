@@ -1,72 +1,34 @@
-import * as React from "react";
-import {
-  Button as ButtonPrimitive,
-  type ButtonProps as ButtonPrimitiveProps,
-  Dialog as DialogPrimitive,
-  type DialogProps as DialogPrimitiveProps,
-  DialogTrigger as DialogTriggerPrimitive,
-  type DialogTriggerProps as DialogTriggerPrimitiveProps,
-  Heading,
-  type HeadingProps,
-  ModalOverlay as ModalOverlayPrimitive,
-  type ModalOverlayProps as ModalOverlayPrimitiveProps,
-  Modal as ModalPrimitive,
-} from "react-aria-components";
-import { Button } from "@access/ui/components/button";
-import { cn, defined } from "@access/ui/lib/utils";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import type * as React from "react";
 import { XIcon } from "@phosphor-icons/react";
+import { Button } from "@access/ui/components/button";
+import { useScrollbarGap } from "@access/ui/hooks/use-scrollbar-gap";
+import { cn } from "@access/ui/lib/utils";
 
-type DescriptionContextValue = {
-  id: string;
-  setDescribed: (described: boolean) => void;
-};
-
-const DialogDescriptionContext = React.createContext<DescriptionContextValue | null>(null);
-
-function Dialog({ ...props }: DialogTriggerPrimitiveProps) {
-  return <DialogTriggerPrimitive {...props} />;
+function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogTrigger({
-  className,
-  ...props
-}: Omit<ButtonPrimitiveProps, "className"> & { className?: string }) {
+function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
+}
+
+function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+}
+
+function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
+}
+
+function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+  useScrollbarGap();
+
   return (
-    <ButtonPrimitive
-      data-slot="dialog-trigger"
-      {...(className === undefined ? {} : { className })}
-      {...props}
-    />
-  );
-}
-
-function DialogPortal({ children }: { children?: React.ReactNode }) {
-  return children;
-}
-
-function DialogClose({
-  className,
-  ...props
-}: Omit<ButtonPrimitiveProps, "className"> & { className?: string }) {
-  return (
-    <ButtonPrimitive
-      slot="close"
-      data-slot="dialog-close"
-      {...(className === undefined ? {} : { className })}
-      {...props}
-    />
-  );
-}
-
-function DialogOverlay({
-  className,
-  ...props
-}: Omit<ModalOverlayPrimitiveProps, "className"> & { className?: string }) {
-  return (
-    <ModalOverlayPrimitive
+    <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "bg-black/50 duration-100 data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 fixed inset-0 isolate z-50",
+        "bg-black/50 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 fixed inset-0 isolate z-50",
         className,
       )}
       {...props}
@@ -79,64 +41,50 @@ function DialogContent({
   children,
   showCloseButton = true,
   closeLabel,
-  isDismissable = true,
-  isKeyboardDismissDisabled,
   ...props
-}: Omit<DialogPrimitiveProps, "className" | "children"> & {
-  className?: string;
-  children?: React.ReactNode;
+}: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   closeLabel?: string;
-  isDismissable?: boolean;
-  isKeyboardDismissDisabled?: boolean;
 }) {
-  const descriptionId = React.useId();
-  const [described, setDescribed] = React.useState(false);
-  const description = React.useMemo(() => ({ id: descriptionId, setDescribed }), [descriptionId]);
-
   return (
-    <DialogOverlay
-      isDismissable={isDismissable}
-      {...(isKeyboardDismissDisabled === undefined ? {} : { isKeyboardDismissDisabled })}
-    >
-      <ModalPrimitive>
-        <DialogPrimitive
-          data-slot="dialog-content"
-          {...(described ? { "aria-describedby": descriptionId } : {})}
-          className={cn(
-            "-translate-x-1/2 max-w-[calc(100%-2rem)] rtl:translate-x-1/2 gap-6 rounded-2xl bg-popover p-6 text-base text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-100 sm:max-w-md dark:ring-foreground/10 in-data-entering:animate-in in-data-entering:fade-in-0 in-data-entering:zoom-in-95 in-data-exiting:animate-out in-data-exiting:fade-out-0 in-data-exiting:zoom-out-95 inset-s-1/2 grid fixed top-1/2 z-50 w-full -translate-y-1/2 outline-none has-[>[data-slot=dialog-close]]:*:first:pe-8 has-[>[data-slot=dialog-close][data-label]]:*:first:pe-18",
-            className,
-          )}
-          {...defined(props)}
-        >
-          <DialogDescriptionContext.Provider value={description}>
-            {children}
-          </DialogDescriptionContext.Provider>
-          {showCloseButton && (
-            <Button
-              slot="close"
-              data-slot="dialog-close"
-              data-label={closeLabel ? "" : undefined}
-              variant={closeLabel ? "plain" : "ghost"}
-              className={cn(
-                "top-4.75 absolute inset-e-4",
-                closeLabel && "text-base",
-                !closeLabel &&
-                  "bg-secondary hover:bg-[color-mix(in_oklab,var(--secondary),var(--foreground)_5%)]",
-              )}
-              size={closeLabel ? "sm" : "icon-sm"}
-            >
-              {closeLabel ?? (
-                <>
-                  <XIcon />
-                  <span className="sr-only">Close</span>
-                </>
-              )}
-            </Button>
-          )}
-        </DialogPrimitive>
-      </ModalPrimitive>
-    </DialogOverlay>
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
+        className={cn(
+          "-translate-x-1/2 inset-s-1/2 grid max-w-[calc(100%-2rem)] rtl:translate-x-1/2 gap-6 rounded-2xl bg-popover p-6 text-base text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-100 sm:max-w-md dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 fixed top-1/2 z-50 w-full -translate-y-1/2 outline-none has-[>[data-slot=dialog-close]]:*:first:pe-8 has-[>[data-slot=dialog-close][data-label]]:*:first:pe-18",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            data-label={closeLabel ? "" : undefined}
+            render={
+              <Button
+                variant={closeLabel ? "plain" : "ghost"}
+                className={cn(
+                  "absolute top-4.75 inset-e-4",
+                  closeLabel && "text-base",
+                  !closeLabel &&
+                    "bg-secondary hover:bg-[color-mix(in_oklab,var(--secondary),var(--foreground)_5%)]",
+                )}
+                size={closeLabel ? "sm" : "icon-sm"}
+              />
+            }
+          >
+            {closeLabel ?? (
+              <>
+                <XIcon />
+                <span className="sr-only">Close</span>
+              </>
+            )}
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Popup>
+    </DialogPortal>
   );
 }
 
@@ -162,41 +110,25 @@ function DialogFooter({
     >
       {children}
       {showCloseButton && (
-        <Button slot="close" variant="secondary">
-          Close
-        </Button>
+        <DialogPrimitive.Close render={<Button variant="secondary" />}>Close</DialogPrimitive.Close>
       )}
     </div>
   );
 }
 
-function DialogTitle({
-  className,
-  ...props
-}: Omit<HeadingProps, "className"> & { className?: string }) {
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
-    <Heading
-      slot="title"
-      level={2}
+    <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-base font-semibold", className)}
+      className={cn("cn-font-heading text-base font-semibold", className)}
       {...props}
     />
   );
 }
 
-function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
-  const context = React.useContext(DialogDescriptionContext);
-
-  React.useLayoutEffect(() => {
-    if (!context) return;
-    context.setDescribed(true);
-    return () => context.setDescribed(false);
-  }, [context]);
-
+function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
   return (
-    <p
-      id={context?.id}
+    <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
         "text-sm text-muted-foreground *:[a]:underline *:[a]:hover:text-foreground",

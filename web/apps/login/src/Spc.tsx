@@ -168,7 +168,7 @@ export function Spc() {
         <Button
           {...primary}
           disabled={busy}
-          onPress={() => {
+          onClick={() => {
             void confirm(state.started);
           }}
         >

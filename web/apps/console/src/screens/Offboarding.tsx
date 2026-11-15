@@ -374,8 +374,8 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
         variant="destructive"
         className="self-start"
         data-testid="depart"
-        isDisabled={!decided || elsewhere || offboarded}
-        onPress={() => {
+        disabled={!decided || elsewhere || offboarded}
+        onClick={() => {
           if (anchor === undefined || reentry === undefined) return;
           write(() => commit(ctx, p, { grants, instances, holdings, anchor, reentry }));
         }}
@@ -416,8 +416,8 @@ export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
           variant="outline"
           className="self-start"
           data-testid="preview"
-          isDisabled={party === ""}
-          onPress={preview}
+          disabled={party === ""}
+          onClick={preview}
         >
           {t("offboardingPreview")}
         </Button>

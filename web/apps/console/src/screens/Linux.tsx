@@ -94,7 +94,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="outline"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "putLinuxOfflinePolicy",
                               "PUT",
@@ -109,7 +109,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant={h.break_glass ? "outline" : "destructive"}
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "putLinuxBreakGlassPolicy",
                               "PUT",
@@ -126,7 +126,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="outline"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send("retireLinuxHost", "POST", at(h, "retire"), {}, h.name);
                           }}
                         >
@@ -178,7 +178,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
           <Button
             type="submit"
             className="self-start"
-            isDisabled={name === "" || group === "" || certificate === ""}
+            disabled={name === "" || group === "" || certificate === ""}
           >
             {t("linuxHostRegisterSend")}
           </Button>

@@ -62,7 +62,7 @@ export function Approvers(): ReactElement {
                   variant="outline"
                   size="sm"
                   aria-label={`${t("approvers.remove")}: ${a.name}`}
-                  onPress={() => {
+                  onClick={() => {
                     void json(
                       frontend(`/v1/approvers/${encodeURIComponent(a.id)}/retire`, {
                         method: "POST",

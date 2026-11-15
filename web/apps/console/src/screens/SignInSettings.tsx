@@ -191,7 +191,7 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
             {t("settingsCspLoosens")}
           </Notice>
         )}
-        <Button type="submit" className="self-start" isDisabled={mode === current}>
+        <Button type="submit" className="self-start" disabled={mode === current}>
           {t("settingsSave")}
         </Button>
       </form>
@@ -240,7 +240,7 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
             />
             {t("settingsDbsc")}
           </label>
-          <Button type="submit" className="self-start" isDisabled={dbsc === current}>
+          <Button type="submit" className="self-start" disabled={dbsc === current}>
             {t("settingsSave")}
           </Button>
         </form>
@@ -393,7 +393,7 @@ function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
             hint={t("settingsRpCountHint")}
             type="number"
           />
-          <Button type="submit" className="self-start" isDisabled={rp === "" || count === ""}>
+          <Button type="submit" className="self-start" disabled={rp === "" || count === ""}>
             {t("settingsSave")}
           </Button>
         </form>

@@ -272,11 +272,11 @@ export function Approval() {
               <Button
                 {...primary}
                 disabled={busy || state.preview.draft === null}
-                onPress={() => void approve(state.preview)}
+                onClick={() => void approve(state.preview)}
               >
                 {t("action.approve_access")}
               </Button>
-              <Button {...quiet} disabled={busy} onPress={() => void decline(state.preview)}>
+              <Button {...quiet} disabled={busy} onClick={() => void decline(state.preview)}>
                 {t("action.decline_access")}
               </Button>
             </div>
@@ -299,7 +299,7 @@ export function Approval() {
             <div className="flex flex-col gap-2">
               <Button
                 {...primary}
-                onPress={() => {
+                onClick={() => {
                   confirmed.current?.(true);
                 }}
               >
@@ -307,7 +307,7 @@ export function Approval() {
               </Button>
               <Button
                 {...quiet}
-                onPress={() => {
+                onClick={() => {
                   confirmed.current?.(false);
                 }}
               >

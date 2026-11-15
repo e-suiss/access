@@ -1,11 +1,5 @@
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { type CxOptions, cva, cx, type VariantProps } from "class-variance-authority";
-import type * as React from "react";
-import {
-  Button as ButtonPrimitive,
-  type ButtonProps as ButtonPrimitiveProps,
-  Link as LinkPrimitive,
-  type LinkProps as LinkPrimitiveProps,
-} from "react-aria-components";
 import { cn } from "@access/ui/lib/utils";
 
 const buttonStyles = cva(
@@ -88,15 +82,8 @@ function Button({
   variant,
   size,
   block,
-  disabled,
-  isDisabled = disabled,
   ...props
-}: Omit<ButtonPrimitiveProps, "className"> &
-  React.RefAttributes<HTMLButtonElement> &
-  VariantProps<typeof buttonVariants> & {
-    className?: string;
-    disabled?: boolean;
-  }) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -104,31 +91,8 @@ function Button({
       data-size={size ?? "default"}
       className={cn(buttonVariants({ variant, size, block, className }))}
       {...props}
-      {...(isDisabled === undefined ? {} : { isDisabled })}
     />
   );
 }
 
-function LinkButton({
-  className,
-  variant,
-  size,
-  block,
-  ...props
-}: Omit<LinkPrimitiveProps, "className"> &
-  React.RefAttributes<HTMLAnchorElement> &
-  VariantProps<typeof buttonVariants> & {
-    className?: string;
-  }) {
-  return (
-    <LinkPrimitive
-      data-slot="button"
-      data-variant={variant ?? "default"}
-      data-size={size ?? "default"}
-      className={cn(buttonVariants({ variant, size, block, className }))}
-      {...props}
-    />
-  );
-}
-
-export { Button, buttonVariants, LinkButton };
+export { Button, buttonVariants };

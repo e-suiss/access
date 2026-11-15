@@ -137,10 +137,10 @@ export function Device() {
                   })}
             </p>
             <div className="flex flex-col gap-2">
-              <Button {...primary} disabled={busy} onPress={() => void decide(state, true)}>
+              <Button {...primary} disabled={busy} onClick={() => void decide(state, true)}>
                 {t("action.approve_access")}
               </Button>
-              <Button {...quiet} disabled={busy} onPress={() => void decide(state, false)}>
+              <Button {...quiet} disabled={busy} onClick={() => void decide(state, false)}>
                 {t("action.decline_access")}
               </Button>
             </div>

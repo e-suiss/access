@@ -1,77 +1,16 @@
-import * as React from "react";
-import {
-  Button as ButtonPrimitive,
-  type ButtonProps as ButtonPrimitiveProps,
-  OverlayArrow,
-  type Placement,
-  Tooltip as TooltipPrimitive,
-  type TooltipProps as TooltipPrimitiveProps,
-  type TooltipTriggerComponentProps,
-  TooltipTrigger as TooltipTriggerPrimitive,
-} from "react-aria-components";
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "@access/ui/lib/utils";
 
-type Side = "top" | "right" | "bottom" | "left" | "inline-start" | "inline-end";
-type Align = "start" | "center" | "end";
-
-const AXES = {
-  top: "top",
-  right: "right",
-  bottom: "bottom",
-  left: "left",
-  "inline-start": "start",
-  "inline-end": "end",
-} as const;
-
-function toPlacement(side: Side, align: Align): Placement {
-  const axis = AXES[side];
-  if (align === "center") return axis;
-  if (axis === "top" || axis === "bottom") return `${axis} ${align}`;
-  return `${axis} ${align === "start" ? "top" : "bottom"}`;
+function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
+  return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
 }
 
-type TooltipDelay = {
-  delay?: number;
-  closeDelay?: number;
-};
-
-const TooltipProviderContext = React.createContext<TooltipDelay>({});
-
-function TooltipProvider({
-  delay = 0,
-  closeDelay = 0,
-  children,
-}: TooltipDelay & { children?: React.ReactNode }) {
-  const value = React.useMemo(() => ({ delay, closeDelay }), [delay, closeDelay]);
-
-  return (
-    <TooltipProviderContext.Provider value={value}>{children}</TooltipProviderContext.Provider>
-  );
+function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
-function Tooltip({ delay, closeDelay, ...props }: TooltipTriggerComponentProps) {
-  const provider = React.useContext(TooltipProviderContext);
-
-  return (
-    <TooltipTriggerPrimitive
-      delay={delay ?? provider.delay ?? 600}
-      closeDelay={closeDelay ?? provider.closeDelay ?? 0}
-      {...props}
-    />
-  );
-}
-
-function TooltipTrigger({
-  className,
-  ...props
-}: Omit<ButtonPrimitiveProps, "className"> & { className?: string }) {
-  return (
-    <ButtonPrimitive
-      data-slot="tooltip-trigger"
-      {...(className === undefined ? {} : { className })}
-      {...props}
-    />
-  );
+function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
 function TooltipContent({
@@ -82,45 +21,30 @@ function TooltipContent({
   alignOffset = 0,
   children,
   ...props
-}: Omit<
-  TooltipPrimitiveProps,
-  "className" | "children" | "placement" | "offset" | "crossOffset"
-> & {
-  className?: string;
-  children?: React.ReactNode;
-  align?: Align;
-  alignOffset?: number;
-  side?: Side;
-  sideOffset?: number;
-}) {
+}: TooltipPrimitive.Popup.Props &
+  Pick<TooltipPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
   return (
-    <TooltipPrimitive
-      data-slot="tooltip-content"
-      placement={toPlacement(side, align)}
-      offset={sideOffset}
-      crossOffset={alignOffset}
-      className={cn(
-        "items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs has-data-[slot=kbd]:pe-1.5 data-[placement=bottom]:slide-in-from-top-2 data-[placement=left]:slide-in-from-right-2 data-[placement=right]:slide-in-from-left-2 data-[placement=top]:slide-in-from-bottom-2 data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 inline-flex z-50 w-fit max-w-xs origin-(--trigger-anchor-point) bg-foreground text-background **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <OverlayArrow
-        className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-xs bg-foreground fill-foreground data-[placement=bottom]:top-1 data-[placement=bottom]:-translate-x-1/2 data-[placement=left]:top-1/2! data-[placement=left]:-right-1 data-[placement=left]:translate-x-[-1.5px] rtl:data-[placement=left]:translate-x-[1.5px] data-[placement=left]:-translate-y-1/2 data-[placement=right]:top-1/2! data-[placement=right]:-left-1 data-[placement=right]:translate-x-[1.5px] rtl:data-[placement=right]:translate-x-[-1.5px] data-[placement=right]:-translate-y-1/2 data-[placement=top]:-bottom-2.5 data-[placement=top]:-translate-x-1/2"
-        style={({ placement, defaultStyle }) => {
-          const { top, bottom, left, right, transform, ...style } = defaultStyle;
-          if (placement === "top" || placement === "bottom")
-            return { ...style, left, transform: "none" };
-          return {
-            ...style,
-            top,
-            transform: "none",
-            ...(placement === "left" ? { left: "auto" } : { right: "auto" }),
-          };
-        }}
-      />
-    </TooltipPrimitive>
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        side={side}
+        sideOffset={sideOffset}
+        className="isolate z-50"
+      >
+        <TooltipPrimitive.Popup
+          data-slot="tooltip-content"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs has-data-[slot=kbd]:pe-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-start-2 data-[side=inline-start]:slide-in-from-end-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 w-fit max-w-xs origin-(--transform-origin) bg-foreground text-background **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-xs bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-inset-s-1 data-[side=inline-end]:translate-x-[1.5px] rtl:data-[side=inline-end]:translate-x-[-1.5px] data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-inset-e-1 data-[side=inline-start]:translate-x-[-1.5px] rtl:data-[side=inline-start]:translate-x-[1.5px] data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:translate-x-[-1.5px] data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:translate-x-[1.5px] data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+        </TooltipPrimitive.Popup>
+      </TooltipPrimitive.Positioner>
+    </TooltipPrimitive.Portal>
   );
 }
 

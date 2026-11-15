@@ -63,7 +63,7 @@ export function CloudKeys(): ReactElement | null {
                 <Button
                   variant="outline"
                   size="sm"
-                  onPress={() => {
+                  onClick={() => {
                     void json(
                       frontend(`/v1/me/cloud-key-permissions/${encodeURIComponent(p.id)}/revoke`, {
                         method: "POST",

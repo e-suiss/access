@@ -130,7 +130,7 @@ function Passkeys(props: {
                   variant="outline"
                   size="sm"
                   aria-label={`${t("action.remove")}: ${p.name ?? t("methods.passkey_unnamed")}`}
-                  onPress={() => {
+                  onClick={() => {
                     props.remove(p.id);
                   }}
                 >
@@ -155,7 +155,7 @@ function Passkeys(props: {
             }}
           />
         </Field>
-        <Button type="submit" isDisabled={busy}>
+        <Button type="submit" disabled={busy}>
           {t("action.passkey_create")}
         </Button>
       </form>
@@ -213,7 +213,7 @@ function Password(props: {
             <Button type="submit">{t("action.save")}</Button>
             <Button
               variant="outline"
-              onPress={() => {
+              onClick={() => {
                 setOpen(false);
               }}
             >
@@ -225,7 +225,7 @@ function Password(props: {
         <Actions>
           <Button
             variant="outline"
-            onPress={() => {
+            onClick={() => {
               setOpen(true);
             }}
           >
@@ -303,7 +303,7 @@ function Authenticator(props: {
                   variant="outline"
                   size="sm"
                   aria-label={`${t("action.remove")}: ${t("methods.authenticator")}`}
-                  onPress={() => {
+                  onClick={() => {
                     props.remove(m.id);
                   }}
                 >
@@ -316,7 +316,7 @@ function Authenticator(props: {
       )}
       {pending === null ? (
         <Actions>
-          <Button variant="outline" onPress={begin}>
+          <Button variant="outline" onClick={begin}>
             {t("action.add_authenticator")}
           </Button>
         </Actions>
@@ -340,7 +340,7 @@ function Authenticator(props: {
             <Button
               variant="outline"
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 void navigator.clipboard.writeText(pending.secret).then(
                   () => {
                     props.say(t("methods.key_copied"));
@@ -417,7 +417,7 @@ function RecoveryCodes(props: {
           <Actions>
             <Button
               variant="outline"
-              onPress={() => {
+              onClick={() => {
                 void json<{ recovery_codes: string[] }>(
                   frontend("/v1/account/recovery-codes", { method: "POST" }),
                 )
@@ -449,7 +449,7 @@ function RecoveryCodes(props: {
           </ul>
           <Actions>
             <Button
-              onPress={() => {
+              onClick={() => {
                 void json(
                   frontend("/v1/account/recovery-codes/acknowledgement", { method: "POST" }),
                 )

@@ -229,7 +229,7 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                   <Button
                     variant={open === o.organization ? "tinted" : "outline"}
                     aria-pressed={open === o.organization}
-                    onPress={() => {
+                    onClick={() => {
                       setOpen(o.organization);
                       run(() =>
                         adminGet<Organization>(

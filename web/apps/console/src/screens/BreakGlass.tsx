@@ -90,7 +90,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       variant="outline"
                       size="sm"
                       className="ms-auto"
-                      onPress={() => {
+                      onClick={() => {
                         send(
                           "clearBreakglassAccount",
                           `breakglass/accounts/${encodeURIComponent(a.member)}/clear`,
@@ -129,7 +129,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
           <Button
             type="submit"
             className="self-start"
-            isDisabled={organization === "" || member === ""}
+            disabled={organization === "" || member === ""}
           >
             {t("breakglassMark")}
           </Button>
@@ -169,7 +169,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
                             key={c}
                             variant="outline"
                             size="sm"
-                            onPress={() => {
+                            onClick={() => {
                               send(
                                 "reviewBreakglassUse",
                                 `breakglass/reviews/${encodeURIComponent(u.exercise)}`,

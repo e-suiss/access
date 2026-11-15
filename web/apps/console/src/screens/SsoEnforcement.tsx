@@ -77,7 +77,7 @@ export function SsoEnforcement({
               <div className={ACTIONS}>
                 <Button
                   variant="outline"
-                  onPress={() => {
+                  onClick={() => {
                     send("liftOrganizationSso", "sso-enforcement/lift", {});
                   }}
                 >
@@ -114,7 +114,7 @@ export function SsoEnforcement({
                   ))}
                 </FieldSet>
                 <div className={ACTIONS}>
-                  <Button type="submit" isDisabled={fate === undefined}>
+                  <Button type="submit" disabled={fate === undefined}>
                     {t("ssoEnforce")}
                   </Button>
                 </div>

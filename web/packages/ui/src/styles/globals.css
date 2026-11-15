@@ -158,9 +158,10 @@
   }
 }
 
-/* OP-159 m.31 */
-@layer base {
-  [data-react-aria-pressable] {
-    touch-action: pan-x pan-y pinch-zoom;
-  }
+/* OP-159 m.37 (c) */
+.base-ui-disable-scrollbar {
+  scrollbar-width: none;
+}
+.base-ui-disable-scrollbar::-webkit-scrollbar {
+  display: none;
 }

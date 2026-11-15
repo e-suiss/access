@@ -161,7 +161,7 @@ function PreferencesView(): ReactElement {
       </Table>
       <Actions>
         <Button
-          onPress={() => {
+          onClick={() => {
             const changes = Object.entries(draft)
               .filter(([k, v]) => prefs.current[k] !== v)
               .map(([k, granted]) => {
@@ -282,7 +282,7 @@ function DeletionView(): ReactElement {
             <Actions>
               <Button
                 variant="outline"
-                onPress={() => {
+                onClick={() => {
                   void frontend("/v1/account/deletion", { method: "DELETE" }).then(load);
                 }}
               >

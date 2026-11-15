@@ -1,9 +1,7 @@
-"use client";
-
 import { OTPInput, OTPInputContext } from "input-otp";
 import * as React from "react";
-import { cn } from "@access/ui/lib/utils";
 import { MinusIcon } from "@phosphor-icons/react";
+import { cn } from "@access/ui/lib/utils";
 
 function InputOTP({
   className,

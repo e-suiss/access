@@ -1,8 +1,8 @@
 import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 import * as React from "react";
+import { CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@access/ui/components/button";
 import { cn } from "@access/ui/lib/utils";
-import { XIcon, CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon } from "@phosphor-icons/react";
 
 const toast = ToastPrimitive.createToastManager();
 

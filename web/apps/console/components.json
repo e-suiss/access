@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "aria-suiss",
+  "style": "base-suiss",
   "rsc": false,
   "tsx": true,
   "tailwind": {
@@ -19,6 +19,6 @@
     "ui": "@access/ui/components"
   },
   "registries": {
-    "@esuiss": "https://suiss.app/ui/r/aria-suiss/{name}.json"
+    "@esuiss": "https://suiss.app/ui/r/base-suiss/{name}.json"
   }
 }

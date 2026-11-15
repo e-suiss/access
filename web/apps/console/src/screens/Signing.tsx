@@ -110,7 +110,7 @@ function ProfilePanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }
           variant="destructive"
           className="self-start"
           data-testid="signing-turn-off"
-          onPress={() => {
+          onClick={() => {
             submit({});
           }}
         >
@@ -165,7 +165,7 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
             {label(m)}
           </label>
         ))}
-        <Button type="submit" className="self-start" isDisabled={mode === v.kex_share}>
+        <Button type="submit" className="self-start" disabled={mode === v.kex_share}>
           {t("settingsSave")}
         </Button>
       </form>

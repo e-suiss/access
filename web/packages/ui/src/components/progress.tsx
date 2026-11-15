@@ -1,112 +1,69 @@
-"use client";
-
-import * as React from "react";
-import {
-  Label as LabelPrimitive,
-  type LabelProps as LabelPrimitiveProps,
-  ProgressBar as ProgressPrimitive,
-  type ProgressBarProps as ProgressPrimitiveProps,
-} from "react-aria-components";
-import { cn, defined } from "@access/ui/lib/utils";
-
-type ProgressContextValue = {
-  percentage?: number | undefined;
-  isIndeterminate: boolean;
-  valueText?: string | undefined;
-};
-
-const ProgressContext = React.createContext<ProgressContextValue | null>(null);
-
-function useProgress() {
-  const context = React.useContext(ProgressContext);
-  if (!context) {
-    throw new Error("useProgress must be used within a <Progress />");
-  }
-
-  return context;
-}
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
+import { cn } from "@access/ui/lib/utils";
 
 function Progress({
   className,
   children,
+  value,
+  locale = "en-US",
   ...props
-}: Omit<ProgressPrimitiveProps, "className" | "children"> & {
-  className?: string;
-  children?: React.ReactNode;
-}) {
+}: ProgressPrimitive.Root.Props) {
   return (
-    <ProgressPrimitive
+    <ProgressPrimitive.Root
+      value={value}
+      locale={locale}
       data-slot="progress"
       className={cn("flex flex-wrap gap-3", className)}
       {...props}
     >
-      {({ percentage, valueText, isIndeterminate }) => (
-        <ProgressContext.Provider value={{ percentage, valueText, isIndeterminate }}>
-          {children}
-          <ProgressTrack>
-            <ProgressIndicator />
-          </ProgressTrack>
-        </ProgressContext.Provider>
-      )}
-    </ProgressPrimitive>
+      {children}
+      <ProgressTrack>
+        <ProgressIndicator />
+      </ProgressTrack>
+    </ProgressPrimitive.Root>
   );
 }
 
-function ProgressTrack({ className, ...props }: React.ComponentProps<"div">) {
+function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
   return (
-    <div
+    <ProgressPrimitive.Track
       className={cn(
         "h-1 rounded-full bg-muted relative flex w-full items-center overflow-x-hidden",
         className,
       )}
       data-slot="progress-track"
-      {...defined(props)}
-    />
-  );
-}
-
-function ProgressIndicator({ className, style, ...props }: React.ComponentProps<"div">) {
-  const { percentage, isIndeterminate } = useProgress();
-
-  return (
-    <div
-      data-slot="progress-indicator"
-      className={cn("bg-primary transition-[width] h-full", className)}
-      style={{
-        width: isIndeterminate ? undefined : `${percentage ?? 0}%`,
-        ...style,
-      }}
       {...props}
     />
   );
 }
 
-function ProgressLabel({
-  className,
-  ...props
-}: Omit<LabelPrimitiveProps, "className"> & { className?: string }) {
+function ProgressIndicator({ className, ...props }: ProgressPrimitive.Indicator.Props) {
   return (
-    <LabelPrimitive className={cn("text-sm", className)} data-slot="progress-label" {...props} />
+    <ProgressPrimitive.Indicator
+      data-slot="progress-indicator"
+      className={cn("bg-primary transition-[width] h-full", className)}
+      {...props}
+    />
   );
 }
 
-function ProgressValue({
-  className,
-  children,
-  ...props
-}: Omit<React.ComponentProps<"span">, "children"> & {
-  children?: (value: string) => React.ReactNode;
-}) {
-  const { valueText } = useProgress();
-
+function ProgressLabel({ className, ...props }: ProgressPrimitive.Label.Props) {
   return (
-    <span
+    <ProgressPrimitive.Label
+      className={cn("text-sm", className)}
+      data-slot="progress-label"
+      {...props}
+    />
+  );
+}
+
+function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
+  return (
+    <ProgressPrimitive.Value
       className={cn("ms-auto text-sm text-muted-foreground tabular-nums", className)}
       data-slot="progress-value"
       {...props}
-    >
-      {children && valueText != null ? children(valueText) : valueText}
-    </span>
+    />
   );
 }
 

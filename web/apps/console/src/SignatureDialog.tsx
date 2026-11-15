@@ -119,14 +119,14 @@ export function useSignatureScreen(): readonly [Confirm, ReactElement | null] {
   const element =
     pending === null ? null : (
       <Dialog
-        isOpen
+        open
+        disablePointerDismissal
         onOpenChange={(open) => {
           if (!open) finish(false);
         }}
       >
         <DialogContent
           showCloseButton={false}
-          isDismissable={false}
           className="max-h-[calc(100svh-2rem)] overflow-y-auto bg-amber-50 text-neutral-900 ring-4 ring-neutral-900 sm:max-w-2xl dark:ring-neutral-100"
         >
           <DialogHeader>
@@ -140,7 +140,7 @@ export function useSignatureScreen(): readonly [Confirm, ReactElement | null] {
             <Button
               variant="outline"
               className="border-neutral-900 bg-transparent text-neutral-900 hover:bg-neutral-900/10"
-              onPress={() => {
+              onClick={() => {
                 finish(false);
               }}
             >
@@ -148,7 +148,7 @@ export function useSignatureScreen(): readonly [Confirm, ReactElement | null] {
             </Button>
             <Button
               className="bg-neutral-900 text-white hover:bg-neutral-700"
-              onPress={() => {
+              onClick={() => {
                 finish(true);
               }}
             >

@@ -56,7 +56,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <p>{t("sshCaIntro")}</p>
         <p className={ACTIONS}>
           <Button
-            onPress={() => {
+            onClick={() => {
               send("putSshCa", "PUT", "settings/ssh-ca", { enabled: true });
             }}
           >
@@ -64,7 +64,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
           </Button>
           <Button
             variant="outline"
-            onPress={() => {
+            onClick={() => {
               send("putSshCa", "PUT", "settings/ssh-ca", { enabled: false });
             }}
           >
@@ -72,7 +72,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
           </Button>
           <Button
             variant="outline"
-            onPress={() => {
+            onClick={() => {
               send("rotateSshCa", "POST", "settings/ssh-ca/rotate", {});
             }}
           >
@@ -85,7 +85,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <p className={ACTIONS}>
           <Button
             variant="destructive"
-            onPress={() => {
+            onClick={() => {
               send("replaceSshCa", "POST", "settings/ssh-ca/replace", {});
             }}
           >
@@ -131,7 +131,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           variant="outline"
                           size="sm"
                           className="ms-auto"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "retireSshHostGroup",
                               "POST",
@@ -172,7 +172,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
             value={description}
             onChange={setDescription}
           />
-          <Button type="submit" className="self-start" isDisabled={name === ""}>
+          <Button type="submit" className="self-start" disabled={name === ""}>
             {t("sshGroupRegisterSend")}
           </Button>
         </form>

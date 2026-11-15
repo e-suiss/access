@@ -194,8 +194,8 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
             </ul>
             <Button
               className="self-start"
-              isDisabled={name === "" || chosen.size === 0}
-              onPress={() => {
+              disabled={name === "" || chosen.size === 0}
+              onClick={() => {
                 save(v, own);
               }}
             >
@@ -277,7 +277,7 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
                   <Button
                     data-testid="move-delegations"
                     className="self-start"
-                    onPress={() => {
+                    onClick={() => {
                       move(() =>
                         metaWrites(
                           ctx.instance,
@@ -407,7 +407,7 @@ function DelegatedAdmin({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <p className={HINT}>{t("delegatedAdminIntro")}</p>
       <div className={ACTIONS}>
         <Button
-          onPress={() => {
+          onClick={() => {
             set(true);
           }}
         >
@@ -415,7 +415,7 @@ function DelegatedAdmin({ ctx }: { readonly ctx: Ctx }): ReactElement {
         </Button>
         <Button
           variant="outline"
-          onPress={() => {
+          onClick={() => {
             set(false);
           }}
         >
@@ -495,7 +495,7 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           act(a, "suspend");
                         }}
                       >
@@ -506,7 +506,7 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <Button
                         variant="outline"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           act(a, "reactivate");
                         }}
                       >
@@ -920,7 +920,7 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Button
           variant="outline"
           className="self-start"
-          onPress={() => {
+          onClick={() => {
             more(token);
           }}
         >
@@ -997,7 +997,7 @@ export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Button
           variant="outline"
           className="self-start"
-          onPress={() => {
+          onClick={() => {
             more(token);
           }}
         >

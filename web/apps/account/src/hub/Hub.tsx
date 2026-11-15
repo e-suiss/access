@@ -286,7 +286,7 @@ function RevokePanel({
           {next === "retry_same_nonce" && (
             <Button
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 void done.retry().then((s) => {
                   const after = honesty.next(s.attempt, Date.now());
                   setState({ r: s, next: after, when: Date.now() });
@@ -297,7 +297,7 @@ function RevokePanel({
               {t("action.read_again")}
             </Button>
           )}
-          <Button variant="outline" size="sm" onPress={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose}>
             {t("action.cancel")}
           </Button>
         </Actions>
@@ -334,8 +334,8 @@ function RevokePanel({
       <Actions>
         <Button
           size="sm"
-          isDisabled={view === null}
-          onPress={() => {
+          disabled={view === null}
+          onClick={() => {
             view?.resolve(true);
             setView(null);
           }}
@@ -345,7 +345,7 @@ function RevokePanel({
         <Button
           variant="outline"
           size="sm"
-          onPress={() => {
+          onClick={() => {
             view?.resolve(false);
             onClose();
           }}
@@ -425,7 +425,7 @@ function Rows({
                 <Button
                   variant="outline"
                   size="sm"
-                  onPress={() => {
+                  onClick={() => {
                     setOpen({ grant: r.grant, what: "why" });
                   }}
                 >
@@ -435,7 +435,7 @@ function Rows({
                   <>
                     <Button
                       size="sm"
-                      onPress={() => {
+                      onClick={() => {
                         setOpen({ grant: r.grant, what: "revoke" });
                       }}
                     >
@@ -445,7 +445,7 @@ function Rows({
                       <Button
                         variant="outline"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           setOpen({ grant: r.grant, what: "stop" });
                         }}
                       >
@@ -514,7 +514,7 @@ export function Hub({
     <div className="flex flex-col gap-6" data-testid="hub">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {section === "authority" ? <PageTitle>{t("nav.authority")}</PageTitle> : <span />}
-        <Button variant="outline" size="sm" onPress={load}>
+        <Button variant="outline" size="sm" onClick={load}>
           {t("action.read_again")}
         </Button>
       </div>

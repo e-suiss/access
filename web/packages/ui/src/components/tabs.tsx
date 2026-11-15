@@ -1,30 +1,14 @@
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-import {
-  TabList as TabListPrimitive,
-  type TabListProps as TabListPrimitiveProps,
-  TabPanel as TabPanelPrimitive,
-  type TabPanelProps as TabPanelPrimitiveProps,
-  Tab as TabPrimitive,
-  type TabProps as TabPrimitiveProps,
-  Tabs as TabsPrimitive,
-  type TabsProps as TabsPrimitiveProps,
-} from "react-aria-components";
 import { cn } from "@access/ui/lib/utils";
 
-function Tabs({
-  className,
-  orientation = "horizontal",
-  keyboardActivation = "manual",
-  ...props
-}: Omit<TabsPrimitiveProps, "className"> & { className?: string }) {
+function Tabs({ className, orientation = "horizontal", ...props }: TabsPrimitive.Root.Props) {
   return (
-    <TabsPrimitive
+    <TabsPrimitive.Root
       data-slot="tabs"
       orientation={orientation}
-      keyboardActivation={keyboardActivation}
-      data-horizontal={orientation === "horizontal" || undefined}
-      data-vertical={orientation === "vertical" || undefined}
+      data-orientation={orientation}
       className={cn("gap-2 group/tabs flex data-horizontal:flex-col", className)}
       {...props}
     />
@@ -50,20 +34,16 @@ function TabsList({
   className,
   variant = "default",
   children,
+  ref: forwardedRef,
   ...props
-}: Omit<TabListPrimitiveProps<object>, "className" | "children"> &
-  VariantProps<typeof tabsListVariants> & {
-    className?: string;
-    children?: React.ReactNode;
-  }) {
+}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const indicator = React.useRef<HTMLSpanElement>(null);
 
   React.useEffect(() => {
     const list = ref.current;
     if (!list) return;
     const reveal = () => {
-      const active = list.querySelector<HTMLElement>("[data-slot=tabs-trigger][data-selected]");
+      const active = list.querySelector<HTMLElement>("[data-slot=tabs-trigger][data-active]");
       const first = list.querySelector<HTMLElement>("[data-slot=tabs-trigger]");
       if (!active || !first || list.clientWidth === 0) return;
       const style = getComputedStyle(list);
@@ -84,7 +64,7 @@ function TabsList({
     const observer = new MutationObserver(reveal);
     observer.observe(list, {
       subtree: true,
-      attributeFilter: ["data-selected"],
+      attributeFilter: ["data-active"],
     });
     return () => observer.disconnect();
   }, []);
@@ -122,75 +102,42 @@ function TabsList({
     };
   }, []);
 
-  React.useLayoutEffect(() => {
-    const list = ref.current;
-    const span = indicator.current;
-    if (!list || !span) return;
-    const measure = () => {
-      const active = list.querySelector<HTMLElement>("[data-slot=tabs-trigger][data-selected]");
-      if (!active) {
-        span.hidden = true;
-        return;
-      }
-      span.style.setProperty("--active-tab-left", `${active.offsetLeft}px`);
-      span.style.setProperty("--active-tab-top", `${active.offsetTop}px`);
-      span.style.setProperty("--active-tab-width", `${active.offsetWidth}px`);
-      span.style.setProperty("--active-tab-height", `${active.offsetHeight}px`);
-      span.hidden = false;
-    };
-    measure();
-    const mutations = new MutationObserver(measure);
-    mutations.observe(list, {
-      subtree: true,
-      childList: true,
-      attributeFilter: ["data-selected"],
-    });
-    const resize = new ResizeObserver(measure);
-    resize.observe(list);
-    for (const trigger of list.querySelectorAll("[data-slot=tabs-trigger]"))
-      resize.observe(trigger);
-    return () => {
-      mutations.disconnect();
-      resize.disconnect();
-    };
-  }, []);
-
   return (
-    <div
-      ref={ref}
+    <TabsPrimitive.List
+      ref={(node) => {
+        ref.current = node;
+        if (typeof forwardedRef === "function") return forwardedRef(node);
+        if (forwardedRef) forwardedRef.current = node;
+      }}
       data-slot="tabs-list"
       data-variant={variant}
       className="no-scrollbar relative flex max-w-full overflow-x-auto overscroll-x-contain group-data-vertical/tabs:w-fit group-data-horizontal/tabs:data-[variant=line]:-mb-1.25 max-md:group-data-horizontal/tabs:-ms-(--tabs-list-bleed-start) max-md:group-data-horizontal/tabs:-me-(--tabs-list-bleed-end) max-md:group-data-horizontal/tabs:max-w-[calc(100%+var(--tabs-list-bleed-start,0px)+var(--tabs-list-bleed-end,0px))] max-md:group-data-horizontal/tabs:ps-(--tabs-list-bleed-start) max-md:group-data-horizontal/tabs:pe-(--tabs-list-bleed-end)"
+      {...props}
     >
-      <span
-        ref={indicator}
-        aria-hidden
+      <TabsPrimitive.Indicator
         data-slot="tabs-indicator"
         data-variant={variant}
+        renderBeforeHydration
         className="pointer-events-none absolute top-(--active-tab-top) left-(--active-tab-left) h-(--active-tab-height) w-(--active-tab-width) rounded-md bg-card shadow-sm transition-[left,top,width,height] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] data-[variant=line]:rounded-none data-[variant=line]:bg-foreground data-[variant=line]:shadow-none group-data-horizontal/tabs:data-[variant=line]:top-[calc(var(--active-tab-top)+var(--active-tab-height)+(--spacing(0.75)))] group-data-horizontal/tabs:data-[variant=line]:h-0.5 group-data-vertical/tabs:data-[variant=line]:left-[calc(var(--active-tab-left)+var(--active-tab-width)+(--spacing(0.5)))] group-data-vertical/tabs:data-[variant=line]:w-0.5 motion-reduce:transition-none dark:bg-border dark:data-[variant=line]:bg-foreground"
       />
-      <TabListPrimitive
+      <div
         data-slot="tabs-list-content"
         data-variant={variant}
         className={cn(tabsListVariants({ variant }), className)}
-        {...props}
       >
         {children}
-      </TabListPrimitive>
-    </div>
+      </div>
+    </TabsPrimitive.List>
   );
 }
 
-function TabsTrigger({
-  className,
-  ...props
-}: Omit<TabPrimitiveProps, "className"> & { className?: string }) {
+function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
-    <TabPrimitive
+    <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "flex-1 group-data-vertical/tabs:w-full hover:text-foreground group-data-horizontal/tabs:h-full group-data-[variant=line]/tabs-list:h-[calc(100%-1px)] gap-2 rounded-md border border-transparent! px-3 py-1 text-sm text-muted-foreground transition-colors group-data-vertical/tabs:h-9 group-data-vertical/tabs:flex-none group-data-vertical/tabs:px-3 focus-visible:ring-3 has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2 data-disabled:pointer-events-none data-disabled:opacity-50 relative inline-flex items-center justify-center whitespace-nowrap group-data-vertical/tabs:justify-start focus-visible:border-ring focus-visible:ring-ring/50 disabled:pointer-events-none [&_svg]:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "data-selected:text-foreground",
+        "flex-1 group-data-vertical/tabs:w-full hover:text-foreground group-data-horizontal/tabs:h-full group-data-[variant=line]/tabs-list:h-[calc(100%-1px)] gap-2 rounded-md border border-transparent! px-3 py-1 text-sm text-muted-foreground transition-colors group-data-vertical/tabs:h-9 group-data-vertical/tabs:flex-none group-data-vertical/tabs:px-3 focus-visible:ring-3 has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2 relative inline-flex items-center justify-center whitespace-nowrap group-data-vertical/tabs:justify-start focus-visible:border-ring focus-visible:ring-ring/50 disabled:pointer-events-none aria-disabled:pointer-events-none [&_svg]:pointer-events-none aria-disabled:opacity-50 disabled:opacity-50 [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "data-active:text-foreground",
         className,
       )}
       {...props}
@@ -198,12 +145,9 @@ function TabsTrigger({
   );
 }
 
-function TabsContent({
-  className,
-  ...props
-}: Omit<TabPanelPrimitiveProps, "className"> & { className?: string }) {
+function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
-    <TabPanelPrimitive
+    <TabsPrimitive.Panel
       data-slot="tabs-content"
       className={cn(
         "rounded-lg text-base focus-visible:ring-3 focus-visible:ring-ring/50 flex-1 outline-none",

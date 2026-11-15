@@ -40,12 +40,13 @@ export function useSignature(): {
   const dialog =
     pending === null ? null : (
       <Dialog
-        isOpen
+        open
+        disablePointerDismissal
         onOpenChange={(open) => {
           if (!open) close(false);
         }}
       >
-        <DialogContent showCloseButton={false} isDismissable={false} className="sm:max-w-lg">
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("sign.title")}</DialogTitle>
           </DialogHeader>
@@ -68,14 +69,14 @@ export function useSignature(): {
           <DialogFooter>
             <Button
               variant="outline"
-              onPress={() => {
+              onClick={() => {
                 close(false);
               }}
             >
               {t("action.cancel")}
             </Button>
             <Button
-              onPress={() => {
+              onClick={() => {
                 close(true);
               }}
             >

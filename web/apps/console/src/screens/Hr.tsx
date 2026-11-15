@@ -190,7 +190,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         variant="destructive"
                         size="sm"
                         className="self-start"
-                        onPress={() => {
+                        onClick={() => {
                           send(
                             "retireHrSource",
                             `hr-sources/${encodeURIComponent(src.name)}/retire`,
@@ -224,7 +224,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             hint={t("hrNameHint")}
           />
           <div className={ACTIONS}>
-            <Button type="submit" isDisabled={name === ""}>
+            <Button type="submit" disabled={name === ""}>
               {t("hrRegisterSend")}
             </Button>
           </div>
@@ -294,7 +294,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             />
           </FieldRoot>
           <div className={ACTIONS}>
-            <Button type="submit" isDisabled={file === undefined || into === ""}>
+            <Button type="submit" disabled={file === undefined || into === ""}>
               {t("hrImportSend")}
             </Button>
           </div>
@@ -326,7 +326,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           send(
                             "retireHrConnector",
                             `hr-connectors/${encodeURIComponent(k.name)}/retire`,
@@ -389,7 +389,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
             </NativeSelect>
           </FieldRoot>
           <div className={ACTIONS}>
-            <Button type="submit" isDisabled={connector === "" || target === ""}>
+            <Button type="submit" disabled={connector === "" || target === ""}>
               {t("hrRegisterSend")}
             </Button>
           </div>

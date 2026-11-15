@@ -1,6 +1,8 @@
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 import type * as React from "react";
-import { cn } from "@access/ui/lib/utils";
 import { CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react";
+import { cn } from "@access/ui/lib/utils";
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" className={className} {...props} />;
@@ -29,23 +31,23 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
   );
 }
 
-function BreadcrumbLink({
-  className,
-  render,
-  ...props
-}: React.ComponentProps<"a"> & {
-  render?: (props: React.HTMLAttributes<HTMLElement>) => React.ReactNode;
-}) {
-  const merged = {
-    "data-slot": "breadcrumb-link",
-    className: cn(
-      "rounded-xs outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg:not([class*='size-'])]:size-4.5",
-      className,
+function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProps<"a">) {
+  return useRender({
+    defaultTagName: "a",
+    props: mergeProps<"a">(
+      {
+        className: cn(
+          "rounded-xs outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg:not([class*='size-'])]:size-4.5",
+          className,
+        ),
+      },
+      props,
     ),
-    ...props,
-  };
-  if (render) return render(merged as React.HTMLAttributes<HTMLElement>);
-  return <a {...merged} />;
+    render,
+    state: {
+      slot: "breadcrumb-link",
+    },
+  });
 }
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {

@@ -211,7 +211,7 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
           />
         </FieldRoot>
         <p className={ACTIONS}>
-          <Button type="submit" isDisabled={pkg === undefined || domains.length === 0}>
+          <Button type="submit" disabled={pkg === undefined || domains.length === 0}>
             {t("publishButton")}
           </Button>
         </p>
@@ -661,8 +661,8 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Field id="lab-rpath" label={t("labResourcePath")} value={rpath} onChange={setRpath} />
         <p className={ACTIONS}>
           <Button
-            isDisabled={!here}
-            onPress={() => {
+            disabled={!here}
+            onClick={() => {
               runCheck(() => check(ctx.instance, subject, wanted()));
             }}
           >
@@ -670,8 +670,8 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
           </Button>
           <Button
             variant="outline"
-            isDisabled={!here}
-            onPress={() => {
+            disabled={!here}
+            onClick={() => {
               runExplain(() => explain(ctx.instance, subject, wanted()));
             }}
           >

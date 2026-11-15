@@ -149,8 +149,8 @@ function Option(props: {
         id={id}
         name={props.node.name}
         aria-labelledby={`${id}-label`}
-        isSelected={props.checked}
-        onChange={(checked) => {
+        checked={props.checked}
+        onCheckedChange={(checked) => {
           props.onChange(props.node.name, checked);
         }}
       />
@@ -355,12 +355,12 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           />
         ))}
       {passkeyButton !== undefined && (
-        <Button {...other} disabled={busy} onPress={() => void signInWithPasskey()}>
+        <Button {...other} disabled={busy} onClick={() => void signInWithPasskey()}>
           {text(passkeyButton.label)}
         </Button>
       )}
       {create?.mediation === "explicit" && (
-        <Button {...other} disabled={busy} onPress={() => void registerPasskey()}>
+        <Button {...other} disabled={busy} onClick={() => void registerPasskey()}>
           {text(create.label)}
         </Button>
       )}

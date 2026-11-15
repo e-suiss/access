@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
-    dedupe: ["react", "react-dom", "react-aria-components"],
+    dedupe: ["react", "react-dom", "@base-ui/react"],
   },
   server: { fs: { allow: ["../../.."] } },
   build: { target: "es2024" },

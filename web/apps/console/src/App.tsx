@@ -105,7 +105,7 @@ function NavToggle(): ReactElement {
       size="icon-sm"
       className="md:hidden"
       aria-label={t("navLabel")}
-      onPress={toggleSidebar}
+      onClick={toggleSidebar}
     >
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
         <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
@@ -331,7 +331,7 @@ export function App(): ReactElement {
             <span className="text-muted-foreground"> · </span>
             <span className={`${MONO} text-muted-foreground`}>{s.realm}</span>
           </p>
-          <Button variant="outline" size="sm" onPress={signOut}>
+          <Button variant="outline" size="sm" onClick={signOut}>
             {t("signOut")}
           </Button>
         </header>

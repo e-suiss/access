@@ -71,7 +71,7 @@ export function LinkedSignIns(): ReactElement {
                   variant="outline"
                   size="sm"
                   aria-label={`${t("action.remove")}: ${l.provider}`}
-                  onPress={() => {
+                  onClick={() => {
                     void json(
                       frontend(`/v1/account/linked/${encodeURIComponent(l.link)}`, {
                         method: "DELETE",
@@ -135,7 +135,7 @@ export function ConnectedApps(): ReactElement {
                   variant="outline"
                   size="sm"
                   aria-label={`${t("action.stop_sharing")}: ${a.app}`}
-                  onPress={() => {
+                  onClick={() => {
                     void json(
                       frontend(`/v1/account/connected-apps/${encodeURIComponent(a.client_id)}`, {
                         method: "DELETE",

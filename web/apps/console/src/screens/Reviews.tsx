@@ -116,7 +116,7 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
                       <Button
                         variant="outline"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           runKeep(async () => {
                             const done = await keep(ctx, review, i.grant);
                             if (done) setKept(new Set([...kept, i.grant]));
@@ -129,7 +129,7 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
                       <Button
                         variant="destructive"
                         size="sm"
-                        onPress={() => {
+                        onClick={() => {
                           runRemove(() =>
                             metaWrite(
                               ctx.instance,
@@ -205,7 +205,7 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="outline"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             setOpen(r.name);
                           }}
                         >
@@ -214,7 +214,7 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         <Button
                           variant="outline"
                           size="sm"
-                          onPress={() => {
+                          onClick={() => {
                             send(
                               "closeReview",
                               `reviews/${encodeURIComponent(r.name)}/close`,
@@ -263,7 +263,7 @@ export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
             <span className="font-semibold">{t("reviewsScope")}</span> {t("reviewsScopeTeam")}
           </p>
           <div className={ACTIONS}>
-            <Button type="submit" isDisabled={name === "" || !(Number(period) >= 7)}>
+            <Button type="submit" disabled={name === "" || !(Number(period) >= 7)}>
               {t("reviewsSchedule")}
             </Button>
           </div>
