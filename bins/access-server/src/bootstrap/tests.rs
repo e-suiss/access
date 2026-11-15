@@ -418,6 +418,7 @@ fn plan() -> Plan {
         breakglass_account: None,
         review_schedule: None,
         pq_profile: None,
+        platform_admin: None,
     }
 }
 
@@ -885,6 +886,11 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
 // OP-69, OP-149 m.21, TN-111, L0-META-7, OP-149 m.4, MD-14, EI-25, OP-137
 /// The test user's TOTP credentials and the seeds they hold, in base32.
 async fn totp_seeds(w: &World, identifier: &str) -> Vec<String> {
+    totp_seeds_in(w, "acme", identifier).await
+}
+
+/// [`totp_seeds`] of an account in realm `slug`.
+async fn totp_seeds_in(w: &World, slug: &str, identifier: &str) -> Vec<String> {
     use access_identity_account::adapters::pg::PgAccounts;
     use access_identity_account::app::Realm;
     use access_identity_account::app::sealing::{open, subject_key};
@@ -892,7 +898,7 @@ async fn totp_seeds(w: &World, identifier: &str) -> Vec<String> {
     use access_identity_events::adapters::RealmKek as _;
     use access_identity_session::app::TOTP;
 
-    let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
+    let route = route_by_slug(&w.db.router, slug).await.unwrap().unwrap();
     let keks = crate::login::RealmKeks::new(w.keys.clone());
     let kek = keks.kek(route.tenant, route.realm).unwrap();
     let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
@@ -2771,4 +2777,5 @@ mod aitm;
 // OP-159 m.4 (b) (J6)
 mod solver;
 // OP-159 m.4 (b) (J3)
+mod platform_admin;
 mod pq_fixture;

@@ -271,7 +271,8 @@ export async function readProof(
 /**
  * A write through the admin proxy (TN-110, MD-14): the signature screen shows the Kernel's
  * decoding of `envelope` and of the statement about to be signed; only after the user signs
- * does WebCrypto sign. The AIS nonce is the `Idempotency-Key` (TN-126).
+ * does WebCrypto sign. The AIS nonce is the `Idempotency-Key` (TN-126). The statement names
+ * `basis`, the Instance's own unless the caller chose a holding (OP-159 m.41).
  */
 export async function adminWrite(
   instance: Instance,
@@ -282,6 +283,7 @@ export async function adminWrite(
   body: unknown,
   pep: string = instance.pep,
   ifMatch?: string,
+  basis: Uint8Array = instance.basis,
 ): Promise<Response> {
   const k = await loadKernel();
   const n = nonce();
@@ -293,7 +295,7 @@ export async function adminWrite(
     "commit",
     pep,
     new Uint8Array(),
-    instance.basis,
+    basis,
     BigInt(Date.now()),
     new Uint8Array(),
   );

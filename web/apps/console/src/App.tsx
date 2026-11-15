@@ -1,5 +1,5 @@
-// TN-128, IA-5, §8.17.4.1: the console shell. Admin, Developer and Audit appear only when the
-// eligibility check says the viewer can exercise one of their actions; without this browser's
+// TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b): the console shell. Admin, Developer, Audit and
+// Platform appear only when the eligibility check says the viewer can exercise one of their actions; without this browser's
 // device key nothing is probed and nothing appears.
 import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from "react";
 
@@ -36,6 +36,8 @@ import { Busy, Failure, MONO } from "./ui.js";
 
 const BASE = "/console/";
 
+const SECTIONS: ReadonlySet<string> = new Set<Section>(["admin", "developer", "audit", "platform"]);
+
 // TN-113: a path has one spelling and a trailing slash is an empty segment, so the console's
 // own page is `/console` and every screen is `/console/<route>`
 const HOME = "/console";
@@ -54,6 +56,7 @@ const ROUTES: readonly Route[] = [
   "admin",
   "developer",
   "audit",
+  "platform",
 ];
 
 interface Where {
@@ -66,8 +69,7 @@ function routeOf(path: string): Where {
   const [head = "", sub] = r.split("/", 2);
   if (!(ROUTES as readonly string[]).includes(head)) return { route: "", screen: undefined };
   const route = head as Route;
-  const screens: readonly string[] =
-    route === "admin" || route === "developer" || route === "audit" ? SCREENS[route] : [];
+  const screens: readonly string[] = SECTIONS.has(route) ? SCREENS[route as Section] : [];
   const screen = sub !== undefined && screens.includes(sub) ? (sub as Screen) : undefined;
   return { route, screen };
 }
@@ -88,6 +90,7 @@ const NAV: readonly NavItem[] = [
   { route: "admin", key: "navAdmin" },
   { route: "developer", key: "navDeveloper" },
   { route: "audit", key: "navAudit" },
+  { route: "platform", key: "navPlatform" },
 ];
 
 const OWN: readonly NavItem[] = [
@@ -175,8 +178,6 @@ function Nav({
     </nav>
   );
 }
-
-const SECTIONS: ReadonlySet<Route> = new Set<Route>(["admin", "developer", "audit"]);
 
 export function App(): ReactElement {
   const [state, setState] = useState<State>({ status: "loading" });
@@ -281,13 +282,10 @@ export function App(): ReactElement {
   if (current === "profile") page = <Profile session={s} />;
   else if (current === "sessions") page = <Sessions onEnded={loadSession} />;
   else if (current === "about") page = <About />;
-  else if (
-    (current === "admin" || current === "developer" || current === "audit") &&
-    instance !== undefined
-  )
+  else if (SECTIONS.has(current) && instance !== undefined)
     page = (
       <SectionPage
-        section={current}
+        section={current as Section}
         screen={where.screen}
         ctx={{ session: s, instance, confirm, screens: shownScreens }}
         go={go}

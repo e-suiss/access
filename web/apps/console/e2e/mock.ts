@@ -198,6 +198,13 @@ export interface Write {
   readonly ifMatch?: string;
 }
 
+/** The `idp.platform.*` action each platform write compiles to (OP-159 m.41). */
+const PLATFORM_OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
+  createTenant: ["tenant_create", "tenant"],
+  createRealm: ["realm_create", "realm"],
+  createSandboxDomain: ["sandbox_create", "sandbox"],
+};
+
 export interface Seen {
   readonly method: string;
   readonly path: string;
@@ -228,6 +235,8 @@ export class ConsoleMock {
   readonly queries: { kind: string; query: unknown; ais: boolean }[] = [];
   /** The writes the management API applied. */
   readonly writes: Write[] = [];
+  /** OP-159 m.41: the basis each applied write's AIS names, as the Kernel describes it. */
+  readonly bases: unknown[] = [];
   /** The realm's registered passkeys (IDI-4). */
   passkeys = 3;
   /** Draft a different action than asked (a compromised draft). */
@@ -244,6 +253,10 @@ export class ConsoleMock {
   readonly published: { package: unknown; domains: unknown }[] = [];
   /** OP-159 m.4 (b) (J3): management writes refused with a problem, by path. */
   readonly refuse = new Map<string, readonly [number, string]>();
+  /** The realm the console session is in (OP-159 m.41: `platform` for the platform realm). */
+  realm = "acme";
+  /** OP-159 m.41, INV-29: whether the viewer is the platform realm's root; nobody is by default. */
+  platformRoot = false;
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
   async signIn(context: BrowserContext, baseURL: string, account = "acc_ada"): Promise<string> {
@@ -285,7 +298,7 @@ export class ConsoleMock {
     s: Session,
     ais: string | undefined,
     mode: string,
-  ): Promise<{ intent: string } | undefined> {
+  ): Promise<{ intent: string; basis?: unknown } | undefined> {
     if (ais === undefined || s.key === undefined || s.kid === undefined) return undefined;
     const kernel = await k();
     const parts = sign1Parts(Buffer.from(ais, "base64url"));
@@ -300,6 +313,7 @@ export class ConsoleMock {
     const st = JSON.parse(kernel.describeStatement(parts.payload)) as {
       mode: string;
       intent: string;
+      basis?: unknown;
     };
     return st.mode === mode ? st : undefined;
   }
@@ -345,7 +359,7 @@ export class ConsoleMock {
       return reply(200, {
         account: s.account,
         display_name: "<img src=x onerror=alert(1)>Ada",
-        realm: "acme",
+        realm: this.realm,
         domain: DOMAIN,
         expires_at: new Date(Date.now() + 12 * 3600_000).toISOString(),
         idle_timeout_s: "900",
@@ -470,6 +484,42 @@ export class ConsoleMock {
       if (read && st.intent !== readIntent(r.method(), target)) {
         return problem(403, "read-proof-rejected");
       }
+      // OP-159 m.41
+      if (drafting && rest === "platform/intents") {
+        const b = body();
+        const op = String(b["operation"]);
+        const action = PLATFORM_OPERATIONS[op];
+        if (action === undefined) return problem(400, "unknown-operation");
+        const given = (b["body"] ?? {}) as Record<string, unknown>;
+        const filled =
+          op === "createTenant" && given["tenant_id"] === undefined
+            ? { ...given, tenant_id: "tnt_new" }
+            : given;
+        const key = typeof filled["slug"] === "string" ? filled["slug"] : "tnt_new";
+        const d = envelopeOf({
+          action: { namespace: "idp.platform", name: action[0], major: 1 },
+          resources: [
+            {
+              namespace: "idp",
+              path: [this.realm, "platform", action[1], key],
+            },
+          ],
+        });
+        const kernel = await k();
+        return reply(200, {
+          operation: op,
+          key: b["key"] ?? null,
+          body: {
+            ...filled,
+            ...(this.tamper ? { slug: "someone-else" } : {}),
+            validity: { not_before: "1970-01-01T00:00:01Z", not_after: "1970-01-01T00:00:02Z" },
+          },
+          domain: DOMAIN,
+          pep: "access-identity",
+          intent: Buffer.from(d.envelope).toString("base64url"),
+          intent_digest: Buffer.from(kernel.intentDigest(d.envelope)).toString("base64url"),
+        });
+      }
       if (drafting) {
         const b = body();
         const op = String(b["operation"]);
@@ -512,6 +562,18 @@ export class ConsoleMock {
           body: b,
           ...(ifMatch === undefined ? {} : { ifMatch }),
         });
+        this.bases.push(st.basis);
+        // OP-159 m.41, TN-110
+        if (rest.startsWith("platform/")) {
+          return reply(201, {
+            exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
+            position: String(this.writes.length),
+            resource:
+              typeof b["slug"] === "string"
+                ? { slug: b["slug"], status: "active" }
+                : { tenant_id: b["tenant_id"], status: "active" },
+          });
+        }
         // V10, OP-157 m.3 (w): a keep records review.kept and is no Exercise
         const kept = /\/reviews\/([^/]+)\/items\/([^/]+)\/keep$/.exec(rest);
         if (kept !== null) {
@@ -596,10 +658,13 @@ export class ConsoleMock {
       if (held) {
         return reply(200, { eligible: s.kid !== undefined && this.heldActions.has(act) });
       }
+      // OP-159 m.41, INV-29
+      const platform = act.startsWith("idp.platform/");
       const yes =
         s.kid !== undefined &&
         this.eligible.has(s.account) &&
         intent !== undefined &&
+        (!platform || (this.realm === "platform" && this.platformRoot)) &&
         (this.eligibleActions.size === 0 || this.eligibleActions.has(act));
       return reply(200, { eligible: yes });
     }

@@ -17,6 +17,7 @@ mod catalog;
 mod durability;
 mod governance;
 pub(crate) mod local;
+pub(crate) mod platform_admin;
 mod pq_profile;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -178,6 +179,7 @@ struct PlanFile {
     replica: Option<durability::ReplicaFile>,
     second_provider: Option<durability::SecondProviderFile>,
     pq_profile: Option<pq_profile::PqProfileFile>,
+    platform_admin: Option<platform_admin::PlatformAdminFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -258,7 +260,7 @@ impl TotpSeedFile {
         use std::io::Read as _;
         use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
         let bad = |e: std::io::Error| {
-            BootstrapError::Plan(format!("test_user totp_seed_file {}: {e}", path.display()))
+            BootstrapError::Plan(format!("totp_seed_file {}: {e}", path.display()))
         };
         let mut file = std::fs::OpenOptions::new()
             .read(true)
@@ -294,10 +296,7 @@ impl TotpSeedFile {
         self.file
             .write_all_at(format!("{seed}\n").as_bytes(), 0)
             .map_err(|e| {
-                BootstrapError::Unavailable(format!(
-                    "test_user totp_seed_file {}: {e}",
-                    self.path.display()
-                ))
+                BootstrapError::Unavailable(format!("totp_seed_file {}: {e}", self.path.display()))
             })
     }
 }
@@ -749,6 +748,8 @@ pub(crate) struct Plan {
     pub(crate) review_schedule: Option<governance::ReviewPlan>,
     /// OP-159 m.4 (a)
     pub(crate) pq_profile: Option<pq_profile::PqProfilePlan>,
+    /// OP-159 m.41 (a)
+    pub(crate) platform_admin: Option<platform_admin::PlatformAdminPlan>,
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
@@ -765,9 +766,23 @@ fn sample_tenant(tenants: &[String], section: &str, realm: &str) -> Result<(), B
 /// The test user's password: the plan's literal, or the environment variable the plan names
 /// (OP-149 m.26 (b)); never a default.
 fn test_password(file: &TestUserFile) -> Result<Secret<String>, BootstrapError> {
-    let plan = |what: &str| BootstrapError::Plan(format!("test_user: {what}"));
-    let raw = match (&file.password, &file.password_env) {
-        (Some(p), None) => p.clone(),
+    named_password(
+        "test_user",
+        file.password.clone(),
+        file.password_env.as_deref(),
+    )
+}
+
+/// A section's password: its `password` literal, or the environment variable its
+/// `password_env` names; exactly one, never empty, never a default.
+fn named_password(
+    section: &str,
+    password: Option<String>,
+    password_env: Option<&str>,
+) -> Result<Secret<String>, BootstrapError> {
+    let plan = |what: &str| BootstrapError::Plan(format!("{section}: {what}"));
+    let raw = match (password, password_env) {
+        (Some(p), None) => p,
         (None, Some(var)) => {
             std::env::var(var).map_err(|_| plan(&format!("password_env {var} is not set")))?
         }
@@ -901,6 +916,8 @@ impl Plan {
             breakglass_account,
             review_schedule,
             pq_profile,
+            // OP-159 m.41 (a)
+            platform_admin: platform_admin::check(file.platform_admin)?,
         })
     }
 }
@@ -1127,6 +1144,9 @@ pub(crate) struct Summary {
     /// Present when the plan names the post-quantum signing profile (OP-159 m.4 (a)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) pq_profile: Option<pq_profile::PqProfileOut>,
+    /// Present when the plan names the platform administrator (OP-159 m.41 (a)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) platform_admin: Option<platform_admin::PlatformAdminOut>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -1397,6 +1417,7 @@ where
         let mut compromise = None;
         let mut sample_agent = None;
         let mut pq_profile = None;
+        let mut platform_admin = None;
         let (mut support_operator, mut breakglass_account, mut review_schedule) =
             (None, None, None);
         // OP-149 m.26 (c)
@@ -1485,6 +1506,18 @@ where
                 .ok_or(AdminError::NoRealm)?;
             if is_platform {
                 platform = Some((tenant, realm, domain, route.issuer.clone()));
+                // OP-159 m.41 (a), INV-29
+                if let Some(p) = &plan.platform_admin {
+                    platform_admin = Some(
+                        self.platform_admin(
+                            &ids,
+                            (tenant, realm),
+                            (domain, &root, slug, &route.issuer),
+                            p,
+                        )
+                        .await?,
+                    );
+                }
             }
             // OP-149 m.26 (b), (c), m.29 (b)
             if let Some(u) = plan.test_user.as_ref().filter(|u| u.realm == *slug) {
@@ -1591,6 +1624,7 @@ where
             breakglass_account,
             review_schedule,
             pq_profile,
+            platform_admin,
         })
     }
 

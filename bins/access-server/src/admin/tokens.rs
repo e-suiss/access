@@ -10,6 +10,7 @@
 use access_crypto::AwsLcBackend;
 use access_crypto::dpop::replay_key;
 use access_crypto::jose::JwsAlg;
+use access_http::api::domain::Surface as ApiSurface;
 use access_http::api::ports::{Presented, ReadToken, ReadTokens, Unavailable};
 use access_http::console::ports::{ConsoleSession, IssuedRead, SessionInstance};
 use access_identity_oauth::adapters::dpop::PgReplayCache;
@@ -152,14 +153,16 @@ impl<P: LiveKeys> ManagementTokens<P> {
         Ok(Standing::Live)
     }
 
-    /// A read token for the console session `row` and its device Instance, bound to the BFF's
-    /// DPoP key `jkt` of the session; `None` when the session, its account or its Instance is
-    /// not live.
+    /// A read token on `surface` for the console session `row` and its device Instance, bound
+    /// to the BFF's DPoP key `jkt` of the session; `None` when the session, its account or its
+    /// Instance is not live, or when `surface` is the platform's and the session is not in the
+    /// platform realm (OP-151 m.2 M2, OP-159 m.41).
     pub(crate) async fn issue_console(
         &self,
         row: &ConsoleSessionRow,
         instance: &SessionInstance,
         jkt: [u8; 32],
+        surface: ApiSurface,
     ) -> Result<Option<IssuedRead>, Unavailable> {
         let now = WallClock.now_ms()?;
         if row.ended_ms.is_some()
@@ -168,7 +171,11 @@ impl<P: LiveKeys> ManagementTokens<P> {
         {
             return Ok(None);
         }
-        let surface = Surface::Realm(row.slug.clone());
+        // OP-159 m.41, TN-119
+        let surface = match surface {
+            ApiSurface::Realm => Surface::Realm(row.slug.clone()),
+            ApiSurface::Platform => Surface::Platform,
+        };
         let Some(realm) = self.realm_of(&surface).await? else {
             return Ok(None);
         };
@@ -236,6 +243,7 @@ impl<P: LiveKeys + 'static> access_http::console::ports::ReadGrants for ConsoleG
         session: &ConsoleSession,
         instance: &SessionInstance,
         jkt: [u8; 32],
+        surface: ApiSurface,
     ) -> Result<Option<IssuedRead>, Unavailable> {
         let Some(row) = console::by_id(&self.0.app, &session.id)
             .await
@@ -243,7 +251,7 @@ impl<P: LiveKeys + 'static> access_http::console::ports::ReadGrants for ConsoleG
         else {
             return Ok(None);
         };
-        self.0.issue_console(&row, instance, jkt).await
+        self.0.issue_console(&row, instance, jkt, surface).await
     }
 }
 

@@ -130,6 +130,25 @@ fn a_catalogued_action_is_drafted_as_adp_reads_it() {
     );
 }
 
+// OP-159 m.41 (b), IA-5, XI-11
+#[test]
+fn a_platform_action_is_drafted_for_its_eligibility_probe() {
+    use access_identity_admin::domain::provision::PlatformAction;
+    for a in PlatformAction::ALL {
+        let d = ask(&wanted(
+            "idp.platform",
+            a.name(),
+            "idp",
+            &["acme", "platform"],
+            "check",
+        ))
+        .unwrap();
+        assert_eq!(d.envelope.action, a.action_ref());
+        assert_eq!(d.probe, Some(ProbeRoot::Idp));
+        assert_eq!(d.payload, None);
+    }
+}
+
 // OP-151 m.20 (d), IA-5
 #[test]
 fn a_check_draft_carries_its_probe_set() {
@@ -215,8 +234,16 @@ fn anything_else_is_refused() {
             DraftError::Action,
         ),
         (
-            wanted("idp.platform", "realm_create", "idp", &["acme"], "check"),
+            wanted("idp.platform", "realm_create", "idp", &["acme"], "commit"),
+            DraftError::Mode,
+        ),
+        (
+            wanted("idp.platform", "realm_delete", "idp", &["acme"], "check"),
             DraftError::Action,
+        ),
+        (
+            wanted("idp.platform", "tenant_create", "idp", &["other"], "check"),
+            DraftError::Resource,
         ),
         (
             wanted("idp.account", "suspend", "idp", &["other"], "check"),

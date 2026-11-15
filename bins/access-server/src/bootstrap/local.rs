@@ -283,8 +283,14 @@ where
             .device_party((tenant, realm), domain, subject, (TEST_DEVICE_LABEL, None))
             .await?;
         let (passkey, totp) = self
-            .authenticators(&u.realm, subject, identifier.value(), u.totp.as_ref())
+            .authenticators(
+                &u.realm,
+                subject,
+                identifier.value(),
+                (true, u.totp.as_ref()),
+            )
             .await?;
+        let passkey = passkey.ok_or(BootstrapError::Encode)?;
         Ok((
             TestUserOut {
                 realm: u.realm.clone(),
@@ -326,36 +332,40 @@ where
             .any(|r| r.id.as_bytes() == credential_id))
     }
 
-    /// The test user's software passkey (OP-149 m.26 (e)): an Ed25519 key kept in the token
-    /// answers the realm's own registration ceremony, through the step the hosted
+    /// With `passkey`, the test user's software passkey (OP-149 m.26 (e)): an Ed25519 key kept
+    /// in the token answers the realm's own registration ceremony, through the step the hosted
     /// `POST /v1/account/passkeys/{registration}` finishes with (§10.2.4, OP-150 L2), so the
     /// passkey is a device-bound, user-verified credential of the account like any other. A
     /// registered passkey of that key is found, not made again. With `totp`, also the user's
-    /// authenticator app (OP-149 m.26 (b), §10.2.2): the realm's own TOTP enrollment makes the
-    /// seed, a code computed from it confirms it, and the seed goes to the plan's file; an
-    /// account with an authenticator app and a file holding a seed keeps both. Returns the
-    /// passkey's credential id and the authenticator app.
+    /// authenticator app (OP-149 m.26 (b), OP-159 m.41 (a), §10.2.2): the realm's own TOTP
+    /// enrollment makes the seed, a code computed from it confirms it, and the seed goes to the
+    /// plan's file; an account with an authenticator app and a file holding a seed keeps both.
+    /// Returns the passkey's credential id and the authenticator app.
     #[expect(
         clippy::too_many_lines,
         reason = "one passkey registration and one TOTP enrollment through the sign-in service, as a person would"
     )]
-    async fn authenticators(
+    pub(super) async fn authenticators(
         &self,
         slug: &str,
         subject: [u8; 16],
         identifier: &str,
-        totp: Option<&TotpSeedFile>,
-    ) -> Result<([u8; 32], Option<TotpOut>), BootstrapError> {
-        let key = token_key(self.hsm, TEST_PASSKEY_LABEL)?;
-        let PublicKey::Ed25519(public) = key.public_key() else {
-            return Err(BootstrapError::Encode);
+        (passkey, totp): (bool, Option<&TotpSeedFile>),
+    ) -> Result<(Option<[u8; 32]>, Option<TotpOut>), BootstrapError> {
+        let authenticator = if passkey {
+            let key = token_key(self.hsm, TEST_PASSKEY_LABEL)?;
+            let PublicKey::Ed25519(public) = key.public_key() else {
+                return Err(BootstrapError::Encode);
+            };
+            Some(SoftwareAuthenticator::ed25519(public))
+        } else {
+            None
         };
-        let authenticator = SoftwareAuthenticator::ed25519(public);
         let route = route_by_slug(self.router, slug)
             .await?
             .ok_or(AdminError::NoRealm)?;
         let issuer = Issuer::parse(&route.issuer)
-            .map_err(|e| BootstrapError::Plan(format!("test_user: realm issuer: {e}")))?;
+            .map_err(|e| BootstrapError::Plan(format!("{slug}: realm issuer: {e}")))?;
         let entry = RealmEntry {
             tenant: route.tenant,
             realm: route.realm,
@@ -378,9 +388,6 @@ where
             kek: &*kit.kek,
             ids: &kit.ids,
         };
-        let registered = self
-            .has_passkey(&kit, &registry, subject, &authenticator.credential_id)
-            .await?;
         let db = PgAccounts::sealed(self.app.clone(), kit.vault());
         let realm = kit.realm();
         let notifier = Outbox.notifier(&realm);
@@ -418,7 +425,14 @@ where
         };
         let down =
             |e: access_identity_session::SessionError| BootstrapError::Unavailable(e.to_string());
-        if !registered {
+        let registered = match &authenticator {
+            Some(a) => {
+                self.has_passkey(&kit, &registry, subject, &a.credential_id)
+                    .await?
+            }
+            None => true,
+        };
+        if let (Some(authenticator), false) = (&authenticator, registered) {
             let start = auth
                 .start_passkey(subject, identifier, identifier)
                 .await
@@ -445,8 +459,9 @@ where
                 return Err(BootstrapError::Refused(format!("test_user passkey: {r}")));
             }
         }
+        let credential = authenticator.as_ref().map(|a| a.credential_id);
         let Some(file) = totp else {
-            return Ok((authenticator.credential_id, None));
+            return Ok((credential, None));
         };
         let params = TotpParams::DEFAULT;
         let enrolled = auth
@@ -465,14 +480,12 @@ where
                 .await
                 .map_err(down)?
             {
-                return Err(BootstrapError::Refused(format!(
-                    "test_user totp: {refused:?}"
-                )));
+                return Err(BootstrapError::Refused(format!("totp: {refused:?}")));
             }
             file.write(&base32(start.seed.expose()))?;
         }
         Ok((
-            authenticator.credential_id,
+            credential,
             Some(TotpOut {
                 seed_file: file.path.display().to_string(),
                 algorithm: params.algorithm.uri_name(),

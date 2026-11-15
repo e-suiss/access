@@ -12,6 +12,8 @@ use axum::body::Bytes;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method};
 use suiss_crypto::secret::Secret;
 
+pub use crate::api::domain::Surface;
+
 pub use crate::api::ports::{Clock, Entropy, Unavailable};
 
 /// The device Instance a console session registered (OP-149 m.6, OP-151 m.3 (e)): its key
@@ -227,15 +229,17 @@ pub struct IssuedRead {
 }
 
 /// Issues management read tokens to a session's device Instance, holder-bound to the session's
-/// DPoP key `jkt` (TN-130, OP-151 m.3 (c)). Scope `realm.read` only: it authorises CT0 reads,
+/// DPoP key `jkt` (TN-130, OP-151 m.3 (c)). One surface's read scope only (`realm.read`, or
+/// `platform.read` for a session of the platform realm, OP-159 m.41): it authorises CT0 reads,
 /// never a write.
 pub trait ReadGrants: Send + Sync {
-    /// A token for `session`, or `None` when the session may not have one.
+    /// A token for `session` on `surface`, or `None` when the session may not have one.
     fn issue(
         &self,
         session: &ConsoleSession,
         instance: &SessionInstance,
         jkt: [u8; 32],
+        surface: Surface,
     ) -> impl Future<Output = Result<Option<IssuedRead>, Unavailable>> + Send;
 }
 

@@ -28,6 +28,7 @@ import { Export as SiemExport } from "./Export.js";
 import { Linux } from "./Linux.js";
 import { BreakGlass } from "./BreakGlass.js";
 import { Hr } from "./Hr.js";
+import * as P from "./Platform.js";
 import { Ssh } from "./Ssh.js";
 
 export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
@@ -66,18 +67,24 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   containment: "screenContainment",
   export: "screenExport",
   recovery: "screenRecovery",
+  tenants: "screenTenants",
+  realms: "screenRealms",
+  sandboxes: "screenSandboxes",
+  operator: "screenOperator",
 };
 
 const SECTION_TITLE: Readonly<Record<Section, Key>> = {
   admin: "navAdmin",
   developer: "navDeveloper",
   audit: "navAudit",
+  platform: "navPlatform",
 };
 
 const SECTION_INTRO: Readonly<Record<Section, Key>> = {
   admin: "sectionAdminIntro",
   developer: "sectionDeveloperIntro",
   audit: "sectionAuditIntro",
+  platform: "sectionPlatformIntro",
 };
 
 function body(screen: Screen, ctx: Ctx): ReactElement {
@@ -154,6 +161,15 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
 
     case "recovery":
       return <Recovery ctx={ctx} />;
+    // OP-159 m.41 (b)
+    case "tenants":
+      return <P.Tenants ctx={ctx} />;
+    case "realms":
+      return <P.Realms ctx={ctx} />;
+    case "sandboxes":
+      return <P.Sandboxes ctx={ctx} />;
+    case "operator":
+      return <P.Operator ctx={ctx} />;
   }
 }
 

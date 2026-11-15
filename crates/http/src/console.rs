@@ -16,8 +16,10 @@
 //! - a **read** through the same proxy must carry a read proof: an AIS in `check` mode (CT0) by
 //!   the session's device Instance over this very request. Only then does the BFF present the
 //!   session's management read token, which is issued to that Instance, lives at most 60
-//!   minutes, carries `realm.read` only and is bound to a DPoP key the BFF holds for the
-//!   session. The token authorises CT0 reads only, so the BFF is not an authority holder;
+//!   minutes, carries one surface's read scope (`realm.read`, or `platform.read` for a
+//!   `platform/…` path of a session in the platform realm, OP-159 m.41) and is bound to a DPoP
+//!   key the BFF holds for the session. The token authorises CT0 reads only, so the BFF is not
+//!   an authority holder;
 //! - `/console/api/proxy/adp/*` (explain, search, eligibility) passes the body on as the browser
 //!   wrote it: with the browser's AIS the reader is the user's Instance, without it the reader
 //!   is `Anonymous` and sees Public only.

@@ -11,7 +11,7 @@ use axum::body::Bytes;
 use super::ports::{
     ConsoleSession, ConsoleSessions, DeviceAnswer, Devices, Forward, Forwarded, IssuedRead,
     Network, NewConsoleSession, Profiles, ReadGrants, SessionInstance, SessionSummary, SignIn,
-    SignedIn, Unavailable, Upstream,
+    SignedIn, Surface, Unavailable, Upstream,
 };
 
 /// No sign-in hand-off: every start is unavailable.
@@ -157,6 +157,7 @@ impl ReadGrants for NoReadGrants {
         _: &ConsoleSession,
         _: &SessionInstance,
         _: [u8; 32],
+        _: Surface,
     ) -> impl Future<Output = Result<Option<IssuedRead>, Unavailable>> + Send {
         ready(Ok(None))
     }

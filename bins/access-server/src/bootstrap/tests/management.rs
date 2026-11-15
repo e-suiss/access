@@ -320,6 +320,19 @@ pub(super) async fn console_declaring(
     plan: &Plan,
     targets: DeclaredTargets,
 ) -> Console {
+    console_as(label, with_adp, plan, targets, ("acme", None)).await
+}
+
+/// [`console_declaring`] signed in to the realm `slug`: as the bootstrapped account whose
+/// identifier `account` names, with the Party the bootstrap bound it to, or else as a new
+/// account bound to the realm's founding root (OP-159 m.41).
+pub(super) async fn console_as(
+    label: &str,
+    with_adp: bool,
+    plan: &Plan,
+    targets: DeclaredTargets,
+    (slug, account): (&str, Option<&str>),
+) -> Console {
     let w = World::new(label).await;
     let declared = DeclaredTargets::default();
     Bootstrap {
@@ -344,20 +357,30 @@ pub(super) async fn console_declaring(
             .unwrap();
     }
 
-    let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
+    let route = route_by_slug(&w.db.router, slug).await.unwrap().unwrap();
     let root = root_party(&root_key(&w.keys).unwrap().public_key());
+    let found = match account {
+        Some(identifier) => Some(bootstrapped_subject(&w, &route, identifier).await),
+        None => None,
+    };
     let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
         .await
         .unwrap();
-    let subject = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
-        .await
-        .unwrap();
-    assert!(
-        idp::bind_subject_party(&mut t, &subject, &root.0)
+    let (subject, party) = if let Some(subject) = found {
+        let party = idp::subject_party(&mut t, &subject).await.unwrap().unwrap();
+        (subject, access_kernel::model::Id(party))
+    } else {
+        let subject = t
+            .insert_subject("active", "realm-kek:1", &[9; 40])
             .await
-            .unwrap()
-    );
+            .unwrap();
+        assert!(
+            idp::bind_subject_party(&mut t, &subject, &root.0)
+                .await
+                .unwrap()
+        );
+        (subject, root)
+    };
     let domain = Digest(
         *idp::governance(&mut t)
             .await
@@ -418,7 +441,7 @@ pub(super) async fn console_declaring(
                 w.keys.clone(),
             )),
             declared: targets,
-            platform: None,
+            platform: Some(plan.platform.clone()),
             outbound: Outbound::disabled(Duration::from_secs(5)),
             vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
                 w.keys.clone(),
@@ -450,7 +473,7 @@ pub(super) async fn console_declaring(
     // TN-131, OP-151 m.12 (b)
     let (r, _) = send(
         &management,
-        Request::get("/console/api/sign-in?realm=acme")
+        Request::get(format!("/console/api/sign-in?realm={slug}"))
             .body(Body::empty())
             .unwrap(),
     )
@@ -458,7 +481,7 @@ pub(super) async fn console_declaring(
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let authorize = location(&r);
     let started = cookies(&r);
-    assert!(authorize.starts_with("https://access.test/realms/acme/authorize?"));
+    assert!(authorize.starts_with(&format!("https://access.test/realms/{slug}/authorize?")));
     assert!(authorize.contains("prompt=login") && authorize.contains("code_challenge_method=S256"));
     let (r, _) = send(
         &oauth,
@@ -557,7 +580,7 @@ pub(super) async fn console_declaring(
     .await;
     assert_eq!(r.status(), StatusCode::OK);
     let session: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(session["realm"], "acme");
+    assert_eq!(session["realm"], slug);
     assert!(session["instance"].is_null());
 
     // OP-149 m.6, OP-151 m.3 (e)
@@ -577,7 +600,7 @@ pub(super) async fn console_declaring(
         String::from_utf8_lossy(&body)
     );
     let c: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(c["party"], b64url_encode(&root.0));
+    assert_eq!(c["party"], b64url_encode(&party.0));
     assert!(c.get("register").is_none());
     let grant = <[u8; 16]>::try_from(b64url_decode(c["basis"].as_str().unwrap()).unwrap()).unwrap();
     let challenge = b64url_decode(c["challenge"].as_str().unwrap()).unwrap();
@@ -623,6 +646,22 @@ pub(super) async fn console_declaring(
         bundles,
         trust,
     }
+}
+
+/// The account `identifier` of the realm `route`, as the bootstrap made it.
+async fn bootstrapped_subject(
+    w: &World,
+    route: &access_store::tenancy::RealmRoute,
+    identifier: &str,
+) -> [u8; 16] {
+    use access_identity_account::adapters::pg::PgAccounts;
+    use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+    let keks = crate::login::RealmKeks::new(w.keys.clone());
+    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.realm).unwrap());
+    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let subject = tx.subject_by_identifier(identifier).await.unwrap().unwrap();
+    tx.commit().await.unwrap();
+    subject
 }
 
 // OP-151 m.12 (b), (c), (e), TN-128, TN-129, TN-130, TN-110, TN-27, Ek B 3300
@@ -805,7 +844,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         app: w.db.app.clone(),
         plane: w.plane.clone(),
         dpop: DpopProfile::default(),
-        platform: None,
+        platform: Some(String::from("platform")),
     };
     let row = access_store::console::live_of(&w.db.app, route.tenant, route.realm, &subject, 10)
         .await
@@ -818,10 +857,28 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     };
     let dpop = crate::console::MemoryDpop::default();
     let issued = tokens
-        .issue_console(&row, &instance, dpop.jkt(row.id).unwrap())
+        .issue_console(
+            &row,
+            &instance,
+            dpop.jkt(row.id).unwrap(),
+            access_http::api::domain::Surface::Realm,
+        )
         .await
         .unwrap()
         .unwrap();
+    // OP-159 m.41, TN-119
+    assert!(
+        tokens
+            .issue_console(
+                &row,
+                &instance,
+                dpop.jkt(row.id).unwrap(),
+                access_http::api::domain::Surface::Platform,
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
     let token = String::from_utf8(issued.token.expose().clone()).unwrap();
     let uri = format!("{ORIGIN}{target}");
     let ath = suiss_crypto::digest::sha256(token.as_bytes());
@@ -1215,3 +1272,5 @@ mod recovery;
 mod redteam;
 // OP-159 m.4 (b) (J9)
 mod profile_check;
+// OP-159 m.41
+mod platform;

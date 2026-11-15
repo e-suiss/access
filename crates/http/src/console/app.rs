@@ -36,7 +36,7 @@ use super::domain::{
 };
 use super::ports::{
     ConsoleEnv, ConsoleSession, ConsoleSessions, DeviceAnswer, Devices, DpopKeys, Forward,
-    Forwarded, Network, NewConsoleSession, Profiles, ReadGrants, SessionInstance, SignIn,
+    Forwarded, Network, NewConsoleSession, Profiles, ReadGrants, SessionInstance, SignIn, Surface,
     Unavailable, Upstream,
 };
 use crate::login::{Assets, Peer};
@@ -72,7 +72,7 @@ pub struct Console<E> {
     env: E,
     limits: Limits,
     assets: Option<Assets>,
-    held: Mutex<HashMap<[u8; 16], Held>>,
+    held: Mutex<HashMap<([u8; 16], Surface), Held>>,
 }
 
 impl<E: ConsoleEnv> Console<E> {
@@ -94,7 +94,7 @@ impl<E: ConsoleEnv> Console<E> {
 
     fn forget(&self, session: [u8; 16]) {
         if let Ok(mut held) = self.held.lock() {
-            held.remove(&session);
+            held.retain(|(id, _), _| *id != session);
         }
         self.env.dpop().forget(session);
     }
@@ -739,28 +739,34 @@ fn path_and_query(path: &str, uri: &Uri) -> String {
     }
 }
 
-/// The session's read token, held or newly issued to its device Instance and bound to the
-/// BFF's DPoP key of the session (TN-130, OP-151 m.3 (c)).
+/// The session's read token for `surface`, held or newly issued to its device Instance and
+/// bound to the BFF's DPoP key of the session (TN-130, OP-151 m.3 (c)).
 async fn read_token<E: ConsoleEnv>(
     c: &Console<E>,
     session: &ConsoleSession,
     instance: &SessionInstance,
+    surface: Surface,
     now: u64,
 ) -> Result<Option<Secret<Vec<u8>>>, Unavailable> {
     if let Ok(held) = c.held.lock()
-        && let Some(h) = held.get(&session.id)
+        && let Some(h) = held.get(&(session.id, surface))
         && h.expires_ms > now.saturating_add(RENEW_MS)
     {
         return Ok(Some(h.token.clone()));
     }
     let jkt = c.env.dpop().jkt(session.id)?;
-    let Some(issued) = c.env.grants().issue(session, instance, jkt).await? else {
+    let Some(issued) = c
+        .env
+        .grants()
+        .issue(session, instance, jkt, surface)
+        .await?
+    else {
         return Ok(None);
     };
     let token = issued.token.clone();
     let mut held = c.held.lock().map_err(|_| Unavailable)?;
     held.insert(
-        session.id,
+        (session.id, surface),
         Held {
             token: issued.token,
             expires_ms: issued.expires_ms,
@@ -839,7 +845,13 @@ async fn admin_proxy<E: ConsoleEnv>(
             Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
             Err(ProofError::Rejected) => return problems::proof_rejected().into_response(),
         }
-        let token = match read_token(&c, &live.session, &instance, now).await {
+        // OP-159 m.41, TN-119
+        let surface = if rest == "platform" || rest.starts_with("platform/") {
+            Surface::Platform
+        } else {
+            Surface::Realm
+        };
+        let token = match read_token(&c, &live.session, &instance, surface, now).await {
             Ok(Some(t)) => t,
             Ok(None) => return problems::read_not_granted().into_response(),
             Err(Unavailable) => return unavailable(),

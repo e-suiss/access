@@ -560,6 +560,7 @@ export async function open(
     admin: "Admin",
     developer: "Developer",
     audit: "Audit",
+    platform: "Platform",
   };
   const section = names[path.split("/")[2] ?? ""];
   if (section !== undefined) {

@@ -1,5 +1,5 @@
-// IA-5, XI-11: Admin, Developer and Audit, and each screen inside them, are shown only when the
-// viewer can exercise at least one action of it, as the eligibility check answers through the
+// IA-5, XI-11: Admin, Developer, Audit and Platform, and each screen inside them, are shown only
+// when the viewer can exercise at least one action of it, as the eligibility check answers through the
 // BFF's ADP read path for a drafted intent. No answer, an error or a refusal shows nothing
 // (fail closed); there are no disabled stubs.
 import { search } from "./adp.js";
@@ -7,7 +7,7 @@ import { call } from "./api.js";
 import type { Instance } from "./instance.js";
 import { draft, type Wanted } from "./intents.js";
 
-export type Section = "admin" | "developer" | "audit";
+export type Section = "admin" | "developer" | "audit" | "platform";
 
 /** The screens of each section (§8.17.4.1; "Sign-in settings" is the identity plane's, E34). */
 export const SCREENS = {
@@ -39,6 +39,8 @@ export const SCREENS = {
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
   audit: ["records", "replay", "revocation", "unknown", "containment", "export", "recovery"],
+  // OP-159 m.41 (b)
+  platform: ["tenants", "realms", "sandboxes", "operator"],
 } as const satisfies Readonly<Record<Section, readonly string[]>>;
 
 export type Screen = (typeof SCREENS)[Section][number];
@@ -63,6 +65,13 @@ const idp = (namespace: string, name: string): Probe => ({
  * disabled stubs (IA-5, OP-157 m.4 (a)). Its lane drops the wrapper.
  */
 const planned = (probes: readonly Probe[]): readonly Probe[] => probes.slice(0, 0);
+// OP-159 m.41 (b), INV-29
+const platform = (name: string): Probe => idp("platform", name);
+const PLATFORM: readonly Probe[] = [
+  platform("tenant_create"),
+  platform("realm_create"),
+  platform("sandbox_create"),
+];
 // OP-151 m.8 (h)
 const AUDIT: Probe = { namespace: "access", name: "read", major: 1, resource: "audit" };
 
@@ -144,6 +153,11 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   export: [AUDIT],
   // OP-158 m.4 (a), m.3 (m): what an auditor reads; only `access-cli domain recover` recovers
   recovery: [AUDIT],
+  // OP-159 m.41 (b)
+  tenants: PLATFORM,
+  realms: [platform("realm_create")],
+  sandboxes: [platform("sandbox_create")],
+  operator: PLATFORM,
 };
 
 /** The intent `probe` asks about in `realm`. */

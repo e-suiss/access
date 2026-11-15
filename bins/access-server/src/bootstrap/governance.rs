@@ -450,7 +450,7 @@ pub(crate) struct ReviewOut {
 }
 
 /// The realm's `idp` resources: what every `idp.*` change names.
-fn realm_resources(slug: &str) -> ResourceSelector {
+pub(super) fn realm_resources(slug: &str) -> ResourceSelector {
     ResourceSelector::Structural(Structural {
         namespace: String::from(RESOURCE_NAMESPACE),
         prefix: vec![String::from(slug)],
@@ -482,7 +482,7 @@ where
     }
 
     /// The account of `identifier` in the realm, made with `password` when there is none.
-    async fn account(
+    pub(super) async fn account(
         &self,
         ids: &IdKey,
         (tenant, realm): (TenantId, RealmId),

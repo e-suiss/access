@@ -105,3 +105,14 @@ period_days = 90
 realm = "acme"
 profile = "ml-dsa-65"
 kex_share = "optimistic"
+
+# OP-159 m.41 (a): the local platform administrator, an account in the platform realm with the
+# test user's password and an authenticator app (its seed in `totp_seed_file`, owner-only, never
+# printed). The platform realm's root grants its Party the `idp.platform.*` actions
+# (`tenant_create`, `realm_create`, `sandbox_create`) by a `grant_issue` Exercise: nobody holds
+# them by default (INV-29). It signs in to the console with the realm `platform`; the summary says
+# `platform_admin` (realm, issuer, identifier, subject, party, instance, actions, basis, totp).
+[platform_admin]
+identifier = "admin@platform.local"
+password_env = "BOOTSTRAP_TEST_PASSWORD"
+totp_seed_file = "/var/lib/access/bootstrap/platform-admin-totp"

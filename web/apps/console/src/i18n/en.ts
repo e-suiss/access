@@ -1077,6 +1077,70 @@ export const en = {
   // OP-159 m.4 (b) (J3)
   signingFipsModuleInUse: "in use",
   signingFipsModuleNotInUse: "not in use",
+  // OP-159 m.41 (b): the Platform section
+  navPlatform: "Platform",
+  sectionPlatformIntro:
+    "Tenants, the realms and sandbox domains in them, and how this deployment is doing. You see each realm's metadata only, never its accounts, apps, authority, records or settings.",
+  screenTenants: "Tenants",
+  screenRealms: "Realms",
+  screenSandboxes: "Sandbox domains",
+  screenOperator: "Operator health",
+  platformTenantsIntro: "Every tenant of this deployment, with its state and placement.",
+  platformTenant: "Tenant",
+  platformTenantChoose: "Choose a tenant",
+  platformStatus: "State",
+  platformPlacement: "Placement",
+  platformPlacementOptional: "Placement (optional)",
+  platformCreated: "Created",
+  platformTenantCreate: "New tenant",
+  platformTenantCreateHint:
+    "Access gives the tenant its ID when it drafts the change. Leave the placement empty for the default pool.",
+  platformTenantCreateSend: "Create tenant",
+  platformRealmsIntro: "A tenant's realms, each with the state of its signing keys.",
+  platformSandboxesIntro:
+    "A tenant's sandbox domains. Authority never flows between a sandbox and a production realm, and each sandbox has a fixed daily budget.",
+  platformBoundary:
+    "To manage what is inside a realm, sign in to that realm with one of its own administrators.",
+  platformRealmDetails: "Realm {slug}",
+  platformSandbox: "Sandbox",
+  platformSlug: "Short name",
+  platformSlugHint:
+    "Lowercase letters, digits and hyphens, 3 to 63 characters. It can't be changed later.",
+  platformIssuer: "Issuer",
+  platformKeys: "Signing keys",
+  platformKeyPending: "No keys published yet",
+  platformKeyPublished: "Published, not signing yet",
+  platformKeySigning: "Signing",
+  platformKeyUnavailable: "The key service did not answer",
+  platformSigningAt: "Signs from at the latest",
+  platformKexShare: "Post-quantum key exchange",
+  platformBudget: "Daily budget",
+  platformBudgetValue: "{exercises} changes and {projections} answers a day",
+  platformRealmCreate: "New realm",
+  platformRealmCreateHint:
+    "A new realm starts with its own founding root, chosen here. This deployment's operator holds nothing in it.",
+  platformRealmCreateSend: "Create realm",
+  platformSandboxCreate: "New sandbox domain",
+  platformSandboxCreateHint:
+    "A sandbox domain starts from the sandbox template with its own founding root and a fixed daily budget.",
+  platformSandboxCreateSend: "Create sandbox domain",
+  platformIssuerStyle: "Address",
+  platformIssuerSubdomain: "Its own subdomain",
+  platformIssuerPath: "A path on the shared host",
+  platformRoot: "Founding root",
+  platformRootJoint: "Several people together (recommended)",
+  platformRootSole: "Only me",
+  platformRootParties: "Party IDs",
+  platformRootPartiesHint: "One per line or separated by commas; yours is filled in.",
+  platformRootK: "How many of them must sign",
+  platformRootSoleAcknowledge:
+    "I understand that a realm with a single founding root can't be recovered if that key is lost.",
+  platformOperatorIntro:
+    "This deployment's readiness checks, by name. No addresses, keys or secrets are shown.",
+  platformReady: "Ready",
+  platformDegraded: "Degraded: at least one check is failing",
+  platformCheckOk: "OK",
+  platformCheckFailing: "Failing",
 } as const;
 
 export type Key = keyof typeof en;

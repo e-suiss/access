@@ -10,6 +10,7 @@
 
 use std::collections::BTreeMap;
 
+use access_identity_admin::domain::provision::{self, PlatformAction};
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Mode;
@@ -202,6 +203,7 @@ impl Drafted {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Family {
     Idp,
+    Platform,
     Read,
     Export,
     Meta,
@@ -222,6 +224,13 @@ fn catalogued(namespace: &str, name: &str, major: u64) -> Option<(ActionRef, Fam
             _ => return None,
         };
         return Some((core_action(name), family));
+    }
+    // OP-159 m.41 (b), IA-5
+    if namespace == provision::NAMESPACE {
+        return PlatformAction::ALL
+            .into_iter()
+            .find(|a| a.name() == name)
+            .map(|a| (a.action_ref(), Family::Platform));
     }
     IdpAction::ALL
         .into_iter()
@@ -275,7 +284,9 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
     }
     let first = one.path.first().map(String::as_str);
     match family {
-        Family::Idp => one.namespace == RESOURCE_NAMESPACE && first == Some(realm),
+        Family::Idp | Family::Platform => {
+            one.namespace == RESOURCE_NAMESPACE && first == Some(realm)
+        }
         Family::Export => one.namespace == AUDIT_NAMESPACE && one.path == [realm],
         Family::Read => {
             (one.namespace == AUDIT_NAMESPACE && one.path == [realm])
@@ -334,7 +345,8 @@ fn mode(v: Option<&Value>) -> Result<Mode, DraftError> {
 ///
 /// A core meta-action carries its payload's digest: without `payload` it is drafted for `check`
 /// only (an eligibility probe), with one of [`META_WRITES`] it may be committed; the read is
-/// never committed; `idp.*` actions and the export may be either.
+/// never committed; `idp.*` actions and the export may be either, but an `idp.platform.*`
+/// action only for `check`: its writes are drafted by `POST …/platform/intents` (OP-159 m.41).
 ///
 /// # Errors
 /// [`DraftError`].
@@ -511,7 +523,7 @@ pub fn draft_with(
     let bytes = envelope.to_bytes().map_err(|_| DraftError::Malformed)?;
     // PI-7
     let probe = (mode == Mode::Check && payload.is_none() && family != Family::Publish).then_some(
-        if family == Family::Idp {
+        if matches!(family, Family::Idp | Family::Platform) {
             ProbeRoot::Idp
         } else {
             ProbeRoot::Meta

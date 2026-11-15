@@ -22,7 +22,7 @@ use access_http::console::domain::read_intent;
 use access_http::console::ports::{
     Clock, ConsoleEnv, ConsoleSession, ConsoleSessions, DeviceAnswer, Devices, DpopKeys, Entropy,
     Forward, Forwarded, IssuedRead, Network, NewConsoleSession, Profiles, ReadGrants,
-    SessionInstance, SessionSummary, SignIn, SignedIn, Unavailable, Upstream,
+    SessionInstance, SessionSummary, SignIn, SignedIn, Surface, Unavailable, Upstream,
 };
 use access_http::console::{Console, router};
 use access_http::login::{Assets, Peer};
@@ -264,6 +264,7 @@ impl Devices for Device {
 struct Grants {
     issued: AtomicU64,
     refuse: AtomicBool,
+    refuse_platform: AtomicBool,
 }
 
 impl ReadGrants for Grants {
@@ -272,13 +273,18 @@ impl ReadGrants for Grants {
         _: &ConsoleSession,
         _: &SessionInstance,
         jkt: [u8; 32],
+        surface: Surface,
     ) -> Result<Option<IssuedRead>, Unavailable> {
-        if self.refuse.load(Ordering::SeqCst) {
+        if self.refuse.load(Ordering::SeqCst)
+            || (surface == Surface::Platform && self.refuse_platform.load(Ordering::SeqCst))
+        {
             return Ok(None);
         }
         self.issued.fetch_add(1, Ordering::SeqCst);
         Ok(Some(IssuedRead {
-            token: Secret::new(format!("tok-{}", b64url_encode(&jkt)).into_bytes()),
+            token: Secret::new(
+                format!("tok-{}-{}", surface.name(), b64url_encode(&jkt)).into_bytes(),
+            ),
             expires_ms: T0 + 3_600_000,
         }))
     }
@@ -924,6 +930,70 @@ async fn drafting_an_intent_is_a_read() {
     let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
     assert!(names.contains(&"authorization") && names.contains(&"dpop"));
     assert!(!names.contains(&"x-access-ais"));
+}
+
+fn authorization(f: &Forward) -> String {
+    f.headers
+        .iter()
+        .find(|(n, _)| n == "authorization")
+        .unwrap()
+        .1
+        .to_str()
+        .unwrap()
+        .to_owned()
+}
+
+// OP-159 m.41, TN-119, OP-151 m.3 (a)
+#[tokio::test]
+async fn a_platform_read_presents_the_platform_surfaces_own_token() {
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    let read = |path: &str| {
+        let mut r = s.get(&format!("/console/api/proxy/admin/{path}"));
+        r.headers_mut().insert(
+            "x-access-ais",
+            h.ais(
+                Mode::Check,
+                read_intent(&Method::GET, &format!("/admin/v1/{path}")),
+                h.now(),
+            )
+            .parse()
+            .unwrap(),
+        );
+        r
+    };
+    for path in [
+        "platform/tenants",
+        "realms/acme",
+        "platform/operator/health",
+    ] {
+        let (r, _) = h.send(read(path), CLIENT).await;
+        assert_eq!(r.status(), StatusCode::OK, "{path}");
+    }
+    assert_eq!(h.env().grants.issued.load(Ordering::SeqCst), 2);
+    let seen = h.env().up.take();
+    assert!(authorization(&seen[0].1).starts_with("DPoP tok-platform-"));
+    assert!(authorization(&seen[1].1).starts_with("DPoP tok-realm-"));
+    assert_eq!(authorization(&seen[2].1), authorization(&seen[0].1));
+
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    h.env().grants.refuse_platform.store(true, Ordering::SeqCst);
+    let mut r = s.get("/console/api/proxy/admin/platform/tenants");
+    r.headers_mut().insert(
+        "x-access-ais",
+        h.ais(
+            Mode::Check,
+            read_intent(&Method::GET, "/admin/v1/platform/tenants"),
+            h.now(),
+        )
+        .parse()
+        .unwrap(),
+    );
+    let (r, body) = h.send(r, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(&body)["code"], "read-not-granted");
+    assert!(h.env().up.take().is_empty());
 }
 
 // TN-130

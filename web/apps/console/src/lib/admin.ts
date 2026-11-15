@@ -13,7 +13,7 @@ import {
   readProof,
 } from "./instance.js";
 
-async function problemOf(r: Response): Promise<Problem> {
+export async function problemOf(r: Response): Promise<Problem> {
   try {
     const p = (await r.json()) as { code?: unknown; reason?: unknown };
     return new Problem(
