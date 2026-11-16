@@ -2,37 +2,34 @@
 // connectors. Registering, retiring and importing are each one signed change; an HR source's
 // records select people for roles only through the domain's protected subject-selection
 // acceptance of its issuer, so a role a rule over them holds shows "Sync from HR".
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
+import { FieldLabel, FieldLegend, Field as FieldRoot, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { search } from "../lib/adp.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface HrSource {
-  readonly name: string;
-  readonly issuer: string;
-  readonly status: string;
-  readonly people: number;
-  readonly version: number;
-}
+// OP-159 m.46 (f)
+const HrSources = items(
+  v.looseObject({
+    name: v.string(),
+    issuer: v.string(),
+    status: v.string(),
+    people: v.number(),
+    version: v.number(),
+  }),
+);
 
-interface HrConnector {
-  readonly name: string;
-  readonly source: string;
-  readonly vendor: string;
-  readonly status: string;
-}
-
-interface Page<T> {
-  readonly items: readonly T[];
-}
+const HrConnectors = items(
+  v.looseObject({ name: v.string(), source: v.string(), vendor: v.string(), status: v.string() }),
+);
 
 interface AcceptedSource {
   readonly use: string;
@@ -105,10 +102,10 @@ function accepted(report: SourcesReport | undefined, issuer: string): boolean {
 export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const sources = useLoad(readKey(ctx, `envs/${environment}/hr-sources`), () =>
-    adminGetAs<Page<HrSource>>(ctx.instance, `envs/${environment}/hr-sources`),
+    adminGet(ctx.instance, `envs/${environment}/hr-sources`, HrSources),
   );
   const connectors = useLoad(readKey(ctx, `envs/${environment}/hr-connectors`), () =>
-    adminGetAs<Page<HrConnector>>(ctx.instance, `envs/${environment}/hr-connectors`),
+    adminGet(ctx.instance, `envs/${environment}/hr-connectors`, HrConnectors),
   );
   const report = useLoad(readKey(ctx, "hr-sources-report"), () =>
     search<SourcesReport>(ctx.instance, "sources", {}).then((a) => a.results[0]),

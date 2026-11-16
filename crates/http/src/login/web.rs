@@ -824,12 +824,21 @@ where
 }
 
 /// Whether the page at `uri` has the person's device Instance sign with the Kernel (Wasm): the
-/// consent screen of a client the environment did not register (EI-18, OP-154 m.3 (k)) and the CIBA
-/// approval page (OP-155 m.3 (l)).
+/// consent screen of a client the environment did not register (EI-18, OP-154 m.3 (k)), the CIBA
+/// approval page (OP-155 m.3 (l)), and a tenant founder's or invited administrator's page, which
+/// encodes the browser's device key (OP-159 m.47 (c), (f)).
 fn signs(uri: &Uri) -> bool {
-    uri.query()
-        .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
-        .is_some_and(|p| matches!(p.get("reason"), Some("approve" | "ciba")))
+    let path = uri.path();
+    let below = |what: &str| {
+        path.split_once("/login/")
+            .is_some_and(|(_, rest)| rest.strip_prefix(what).is_some_and(|t| !t.is_empty()))
+    };
+    below("founding/")
+        || below("admin-invite/")
+        || uri
+            .query()
+            .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
+            .is_some_and(|p| matches!(p.get("reason"), Some("approve" | "ciba")))
 }
 
 /// Whether the page at `uri` is the Secure Payment Confirmation page (OP-156 m.3 (g)).

@@ -3,27 +3,33 @@
 // them no effect, which comes only from the domain's own Acceptance and policies. A posture is
 // the provider's statement ("Compliant per Acme MDM (statement)"), never Access's own, and a
 // delayed source is stated, never hidden. Each change is one signed Exercise.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
+import { FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FORM, H4, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Source {
-  readonly name: string;
-  readonly kind: "kyc" | "mdm" | "risk" | "dlp";
-  readonly class: string;
-  readonly provider: string;
-  readonly issuer: string;
-  readonly format: string;
-  readonly transmitter?: string | null;
-  readonly status: string;
-}
+// OP-159 m.46 (f)
+const Source = v.looseObject({
+  name: v.string(),
+  kind: v.picklist(["kyc", "mdm", "risk", "dlp"]),
+  class: v.string(),
+  provider: v.string(),
+  issuer: v.string(),
+  format: v.string(),
+  transmitter: v.exactOptional(v.nullable(v.string())),
+  status: v.string(),
+});
+
+type Source = v.InferOutput<typeof Source>;
+
+const Sources = items(Source);
 
 const KIND = {
   kyc: "signalKindKyc",
@@ -36,10 +42,7 @@ const KIND = {
 export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(readKey(ctx, `envs/${environment}/signal-sources`), () =>
-    adminGetAs<{ readonly items: readonly Source[] }>(
-      ctx.instance,
-      `envs/${environment}/signal-sources`,
-    ),
+    adminGet(ctx.instance, `envs/${environment}/signal-sources`, Sources),
   );
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Source["kind"]>("mdm");

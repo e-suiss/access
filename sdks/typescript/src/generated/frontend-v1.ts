@@ -975,10 +975,112 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)). */
+        /** The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `management`) and, for a management environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)). */
         get: operations["getBranding"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/foundings/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A tenant founding's name, its management environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)). */
+        get: operations["getFounding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/foundings/{token}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Proves the founder's address {email, code}; 204 (TN-89 (5), (7)). Problems: invalid-code, founding-expired, founding-state. */
+        post: operations["verifyFounding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/foundings/{token}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Opens the management environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141). */
+        post: operations["completeFounding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin-invites/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A tenant administrator invitation on the management environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)). */
+        get: operations["getAdminInvite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin-invites/{token}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Proves the invitee's address {email, code}; 204 (TN-89 (5), (7)). Problems: invalid-code, invite-expired, invite-state. */
+        post: operations["verifyAdminInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin-invites/{token}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Makes the invitee's account {email, code, password, device_key} and adds it as an administrator, never an owner; 201 {environment}. The device key's Instance is registered at the first console sign-in. Problems: invalid-code, invite-expired, invite-state (also: the address has an account, or the inviter is no administrator any more), invalid-password, key-invalid (OP-159 m.47 (f)). */
+        post: operations["acceptAdminInvite"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2493,6 +2595,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Branding: {
+            display_name: string | null;
+            logo_uri: string | null;
+            environment: {
+                /** @enum {unknown} */
+                kind: "standard" | "management";
+                /** @description The tenant's display name, for a management environment only (TN-138, OP-159 m.47 (b)). */
+                tenant_name?: string | null;
+            };
+        };
         Problem: {
             type: string;
             title: string;
@@ -4162,6 +4274,160 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFounding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    verifyFounding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    completeFounding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    verifyAdminInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    acceptAdminInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
         responses: {
             /** @description OK */
             200: {

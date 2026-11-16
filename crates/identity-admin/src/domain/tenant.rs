@@ -29,6 +29,10 @@ pub const MANAGEMENT: &str = "management";
 /// The environment kind every other environment is.
 pub const STANDARD: &str = "standard";
 
+/// How long a tenant administrator invitation holds when the request names no lifetime (TN-89):
+/// seven days.
+pub const INVITE_DAYS: u32 = 7;
+
 /// How long a cross-domain first acceptance of a tenant administrator invitation waits before the
 /// administrator holds anything (TN-109, OP-159 m.47 (f)): 24 hours.
 pub const ADMIN_COOLING_S: i64 = 24 * 3_600;
@@ -153,6 +157,10 @@ pub enum TenantInvalid {
     /// The last owner cannot be removed (m.47 (e)).
     #[error("last owner")]
     LastOwner,
+    /// The management environment sent as many invitations this hour or day as it may, or too
+    /// few of its recent ones were accepted (TN-89 (11), TN-95).
+    #[error("invitation limit")]
+    InviteLimit,
 }
 
 impl TenantInvalid {
@@ -166,6 +174,7 @@ impl TenantInvalid {
             Self::Lifetime => "invalid-lifetime",
             Self::NoAdmin => "not-found",
             Self::LastOwner => "last-tenant-owner",
+            Self::InviteLimit => "rate-limited",
         }
     }
 }

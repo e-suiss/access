@@ -4,8 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { AgentBadge, AgentConnections } from "./agents/Agents.js";
 import type { AgentFace, Connection } from "./agents/model.js";
-import { StatusLadder, type Rung } from "./StatusLadder.js";
-import { WhyPanel, type Depth, type Explanation } from "./WhyPanel.js";
+import { type Rung, StatusLadder } from "./StatusLadder.js";
+import { type Depth, type Explanation, WhyPanel } from "./WhyPanel.js";
 
 /** A custom element that renders one component from its `data` property; it keeps no copy of
  * Access data beyond what it was last given and sends nothing anywhere. */

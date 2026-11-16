@@ -270,12 +270,42 @@ where
         Ok(issuer_path(&kit.issuer).to_owned())
     }
 
-    /// `GET /v1/login/branding` (TN-106).
+    /// `GET /v1/login/branding` (TN-106): the branding record and the environment's kind; a
+    /// management environment also names its tenant, which the page titles "{name} — Yönetim
+    /// girişi" (TN-138, OP-159 m.47 (b)).
     pub async fn branding(&self, entry: &EnvironmentEntry) -> Reply {
-        match self.theme(entry).await {
-            Ok(t) => Reply::json(200, t.json()),
-            Err(r) => r,
+        let theme = match self.theme(entry).await {
+            Ok(t) => t,
+            Err(r) => return r,
+        };
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let read = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+            let kind = access_store::tenant_admin::environment_kind(&mut t).await?;
+            let name = access_store::tenant_admin::tenant_profile(&mut t)
+                .await?
+                .and_then(|(n, _)| n);
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>((kind, name))
+        };
+        let Ok((kind, name)) = read.await else {
+            return Reply::problem(UNAVAILABLE);
+        };
+        let management = kind.as_deref() == Some("management");
+        let mut environment = serde_json::json!({
+            "kind": if management { "management" } else { "standard" },
+        });
+        if management && let Some(o) = environment.as_object_mut() {
+            o.insert(String::from("tenant_name"), serde_json::Value::from(name));
         }
+        let mut body = theme.json();
+        if let Some(o) = body.as_object_mut() {
+            o.insert(String::from("environment"), environment);
+        }
+        Reply::json(200, body)
     }
 
     /// `GET /v1/login/messages` (X35, XI-25, OP-153 m.22 (k)): the environment's stored texts by

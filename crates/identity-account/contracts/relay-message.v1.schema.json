@@ -1551,6 +1551,12 @@
         "expires_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "console_link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "A tenant founder's or administrator's console, opened once the invitation is accepted (OP-159 m.47 (c), (f))."
         }
       }
     },
@@ -2015,7 +2021,8 @@
           "enum": [
             "sub_delegation",
             "domain_acceptance",
-            "instance_ended"
+            "instance_ended",
+            "administrator_added"
           ]
         },
         "name": {

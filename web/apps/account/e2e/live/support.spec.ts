@@ -9,10 +9,10 @@
 // (access-local-client support-episode). Here the person reads that access and its use under the
 // operator's name, the operator asks again, the person gives it on the page and revokes both.
 import AxeBuilder from "@axe-core/playwright";
-import { type BrowserContext, expect, request as http, test, type Page } from "@playwright/test";
+import { type BrowserContext, expect, request as http, type Page, test } from "@playwright/test";
 
 import { OWN_DEVICE_SESSION } from "./session.js";
-import { PASSWORD, ENVIRONMENT, signInWithPassword } from "./signin.js";
+import { ENVIRONMENT, PASSWORD, signInWithPassword } from "./signin.js";
 
 const OPERATOR = process.env["ACCESS_LIVE_SUPPORT_OPERATOR"];
 const SUBJECT = process.env["ACCESS_LIVE_TEST_SUBJECT"];

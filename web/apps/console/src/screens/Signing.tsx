@@ -1,30 +1,34 @@
 // CR-41, CR-44, HL-27, OP-159 m.3 (g), (o), (r), (t)
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-type Profile = "ml-dsa-65" | "ml-dsa-44" | "ml-dsa-87";
-type KexShare = "optimistic" | "advertise-only";
+// OP-159 m.46 (f)
+const Profile = v.picklist(["ml-dsa-65", "ml-dsa-44", "ml-dsa-87"]);
+type Profile = v.InferOutput<typeof Profile>;
+const KexShare = v.picklist(["optimistic", "advertise-only"]);
+type KexShare = v.InferOutput<typeof KexShare>;
 
-interface SigningView {
-  readonly signing_profile: Profile | null;
-  readonly algorithms: readonly string[];
-  readonly kex_share: KexShare;
-  readonly fips: boolean;
-  readonly fips_module: boolean;
-  readonly governing_domain: string;
-  readonly pq_reanchor: {
-    readonly size: number;
-    readonly time: number;
-    readonly witnesses: readonly string[];
-  } | null;
-}
+const SigningView = v.looseObject({
+  signing_profile: v.nullable(Profile),
+  algorithms: v.array(v.string()),
+  kex_share: KexShare,
+  fips: v.boolean(),
+  fips_module: v.boolean(),
+  governing_domain: v.string(),
+  pq_reanchor: v.nullable(
+    v.looseObject({ size: v.number(), time: v.number(), witnesses: v.array(v.string()) }),
+  ),
+});
+
+type SigningView = v.InferOutput<typeof SigningView>;
 
 const PROFILES: readonly Profile[] = ["ml-dsa-65", "ml-dsa-44", "ml-dsa-87"];
 
@@ -180,7 +184,7 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
 export function Signing({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const view = useLoad(readKey(ctx, `envs/${environment}/signing`), () =>
-    adminGetAs<SigningView>(ctx.instance, `envs/${environment}/signing`),
+    adminGet(ctx.instance, `envs/${environment}/signing`, SigningView),
   );
   return (
     <div data-testid="signing" className="flex flex-col gap-6">

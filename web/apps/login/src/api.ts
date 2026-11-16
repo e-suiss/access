@@ -1,11 +1,13 @@
+import * as v from "valibot";
+
 import { under } from "./base.js";
 import {
-  flowsPath,
-  parseUi,
-  stepUpPath,
   type FlowKind,
+  flowsPath,
   type LoginUi,
+  parseUi,
   type Submission,
+  stepUpPath,
 } from "./contract.js";
 
 export type Answer =
@@ -14,12 +16,15 @@ export type Answer =
   | { readonly kind: "degraded" }
   | { readonly kind: "failed" };
 
+// OP-159 m.46 (f)
+const ProblemBody = v.looseObject({ code: v.optional(v.unknown()), type: v.optional(v.unknown()) });
+
 /** The RFC 9457 problem code of a refusal, from `code` or the last segment of `type`. */
 function problemCode(body: unknown): string | null {
-  if (typeof body !== "object" || body === null) return null;
-  const b = body as { code?: unknown; type?: unknown };
-  if (typeof b.code === "string") return b.code;
-  return typeof b.type === "string" ? (b.type.split(":").pop() ?? null) : null;
+  const p = v.safeParse(ProblemBody, body);
+  if (!p.success) return null;
+  if (typeof p.output.code === "string") return p.output.code;
+  return typeof p.output.type === "string" ? (p.output.type.split(":").pop() ?? null) : null;
 }
 
 async function answer(response: Response): Promise<Answer> {

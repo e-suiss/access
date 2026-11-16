@@ -4,13 +4,15 @@
 // person's AAS: their device Instance signs the drafted `approve` contribution after the screen
 // showed the Kernel's decoding, the hosted approval shows the decision point's render and takes
 // one passkey assertion over H(AAS), and only then is the request answered.
-import { useEffect, useRef, useState } from "react";
 
-import { loadKernel } from "@esuiss/access";
 import { Button } from "@access/ui/components/button";
+import { loadKernel } from "@esuiss/access";
+import { useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN, under } from "./base.js";
-import { type JsonAnswer, postJson } from "./http.js";
+import { Empty, type JsonAnswer, postJson } from "./http.js";
+import { t } from "./i18n.js";
 import {
   account,
   b64url,
@@ -18,15 +20,13 @@ import {
   decode,
   find,
   fromB64url,
+  Holding,
   type Instance,
   NotSigned,
   register,
-  type Session,
+  Session,
   sign,
 } from "./instance.js";
-import type { PasskeyOptions } from "./contract.js";
-import { getPasskey } from "./passkey.js";
-import { t } from "./i18n.js";
 import {
   facts,
   inlineLink,
@@ -39,41 +39,43 @@ import {
   stack,
   Title,
 } from "./Layout.js";
+import { getPasskey } from "./passkey.js";
 
-interface Holding {
-  readonly holding: { readonly grant: string; readonly holder: string; readonly since: number };
-}
+// OP-159 m.46 (f)
+type HoldingBasis = Readonly<v.InferOutput<typeof Holding>>;
 
 /** What a CIBA request asks (`POST /v1/ciba/preview`). */
-export interface CibaPreview {
-  readonly client: string;
-  readonly binding_message: string | null;
-  readonly scopes: readonly string[];
-  readonly expires_at: number;
-  readonly request: unknown;
-  readonly redirect_uri: string;
-  readonly contribution_basis: Holding | null;
-  readonly domain: string;
-  readonly contribution: {
-    readonly class: string;
-    readonly envelope: string;
-    readonly valid_from: number;
-    readonly valid_until: number;
-  };
-  readonly csrf: string;
-}
+const CibaPreview = v.looseObject({
+  client: v.string(),
+  binding_message: v.nullable(v.string()),
+  scopes: v.array(v.string()),
+  expires_at: v.number(),
+  request: v.unknown(),
+  redirect_uri: v.string(),
+  contribution_basis: v.nullable(Holding),
+  domain: v.string(),
+  contribution: v.looseObject({
+    class: v.string(),
+    envelope: v.string(),
+    valid_from: v.number(),
+    valid_until: v.number(),
+  }),
+  csrf: v.string(),
+});
 
-interface RenderField {
-  readonly name: string;
-  readonly text: string;
-  readonly material: boolean;
-}
+export type CibaPreview = Readonly<v.InferOutput<typeof CibaPreview>>;
 
-interface Started {
-  readonly flow: string;
-  readonly render: { readonly fields: readonly RenderField[] };
-  readonly options: PasskeyOptions;
-}
+const RenderField = v.looseObject({ name: v.string(), text: v.string(), material: v.boolean() });
+
+const Started = v.looseObject({
+  flow: v.string(),
+  render: v.looseObject({ fields: v.array(RenderField) }),
+  options: v.record(v.string(), v.unknown()),
+});
+
+type Started = Readonly<v.InferOutput<typeof Started>>;
+
+const Pushed = v.looseObject({ request_uri: v.string() });
 
 type State =
   | { readonly phase: "loading" }
@@ -121,7 +123,7 @@ async function contribution(
   session: Session,
   instance: Instance,
   preview: CibaPreview,
-  basis: Holding,
+  basis: HoldingBasis,
 ): Promise<unknown> {
   const k = await loadKernel();
   const envelope = fromB64url(preview.contribution.envelope);
@@ -160,7 +162,7 @@ export function Ciba() {
 
   useEffect(() => {
     if (request === null) return;
-    void postJson<CibaPreview>("/v1/ciba/preview", { request }).then((a) => {
+    void postJson("/v1/ciba/preview", { request }, CibaPreview).then((a) => {
       if (a.ok) setState({ phase: "ready", preview: a.body });
       else if (a.status === 401) setState({ phase: "sign_in" });
       else if (a.status === 410) setState({ phase: "expired" });
@@ -187,27 +189,26 @@ export function Ciba() {
           setState({ phase: "confirm", preview, decoded: d });
           setBusy(false);
         });
-      const session = await account<Session>("/session");
+      const session = await account("/session", Session);
       const instance = (await find(session)) ?? (await register(session, ask));
       if (!(await ask(shown))) throw new NotSigned("cancelled");
       setBusy(true);
       const signed = await contribution(session, instance, preview, basis);
       const push = must(
-        await postJson<{ request_uri: string }>("/v1/approve/requests", {
-          request: preview.request,
-          contribution: signed,
-        }),
+        await postJson(
+          "/v1/approve/requests",
+          { request: preview.request, contribution: signed },
+          Pushed,
+        ),
       );
       const flowState = b64url(crypto.getRandomValues(new Uint8Array(8)));
       const started = must(
-        await postJson<Started>("/v1/approve/flows", {
-          request: push.request_uri,
-          redirect_uri: preview.redirect_uri,
-          state: flowState,
-        }),
+        await postJson(
+          "/v1/approve/flows",
+          { request: push.request_uri, redirect_uri: preview.redirect_uri, state: flowState },
+          Started,
+        ),
       );
-      // OP-157 m.3 (l)
-      if (typeof started.flow !== "string") throw new NotSigned("not approvable");
       pushed.current = { uri: push.request_uri, state: flowState };
       setState({ phase: "render", preview, started });
     } catch {
@@ -226,11 +227,11 @@ export function Ciba() {
       const credential = await getPasskey(started.options, undefined, new AbortController().signal);
       if (credential === null) throw new NotSigned("cancelled");
       must(
-        await postJson(`/v1/approve/flows/${started.flow}`, {
-          credential,
-          redirect_uri: preview.redirect_uri,
-          state: p.state,
-        }),
+        await postJson(
+          `/v1/approve/flows/${started.flow}`,
+          { credential, redirect_uri: preview.redirect_uri, state: p.state },
+          Empty,
+        ),
       );
       await answer(preview, request, p.uri);
       setState({ phase: "approved", client: preview.client });

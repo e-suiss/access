@@ -2,25 +2,27 @@
 // enforcing would end before anything changes, service accounts included; enforcing names the
 // pending invitations' fate, with no default; lifting widens again. A setup link goes to the
 // organization's IT administrator and is shown once. Each is one signed change.
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
-import { type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Preview {
-  readonly enforced: boolean;
-  readonly invitations?: string | null;
-  readonly service_accounts: readonly string[];
-  readonly pending_invitations: number;
-  readonly totals: { readonly members: number };
-}
+// OP-159 m.46 (f)
+const Preview = v.looseObject({
+  enforced: v.boolean(),
+  invitations: v.exactOptional(v.nullable(v.string())),
+  service_accounts: v.array(v.string()),
+  pending_invitations: v.number(),
+  totals: v.looseObject({ members: v.number() }),
+});
 
 type Fate = "cancel" | "redirect_to_sso";
 
@@ -39,7 +41,7 @@ export function SsoEnforcement({
   const environment = encodeURIComponent(ctx.session.environment);
   const base = `organizations/${encodeURIComponent(org)}`;
   const preview = useLoad(readKey(ctx, `envs/${environment}/${base}/sso-enforcement/preview`), () =>
-    adminGetAs<Preview>(ctx.instance, `envs/${environment}/${base}/sso-enforcement/preview`),
+    adminGet(ctx.instance, `envs/${environment}/${base}/sso-enforcement/preview`, Preview),
   );
   const [fate, setFate] = useState<Fate | undefined>(undefined);
   const [email, setEmail] = useState("");

@@ -1,40 +1,53 @@
 // IDP-39 (3), LFP-18, OP-157 m.3 (w), m.6 (a): the Admin section's access review screen. A
 // campaign is a view, never a queue: the reviewer sees the Grants of their own team, Keep records
 // that one was checked and changes nothing, Remove is the reviewer's own revoke of that one Grant.
-import { useState, type ReactElement } from "react";
-
-import { loadKernel } from "@esuiss/access";
 
 import { Button } from "@access/ui/components/button";
+import { loadKernel } from "@esuiss/access";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, draftChange, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, draftChange, items as list, type WriteResult } from "../lib/admin.js";
 import { b64url, call, fromB64url, Problem } from "../lib/api.js";
-import { decodedStatement, nonce, NotSigned, sign } from "../lib/instance.js";
-import { type Basis, metaWrite, type MetaResult } from "../lib/meta.js";
+import { decodedStatement, NotSigned, nonce, sign } from "../lib/instance.js";
+import { type MetaResult, metaWrite } from "../lib/meta.js";
 import { ACTIONS, Failure, FORM, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
-import { at, type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Review {
-  readonly name: string;
-  readonly period_days: number;
-  readonly scope: string;
-  readonly status: "live" | "closed";
-  readonly next_run?: string | null;
-}
+// OP-159 m.46 (f)
+const Reviews_ = list(
+  v.looseObject({
+    name: v.string(),
+    period_days: v.number(),
+    scope: v.string(),
+    status: v.picklist(["live", "closed"]),
+    next_run: v.exactOptional(v.nullable(v.string())),
+  }),
+);
 
-interface Item {
-  readonly grant: string;
-  readonly holder: { readonly party?: string; readonly group?: readonly string[] };
-  readonly actions: readonly { readonly namespace: string; readonly name: string }[];
-  readonly valid_until?: string | null;
-  readonly derived: number;
-  readonly remove: { readonly operation: string; readonly basis: Basis };
-}
+const Basis = v.union([
+  v.object({ anchor: v.string() }),
+  v.object({ holding: v.object({ grant: v.string(), holder: v.string(), since: v.number() }) }),
+]);
 
-interface Page<T> {
-  readonly items: readonly T[];
-}
+const Item = v.looseObject({
+  grant: v.string(),
+  holder: v.looseObject({
+    party: v.exactOptional(v.string()),
+    group: v.exactOptional(v.array(v.string())),
+  }),
+  actions: v.array(v.looseObject({ namespace: v.string(), name: v.string() })),
+  valid_until: v.exactOptional(v.nullable(v.string())),
+  derived: v.number(),
+  remove: v.looseObject({ operation: v.string(), basis: Basis }),
+});
+
+type Item = v.InferOutput<typeof Item>;
+
+const Items_ = list(Item);
+
+const Kept = v.looseObject({ kept: v.exactOptional(v.unknown()) });
 
 function holderText(h: Item["holder"]): string {
   return h.party ?? (h.group ?? []).join(", ");
@@ -75,8 +88,7 @@ async function keep(ctx: Ctx, review: string, grant: string): Promise<boolean> {
     },
   });
   if (!r.ok) throw new Problem(r.status, "unknown", undefined);
-  const v = (await r.json()) as { kept?: unknown };
-  return v.kept === true;
+  return v.parse(Kept, await r.json()).kept === true;
 }
 
 function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }): ReactElement {
@@ -84,9 +96,10 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
   const items = useLoad(
     readKey(ctx, `envs/${environment}/reviews/${encodeURIComponent(review)}/items`),
     () =>
-      adminGetAs<Page<Item>>(
+      adminGet(
         ctx.instance,
         `envs/${environment}/reviews/${encodeURIComponent(review)}/items`,
+        Items_,
       ),
   );
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
@@ -171,7 +184,7 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
 export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const reviews = useLoad(readKey(ctx, `envs/${environment}/reviews`), () =>
-    adminGetAs<Page<Review>>(ctx.instance, `envs/${environment}/reviews`),
+    adminGet(ctx.instance, `envs/${environment}/reviews`, Reviews_),
   );
   const [name, setName] = useState("");
   const [period, setPeriod] = useState("90");

@@ -52,7 +52,7 @@ const STATE_BODY: &[&str] = &[rest::VALIDITY];
 /// The members a placement move takes.
 const PLACEMENT_BODY: &[&str] = &["placement", rest::VALIDITY];
 
-fn invalid(i: ProvisionInvalid) -> &'static Code {
+pub(super) fn invalid(i: ProvisionInvalid) -> &'static Code {
     use codes::platform as p;
     match i {
         ProvisionInvalid::Slug => &p::INVALID_SLUG,
@@ -548,9 +548,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
             validity,
             basis: statement.basis,
             capacity: statement.capacity,
-            mail: mail
-                .as_ref()
-                .map(|(email, secrets)| FounderMail { email, secrets }),
+            mail: mail.as_ref().map(|(email, secrets)| FounderMail {
+                email,
+                secrets,
+                console: self.console.as_deref(),
+            }),
         };
         let done = Box::pin(self.admin(&ids).provision(&platform, order, caller.ais)).await;
         let (exercise_id, position, created) = match done {

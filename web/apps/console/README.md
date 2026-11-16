@@ -26,9 +26,15 @@ browser                                  management listener (access-server)
   configured, otherwise your /24 or /48; your exact address when the environment asks for it).
   The session row keeps a slot for a Device Bound Session Credentials key; until DBSC is
   implemented its endpoints answer `501`.
+- **Tenants.** A tenant's administrators sign in once, at its management environment's console
+  (for example `/console/acme-admin`). That page is the tenant's home: its environments, a new
+  environment, and its administrators (invite, make owner, remove). Opening one of the tenant's
+  environments (for example `/console/acme`) needs no new sign-in; only another tenant's environment
+  does.
 - **Device key.** On first use the console asks you to register this browser. It generates a
   P-256 key that cannot be exported, keeps it in IndexedDB, and registers it as your sign-in's
-  device Instance through the device's own `instance_create` Exercise.
+  device Instance through the device's own `instance_create` Exercise. The first visit to each of
+  your tenant's environments registers a key there the same way, with one signature.
 - **Signing.** Statements are encoded by the Kernel compiled to WebAssembly (no CBOR is written
   in TypeScript) and signed by WebCrypto. Before anything is signed for a change, the signature
   screen shows what the Kernel decoded from the very bytes about to be signed.

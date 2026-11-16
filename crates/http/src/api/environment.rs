@@ -1587,7 +1587,45 @@ const BASE: &[Route] = &[
         "retireExportSink",
         "Retires an export sink: idp.export.sink_retire.",
     ),
+    // OP-159 m.47 (a), (e), (f), (h)
+    list(
+        TE,
+        "listManagedEnvironments",
+        "The tenant's environments, read in its management environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a management environment.",
+    ),
+    write(
+        Verb::Post,
+        TE,
+        "createTenantEnvironment",
+        "Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the management environment's Claims: idp.tenant.environment_create (CT2). Refused with `management-environment` outside the tenant's management environment (OP-159 m.47 (d), (h), TN-140).",
+    ),
+    list(
+        TA,
+        "listTenantAdmins",
+        "The tenant's administrators and pending invitations, read in its management environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed) and since when; a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), TN-89 (1)).",
+    ),
+    write(
+        Verb::Post,
+        TA,
+        "inviteTenantAdmin",
+        "Invites a tenant administrator {email}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours: idp.tenant.admin_invite (CT2, OP-159 m.47 (f), TN-89, TN-109).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/envs/{slug}/tenant/admins/{admin}/owner",
+        "addTenantOwner",
+        "Makes an administrator an owner, a root of the tenant's new environments: idp.tenant.owner_add (reserved, CT3; the owners' own, OP-159 m.47 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/envs/{slug}/tenant/admins/{admin}/remove",
+        "removeTenantAdmin",
+        "Removes an administrator: its tenant_administration Claims end in every environment at once; the last owner stays (`last-tenant-owner`): idp.tenant.admin_remove (CT1, OP-159 m.47 (e), (f)).",
+    ),
 ];
+
+const TE: &str = "/admin/v1/envs/{slug}/tenant/environments";
+const TA: &str = "/admin/v1/envs/{slug}/tenant/admins";
 
 /// How a row is served.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2028,6 +2066,18 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "listWebhookDeliveries" => (Deliveries, Shape::List(&["event", "state"])),
         "getSignals" => (Signals, Shape::Get),
         "getAnalytics" => (Analytics, Shape::Get),
+        // OP-159 m.47 (a), (e), (f), (h)
+        "listManagedEnvironments" => (
+            ResourceKind::TenantEnvironments,
+            Shape::List(&["slug", "kind", "sandbox"]),
+        ),
+        "createTenantEnvironment" => (ResourceKind::TenantEnvironments, CREATE),
+        "listTenantAdmins" => (
+            ResourceKind::TenantAdmins,
+            Shape::List(&["id", "role", "status"]),
+        ),
+        "inviteTenantAdmin" => (ResourceKind::TenantAdmins, CREATE),
+        "addTenantOwner" | "removeTenantAdmin" => (ResourceKind::TenantAdmins, w(false)),
         // OP-41
         "listAuditEvents" => (Analytics, Shape::Audit),
         "getAuditEventProof" => (Analytics, Shape::AuditProof),

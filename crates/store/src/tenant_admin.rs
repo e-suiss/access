@@ -400,6 +400,8 @@ pub struct TenantEnvironment {
     pub issuer: Option<String>,
     /// Creation time, Unix ms.
     pub created_ms: u64,
+    /// Whether it is a sandbox (OP-151 m.3 (m)).
+    pub sandbox: bool,
 }
 
 /// The tenant's live environments by slug, read in tenant scope.
@@ -408,9 +410,13 @@ pub struct TenantEnvironment {
 /// [`StoreError`].
 pub async fn tenant_environments(t: &mut TenantTx) -> Result<Vec<TenantEnvironment>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT environment_id, slug, kind, governing_domain_id, issuer,
-                  (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!"
-             FROM access.environments WHERE tenant_id = $1 AND status = 'active' ORDER BY slug"#,
+        r#"SELECT e.environment_id, e.slug, e.kind, e.governing_domain_id, e.issuer,
+                  (extract(epoch FROM e.created_at) * 1000)::bigint AS "created_ms!",
+                  EXISTS (SELECT 1 FROM access.sandbox_domains s
+                           WHERE s.tenant_id = e.tenant_id AND s.domain_id = e.governing_domain_id)
+                    AS "sandbox!"
+             FROM access.environments e WHERE e.tenant_id = $1 AND e.status = 'active'
+            ORDER BY e.slug"#,
         tenant_uuid(t),
     )
     .fetch_all(&mut *t.tx)
@@ -424,6 +430,7 @@ pub async fn tenant_environments(t: &mut TenantTx) -> Result<Vec<TenantEnvironme
                 domain: DomainId::from_bytes(id32(&r.governing_domain_id)?),
                 issuer: r.issuer,
                 created_ms: unsigned(r.created_ms)?,
+                sandbox: r.sandbox,
             })
         })
         .collect()
@@ -756,8 +763,17 @@ pub async fn lines(
         .collect()
 }
 
-/// The line of the Party `party` in `domain`, with whether its administrator is still one
-/// (OP-159 m.47 (f)): what the extended standing reads.
+/// What the extended standing reads of a line's administrator (OP-159 m.47 (f)).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct LineAdmin {
+    /// Whether it is still an administrator.
+    pub live: bool,
+    /// Until when its first acceptance cools, Unix ms (TN-109).
+    pub cooling_until_ms: Option<u64>,
+}
+
+/// The line of the Party `party` in `domain`, with its administrator (OP-159 m.47 (f)): what the
+/// extended standing reads.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -765,11 +781,12 @@ pub async fn line_of_party(
     t: &mut TenantTx,
     domain: &DomainId,
     party: &[u8; 16],
-) -> Result<Option<(AdminLine, bool)>, StoreError> {
+) -> Result<Option<(AdminLine, LineAdmin)>, StoreError> {
     let environment = t.environment().ok_or(StoreError::Range)?;
     let row = sqlx::query!(
         r#"SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,
-                  a.ended_at IS NULL AS "admin_live!"
+                  a.ended_at IS NULL AS "admin_live!",
+                  (extract(epoch FROM a.cooling_until) * 1000)::bigint AS cooling_ms
              FROM access.tenant_admin_claims c
              JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id
               AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id
@@ -795,7 +812,10 @@ pub async fn line_of_party(
                 ended_ms: r.ended_ms.map(unsigned).transpose()?,
                 ended_claim: r.ended_claim_id.as_deref().map(id16).transpose()?,
             },
-            r.admin_live,
+            LineAdmin {
+                live: r.admin_live,
+                cooling_until_ms: r.cooling_ms.map(unsigned).transpose()?,
+            },
         ))
     })
     .transpose()
@@ -818,6 +838,207 @@ pub async fn due_tenants(pool: &PgPool, before_ms: u64) -> Result<Vec<TenantId>,
         .into_iter()
         .map(|u| TenantId::from_bytes(*u.as_bytes()))
         .collect())
+}
+
+/// A tenant administrator invitation to record (OP-159 m.47 (f), TN-89).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct NewInvitation<'a> {
+    /// SHA-256 of the link token.
+    pub token_hash: &'a [u8; 32],
+    /// SHA-256 of the magic code.
+    pub code_hash: &'a [u8; 32],
+    /// The management environment's blind index of the invitee's folded address.
+    pub invitee_index: &'a [u8; 32],
+    /// The invitee's address domain.
+    pub invitee_domain: &'a str,
+    /// The inviter's subject.
+    pub inviter: &'a [u8; 16],
+    /// Whether the invitee's domain is not the inviter's (TN-109).
+    pub cross_domain: bool,
+    /// The `idp.tenant.admin_invite` Exercise.
+    pub exercise: &'a [u8; 32],
+    /// How long the link holds, seconds; at most 30 days.
+    pub ttl_s: i64,
+}
+
+/// A tenant administrator invitation as the management environment keeps it: never its address.
+#[derive(Clone, PartialEq, Eq)]
+pub struct AdminInvitation {
+    /// Its id.
+    pub id: [u8; 16],
+    /// SHA-256 of the magic code.
+    pub code_hash: [u8; 32],
+    /// The invitee's blind index.
+    pub invitee_index: [u8; 32],
+    /// The invitee's address domain.
+    pub invitee_domain: String,
+    /// The inviter's subject.
+    pub inviter: [u8; 16],
+    /// Whether the invitee's domain is not the inviter's (TN-109).
+    pub cross_domain: bool,
+    /// When it was made, Unix ms.
+    pub created_ms: u64,
+    /// Until when it holds, Unix ms.
+    pub expires_ms: u64,
+    /// Whether the address was proven.
+    pub verified: bool,
+    /// The account its acceptance made.
+    pub accepted_subject: Option<[u8; 16]>,
+    /// Whether a newer invitation to the same address replaced it.
+    pub superseded: bool,
+}
+
+/// Records an invitation in the transaction's management environment and supersedes the pending
+/// ones to the same address (OP-159 m.47 (f)); returns its id.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn insert_invitation(
+    t: &mut TenantTx,
+    i: &NewInvitation<'_>,
+) -> Result<[u8; 16], StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    sqlx::query!(
+        "UPDATE access.tenant_admin_invitations SET superseded_at = clock_timestamp()
+          WHERE tenant_id = $1 AND environment_id = $2 AND invitee_index = $3
+            AND accepted_at IS NULL AND superseded_at IS NULL",
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        i.invitee_index.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    let id = sqlx::query_scalar!(
+        "INSERT INTO access.tenant_admin_invitations
+           (tenant_id, environment_id, token_hash, code_hash, invitee_index, invitee_domain,
+            inviter_subject, cross_domain, created_exercise, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp() + make_interval(secs => $10))
+         RETURNING invitation_id",
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        i.token_hash.as_slice(),
+        i.code_hash.as_slice(),
+        i.invitee_index.as_slice(),
+        i.invitee_domain,
+        Uuid::from_bytes(*i.inviter),
+        i.cross_domain,
+        i.exercise.as_slice(),
+        f64::from(i32::try_from(i.ttl_s).map_err(|_| StoreError::Range)?),
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    Ok(*id.as_bytes())
+}
+
+/// The invitations of the transaction's management environment, newest first, or the one whose
+/// link token hashes to `token_hash`.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn invitations(
+    t: &mut TenantTx,
+    token_hash: Option<&[u8; 32]>,
+) -> Result<Vec<AdminInvitation>, StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    let rows = sqlx::query!(
+        r#"SELECT invitation_id, code_hash, invitee_index, invitee_domain, inviter_subject,
+                  cross_domain, verified_at IS NOT NULL AS "verified!", accepted_subject,
+                  superseded_at IS NOT NULL AS "superseded!",
+                  (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
+                  (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
+             FROM access.tenant_admin_invitations
+            WHERE tenant_id = $1 AND environment_id = $2
+              AND ($3::bytea IS NULL OR token_hash = $3)
+            ORDER BY created_at DESC, invitation_id"#,
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        token_hash.map(<[u8; 32]>::as_slice),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(AdminInvitation {
+                id: *r.invitation_id.as_bytes(),
+                code_hash: id32(&r.code_hash)?,
+                invitee_index: id32(&r.invitee_index)?,
+                invitee_domain: r.invitee_domain,
+                inviter: *r.inviter_subject.as_bytes(),
+                cross_domain: r.cross_domain,
+                created_ms: unsigned(r.created_ms)?,
+                expires_ms: unsigned(r.expires_ms)?,
+                verified: r.verified,
+                accepted_subject: r.accepted_subject.map(|u| *u.as_bytes()),
+                superseded: r.superseded,
+            })
+        })
+        .collect()
+}
+
+/// Marks the invitation `id` verified (TN-89 (5)); `false` when it was, or is closed.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn verify_invitation(t: &mut TenantTx, id: &[u8; 16]) -> Result<bool, StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    let done = sqlx::query!(
+        "UPDATE access.tenant_admin_invitations SET verified_at = clock_timestamp()
+          WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3
+            AND verified_at IS NULL AND accepted_at IS NULL AND superseded_at IS NULL",
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        Uuid::from_bytes(*id),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// Closes the verified invitation `id` with the account its acceptance made; `false` when it was
+/// not open.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn accept_invitation(
+    t: &mut TenantTx,
+    id: &[u8; 16],
+    subject: &[u8; 16],
+) -> Result<bool, StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    let done = sqlx::query!(
+        "UPDATE access.tenant_admin_invitations
+            SET accepted_at = clock_timestamp(), accepted_subject = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3
+            AND verified_at IS NOT NULL AND accepted_at IS NULL AND superseded_at IS NULL",
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        Uuid::from_bytes(*id),
+        Uuid::from_bytes(*subject),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// Invitations the transaction's management environment made in the last `since_s` seconds, and
+/// how many of them were accepted (TN-89 (11)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn invitation_counts(t: &mut TenantTx, since_s: i64) -> Result<(i64, i64), StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    let r = sqlx::query!(
+        r#"SELECT count(*) AS "sent!", count(accepted_at) AS "accepted!"
+             FROM access.tenant_admin_invitations
+            WHERE tenant_id = $1 AND environment_id = $2
+              AND created_at > clock_timestamp() - make_interval(secs => $3)"#,
+        tenant_uuid(t),
+        Uuid::from_bytes(*environment.as_bytes()),
+        f64::from(i32::try_from(since_s).map_err(|_| StoreError::Range)?),
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    Ok((r.sent, r.accepted))
 }
 
 /// The console session's device Instance in one domain (TN-142).

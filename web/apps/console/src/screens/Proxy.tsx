@@ -1,31 +1,31 @@
 // IDP-30, B22, OP-156 m.3 (l), (m), m.15 (h): the environment's forward-auth proxies. Registering,
 // retiring and turning plain identity headers on or off are each one signed change; turning them
 // on runs the setup check, and its refusal is shown as the change's answer.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
+import { FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface ProxyRow {
-  readonly name: string;
-  readonly engine: string;
-  readonly host: string;
-  readonly upstream: string | null;
-  readonly status: string;
-  readonly plain_headers: boolean;
-  readonly decision_cache_s: number;
-  readonly routes: readonly string[];
-}
-
-interface Page<T> {
-  readonly items: readonly T[];
-}
+// OP-159 m.46 (f)
+const ProxyRows = items(
+  v.looseObject({
+    name: v.string(),
+    engine: v.string(),
+    host: v.string(),
+    upstream: v.nullable(v.string()),
+    status: v.string(),
+    plain_headers: v.boolean(),
+    decision_cache_s: v.number(),
+    routes: v.array(v.string()),
+  }),
+);
 
 const ENGINES = ["envoy", "caddy", "traefik", "nginx"] as const;
 
@@ -33,7 +33,7 @@ const ENGINES = ["envoy", "caddy", "traefik", "nginx"] as const;
 export function Proxies({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const proxies = useLoad(readKey(ctx, `envs/${environment}/proxies`), () =>
-    adminGetAs<Page<ProxyRow>>(ctx.instance, `envs/${environment}/proxies`),
+    adminGet(ctx.instance, `envs/${environment}/proxies`, ProxyRows),
   );
   const [name, setName] = useState("");
   const [engine, setEngine] = useState<string>("envoy");

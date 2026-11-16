@@ -1442,7 +1442,7 @@ where
         let party = root_party(&key);
         let style = issuer_style(plan.style);
         let mut environments = Vec::new();
-        // OP-159 m.47 (i): the platform environment is the platform tenant's management environment
+        // OP-159 m.47 (i)
         let opening = self.admin(&ids, None);
         let platform_opened = self
             .environment(
@@ -1503,7 +1503,7 @@ where
             Some(_) => Some(self.case_system()?.1),
             None => None,
         };
-        // OP-159 m.47 (i): a managed environment's Genesis carries the plan's local fixtures
+        // OP-159 m.47 (i)
         let genesis = |slug: &str, founder: Id| -> tenants::Genesis {
             let catalog = plan.sample.as_ref().filter(|s| s.environment == slug);
             let accepted = plan
@@ -1569,7 +1569,7 @@ where
             (None, None, None);
         for task in &tasks {
             let (slug, is_platform) = (&task.slug, task.is_platform);
-            // OP-159 m.47 (i): a managed tenant's environments are rooted in its founder
+            // OP-159 m.47 (i)
             let root = match &task.founder {
                 Some(label) => token_key(self.hsm, label)?,
                 None => root_key(self.hsm)?,

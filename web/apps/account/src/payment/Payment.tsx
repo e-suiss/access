@@ -1,17 +1,18 @@
 // OP-156 m.3 (v), §8.17.5.11, R8, X8, X11, XI-3: the hosted one-time payment page. It shows
 // "Pay 300 TRY to M, once" from the Kernel's decoding of the request's bytes, and the outcome
 // only as Access recorded it.
-import type { pay } from "@esuiss/access";
+
 import { honesty, payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
-import { useEffect, useState, type ReactElement } from "react";
+import type { pay } from "@esuiss/access";
+import { type ReactElement, useEffect, useState } from "react";
 
 import { catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { Actions, Loading, Panel } from "../lib/ui.js";
-import { decode, payOnce, type Paying, requestOf } from "./pay.js";
+import { decode, type Paying, payOnce, requestOf } from "./pay.js";
 
 export function OneTimePaymentPage({
   instance,

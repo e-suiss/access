@@ -10,7 +10,7 @@ import {
 } from "@access/ui/components/card";
 
 import { EN } from "../texts.js";
-import { type Opener, type Request, mayOpen, say, termsArgs, titleArgs } from "./model.js";
+import { mayOpen, type Opener, type Request, say, termsArgs, titleArgs } from "./model.js";
 
 export interface SupportRequestProps {
   readonly request: Request;

@@ -3,8 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
 import { reloadSession } from "../lib/session.js";
-import { About, Profile, Sessions } from "../screens/Own.js";
 import { useShell } from "../Shell.js";
+import { About, Profile, Sessions } from "../screens/Own.js";
 
 export function ProfilePage(): ReactElement {
   return <Profile session={useShell().session} />;

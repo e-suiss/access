@@ -3,33 +3,35 @@
 // forced recovery with the record position it took effect at. After a recovery the banner says
 // which changes may be lost and that revocations made after that time must be made again;
 // nothing here starts a recovery, which only `access-cli domain recover` does.
-import type { ReactElement } from "react";
 
 import { Card, CardContent } from "@access/ui/components/card";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
+import { adminGet } from "../lib/admin.js";
 import { BULLETS, HINT, Notice } from "../ui.js";
-import { at, type Ctx, Show, readKey, useLoad } from "./parts.js";
+import { at, type Ctx, readKey, Show, useLoad } from "./parts.js";
 
-interface Entry {
-  readonly kind: "recovered" | "handover";
-  readonly position: string;
-  readonly at: string;
-  readonly lost_after?: string;
-}
+// OP-159 m.46 (f)
+const Entry = v.looseObject({
+  kind: v.picklist(["recovered", "handover"]),
+  position: v.string(),
+  at: v.string(),
+  lost_after: v.exactOptional(v.string()),
+});
 
-interface RecoveryView {
-  readonly recovery: "available" | "not_available";
-  readonly recovery_threshold?: { readonly k: number; readonly n: number };
-  readonly history: readonly Entry[];
-}
+const RecoveryView = v.looseObject({
+  recovery: v.picklist(["available", "not_available"]),
+  recovery_threshold: v.exactOptional(v.looseObject({ k: v.number(), n: v.number() })),
+  history: v.array(Entry),
+});
 
 /** The recovery and handover screen. */
 export function Recovery({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const view = useLoad(readKey(ctx, `envs/${environment}/recovery`), () =>
-    adminGetAs<RecoveryView>(ctx.instance, `envs/${environment}/recovery`),
+    adminGet(ctx.instance, `envs/${environment}/recovery`, RecoveryView),
   );
   return (
     <div data-testid="recovery" className="flex flex-col gap-4">

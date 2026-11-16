@@ -2,7 +2,6 @@
 // registry. Each agent is shown as an agent with its kind, operator, sponsors and status; one
 // without an active sponsor reads suspended; its running copies end one signed change each, as
 // containment ends them, and nothing here changes authority without a signature.
-import { useState, type ReactElement } from "react";
 
 import { Badge as SuissBadge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
@@ -15,38 +14,50 @@ import {
   TableHeader,
   TableRow,
 } from "@access/ui/components/table";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
-import { metaWrite, type MetaResult } from "../lib/meta.js";
+import { adminGet, items } from "../lib/admin.js";
+import { type MetaResult, metaWrite } from "../lib/meta.js";
 import { BULLETS, FACTS, H4, HINT, MONO, Notice, REPORT } from "../ui.js";
-import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface AgentSummary {
-  readonly agent: string;
-  readonly display_name: string;
-  readonly agent_kind: string;
-  readonly operator: string;
-  readonly status: string;
-  readonly sponsors?: readonly string[];
-}
+// OP-159 m.46 (f)
+const summary = {
+  agent: v.string(),
+  display_name: v.string(),
+  agent_kind: v.string(),
+  operator: v.string(),
+  status: v.string(),
+  sponsors: v.exactOptional(v.array(v.string())),
+};
 
-interface Sponsorship {
-  readonly account_id: string;
-  readonly assigned_at: string;
-  readonly ended_at?: string | null;
-  readonly ended_by?: string | null;
-}
+const AgentSummary = v.looseObject(summary);
 
-interface Agent extends AgentSummary {
-  readonly description?: string | null;
-  readonly status_at: string;
-  readonly connections: readonly string[];
-  readonly last_run_at?: string | null;
-  readonly created_at: string;
-  readonly sponsorships: readonly Sponsorship[];
-  readonly instances?: readonly string[];
-}
+type AgentSummary = v.InferOutput<typeof AgentSummary>;
+
+const AgentSummaries = items(AgentSummary);
+
+const Sponsorship = v.looseObject({
+  account_id: v.string(),
+  assigned_at: v.string(),
+  ended_at: v.exactOptional(v.nullable(v.string())),
+  ended_by: v.exactOptional(v.nullable(v.string())),
+});
+
+const Agent = v.looseObject({
+  ...summary,
+  description: v.exactOptional(v.nullable(v.string())),
+  status_at: v.string(),
+  connections: v.array(v.string()),
+  last_run_at: v.exactOptional(v.nullable(v.string())),
+  created_at: v.string(),
+  sponsorships: v.array(Sponsorship),
+  instances: v.exactOptional(v.array(v.string())),
+});
+
+type Agent = v.InferOutput<typeof Agent>;
 
 function statusText(s: string): string {
   if (s === "active") return t("agentActive");
@@ -178,10 +189,7 @@ function AgentView({ a, ctx }: { readonly a: Agent; readonly ctx: Ctx }): ReactE
 export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(readKey(ctx, `envs/${environment}/agents`), () =>
-    adminGetAs<{ readonly items: readonly AgentSummary[] }>(
-      ctx.instance,
-      `envs/${environment}/agents`,
-    ),
+    adminGet(ctx.instance, `envs/${environment}/agents`, AgentSummaries),
   );
   const [open, setOpen] = useState<string | undefined>(undefined);
   const [one, run] = useRun<Agent>();
@@ -214,9 +222,10 @@ export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           onClick={() => {
                             setOpen(a.agent);
                             run(() =>
-                              adminGetAs<Agent>(
+                              adminGet(
                                 ctx.instance,
                                 `envs/${environment}/agents/${encodeURIComponent(a.agent)}`,
+                                Agent,
                               ),
                             );
                           }}

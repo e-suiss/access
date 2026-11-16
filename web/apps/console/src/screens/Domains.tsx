@@ -3,29 +3,35 @@
 // and checks them again every 90 days, and a domain is served with its own certificate only while
 // they hold. Binding the issuer or the passkey domain to a confirmed domain is one signed CT3
 // change that can't be reversed. Each change is one signed Exercise.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Input } from "@access/ui/components/input";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, H4, HINT, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Domain {
-  readonly host: string;
-  readonly status: string;
-  readonly served: boolean;
-  readonly txt_name: string;
-  readonly txt_value: string;
-  readonly cname_target: string;
-  readonly finding?: string | null;
-  readonly reverify_by?: string | null;
-  readonly bound_as?: "issuer" | "rp_id" | null;
-  readonly certificate_expires_at?: string | null;
-  readonly renews_at?: string | null;
-}
+// OP-159 m.46 (f)
+const Domain = v.looseObject({
+  host: v.string(),
+  status: v.string(),
+  served: v.boolean(),
+  txt_name: v.string(),
+  txt_value: v.string(),
+  cname_target: v.string(),
+  finding: v.exactOptional(v.nullable(v.string())),
+  reverify_by: v.exactOptional(v.nullable(v.string())),
+  bound_as: v.exactOptional(v.nullable(v.picklist(["issuer", "rp_id"]))),
+  certificate_expires_at: v.exactOptional(v.nullable(v.string())),
+  renews_at: v.exactOptional(v.nullable(v.string())),
+});
+
+type Domain = v.InferOutput<typeof Domain>;
+
+const Domains_ = items(Domain);
 
 function Steps({ d }: { readonly d: Domain }): ReactElement {
   return (
@@ -59,7 +65,7 @@ function State({ d }: { readonly d: Domain }): ReactElement {
 export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(readKey(ctx, `envs/${environment}/domains`), () =>
-    adminGetAs<{ readonly items: readonly Domain[] }>(ctx.instance, `envs/${environment}/domains`),
+    adminGet(ctx.instance, `envs/${environment}/domains`, Domains_),
   );
   const [host, setHost] = useState("");
   const [w, write] = useRun<WriteResult>();

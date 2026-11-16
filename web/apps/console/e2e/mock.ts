@@ -2,12 +2,11 @@
 // (tested there for real): the cookie finds the session, state changes carry the CSRF token,
 // the admin proxy needs an AIS by the session's device Instance key, and the ADP proxy adds no
 // credential, so a body without the browser's AIS reads as Anonymous (Public only).
-import { readFile } from "node:fs/promises";
 
 import { createHash } from "node:crypto";
-
+import { readFile } from "node:fs/promises";
+import { type Kernel, loadKernel } from "@esuiss/access";
 import type { BrowserContext, Route } from "@playwright/test";
-import { loadKernel, type Kernel } from "@esuiss/access";
 
 import { type Cbor, encode } from "./cbor.js";
 
@@ -72,12 +71,25 @@ function sign1Parts(bytes: Uint8Array): {
   return { protected: p, payload, sig };
 }
 
+/** A device key the session registered in an environment its management environment administers. */
+interface Foreign {
+  readonly key: CryptoKey;
+  readonly kid: string;
+}
+
 interface Session {
   readonly account: string;
   csrf: string;
   key?: CryptoKey;
   kid?: string;
   ended: boolean;
+  /** OP-159 m.47 (g), TN-142: its Instances in other environments, by slug. */
+  readonly foreign: Map<string, Foreign>;
+}
+
+/** The governing domain of administered environment `slug` (OP-159 m.47 (d)). */
+export function foreignDomain(slug: string): string {
+  return createHash("sha256").update(`domain/${slug}`).digest("base64url");
 }
 
 /** An intent as a screen asks for it. */
@@ -197,6 +209,11 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   // OP-159 m.4 (a)
   putSigningProfile: ["idp.environment", "signing_profile"],
   putKexShare: ["idp.environment", "kex_share"],
+  // OP-159 m.47 (h), TN-140
+  createTenantEnvironment: ["idp.tenant", "environment_create"],
+  inviteTenantAdmin: ["idp.tenant", "admin_invite"],
+  addTenantOwner: ["idp.tenant", "owner_add"],
+  removeTenantAdmin: ["idp.tenant", "admin_remove"],
 };
 
 export interface Write {
@@ -209,8 +226,10 @@ export interface Write {
 /** The `idp.platform.*` action each platform write compiles to (OP-159 m.41). */
 const PLATFORM_OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   createTenant: ["tenant_create", "tenant"],
-  createEnvironment: ["environment_create", "environment"],
-  createSandboxDomain: ["sandbox_create", "sandbox"],
+  reinviteFounder: ["tenant_create", "founder"],
+  suspendTenant: ["tenant_suspend", "tenant"],
+  reactivateTenant: ["tenant_reactivate", "tenant"],
+  moveTenantPlacement: ["tenant_placement", "tenant"],
 };
 
 export interface Seen {
@@ -265,12 +284,18 @@ export class ConsoleMock {
   environment = "acme";
   /** OP-159 m.41, INV-29: whether the viewer is the platform environment's root; nobody is by default. */
   platformRoot = false;
+  /** OP-159 m.47 (g): the environments a challenge was asked for and not yet answered. */
+  private readonly foreignChallenges = new Set<string>();
+  /** OP-159 m.47 (g): the environments this session registered a key in, in order. */
+  readonly registeredIn: string[] = [];
+  /** The management API calls, with the environment whose Instance made them. */
+  readonly adminSeen: { environment: string; method: string; path: string }[] = [];
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
   async signIn(context: BrowserContext, baseURL: string, account = "acc_ada"): Promise<string> {
     const value = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
     const csrf = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
-    this.sessions.set(value, { account, csrf, ended: false });
+    this.sessions.set(value, { account, csrf, ended: false, foreign: new Map() });
     await context.addCookies([
       {
         name: COOKIE,
@@ -301,19 +326,58 @@ export class ConsoleMock {
     return (await this.statement(s, ais, mode)) !== undefined;
   }
 
-  /** The verified statement of `ais` by the session's key in `mode`. */
+  /** Whether `slug` is a standard environment the session's management environment administers. */
+  administers(slug: string): boolean {
+    const listed = this.admin.get(`envs/${this.environment}/tenant/environments`) as
+      | { items?: { slug: string; kind: string }[] }
+      | undefined;
+    return (listed?.items ?? []).some((e) => e.slug === slug && e.kind === "standard");
+  }
+
+  /** The domain of environment `slug`: the session's own, or an administered one's. */
+  domainOf(slug: string): string {
+    return slug === this.environment ? DOMAIN : foreignDomain(slug);
+  }
+
+  /**
+   * The verified statement of `ais` in `mode` by the session's key in environment `env`: its own
+   * when `env` is the session's, that environment's Instance key otherwise, and any of them when
+   * `env` is not named (ADP reads, OP-159 m.47 (g)).
+   */
   private async statement(
     s: Session,
     ais: string | undefined,
     mode: string,
+    env?: string,
   ): Promise<{ intent: string; basis?: unknown } | undefined> {
-    if (ais === undefined || s.key === undefined || s.kid === undefined) return undefined;
+    if (env !== undefined && env !== this.environment) {
+      const f = s.foreign.get(env);
+      return f === undefined ? undefined : this.statementBy(f.key, ais, mode);
+    }
+    const own =
+      s.key === undefined || s.kid === undefined
+        ? undefined
+        : await this.statementBy(s.key, ais, mode);
+    if (own !== undefined || env !== undefined) return own;
+    for (const f of s.foreign.values()) {
+      const st = await this.statementBy(f.key, ais, mode);
+      if (st !== undefined) return st;
+    }
+    return undefined;
+  }
+
+  private async statementBy(
+    key: CryptoKey,
+    ais: string | undefined,
+    mode: string,
+  ): Promise<{ intent: string; basis?: unknown } | undefined> {
+    if (ais === undefined) return undefined;
     const kernel = await k();
     const parts = sign1Parts(Buffer.from(ais, "base64url"));
     const tbs = Uint8Array.from(kernel.coseToBeSigned(parts.protected, parts.payload));
     const ok = await crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
-      s.key,
+      key,
       Uint8Array.from(parts.sig),
       tbs,
     );
@@ -372,6 +436,7 @@ export class ConsoleMock {
         expires_at: new Date(Date.now() + 12 * 3600_000).toISOString(),
         idle_timeout_s: "900",
         instance: s.kid ?? null,
+        environments: [...s.foreign.keys()],
       });
     }
     if (path === "/about") return reply(200, { server_version: "0.3.1" });
@@ -443,9 +508,63 @@ export class ConsoleMock {
       s.kid = Buffer.from((await k()).thumbprintP256(x, y)).toString("base64url");
       return reply(201, { instance: s.kid });
     }
+    // OP-159 m.47 (g), TN-142
+    const foreignAt = /^\/environments\/([a-z0-9-]+)\/instances(\/challenge)?$/.exec(path);
+    if (foreignAt !== null) {
+      const slug = foreignAt[1] ?? "";
+      if (slug === this.environment || !this.administers(slug)) return problem(404, "not-found");
+      if (s.kid === undefined) return problem(403, "console-instance-required");
+      if (foreignAt[2] !== undefined) {
+        const key = Buffer.from(String(body()["key"]), "base64url");
+        if (key.length < 64) return problem(400, "invalid-request");
+        const register = envelopeOf({
+          action: { namespace: "access", name: "party_register", major: 1 },
+          resources: [{ namespace: "access.party", path: ["0202"] }],
+        }).envelope;
+        this.foreignChallenges.add(slug);
+        return reply(201, {
+          challenge: Buffer.alloc(32, 6).toString("base64url"),
+          domain: foreignDomain(slug),
+          environment: slug,
+          basis: BASIS,
+          pep: "access-identity",
+          party: PARTY,
+          valid_from: "1970-01-01T00:00:01Z",
+          valid_until: "1970-01-01T00:00:02Z",
+          expires_at: new Date(Date.now() + 300_000).toISOString(),
+          create: CREATE_ENVELOPE,
+          ...(s.foreign.has(slug) ? {} : { register: Buffer.from(register).toString("base64url") }),
+        });
+      }
+      if (!this.foreignChallenges.delete(slug)) return problem(400, "invalid-challenge");
+      const b = body();
+      if (b["party"] !== PARTY || typeof b["register_ais"] !== "string") {
+        return problem(400, "invalid-challenge");
+      }
+      const cose = Buffer.from(String(b["key"]), "base64url");
+      const x = cose.subarray(cose.length - 67, cose.length - 35);
+      const y = cose.subarray(cose.length - 32);
+      const key = await crypto.subtle.importKey(
+        "raw",
+        Uint8Array.from([4, ...x, ...y]),
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"],
+      );
+      for (const a of [b["ais"], b["register_ais"]]) {
+        if ((await this.statementBy(key, String(a), "commit")) === undefined) {
+          return problem(400, "key-pop-invalid");
+        }
+      }
+      const kid = Buffer.from((await k()).thumbprintP256(x, y)).toString("base64url");
+      s.foreign.set(slug, { key, kid });
+      this.registeredIn.push(slug);
+      return reply(201, { environment: slug, instance: kid, kid, party: PARTY });
+    }
     if (path === "/intents") {
       // OP-151 m.19 (a): a draft is a read, by a read proof over the draft route
-      const st = await this.statement(s, headers["x-access-ais"], "check");
+      const drafting = url.searchParams.get("environment") ?? this.environment;
+      const st = await this.statement(s, headers["x-access-ais"], "check", drafting);
       if (st === undefined) return problem(403, "read-proof-rejected");
       if (st.intent !== readIntent("POST", "/console/api/intents")) {
         return problem(403, "read-proof-rejected");
@@ -471,7 +590,11 @@ export class ConsoleMock {
       // OP-151 m.20 (d): a check draft carries the eligibility set it belongs to
       const probe =
         mode === "check"
-          ? { domain: DOMAIN, basis: { anchor: "AAAAAAAAAAAAAAAAAAAAAA" }, capacity: "own" }
+          ? {
+              domain: this.domainOf(drafting),
+              basis: { anchor: "AAAAAAAAAAAAAAAAAAAAAA" },
+              capacity: "own",
+            }
           : undefined;
       return reply(200, {
         intent: d.intent,
@@ -484,11 +607,18 @@ export class ConsoleMock {
       if (ais === undefined) return problem(401, "ais-required");
       if (s.kid === undefined) return problem(403, "console-instance-required");
       const rest = path.slice("/proxy/admin/".length);
+      // OP-159 m.47 (g), TN-142: `envs/{slug}/…` of an administered environment is read and
+      // written with the session's Instance there
+      const named = /^envs\/([^/]+)\//.exec(rest)?.[1] ?? this.environment;
+      if (named !== this.environment && !s.foreign.has(named)) {
+        return problem(403, "console-instance-required");
+      }
       const target = `/admin/v1/${rest}${url.search}`;
       const drafting = r.method() === "POST" && rest.endsWith("/intents");
       const read = r.method() === "GET" || drafting;
-      const st = await this.statement(s, ais, read ? "check" : "commit");
+      const st = await this.statement(s, ais, read ? "check" : "commit", named);
       if (st === undefined) return problem(403, "read-proof-rejected");
+      this.adminSeen.push({ environment: named, method: r.method(), path: rest });
       if (read && st.intent !== readIntent(r.method(), target)) {
         return problem(403, "read-proof-rejected");
       }
@@ -503,7 +633,12 @@ export class ConsoleMock {
           op === "createTenant" && given["tenant_id"] === undefined
             ? { ...given, tenant_id: "tnt_new" }
             : given;
-        const key = typeof filled["slug"] === "string" ? filled["slug"] : "tnt_new";
+        const key =
+          typeof b["key"] === "string"
+            ? b["key"]
+            : typeof filled["management_slug"] === "string"
+              ? filled["management_slug"]
+              : "tnt_new";
         const d = envelopeOf({
           action: { namespace: "idp.platform", name: action[0], major: 1 },
           resources: [
@@ -519,7 +654,7 @@ export class ConsoleMock {
           key: b["key"] ?? null,
           body: {
             ...filled,
-            ...(this.tamper ? { slug: "someone-else" } : {}),
+            ...(this.tamper ? { display_name: "Someone else" } : {}),
             validity: { not_before: "1970-01-01T00:00:01Z", not_after: "1970-01-01T00:00:02Z" },
           },
           domain: DOMAIN,
@@ -547,7 +682,7 @@ export class ConsoleMock {
             ...(this.tamper ? { display_name: "Someone else" } : {}),
             validity: { not_before: "1970-01-01T00:00:01Z", not_after: "1970-01-01T00:00:02Z" },
           },
-          domain: DOMAIN,
+          domain: this.domainOf(slug),
           pep: "access-admin",
           intent: Buffer.from(d.envelope).toString("base64url"),
           intent_digest: bareDigest(kernel.intentDigest(d.envelope)),
@@ -576,10 +711,7 @@ export class ConsoleMock {
           return reply(201, {
             exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
             position: String(this.writes.length),
-            resource:
-              typeof b["slug"] === "string"
-                ? { slug: b["slug"], status: "active" }
-                : { tenant_id: b["tenant_id"], status: "active" },
+            resource: { tenant_id: b["tenant_id"] ?? rest.split("/")[2], status: "active" },
           });
         }
         // V10, OP-157 m.3 (w): a keep records review.kept and is no Exercise
@@ -656,7 +788,10 @@ export class ConsoleMock {
         | { intent?: Wanted; domain?: unknown; basis?: unknown; capacity?: unknown }
         | undefined;
       // OP-149 m.10: like ADP, a set without its domain, basis and capacity is not decoded
-      if (set?.domain !== DOMAIN || set.basis === undefined || set.capacity !== "own") {
+      const known =
+        set?.domain === DOMAIN ||
+        [...s.foreign.keys()].some((f) => foreignDomain(f) === set?.domain);
+      if (!known || set?.basis === undefined || set.capacity !== "own") {
         return problem(400, "set");
       }
       const intent = set.intent;

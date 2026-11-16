@@ -3,9 +3,9 @@ import { getRouteApi } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 
 import type { Screen } from "../lib/sections.js";
-import type { Ctx } from "../screens/parts.js";
 import { Planned } from "../screens/Planned.js";
 import * as P from "../screens/Platform.js";
+import type { Ctx } from "../screens/parts.js";
 import { SectionRoute } from "./section.js";
 
 const route = getRouteApi("/$environment/platform/{-$screen}");

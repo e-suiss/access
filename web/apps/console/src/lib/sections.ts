@@ -70,10 +70,12 @@ const idp = (namespace: string, name: string): Probe => ({
 const planned = (probes: readonly Probe[]): readonly Probe[] => probes.slice(0, 0);
 // OP-159 m.41 (b), INV-29
 const platform = (name: string): Probe => idp("platform", name);
+// OP-159 m.47 (h): catalog version 2
 const PLATFORM: readonly Probe[] = [
   platform("tenant_create"),
-  platform("environment_create"),
-  platform("sandbox_create"),
+  platform("tenant_suspend"),
+  platform("tenant_reactivate"),
+  platform("tenant_placement"),
 ];
 // OP-151 m.8 (h)
 const AUDIT: Probe = { namespace: "access", name: "read", major: 1, resource: "audit" };
@@ -158,8 +160,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   recovery: [AUDIT],
   // OP-159 m.41 (b)
   tenants: PLATFORM,
-  envs: [platform("environment_create")],
-  sandboxes: [platform("sandbox_create")],
+  envs: PLATFORM,
+  sandboxes: PLATFORM,
   operator: PLATFORM,
 };
 
@@ -270,4 +272,41 @@ export function visibleSections(screens: ReadonlySet<Screen>): ReadonlySet<Secti
   const out = new Set<Section>();
   for (const s of screens) out.add(sectionOf(s));
   return out;
+}
+
+// OP-159 m.47 (e), (f), (h), TN-140
+/** The tenant's own actions, which only its management environment publishes. */
+export const TENANT_ACTIONS = [
+  "environment_create",
+  "admin_invite",
+  "admin_remove",
+  "owner_add",
+] as const;
+
+export type TenantAction = (typeof TENANT_ACTIONS)[number];
+
+/**
+ * The tenant actions the viewer can exercise in management environment `environment`, asked once
+ * per session and Instance like the screens; no answer is no action (fail closed).
+ */
+export function tenantActionsQuery(instance: Instance, environment: string, account: string) {
+  return queryOptions({
+    queryKey: ["tenant-actions", environment, account, instance.id] as const,
+    queryFn: async (): Promise<ReadonlySet<TenantAction>> => {
+      let held: Promise<readonly Holding[]> | undefined;
+      const holdings = (): Promise<readonly Holding[]> => {
+        held ??= readHoldings(instance).catch(() => []);
+        return held;
+      };
+      const out = new Set<TenantAction>();
+      await Promise.all(
+        TENANT_ACTIONS.map(async (a) => {
+          if (await eligible(instance, environment, idp("tenant", a), holdings)) out.add(a);
+        }),
+      );
+      return out;
+    },
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
 }

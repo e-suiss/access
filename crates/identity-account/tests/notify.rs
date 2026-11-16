@@ -1040,6 +1040,9 @@ fn every_kind_matches_the_json_schema() {
             organization: "Acme <a href=x>".to_owned(),
             inviter: "Ayşe".to_owned(),
             expires_at_ms: START_MS + 1,
+            console_link: Some(Secret::new(
+                "https://manage.example/console/acme-admin".to_owned(),
+            )),
         },
     }])
     .chain(

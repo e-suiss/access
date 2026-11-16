@@ -557,6 +557,20 @@
       "description": "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e))."
     },
     {
+      "code": "invite-expired",
+      "type": "urn:suiss:access:problem:invite-expired",
+      "status": 410,
+      "title": "Gone",
+      "description": "The administrator invitation expired; an administrator can invite again (OP-159 m.47 (f), TN-89)."
+    },
+    {
+      "code": "invite-state",
+      "type": "urn:suiss:access:problem:invite-state",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the management environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7))."
+    },
+    {
       "code": "public-sub-not-opted-in",
       "type": "urn:suiss:access:problem:public-sub-not-opted-in",
       "status": 400,

@@ -12,9 +12,11 @@ export const en = {
   navAbout: "About",
   signOut: "Sign out",
   environmentSwitch: "Environment {environment}: switch environment",
-  environmentSwitchPlatform: "Environments on this platform",
+  environmentSwitchTenant: "Your tenant",
+  environmentSwitchHome: "{environment} (tenant home)",
   environmentSwitchKnown: "Signed in from this browser",
-  environmentSwitchNote: "Each environment has its own sign-in.",
+  environmentSwitchNote:
+    "Your tenant's environments share your sign-in; any other environment has its own.",
   paletteTitle: "Go to",
   paletteDescription: "Find a screen of this environment or another environment to open.",
   palettePlaceholder: "Search screens and environments…",
@@ -1099,7 +1101,7 @@ export const en = {
   // OP-159 m.41 (b): the Platform section
   navPlatform: "Platform",
   sectionPlatformIntro:
-    "Tenants, the environments and sandbox domains in them, and how this deployment is doing. You see each environment's metadata only, never its accounts, apps, authority, records or settings.",
+    "Tenants, the environments and sandbox domains in them, and how this deployment is doing. You see each environment's metadata only, never its accounts, apps, authority, records or settings, and you open no environment: a tenant's founder and administrators do.",
   screenTenants: "Tenants",
   screenEnvironments: "Environments",
   screenSandboxes: "Sandbox domains",
@@ -1113,13 +1115,13 @@ export const en = {
   platformCreated: "Created",
   platformTenantCreate: "New tenant",
   platformTenantCreateHint:
-    "Access gives the tenant its ID when it drafts the change. Leave the placement empty for the default pool.",
+    "Access gives the tenant its ID when it drafts the change, and sends the founder's invitation with it. Leave the placement empty for the default pool.",
   platformTenantCreateSend: "Create tenant",
   platformEnvironmentsIntro: "A tenant's environments, each with the state of its signing keys.",
   platformSandboxesIntro:
     "A tenant's sandbox domains. Authority never flows between a sandbox and a production environment, and each sandbox has a fixed daily budget.",
   platformBoundary:
-    "To manage what is inside an environment, sign in to that environment with one of its own administrators.",
+    "What is inside an environment is managed by its tenant's administrators, in the tenant's management environment.",
   platformEnvironmentDetails: "Environment {slug}",
   platformSandbox: "Sandbox",
   platformSlug: "Short name",
@@ -1137,31 +1139,85 @@ export const en = {
   platformKexShare: "Post-quantum key exchange",
   platformBudget: "Daily budget",
   platformBudgetValue: "{exercises} changes and {projections} answers a day",
-  platformEnvironmentCreate: "New environment",
-  platformEnvironmentCreateHint:
-    "A new environment starts with its own founding root, chosen here. This deployment's operator holds nothing in it.",
-  platformEnvironmentCreateSend: "Create environment",
-  platformSandboxCreate: "New sandbox domain",
-  platformSandboxCreateHint:
-    "A sandbox domain starts from the sandbox template with its own founding root and a fixed daily budget.",
-  platformSandboxCreateSend: "Create sandbox domain",
   platformIssuerStyle: "Address",
   platformIssuerSubdomain: "Its own subdomain",
   platformIssuerPath: "A path on the shared host",
-  platformRoot: "Founding root",
-  platformRootJoint: "Several people together (recommended)",
-  platformRootSole: "Only me",
-  platformRootParties: "Party IDs",
-  platformRootPartiesHint: "One per line or separated by commas; yours is filled in.",
-  platformRootK: "How many of them must sign",
-  platformRootSoleAcknowledge:
-    "I understand that an environment with a single founding root can't be recovered if that key is lost.",
   platformOperatorIntro:
     "This deployment's readiness checks, by name. No addresses, keys or secrets are shown.",
   platformReady: "Ready",
   platformDegraded: "Degraded: at least one check is failing",
   platformCheckOk: "OK",
   platformCheckFailing: "Failing",
+  // OP-159 m.47
+  enterTitle: "Manage {environment}",
+  enterIntro:
+    "You're signed in at {home}, your tenant's management environment. You manage this environment with that same sign-in.",
+  enterDeviceTitle: "This browser's key in this environment",
+  enterDeviceText:
+    "The first time you open this environment, this browser registers its own key here. You sign once; no new sign-in is needed.",
+  enterNeedsHome: "First register this browser at {home}.",
+  enterGoHome: "Go to {home}",
+  enterAction: "Register and open {environment}",
+  enterFailed: "This browser could not be registered here. Nothing was changed. Try again shortly.",
+  tenantHomeTitle: "Your tenant",
+  tenantHomeIntro:
+    "{environment} is your tenant's management environment. From here you manage every environment of the tenant and its administrators.",
+  tenantEnvironments: "Environments",
+  tenantEnvironmentsIntro:
+    "Open an environment to manage its people, apps and settings. You stay signed in.",
+  tenantManagement: "Management",
+  tenantEnvironmentCreate: "New environment",
+  tenantEnvironmentCreateHint:
+    "The environment belongs to this tenant. Its owners are the tenant's owners, and its administrators are the tenant's administrators.",
+  tenantEnvironmentSandbox: "Sandbox: for trying things out, with a fixed daily budget",
+  tenantEnvironmentCreateSend: "Create environment",
+  tenantAdmins: "Administrators",
+  tenantAdminsIntro:
+    "Administrators sign in here once and manage every environment of the tenant. Owners can also change roles, permissions and trust.",
+  tenantAdminIdentifier: "Address",
+  tenantAdminRole: "Role",
+  tenantAdminSince: "Since",
+  tenantAdminActions: "Actions",
+  tenantRoleOwner: "Owner",
+  tenantRoleAdmin: "Administrator",
+  tenantStatusInvited: "Invited",
+  tenantStatusActive: "Active",
+  tenantStatusRemoved: "Removed",
+  tenantMakeOwner: "Make owner",
+  tenantMakeOwnerOf: "Make {who} an owner",
+  tenantRemove: "Remove",
+  tenantRemoveOf: "Remove {who}",
+  tenantInvite: "Invite an administrator",
+  tenantInviteHint:
+    "The invitation goes to this address. Whoever accepts it becomes an administrator, never an owner.",
+  tenantInviteEmail: "Email address",
+  tenantInviteSend: "Send invitation",
+  tenantLastOwner: "The tenant's last owner can't be removed. Make someone else an owner first.",
+  platformTenantName: "Name",
+  platformManagementSlug: "Management environment",
+  platformManagementSlugHint:
+    "The short name of the tenant's management environment, where its administrators sign in. Lowercase letters, digits and hyphens, 3 to 63 characters. It can't be changed later.",
+  platformFounderEmail: "Founder's email address",
+  platformFounderEmailHint:
+    "The founder gets an invitation link and a code. They set up the tenant; this deployment's operator holds nothing in it.",
+  platformTenantConsoleCreated: "The tenant's console, once its founder has set it up:",
+  platformTenantProvisioning: "Waiting for its founder",
+  platformTenantActive: "Active",
+  platformTenantSuspended: "Suspended",
+  platformTenantDeleted: "Deleted",
+  platformFounding: "Founding",
+  platformFoundingPending: "Invitation sent",
+  platformFoundingExpired: "Invitation expired",
+  platformFoundingCompleted: "Done",
+  platformTenantDetails: "Tenant {name}",
+  platformReinvite: "Send a new invitation",
+  platformReinviteHint:
+    "The address the founding was made for. The old link and code stop working.",
+  platformSuspend: "Suspend tenant",
+  platformReactivate: "Reactivate tenant",
+  platformPlacementNew: "New placement",
+  platformPlacementNewHint: "Now {placement}. Only the tenant's new environments are placed there.",
+  platformPlacementMove: "Move placement",
 } as const;
 
 export type Key = keyof typeof en;

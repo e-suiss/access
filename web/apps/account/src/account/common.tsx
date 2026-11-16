@@ -1,7 +1,7 @@
 // TN-107, X29, §8.13: what every S10/S11 write shares. A write that needs a fresh confirmation
 // sends the browser to the hosted login and back; a lost sign-in says only "Please sign in
 // again to continue."; every outcome is announced in a live region.
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { type ReactElement, useCallback, useEffect, useState } from "react";
 
 import { FRONTEND, PAGE, Problem } from "../lib/api.js";
 import { locale, t } from "../lib/i18n.js";

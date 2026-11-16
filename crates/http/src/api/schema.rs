@@ -258,13 +258,18 @@ fn base_schemas() -> Value {
             "properties": {
                 "agent": text("Opaque id of the agent Party."),
                 "display_name": text("Name shown to people; attacker input, rendered as text."),
+                "description": { "type": ["string", "null"], "description": "What the agent does; attacker input, rendered as text." },
                 "agent_kind": { "type": "string", "enum": ["cloud", "local", "enterprise", "robot"] },
                 "operator": text("The operator Party: an organization or a person."),
                 "sponsors": { "type": "array", "items": { "type": "string" }, "description": "The human sponsors' account ids; at least one while the agent is active." },
                 "status": { "type": "string", "enum": ["active", "suspended", "retired"], "readOnly": true },
+                "status_at": r("schemas", "Time"),
                 "connections": { "type": "array", "items": { "type": "string" }, "description": "Connected accounts for agents, by connection id; never a token." },
                 "last_run_at": { "anyOf": [r("schemas", "Time"), { "type": "null" }] },
                 "created_at": r("schemas", "Time"),
+                "registered_exercise": text("The `party_register` Exercise that recorded the agent's Party, base64url."),
+                "sponsorships": { "type": "array", "readOnly": true, "items": { "type": "object" }, "description": "Every sponsorship episode, live and ended, as the sponsors list shows it (SI-21, AG-41)." },
+                "instances": { "type": "array", "readOnly": true, "items": { "type": "string" }, "description": "The agent's live Instances, base64url; on a single agent read only (AG-21)." },
             },
         },
         "UpstreamIdp": {
@@ -1015,7 +1020,9 @@ fn body_of(row: &Route) -> &'static str {
             | ResourceKind::LinuxHosts
             | ResourceKind::HrSources
             | ResourceKind::HrConnectors
-            | ResourceKind::SignalSources => "Page",
+            | ResourceKind::SignalSources
+            | ResourceKind::TenantEnvironments
+            | ResourceKind::TenantAdmins => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",

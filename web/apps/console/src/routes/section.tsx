@@ -3,9 +3,9 @@
 import type { ReactElement } from "react";
 
 import type { Screen, Section } from "../lib/sections.js";
+import { AuthorityPage, useCtx, useSectionVisible } from "../Shell.js";
 import type { Ctx } from "../screens/parts.js";
 import { SectionPage, screenOf } from "../screens/Section.js";
-import { AuthorityPage, useCtx, useSectionVisible } from "../Shell.js";
 
 export function SectionRoute({
   section,

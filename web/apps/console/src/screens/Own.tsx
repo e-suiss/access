@@ -1,12 +1,12 @@
 // Ek B 3089, TN-128: the identity plane's own, authority-free screens; the cookie is enough
-import { loadKernel } from "@esuiss/access";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactElement } from "react";
-import * as v from "valibot";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
+import { loadKernel } from "@esuiss/access";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { DataTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";

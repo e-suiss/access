@@ -2,33 +2,33 @@
 // and replacing its key, and registering and retiring server groups are each one signed change;
 // servers trust the CA key the environment publishes and refuse what its KRL lists. Certificates are
 // projections of ssh.login Grants and show in the audit log.
-import { Link } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
+import { Link } from "@tanstack/react-router";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface HostGroup {
-  readonly name: string;
-  readonly description: string;
-  readonly status: string;
-  readonly version: number;
-}
-
-interface Page<T> {
-  readonly items: readonly T[];
-}
+// OP-159 m.46 (f)
+const HostGroups = items(
+  v.looseObject({
+    name: v.string(),
+    description: v.string(),
+    status: v.string(),
+    version: v.number(),
+  }),
+);
 
 /** The SSH certificate authority screen. */
 export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const groups = useLoad(readKey(ctx, `envs/${environment}/ssh-host-groups`), () =>
-    adminGetAs<Page<HostGroup>>(ctx.instance, `envs/${environment}/ssh-host-groups`),
+    adminGet(ctx.instance, `envs/${environment}/ssh-host-groups`, HostGroups),
   );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

@@ -1,17 +1,61 @@
 // TN-106, OP-153 m.3 (t), §14.3: branding is data; the logo is an image from an origin the
 // environment's CSP allows, drawn with <img> only, so an SVG cannot run anything; no upload exists.
+// OP-159 m.47 (b), TN-138: the branding also says the environment's kind; a management environment
+// names its tenant, whose administrators sign in there.
 import { useEffect, useState } from "react";
+import * as v from "valibot";
 
 import { under } from "./base.js";
 import { getJson } from "./http.js";
 
+// OP-159 m.46 (f)
 /** `GET /v1/login/branding`. */
-export interface BrandingData {
-  readonly display_name: string | null;
-  readonly logo_uri: string | null;
-}
+const BrandingData = v.looseObject({
+  display_name: v.nullish(v.string(), null),
+  logo_uri: v.nullish(v.string(), null),
+  environment: v.exactOptional(
+    v.looseObject({
+      kind: v.picklist(["standard", "management"]),
+      tenant_name: v.nullish(v.string()),
+      display_name: v.nullish(v.string()),
+    }),
+  ),
+});
+
+export type BrandingData = Readonly<v.InferOutput<typeof BrandingData>>;
 
 export const brandingPath = "/v1/login/branding";
+
+let read: Promise<BrandingData | null> | undefined;
+
+/** The environment's branding, read once for the page. */
+function branding(): Promise<BrandingData | null> {
+  read ??= getJson(brandingPath, BrandingData).then((a) => (a.ok ? a.body : null));
+  return read;
+}
+
+/** The environment's branding once it is read; `null` before, or when there is none. */
+export function useBranding(): BrandingData | null {
+  const [brand, setBrand] = useState<BrandingData | null>(null);
+  useEffect(() => {
+    let live = true;
+    void branding().then((b) => {
+      if (live) setBrand(b);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return brand;
+}
+
+// OP-159 m.47 (b)
+/** The tenant whose management environment this is; `undefined` for any other environment. */
+export function managementOf(brand: BrandingData | null): string | undefined {
+  const e = brand?.environment;
+  if (e?.kind !== "management") return undefined;
+  return e.tenant_name ?? e.display_name ?? brand?.display_name ?? "";
+}
 
 /** The environment's theme sheet: CSS custom properties the server writes from validated colours. */
 export function linkTheme(): void {
@@ -31,12 +75,7 @@ function httpsUrl(value: unknown): value is string {
 }
 
 export function Branding() {
-  const [brand, setBrand] = useState<BrandingData | null>(null);
-  useEffect(() => {
-    void getJson<BrandingData>(brandingPath).then((a) => {
-      if (a.ok) setBrand(a.body);
-    });
-  }, []);
+  const brand = useBranding();
   if (brand === null) return null;
   const name = typeof brand.display_name === "string" ? brand.display_name : null;
   const logo = httpsUrl(brand.logo_uri) ? brand.logo_uri : null;

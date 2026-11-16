@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT environment_id, slug, kind, governing_domain_id, issuer,\n                  (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\"\n             FROM access.environments WHERE tenant_id = $1 AND status = 'active' ORDER BY slug",
+  "query": "SELECT e.environment_id, e.slug, e.kind, e.governing_domain_id, e.issuer,\n                  (extract(epoch FROM e.created_at) * 1000)::bigint AS \"created_ms!\",\n                  EXISTS (SELECT 1 FROM access.sandbox_domains s\n                           WHERE s.tenant_id = e.tenant_id AND s.domain_id = e.governing_domain_id)\n                    AS \"sandbox!\"\n             FROM access.environments e WHERE e.tenant_id = $1 AND e.status = 'active'\n            ORDER BY e.slug",
   "describe": {
     "columns": [
       {
@@ -63,6 +63,12 @@
         "name": "created_ms!",
         "type_info": "Int8",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "sandbox!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -76,8 +82,9 @@
       false,
       false,
       true,
+      null,
       null
     ]
   },
-  "hash": "0fad4d582b93f3a3aac4e6a1cb00b1fcc5aa2901494937b4ee81a45baf950865"
+  "hash": "0d0eed6a3123421cc84d6f5ea244f89ee5e481e391d9684d2dc0b8ee9f362599"
 }

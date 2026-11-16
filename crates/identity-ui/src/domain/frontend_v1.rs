@@ -644,7 +644,45 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/login/branding",
         "getBranding",
-        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
+        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `management`) and, for a management environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)).",
+    ),
+    // OP-159 m.47 (c), TN-141
+    served(
+        Verb::Get,
+        "/v1/foundings/{token}",
+        "getFounding",
+        "A tenant founding's name, its management environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)).",
+    ),
+    served(
+        Verb::Post,
+        "/v1/foundings/{token}/verify",
+        "verifyFounding",
+        "Proves the founder's address {email, code}; 204 (TN-89 (5), (7)). Problems: invalid-code, founding-expired, founding-state.",
+    ),
+    served(
+        Verb::Post,
+        "/v1/foundings/{token}/complete",
+        "completeFounding",
+        "Opens the management environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141).",
+    ),
+    // OP-159 m.47 (f), TN-89
+    served(
+        Verb::Get,
+        "/v1/admin-invites/{token}",
+        "getAdminInvite",
+        "A tenant administrator invitation on the management environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)).",
+    ),
+    served(
+        Verb::Post,
+        "/v1/admin-invites/{token}/verify",
+        "verifyAdminInvite",
+        "Proves the invitee's address {email, code}; 204 (TN-89 (5), (7)). Problems: invalid-code, invite-expired, invite-state.",
+    ),
+    served(
+        Verb::Post,
+        "/v1/admin-invites/{token}/accept",
+        "acceptAdminInvite",
+        "Makes the invitee's account {email, code, password, device_key} and adds it as an administrator, never an owner; 201 {environment}. The device key's Instance is registered at the first console sign-in. Problems: invalid-code, invite-expired, invite-state (also: the address has an account, or the inviter is no administrator any more), invalid-password, key-invalid (OP-159 m.47 (f)).",
     ),
     live(
         Owner::N5,
@@ -1454,9 +1492,13 @@ pub fn openapi() -> Value {
     for r in ROUTES {
         let mut responses = Map::new();
         if r.live {
+            let schema = match r.operation {
+                "getBranding" => json!({ "$ref": "#/components/schemas/Branding" }),
+                _ => json!({ "type": "object" }),
+            };
             responses.insert(
                 String::from("200"),
-                json!({ "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } }),
+                json!({ "description": "OK", "content": { "application/json": { "schema": schema } } }),
             );
         } else {
             responses.insert(
@@ -1503,6 +1545,25 @@ pub fn openapi() -> Value {
         "paths": Value::Object(paths),
         "components": {
             "schemas": {
+                "Branding": {
+                    "type": "object",
+                    "required": ["display_name", "logo_uri", "environment"],
+                    "properties": {
+                        "display_name": { "type": ["string", "null"] },
+                        "logo_uri": { "type": ["string", "null"] },
+                        "environment": {
+                            "type": "object",
+                            "required": ["kind"],
+                            "properties": {
+                                "kind": { "enum": ["standard", "management"] },
+                                "tenant_name": {
+                                    "type": ["string", "null"],
+                                    "description": "The tenant's display name, for a management environment only (TN-138, OP-159 m.47 (b)).",
+                                },
+                            },
+                        },
+                    },
+                },
                 "Problem": {
                     "type": "object",
                     "required": ["type", "title", "status", "code"],

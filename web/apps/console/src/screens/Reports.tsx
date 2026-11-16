@@ -1,6 +1,5 @@
 // §8.17.9.2, §8.17.10.2, §5.4, §16.5.1, X21: the developer-surface reports as text. None of them
 // renders an action: there is no accept, move or stop button in any report (X21, §8.17.7.5).
-import type { ReactElement } from "react";
 
 import {
   Table,
@@ -11,11 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@access/ui/components/table";
+import type { ReactElement } from "react";
 
 import { t } from "../i18n/index.js";
 import { type Ability, compatKey, impactSentence, relationKey } from "../lib/text.js";
-import { Advisory, at, List } from "./parts.js";
 import { BULLETS, FACTS, H4, HINT, MONO, REPORT } from "../ui.js";
+import { Advisory, at, List } from "./parts.js";
 
 export interface Publication {
   readonly type: "schema_publication";

@@ -1,11 +1,12 @@
 // TN-89, OP-153 m.3 (o): an invitation names the organization as plain text (attacker input:
 // never a link or markup); opening it consumes nothing; joining is the signed-in person's POST,
 // and an address domain the organization has not confirmed asks first (TN-89 (10)).
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { type SyntheticEvent, useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN } from "./base.js";
 import { getJson, postJson } from "./http.js";
@@ -22,15 +23,19 @@ import {
   warning,
 } from "./Layout.js";
 
-interface Organization {
-  readonly id: string;
-  readonly display_name: string;
-}
+// OP-159 m.46 (f)
+const Organization = v.looseObject({
+  id: v.exactOptional(v.string()),
+  display_name: v.string(),
+});
 
-interface Invite {
-  readonly organization: Organization;
-  readonly invitee_domain: string;
-}
+type Organization = Readonly<v.InferOutput<typeof Organization>>;
+
+const Invite = v.looseObject({ organization: Organization, invitee_domain: v.string() });
+
+type Invite = Readonly<v.InferOutput<typeof Invite>>;
+
+const Joined = v.looseObject({ organization: Organization });
 
 type State =
   | { readonly phase: "ask_code" }
@@ -53,11 +58,6 @@ function codeOfPath(): string | null {
   return m?.[1] ?? null;
 }
 
-function isInvite(body: unknown): body is Invite {
-  const b = body as Partial<Invite> | null;
-  return typeof b?.organization?.display_name === "string" && typeof b.invitee_domain === "string";
-}
-
 const organization = "text-lg font-semibold wrap-anywhere";
 
 export function Invitation() {
@@ -70,12 +70,15 @@ export function Invitation() {
 
   useEffect(() => {
     if (code === null) return;
-    void getJson<Invite>(`/v1/invitations/${encodeURIComponent(code)}`).then((a) => {
-      if (a.ok && isInvite(a.body)) setState({ phase: "ready", invite: a.body });
+    void getJson(`/v1/invitations/${encodeURIComponent(code)}`, Invite).then((a) => {
+      if (a.ok) setState({ phase: "ready", invite: a.body });
       else
         setState({
           phase: "refused",
-          text: a.ok ? "error.access_owner" : (refusals[a.code] ?? "invitation.expired"),
+          text:
+            a.code === "malformed"
+              ? "error.access_owner"
+              : (refusals[a.code] ?? "invitation.expired"),
         });
     });
   }, [code]);
@@ -87,9 +90,10 @@ export function Invitation() {
   const join = async (invite: Invite, confirm: boolean) => {
     if (code === null) return;
     setBusy(true);
-    const a = await postJson<{ organization: Organization }>(
+    const a = await postJson(
       `/v1/invitations/${encodeURIComponent(code)}`,
       confirm ? { confirm: true } : {},
+      Joined,
     );
     setBusy(false);
     if (a.ok) setState({ phase: "joined", organization: a.body.organization });

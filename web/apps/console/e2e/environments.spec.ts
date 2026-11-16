@@ -1,8 +1,9 @@
 // OP-159 m.43 (b), m.42 (c), IA-5: the environment switcher in the console header. It lists the environments
-// this browser signed in to (and, in a platform session, the platform's environments: platform.spec.ts);
+// this browser signed in to (and, in a management environment, the tenant's: tenant.spec.ts);
 // choosing one opens that environment's console, which never switches the session silently.
-import { expect, test } from "./fixtures.js";
+
 import { BASE } from "./data.js";
+import { expect, test } from "./fixtures.js";
 
 const KNOWN = "access-console-environments";
 
@@ -30,7 +31,7 @@ test("the switcher lists the environments this browser signed in to and opens th
     "aria-checked",
     "true",
   );
-  await expect(menu.getByRole("group", { name: "Environments on this platform" })).toHaveCount(0);
+  await expect(menu.getByRole("group", { name: "Your tenant" })).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), KNOWN)).toBe(
     JSON.stringify(["acme", "shop"]),
   );

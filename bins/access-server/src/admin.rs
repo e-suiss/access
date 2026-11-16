@@ -7,6 +7,7 @@
 pub(crate) mod environment;
 pub(crate) mod offboarding;
 pub(crate) mod platform;
+pub(crate) mod tenant;
 pub(crate) mod tokens;
 
 use std::sync::Arc;

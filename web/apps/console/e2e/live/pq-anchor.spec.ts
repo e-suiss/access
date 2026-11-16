@@ -4,7 +4,7 @@
 // text itself is covered by the mocked placement spec.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, registerAndOpen, signIn } from "./signin.js";
+import { NOT_READY, READY, registerAndOpen, signIn } from "./signin.js";
 
 test.describe("@live console post-quantum anchor", () => {
   test("@live the durability read answers nothing without a session", async ({ page }) => {
@@ -15,7 +15,7 @@ test.describe("@live console post-quantum anchor", () => {
   test("@live the signed-in test user is not offered the durability screen or its anchor line", async ({
     page,
   }) => {
-    test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user");
+    test.skip(!READY, NOT_READY);
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page);

@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-
-import { StatusLadder, StepUp, WhyPanel, honesty } from "./index.js";
 import type { Explanation, Rung } from "./index.js";
+import { honesty, StatusLadder, StepUp, WhyPanel } from "./index.js";
 
 const rungs: Rung[] = [
   { text: "ladder.requested", owner: "requester", state: "reached" },

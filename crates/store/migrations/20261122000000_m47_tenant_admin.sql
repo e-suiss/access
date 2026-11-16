@@ -21,8 +21,6 @@ ALTER TABLE access.tenants
 
 ALTER TABLE access.environments
   ADD COLUMN kind text NOT NULL DEFAULT 'standard' CHECK (kind IN ('standard', 'management'));
-CREATE UNIQUE INDEX environments_one_management ON access.environments (tenant_id)
-  WHERE kind = 'management';
 GRANT SELECT (kind) ON access.environments TO access_router;
 
 CREATE FUNCTION access.environment_kind_fixed() RETURNS trigger

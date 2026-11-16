@@ -3,8 +3,9 @@
 // the Kernel decodes from them, refuses anything that is not one-time (a core action or a meta
 // payload would leave the merchant a Grant), and sends the customer's own commit, signed in this
 // browser after the signature screen. It is shown paid only once Access answers with the record.
-import { loadKernel, pay } from "@esuiss/access";
+
 import { honesty } from "@access/ui";
+import { loadKernel, pay } from "@esuiss/access";
 import * as v from "valibot";
 
 import { API, b64url, fromB64url } from "../lib/api.js";
@@ -13,8 +14,8 @@ import {
   decodedIntent,
   decodedStatement,
   type Instance,
-  nonce,
   NotSigned,
+  nonce,
   sign,
 } from "../lib/instance.js";
 

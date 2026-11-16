@@ -2,7 +2,7 @@
 // the environment's hosted login through its JSON steps: identifier, password and, since the environment asks
 // for a second factor once one is enrolled, a code of the authenticator app whose seed the
 // bootstrap wrote.
-import { expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext, expect } from "@playwright/test";
 
 import { nextStep, totp } from "./totp.js";
 

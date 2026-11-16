@@ -6,7 +6,7 @@
 // in with this browser's key, the test user sees that item and keeps it.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, registerAndOpen, signIn } from "./signin.js";
+import { NOT_READY, READY, registerAndOpen, signIn } from "./signin.js";
 
 const ADMIN = "/console/api/proxy/admin/envs/acme/reviews";
 const REVIEW = process.env["ACCESS_LIVE_REVIEW"];
@@ -40,8 +40,8 @@ test.describe("@live console access reviews", () => {
     page,
   }) => {
     test.skip(
-      PASSWORD === "" || REVIEW === undefined,
-      "ACCESS_LIVE_REVIEW names the bootstrap's review; ACCESS_LOCAL_TEST_PASSWORD its manager's password",
+      !READY || REVIEW === undefined,
+      `ACCESS_LIVE_REVIEW names the bootstrap's review; ${NOT_READY}`,
     );
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);

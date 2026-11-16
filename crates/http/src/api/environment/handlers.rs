@@ -74,6 +74,9 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         | ResourceKind::Recovery
         | ResourceKind::Signing => "environment",
         ResourceKind::CustomDomains => "host",
+        // OP-159 m.47 (a), (e)
+        ResourceKind::TenantEnvironments => "slug",
+        ResourceKind::TenantAdmins => "id",
         _ => "client_id",
     }
 }

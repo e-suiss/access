@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,\n                  a.ended_at IS NULL AS \"admin_live!\"\n             FROM access.tenant_admin_claims c\n             JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id\n              AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id\n            WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4\n            ORDER BY c.created_at DESC LIMIT 1",
+  "query": "SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,\n                  a.ended_at IS NULL AS \"admin_live!\",\n                  (extract(epoch FROM a.cooling_until) * 1000)::bigint AS cooling_ms\n             FROM access.tenant_admin_claims c\n             JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id\n              AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id\n            WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4\n            ORDER BY c.created_at DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -74,6 +74,12 @@
         "name": "admin_live!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "cooling_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -91,8 +97,9 @@
       true,
       true,
       true,
+      null,
       null
     ]
   },
-  "hash": "5da5ce9f4efbe53e923a57d70fbc0ccfc93d098426dc2d2df68da52dfa11b1cf"
+  "hash": "71f91e2d4c9c1ce7851d54a2f923ab0fb302c1e78b5b0a255d877a5e715702ab"
 }

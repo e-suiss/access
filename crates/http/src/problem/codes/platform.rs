@@ -102,3 +102,17 @@ pub const LAST_TENANT_OWNER: Code = code(
     "Conflict",
     "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e)).",
 );
+/// The tenant administrator invitation expired.
+pub const INVITE_EXPIRED: Code = code(
+    "invite-expired",
+    410,
+    "Gone",
+    "The administrator invitation expired; an administrator can invite again (OP-159 m.47 (f), TN-89).",
+);
+/// A tenant administrator invitation step out of order.
+pub const INVITE_STATE: Code = code(
+    "invite-state",
+    409,
+    "Conflict",
+    "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the management environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7)).",
+);

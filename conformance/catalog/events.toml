@@ -1132,3 +1132,75 @@ severity = "warn"
 since = "unreleased"
 fields = ["kind", "reason", "xid", "id"]
 ocsf = "application_error"
+
+[[event]]
+name = "console.device.registered_in"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "entity_management"
+
+[[event]]
+name = "founding.refused"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "founding.account"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["error"]
+ocsf = "account_change"
+
+[[event]]
+name = "admin_invite.refused"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "admin_invite.account"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["error"]
+ocsf = "account_change"
+
+[[event]]
+name = "administration.claim.refused"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "administration.claim.not_admitted"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["verdict"]
+ocsf = "application_error"
+
+[[event]]
+name = "administration.end"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "api.tenant.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admin_invitations SET superseded_at = clock_timestamp()\n          WHERE tenant_id = $1 AND environment_id = $2 AND invitee_index = $3\n            AND accepted_at IS NULL AND superseded_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0d18d0fb6bc09ff0c913b8e75c7f190eb4a0e28ee15466506d6df4e734e03288"
+}

@@ -5,24 +5,33 @@
 // `idp.platform.*` Exercise.
 import { loadKernel } from "@esuiss/access";
 import * as v from "valibot";
-
+import { draftHolds, IntentDraft, WriteResult } from "./admin.js";
 import { Eligibility, holdings } from "./adp.js";
 import { answer, call, fromB64url, Problem } from "./api.js";
-import { draftHolds, IntentDraft, WriteResult } from "./admin.js";
 import { adminWrite, type Confirm, type Instance, NotSigned, readProof } from "./instance.js";
 import { draft } from "./intents.js";
 import { type Basis, basisCbor } from "./meta.js";
 
 const RootBasis = v.looseObject({ anchor: v.string() });
 
+// OP-159 m.47 (h): catalog version 2
 /** The platform actions (`idp.platform.*`). */
-export type PlatformAction = "tenant_create" | "environment_create" | "sandbox_create";
+export type PlatformAction =
+  | "tenant_create"
+  | "tenant_suspend"
+  | "tenant_reactivate"
+  | "tenant_placement";
 
 /** One platform write the console sends. */
 export interface PlatformChange {
-  readonly operation: "createTenant" | "createEnvironment" | "createSandboxDomain";
+  readonly operation:
+    | "createTenant"
+    | "reinviteFounder"
+    | "suspendTenant"
+    | "reactivateTenant"
+    | "moveTenantPlacement";
   readonly action: PlatformAction;
-  /** The tenant an environment or sandbox domain is created in. */
+  /** The tenant a change names. */
   readonly tenant?: string;
   readonly path: string;
   readonly body: Readonly<Record<string, unknown>>;

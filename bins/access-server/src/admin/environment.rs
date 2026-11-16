@@ -73,6 +73,11 @@ pub(crate) struct Environments<P> {
     /// The authority signer, whose Domain Metadata names a domain's witnesses and replicas
     /// (OP-158 m.3 (p)); without it the durability read names none.
     pub(crate) authority_signer: Option<std::path::PathBuf>,
+    /// Ends a removed or suspended tenant administrator's Claims at once (OP-159 m.47 (f));
+    /// without it the restate job ends them.
+    pub(crate) administration: super::tenant::Ender,
+    /// The console's origin, which founding and invitation mails name (OP-159 m.47 (c), (f)).
+    pub(crate) console: Option<String>,
 }
 
 /// The `GeoIP` source's state as the signals read names it (§8.13): never `configured` unless
@@ -131,6 +136,8 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::RateLimits => Kind::RateLimits,
         ResourceKind::Recovery => Kind::Recovery,
         ResourceKind::Signing => Kind::Signing,
+        ResourceKind::TenantEnvironments => Kind::TenantEnvironments,
+        ResourceKind::TenantAdmins => Kind::TenantAdmins,
     }
 }
 
@@ -409,6 +416,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
     }
 
     async fn draft_inner(&self, w: ResourceWrite) -> Result<Drafted, Unavailable> {
+        // OP-159 m.47 (e), (f), (h)
+        if super::tenant::OPERATIONS.contains(&w.operation) {
+            return self.tenant_draft(w).await;
+        }
         let ids = self.ids.key().ok_or(Unavailable)?;
         let c = match self.compile(&ids, &w, true).await? {
             Ok(c) => c,
@@ -539,6 +550,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         w: ResourceWrite,
         caller: WriteCaller,
     ) -> Result<Written, Unavailable> {
+        // OP-159 m.47 (e), (f), (h)
+        if super::tenant::OPERATIONS.contains(&w.operation) {
+            return self.tenant_commit(w, caller).await;
+        }
         let ids = self.ids.key().ok_or(Unavailable)?;
         let compiled = match self.compile(&ids, &w, false).await? {
             Ok(c) => c,
@@ -604,6 +619,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
             Ok(Applied::NotAllowed { .. }) => return Ok(Written::NotAllowed),
             Err(e) => return refusal(&e).map(Written::Rejected),
         };
+        // OP-159 m.47 (f)
+        if let Change::AccountSuspend(s) | Change::AccountDelete(s) = &compiled.change {
+            self.end_administration((compiled.tenant, compiled.environment), *s)
+                .await;
+        }
         let resource = match report {
             Some(r) => serde_json::to_value(&r)
                 .ok()

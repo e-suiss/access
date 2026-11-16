@@ -4,30 +4,30 @@
 // answer is "Not confirmed — checking", retried with the same signed request (G39, HL-5). An
 // agent is shown as an agent (XI-17); what it did is what its runtime reported (E64, X30); Stop
 // is two rows (X13) and the aftermath is honest about the horizon (§8.13, §8.17.7.4).
-import { agents, honesty, payment, WhyPanel, type Explanation } from "@access/ui";
+import { agents, type Explanation, honesty, payment, WhyPanel } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Badge as UiBadge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { cn } from "@access/ui/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { type ReactElement, useCallback, useEffect, useState } from "react";
 
-import { revoke, search, type Revoking } from "../lib/adp.js";
+import { type Revoking, revoke, search } from "../lib/adp.js";
 import { at, catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance, SignatureView } from "../lib/instance.js";
 import {
   Actions,
+  Rows as List,
   Loading,
   Meta,
   MONO,
   Nothing,
   PageTitle,
   Panel,
-  Rows as List,
 } from "../lib/ui.js";
-import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
-import { relayStatus } from "./relay.js";
 import { supportAccess, supportLine } from "../support/model.js";
+import { type ActivityRow, assemble, type Hub as HubData, type Read, type Row } from "./model.js";
+import { relayStatus } from "./relay.js";
 
 export type Section = "authority" | "activity" | "changes";
 

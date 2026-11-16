@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createFlow, getFlow, stepUp, submit, type Answer } from "./api.js";
+import { type Answer, createFlow, getFlow, stepUp, submit } from "./api.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
 import { t } from "./i18n.js";
 import { note, Panel, problem } from "./Layout.js";
-import { pushGiveUpMs, pushOf, PUSH_POLL_MS, waitsForPush } from "./PushWait.js";
+import { PUSH_POLL_MS, pushGiveUpMs, pushOf, waitsForPush } from "./PushWait.js";
 import { StepView } from "./StepView.js";
 
 type State =

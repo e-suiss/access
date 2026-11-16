@@ -1,8 +1,9 @@
 // OP-153 m.3 (z), §8.8, X27: "Share with *App*" lists the identity claims a third-party app asks
 // for; it never says Allow or Authorize and never grants authority (that is RAR, S1).
-import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
+import { useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN } from "./base.js";
 import { follow, postJson } from "./http.js";
@@ -19,15 +20,16 @@ import {
   Title,
 } from "./Layout.js";
 
-interface Preview {
-  readonly client_id: string;
-  readonly app: string;
-  readonly claims: readonly string[];
-}
+// OP-159 m.46 (f)
+const Preview = v.looseObject({
+  client_id: v.string(),
+  app: v.string(),
+  claims: v.array(v.string()),
+});
 
-interface Redirect {
-  readonly redirect_to: string;
-}
+type Preview = Readonly<v.InferOutput<typeof Preview>>;
+
+const Redirect = v.looseObject({ redirect_to: v.string() });
 
 type State =
   | { readonly phase: "loading" }
@@ -64,7 +66,7 @@ export function Consent() {
 
   useEffect(() => {
     if (returnTo === null) return;
-    void postJson<Preview>("/v1/account/connected-apps/preview", { return_to: returnTo }).then(
+    void postJson("/v1/account/connected-apps/preview", { return_to: returnTo }, Preview).then(
       (a) => {
         if (a.ok) setState({ phase: "ready", preview: a.body });
         else if (a.status === 401) setState({ phase: "sign_in" });
@@ -80,7 +82,7 @@ export function Consent() {
   const share = async () => {
     if (returnTo === null) return;
     setBusy(true);
-    const a = await postJson<Redirect>("/v1/account/connected-apps", { return_to: returnTo });
+    const a = await postJson("/v1/account/connected-apps", { return_to: returnTo }, Redirect);
     setBusy(false);
     if (a.ok) follow(a.body.redirect_to);
     else setState({ phase: "failed" });
@@ -90,9 +92,11 @@ export function Consent() {
   const decline = async () => {
     if (returnTo === null) return;
     setBusy(true);
-    const a = await postJson<Redirect>("/v1/account/connected-apps/decline", {
-      return_to: returnTo,
-    });
+    const a = await postJson(
+      "/v1/account/connected-apps/decline",
+      { return_to: returnTo },
+      Redirect,
+    );
     setBusy(false);
     if (!a.ok) {
       setState({ phase: "failed" });

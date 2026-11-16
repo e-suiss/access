@@ -2,24 +2,25 @@
 // `reason_admin`, the StateBasis and the expanded `basis_ref`; deeper identities stay
 // pseudonymous; totals are given only within the reader's disclosure (m.8 (g)); an export is a
 // signed Exercise of its own.
-import { getRouteApi } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
+import { FieldLabel, FieldLegend, Field as FieldRoot, FieldSet } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { getRouteApi } from "@tanstack/react-router";
+import { type ReactElement, useState } from "react";
 
 import { ResultTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";
 import {
-  explain,
   type Explained,
-  exportAudit,
   type Exported,
-  search,
+  explain,
+  exportAudit,
   type SearchAnswer,
+  search,
 } from "../lib/adp.js";
 import { type MetaPayload, type MetaResult, metaWrite } from "../lib/meta.js";
+import { ACTIONS, CHOICE, CHOICE_LABEL, Failure, FORM, HINT, Notice } from "../ui.js";
 import { Explanation } from "./Explanation.js";
 import { type Ctx, Field, PageCount, Panel, Show, useRun } from "./parts.js";
 import {
@@ -28,7 +29,6 @@ import {
   type RevocationImpact,
   RevocationView,
 } from "./Reports.js";
-import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, Failure, HINT, Notice } from "../ui.js";
 
 function split(action: string): { namespace: string; name: string } {
   const i = action.lastIndexOf(".");

@@ -10,8 +10,8 @@ import {
   decodedStatement,
   find,
   type Instance,
-  nonce,
   NotSigned,
+  nonce,
   sign,
 } from "../lib/instance.js";
 

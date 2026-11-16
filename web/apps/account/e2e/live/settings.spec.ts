@@ -4,7 +4,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, ENVIRONMENT } from "./signin.js";
+import { ENVIRONMENT, PASSWORD } from "./signin.js";
 
 // @axe-core/playwright pins a newer playwright-core than @playwright/test; the page is the same
 

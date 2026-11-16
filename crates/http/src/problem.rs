@@ -439,6 +439,8 @@ pub const CODES: &[Code] = &[
     codes::platform::FOUNDING_STATE,
     codes::platform::INVALID_CODE,
     codes::platform::LAST_TENANT_OWNER,
+    codes::platform::INVITE_EXPIRED,
+    codes::platform::INVITE_STATE,
     codes::environment::PUBLIC_SUB_NOT_OPTED_IN,
     codes::environment::INVALID_SECTOR_IDENTIFIER_URI,
     codes::environment::RESERVED_OPERATION,

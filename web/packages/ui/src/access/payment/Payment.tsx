@@ -9,7 +9,7 @@ import { Button } from "@access/ui/components/button";
 import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
 
 import { text } from "../texts.js";
-import { type Line, type LimitRow, type Money, money } from "./model.js";
+import { type LimitRow, type Line, type Money, money } from "./model.js";
 
 type Catalogue = Readonly<Record<string, string>> | undefined;
 

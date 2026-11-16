@@ -1,7 +1,6 @@
 // X11, TN-131: the signature screen is its own surface. It renders only what the Kernel decoded
 // from the bytes about to be signed (never the UI's own copy), as text nodes, and nothing is
 // signed until the user presses Sign.
-import { useCallback, useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
 import {
@@ -12,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@access/ui/components/dialog";
+import { type ReactElement, useCallback, useState } from "react";
 
 import { t } from "./i18n/index.js";
 import type { Confirm, SignatureView } from "./lib/instance.js";

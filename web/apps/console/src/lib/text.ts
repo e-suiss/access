@@ -3,7 +3,7 @@
 // rendered, whatever an answer carries. An unknown subcode reads as its class (P15).
 import { reason as sdkReason } from "@esuiss/access";
 
-import { t, type Key } from "../i18n/index.js";
+import { type Key, t } from "../i18n/index.js";
 
 /** The category text and "what is needed" of each reason class (§8.17.8.2, E-6). */
 export const REASONS: Readonly<Record<sdkReason.ReasonClass, readonly [Key, Key]>> = {

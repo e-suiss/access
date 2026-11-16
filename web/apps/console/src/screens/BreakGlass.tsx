@@ -1,39 +1,41 @@
 // INV-28, TN-93, §12.3.8, OP-157 m.3 (h): break-glass is a protected Grant given in advance.
 // Marking an account gives it no authority; each use is reviewed afterwards by someone else,
 // and a drill runs at least every 90 days.
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, at, readKey, useLoad, useRun } from "./parts.js";
-
-interface Account {
-  readonly account_id: string;
-  readonly member: string;
-  readonly organization: string;
-  readonly organization_name: string;
-  readonly marked_at: number;
-}
-
-interface Use {
-  readonly exercise: string;
-  readonly drill: boolean;
-  readonly used_at: number;
-  readonly due_at: number;
-  readonly state: "pending" | "overdue" | "reviewed";
-  readonly classification: "drill" | "emergency" | "misuse" | null;
-  readonly next_due_at?: number | null;
-}
-
-interface Page<T> {
-  readonly items: readonly T[];
-}
+import { at, type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
 const CLASSES = ["drill", "emergency", "misuse"] as const;
+
+// OP-159 m.46 (f)
+const Accounts = items(
+  v.looseObject({
+    account_id: v.string(),
+    member: v.string(),
+    organization: v.string(),
+    organization_name: v.string(),
+    marked_at: v.number(),
+  }),
+);
+
+const Uses = items(
+  v.looseObject({
+    exercise: v.string(),
+    drill: v.boolean(),
+    used_at: v.number(),
+    due_at: v.number(),
+    state: v.picklist(["pending", "overdue", "reviewed"]),
+    classification: v.nullable(v.picklist(CLASSES)),
+    next_due_at: v.exactOptional(v.nullable(v.number())),
+  }),
+);
 
 const DRILL_EVERY_MS = 90 * 86_400_000;
 
@@ -48,10 +50,10 @@ const classOf = (c: (typeof CLASSES)[number]): string =>
 export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const accounts = useLoad(readKey(ctx, `envs/${environment}/breakglass/accounts`), () =>
-    adminGetAs<Page<Account>>(ctx.instance, `envs/${environment}/breakglass/accounts`),
+    adminGet(ctx.instance, `envs/${environment}/breakglass/accounts`, Accounts),
   );
   const reviews = useLoad(readKey(ctx, `envs/${environment}/breakglass/reviews`), () =>
-    adminGetAs<Page<Use>>(ctx.instance, `envs/${environment}/breakglass/reviews`),
+    adminGet(ctx.instance, `envs/${environment}/breakglass/reviews`, Uses),
   );
   const [organization, setOrganization] = useState("");
   const [member, setMember] = useState("");

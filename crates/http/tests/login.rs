@@ -1328,8 +1328,25 @@ async fn only_the_consent_screen_may_compile_the_kernel_and_no_page_is_framed() 
         "{csp}"
     );
     assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+    // OP-159 m.47 (c), (f)
+    for path in ["/login/founding/tok", "/login/admin-invite/tok"] {
+        let page = b.get(path).await;
+        assert_eq!(page.status, StatusCode::OK, "{path}");
+        let csp = page.headers["content-security-policy"].to_str().unwrap();
+        assert!(
+            csp.contains("script-src 'self' 'wasm-unsafe-eval';"),
+            "{path}: {csp}"
+        );
+        assert!(csp.contains("frame-ancestors 'none'"), "{path}: {csp}");
+    }
     // OP-154 m.3 (p), m.7 (f)
-    for path in ["/login", "/login?reason=share", "/device"] {
+    for path in [
+        "/login",
+        "/login?reason=share",
+        "/device",
+        "/login/founding/",
+        "/login/recovery",
+    ] {
         let page = b.get(path).await;
         assert_eq!(page.status, StatusCode::OK, "{path}");
         let csp = page.headers["content-security-policy"].to_str().unwrap();
@@ -4977,7 +4994,11 @@ async fn n5_the_theme_record_is_applied_to_the_hosted_page() {
     assert_eq!(none.status, StatusCode::OK);
     assert_eq!(
         none.json(),
-        json!({ "display_name": null, "logo_uri": null })
+        json!({
+            "display_name": null,
+            "logo_uri": null,
+            "environment": { "kind": "standard" },
+        })
     );
     assert_eq!(b.get("/login/theme.css").await.body, b":root{}\n");
     e.brand(

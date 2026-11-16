@@ -2,30 +2,32 @@
 // offline limits and its break-glass switch are each one signed change. A host resolves and
 // signs in exactly the people whose ssh.login access names its server group; sudo asks for a
 // security key every time and never works offline.
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Host {
-  readonly name: string;
-  readonly host_group: string;
-  readonly certificate: string;
-  readonly sudo_ct: number;
-  readonly nss_ttl_s: number;
-  readonly console_ttl_s: number;
-  readonly break_glass: boolean;
-  readonly status: string;
-}
+// OP-159 m.46 (f)
+const Host = v.looseObject({
+  name: v.string(),
+  host_group: v.string(),
+  certificate: v.string(),
+  sudo_ct: v.number(),
+  nss_ttl_s: v.number(),
+  console_ttl_s: v.number(),
+  break_glass: v.boolean(),
+  status: v.string(),
+});
 
-interface Page<T> {
-  readonly items: readonly T[];
-}
+type Host = v.InferOutput<typeof Host>;
+
+const Hosts = items(Host);
 
 const hours = (s: number): string => String(Math.round((s / 3600) * 10) / 10);
 
@@ -33,7 +35,7 @@ const hours = (s: number): string => String(Math.round((s / 3600) * 10) / 10);
 export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const hosts = useLoad(readKey(ctx, `envs/${environment}/linux-hosts`), () =>
-    adminGetAs<Page<Host>>(ctx.instance, `envs/${environment}/linux-hosts`),
+    adminGet(ctx.instance, `envs/${environment}/linux-hosts`, Hosts),
   );
   const [name, setName] = useState("");
   const [group, setGroup] = useState("");

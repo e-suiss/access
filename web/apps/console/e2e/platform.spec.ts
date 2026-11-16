@@ -1,7 +1,8 @@
-// OP-159 m.41 (b), (c), TN-119, INV-29, IA-5, XI-11: the Platform section over mocked management
-// answers. The section shows only for a viewer whose own Grant covers an `idp.platform.*` action;
-// it reads metadata only, and each creation is drafted, shown on the signature screen and signed on
-// that Grant (bins/access-server `management::platform` runs the same path for real).
+// OP-159 m.41 (b), (c), m.47 (c), (h), TN-119, INV-29, IA-5, XI-11: the Platform section over mocked
+// management answers. The section shows only for a viewer whose own Grant covers an `idp.platform.*`
+// action; it reads metadata only, opens no environment, and each tenant change is drafted, shown on
+// the signature screen and signed on that Grant (bins/access-server `management::platform` runs the
+// same path for real).
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
@@ -12,7 +13,12 @@ import type { ConsoleMock } from "./mock.js";
 
 const GRANT = Buffer.alloc(16, 0x47).toString("base64url");
 const PARTY = Buffer.alloc(16, 2).toString("base64url");
-const ACTIONS = ["tenant_create", "environment_create", "sandbox_create"] as const;
+const ACTIONS = [
+  "tenant_create",
+  "tenant_suspend",
+  "tenant_reactivate",
+  "tenant_placement",
+] as const;
 
 function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void {
   bff.environment = "platform";
@@ -31,15 +37,38 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
   });
   bff.admin.set("platform/tenants", {
     items: [
-      { tenant_id: "tnt_platform", status: "active", placement: "pool-default" },
-      { tenant_id: "tnt_acme", status: "active", placement: "pool-default" },
+      {
+        tenant_id: "tnt_acme",
+        display_name: "Acme",
+        management_slug: "acme-admin",
+        founding: "completed",
+        status: "active",
+        placement: "pool-default",
+        created_at: "2026-11-16T09:00:00Z",
+      },
+      {
+        tenant_id: "tnt_globex",
+        display_name: "<i>Globex</i>",
+        management_slug: "globex-admin",
+        founding: "expired",
+        status: "provisioning",
+        placement: "pool-default",
+      },
+      {
+        tenant_id: "tnt_initech",
+        display_name: "Initech",
+        management_slug: "initech-admin",
+        founding: "completed",
+        status: "suspended",
+        placement: "pool-eu",
+      },
     ],
   });
-  bff.admin.set("platform/tenants/tnt_platform/envs", {
-    items: [{ slug: "platform", tenant_id: "tnt_platform", status: "active", sandbox: false }],
-  });
   bff.admin.set("platform/tenants/tnt_acme/envs", {
-    items: [{ slug: "acme", tenant_id: "tnt_acme", status: "active", sandbox: false }],
+    items: [
+      { slug: "acme-admin", kind: "management", tenant_id: "tnt_acme", status: "active" },
+      { slug: "acme", kind: "standard", tenant_id: "tnt_acme", status: "active", sandbox: false },
+    ],
   });
   bff.admin.set("platform/tenants/tnt_acme/sandbox-domains", {
     items: [
@@ -54,6 +83,7 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
   });
   bff.admin.set("platform/envs/acme", {
     slug: "acme",
+    kind: "standard",
     tenant_id: "tnt_acme",
     issuer: "https://access-server:8443/env/acme",
     status: "active",
@@ -115,41 +145,167 @@ test("the platform section shows only for a viewer whose Grant covers a platform
     "Sandbox domains",
     "Operator health",
   ]);
-  // OP-159 m.43 (c), §13.7.4: asked on the Grant naming it, which answers, and not again
+  // OP-159 m.43 (c), m.47 (h), §13.7.4: asked on the Grant naming it, which answers, and not again
   for (const a of ACTIONS) {
     expect(bff.probesAsked).toContain(`idp.platform/${a}|holding`);
     expect(bff.probesAsked).not.toContain(`idp.platform/${a}|anchor`);
   }
+  // m.47 (h): catalog version 1's environment creation is not asked about
+  expect(bff.probesAsked.some((p) => /environment_create|sandbox_create/.test(p))).toBe(false);
 });
 
-// OP-159 m.43 (b), TN-119: in a platform session the switcher lists the platform's environments
-test("in a platform session the switcher lists the platform's environments and opens one", async ({
+// OP-159 m.47 (a), TN-119: the platform lists tenants, never enters them
+test("the switcher lists no tenant's environments in a platform session", async ({ page, bff }) => {
+  seedPlatform(bff);
+  await openPlatform(page, "/console/platform/platform");
+  await page.getByRole("button", { name: "Environment platform: switch environment" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["platform"]);
+  expect(bff.seen.some((x) => /\/tnt_[a-z]+\/envs$/.test(x.path))).toBe(false);
+});
+
+// OP-159 m.47 (c), m.42 (d), TN-131
+test("tenants show their name, management environment, console link, state and founding", async ({
   page,
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform");
-  const switcher = page.getByRole("button", { name: "Environment platform: switch environment" });
-  await switcher.click();
-  const menu = page.getByRole("menu");
-  const listed = menu.getByRole("group", { name: "Environments on this platform" });
-  await expect(listed.getByRole("menuitemradio")).toHaveText(["acme", "platform"]);
-  await expect(menu.getByRole("group", { name: "Signed in from this browser" })).toHaveCount(0);
-  await listed.getByRole("menuitemradio", { name: "acme" }).click();
-  await expect(page).toHaveURL(/\/console\/acme$/);
-  await expect(page.getByRole("button", { name: "Sign out and sign in to acme" })).toBeVisible();
+  await openPlatform(page, "/console/platform/platform/tenants");
+  const list = page.getByTestId("tenant-list");
+  const acme = list.locator('[data-tenant="tnt_acme"]');
+  await expect(acme).toContainText("Acme");
+  await expect(acme).toContainText("acme-admin");
+  await expect(acme).toContainText("Active");
+  await expect(acme).toContainText("Done");
+  await expect(acme.getByTestId("environment-console-link")).toHaveText(
+    `${BASE}/console/acme-admin`,
+  );
+  await expect(acme.getByTestId("environment-console-link")).toHaveAttribute(
+    "href",
+    "/console/acme-admin",
+  );
+  const globex = list.locator('[data-tenant="tnt_globex"]');
+  await expect(globex).toContainText("<i>Globex</i>");
+  await expect(globex.locator("i")).toHaveCount(0);
+  await expect(globex).toContainText("Waiting for its founder");
+  await expect(globex).toContainText("Invitation expired");
+  await expect(list.locator('[data-tenant="tnt_initech"]')).toContainText("Suspended");
 });
 
-// IA-5, fail closed: a Grant of one action shows only its screens
-test("a Grant of one platform action shows only that action's screens", async ({ page, bff }) => {
-  seedPlatform(bff, ["sandbox_create"]);
-  await openPlatform(page, "/console/platform/platform");
-  const screens = page.getByRole("navigation", { name: "Screens in this section" });
-  await expect(screens.getByRole("link")).toHaveText([
-    "Tenants",
-    "Sandbox domains",
-    "Operator health",
+// OP-159 m.47 (c), TN-110, OP-151 m.11 (a): a tenant is drafted, signed on the Grant and sent
+test("a new tenant with its founder is drafted, shown, signed on the platform Grant and listed", async ({
+  page,
+  bff,
+}) => {
+  seedPlatform(bff);
+  await openPlatform(page, "/console/platform/platform/tenants");
+  await expect(page.getByTestId("tenant-list")).toContainText("Acme");
+  const listings = () =>
+    bff.seen.filter((x) => x.method === "GET" && x.path.endsWith("/tenants")).length;
+  const before = listings();
+  const panel = page.getByRole("region", { name: "New tenant" });
+  const send = panel.getByRole("button", { name: "Create tenant" });
+  await expect(send).toBeDisabled();
+  await panel.getByLabel("Name").fill("Hooli");
+  await panel.getByLabel("Management environment").fill("hooli-admin");
+  await panel.getByLabel("Founder's email address").fill("founder@hooli.example");
+  await panel.getByLabel("Placement (optional)").fill("pool-eu");
+  await send.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("idp.platform.tenant_create");
+  await expect(dialog).toContainText("idp:[platform/platform/tenant/hooli-admin]");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(panel.getByRole("status")).toContainText("Recorded as change");
+  await expect(panel.getByTestId("tenant-console-created")).toContainText(
+    `${BASE}/console/hooli-admin`,
+  );
+  expect(bff.writes).toHaveLength(1);
+  const w = bff.writes[0];
+  expect(w?.path).toBe("platform/tenants");
+  expect(w?.body).toMatchObject({
+    tenant_id: "tnt_new",
+    display_name: "Hooli",
+    management_slug: "hooli-admin",
+    founder_email: "founder@hooli.example",
+    placement: "pool-eu",
+  });
+  expect(bff.bases[0]).toEqual({ holding: { grant: GRANT, holder: PARTY, since: "7" } });
+  await expect.poll(listings).toBe(before + 1);
+  // m.47 (h): the platform opens no environment
+  await expect(page.getByText(/New environment|New sandbox domain|Founding root/)).toHaveCount(0);
+});
+
+// OP-159 m.47 (c), (h), TN-141
+test("a tenant's founder is invited again, and a tenant is suspended, reactivated and moved", async ({
+  page,
+  bff,
+}) => {
+  seedPlatform(bff);
+  await openPlatform(page, "/console/platform/platform/tenants");
+  const dialog = page.getByRole("dialog");
+  const picker = page.getByLabel("Tenant", { exact: true });
+  await picker.selectOption("tnt_globex");
+  const globex = page.getByRole("region", { name: "Tenant <i>Globex</i>" });
+  await globex.getByLabel("Founder's email address").fill("founder@globex.example");
+  await globex.getByRole("button", { name: "Send a new invitation" }).click();
+  await expect(dialog).toContainText("idp.platform.tenant_create");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(globex.getByRole("status")).toContainText("Recorded as change");
+  await expect(globex.getByRole("button", { name: "Suspend tenant" })).toHaveCount(0);
+
+  await picker.selectOption("tnt_acme");
+  const acme = page.getByRole("region", { name: "Tenant Acme" });
+  await expect(acme.getByRole("button", { name: "Send a new invitation" })).toHaveCount(0);
+  await acme.getByRole("button", { name: "Suspend tenant" }).click();
+  await expect(dialog).toContainText("idp.platform.tenant_suspend");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(acme.getByRole("status")).toContainText("Recorded as change");
+  await acme.getByLabel("New placement").fill("pool-eu");
+  await acme.getByRole("button", { name: "Move placement" }).click();
+  await expect(dialog).toContainText("idp.platform.tenant_placement");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+
+  await picker.selectOption("tnt_initech");
+  const initech = page.getByRole("region", { name: "Tenant Initech" });
+  await initech.getByRole("button", { name: "Reactivate tenant" }).click();
+  await expect(dialog).toContainText("idp.platform.tenant_reactivate");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(initech.getByRole("status")).toContainText("Recorded as change");
+
+  expect(bff.writes.map((w) => [w.path, w.body])).toEqual([
+    [
+      "platform/tenants/tnt_globex/reinvite-founder",
+      expect.objectContaining({ founder_email: "founder@globex.example" }),
+    ],
+    ["platform/tenants/tnt_acme/suspend", expect.any(Object)],
+    ["platform/tenants/tnt_acme/placement", expect.objectContaining({ placement: "pool-eu" })],
+    ["platform/tenants/tnt_initech/reactivate", expect.any(Object)],
   ]);
+});
+
+// OP-159 m.47 (h): environments are metadata here; none is created
+test("an environment's metadata and key state show, with no way to create one", async ({
+  page,
+  bff,
+}) => {
+  seedPlatform(bff);
+  await openPlatform(page, "/console/platform/platform/envs");
+  await page.getByLabel("Tenant").selectOption("tnt_acme");
+  await expect(page.getByTestId("envs-list")).toContainText("Management");
+  await page.getByRole("button", { name: "acme", exact: true }).click();
+  await expect(page.getByTestId("environment-key-state")).toHaveAttribute("data-state", "signing");
+  await expect(page.getByTestId("environment-meta")).toContainText(
+    "https://access-server:8443/env/acme",
+  );
+  await expect(page.getByRole("region", { name: "New environment" })).toHaveCount(0);
+  await page.evaluate(() => {
+    history.pushState(null, "", "/console/platform/platform/sandboxes");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await page.getByLabel("Tenant").selectOption("tnt_acme");
+  await expect(page.getByTestId("sandbox-domains-list")).toContainText("acme-lab");
+  await expect(page.getByRole("region", { name: "New sandbox domain" })).toHaveCount(0);
+  expect(bff.writes).toEqual([]);
 });
 
 // INV-29: without a Grant nothing shows, even in the platform environment
@@ -171,112 +327,16 @@ test("a platform environment account without a Grant sees no platform section", 
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
 });
 
-// OP-159 m.41 (b), TN-110, OP-151 m.11 (a): a tenant is drafted, signed on the Grant and sent
-test("a new tenant is drafted, shown, signed on the platform Grant and listed", async ({
-  page,
-  bff,
-}) => {
-  seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/tenants");
-  await expect(page.getByTestId("tenant-list")).toContainText("tnt_acme");
-  const listings = () =>
-    bff.seen.filter((x) => x.method === "GET" && x.path.endsWith("/tenants")).length;
-  // OP-159 m.43 (b)
-  await expect.poll(() => bff.seen.some((x) => x.path.endsWith("/tnt_platform/envs"))).toBe(true);
-  const before = listings();
-  const panel = page.getByRole("region", { name: "New tenant" });
-  await panel.getByRole("button", { name: "Create tenant" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("idp.platform.tenant_create");
-  await expect(dialog).toContainText("idp:[platform/platform/tenant/tnt_new]");
-  await dialog.getByRole("button", { name: "Sign" }).click();
-  await expect(panel.getByRole("status")).toContainText("Recorded as change");
-  expect(bff.writes).toHaveLength(1);
-  const w = bff.writes[0];
-  expect(w?.path).toBe("platform/tenants");
-  expect(w?.body["tenant_id"]).toBe("tnt_new");
-  expect(bff.bases[0]).toEqual({ holding: { grant: GRANT, holder: PARTY, since: "7" } });
-  await expect.poll(listings).toBe(before + 1);
-});
-
-// TN-111, §13.7.7: an environment is opened with the viewer's founding root, never the operator's
-test("an environment's metadata and key state show, and a new environment names its own founding root", async ({
-  page,
-  bff,
-}) => {
-  seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/envs");
-  await page.getByLabel("Tenant").selectOption("tnt_acme");
-  // OP-159 m.42 (d)
-  await expect(page.getByTestId("environment-console-link")).toHaveText(`${BASE}/console/acme`);
-  await expect(page.getByTestId("environment-console-link")).toHaveAttribute(
-    "href",
-    "/console/acme",
-  );
-  await page.getByRole("button", { name: "acme" }).click();
-  await expect(page.getByTestId("environment-key-state")).toHaveAttribute("data-state", "signing");
-  await expect(page.getByTestId("environment-meta")).toContainText(
-    "https://access-server:8443/env/acme",
-  );
-  const panel = page.getByRole("region", { name: "New environment" });
-  await panel.getByLabel("Short name").fill("shop");
-  await expect(panel.getByRole("button", { name: "Create environment" })).toBeDisabled();
-  await panel.getByLabel("Party IDs").fill(`${PARTY}\nAwMDAwMDAwMDAwMDAwMDAw`);
-  await panel.getByRole("button", { name: "Create environment" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("idp.platform.environment_create");
-  await dialog.getByRole("button", { name: "Sign" }).click();
-  await expect(panel.getByRole("status")).toContainText("Recorded as change");
-  await expect(panel.getByTestId("environment-console-created")).toContainText(
-    `${BASE}/console/shop`,
-  );
-  const w = bff.writes[0];
-  expect(w?.path).toBe("platform/tenants/tnt_acme/envs");
-  expect(w?.body["root"]).toEqual({
-    joint: { k: 2, parties: [PARTY, "AwMDAwMDAwMDAwMDAwMDAw"] },
-  });
-  expect(bff.bases[0]).toEqual({ holding: { grant: GRANT, holder: PARTY, since: "7" } });
-  await expect(page.getByText(/password|email|redirect/i)).toHaveCount(0);
-});
-
-// OP-151 m.3 (m), TN-60: a sole root is only with the acknowledgement that it can't be recovered
-test("a sandbox domain with a sole founding root needs the no-recovery acknowledgement", async ({
-  page,
-  bff,
-}) => {
-  seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/sandboxes");
-  await page.getByLabel("Tenant").selectOption("tnt_acme");
-  await expect(page.getByTestId("sandbox-domains-list")).toContainText("acme-lab");
-  await expect(page.getByTestId("environment-console-link")).toHaveCount(0);
-  const panel = page.getByRole("region", { name: "New sandbox domain" });
-  await panel.getByLabel("Short name").fill("acme-try");
-  await panel.getByLabel("Only me").check();
-  const send = panel.getByRole("button", { name: "Create sandbox domain" });
-  await expect(send).toBeDisabled();
-  await panel.getByRole("checkbox").check();
-  await send.click();
-  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
-  await expect(panel.getByRole("status")).toContainText("Recorded as change");
-  const w = bff.writes[0];
-  expect(w?.path).toBe("platform/tenants/tnt_acme/sandbox-domains");
-  expect(w?.body).toMatchObject({
-    slug: "acme-try",
-    root: { sole: PARTY },
-    acknowledge_no_recovery: true,
-  });
-});
-
 // X11: a draft that is not what was asked for is never signed
 test("a tampered platform draft is refused before the signature screen", async ({ page, bff }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/envs");
+  await openPlatform(page, "/console/platform/platform/tenants");
   bff.tamper = true;
-  await page.getByLabel("Tenant").selectOption("tnt_acme");
-  const panel = page.getByRole("region", { name: "New environment" });
-  await panel.getByLabel("Short name").fill("shop");
-  await panel.getByLabel("Party IDs").fill(`${PARTY},AwMDAwMDAwMDAwMDAwMDAw`);
-  await panel.getByRole("button", { name: "Create environment" }).click();
+  const panel = page.getByRole("region", { name: "New tenant" });
+  await panel.getByLabel("Name").fill("Hooli");
+  await panel.getByLabel("Management environment").fill("hooli-admin");
+  await panel.getByLabel("Founder's email address").fill("founder@hooli.example");
+  await panel.getByRole("button", { name: "Create tenant" }).click();
   await expect(panel.getByRole("alert")).toContainText(en.signatureMismatch);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(bff.writes).toEqual([]);
@@ -297,6 +357,7 @@ test("operator health shows each readiness check", async ({ page, bff }) => {
 test("every platform screen has no WCAG 2.2 AA violations", async ({ page, bff }) => {
   seedPlatform(bff);
   await openPlatform(page, "/console/platform/platform/tenants");
+  await page.getByLabel("Tenant", { exact: true }).selectOption("tnt_acme");
   for (const [path, heading] of [
     ["platform/tenants", "Tenants"],
     ["platform/envs", "Environments"],
@@ -309,6 +370,7 @@ test("every platform screen has no WCAG 2.2 AA violations", async ({ page, bff }
     }, `/console/platform/${path}`);
     await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible();
     await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
+    await page.mouse.move(0, 0);
     const a11y = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
       .analyze();

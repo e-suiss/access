@@ -469,13 +469,17 @@ pub enum SecurityEvent {
     DomainAcceptance,
     /// One of the person's Instances was ended.
     InstanceEnded,
+    /// A new administrator joined the tenant the person administers (OP-159 m.47 (f)); the name
+    /// is the new administrator's address.
+    AdministratorAdded,
 }
 
 impl SecurityEvent {
-    const ALL: [Self; 3] = [
+    const ALL: [Self; 4] = [
         Self::SubDelegation,
         Self::DomainAcceptance,
         Self::InstanceEnded,
+        Self::AdministratorAdded,
     ];
 
     /// Wire name.
@@ -485,6 +489,7 @@ impl SecurityEvent {
             Self::SubDelegation => "sub_delegation",
             Self::DomainAcceptance => "domain_acceptance",
             Self::InstanceEnded => "instance_ended",
+            Self::AdministratorAdded => "administrator_added",
         }
     }
 
@@ -693,6 +698,9 @@ pub enum Body {
         inviter: String,
         /// Unix ms after which it is worthless.
         expires_at_ms: u64,
+        /// The `https` console link of a tenant founder's or administrator's invitation, opened
+        /// once the invitation is accepted (OP-159 m.47 (c), (f)).
+        console_link: Option<Secret<String>>,
     },
     /// A notice about an agent (each [`AgentNotice`] its own kind). The name is attacker input:
     /// Relay renders it as text.
@@ -1525,9 +1533,13 @@ impl Body {
                 link,
                 organization,
                 inviter,
+                console_link,
                 ..
             } => {
                 https_link(link.expose())?;
+                if let Some(c) = console_link {
+                    https_link(c.expose())?;
+                }
                 name(organization, "organization")?;
                 name(inviter, "inviter")
             }
@@ -1888,11 +1900,15 @@ impl Message {
                 organization,
                 inviter,
                 expires_at_ms,
+                console_link,
             } => {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert("organization".into(), Value::String(organization.clone()));
                 m.insert("inviter".into(), Value::String(inviter.clone()));
                 m.insert("expires_at_ms".into(), (*expires_at_ms).into());
+                if let Some(c) = console_link {
+                    m.insert("console_link".into(), Value::String(c.expose().clone()));
+                }
             }
             Body::MagicLink {
                 link,
@@ -2179,6 +2195,7 @@ impl Message {
                 organization: text("organization")?.to_owned(),
                 inviter: text("inviter")?.to_owned(),
                 expires_at_ms: int("expires_at_ms")?,
+                console_link: text("console_link").ok().map(|c| Secret::new(c.to_owned())),
             },
             k => {
                 if let Some(notice) = Notice::of_kind(k) {
@@ -2269,11 +2286,15 @@ impl Message {
                 organization,
                 inviter,
                 expires_at_ms,
+                console_link,
             } => {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert("organization".into(), Value::String(organization.clone()));
                 m.insert("inviter".into(), Value::String(inviter.clone()));
                 m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
+                if let Some(c) = console_link {
+                    m.insert("console_link".into(), Value::String(c.expose().clone()));
+                }
             }
             Body::MagicLink {
                 link,

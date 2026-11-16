@@ -1,9 +1,9 @@
 // TN-131: the console's layout pieces on suiss/ui; every string renders as a text node.
-import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { Alert } from "@access/ui/components/alert";
 import { Skeleton } from "@access/ui/components/skeleton";
 import { cn } from "@access/ui/lib/utils";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 import { t } from "./i18n/index.js";
 

@@ -1,7 +1,8 @@
 // OP-156 m.3 (i), §10.2.4: the custom domains panel shows the two records to publish for a
 // domain that is not served yet and the certificate's end for a served one.
-import { expect, test } from "./fixtures.js";
+
 import { BASE, open } from "./data.js";
+import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);

@@ -8,7 +8,6 @@ import * as v from "valibot";
 
 import { Eligibility, holdings } from "./adp.js";
 import { API, b64url, call, fromB64url, json, Problem } from "./api.js";
-import { draft } from "./intents.js";
 import {
   ADP_PEP,
   type Confirm,
@@ -16,11 +15,12 @@ import {
   decodedIntent,
   decodedStatement,
   type Instance,
-  nonce,
   NotSigned,
+  nonce,
   readProof,
   sign,
 } from "./instance.js";
+import { draft } from "./intents.js";
 
 /** A meta payload in the JSON form of L1-ADP-17: `{"<meta-action>": {...}}`. */
 export type MetaPayload = Readonly<Record<string, unknown>>;

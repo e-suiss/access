@@ -3,12 +3,12 @@
 // never offers to skip it.
 import { Alert } from "@access/ui/components/alert";
 import { Button } from "@access/ui/components/button";
-import { useState, type ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 
 import { Problem, type SessionInfo } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
-import { Actions, Panel } from "../lib/ui.js";
 import { type Confirm, type Instance, NotSigned, register } from "../lib/instance.js";
+import { Actions, Panel } from "../lib/ui.js";
 
 export function DeviceSetup({
   session,

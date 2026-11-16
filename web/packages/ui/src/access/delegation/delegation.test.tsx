@@ -3,14 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   BLOCKS,
-  DAY_MS,
-  type Draft,
-  DelegationSheet,
-  TERMS,
-  type Viewer,
   budgetView,
   capacityOptions,
   classify,
+  DAY_MS,
+  DelegationSheet,
+  type Draft,
   endingHint,
   exclusionText,
   giveOnce,
@@ -22,6 +20,8 @@ import {
   preview,
   roleLine,
   rootText,
+  TERMS,
+  type Viewer,
   validityAllowed,
 } from "./index.js";
 

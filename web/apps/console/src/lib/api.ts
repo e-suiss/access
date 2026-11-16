@@ -98,6 +98,8 @@ export const SessionInfo = v.object({
   expires_at: v.string(),
   idle_timeout_s: v.string(),
   instance: v.nullable(v.string()),
+  // OP-159 m.47 (g), TN-142
+  environments: v.array(v.string()),
 });
 
 export type SessionInfo = Readonly<v.InferOutput<typeof SessionInfo>>;

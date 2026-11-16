@@ -2,10 +2,11 @@
 // X30, E26, XI-3: the merchants holding a pay Grant from this person, read with this browser's
 // device key. Stop charges is the person's own grant.revoke, shown done only once recorded;
 // Pay's agreements are Pay's to show and cancel, apart from this.
-import { pay } from "@esuiss/access";
+
 import { payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Card, CardContent } from "@access/ui/components/card";
+import { pay } from "@esuiss/access";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 

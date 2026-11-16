@@ -6,9 +6,9 @@
 // that would leave a merchant a Grant is refused before anything is signed; the public relay
 // status reads as Access reports it.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
-import { PASSWORD, ENVIRONMENT, signIn } from "./signin.js";
+import { ENVIRONMENT, PASSWORD, signIn } from "./signin.js";
 
 async function axe(page: Page): Promise<void> {
   const result = await new AxeBuilder({ page: page })

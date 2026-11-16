@@ -1,28 +1,32 @@
 // §12.3.2, TN-54, TN-55, OP-153 m.3 (d), (e): recovery answers the same whether or not an
 // account exists, says when the waiting period ends, and claims no more than the server's text
 // (X38). The attempt rides in an HttpOnly cookie; the page keeps only the attempt id.
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { RadioGroup, RadioGroupItem } from "@access/ui/components/radio-group";
+import { type SyntheticEvent, useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN } from "./base.js";
-import { getJson, postJson, type JsonAnswer } from "./http.js";
+import { getJson, type JsonAnswer, postJson } from "./http.js";
 import { t, when } from "./i18n.js";
-import { link, note, Panel, primary, problem, quiet, stack, Title, pressable } from "./Layout.js";
+import { link, note, Panel, pressable, primary, problem, quiet, stack, Title } from "./Layout.js";
 
+// OP-159 m.46 (f)
 /** One attempt as `/v1/recovery` answers it. */
-export interface Attempt {
-  readonly attempt?: string;
-  readonly state?: string;
-  readonly method?: string;
-  readonly text?: string;
-  readonly until?: string;
-  readonly replacement_code?: string;
-  readonly sensitive_actions_after?: string;
-}
+const Attempt = v.looseObject({
+  attempt: v.exactOptional(v.string()),
+  state: v.exactOptional(v.string()),
+  method: v.exactOptional(v.string()),
+  text: v.exactOptional(v.string()),
+  until: v.exactOptional(v.string()),
+  replacement_code: v.exactOptional(v.string()),
+  sensitive_actions_after: v.exactOptional(v.string()),
+});
+
+export type Attempt = Readonly<v.InferOutput<typeof Attempt>>;
 
 type Path = "registered_code" | "sent_code";
 
@@ -118,23 +122,23 @@ export function Recovery() {
     event.preventDefault();
     const identifier = value(event, "identifier");
     const method = value(event, "method") as Path;
-    void run(() => postJson<Attempt>("/v1/recovery", { identifier, method }));
+    void run(() => postJson("/v1/recovery", { identifier, method }, Attempt));
   };
 
   const step = (attempt: Attempt, body: Record<string, unknown>) => {
     const id = attempt.attempt ?? "";
-    void run(() => postJson<Attempt>(`/v1/recovery/${encodeURIComponent(id)}`, body), attempt);
+    void run(() => postJson(`/v1/recovery/${encodeURIComponent(id)}`, body, Attempt), attempt);
   };
 
   const refresh = (attempt: Attempt) => {
     const id = attempt.attempt ?? "";
-    void run(() => getJson<Attempt>(`/v1/recovery/${encodeURIComponent(id)}`), attempt);
+    void run(() => getJson(`/v1/recovery/${encodeURIComponent(id)}`, Attempt), attempt);
   };
 
   const extend = (attempt: Attempt) => {
     const id = attempt.attempt ?? "";
     void run(
-      () => postJson<Attempt>(`/v1/recovery/${encodeURIComponent(id)}/extension`, {}),
+      () => postJson(`/v1/recovery/${encodeURIComponent(id)}/extension`, {}, Attempt),
       attempt,
     );
   };

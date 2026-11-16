@@ -1,7 +1,6 @@
+import { prepareDocument } from "@access/ui/lib/document";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-
-import { prepareDocument } from "@access/ui/lib/document";
 
 import { App } from "./App.js";
 import { linkTheme } from "./Branding.js";

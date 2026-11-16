@@ -1,4 +1,4 @@
-import { test as base, expect, type CDPSession, type Page } from "@playwright/test";
+import { test as base, type CDPSession, expect, type Page } from "@playwright/test";
 
 import { LoginMock } from "./mock.js";
 

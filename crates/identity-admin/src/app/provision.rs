@@ -96,6 +96,9 @@ pub struct FounderMail<'a> {
     pub email: &'a str,
     /// The link and the code the commitment hashes.
     pub secrets: &'a FoundingSecrets,
+    /// The console's origin, `https://host[:port]`: the mail names the tenant's console under it
+    /// (OP-159 m.47 (c)).
+    pub console: Option<&'a str>,
 }
 
 /// A provisioning write as its caller signs it.
@@ -424,6 +427,12 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 organization: name,
                 inviter: String::from("Platform"),
                 expires_at_ms: at.saturating_add(ttl_ms),
+                console_link: mail.console.map(|o| {
+                    access_crypto::Secret::new(format!(
+                        "{}/console/{slug}",
+                        o.trim_end_matches('/')
+                    ))
+                }),
             },
         };
         OutboxNotifier::new(&named, &SystemEntropy, &SystemClock)

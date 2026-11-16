@@ -2,6 +2,7 @@
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod accounts;
+pub mod admin_invite;
 pub mod agents;
 mod breakglass;
 mod custom_domains;
@@ -1672,10 +1673,11 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
 
     /// The extended standing of a Party bound to no account of the environment (OP-159 m.47 (e),
     /// (f)): a Party with a `tenant_administration` line in the environment's domain, kept by a
-    /// management environment whose Claims the domain consumes, stands only while that line has not
-    /// ended and its administrator is one; a removed owner stops at once although it still roots
-    /// the domain. Whether an unstated or lapsed line selects anything is the authority plane's
-    /// (its episode). Any other Party, such as the operator's root, is not narrowed here.
+    /// management environment whose Claims the domain consumes, stands only while that line is
+    /// live there: not ended, past any cooling, with an administrator that is one and whose
+    /// account can sign in, and, once its first Claim is stated, within that Claim's validity. A
+    /// removed owner stops at once although it still roots the domain; a line whose Claim lapsed
+    /// stops too. Any other Party, such as the operator's root, is not narrowed here.
     async fn administers(
         &self,
         tenant: TenantId,
@@ -1689,10 +1691,28 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         for management in managers {
             let mut t = TenantTx::begin(self.app, tenant, management).await?;
             let line = access_store::tenant_admin::line_of_party(&mut t, &d, &party.0).await?;
+            let status = match &line {
+                Some((l, _)) => resources::account(&mut t, l.subject)
+                    .await?
+                    .map(|a| a.status),
+                None => None,
+            };
             t.commit().await?;
-            if let Some((line, admin_live)) = line
-                && (!admin_live || line.ended_ms.is_some())
-            {
+            let Some((line, admin)) = line else {
+                continue;
+            };
+            let now = access_store::authority::server_time(self.app).await?;
+            let signs_in = status
+                .as_deref()
+                .and_then(AccountStatus::parse)
+                .is_some_and(AccountStatus::can_authenticate);
+            let lapsed = line.claim.is_some() && line.valid_until_ms.is_none_or(|u| u <= now);
+            let stands = admin.live
+                && signs_in
+                && line.ended_ms.is_none()
+                && !lapsed
+                && admin.cooling_until_ms.is_none_or(|c| c <= now);
+            if !stands {
                 return Err(AdminError::Refused(String::from(ACTOR_BINDING)));
             }
         }

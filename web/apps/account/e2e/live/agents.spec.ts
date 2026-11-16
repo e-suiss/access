@@ -8,7 +8,7 @@
 // use with no report.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, ENVIRONMENT } from "./signin.js";
+import { ENVIRONMENT, PASSWORD } from "./signin.js";
 
 test.describe("@live connected accounts for agents", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");

@@ -556,6 +556,14 @@ jobs:
           echo "::add-mask::$seed"
           test -n "$seed"
           echo "ACCESS_LIVE_TEST_TOTP_SEED=$seed" >> "$GITHUB_ENV"
+          # OP-159 m.47 (i): the Acme tenant's and the platform's administrators sign in to the
+          # console with a second factor too
+          for pair in ADMIN:acme-admin-totp PLATFORM:platform-admin-totp; do
+            seed="$($COMPOSE run --rm --no-deps -T --entrypoint cat bootstrap "/var/lib/access/bootstrap/${pair#*:}")"
+            echo "::add-mask::$seed"
+            test -n "$seed"
+            echo "ACCESS_LIVE_${pair%%:*}_TOTP_SEED=$seed" >> "$GITHUB_ENV"
+          done
       # OP-157 m.6 (i): the Stage 12 specs' inputs, from the bootstrap's own summary: a request
       # pushed for the test user's allowed Exercise with its device's contribution, which the
       # approval spec opens; and one support access episode (the operator asks, the test user's

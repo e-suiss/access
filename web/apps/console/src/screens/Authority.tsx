@@ -1,13 +1,13 @@
 // §8.17.4.1: the Authority hub; its views come with the authority read screens. Here the
 // browser's device key is registered (OP-151 m.3 (e)), without which nothing is signed.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@access/ui/components/card";
+import { type ReactElement, useState } from "react";
 
 import { t } from "../i18n/index.js";
-import { type Confirm, type Instance, NotSigned, register } from "../lib/instance.js";
 import type { SessionInfo } from "../lib/api.js";
+import { type Confirm, type Instance, NotSigned, register } from "../lib/instance.js";
 import { Failure, Page } from "../ui.js";
 
 export function Authority({

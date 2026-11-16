@@ -393,10 +393,15 @@ async fn session_info<E: ConsoleEnv>(
     let Ok(environments) = c.env.devices().instances(s).await else {
         return unavailable();
     };
+    // TN-138
+    let Ok(kind) = c.env.devices().kind(s).await else {
+        return unavailable();
+    };
     json_reply(
         StatusCode::OK,
         &json!({
             "environments": environments,
+            "kind": kind,
             "account": s.who.account,
             "display_name": s.who.display_name,
             "environment": s.who.environment,

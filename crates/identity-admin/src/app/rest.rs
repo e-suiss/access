@@ -2794,6 +2794,11 @@ pub enum Kind {
     /// The environment's signing profile, signing keys and algorithms, key exchange share policy and
     /// crypto module (OP-159 m.3 (o), (r), (t)).
     Signing,
+    /// The tenant's environments, read in its management environment (OP-159 m.47 (a)).
+    TenantEnvironments,
+    /// The tenant's administrators and pending invitations, read in its management environment
+    /// (OP-159 m.47 (e), (f)).
+    TenantAdmins,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3107,6 +3112,20 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         after: Option<&str>,
         limit: u32,
     ) -> Result<Read, AdminError> {
+        // OP-159 m.47 (a), (e), (f)
+        let tenant_read = match kind {
+            Kind::TenantEnvironments => {
+                Some(self.tenant_environments_view((tenant, environment)).await?)
+            }
+            Kind::TenantAdmins => Some(self.tenant_admins_view((tenant, environment)).await?),
+            _ => None,
+        };
+        if let Some(items) = tenant_read {
+            return Ok(Read {
+                items: items.into_iter().map(|v| (v, 0)).collect(),
+                last: None,
+            });
+        }
         let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let read = self.read_in(&mut t, kind, key, after, limit).await;
         t.commit().await?;
@@ -3553,9 +3572,14 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
-                Read::default()
-            }
+            | (
+                Kind::SupportGrants
+                | Kind::ReviewItems
+                | Kind::OffboardingPreviews
+                | Kind::TenantEnvironments
+                | Kind::TenantAdmins,
+                _,
+            ) => Read::default(),
             // CR-41, CR-44, OP-159 m.3 (o), (r), (t)
             (Kind::Signing, _) => Read {
                 items: vec![(signing_view(t).await?, 0)],

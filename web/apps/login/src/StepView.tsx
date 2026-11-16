@@ -1,5 +1,12 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { Button } from "@access/ui/components/button";
+import { Checkbox } from "@access/ui/components/checkbox";
+import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
+import { Input } from "@access/ui/components/input";
+import { type SyntheticEvent, useEffect, useRef, useState } from "react";
+import * as v from "valibot";
+import { managementOf, useBranding } from "./Branding.js";
 
+import { LOGIN, under } from "./base.js";
 import type {
   FieldName,
   InputNode,
@@ -9,31 +16,25 @@ import type {
   OptionNode,
   PasskeyCreateNode,
   ProviderNode,
-  SubmitNode,
   Submission,
+  SubmitNode,
   UiNode,
 } from "./contract.js";
-import { Button } from "@access/ui/components/button";
-import { Checkbox } from "@access/ui/components/checkbox";
-import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
-import { Input } from "@access/ui/components/input";
-
-import { LOGIN, under } from "./base.js";
+import { follow, returnTo } from "./http.js";
+import { t, text } from "./i18n.js";
 import {
   link,
   note,
   other,
   otherLink,
+  pressable,
   primary,
   problem,
   quiet,
   stack,
   Title,
-  pressable,
 } from "./Layout.js";
-import { pushOf, PushWait } from "./PushWait.js";
-import { follow, returnTo } from "./http.js";
-import { t, text } from "./i18n.js";
+import { PushWait, pushOf } from "./PushWait.js";
 import {
   conditionalCreateAvailable,
   conditionalGetAvailable,
@@ -176,14 +177,41 @@ const conditionalCreateWaitMs = 2000;
 /** Credentials the server called unknown; autofill does not resubmit them (TN-97). */
 const refused = new Set<string>();
 
+// OP-159 m.46 (f)
+const Credential = v.looseObject({ id: v.string() });
+
 function credentialId(json: string): string {
-  const parsed = JSON.parse(json) as { id?: unknown };
-  return typeof parsed.id === "string" ? parsed.id : "";
+  const parsed = v.safeParse(Credential, JSON.parse(json));
+  return parsed.success ? parsed.output.id : "";
 }
 
-function heading(ui: LoginUi): string {
+function heading(ui: LoginUi, management: string | undefined): string {
   if (ui.kind === "registration") return t("registration.title");
-  return ui.step === "complete" ? t("page.signing_in") : t("page.sign_in");
+  if (ui.step === "complete") return t("page.signing_in");
+  // OP-159 m.47 (b), TN-138
+  if (management !== undefined) return t("page.management_sign_in", { name: management });
+  return t("page.sign_in");
+}
+
+/**
+ * OP-159 m.47 (b), TN-138: a second step is required and nothing on the step can give one: the
+ * account has none yet and the step offers no way to add one.
+ */
+function noSecondStep(ui: LoginUi): boolean {
+  if (ui.step !== "second_factor") return false;
+  const missing = ui.requirements.some(
+    (r) => r.requirement === "second_factor" && r.state === "missing",
+  );
+  const offered = ui.nodes.some(
+    (n) =>
+      n.type === "passkey_get" ||
+      n.type === "passkey_create" ||
+      n.type === "push_number" ||
+      ((n.type === "input" || n.type === "submit") &&
+        n.method !== "restart" &&
+        n.method !== "skip"),
+  );
+  return missing && !offered;
 }
 
 function initialOptions(nodes: readonly UiNode[]): Fields {
@@ -303,6 +331,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const errors = ui.messages.filter((m) => m.severity === "error");
   const infos = ui.messages.filter((m) => m.severity === "info");
   const login = ui.kind === undefined || ui.kind === "login";
+  const management = managementOf(useBranding());
 
   return (
     <section
@@ -312,7 +341,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       className={stack}
     >
       <Title id="step-heading" ref={title}>
-        {heading(ui)}
+        {heading(ui, management)}
       </Title>
       <div role="alert" className="flex flex-col gap-2 empty:-mb-4" data-testid="errors">
         {errors.map((m) => (
@@ -329,6 +358,11 @@ export function StepView({ ui, busy, onSubmit }: Props) {
         ))}
       </div>
       {push !== undefined && <PushWait node={push} />}
+      {noSecondStep(ui) && (
+        <p className={problem} data-testid="second-step-missing">
+          {t("page.second_step_missing")}
+        </p>
+      )}
       {optionNodes.length > 0 && (
         <FieldSet className="gap-3">
           <FieldLegend className="sr-only">{t("page.options")}</FieldLegend>
@@ -388,9 +422,11 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           <a className={link} href={`${LOGIN}/recovery`}>
             {t("page.recover")}
           </a>{" "}
-          <a className={link} href={`${LOGIN}?reason=create`}>
-            {t("page.create_account")}
-          </a>
+          {management === undefined && (
+            <a className={link} href={`${LOGIN}?reason=create`}>
+              {t("page.create_account")}
+            </a>
+          )}
         </p>
       )}
       {ui.kind === "registration" && ui.step !== "complete" && (

@@ -1,14 +1,15 @@
 // OP-157 m.3 (f), §8.16
-export {
-  SupportActions,
-  SupportRequest,
-  type SupportActionsProps,
-  type SupportRequestProps,
-} from "./SupportRequest.js";
+
+export * from "./model.js";
 export {
   SupportBanner,
-  SupportView,
   type SupportBannerProps,
+  SupportView,
   type SupportViewProps,
 } from "./SupportBanner.js";
-export * from "./model.js";
+export {
+  SupportActions,
+  type SupportActionsProps,
+  SupportRequest,
+  type SupportRequestProps,
+} from "./SupportRequest.js";

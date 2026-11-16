@@ -1,11 +1,13 @@
 // CMP-15.6, TN-133, X40: the environment's hosted pages under /login, drawn from the node contract and
 // the environment's Frontend API; the environment's own branding, no Suiss shell.
+import { AdminInvite } from "./AdminInvite.js";
 import { Approval } from "./Approval.js";
 import { Branding } from "./Branding.js";
 import { Ciba } from "./Ciba.js";
 import { Consent } from "./Consent.js";
 import { Device } from "./Device.js";
 import { ErrorPage } from "./ErrorPage.js";
+import { Founding } from "./Founding.js";
 import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
 import { Recovery } from "./Recovery.js";
@@ -26,6 +28,8 @@ export type Page =
   | "invitation"
   | "link"
   | "sso_setup"
+  | "founding"
+  | "admin_invite"
   | "error";
 
 export function pageOf(path: string, search: string): Page {
@@ -38,6 +42,9 @@ export function pageOf(path: string, search: string): Page {
   if (rest === "/invitation" || rest.startsWith("/invitation/")) return "invitation";
   // TN-134, OP-155 m.3 (i)
   if (rest.startsWith("/sso-setup/")) return "sso_setup";
+  // OP-159 m.47 (c), (f)
+  if (rest.startsWith("/founding/")) return "founding";
+  if (rest.startsWith("/admin-invite/")) return "admin_invite";
   const reason = new URLSearchParams(search).get("reason");
   // OP-153 m.3 (z)
   if (reason === "share") return "consent";
@@ -76,6 +83,10 @@ function Body({ page }: { readonly page: Page }) {
       return <MagicLink />;
     case "sso_setup":
       return <SsoSetup />;
+    case "founding":
+      return <Founding />;
+    case "admin_invite":
+      return <AdminInvite />;
     case "error":
       return <ErrorPage />;
   }

@@ -4,16 +4,17 @@
 // web/packages/ui/src/access, taken from its source so the login bundle carries no React components.
 // The environment's own texts for unprotected keys (`idp.environment.locale_overrides`) are read once before
 // the first render and come first in the chain; a protected key never takes one (X35, m.22 (k)).
+
+import * as v from "valibot";
+import protectedToml from "../../../../conformance/catalog/protected-messages.toml?raw";
+import enLogin from "../../../../locales/en/login.ftl?raw";
+import trLogin from "../../../../locales/tr/login.ftl?raw";
 import {
   Catalogs,
   keyOf,
   type Overrides,
   parseProtected,
 } from "../../../packages/ui/src/access/fluent.js";
-
-import enLogin from "../../../../locales/en/login.ftl?raw";
-import trLogin from "../../../../locales/tr/login.ftl?raw";
-import protectedToml from "../../../../conformance/catalog/protected-messages.toml?raw";
 import type { Text } from "./contract.js";
 import { getJson } from "./http.js";
 
@@ -45,15 +46,22 @@ export const messagesPath = "/v1/login/messages";
 
 let environment: Overrides | undefined;
 
+// OP-159 m.46 (f)
+const Texts = v.record(v.string(), v.unknown());
+
+const Messages = v.looseObject({ overrides: v.exactOptional(v.unknown()) });
+
 /** The environment's overrides from their JSON, `{locale: {key: text}}`: strings only, each checked. */
 export function overridesOf(json: unknown): Overrides | undefined {
-  if (typeof json !== "object" || json === null) return undefined;
+  const all = v.safeParse(Texts, json);
+  if (!all.success) return undefined;
   const out = new Map<string, Map<string, string>>();
-  for (const [tag, texts] of Object.entries(json as Record<string, unknown>)) {
-    if (typeof texts !== "object" || texts === null) continue;
+  for (const [tag, texts] of Object.entries(all.output)) {
+    const read = v.safeParse(Texts, texts);
+    if (!read.success) continue;
     const kept = new Map<string, string>();
-    for (const [k, v] of Object.entries(texts as Record<string, unknown>)) {
-      if (typeof v === "string" && !catalogs.isProtected(k)) kept.set(k, v);
+    for (const [k, text] of Object.entries(read.output)) {
+      if (typeof text === "string" && !catalogs.isProtected(k)) kept.set(k, text);
     }
     out.set(tag.toLowerCase(), kept);
   }
@@ -67,7 +75,7 @@ export function overridesOf(json: unknown): Overrides | undefined {
 
 /** Reads the environment's overrides; without an answer the pages use Access's own texts. */
 export async function loadOverrides(): Promise<void> {
-  const a = await getJson<{ overrides?: unknown }>(messagesPath);
+  const a = await getJson(messagesPath, Messages);
   environment = a.ok ? overridesOf(a.body.overrides) : undefined;
 }
 

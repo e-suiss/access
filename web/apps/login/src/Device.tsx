@@ -2,24 +2,28 @@
 // The person enters the code a device shows, reads which app asks, for what and from where, and
 // approves or declines while signed in. Every wrong code reads the same. Without an operator's
 // IP-range list no country is known, and none is shown (OP-155 m.3 (l)).
-import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { type SyntheticEvent, useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN, under } from "./base.js";
 import { postJson } from "./http.js";
 import { t } from "./i18n.js";
 import { inlineLink, outcome, Panel, primary, problem, quiet, stack, Title } from "./Layout.js";
 
-interface DevicePreview {
-  readonly client: string;
-  readonly scopes: readonly string[];
-  readonly ip_prefix: string;
-  readonly country: string | null;
-  readonly csrf: string;
-}
+// OP-159 m.46 (f)
+const DevicePreview = v.looseObject({
+  client: v.string(),
+  scopes: v.array(v.string()),
+  ip_prefix: v.string(),
+  country: v.nullable(v.string()),
+  csrf: v.string(),
+});
+
+type DevicePreview = Readonly<v.InferOutput<typeof DevicePreview>>;
 
 type State =
   | { readonly phase: "enter" }
@@ -45,7 +49,7 @@ export function Device() {
   const look = async (e: SyntheticEvent) => {
     e.preventDefault();
     setBusy(true);
-    const a = await postJson<DevicePreview>("/v1/device/preview", { user_code: code });
+    const a = await postJson("/v1/device/preview", { user_code: code }, DevicePreview);
     setBusy(false);
     if (a.ok) setState({ phase: "ready", code, preview: a.body });
     else if (a.status === 401) setState({ phase: "sign_in" });

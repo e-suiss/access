@@ -3,31 +3,42 @@
 // produced, and asks the browser for a `payment.get` assertion over H(AAS) with exactly those
 // values; the server refuses any other bytes. Without SPC in the browser or the request, it is a
 // passkey assertion over the same statement.
-import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { under } from "./base.js";
 import { follow } from "./http.js";
 import { t } from "./i18n.js";
 import { note, Panel, primary, problem, stack, Title } from "./Layout.js";
 
+// OP-159 m.46 (f)
 /** What `POST /v1/approve/flows` answers. */
-export interface SpcStarted {
-  readonly flow: string;
-  readonly options: {
-    readonly challenge: string;
-    readonly rpId: string;
-    readonly timeout?: number;
-    readonly allowCredentials: readonly { readonly id: string }[];
-  };
-  readonly spc?: {
-    readonly payeeName: string;
-    readonly payeeOrigin?: string;
-    readonly total: { readonly currency: string; readonly value: string };
-    readonly instrument: { readonly displayName: string; readonly icon: string };
-  };
-}
+const SpcStarted = v.looseObject({
+  flow: v.string(),
+  options: v.looseObject({
+    challenge: v.string(),
+    rpId: v.string(),
+    timeout: v.exactOptional(v.number()),
+    allowCredentials: v.array(v.looseObject({ id: v.string() })),
+  }),
+  spc: v.exactOptional(
+    v.looseObject({
+      payeeName: v.string(),
+      payeeOrigin: v.exactOptional(v.string()),
+      total: v.looseObject({ currency: v.string(), value: v.string() }),
+      instrument: v.looseObject({ displayName: v.string(), icon: v.string() }),
+    }),
+  ),
+});
+
+export type SpcStarted = Readonly<v.InferOutput<typeof SpcStarted>>;
+
+const Finished = v.looseObject({
+  redirect: v.exactOptional(v.string()),
+  code: v.exactOptional(v.string()),
+});
 
 type State =
   | { readonly phase: "loading" }
@@ -102,7 +113,8 @@ export function Spc() {
   const start = useEffectEvent(() => {
     void call("/v1/approve/flows", call_).then(async (r) => {
       // OP-157 m.3 (l)
-      if (r.status === 201) setState({ phase: "ready", started: (await r.json()) as SpcStarted });
+      const read = r.status === 201 ? v.safeParse(SpcStarted, await r.json()) : undefined;
+      if (read?.success === true) setState({ phase: "ready", started: read.output });
       else setState({ phase: "failed" });
     });
   });
@@ -126,7 +138,8 @@ export function Spc() {
       redirect_uri: call_.redirect_uri,
       state: call_.state,
     });
-    const out = (await r.json().catch(() => ({}))) as { redirect?: string; code?: string };
+    const read = v.safeParse(Finished, await r.json().catch(() => ({})));
+    const out = read.success ? read.output : {};
     setBusy(false);
     if (r.ok && out.redirect !== undefined) follow(out.redirect);
     else setState({ phase: out.code === "spc-mismatch" ? "mismatch" : "failed" });

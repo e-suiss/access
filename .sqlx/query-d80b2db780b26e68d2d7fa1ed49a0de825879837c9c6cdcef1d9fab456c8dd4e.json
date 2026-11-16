@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admin_invitations\n            SET accepted_at = clock_timestamp(), accepted_subject = $4\n          WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3\n            AND verified_at IS NOT NULL AND accepted_at IS NULL AND superseded_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d80b2db780b26e68d2d7fa1ed49a0de825879837c9c6cdcef1d9fab456c8dd4e"
+}

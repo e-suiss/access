@@ -6,7 +6,7 @@
 // this browser's key, the test user's screen lists the marked account.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, registerAndOpen, signIn } from "./signin.js";
+import { NOT_READY, READY, registerAndOpen, signIn } from "./signin.js";
 
 const ADMIN = "/console/api/proxy/admin/envs/acme/breakglass";
 const ORGANIZATION = process.env["ACCESS_LIVE_BREAKGLASS_ORGANIZATION"];
@@ -41,8 +41,8 @@ test.describe("@live console break-glass", () => {
   // INV-28, §12.3.8, OP-157 m.3 (h), Ek B 5536, 5537
   test("@live the break-glass screen lists the marked account", async ({ page }) => {
     test.skip(
-      PASSWORD === "" || ORGANIZATION === undefined,
-      "ACCESS_LIVE_BREAKGLASS_ORGANIZATION names the bootstrap's break-glass organization",
+      !READY || ORGANIZATION === undefined,
+      `ACCESS_LIVE_BREAKGLASS_ORGANIZATION names the bootstrap's break-glass organization; ${NOT_READY}`,
     );
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);

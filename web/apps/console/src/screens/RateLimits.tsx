@@ -1,7 +1,6 @@
 // §12.5.4, TN-127, OP-158 m.3 (v): Observability ▸ Rate limits. Each bucket's share in use now
 // and over 1 h and 24 h, the heaviest consumers as digests, refusals by type and the warning
 // threshold, as the management API reports them; nothing here changes a limit.
-import type { ReactElement } from "react";
 
 import { Card, CardContent } from "@access/ui/components/card";
 import {
@@ -12,40 +11,36 @@ import {
   TableHeader,
   TableRow,
 } from "@access/ui/components/table";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
+import { adminGet } from "../lib/admin.js";
 import { HINT, MONO, Notice, NUMBERED, ROWS } from "../ui.js";
-import { type Ctx, Show, readKey, useLoad } from "./parts.js";
+import { type Ctx, readKey, Show, useLoad } from "./parts.js";
 
-interface Bucket {
-  readonly name: string;
-  readonly now_percent: number;
-  readonly average_1h_percent: number;
-  readonly average_24h_percent: number;
-  readonly above_threshold: boolean;
-}
+// OP-159 m.46 (f)
+const Bucket = v.looseObject({
+  name: v.string(),
+  now_percent: v.number(),
+  average_1h_percent: v.number(),
+  average_24h_percent: v.number(),
+  above_threshold: v.boolean(),
+});
 
-interface Consumer {
-  readonly consumer: string;
-  readonly requests: number;
-}
+const Consumer = v.looseObject({ consumer: v.string(), requests: v.number() });
 
-interface Event {
-  readonly kind: string;
-  readonly last_hour: number;
-  readonly last_day: number;
-}
+const Event = v.looseObject({ kind: v.string(), last_hour: v.number(), last_day: v.number() });
 
-interface RateLimitsView {
-  readonly rate_limit_rps: number;
-  readonly usage: {
-    readonly buckets: readonly Bucket[];
-    readonly top_consumers: readonly Consumer[];
-    readonly events: readonly Event[];
-    readonly threshold_percent: number;
-  };
-}
+const RateLimitsView = v.looseObject({
+  rate_limit_rps: v.number(),
+  usage: v.looseObject({
+    buckets: v.array(Bucket),
+    top_consumers: v.array(Consumer),
+    events: v.array(Event),
+    threshold_percent: v.number(),
+  }),
+});
 
 const percent = (n: number) => `${String(n)}%`;
 
@@ -53,7 +48,7 @@ const percent = (n: number) => `${String(n)}%`;
 export function RateLimits({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const view = useLoad(readKey(ctx, `envs/${environment}/rate-limits`), () =>
-    adminGetAs<RateLimitsView>(ctx.instance, `envs/${environment}/rate-limits`),
+    adminGet(ctx.instance, `envs/${environment}/rate-limits`, RateLimitsView),
   );
   return (
     <div data-testid="rate-limits" className="flex flex-col gap-4">

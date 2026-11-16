@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 
 import type { Screen } from "../lib/sections.js";
 import * as D from "../screens/Developer.js";
-import type { Ctx } from "../screens/parts.js";
 import { Planned } from "../screens/Planned.js";
+import type { Ctx } from "../screens/parts.js";
 import { SectionRoute } from "./section.js";
 
 const route = getRouteApi("/$environment/developer/{-$screen}");

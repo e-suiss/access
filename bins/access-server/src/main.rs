@@ -2278,7 +2278,7 @@ async fn serve(
         None => domains,
     });
     // OP-150 L2, CMP-8
-    let (renewing, courier) = claims::start(
+    let (renewing, courier, administration) = claims::start(
         (signer(), signer()),
         &platform_pools,
         (domains.clone(), (hr::Vaults(hr_keks), cell_ids.clone())),
@@ -2490,6 +2490,7 @@ async fn serve(
     // OP-159 m.47 (c), TN-141
     let founding = founding::router(founding::Founding {
         app: admin_app.clone(),
+        router: tenants_pool.clone(),
         ids: admin_ids.clone(),
         plane: idp_plane.clone(),
         base: EnvironmentBase::parse(&identity_section.environment_base)
@@ -2498,7 +2499,7 @@ async fn serve(
         keks: login::EnvironmentKeks::new(prepared.identity_keys.clone()),
     });
     let management = admin::router(
-        (management_origin, identity_section.signer.clone()),
+        (management_origin.clone(), identity_section.signer.clone()),
         &prepared.identity_keys,
         admin::environment::Environments {
             app: admin_app,
@@ -2521,6 +2522,9 @@ async fn serve(
             ips: admin_pseudonyms,
             // OP-158 m.3 (p)
             authority_signer: config.signer.clone(),
+            // OP-159 m.47 (f)
+            administration: Some(administration),
+            console: Some(management_origin.clone()),
         },
         admin::InProcessRoutes {
             oauth: authorize.clone(),

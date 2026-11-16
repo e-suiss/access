@@ -197,6 +197,7 @@ pub(crate) async fn invite(
             expires_at_ms: w
                 .at
                 .saturating_add(u64::try_from(ttl_s).unwrap_or(0).saturating_mul(1000)),
+            console_link: None,
         },
     };
     OutboxNotifier::new(&named, &SystemEntropy, &SystemClock)

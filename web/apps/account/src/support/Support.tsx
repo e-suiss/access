@@ -16,7 +16,7 @@ import { frontend, json } from "../lib/api.js";
 import { catalogue, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { Check, Loading, Meta, Nothing, PageTitle, Panel, RowItem, Rows } from "../lib/ui.js";
-import { readAccess, Requests, type SupportRow } from "./model.js";
+import { Requests, readAccess, type SupportRow } from "./model.js";
 import { type Drafted, signDraft } from "./sign.js";
 
 function ended(a: SupportRow): string {

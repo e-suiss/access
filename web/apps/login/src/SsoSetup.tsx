@@ -2,10 +2,11 @@
 // link. The page is `<OrganizationSSO />` over the environment's setup API, the same component a
 // tenant embeds. Reading the link spends nothing; the first step binds it to this browser; what
 // the page saves is a connection draft that an owner of the organization still has to turn on.
-import { useEffect, useState } from "react";
+
+import { sso } from "@access/ui";
 
 import { sso as client } from "@esuiss/access";
-import { sso } from "@access/ui";
+import { useEffect, useState } from "react";
 
 import { ENVIRONMENT } from "./base.js";
 import { maybe, t } from "./i18n.js";

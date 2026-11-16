@@ -1,40 +1,19 @@
 // §8.17.9, S7, IA-5: the Admin section's authority screens. Reads go to ADP as the viewer's own
 // check; every action shown is one the viewer can exercise (IA-5); nothing here is a single
 // "stop everything" control (§8.17.7.5), and revoke is never offered as reversible (§8.10).
-import { getRouteApi } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
-import * as v from "valibot";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { FieldLegend, FieldSet } from "@access/ui/components/field";
-
-import { type Key, t } from "../i18n/index.js";
+import { getRouteApi } from "@tanstack/react-router";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 import { DataTable, ResultTable } from "../DataTable.js";
+import { type Key, t } from "../i18n/index.js";
 import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
-import { search, type SearchAnswer } from "../lib/adp.js";
+import { type SearchAnswer, search } from "../lib/adp.js";
 import { type MetaPayload, type MetaResult, metaWrite, metaWrites } from "../lib/meta.js";
 import { META_BY_ACTION } from "../lib/text.js";
-import {
-  at,
-  type Ctx,
-  Field,
-  PageCount,
-  Panel,
-  readKey,
-  Show,
-  useLoad,
-  usePages,
-  useRun,
-} from "./parts.js";
-import {
-  type ChangeImpact,
-  ChangeImpactView,
-  type Publication,
-  PublicationView,
-  type RevocationImpact,
-  Aftermath,
-} from "./Reports.js";
 import {
   ACTIONS,
   BULLETS,
@@ -48,6 +27,26 @@ import {
   Notice,
   NUMBERED,
 } from "../ui.js";
+import {
+  at,
+  type Ctx,
+  Field,
+  PageCount,
+  Panel,
+  readKey,
+  Show,
+  useLoad,
+  usePages,
+  useRun,
+} from "./parts.js";
+import {
+  Aftermath,
+  type ChangeImpact,
+  ChangeImpactView,
+  type Publication,
+  PublicationView,
+  type RevocationImpact,
+} from "./Reports.js";
 
 /** An action reference as a role version or a holding names it (L1-ADP-17). */
 interface ActionRef {

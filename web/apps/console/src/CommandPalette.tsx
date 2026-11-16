@@ -1,8 +1,6 @@
 // OP-159 m.46 (g), IA-5: the command palette (Ctrl/⌘ K). It lists only the screens the viewer may see
 // in this environment, as the probes answered, and the environments the switcher offers; choosing
 // one goes there. It changes nothing by itself.
-import { useNavigate } from "@tanstack/react-router";
-import type { ReactElement } from "react";
 
 import {
   Command,
@@ -13,9 +11,11 @@ import {
   CommandItem,
   CommandList,
 } from "@access/ui/components/command";
+import { useNavigate } from "@tanstack/react-router";
+import type { ReactElement } from "react";
 
 import { t } from "./i18n/index.js";
-import { type Screen, SCREENS, type Section } from "./lib/sections.js";
+import { SCREENS, type Screen, type Section } from "./lib/sections.js";
 import { SCREEN_TITLE, SECTION_TITLE, SECTION_TO } from "./screens/Section.js";
 import { MONO } from "./ui.js";
 
@@ -24,7 +24,7 @@ export function CommandPalette({
   onOpenChange,
   environment,
   screens,
-  platform,
+  tenant,
   known,
   onEnvironment,
 }: {
@@ -32,7 +32,7 @@ export function CommandPalette({
   readonly onOpenChange: (open: boolean) => void;
   readonly environment: string;
   readonly screens: ReadonlySet<Screen>;
-  readonly platform: readonly string[];
+  readonly tenant: readonly string[];
   readonly known: readonly string[];
   readonly onEnvironment: (environment: string) => void;
 }): ReactElement {
@@ -44,7 +44,7 @@ export function CommandPalette({
       .filter((s) => screens.has(s))
       .map((screen) => ({ section, screen })),
   );
-  const environments = [...new Set([...platform, ...known])].filter((r) => r !== environment);
+  const environments = [...new Set([...tenant, ...known])].filter((r) => r !== environment);
 
   return (
     <CommandDialog

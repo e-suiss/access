@@ -14,10 +14,11 @@
     "lint": "biome lint --error-on-warnings ."
   },
   "dependencies": {
-    "@esuiss/access": "link:../../../sdks/typescript",
     "@access/ui": "workspace:*",
+    "@esuiss/access": "link:../../../sdks/typescript",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "@access/typescript-config": "workspace:*",

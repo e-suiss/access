@@ -5,7 +5,7 @@ import { ConsoleMock } from "./mock.js";
 // A refused BFF call (401, 403, 422) is an expected answer the console handles; the browser still
 // logs it as a failed resource, which is not a page error.
 const EXPECTED =
-  /^Failed to load resource: the server responded with a status of (401|403|409|422|503)/;
+  /^Failed to load resource: the server responded with a status of (401|403|404|409|422|503)/;
 
 export const test = base.extend<{ pageErrors: string[]; bff: ConsoleMock }>({
   pageErrors: [

@@ -1,7 +1,7 @@
 // OP-153 m.3 (gg), TN-106, TN-107, TN-133, X-L5: the hosted pages against the running local
 // deployment, through its real router; nothing here is mocked.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 const ENVIRONMENT = process.env["ACCESS_LIVE_ENVIRONMENT"] ?? "/env/acme";
 const wcag22aa = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];

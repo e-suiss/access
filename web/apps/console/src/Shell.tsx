@@ -1,9 +1,6 @@
 // TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b), m.42, m.43 (b), m.46 (d), (e): the console shell. Admin,
 // Developer, Audit and Platform appear only when the eligibility check says the viewer can exercise
 // one of their actions; without this browser's device key nothing is probed and nothing appears.
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Navigate, Outlet, useMatches, useNavigate, useParams } from "@tanstack/react-router";
-import { createContext, lazy, type ReactElement, Suspense, use, useEffect, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
 import {
@@ -18,12 +15,14 @@ import {
   SidebarProvider,
   useSidebar,
 } from "@access/ui/components/sidebar";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, Navigate, Outlet, useMatches, useNavigate, useParams } from "@tanstack/react-router";
+import { createContext, lazy, type ReactElement, Suspense, use, useEffect, useState } from "react";
 
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher.js";
 import { type Key, t } from "./i18n/index.js";
-import type { SessionInfo } from "./lib/api.js";
-import { platformEnvironmentsQuery } from "./lib/environments.js";
-import { find, type Instance } from "./lib/instance.js";
+import { b64url, type SessionInfo } from "./lib/api.js";
+import { find, findIn, type Instance } from "./lib/instance.js";
 import {
   isEnvironment,
   knownEnvironments,
@@ -33,10 +32,13 @@ import {
 } from "./lib/remember.js";
 import { type Screen, type Section, screensQuery, visibleSections } from "./lib/sections.js";
 import { reloadSession, sessionQuery, signOut } from "./lib/session.js";
+import { type TenantEnvironment, tenantEnvironmentsQuery } from "./lib/tenant.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
 import { Authority } from "./screens/Authority.js";
+import { EnterEnvironment } from "./screens/EnterEnvironment.js";
 import type { Ctx } from "./screens/parts.js";
 import { NoEnvironment, OtherEnvironment, SignIn, SigningIn } from "./screens/SignIn.js";
+import { TenantHome } from "./screens/TenantHome.js";
 import { Busy, Failure } from "./ui.js";
 
 const SECTIONS: ReadonlySet<string> = new Set<Section>(["admin", "developer", "audit", "platform"]);
@@ -95,11 +97,15 @@ const justStarted = signInJustStarted();
 
 /** What every page of a signed-in environment works with. */
 interface Shell {
+  /** The session as the viewed environment's pages see it: that environment, its domain. */
   readonly session: SessionInfo;
   readonly instance: Instance | undefined;
   readonly confirm: Ctx["confirm"];
   readonly screens: ReadonlySet<Screen>;
   readonly registered: (i: Instance) => void;
+  // OP-159 m.47 (a)
+  /** The tenant's environments when the viewed environment is its management environment. */
+  readonly tenant: readonly TenantEnvironment[] | undefined;
 }
 
 const ShellContext = createContext<Shell | undefined>(undefined);
@@ -152,13 +158,14 @@ export function Home(): ReactElement {
   return <Navigate to="/$environment" params={{ environment: go }} replace />;
 }
 
-// OP-159 m.42 (a), (c), (f)
-/** `/console/{slug}/…`: signs in to the environment, or notes the session is another one's. */
+// OP-159 m.42 (a), (c), (f), m.47 (a)
+/**
+ * `/console/{slug}/…`: signs in to the environment; signed in, the environment's pages, or a note
+ * that the session is another tenant's.
+ */
 export function EnvironmentShell(): ReactElement {
   const { environment } = useParams({ from: "/$environment" });
   const q = useQuery(sessionQuery);
-  const client = useQueryClient();
-  const navigate = useNavigate();
   const valid = isEnvironment(environment);
   const s = q.data;
   const autoSignIn =
@@ -175,26 +182,7 @@ export function EnvironmentShell(): ReactElement {
     if (autoSignIn) return <SigningIn environment={environment} />;
     return <SignIn environment={environment} reason={s.reason} signedOut={s.signedOut} />;
   }
-  const session = s.session;
-  if (environment !== session.environment) {
-    return (
-      <OtherEnvironment
-        current={session.environment}
-        wanted={environment}
-        onGo={() => {
-          void navigate({ to: "/$environment", params: { environment: session.environment } });
-        }}
-        onSwitch={() => {
-          void signOut(client).then(() => {
-            if (client.getQueryData(sessionQuery.queryKey)?.status === "signed-out") {
-              startSignIn(environment);
-            }
-          });
-        }}
-      />
-    );
-  }
-  return <SignedIn session={session} />;
+  return <SignedIn session={s.session} environment={environment} />;
 }
 
 /** The sidebar's toggle on narrow screens, where the sidebar is a sheet. */
@@ -284,7 +272,34 @@ function useRoute(): Route {
   return ROUTES.has(head) ? (head as Route) : "";
 }
 
-function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement {
+/**
+ * Whether `environment` is one the session's management environment administers (OP-159 m.47 (a),
+ * (g)): `undefined` while that is not known yet.
+ */
+function administered(
+  session: SessionInfo,
+  environment: string,
+  own: Instance | null | undefined,
+  tenant: {
+    readonly data: readonly TenantEnvironment[] | null | undefined;
+    readonly isError: boolean;
+  },
+): boolean | undefined {
+  if (environment === session.environment || session.environments.includes(environment)) {
+    return true;
+  }
+  if (own === null || tenant.isError || tenant.data === null) return false;
+  if (own === undefined || tenant.data === undefined) return undefined;
+  return tenant.data.some((e) => e.slug === environment && e.kind === "standard");
+}
+
+function SignedIn({
+  session,
+  environment,
+}: {
+  readonly session: SessionInfo;
+  readonly environment: string;
+}): ReactElement {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [confirm, signatureScreen] = useSignatureScreen();
@@ -302,42 +317,83 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
       document.removeEventListener("keydown", key);
     };
   }, []);
+  const ownKey = ["instance", session.environment, session.account, session.instance] as const;
   const found = useQuery({
-    queryKey: ["instance", session.environment, session.account, session.instance] as const,
+    queryKey: ownKey,
     queryFn: async () =>
       (await find(session.environment, session.account, session.instance)) ?? null,
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const instance = found.data ?? undefined;
-  const probed = useQuery(screensQuery(instance, session.environment, session.account));
+  const own = found.data;
+  // OP-159 m.47 (a), (g), TN-142
+  const tenantRead = useQuery(tenantEnvironmentsQuery(own ?? undefined, session.environment));
+  const tenantList = tenantRead.data ?? undefined;
+  const foreign = environment !== session.environment;
+  const inKey = ["instance-in", environment, session.account, session.instance] as const;
+  const foundIn = useQuery({
+    queryKey: inKey,
+    queryFn: async () => (await findIn(environment, session.account, session.instance)) ?? null,
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled: foreign,
+  });
+  const allowed = administered(session, environment, own, tenantRead);
+  const instance = foreign ? (foundIn.data ?? undefined) : (own ?? undefined);
+  const view: SessionInfo = foreign
+    ? {
+        ...session,
+        environment,
+        domain: instance === undefined ? session.domain : b64url(instance.domain),
+      }
+    : session;
+  const probed = useQuery(screensQuery(instance, environment, session.account));
   const screens: ReadonlySet<Screen> =
     instance === undefined ? new Set() : (probed.data ?? new Set());
   const visible = visibleSections(screens);
-  // OP-159 m.43 (b), TN-119
-  const platformViewer = instance !== undefined && visible.has("platform");
-  const listed = useQuery({
-    ...platformEnvironmentsQuery(instance, session.environment),
-    enabled: platformViewer,
-  });
-  const platform = platformViewer ? (listed.data ?? []) : [];
+  const tenantSlugs = (tenantList ?? [])
+    .filter((e) => e.kind === "standard")
+    .map((e) => e.slug)
+    .sort();
 
   const route = useRoute();
   const shown = NAV.filter((n) => !SECTIONS.has(n.route) || visible.has(n.route as Section));
   const current: Route = SECTIONS.has(route) && !visible.has(route as Section) ? "" : route;
-  const go = (environment: string) => {
-    void navigate({ to: "/$environment", params: { environment } });
+  const go = (to: string) => {
+    void navigate({ to: "/$environment", params: { environment: to } });
   };
 
+  // OP-159 m.42 (c), m.47 (a): only another tenant's environment is another sign-in
+  if (allowed === false) {
+    return (
+      <OtherEnvironment
+        current={session.environment}
+        wanted={environment}
+        onGo={() => {
+          go(session.environment);
+        }}
+        onSwitch={() => {
+          void signOut(client).then(() => {
+            if (client.getQueryData(sessionQuery.queryKey)?.status === "signed-out") {
+              startSignIn(environment);
+            }
+          });
+        }}
+      />
+    );
+  }
+  if (allowed === undefined || (foreign && foundIn.data === undefined)) return <Waiting />;
+
   const shell: Shell = {
-    session,
+    session: view,
     instance,
     confirm,
     screens,
+    tenant: foreign || tenantList === undefined ? undefined : tenantList,
     registered: (i) => {
-      client.setQueryData(["instance", session.environment, session.account, session.instance], i);
+      client.setQueryData(foreign ? inKey : ownKey, i);
       void reloadSession(client);
     },
   };
+  const entering = foreign && instance === undefined;
 
   return (
     <ShellContext value={shell}>
@@ -353,7 +409,7 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
             <p className="px-3 py-2 text-base font-semibold">{t("brand")}</p>
           </SidebarHeader>
           <SidebarContent>
-            <Nav environment={session.environment} items={shown} current={current} />
+            <Nav environment={environment} items={shown} current={current} />
           </SidebarContent>
         </Sidebar>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -364,8 +420,9 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
               <span data-testid="who">{session.display_name}</span>
             </p>
             <EnvironmentSwitcher
-              current={session.environment}
-              platform={platform}
+              current={environment}
+              home={tenantList === undefined ? undefined : session.environment}
+              tenant={tenantSlugs}
               known={known}
               onGo={go}
             />
@@ -379,7 +436,18 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
               {t("signOut")}
             </Button>
           </header>
-          <Outlet />
+          {entering ? (
+            <EnterEnvironment
+              environment={environment}
+              home={session.environment}
+              account={session.account}
+              session={own === null || own === undefined ? null : session.instance}
+              confirm={confirm}
+              onRegistered={shell.registered}
+            />
+          ) : (
+            <Outlet />
+          )}
         </div>
         {signatureScreen}
         {palette !== undefined && (
@@ -387,9 +455,9 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
             <CommandPalette
               open={palette}
               onOpenChange={setPalette}
-              environment={session.environment}
+              environment={environment}
               screens={screens}
-              platform={platform}
+              tenant={tenantList === undefined ? [] : [session.environment, ...tenantSlugs]}
               known={known}
               onEnvironment={go}
             />
@@ -400,9 +468,20 @@ function SignedIn({ session }: { readonly session: SessionInfo }): ReactElement 
   );
 }
 
-/** The environment's home: its authority and this browser's device Instance. */
+/**
+ * The environment's home: its authority and this browser's device Instance; in a management
+ * environment, the tenant's home (OP-159 m.47 (a)).
+ */
 export function AuthorityPage(): ReactElement {
   const s = useShell();
+  if (s.instance !== undefined && s.tenant !== undefined) {
+    return (
+      <TenantHome
+        ctx={{ session: s.session, instance: s.instance, confirm: s.confirm, screens: s.screens }}
+        environments={s.tenant}
+      />
+    );
+  }
   return (
     <Authority
       session={s.session}

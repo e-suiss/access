@@ -5,7 +5,7 @@
 // device contribution (access-local-client push, OP-157 m.6 (i)); the test user signs in and
 // opens it. Without it only the routes and the page script are checked.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { PASSWORD, signIn } from "./signin.js";
 

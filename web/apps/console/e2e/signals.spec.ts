@@ -1,7 +1,8 @@
 // OP-156 m.3 (r), E38, §8.10: the console's signal sources over mocked management answers; what
 // a source's Claims do is the server's (bins/access-server signal source walkthroughs).
-import { expect, test } from "./fixtures.js";
+
 import { BASE, open } from "./data.js";
+import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);

@@ -1,9 +1,9 @@
 // TN-106, TN-107, TN-108
-import type { ComponentProps } from "react";
 
 import { buttonVariants } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
 import { cn } from "@access/ui/lib/utils";
+import type { ComponentProps } from "react";
 
 /** The one card a page is drawn on. */
 export function Panel({ className, children, ...props }: ComponentProps<"div">) {

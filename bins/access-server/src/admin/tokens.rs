@@ -222,8 +222,10 @@ impl<P: LiveKeys> ManagementTokens<P> {
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
-        Ok(line.is_some_and(|(l, admin)| admin && l.ended_ms.is_none())
-            && self.plane.live_key(domain, instance).await?.is_some())
+        Ok(
+            line.is_some_and(|(l, admin)| admin.live && l.ended_ms.is_none())
+                && self.plane.live_key(domain, instance).await?.is_some(),
+        )
     }
 
     /// A read token on the environment surface of `slug`, an environment the console session

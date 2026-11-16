@@ -6,46 +6,49 @@
 // declared is a proposal until the root approves it, and it never counts before.
 // HL-8, HL-17, DL-10, OP-159 m.3 (s): whether the HSM partition and the compute are shared; an
 // undeclared hosting reads as shared and shows the co-tenant risk.
-import type { ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Card, CardContent } from "@access/ui/components/card";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
+import { adminGet } from "../lib/admin.js";
 import { BULLETS, HINT, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Show, readKey, useLoad } from "./parts.js";
+import { at, type Ctx, readKey, Show, useLoad } from "./parts.js";
 
 const H3 = "text-base font-semibold";
 
-interface Declared {
-  readonly name: string;
-  readonly operator: string;
-  readonly independent: boolean;
-  readonly canonical?: boolean;
-}
+// OP-159 m.46 (f)
+const Declared = v.looseObject({
+  name: v.string(),
+  operator: v.string(),
+  independent: v.boolean(),
+  canonical: v.exactOptional(v.boolean()),
+});
 
-interface PqReanchor {
-  readonly size: number;
-  readonly time: number;
-  readonly witnesses: readonly string[];
-}
+type Declared = v.InferOutput<typeof Declared>;
 
-interface DurabilityView {
-  readonly durability: "replicated" | "single-node" | null;
-  readonly class: string | null;
-  readonly region: string | null;
-  readonly dr_profile: { readonly rpo_s: number } | null;
-  readonly rpo_s: number | null;
-  readonly witnesses?: readonly Declared[];
-  readonly replicas?: readonly Declared[];
-  readonly acknowledges?: boolean;
-  readonly pq_reanchor?: PqReanchor | null;
-  readonly hosting?: {
-    readonly hsm_partition: "shared" | "dedicated";
-    readonly compute: "shared" | "dedicated";
-  };
-}
+const PqReanchor = v.looseObject({
+  size: v.number(),
+  time: v.number(),
+  witnesses: v.array(v.string()),
+});
+
+const Shared = v.picklist(["shared", "dedicated"]);
+
+const DurabilityView = v.looseObject({
+  durability: v.nullable(v.picklist(["replicated", "single-node"])),
+  class: v.nullable(v.string()),
+  region: v.nullable(v.string()),
+  dr_profile: v.nullable(v.looseObject({ rpo_s: v.number() })),
+  rpo_s: v.nullable(v.number()),
+  witnesses: v.exactOptional(v.array(Declared)),
+  replicas: v.exactOptional(v.array(Declared)),
+  acknowledges: v.exactOptional(v.boolean()),
+  pq_reanchor: v.exactOptional(v.nullable(PqReanchor)),
+  hosting: v.exactOptional(v.looseObject({ hsm_partition: Shared, compute: Shared })),
+});
 
 function Parties({
   items,
@@ -80,7 +83,7 @@ function Parties({
 export function Durability({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const view = useLoad(readKey(ctx, `envs/${environment}/durability`), () =>
-    adminGetAs<DurabilityView>(ctx.instance, `envs/${environment}/durability`),
+    adminGet(ctx.instance, `envs/${environment}/durability`, DurabilityView),
   );
   return (
     <div data-testid="durability" className="flex flex-col gap-4">

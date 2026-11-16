@@ -156,6 +156,12 @@ fn every_environment_write_is_an_idp_exercise() {
         {
             continue;
         }
+        // OP-159 m.47 (h), TN-140
+        if let Some(action) = tenant_action(row.operation_id) {
+            assert!(action.label().starts_with("idp.tenant."));
+            writes += 1;
+            continue;
+        }
         assert!(
             Op::from_operation(row.operation_id).is_some(),
             "{} compiles to no idp.* change",
@@ -164,6 +170,17 @@ fn every_environment_write_is_an_idp_exercise() {
         writes += 1;
     }
     assert!(writes > 30, "{writes}");
+}
+
+fn tenant_action(operation: &str) -> Option<access_identity_admin::domain::tenant::TenantAction> {
+    use access_identity_admin::domain::tenant::TenantAction;
+    Some(match operation {
+        "createTenantEnvironment" => TenantAction::EnvironmentCreate,
+        "inviteTenantAdmin" => TenantAction::AdminInvite,
+        "addTenantOwner" => TenantAction::OwnerAdd,
+        "removeTenantAdmin" => TenantAction::AdminRemove,
+        _ => return None,
+    })
 }
 
 // XI-3, C2, E27

@@ -270,6 +270,15 @@ pub trait Devices: Send + Sync {
         let _ = session;
         std::future::ready(Ok(Vec::new()))
     }
+
+    /// The kind of the session's own environment: `standard` or `management` (TN-138).
+    fn kind(
+        &self,
+        session: &ConsoleSession,
+    ) -> impl Future<Output = Result<&'static str, Unavailable>> + Send {
+        let _ = session;
+        std::future::ready(Ok("standard"))
+    }
 }
 
 /// A management read token issued to a session (TN-130): at most 60 minutes, bound to the

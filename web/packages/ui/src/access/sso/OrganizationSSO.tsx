@@ -16,7 +16,7 @@ import { Input } from "@access/ui/components/input";
 import { Item } from "@access/ui/components/item";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 import { Separator } from "@access/ui/components/separator";
-import { useId, useState, type SyntheticEvent } from "react";
+import { type SyntheticEvent, useId, useState } from "react";
 
 import { text } from "../texts.js";
 

@@ -1,5 +1,5 @@
-import { CSRF, COOKIE } from "./mock.js";
 import { expect, test } from "./fixtures.js";
+import { COOKIE, CSRF } from "./mock.js";
 
 const BASE = "http://127.0.0.1:4173";
 

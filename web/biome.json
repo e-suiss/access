@@ -40,7 +40,7 @@
     "enabled": true,
     "actions": {
       "source": {
-        "organizeImports": "off"
+        "organizeImports": "on"
       }
     }
   },
@@ -119,6 +119,9 @@
         "packages/ui/src/styles/globals.css"
       ],
       "linter": {
+        "enabled": false
+      },
+      "assist": {
         "enabled": false
       }
     },

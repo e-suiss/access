@@ -9,10 +9,9 @@ import { Alert, AlertDescription } from "@access/ui/components/alert";
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
-
-import { type Attention, AttentionLink } from "../work/Work.js";
-import { type LimitRow, type PayLimit, limitRows } from "../payment/model.js";
+import { type LimitRow, limitRows, type PayLimit } from "../payment/model.js";
 import { LimitRows, say } from "../payment/Payment.js";
+import { type Attention, AttentionLink } from "../work/Work.js";
 
 type Catalogue = Readonly<Record<string, string>> | undefined;
 

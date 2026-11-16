@@ -59,6 +59,9 @@ pub struct TenantOrder<'a> {
     pub basis: ExerciseBasis,
     /// The actor's declared capacity.
     pub capacity: Capacity,
+    /// The console's origin, `https://host[:port]`: an invitation's mail names the tenant's
+    /// console under it (OP-159 m.47 (f)).
+    pub console: Option<&'a str>,
 }
 
 /// What a committed environment creation opened.
@@ -141,9 +144,48 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                     return Err(TenantInvalid::NoAdmin.into());
                 }
             }
-            TenantChange::AdminInvite(_) => {}
+            // TN-89 (11)
+            TenantChange::AdminInvite(_) => {
+                let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+                let fits = super::admin_invite::invite_current(&mut t).await;
+                t.commit().await?;
+                fits?;
+            }
         }
         Ok(())
+    }
+
+    /// The inviter of an `idp.tenant.admin_invite`: the subject of the Party that signs `ais` in
+    /// the management environment, and its address (TN-89 (3), (10)); a Party with no account
+    /// there invites no one.
+    async fn inviter(
+        &self,
+        (tenant, environment): (TenantId, EnvironmentId),
+        domain: Digest,
+        (ais, actor): (&[u8], Option<Id>),
+    ) -> Result<([u8; 16], String), TenantError> {
+        let party = match actor {
+            Some(p) => Some(p),
+            None => self
+                .decider
+                .signer(domain, ais)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?,
+        };
+        let refused = || AdminError::Refused(String::from(access_internal_api::idp::ACTOR_BINDING));
+        let party = party.ok_or_else(refused)?;
+        let vault = self
+            .keys
+            .vault(environment)
+            .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+        let subject = idp::party_subject(&mut t, &party.0).await?;
+        let address = match subject {
+            Some(s) => super::admin_invite::address_of(&mut t, &vault, s).await?,
+            None => None,
+        };
+        t.commit().await?;
+        Ok(subject.zip(address).ok_or_else(refused)?)
     }
 
     /// The intent the caller signs for `change` in the management environment (TN-110, EI-25).
@@ -205,6 +247,13 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         // §13.4 G54, TN-49
         self.standing((order.tenant, order.environment), domain, &ais, actor)
             .await?;
+        let inviter = match order.change {
+            TenantChange::AdminInvite(_) => Some(
+                self.inviter((order.tenant, order.environment), domain, (&ais, actor))
+                    .await?,
+            ),
+            _ => None,
+        };
         let verdict = self
             .decider
             .decide(Submission {
@@ -270,6 +319,41 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             TenantChange::OwnerAdd { subject } if first => {
                 tenants::make_owner(&mut t, subject).await?;
             }
+            // OP-159 m.47 (f), TN-89
+            TenantChange::AdminInvite(i) if first => {
+                let vault = self
+                    .keys
+                    .vault(order.environment)
+                    .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+                let issuer = idp::governance(&mut t)
+                    .await?
+                    .and_then(|g| g.issuer)
+                    .ok_or(AdminError::NoEnvironment)?;
+                let name = tenants::tenant_profile(&mut t)
+                    .await?
+                    .and_then(|(n, _)| n)
+                    .unwrap_or_default();
+                let (subject, address) = inviter.as_ref().ok_or(AdminError::Encode)?;
+                let at = access_store::authority::server_time(self.app).await?;
+                let console = order
+                    .console
+                    .map(|o| format!("{}/console/{slug}", o.trim_end_matches('/')));
+                super::admin_invite::invite(
+                    &mut t,
+                    &super::admin_invite::InviteWrite {
+                        vault: &vault,
+                        ids: self.ids,
+                        inviter: (*subject, address),
+                        issuer: &issuer,
+                        console: console.as_deref(),
+                        tenant: &name,
+                        exercise: &exercise.0,
+                        at,
+                    },
+                    i,
+                )
+                .await?;
+            }
             _ => {}
         }
         t.commit().await?;
@@ -297,6 +381,90 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             }
         };
         Ok((applied, opened))
+    }
+
+    /// The tenant's live environments as its administrators list them from the management
+    /// environment `(tenant, management)` (OP-159 m.47 (a)): slug, kind, issuer, creation time and
+    /// whether it is a sandbox; never their settings or content.
+    ///
+    /// # Errors
+    /// [`AdminError::NoEnvironment`] outside a management environment; [`AdminError`].
+    pub async fn tenant_environments_view(
+        &self,
+        (tenant, management): (TenantId, EnvironmentId),
+    ) -> Result<Vec<serde_json::Value>, AdminError> {
+        self.management(tenant, management)
+            .await
+            .map_err(|_| AdminError::NoEnvironment)?;
+        let mut t = TenantTx::begin_tenant(self.app, tenant).await?;
+        let list = tenants::tenant_environments(&mut t).await?;
+        t.commit().await?;
+        Ok(list
+            .into_iter()
+            .map(|e| {
+                serde_json::json!({
+                    "slug": e.slug,
+                    "kind": e.kind,
+                    "issuer": e.issuer,
+                    "created_at": super::rest::rfc3339(e.created_ms),
+                    "sandbox": e.sandbox,
+                })
+            })
+            .collect())
+    }
+
+    /// The tenant's administrators as they list them in their management environment (OP-159
+    /// m.47 (e), (f)): each live, removed or invited one with its id (`usr_…` for an account,
+    /// `inv_…` for a pending invitation), its address, `owner` or `admin`, its status and since
+    /// when. A pending invitation keeps no address (TN-89 (1)): it shows `@` and its domain.
+    ///
+    /// # Errors
+    /// [`AdminError::NoEnvironment`] outside a management environment; [`AdminError`].
+    pub async fn tenant_admins_view(
+        &self,
+        (tenant, management): (TenantId, EnvironmentId),
+    ) -> Result<Vec<serde_json::Value>, AdminError> {
+        use access_identity_account::app::SUBJECT_PREFIX;
+        self.management(tenant, management)
+            .await
+            .map_err(|_| AdminError::NoEnvironment)?;
+        let vault = self
+            .keys
+            .vault(management)
+            .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+        let now = access_store::authority::server_time(self.app).await?;
+        let mut t = TenantTx::begin(self.app, tenant, management).await?;
+        let admins = tenants::admins(&mut t).await?;
+        let invitations = tenants::invitations(&mut t, None).await?;
+        let mut out = Vec::with_capacity(admins.len().saturating_add(invitations.len()));
+        for a in &admins {
+            let address = super::admin_invite::address_of(&mut t, &vault, a.subject).await?;
+            let (status, since) = match a.ended_ms {
+                Some(ended) => ("removed", ended),
+                None => ("active", a.added_ms),
+            };
+            out.push(serde_json::json!({
+                "id": self.ids.encode(SUBJECT_PREFIX, a.subject)?,
+                "identifier": address,
+                "role": if a.owner { "owner" } else { "admin" },
+                "status": status,
+                "since": super::rest::rfc3339(since),
+            }));
+        }
+        t.commit().await?;
+        for i in invitations
+            .iter()
+            .filter(|i| matches!(super::admin_invite::state_of(i, now), "pending" | "proven"))
+        {
+            out.push(serde_json::json!({
+                "id": self.ids.encode(super::rest::INVITATION_PREFIX, i.id)?,
+                "identifier": format!("@{}", i.invitee_domain),
+                "role": "admin",
+                "status": "invited",
+                "since": super::rest::rfc3339(i.created_ms),
+            }));
+        }
+        Ok(out)
     }
 
     /// Opens the environment of a bound `idp.tenant.environment_create` (OP-159 m.47 (d), (e), (h)):

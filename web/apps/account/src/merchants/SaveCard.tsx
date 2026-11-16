@@ -3,11 +3,12 @@
 // alone (per-order limit, end, purpose), refuses anything that is not a bounded payment Grant to
 // the merchant, and commits the customer's own grant.issue from their self-anchor, agency own,
 // after the signature screen. It is shown done only once Access recorded it.
-import { pay } from "@esuiss/access";
+
 import { payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Card, CardContent } from "@access/ui/components/card";
-import { useState, type ReactElement } from "react";
+import { pay } from "@esuiss/access";
+import { type ReactElement, useState } from "react";
 import * as v from "valibot";
 
 import { commitMeta, type Revoking } from "../lib/adp.js";

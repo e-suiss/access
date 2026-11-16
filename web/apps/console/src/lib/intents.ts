@@ -65,7 +65,12 @@ export async function draft(
   w: Wanted,
   mode: "check" | "commit",
 ): Promise<Drafted> {
-  const d = await json("/intents", Draft, {
+  // OP-159 m.47 (g), TN-142
+  const path =
+    instance.environment === undefined
+      ? "/intents"
+      : `/intents?environment=${encodeURIComponent(instance.environment)}`;
+  const d = await json(path, Draft, {
     method: "POST",
     body: { ...w, mode },
     headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },

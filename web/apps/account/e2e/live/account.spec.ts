@@ -5,7 +5,7 @@
 // signs before anything is signed.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, ENVIRONMENT } from "./signin.js";
+import { ENVIRONMENT, PASSWORD } from "./signin.js";
 
 test.describe("@live account pages", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");

@@ -1,44 +1,46 @@
 // OP-156 m.3 (s), X22: the environment's export sinks of the read-only SIEM projection. Registering and
 // retiring a sink are each one signed change; the secret is write-only and never shown again.
 // What a sink holds is a copy, never the record: the audit records answer every question.
-import { Link } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldDescription, FieldLabel } from "@access/ui/components/field";
+import { FieldDescription, FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 import { Textarea } from "@access/ui/components/textarea";
+import { Link } from "@tanstack/react-router";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 
-interface Delivery {
-  readonly sent: string;
-  readonly failures: number;
-  readonly failing_since: string | null;
-  readonly last_error: string | null;
-  readonly last_sent_at: string | null;
-}
+// OP-159 m.46 (f)
+const Delivery = v.looseObject({
+  sent: v.string(),
+  failures: v.number(),
+  failing_since: v.nullable(v.string()),
+  last_error: v.nullable(v.string()),
+  last_sent_at: v.nullable(v.string()),
+});
 
-interface Sink {
-  readonly name: string;
-  readonly adapter: string;
-  readonly preset: string | null;
-  readonly format: string | null;
-  readonly endpoint: string;
-  readonly has_secret: boolean;
-  readonly status: string;
-  readonly record: string;
-  readonly delivery: Delivery | null;
-}
+const Sink = v.looseObject({
+  name: v.string(),
+  adapter: v.string(),
+  preset: v.nullable(v.string()),
+  format: v.nullable(v.string()),
+  endpoint: v.string(),
+  has_secret: v.boolean(),
+  status: v.string(),
+  record: v.string(),
+  delivery: v.nullable(Delivery),
+});
 
-interface Page<T> {
-  readonly items: readonly T[];
-}
+type Sink = v.InferOutput<typeof Sink>;
+
+const Sinks = items(Sink);
 
 /** The adapter and preset an administrator picks, as the API names them. */
 const KINDS = [
@@ -71,7 +73,7 @@ function status(s: Sink): string {
 export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const sinks = useLoad(readKey(ctx, `envs/${environment}/export-sinks`), () =>
-    adminGetAs<Page<Sink>>(ctx.instance, `envs/${environment}/export-sinks`),
+    adminGet(ctx.instance, `envs/${environment}/export-sinks`, Sinks),
   );
   const [name, setName] = useState("");
   const [kind, setKind] = useState<KindValue>("collector:splunk");

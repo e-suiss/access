@@ -1,14 +1,13 @@
 // OP-153 m.3 (s), m.9 (c): the account pages' texts are Access's Fluent catalogs, resolved by the
 // five-step chain; a key no catalog has shows as itself, never as an invented text.
 import { Catalogs, keyOf, parseProtected } from "@access/ui";
-
+import protectedToml from "../../../../../conformance/catalog/protected-messages.toml?raw";
 import enAccount from "../../../../../locales/en/account.ftl?raw";
 import enHub from "../../../../../locales/en/hub.ftl?raw";
 import enLogin from "../../../../../locales/en/login.ftl?raw";
 import trAccount from "../../../../../locales/tr/account.ftl?raw";
 import trHub from "../../../../../locales/tr/hub.ftl?raw";
 import trLogin from "../../../../../locales/tr/login.ftl?raw";
-import protectedToml from "../../../../../conformance/catalog/protected-messages.toml?raw";
 
 const catalogs = new Catalogs(
   { en: [enLogin, enAccount, enHub], tr: [trLogin, trAccount, trHub] },

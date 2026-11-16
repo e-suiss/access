@@ -154,6 +154,7 @@ async fn tenant_write(
             validity: m.validity,
             basis,
             capacity: Capacity::Own,
+            console: None,
         },
         ais,
     ))
@@ -539,8 +540,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
     let shop = shop.unwrap();
     let shop_route = route_by_slug(&w.db.router, "shop").await.unwrap().unwrap();
 
-    // A second administrator, not an owner: an account in the management environment and its
-    // Party in the shop's domain (TNI-14: no account there).
+    // TNI-14
     let (helper, _, _) = s
         .bootstrap
         .account(
@@ -594,8 +594,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
     );
     w.domains.release().await;
 
-    // OP-159 m.47 (d): the rule covers idp.* writes in the shop, signed by the administrator's
-    // own Party there
+    // OP-159 m.47 (d)
     let basis = rule_basis(
         &w,
         "shop",
@@ -620,12 +619,93 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
     assert!(matches!(written, Applied::Written { .. }), "{written:?}");
     w.domains.release().await;
 
-    // OP-159 m.47 (f): removal ends the line in every domain and the extended standing stops it
+    // OP-159 m.47 (f)
+    let shop_d = DomainId::from_bytes(shop.domain.0);
+    let line = |world: &World| {
+        let app = world.db.app.clone();
+        async move {
+            let mut t = TenantTx::begin(&app, tenant, opened.environment)
+                .await
+                .unwrap();
+            let found = tenants::lines(&mut t, Some(&helper))
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|l| l.domain == shop_d)
+                .unwrap();
+            t.commit().await.unwrap();
+            found
+        }
+    };
+    let stated = line(&w).await;
+    let now = server_time(&w.db.app).await.unwrap();
     let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
         .await
         .unwrap();
-    tenants::end_admin(&mut t, &helper, None).await.unwrap();
+    tenants::stated(
+        &mut t,
+        (&helper, &shop_d),
+        &stated.claim.unwrap(),
+        (now - 7_200_000, now - 1),
+    )
+    .await
+    .unwrap();
     t.commit().await.unwrap();
+    assert!(matches!(
+        admin
+            .standing(
+                (tenant, shop_route.environment),
+                shop.domain,
+                &[],
+                Some(helper_party),
+            )
+            .await,
+        Err(access_identity_admin::AdminError::Refused(code)) if code == "actor-binding"
+    ));
+    assert!(
+        courier
+            .admit(
+                (tenant, opened.environment),
+                &helper,
+                (&shop_d, &helper_party.0),
+            )
+            .await
+            .unwrap()
+            .is_some()
+    );
+    w.domains.release().await;
+    admin
+        .standing(
+            (tenant, shop_route.environment),
+            shop.domain,
+            &[],
+            Some(helper_party),
+        )
+        .await
+        .unwrap();
+
+    // OP-159 m.47 (f)
+    let (removed, _) = tenant_write(
+        &s,
+        &admin,
+        m,
+        (&founder_key, subject),
+        &TenantChange::AdminRemove { subject: helper },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(removed, Applied::Written { .. }), "{removed:?}");
+    assert!(matches!(
+        tenant_write(
+            &s,
+            &admin,
+            m,
+            (&founder_key, subject),
+            &TenantChange::AdminRemove { subject },
+        )
+        .await,
+        Err(TenantError::Invalid(TenantInvalid::LastOwner))
+    ));
     assert_eq!(
         courier
             .end((tenant, opened.environment), &helper)
@@ -658,7 +738,6 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
         )
         .await;
     assert!(refused.is_err(), "{refused:?}");
-    // the founder is no line holder in the shop yet, and roots it
     admin
         .standing(
             (tenant, shop_route.environment),
@@ -668,6 +747,66 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
         )
         .await
         .unwrap();
+
+    // TN-109
+    let (cool, _, _) = s
+        .bootstrap
+        .account(
+            &ids,
+            (tenant, opened.environment),
+            "cool@globex.example",
+            Some(&password),
+        )
+        .await
+        .unwrap();
+    let cool_key = token_key(&w.keys, "access/test/tenant-cool").unwrap();
+    let cool_party = root_party(&cool_key.public_key());
+    s.bootstrap
+        .onboard(
+            tenant,
+            shop_route.environment,
+            shop.domain,
+            &cool_key,
+            cool_party,
+        )
+        .await
+        .unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
+        .await
+        .unwrap();
+    tenants::add_admin(
+        &mut t,
+        &cool,
+        &tenants::NewAdmin {
+            party: Some(&cool_party.0),
+            owner: false,
+            exercise: None,
+            cooling_s: Some(access_identity_admin::domain::tenant::ADMIN_COOLING_S),
+        },
+    )
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    courier
+        .admit(
+            (tenant, opened.environment),
+            &cool,
+            (&shop_d, &cool_party.0),
+        )
+        .await
+        .unwrap();
+    w.domains.release().await;
+    assert!(matches!(
+        admin
+            .standing(
+                (tenant, shop_route.environment),
+                shop.domain,
+                &[],
+                Some(cool_party),
+            )
+            .await,
+        Err(access_identity_admin::AdminError::Refused(code)) if code == "actor-binding"
+    ));
 }
 
 // OP-159 m.47 (b), (c), TN-141, TN-89 (5), (8)
@@ -715,6 +854,7 @@ async fn the_founding_routes_take_a_founder_from_the_link_to_an_active_tenant() 
     .await;
     let routes = crate::founding::router(crate::founding::Founding {
         app: w.db.app.clone(),
+        router: w.db.router.clone(),
         ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),
         plane: w.plane.clone(),
         base: w.base.clone(),

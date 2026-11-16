@@ -335,3 +335,21 @@ basis = "contract"
 portable = "derived"
 export = false
 note = "A signed projection served by reference, sealed under its own data key: it names the holder Instance and its key, not a person. The data key is destroyed at the projection's horizon and the row stays (CR-43, OP-73, OP-159 m.3 (q))."
+
+[[field]]
+column = "access.tenant_foundings.founder_index"
+vault = "none"
+retention = "suppression"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "Keyed blind index of the invited founder's folded address in the management environment (TN-141); the address itself is never stored."
+
+[[field]]
+column = "access.tenant_admin_invitations.invitee_index"
+vault = "none"
+retention = "suppression"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "Keyed blind index of the invited administrator's folded address (TN-89, OP-159 m.47 (f)); the address itself is never stored."

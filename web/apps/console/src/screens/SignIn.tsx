@@ -1,9 +1,8 @@
-import type { ReactElement, ReactNode } from "react";
-
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent, CardHeader } from "@access/ui/components/card";
+import type { ReactElement, ReactNode } from "react";
 
-import { t, type Key } from "../i18n/index.js";
+import { type Key, t } from "../i18n/index.js";
 import { BASE } from "../lib/links.js";
 import { startSignIn } from "../lib/remember.js";
 import { MONO, Notice } from "../ui.js";

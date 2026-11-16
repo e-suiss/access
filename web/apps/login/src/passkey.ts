@@ -1,10 +1,53 @@
+import * as v from "valibot";
+
 import type { PasskeyOptions, PasskeySignal } from "./contract.js";
 
 type Json = Record<string, unknown>;
 
-function isRecord(value: unknown): value is Json {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// OP-159 m.46 (f)
+const TRANSPORTS: ReadonlySet<string> = new Set(["ble", "hybrid", "internal", "nfc", "usb"]);
+
+function isTransport(t: string): t is AuthenticatorTransport {
+  return TRANSPORTS.has(t);
 }
+
+const optional = <S extends v.GenericSchema>(s: S) => v.fallback(v.optional(s), undefined);
+
+const Descriptor = v.looseObject({
+  id: v.string(),
+  transports: optional(v.array(v.string())),
+});
+
+const Verification = v.picklist(["required", "preferred", "discouraged"]);
+
+const RequestJson = v.looseObject({
+  challenge: v.string(),
+  rpId: optional(v.string()),
+  allowCredentials: v.optional(v.unknown()),
+  userVerification: optional(Verification),
+  timeout: optional(v.number()),
+});
+
+const CreationJson = v.looseObject({
+  rp: v.looseObject({ name: v.string(), id: optional(v.string()) }),
+  user: v.looseObject({ id: v.string(), name: v.string(), displayName: v.string() }),
+  challenge: v.string(),
+  pubKeyCredParams: v.fallback(
+    v.array(v.looseObject({ type: v.literal("public-key"), alg: v.number() })),
+    [],
+  ),
+  excludeCredentials: v.optional(v.unknown()),
+  authenticatorSelection: optional(
+    v.looseObject({
+      authenticatorAttachment: optional(v.picklist(["platform", "cross-platform"])),
+      residentKey: optional(v.picklist(["discouraged", "preferred", "required"])),
+      requireResidentKey: optional(v.boolean()),
+      userVerification: optional(Verification),
+    }),
+  ),
+  extensions: optional(v.record(v.string(), v.unknown())),
+  timeout: optional(v.number()),
+});
 
 export function fromBase64url(text: string): ArrayBuffer {
   const b64 = text.replaceAll("-", "+").replaceAll("_", "/");
@@ -26,13 +69,18 @@ export function toBase64url(buffer: ArrayBuffer | ArrayBufferView): string {
 
 function descriptors(list: unknown): PublicKeyCredentialDescriptor[] {
   if (!Array.isArray(list)) return [];
-  return list.filter(isRecord).map((d) => ({
-    type: "public-key",
-    id: fromBase64url(String(d["id"])),
-    ...(Array.isArray(d["transports"])
-      ? { transports: d["transports"] as AuthenticatorTransport[] }
-      : {}),
-  }));
+  return list.flatMap((item: unknown) => {
+    const d = v.safeParse(Descriptor, item);
+    if (!d.success) return [];
+    const transports = d.output.transports?.filter(isTransport);
+    return [
+      {
+        type: "public-key" as const,
+        id: fromBase64url(d.output.id),
+        ...(transports === undefined ? {} : { transports }),
+      },
+    ];
+  });
 }
 
 /** Platform authenticator first; cross-device QR (hybrid) only as the last resort (TN-99). */
@@ -53,15 +101,13 @@ async function requestOptions(options: PasskeyOptions): Promise<PublicKeyCredent
   if (typeof PublicKeyCredential.parseRequestOptionsFromJSON === "function") {
     return PublicKeyCredential.parseRequestOptionsFromJSON(json);
   }
-  const o = options as Json;
+  const o = v.parse(RequestJson, options);
   return {
-    challenge: fromBase64url(String(o["challenge"])),
-    ...(typeof o["rpId"] === "string" ? { rpId: o["rpId"] } : {}),
-    allowCredentials: descriptors(o["allowCredentials"]),
-    ...(typeof o["userVerification"] === "string"
-      ? { userVerification: o["userVerification"] as UserVerificationRequirement }
-      : {}),
-    ...(typeof o["timeout"] === "number" ? { timeout: o["timeout"] } : {}),
+    challenge: fromBase64url(o.challenge),
+    ...(o.rpId === undefined ? {} : { rpId: o.rpId }),
+    allowCredentials: descriptors(o.allowCredentials),
+    ...(o.userVerification === undefined ? {} : { userVerification: o.userVerification }),
+    ...(o.timeout === undefined ? {} : { timeout: o.timeout }),
   };
 }
 
@@ -75,27 +121,33 @@ async function creationOptions(
   if (typeof PublicKeyCredential.parseCreationOptionsFromJSON === "function") {
     return PublicKeyCredential.parseCreationOptionsFromJSON(json);
   }
-  const o = options as Json;
-  const rp = isRecord(o["rp"]) ? o["rp"] : {};
-  const user = isRecord(o["user"]) ? o["user"] : {};
+  const o = v.parse(CreationJson, options);
+  const selection = o.authenticatorSelection;
   return {
-    rp: { name: String(rp["name"]), ...(typeof rp["id"] === "string" ? { id: rp["id"] } : {}) },
-    user: {
-      id: fromBase64url(String(user["id"])),
-      name: String(user["name"]),
-      displayName: String(user["displayName"]),
-    },
-    challenge: fromBase64url(String(o["challenge"])),
-    pubKeyCredParams: Array.isArray(o["pubKeyCredParams"])
-      ? (o["pubKeyCredParams"] as PublicKeyCredentialParameters[])
-      : [],
-    excludeCredentials: descriptors(o["excludeCredentials"]),
-    ...(isRecord(o["authenticatorSelection"])
-      ? { authenticatorSelection: o["authenticatorSelection"] }
-      : {}),
+    rp: { name: o.rp.name, ...(o.rp.id === undefined ? {} : { id: o.rp.id }) },
+    user: { id: fromBase64url(o.user.id), name: o.user.name, displayName: o.user.displayName },
+    challenge: fromBase64url(o.challenge),
+    pubKeyCredParams: o.pubKeyCredParams,
+    excludeCredentials: descriptors(o.excludeCredentials),
+    ...(selection === undefined
+      ? {}
+      : {
+          authenticatorSelection: {
+            ...(selection.authenticatorAttachment === undefined
+              ? {}
+              : { authenticatorAttachment: selection.authenticatorAttachment }),
+            ...(selection.residentKey === undefined ? {} : { residentKey: selection.residentKey }),
+            ...(selection.requireResidentKey === undefined
+              ? {}
+              : { requireResidentKey: selection.requireResidentKey }),
+            ...(selection.userVerification === undefined
+              ? {}
+              : { userVerification: selection.userVerification }),
+          },
+        }),
     attestation: "none",
-    ...(isRecord(o["extensions"]) ? { extensions: o["extensions"] } : {}),
-    ...(typeof o["timeout"] === "number" ? { timeout: o["timeout"] } : {}),
+    ...(o.extensions === undefined ? {} : { extensions: o.extensions }),
+    ...(o.timeout === undefined ? {} : { timeout: o.timeout }),
   };
 }
 

@@ -3,11 +3,10 @@
 // for passkeys (TN-17, X-L12); a new environment's first 90 minutes are shown (TN-111, CR-25); delayed
 // signals (§8.13) and a missing GeoIP source (OP-151 m.3 (b)) are stated, never hidden. The page
 // CSP mode, the DBSC switch and the Related Origins are set here too (OP-153 m.22 (c), (g), (k)).
-import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
+import { FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import {
   Table,
   TableBody,
@@ -17,56 +16,67 @@ import {
   TableRow,
 } from "@access/ui/components/table";
 import { Textarea } from "@access/ui/components/textarea";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, adminGetTagged, change, items, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
-import { BULLETS, CHOICE, CHOICE_LABEL, FACTS, FORM, Failure, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, at, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { BULLETS, CHOICE, CHOICE_LABEL, FACTS, Failure, FORM, HINT, MONO, Notice } from "../ui.js";
 import { Domains } from "./Domains.js";
+import { at, type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 import { Signals as SignalSources } from "./Signals.js";
 import { UpstreamLink } from "./UpstreamLink.js";
 
-interface Settings {
-  readonly rp_id?: string | null;
-  readonly signin_policy?: { readonly dbsc?: boolean };
-  readonly session_policy?: unknown;
-  readonly branding?: { readonly display_name?: string | null };
-  readonly csp_mode?: "enforce" | "report_only";
-  readonly related_origins?: readonly string[];
-  /** Sections the repository manages (GitOps); shown read-only. */
-  readonly managed?: readonly string[];
-}
+// OP-159 m.46 (f)
+const Settings = v.looseObject({
+  rp_id: v.exactOptional(v.nullable(v.string())),
+  signin_policy: v.exactOptional(v.looseObject({ dbsc: v.exactOptional(v.boolean()) })),
+  session_policy: v.exactOptional(v.unknown()),
+  branding: v.exactOptional(
+    v.looseObject({ display_name: v.exactOptional(v.nullable(v.string())) }),
+  ),
+  csp_mode: v.exactOptional(v.picklist(["enforce", "report_only"])),
+  related_origins: v.exactOptional(v.array(v.string())),
+  managed: v.exactOptional(v.array(v.string())),
+});
 
-interface EnvironmentMetadata {
-  readonly key_state?: "pending" | "published" | "signing" | "unavailable";
-  readonly signing_available_at?: string | null;
-}
+type Settings = v.InferOutput<typeof Settings>;
 
-interface Signals {
-  readonly transmitters?: readonly {
-    readonly name: string;
-    readonly delayed_since?: number | null;
-  }[];
-  readonly geoip?: "configured" | "not_configured" | "unreadable";
-  readonly verifiers?: readonly { readonly name: string; readonly declared_until: number }[];
-}
+const EnvironmentMetadata = v.looseObject({
+  key_state: v.exactOptional(v.picklist(["pending", "published", "signing", "unavailable"])),
+  signing_available_at: v.exactOptional(v.nullable(v.string())),
+});
 
-export interface AnalyticsDay {
-  readonly day: string;
-  readonly started: number;
-  readonly completed: number;
-  readonly failed: number;
-  readonly passkey_accounts: number;
-  readonly mfa_setup: number;
-  readonly legacy_password_accounts?: number;
-  readonly methods?: Readonly<Record<string, number>>;
-}
+const Signals = v.looseObject({
+  transmitters: v.exactOptional(
+    v.array(
+      v.looseObject({ name: v.string(), delayed_since: v.exactOptional(v.nullable(v.number())) }),
+    ),
+  ),
+  geoip: v.exactOptional(v.picklist(["configured", "not_configured", "unreadable"])),
+  verifiers: v.exactOptional(
+    v.array(v.looseObject({ name: v.string(), declared_until: v.number() })),
+  ),
+});
 
-interface Analytics {
-  readonly days: readonly AnalyticsDay[];
-  readonly surges?: readonly { readonly day: string; readonly failed: number }[];
-}
+const AnalyticsDay = v.looseObject({
+  day: v.string(),
+  started: v.number(),
+  completed: v.number(),
+  failed: v.number(),
+  passkey_accounts: v.number(),
+  mfa_setup: v.number(),
+  legacy_password_accounts: v.exactOptional(v.number()),
+  methods: v.exactOptional(v.record(v.string(), v.number())),
+});
+
+export type AnalyticsDay = v.InferOutput<typeof AnalyticsDay>;
+
+const Analytics = v.looseObject({
+  days: v.array(AnalyticsDay),
+  surges: v.exactOptional(v.array(v.looseObject({ day: v.string(), failed: v.number() }))),
+});
 
 const KEY_STATE = {
   pending: "keyPending",
@@ -82,7 +92,7 @@ function environmentPath(ctx: Ctx, rest = ""): string {
 /** §8.13, Ek B 2963, 3034: delayed signals, missing GeoIP and verifier reports. */
 function Status({ ctx }: { readonly ctx: Ctx }): ReactElement | null {
   const l = useLoad(readKey(ctx, "/signals"), () =>
-    adminGetAs<Signals>(ctx.instance, environmentPath(ctx, "/signals")),
+    adminGet(ctx.instance, environmentPath(ctx, "/signals"), Signals),
   );
   if (l.status !== "done") return null;
   const s = l.value;
@@ -114,9 +124,10 @@ function Keys({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(
     readKey(ctx, `platform/envs/${encodeURIComponent(ctx.session.environment)}`),
     () =>
-      adminGetAs<EnvironmentMetadata>(
+      adminGet(
         ctx.instance,
         `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
+        EnvironmentMetadata,
       ),
   );
   return (
@@ -411,14 +422,14 @@ function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
   );
 }
 
-interface Named {
-  readonly items: readonly {
-    readonly client_id?: string;
-    readonly name?: string;
-    readonly display_name?: string;
-    readonly status?: string;
-  }[];
-}
+const Named = items(
+  v.looseObject({
+    client_id: v.exactOptional(v.string()),
+    name: v.exactOptional(v.string()),
+    display_name: v.exactOptional(v.nullable(v.string())),
+    status: v.exactOptional(v.string()),
+  }),
+);
 
 function Listing({
   ctx,
@@ -432,7 +443,7 @@ function Listing({
   readonly id: string;
 }): ReactElement {
   const l = useLoad(readKey(ctx, path), () =>
-    adminGetAs<Named>(ctx.instance, environmentPath(ctx, path)),
+    adminGet(ctx.instance, environmentPath(ctx, path), Named),
   );
   return (
     <Panel id={id} title={title}>
@@ -444,7 +455,7 @@ function Listing({
               return (
                 <li key={key}>
                   <span className={MONO}>{key}</span>
-                  {c.display_name !== undefined && ` — ${c.display_name}`}
+                  {typeof c.display_name === "string" && ` — ${c.display_name}`}
                   {c.status === "retired" && ` (${t("statusRetired")})`}
                 </li>
               );
@@ -456,21 +467,23 @@ function Listing({
   );
 }
 
-interface SocialWarning {
-  readonly code: string;
-  readonly at?: string;
-  readonly until?: string;
-}
+const SocialWarning = v.looseObject({
+  code: v.string(),
+  at: v.exactOptional(v.string()),
+  until: v.exactOptional(v.string()),
+});
 
-interface Socials {
-  readonly items: readonly {
-    readonly preset: string;
-    readonly client_id?: string | null;
-    readonly shared_development_client: boolean;
-    readonly status: "active" | "disabled";
-    readonly warnings: readonly SocialWarning[];
-  }[];
-}
+type SocialWarning = v.InferOutput<typeof SocialWarning>;
+
+const Socials = items(
+  v.looseObject({
+    preset: v.string(),
+    client_id: v.exactOptional(v.nullable(v.string())),
+    shared_development_client: v.boolean(),
+    status: v.picklist(["active", "disabled"]),
+    warnings: v.array(SocialWarning),
+  }),
+);
 
 /** One social warning as text; a warning never refuses anything (TN-87, IDP-31 (5)). */
 function socialWarning(w: SocialWarning): string {
@@ -483,7 +496,7 @@ function socialWarning(w: SocialWarning): string {
 /** IDP-31, TN-87, Ek B 3572, 3655: the social presets and their warnings. */
 function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(readKey(ctx, "/social-providers"), () =>
-    adminGetAs<Socials>(ctx.instance, environmentPath(ctx, "/social-providers")),
+    adminGet(ctx.instance, environmentPath(ctx, "/social-providers"), Socials),
   );
   return (
     <Panel id="social" title={t("settingsSocial")}>
@@ -514,7 +527,7 @@ function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
 /** IDP-36, K14: counts only, never a decision input. */
 export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(readKey(ctx, "/analytics"), () =>
-    adminGetAs<Analytics>(ctx.instance, environmentPath(ctx, "/analytics")),
+    adminGet(ctx.instance, environmentPath(ctx, "/analytics"), Analytics),
   );
   return (
     <Panel id="analytics" title={t("analyticsTitle")}>
@@ -575,8 +588,8 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(readKey(ctx, "/settings"), async () => {
-    const r = await adminGetTagged(ctx.instance, environmentPath(ctx, "/settings"));
-    return { s: r.value as Settings, ...(r.etag === undefined ? {} : { etag: r.etag }) };
+    const r = await adminGetTagged(ctx.instance, environmentPath(ctx, "/settings"), Settings);
+    return { s: r.value, ...(r.etag === undefined ? {} : { etag: r.etag }) };
   });
   return (
     <>

@@ -3,13 +3,15 @@
 // name only as its own claim; approving is the person's own `grant.issue`, signed by their device
 // Instance after the screen showed the Kernel's decoding. It never says Allow and never grants by
 // itself: the record is kept only for the allowed Exercise.
-import { useEffect, useRef, useState } from "react";
 
-import { loadKernel } from "@esuiss/access";
 import { Button } from "@access/ui/components/button";
+import { loadKernel } from "@esuiss/access";
+import { useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { LOGIN, under } from "./base.js";
 import { follow, postJson, returnTo } from "./http.js";
+import { t } from "./i18n.js";
 import {
   account,
   b64url,
@@ -17,13 +19,13 @@ import {
   decode,
   find,
   fromB64url,
+  Holding,
   type Instance,
   NotSigned,
   register,
-  type Session,
+  Session,
   sign,
 } from "./instance.js";
-import { t } from "./i18n.js";
 import {
   facts,
   inlineLink,
@@ -38,36 +40,42 @@ import {
   warning,
 } from "./Layout.js";
 
-interface Draft {
-  readonly domain: string;
-  readonly intent: {
-    readonly resources: readonly { readonly namespace: string; readonly path: readonly string[] }[];
-  };
-  readonly envelope: string;
-  readonly payload: string;
-  readonly basis: {
-    readonly holding: { readonly grant: string; readonly holder: string; readonly since: number };
-  };
-}
+// OP-159 m.46 (f)
+const Draft = v.looseObject({
+  domain: v.string(),
+  intent: v.looseObject({
+    resources: v.array(v.looseObject({ namespace: v.string(), path: v.array(v.string()) })),
+  }),
+  envelope: v.string(),
+  payload: v.string(),
+  basis: Holding,
+});
+
+type Draft = Readonly<v.InferOutput<typeof Draft>>;
 
 /** What the consent screen shows (`POST /v1/login/approval/preview`). */
-export interface ApprovalPreview {
-  readonly client_id: string;
-  readonly client_host: string;
-  readonly client_says: string;
-  readonly redirect_hosts: readonly string[];
-  readonly loopback_only: boolean;
-  readonly new_app: boolean;
-  readonly visual_changed: boolean;
-  readonly resource: string;
-  readonly scopes: readonly string[];
-  readonly csrf: string;
-  readonly draft: Draft | null;
-}
+const ApprovalPreview = v.looseObject({
+  client_id: v.string(),
+  client_host: v.string(),
+  client_says: v.string(),
+  redirect_hosts: v.array(v.string()),
+  loopback_only: v.boolean(),
+  new_app: v.boolean(),
+  visual_changed: v.boolean(),
+  resource: v.string(),
+  scopes: v.array(v.string()),
+  csrf: v.string(),
+  draft: v.nullable(Draft),
+});
 
-interface Redirect {
-  readonly redirect_to: string;
-}
+export type ApprovalPreview = Readonly<v.InferOutput<typeof ApprovalPreview>>;
+
+const Redirect = v.looseObject({ redirect_to: v.string() });
+
+const Evaluation = v.looseObject({
+  decision: v.exactOptional(v.boolean()),
+  context: v.exactOptional(v.looseObject({ exercise: v.exactOptional(v.string()) })),
+});
 
 type State =
   | { readonly phase: "loading" }
@@ -80,7 +88,12 @@ type State =
 /** How long "You chose not to continue" stays before the app gets its answer. */
 export const DECLINE_PAUSE_MS = 1500;
 
-async function csrfPost<T>(path: string, csrf: string, body: unknown) {
+async function csrfPost<S extends v.GenericSchema>(
+  path: string,
+  csrf: string,
+  body: unknown,
+  schema: S,
+): Promise<v.InferOutput<S>> {
   const r = await fetch(under(path), {
     method: "POST",
     credentials: "same-origin",
@@ -94,7 +107,9 @@ async function csrfPost<T>(path: string, csrf: string, body: unknown) {
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new NotSigned(String(r.status));
-  return (await r.json()) as T;
+  const read = v.safeParse(schema, await r.json());
+  if (!read.success) throw new NotSigned("malformed");
+  return read.output;
 }
 
 /** Commits the drafted `grant.issue` with the device Instance; the allowed Exercise. */
@@ -124,24 +139,21 @@ async function commit(
     new Uint8Array(),
   );
   const resource = draft.intent.resources[0];
-  const answer = await account<{ decision?: boolean; context?: { exercise?: string } }>(
-    "/proxy/adp/evaluation",
-    {
-      subject: { type: "access_party", id: h.holder },
-      action: { name: "grant_issue" },
-      resource: { type: resource?.namespace ?? "", id: (resource?.path ?? []).join("/") },
-      context: {
-        domain: draft.domain,
-        mode: "commit",
-        nonce: b64url(nonce),
-        intent: draft.intent,
-        payload: draft.payload,
-        basis: draft.basis,
-        capacity: "own",
-        ais: await sign(instance.key, k, instance.kid, statement),
-      },
+  const answer = await account("/proxy/adp/evaluation", Evaluation, {
+    subject: { type: "access_party", id: h.holder },
+    action: { name: "grant_issue" },
+    resource: { type: resource?.namespace ?? "", id: (resource?.path ?? []).join("/") },
+    context: {
+      domain: draft.domain,
+      mode: "commit",
+      nonce: b64url(nonce),
+      intent: draft.intent,
+      payload: draft.payload,
+      basis: draft.basis,
+      capacity: "own",
+      ais: await sign(instance.key, k, instance.kid, statement),
     },
-  );
+  });
   const exercise = answer.context?.exercise;
   if (answer.decision !== true || exercise === undefined) throw new NotSigned("refused");
   return exercise;
@@ -158,7 +170,7 @@ export function Approval() {
 
   useEffect(() => {
     if (back === null) return;
-    void postJson<ApprovalPreview>("/v1/login/approval/preview", { return_to: back }).then((a) => {
+    void postJson("/v1/login/approval/preview", { return_to: back }, ApprovalPreview).then((a) => {
       if (a.ok) setState({ phase: "ready", preview: a.body });
       else if (a.status === 401) setState({ phase: "sign_in" });
       else setState({ phase: "failed" });
@@ -182,16 +194,17 @@ export function Approval() {
           setState({ phase: "confirm", preview, decoded: d });
           setBusy(false);
         });
-      const session = await account<Session>("/session");
+      const session = await account("/session", Session);
       const instance = (await find(session)) ?? (await register(session, ask));
       if (!(await ask(shown))) throw new NotSigned("cancelled");
       setBusy(true);
       const exercise = await commit(session, instance, draft, shown);
-      const r = await csrfPost<Redirect>("/v1/login/approval", preview.csrf, {
-        return_to: back,
-        domain: draft.domain,
-        exercise,
-      });
+      const r = await csrfPost(
+        "/v1/login/approval",
+        preview.csrf,
+        { return_to: back, domain: draft.domain, exercise },
+        Redirect,
+      );
       follow(r.redirect_to);
     } catch {
       setState({ phase: "failed" });
@@ -205,9 +218,12 @@ export function Approval() {
     if (back === null) return;
     setBusy(true);
     try {
-      const r = await csrfPost<Redirect>("/v1/login/approval/decline", preview.csrf, {
-        return_to: back,
-      });
+      const r = await csrfPost(
+        "/v1/login/approval/decline",
+        preview.csrf,
+        { return_to: back },
+        Redirect,
+      );
       setState({ phase: "declined" });
       window.setTimeout(() => {
         follow(r.redirect_to);

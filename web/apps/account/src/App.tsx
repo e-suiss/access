@@ -16,19 +16,19 @@ import {
   SidebarProvider,
 } from "@access/ui/components/sidebar";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 
 import { AccountSettings } from "./account/index.js";
 import { DeviceSetup } from "./hub/DeviceSetup.js";
 import { Hub, type Section } from "./hub/Hub.js";
-import { MerchantsPage } from "./merchants/Merchants.js";
-import { SaveCardPage } from "./merchants/SaveCard.js";
-import { OneTimePaymentPage } from "./payment/Payment.js";
 import { useSignature } from "./hub/Sign.js";
 import { FRONTEND, PAGE, Problem, session as readSession } from "./lib/api.js";
 import { t } from "./lib/i18n.js";
 import { find, type Instance } from "./lib/instance.js";
 import { Loading } from "./lib/ui.js";
+import { MerchantsPage } from "./merchants/Merchants.js";
+import { SaveCardPage } from "./merchants/SaveCard.js";
+import { OneTimePaymentPage } from "./payment/Payment.js";
 import { Privacy } from "./privacy/Privacy.js";
 import { SignedOutReason, SignIns } from "./signins/index.js";
 import { SupportPage } from "./support/Support.js";

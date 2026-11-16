@@ -1,9 +1,6 @@
 // OP-159 m.46 (g), TN-131: a long list as a table on suiss/ui's Table markup. TanStack Table
 // keeps the row model and TanStack Virtual renders only the rows in view once a list is long;
 // short lists render every row. Every value renders as a text node.
-import { createColumnHelper, type RowData, tableFeatures, useTable } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { type ReactElement, type ReactNode, useRef } from "react";
 
 import {
   Table,
@@ -15,6 +12,9 @@ import {
   TableRow,
 } from "@access/ui/components/table";
 import { cn } from "@access/ui/lib/utils";
+import { createColumnHelper, type RowData, tableFeatures, useTable } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { type ReactElement, type ReactNode, useRef } from "react";
 
 import { t } from "./i18n/index.js";
 import { MONO } from "./ui.js";

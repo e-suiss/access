@@ -1,8 +1,9 @@
 // §18.3, E22, IDP-39, OP-156 m.3 (x), Ek B 5238: one catalogue page of the enterprise connectors
 // under Developer ▸ Integrations; it lists the products and what Access gives each, and calls
 // nothing of its own.
-import { expect, test } from "./fixtures.js";
+
 import { BASE, open } from "./data.js";
+import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);

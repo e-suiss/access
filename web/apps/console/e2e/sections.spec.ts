@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test";
-
-import { expect, test } from "./fixtures.js";
 import { BASE, open, UNDISCLOSED } from "./data.js";
+import { expect, test } from "./fixtures.js";
 
 async function intent(page: Page): Promise<void> {
   await page.getByLabel("Action namespace").fill("commerce");

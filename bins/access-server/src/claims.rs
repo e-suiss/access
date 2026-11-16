@@ -36,13 +36,18 @@ pub(crate) type ClaimsCourier<L> =
 
 /// Starts the lease renewal `renew` of `domains` and the courier over them, reading the identity
 /// outbox with the event pools' reader; both stop together. The courier is also returned, for
-/// the approvals that need their Claim at once (SI-5, OP-150 L6).
+/// the approvals that need their Claim at once (SI-5, OP-150 L6), and the administration
+/// courier, for the removals and suspensions that end their Claims at once (OP-159 m.47 (f)).
 pub(crate) fn start<L, R, F>(
     (signer, administration_signer): (SignerKeys, SignerKeys),
     pools: &EventPools,
     (domains, hr): (Arc<L>, (crate::hr::Vaults, Arc<crate::ids::CellIds>)),
     renew: R,
-) -> (Running, Arc<ClaimsCourier<L>>)
+) -> (
+    Running,
+    Arc<ClaimsCourier<L>>,
+    Arc<dyn crate::admin::tenant::EndAdministration>,
+)
 where
     L: Ledger + 'static,
     R: FnOnce(Arc<L>) -> F,
@@ -74,18 +79,21 @@ where
     );
     let hr_pools = (app.clone(), reader.clone());
     // OP-159 m.47 (f)
-    let administration = access_identity_account::app::administration::Administration {
-        app: app.clone(),
-        signer: administration_signer,
-        ingest: Ingest::new(
-            Arc::clone(&domains),
-            PgSubmissions(app.clone()),
-            Trusted(tokio::sync::Mutex::new(
-                access_authority_sequencer::adapters::SourcesClock::new(app.clone()),
-            )),
-        ),
-        clock: SystemClock,
-    };
+    let administration = Arc::new(
+        access_identity_account::app::administration::Administration {
+            app: app.clone(),
+            signer: administration_signer,
+            ingest: Ingest::new(
+                Arc::clone(&domains),
+                PgSubmissions(app.clone()),
+                Trusted(tokio::sync::Mutex::new(
+                    access_authority_sequencer::adapters::SourcesClock::new(app.clone()),
+                )),
+            ),
+            clock: SystemClock,
+        },
+    );
+    let ender: Arc<dyn crate::admin::tenant::EndAdministration> = administration.clone();
     let courier = Arc::new(Courier {
         app: app.clone(),
         reader,
@@ -120,6 +128,7 @@ where
             renewing,
         },
         courier,
+        ender,
     )
 }
 

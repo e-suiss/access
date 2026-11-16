@@ -1,18 +1,20 @@
 // §10.2.2, TN-102 rule 6, OP-146 m.14 (h): opening the link consumes nothing; a person confirms
 // with a POST, and another browser must say so explicitly. The session goes only to the browser
 // that started the sign-in, which is waiting and continues on its own.
-import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
+import { useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { postJson } from "./http.js";
 import { t } from "./i18n.js";
 import { note, outcome, Panel, primary, problem, stack, Title } from "./Layout.js";
 
-interface LinkState {
-  readonly state: "confirm" | "confirmed" | "needs_confirmation";
-  readonly same_device?: boolean;
-}
+// OP-159 m.46 (f)
+const LinkState = v.looseObject({
+  state: v.string(),
+  same_device: v.exactOptional(v.boolean()),
+});
 
 type State =
   | { readonly phase: "loading" }
@@ -38,7 +40,7 @@ export function MagicLink() {
 
   useEffect(() => {
     if (token === null) return;
-    void postJson<LinkState>("/v1/login/link/preview", { token }).then((a) => {
+    void postJson("/v1/login/link/preview", { token }, LinkState).then((a) => {
       if (a.ok && a.body.state === "confirm")
         setState({ phase: "confirm", sameDevice: a.body.same_device === true });
       else if (!a.ok && (a.status === 410 || a.status === 400)) setState({ phase: "invalid" });
@@ -53,10 +55,11 @@ export function MagicLink() {
   const confirm = async (otherDevice: boolean) => {
     if (token === null) return;
     setBusy(true);
-    const a = await postJson<LinkState>("/v1/login/link/confirm", {
-      token,
-      other_device: otherDevice,
-    });
+    const a = await postJson(
+      "/v1/login/link/confirm",
+      { token, other_device: otherDevice },
+      LinkState,
+    );
     setBusy(false);
     if (!a.ok) {
       setState(a.status === 410 || a.status === 400 ? { phase: "invalid" } : { phase: "failed" });

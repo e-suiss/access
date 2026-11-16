@@ -1,60 +1,65 @@
 // §8.17.9.6, E6, EI-8, OP-157 m.3 (v): the Admin section's offboarding screen.
-import { useState, type ReactElement } from "react";
-
-import { loadKernel } from "@esuiss/access";
 
 import { Button } from "@access/ui/components/button";
 import { FieldLegend, FieldSet } from "@access/ui/components/field";
 
+import { loadKernel } from "@esuiss/access";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
+
 import { t } from "../i18n/index.js";
-import { adminGetAs, draftChange, type WriteResult } from "../lib/admin.js";
+import { adminGet, draftChange, type WriteResult } from "../lib/admin.js";
 import { API, b64url, call, fromB64url, json, Problem } from "../lib/api.js";
 import {
   decodedIntent,
   decodedStatement,
-  nonce,
   NotSigned,
+  nonce,
   readProof,
   sign,
 } from "../lib/instance.js";
-import { basisCbor, basisFor, type Basis, MetaDraft, type MetaPayload } from "../lib/meta.js";
+import { type Basis, basisCbor, basisFor, MetaDraft, type MetaPayload } from "../lib/meta.js";
 import { CHOICE, CHOICE_LABEL, H4, HINT, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Field, Panel, Show, useRun } from "./parts.js";
 
-interface Selects {
-  readonly class: string;
-  readonly value?: string | null;
-}
+// OP-159 m.46 (f)
+const Selects = v.looseObject({
+  class: v.string(),
+  value: v.exactOptional(v.nullable(v.string())),
+});
 
-interface Preview {
-  readonly party: string;
-  readonly status: string;
-  readonly survive: number;
-  readonly channels: {
-    readonly grants: readonly { readonly grant: string; readonly choices: readonly string[] }[];
-    readonly instances: readonly {
-      readonly instance: string;
-      readonly choices: readonly string[];
-    }[];
-    readonly holdings: readonly {
-      readonly grant: string;
-      readonly selects: readonly Selects[];
-      readonly choices: readonly string[];
-    }[];
-    readonly self_anchor: {
-      readonly anchor?: string | null;
-      readonly given: readonly string[];
-      readonly choices: readonly string[];
-    };
-    readonly reentry: { readonly choices: readonly string[] };
-  };
-  readonly ended: readonly {
-    readonly grant: string;
-    readonly selects: readonly Selects[];
-    readonly at?: string | null;
-    readonly source?: string | null;
-  }[];
-}
+type Selects = v.InferOutput<typeof Selects>;
+
+const Strings = v.array(v.string());
+
+const Preview = v.looseObject({
+  party: v.string(),
+  status: v.string(),
+  survive: v.number(),
+  channels: v.looseObject({
+    grants: v.array(v.looseObject({ grant: v.string(), choices: Strings })),
+    instances: v.array(v.looseObject({ instance: v.string(), choices: Strings })),
+    holdings: v.array(
+      v.looseObject({ grant: v.string(), selects: v.array(Selects), choices: Strings }),
+    ),
+    self_anchor: v.looseObject({
+      anchor: v.exactOptional(v.nullable(v.string())),
+      given: Strings,
+      choices: Strings,
+    }),
+    reentry: v.looseObject({ choices: Strings }),
+  }),
+  ended: v.array(
+    v.looseObject({
+      grant: v.string(),
+      selects: v.array(Selects),
+      at: v.exactOptional(v.nullable(v.string())),
+      source: v.exactOptional(v.nullable(v.string())),
+    }),
+  ),
+});
+
+type Preview = v.InferOutput<typeof Preview>;
 
 type Choices = Readonly<Record<string, string>>;
 
@@ -391,9 +396,10 @@ export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [l, load] = useRun<Preview>();
   const preview = () => {
     load(() =>
-      adminGetAs<Preview>(
+      adminGet(
         ctx.instance,
         `envs/${encodeURIComponent(ctx.session.environment)}/offboarding/${encodeURIComponent(party)}/preview`,
+        Preview,
       ),
     );
   };

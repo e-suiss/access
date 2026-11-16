@@ -1,13 +1,13 @@
 // IA-5, §8.17.4.1, Ek B 2995: one section and its screens. Only the screens the viewer can
 // exercise are listed; "Sign-in settings" (environment configuration) is its own screen apart from
 // authority administration, and billing is not part of the console.
+
+import { cn } from "@access/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 
-import { cn } from "@access/ui/lib/utils";
-
 import { type Key, t } from "../i18n/index.js";
-import { type Screen, SCREENS, type Section } from "../lib/sections.js";
+import { SCREENS, type Screen, type Section } from "../lib/sections.js";
 import { Page } from "../ui.js";
 import type { Ctx } from "./parts.js";
 

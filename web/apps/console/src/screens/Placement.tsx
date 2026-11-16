@@ -1,38 +1,40 @@
 // TI-17, CMP-26, OP-30, OP-158 m.3 (o): Settings ▸ Placement. The cell this environment, its governing
 // domain and its tenant are served from, the cell's region and the environment's residency, and any
 // rehome waiting for its second governing domain. Placement only routes requests.
-import type { ReactElement } from "react";
 
 import { Card, CardContent } from "@access/ui/components/card";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
+import { adminGet } from "../lib/admin.js";
 import { BULLETS, HINT, MONO, ROWS } from "../ui.js";
-import { type Ctx, Show, readKey, useLoad } from "./parts.js";
+import { type Ctx, readKey, Show, useLoad } from "./parts.js";
 
-interface Placed {
-  readonly cell: string;
-  readonly dedicated: boolean;
-  readonly version: number;
-}
+// OP-159 m.46 (f)
+const Placed = v.looseObject({ cell: v.string(), dedicated: v.boolean(), version: v.number() });
 
-interface PendingEnd {
-  readonly side: "from" | "to";
-  readonly to: string;
-  readonly position: string;
-}
+type Placed = v.InferOutput<typeof Placed>;
 
-interface PlacementView {
-  readonly cell: string | null;
-  readonly region: string | null;
-  readonly dedicated_cell: boolean;
-  readonly tenant: Placed | null;
-  readonly environment: Placed | null;
-  readonly domain: Placed | null;
-  readonly governing_domain: string;
-  readonly residency: { readonly region: string; readonly class: string } | null;
-  readonly pending_rehome: readonly PendingEnd[];
-}
+const PendingEnd = v.looseObject({
+  side: v.picklist(["from", "to"]),
+  to: v.string(),
+  position: v.string(),
+});
+
+const PlacementView = v.looseObject({
+  cell: v.nullable(v.string()),
+  region: v.nullable(v.string()),
+  dedicated_cell: v.boolean(),
+  tenant: v.nullable(Placed),
+  environment: v.nullable(Placed),
+  domain: v.nullable(Placed),
+  governing_domain: v.string(),
+  residency: v.nullable(v.looseObject({ region: v.string(), class: v.string() })),
+  pending_rehome: v.array(PendingEnd),
+});
+
+type PlacementView = v.InferOutput<typeof PlacementView>;
 
 /** The cell a subject is served from: its own placement, else the cell that holds it. */
 const cellOf = (v: PlacementView, p: Placed | null): string => p?.cell ?? v.cell ?? t("none");
@@ -41,7 +43,7 @@ const cellOf = (v: PlacementView, p: Placed | null): string => p?.cell ?? v.cell
 export function Placement({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const view = useLoad(readKey(ctx, `envs/${environment}/placement`), () =>
-    adminGetAs<PlacementView>(ctx.instance, `envs/${environment}/placement`),
+    adminGet(ctx.instance, `envs/${environment}/placement`, PlacementView),
   );
   return (
     <div data-testid="placement" className="flex flex-col gap-4">

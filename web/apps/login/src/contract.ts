@@ -1,5 +1,7 @@
 /** The login node contract (`sdks/openapi/login.json`); the hosted login reads nothing else from the server (TN-106, X40). */
 
+import * as v from "valibot";
+
 export const contractVersion = 1;
 export const flowsPath = "/v1/login/flows";
 export const stepUpPath = "/v1/login/step-up";
@@ -28,7 +30,8 @@ export type FieldName =
   | "link_code"
   | "bot_token"
   | "keep_signed_in"
-  | "remember_device";
+  | "remember_device"
+  | "sms_code";
 /** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
 export type OptionName = "keep_signed_in" | "remember_device";
 export type Method =
@@ -50,7 +53,9 @@ export type Method =
   | "accept_invitation"
   | "link"
   | "acknowledge"
-  | "push";
+  | "push"
+  | "send_sms"
+  | "sms";
 
 export interface Text {
   readonly id: string;
@@ -180,47 +185,192 @@ export interface Submission {
   readonly fields: Readonly<Partial<Record<FieldName, string>>>;
 }
 
-const nodeTypes = new Set<string>([
-  "input",
-  "submit",
-  "passkey_get",
-  "passkey_autofill",
-  "passkey_create",
-  "passkey_signal",
-  "option",
-  "provider",
-  "push_number",
-]);
+// OP-159 m.46 (f)
+const STEPS = ["identifier", "authenticate", "second_factor", "complete"] as const;
+const FLOW_KINDS = [
+  "login",
+  "registration",
+  "recovery",
+  "settings",
+  "consent",
+  "invitation",
+  "link",
+] as const;
+const FIELD_NAMES = [
+  "identifier",
+  "password",
+  "totp_code",
+  "recovery_code",
+  "passkey_credential",
+  "email_code",
+  "email",
+  "new_password",
+  "display_name",
+  "acknowledged",
+  "invitation_code",
+  "link_code",
+  "bot_token",
+  "keep_signed_in",
+  "remember_device",
+  "sms_code",
+] as const satisfies readonly FieldName[];
+const METHODS = [
+  "identifier",
+  "password",
+  "passkey",
+  "totp",
+  "recovery_code",
+  "passkey_register",
+  "skip",
+  "restart",
+  "email_code",
+  "magic_link",
+  "register",
+  "recover",
+  "new_password",
+  "share",
+  "dont_share",
+  "accept_invitation",
+  "link",
+  "acknowledge",
+  "push",
+  "send_sms",
+  "sms",
+] as const satisfies readonly Method[];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const TextS = v.object({ id: v.string(), text: v.string() });
+const MessageS: v.GenericSchema<unknown, Message> = v.object({
+  id: v.string(),
+  text: v.string(),
+  severity: v.picklist(["info", "error"]),
+  retry_after_s: v.exactOptional(v.number()),
+});
+const RequirementS: v.GenericSchema<unknown, RequirementStatus> = v.object({
+  requirement: v.picklist(["identifier", "first_factor", "second_factor"]),
+  state: v.picklist(["missing", "satisfied"]),
+});
+const OptionsS = v.record(v.string(), v.unknown());
+const FieldNameS = v.picklist(FIELD_NAMES);
+const MethodS = v.picklist(METHODS);
+
+const InputS: v.GenericSchema<unknown, InputNode> = v.object({
+  type: v.literal("input"),
+  name: FieldNameS,
+  method: MethodS,
+  kind: v.picklist(["text", "password", "code", "hidden"]),
+  autocomplete: v.string(),
+  required: v.boolean(),
+  max_length: v.number(),
+  label: TextS,
+  value: v.exactOptional(v.string()),
+  read_only: v.exactOptional(v.boolean()),
+});
+const SubmitS: v.GenericSchema<unknown, SubmitNode> = v.object({
+  type: v.literal("submit"),
+  method: MethodS,
+  label: TextS,
+});
+const PasskeyGetS: v.GenericSchema<unknown, PasskeyGetNode> = v.object({
+  type: v.literal("passkey_get"),
+  label: TextS,
+  options: OptionsS,
+});
+const PasskeyAutofillS: v.GenericSchema<unknown, PasskeyAutofillNode> = v.object({
+  type: v.literal("passkey_autofill"),
+  field: FieldNameS,
+  options: OptionsS,
+});
+const PasskeyCreateS: v.GenericSchema<unknown, PasskeyCreateNode> = v.object({
+  type: v.literal("passkey_create"),
+  mediation: v.picklist(["explicit", "conditional"]),
+  label: TextS,
+  options: OptionsS,
+});
+const SignalS: v.GenericSchema<unknown, PasskeySignal> = v.variant("kind", [
+  v.object({
+    kind: v.literal("unknown_credential"),
+    rp_id: v.string(),
+    credential_id: v.string(),
+  }),
+  v.object({
+    kind: v.literal("all_accepted_credentials"),
+    rp_id: v.string(),
+    user_id: v.string(),
+    all_accepted_credential_ids: v.array(v.string()),
+  }),
+  v.object({
+    kind: v.literal("current_user_details"),
+    rp_id: v.string(),
+    user_id: v.string(),
+    name: v.string(),
+    display_name: v.string(),
+  }),
+]);
+const PasskeySignalS: v.GenericSchema<unknown, PasskeySignalNode> = v.object({
+  type: v.literal("passkey_signal"),
+  signal: SignalS,
+});
+const OptionS: v.GenericSchema<unknown, OptionNode> = v.object({
+  type: v.literal("option"),
+  name: v.picklist(["keep_signed_in", "remember_device"]),
+  label: TextS,
+  checked: v.boolean(),
+});
+// OP-153 m.3 (l): a provider link leaves only for a path of this site; the redirect onward is the server's
+const ProviderS: v.GenericSchema<unknown, ProviderNode> = v.object({
+  type: v.literal("provider"),
+  provider: v.string(),
+  label: TextS,
+  href: v.custom<string>(isLocalPath),
+});
+const PushNumberS: v.GenericSchema<unknown, PushNumberNode> = v.object({
+  type: v.literal("push_number"),
+  number: v.number(),
+  approver: v.exactOptional(v.string()),
+  label: TextS,
+  expires_at: v.string(),
+});
+
+const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
+  input: InputS,
+  submit: SubmitS,
+  passkey_get: PasskeyGetS,
+  passkey_autofill: PasskeyAutofillS,
+  passkey_create: PasskeyCreateS,
+  passkey_signal: PasskeySignalS,
+  option: OptionS,
+  provider: ProviderS,
+  push_number: PushNumberS,
+};
+
+const NodeType = v.looseObject({ type: v.string() });
+
+/** A node this client knows, read by its schema; any other node is dropped (OP-65: additive). */
+function knownNode(node: unknown): UiNode[] {
+  const head = v.safeParse(NodeType, node);
+  const schema = head.success ? NODES[head.output.type] : undefined;
+  if (schema === undefined) return [];
+  const read = v.safeParse(schema, node);
+  return read.success ? [read.output] : [];
 }
+
+const LoginUiS = v.object({
+  version: v.literal(contractVersion),
+  flow: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{1,128}$/)),
+  kind: v.exactOptional(v.picklist(FLOW_KINDS)),
+  step: v.picklist(STEPS),
+  action: v.pipe(v.string(), v.startsWith(`${flowsPath}/`)),
+  requirements: v.array(RequirementS),
+  nodes: v.array(v.unknown()),
+  messages: v.array(MessageS),
+  redirect_to: v.exactOptional(v.string()),
+});
 
 /** A login step, or `null` when the body is not one. Node types this client does not know are dropped (OP-65: additive changes). */
 export function parseUi(body: unknown): LoginUi | null {
-  if (!isRecord(body) || body["version"] !== contractVersion) return null;
-  const { flow, step, action, nodes, messages, requirements } = body;
-  if (typeof flow !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(flow)) return null;
-  if (
-    typeof step !== "string" ||
-    typeof action !== "string" ||
-    !action.startsWith(`${flowsPath}/`)
-  ) {
-    return null;
-  }
-  if (!Array.isArray(nodes) || !Array.isArray(messages) || !Array.isArray(requirements))
-    return null;
-  const known = nodes.filter(
-    (n: unknown): n is UiNode =>
-      isRecord(n) && typeof n["type"] === "string" && nodeTypes.has(n["type"]) && local(n),
-  );
-  return { ...(body as unknown as LoginUi), nodes: known };
-}
-
-/** A provider link leaves only for a path of this site; the redirect onward is the server's. */
-function local(node: Record<string, unknown>): boolean {
-  if (node["type"] !== "provider") return true;
-  return isLocalPath(node["href"]);
+  const read = v.safeParse(LoginUiS, body);
+  if (!read.success) return null;
+  return { ...read.output, nodes: read.output.nodes.flatMap(knownNode) };
 }
 
 /** A path on this origin: starts with one `/`, never `//` or `/\`. */

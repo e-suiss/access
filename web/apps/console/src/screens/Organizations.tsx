@@ -3,7 +3,6 @@
 // source, never the sign-in source), the role's versioned delegation and any cooling, its domain
 // claims, its ownership handovers and its connection drafts. Ownership is root standing over
 // the organization, never billing; nothing here changes authority without a signed change.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
 import {
@@ -15,62 +14,70 @@ import {
   TableHeader,
   TableRow,
 } from "@access/ui/components/table";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { type Key, t } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
+import { adminGet, items } from "../lib/admin.js";
 import { BULLETS, FACTS, H4, HINT, MONO, REPORT } from "../ui.js";
-import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
 import { SsoEnforcement } from "./SsoEnforcement.js";
 
-interface OrgSummary {
-  readonly organization: string;
-  readonly display_name: string;
-  readonly hrd: boolean;
-}
+// OP-159 m.46 (f)
+const summary = { organization: v.string(), display_name: v.string(), hrd: v.boolean() };
 
-interface Member {
-  readonly account_id: string;
-  readonly owner: boolean;
-  readonly membership_source: string;
-  readonly role?: { readonly name: string; readonly version: number } | null;
-  readonly role_grant?: string | null;
-  readonly cooling_until?: string | null;
-}
+const OrgSummaries = items(v.looseObject(summary));
 
-interface DomainClaim {
-  readonly domain: string;
-  readonly method: string;
-  readonly verified_at?: string | null;
-  readonly reverify_by?: string | null;
-  readonly changed_at?: string | null;
-  readonly contested_at?: string | null;
-  readonly autojoin: boolean;
-  readonly claimed: boolean;
-}
+const Member = v.looseObject({
+  account_id: v.string(),
+  owner: v.boolean(),
+  membership_source: v.string(),
+  role: v.exactOptional(v.nullable(v.looseObject({ name: v.string(), version: v.number() }))),
+  role_grant: v.exactOptional(v.nullable(v.string())),
+  cooling_until: v.exactOptional(v.nullable(v.string())),
+});
 
-interface Handover {
-  readonly handover: string;
-  readonly from: string;
-  readonly to: string;
-  readonly state: string;
-  readonly effective_at: string;
-  readonly dns_recovery: boolean;
-}
+type Member = v.InferOutput<typeof Member>;
 
-interface Draft {
-  readonly protocol: string;
-  readonly issuer?: string | null;
-  readonly client_id?: string | null;
-  readonly entity_id?: string | null;
-}
+const DomainClaim = v.looseObject({
+  domain: v.string(),
+  method: v.string(),
+  verified_at: v.exactOptional(v.nullable(v.string())),
+  reverify_by: v.exactOptional(v.nullable(v.string())),
+  changed_at: v.exactOptional(v.nullable(v.string())),
+  contested_at: v.exactOptional(v.nullable(v.string())),
+  autojoin: v.boolean(),
+  claimed: v.boolean(),
+});
 
-interface Organization extends OrgSummary {
-  readonly roots: number;
-  readonly members: readonly Member[];
-  readonly domains: readonly DomainClaim[];
-  readonly handovers: readonly Handover[];
-  readonly connection_drafts: readonly Draft[];
-}
+type DomainClaim = v.InferOutput<typeof DomainClaim>;
+
+const Handover = v.looseObject({
+  handover: v.string(),
+  from: v.string(),
+  to: v.string(),
+  state: v.string(),
+  effective_at: v.string(),
+  dns_recovery: v.boolean(),
+});
+
+const Draft = v.looseObject({
+  protocol: v.string(),
+  issuer: v.exactOptional(v.nullable(v.string())),
+  client_id: v.exactOptional(v.nullable(v.string())),
+  entity_id: v.exactOptional(v.nullable(v.string())),
+});
+
+const Organization = v.looseObject({
+  ...summary,
+  roots: v.number(),
+  members: v.array(Member),
+  domains: v.array(DomainClaim),
+  handovers: v.array(Handover),
+  connection_drafts: v.array(Draft),
+});
+
+type Organization = v.InferOutput<typeof Organization>;
 
 const SOURCE: Readonly<Record<string, Key>> = {
   founder: "orgSourceFounder",
@@ -208,10 +215,7 @@ function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
 export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(readKey(ctx, `envs/${environment}/organizations`), () =>
-    adminGetAs<{ readonly items: readonly OrgSummary[] }>(
-      ctx.instance,
-      `envs/${environment}/organizations`,
-    ),
+    adminGet(ctx.instance, `envs/${environment}/organizations`, OrgSummaries),
   );
   const [open, setOpen] = useState<string | undefined>(undefined);
   const [one, run] = useRun<Organization>();
@@ -232,9 +236,10 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                     onClick={() => {
                       setOpen(o.organization);
                       run(() =>
-                        adminGetAs<Organization>(
+                        adminGet(
                           ctx.instance,
                           `envs/${environment}/organizations/${encodeURIComponent(o.organization)}`,
+                          Organization,
                         ),
                       );
                     }}

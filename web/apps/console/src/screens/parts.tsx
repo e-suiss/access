@@ -1,21 +1,21 @@
 // §8.13, E25, TN-131: what every section screen shares. A read that fails shows that it failed
 // and nothing else; nothing is ever guessed or shown as allowed. Strings render as text nodes.
+
+import { Badge } from "@access/ui/components/badge";
+import { Card, CardContent, CardHeader } from "@access/ui/components/card";
+import { FieldDescription, FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
+import { Input } from "@access/ui/components/input";
 import {
   type QueryKey,
+  type UseQueryResult,
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
-  type UseQueryResult,
 } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 
-import { Badge } from "@access/ui/components/badge";
-import { Card, CardContent, CardHeader } from "@access/ui/components/card";
-import { Field as FieldRoot, FieldDescription, FieldLabel } from "@access/ui/components/field";
-import { Input } from "@access/ui/components/input";
-
-import { t, type Key } from "../i18n/index.js";
+import { type Key, t } from "../i18n/index.js";
 import type { SearchAnswer } from "../lib/adp.js";
 import { Problem, type SessionInfo } from "../lib/api.js";
 import type { Confirm, Instance } from "../lib/instance.js";
@@ -40,6 +40,8 @@ export type Loaded<T> =
 /** The text for a failed read or change: refused by authority, not signed, or no answer. */
 export function failureKey(e: unknown): Key {
   if (e instanceof NotSigned) return e.message === "mismatch" ? "signatureMismatch" : "notChanged";
+  // OP-159 m.47 (e)
+  if (e instanceof Problem && e.code === "last-tenant-owner") return "tenantLastOwner";
   if (e instanceof Problem && (e.status === 401 || e.status === 403)) return "readRefused";
   return "readFailed";
 }

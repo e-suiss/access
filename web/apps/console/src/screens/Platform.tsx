@@ -1,25 +1,26 @@
-// OP-159 m.41 (b), (c), TN-119, OP-151 m.2 M2, INV-29, X31: the Platform section. Tenants, the
-// environments and sandbox domains in them, an environment's metadata with the state of its signing keys, and
-// the deployment's readiness. Nothing here shows or changes an environment's accounts, apps, authority,
-// records or settings: managing an environment means signing in to it. Each creation is one signed
-// `idp.platform.*` Exercise on the viewer's own Grant. OP-159 m.42 (d): each environment shows its
-// console link.
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
-import * as v from "valibot";
+// OP-159 m.41 (b), (c), m.47 (c), (h), TN-119, OP-151 m.2 M2, INV-29, X31: the Platform section.
+// Tenants with their founding, suspension and placement; the environments and sandbox domains in
+// them, an environment's metadata with the state of its signing keys; and the deployment's
+// readiness. Nothing here opens an environment or shows or changes an environment's accounts, apps,
+// authority, records or settings: a tenant's founder and administrators do that in its management
+// environment. Each change is one signed `idp.platform.*` Exercise on the viewer's own Grant.
+// OP-159 m.42 (d): each management environment and environment shows its console link.
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
+import { FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
 import { DataTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";
 import { adminGet, items, type WriteResult } from "../lib/admin.js";
 import { consoleLink } from "../lib/links.js";
-import { platformChange, type PlatformChange } from "../lib/platform.js";
-import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, HINT, MONO, Notice, ROWS } from "../ui.js";
+import { type PlatformChange, platformChange } from "../lib/platform.js";
+import { ACTIONS, FORM, HINT, MONO, Notice, ROWS } from "../ui.js";
 import {
   at,
   type Ctx,
@@ -35,7 +36,10 @@ import {
 
 const Tenant = v.looseObject({
   tenant_id: v.string(),
-  status: v.string(),
+  display_name: v.exactOptional(v.nullable(v.string())),
+  management_slug: v.exactOptional(v.nullable(v.string())),
+  founding: v.exactOptional(v.nullable(v.picklist(["pending", "completed", "expired"]))),
+  status: v.picklist(["provisioning", "active", "suspended", "deleted"]),
   placement: v.string(),
   created_at: v.exactOptional(v.string()),
 });
@@ -46,6 +50,7 @@ const KeyState = v.picklist(["pending", "published", "signing", "unavailable"]);
 
 const EnvironmentMeta = v.looseObject({
   slug: v.string(),
+  kind: v.exactOptional(v.picklist(["standard", "management"])),
   tenant_id: v.exactOptional(v.string()),
   issuer: v.exactOptional(v.nullable(v.string())),
   status: v.exactOptional(v.string()),
@@ -141,7 +146,7 @@ function TenantPicker({
         <NativeSelectOption value="">{t("platformTenantChoose")}</NativeSelectOption>
         {tenants.map((x) => (
           <NativeSelectOption key={x.tenant_id} value={x.tenant_id}>
-            {x.tenant_id}
+            {tenantName(x)}
           </NativeSelectOption>
         ))}
       </NativeSelect>
@@ -149,11 +154,241 @@ function TenantPicker({
   );
 }
 
-/** Platform ▸ Tenants: every tenant and a new one. */
-export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const list = useTenants(ctx);
+function tenantName(x: Tenant): string {
+  return x.display_name ?? x.tenant_id;
+}
+
+function statusText(s: Tenant["status"]): string {
+  if (s === "provisioning") return t("platformTenantProvisioning");
+  if (s === "suspended") return t("platformTenantSuspended");
+  if (s === "deleted") return t("platformTenantDeleted");
+  return t("platformTenantActive");
+}
+
+function foundingText(f: Tenant["founding"]): string {
+  if (f === "pending") return t("platformFoundingPending");
+  if (f === "expired") return t("platformFoundingExpired");
+  if (f === "completed") return t("platformFoundingCompleted");
+  return t("none");
+}
+
+const SLUG = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+
+const EMAIL = /^[^\s@]+@[^\s@]+$/;
+
+/** A new tenant awaiting its founder (OP-159 m.47 (c)). */
+function CreateTenant({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [email, setEmail] = useState("");
+  const [placement, setPlacement] = useState("");
+  const [made, setMade] = useState("");
+  const [w, write] = useRun<WriteResult>([tenantsKey(ctx)]);
+  const ready =
+    name.trim() !== "" &&
+    name.trim().length <= 120 &&
+    SLUG.test(slug) &&
+    slug !== "api" &&
+    slug !== "assets" &&
+    EMAIL.test(email.trim());
+  return (
+    <Panel id="tenant-create" title={t("platformTenantCreate")}>
+      <p className={HINT}>{t("platformTenantCreateHint")}</p>
+      <form
+        className={FORM}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ready) return;
+          const body: Record<string, unknown> = {
+            display_name: name.trim(),
+            management_slug: slug,
+            founder_email: email.trim(),
+            ...(placement === "" ? {} : { placement }),
+          };
+          const wanted = slug;
+          write(async () => {
+            const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.environment, {
+              operation: "createTenant",
+              action: "tenant_create",
+              path: "platform/tenants",
+              body,
+            });
+            setMade(wanted);
+            return r;
+          });
+        }}
+      >
+        <Field id="tenant-name" label={t("platformTenantName")} value={name} onChange={setName} />
+        <Field
+          id="tenant-slug"
+          label={t("platformManagementSlug")}
+          hint={t("platformManagementSlugHint")}
+          value={slug}
+          onChange={(v) => {
+            setSlug(v.trim().toLowerCase());
+          }}
+        />
+        <Field
+          id="tenant-founder"
+          label={t("platformFounderEmail")}
+          hint={t("platformFounderEmailHint")}
+          value={email}
+          onChange={setEmail}
+        />
+        <Field
+          id="tenant-placement"
+          label={t("platformPlacementOptional")}
+          value={placement}
+          onChange={(v) => {
+            setPlacement(v.trim());
+          }}
+        />
+        <div className={ACTIONS}>
+          <Button type="submit" disabled={!ready}>
+            {t("platformTenantCreateSend")}
+          </Button>
+        </div>
+      </form>
+      <Recorded w={w} />
+      {w.status === "done" && made !== "" && (
+        <p data-testid="tenant-console-created">
+          {t("platformTenantConsoleCreated")} <ConsoleLink slug={made} />
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+/** One tenant's changes: a new founder invitation, suspension, reactivation, placement. */
+function TenantActions({
+  ctx,
+  tenant,
+}: {
+  readonly ctx: Ctx;
+  readonly tenant: Tenant;
+}): ReactElement {
+  const [email, setEmail] = useState("");
   const [placement, setPlacement] = useState("");
   const [w, write] = useRun<WriteResult>([tenantsKey(ctx)]);
+  const id = tenant.tenant_id;
+  const base = `platform/tenants/${encodeURIComponent(id)}`;
+  const send = (c: Omit<PlatformChange, "tenant">) => {
+    write(() =>
+      platformChange(ctx.instance, ctx.confirm, ctx.session.environment, { ...c, tenant: id }),
+    );
+  };
+  const founding = tenant.founding === "pending" || tenant.founding === "expired";
+  return (
+    <Panel id="tenant-actions" title={t("platformTenantDetails", { name: tenantName(tenant) })}>
+      <dl className={ROWS} data-testid="tenant-meta">
+        <div>
+          <dt>{t("platformTenant")}</dt>
+          <dd className={MONO}>{id}</dd>
+        </div>
+        <div>
+          <dt>{t("platformFounding")}</dt>
+          <dd>{foundingText(tenant.founding)}</dd>
+        </div>
+      </dl>
+      {founding && (
+        <form
+          className={FORM}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!EMAIL.test(email.trim())) return;
+            send({
+              operation: "reinviteFounder",
+              action: "tenant_create",
+              path: `${base}/reinvite-founder`,
+              body: { founder_email: email.trim() },
+            });
+          }}
+        >
+          <Field
+            id="tenant-reinvite-email"
+            label={t("platformFounderEmail")}
+            hint={t("platformReinviteHint")}
+            value={email}
+            onChange={setEmail}
+          />
+          <div className={ACTIONS}>
+            <Button type="submit" variant="outline" disabled={!EMAIL.test(email.trim())}>
+              {t("platformReinvite")}
+            </Button>
+          </div>
+        </form>
+      )}
+      <div className={ACTIONS}>
+        {tenant.status === "active" && (
+          <Button
+            variant="destructive"
+            onClick={() => {
+              send({
+                operation: "suspendTenant",
+                action: "tenant_suspend",
+                path: `${base}/suspend`,
+                body: {},
+              });
+            }}
+          >
+            {t("platformSuspend")}
+          </Button>
+        )}
+        {tenant.status === "suspended" && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              send({
+                operation: "reactivateTenant",
+                action: "tenant_reactivate",
+                path: `${base}/reactivate`,
+                body: {},
+              });
+            }}
+          >
+            {t("platformReactivate")}
+          </Button>
+        )}
+      </div>
+      <form
+        className={FORM}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (placement === "") return;
+          send({
+            operation: "moveTenantPlacement",
+            action: "tenant_placement",
+            path: `${base}/placement`,
+            body: { placement },
+          });
+        }}
+      >
+        <Field
+          id="tenant-move-placement"
+          label={t("platformPlacementNew")}
+          hint={t("platformPlacementNewHint", { placement: tenant.placement })}
+          value={placement}
+          onChange={(v) => {
+            setPlacement(v.trim());
+          }}
+        />
+        <div className={ACTIONS}>
+          <Button type="submit" variant="outline" disabled={placement === ""}>
+            {t("platformPlacementMove")}
+          </Button>
+        </div>
+      </form>
+      <Recorded w={w} />
+    </Panel>
+  );
+}
+
+/** Platform ▸ Tenants: every tenant, its changes and a new one. */
+export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const list = useTenants(ctx);
+  const [open, setOpen] = useState<string | undefined>(undefined);
+  const chosen =
+    list.status === "done" ? list.value.items.find((x) => x.tenant_id === open) : undefined;
   return (
     <div data-testid="platform-tenants" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("platformTenantsIntro")}</p>
@@ -168,14 +403,34 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
               label={t("screenTenants")}
               rows={p.items}
               rowKey={(x) => x.tenant_id}
+              rowProps={(x) => ({ "data-tenant": x.tenant_id })}
               columns={[
                 {
                   id: "tenant",
-                  header: t("platformTenant"),
-                  className: MONO,
-                  cell: (x) => x.tenant_id,
+                  header: t("platformTenantName"),
+                  rowHeader: true,
+                  cell: tenantName,
                 },
-                { id: "status", header: t("platformStatus"), cell: (x) => x.status },
+                {
+                  id: "management",
+                  header: t("platformManagementSlug"),
+                  className: "whitespace-normal",
+                  cell: (x) =>
+                    typeof x.management_slug === "string" ? (
+                      <span className="flex flex-col gap-1">
+                        <span className={MONO}>{x.management_slug}</span>
+                        <ConsoleLink slug={x.management_slug} />
+                      </span>
+                    ) : (
+                      ""
+                    ),
+                },
+                { id: "status", header: t("platformStatus"), cell: (x) => statusText(x.status) },
+                {
+                  id: "founding",
+                  header: t("platformFounding"),
+                  cell: (x) => foundingText(x.founding),
+                },
                 {
                   id: "placement",
                   header: t("platformPlacement"),
@@ -188,220 +443,23 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
           )
         }
       </Show>
-      <Panel id="tenant-create" title={t("platformTenantCreate")}>
-        <p className={HINT}>{t("platformTenantCreateHint")}</p>
-        <form
-          className={FORM}
-          onSubmit={(e) => {
-            e.preventDefault();
-            const body: Record<string, unknown> = placement === "" ? {} : { placement };
-            write(() =>
-              platformChange(ctx.instance, ctx.confirm, ctx.session.environment, {
-                operation: "createTenant",
-                action: "tenant_create",
-                path: "platform/tenants",
-                body,
-              }),
-            );
-          }}
-        >
-          <Field
-            id="tenant-placement"
-            label={t("platformPlacementOptional")}
-            value={placement}
-            onChange={(v) => {
-              setPlacement(v.trim());
-            }}
-          />
-          <div className={ACTIONS}>
-            <Button type="submit">{t("platformTenantCreateSend")}</Button>
-          </div>
-        </form>
-        <Recorded w={w} />
-      </Panel>
-    </div>
-  );
-}
-
-type RootKind = "sole" | "joint";
-
-/** A new environment or sandbox domain in `tenant`, its founding root the viewer's choice (TN-111). */
-function CreateEnvironment({
-  ctx,
-  tenant,
-  sandbox,
-  onCreated,
-}: {
-  readonly ctx: Ctx;
-  readonly tenant: string;
-  readonly sandbox: boolean;
-  readonly onCreated: () => void;
-}): ReactElement {
-  const own = ctx.instance.party ?? "";
-  const prefix = sandbox ? "sandbox" : "environment";
-  const [slug, setSlug] = useState("");
-  const [style, setStyle] = useState<"subdomain" | "path">("subdomain");
-  const [kind, setKind] = useState<RootKind>("joint");
-  const [parties, setParties] = useState(own);
-  const [k, setK] = useState("2");
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [w, write] = useRun<WriteResult>();
-  const [made, setMade] = useState("");
-  const listed = parties
-    .split(/[\s,]+/)
-    .map((p) => p.trim())
-    .filter((p) => p !== "");
-  const ready =
-    tenant !== "" &&
-    slug !== "" &&
-    (kind === "sole"
-      ? acknowledged && own !== ""
-      : listed.length >= 2 && Number(k) >= 2 && Number(k) <= listed.length);
-  const send = () => {
-    const root = kind === "sole" ? { sole: own } : { joint: { k: Number(k), parties: listed } };
-    const body: Record<string, unknown> = {
-      slug,
-      issuer_style: style,
-      root,
-      ...(kind === "sole" ? { acknowledge_no_recovery: true } : {}),
-    };
-    const c: PlatformChange = sandbox
-      ? {
-          operation: "createSandboxDomain",
-          action: "sandbox_create",
-          tenant,
-          path: `platform/tenants/${encodeURIComponent(tenant)}/sandbox-domains`,
-          body,
+      <Show l={list}>
+        {(p) =>
+          p.items.length === 0 ? null : (
+            <TenantPicker
+              id="tenant-change"
+              tenants={p.items}
+              value={open ?? ""}
+              onChange={(v) => {
+                setOpen(v === "" ? undefined : v);
+              }}
+            />
+          )
         }
-      : {
-          operation: "createEnvironment",
-          action: "environment_create",
-          tenant,
-          path: `platform/tenants/${encodeURIComponent(tenant)}/envs`,
-          body,
-        };
-    const wanted = slug;
-    write(async () => {
-      const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.environment, c);
-      setMade(wanted);
-      onCreated();
-      return r;
-    });
-  };
-  return (
-    <Panel
-      id={`${prefix}-create`}
-      title={sandbox ? t("platformSandboxCreate") : t("platformEnvironmentCreate")}
-    >
-      <p className={HINT}>
-        {sandbox ? t("platformSandboxCreateHint") : t("platformEnvironmentCreateHint")}
-      </p>
-      <form
-        className={FORM}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (ready) send();
-        }}
-      >
-        <Field
-          id={`${prefix}-slug`}
-          label={t("platformSlug")}
-          hint={t("platformSlugHint")}
-          value={slug}
-          onChange={(v) => {
-            setSlug(v.trim().toLowerCase());
-          }}
-        />
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-semibold">{t("platformIssuerStyle")}</legend>
-          {(["subdomain", "path"] as const).map((s) => (
-            <label key={s} className={CHOICE_LABEL}>
-              <input
-                className={CHOICE}
-                type="radio"
-                name={`${prefix}-style`}
-                value={s}
-                checked={style === s}
-                onChange={() => {
-                  setStyle(s);
-                }}
-              />
-              {s === "subdomain" ? t("platformIssuerSubdomain") : t("platformIssuerPath")}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-semibold">{t("platformRoot")}</legend>
-          <label className={CHOICE_LABEL}>
-            <input
-              className={CHOICE}
-              type="radio"
-              name={`${prefix}-root`}
-              value="joint"
-              checked={kind === "joint"}
-              onChange={() => {
-                setKind("joint");
-              }}
-            />
-            {t("platformRootJoint")}
-          </label>
-          <label className={CHOICE_LABEL}>
-            <input
-              className={CHOICE}
-              type="radio"
-              name={`${prefix}-root`}
-              value="sole"
-              checked={kind === "sole"}
-              onChange={() => {
-                setKind("sole");
-              }}
-            />
-            {t("platformRootSole")}
-          </label>
-        </fieldset>
-        {kind === "joint" ? (
-          <>
-            <Field
-              id={`${prefix}-parties`}
-              label={t("platformRootParties")}
-              hint={t("platformRootPartiesHint")}
-              value={parties}
-              onChange={setParties}
-            />
-            <Field
-              id={`${prefix}-k`}
-              type="number"
-              label={t("platformRootK")}
-              value={k}
-              onChange={setK}
-            />
-          </>
-        ) : (
-          <label className={CHOICE_LABEL}>
-            <input
-              className={CHOICE}
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(e) => {
-                setAcknowledged(e.target.checked);
-              }}
-            />
-            {t("platformRootSoleAcknowledge")}
-          </label>
-        )}
-        <div className={ACTIONS}>
-          <Button type="submit" disabled={!ready}>
-            {sandbox ? t("platformSandboxCreateSend") : t("platformEnvironmentCreateSend")}
-          </Button>
-        </div>
-      </form>
-      <Recorded w={w} />
-      {!sandbox && w.status === "done" && made !== "" && (
-        <p data-testid="environment-console-created">
-          {t("platformConsoleLinkCreated")} <ConsoleLink slug={made} />
-        </p>
-      )}
-    </Panel>
+      </Show>
+      {chosen !== undefined && <TenantActions key={chosen.tenant_id} ctx={ctx} tenant={chosen} />}
+      <CreateTenant ctx={ctx} />
+    </div>
   );
 }
 
@@ -489,7 +547,6 @@ function TenantEnvironments({
   readonly ctx: Ctx;
   readonly sandbox: boolean;
 }): ReactElement {
-  const client = useQueryClient();
   const tenants = useTenants(ctx);
   const [tenant, setTenant] = useState("");
   const [open, setOpen] = useState<string | undefined>(undefined);
@@ -505,9 +562,6 @@ function TenantEnvironments({
       ),
     enabled: tenant !== "",
   });
-  const created = () => {
-    void client.invalidateQueries({ queryKey: listKey });
-  };
   return (
     <div
       data-testid={sandbox ? "platform-sandboxes" : "platform-environments"}
@@ -558,6 +612,9 @@ function TenantEnvironments({
                         >
                           <span className={MONO}>{r.slug}</span>
                         </Button>
+                        {r.kind === "management" && (
+                          <Badge variant="outline">{t("tenantManagement")}</Badge>
+                        )}
                         {r.sandbox === true && (
                           <Badge variant="outline">{t("platformSandbox")}</Badge>
                         )}
@@ -587,7 +644,6 @@ function TenantEnvironments({
           <EnvironmentDetails ctx={ctx} slug={open} />
         </Panel>
       )}
-      <CreateEnvironment ctx={ctx} tenant={tenant} sandbox={sandbox} onCreated={created} />
     </div>
   );
 }

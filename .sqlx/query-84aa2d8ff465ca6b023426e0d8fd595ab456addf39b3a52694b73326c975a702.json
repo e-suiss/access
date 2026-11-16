@@ -1,0 +1,130 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT invitation_id, code_hash, invitee_index, invitee_domain, inviter_subject,\n                  cross_domain, verified_at IS NOT NULL AS \"verified!\", accepted_subject,\n                  superseded_at IS NOT NULL AS \"superseded!\",\n                  (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\",\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\"\n             FROM access.tenant_admin_invitations\n            WHERE tenant_id = $1 AND environment_id = $2\n              AND ($3::bytea IS NULL OR token_hash = $3)\n            ORDER BY created_at DESC, invitation_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invitation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "invitation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "code_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "code_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "invitee_index",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "invitee_index"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "invitee_domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "invitee_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "inviter_subject",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "inviter_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cross_domain",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "cross_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "verified!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "accepted_subject",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "accepted_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "superseded!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "84aa2d8ff465ca6b023426e0d8fd595ab456addf39b3a52694b73326c975a702"
+}

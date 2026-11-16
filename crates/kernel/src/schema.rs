@@ -244,7 +244,7 @@ impl Canonical for Spp {
                     self.actions.iter().map(Canonical::to_value).collect(),
                 )),
             ),
-            // L0-ENC-13: a set in canonical order, as `from_value` reads it
+            // L0-ENC-13
             (
                 "retirements",
                 (!self.retirements.is_empty())

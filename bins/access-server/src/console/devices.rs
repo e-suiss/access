@@ -192,6 +192,12 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
                 "device party already bound"
             );
         }
+        // OP-159 m.47 (f)
+        if let Some((party, _)) = party {
+            access_store::tenant_admin::set_admin_party(&mut tx.0, &row.subject, &party)
+                .await
+                .map_err(down)?;
+        }
         record_device_key(
             &mut tx,
             &DeviceKey {
@@ -697,6 +703,24 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
             },
             found.party,
         )))
+    }
+
+    async fn kind(&self, session: &ConsoleSession) -> Result<&'static str, Unavailable> {
+        let Some(row) = console::by_id(&self.app, &session.id).await.map_err(down)? else {
+            return Ok("standard");
+        };
+        let mut t = TenantTx::begin(&self.app, row.tenant, row.environment)
+            .await
+            .map_err(down)?;
+        let kind = access_store::tenant_admin::environment_kind(&mut t)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(if kind.as_deref() == Some("management") {
+            "management"
+        } else {
+            "standard"
+        })
     }
 
     async fn instances(&self, session: &ConsoleSession) -> Result<Vec<String>, Unavailable> {

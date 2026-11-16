@@ -7,13 +7,13 @@ import { Item, ItemActions, ItemContent } from "@access/ui/components/item";
 import { text } from "../texts.js";
 import {
   type AgentFace,
+  badge,
   type Connection,
+  connectionText,
   type Line,
   type OutcomeLine,
   type StopRow,
   type Suggestion,
-  badge,
-  connectionText,
 } from "./model.js";
 
 type Catalogue = Readonly<Record<string, string>> | undefined;

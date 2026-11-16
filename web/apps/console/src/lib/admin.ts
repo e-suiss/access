@@ -4,7 +4,7 @@
 import { loadKernel } from "@esuiss/access";
 import * as v from "valibot";
 
-import { answer, b64url, call, fromB64url, problemOf } from "./api.js";
+import { answer, b64url, call, fromB64url } from "./api.js";
 import {
   adminRead,
   adminWrite,
@@ -27,29 +27,23 @@ export async function adminGet<S extends v.GenericSchema>(
   return answer(await adminRead(instance, path), schema);
 }
 
-/**
- * A management read whose answer is not yet read by a schema: only JSON is checked. Each screen
- * moves to [`adminGet`] with its own schema (OP-159 m.46 (f)).
- */
-export async function adminGetAs<T>(instance: Instance, path: string): Promise<T> {
-  const value: unknown = await answer(await adminRead(instance, path), v.unknown());
-  return value as T;
-}
-
 /** A list answer whose items `item` reads. */
 export function items<S extends v.GenericSchema>(item: S) {
   return v.object({ items: v.array(item) });
 }
 
-/** A management read and its `ETag`, which a `PUT` or `PATCH` of it sends as `If-Match` (OP-65). */
-export async function adminGetTagged(
+/**
+ * A management read as `schema` reads it, and its `ETag`, which a `PUT` or `PATCH` of it sends as
+ * `If-Match` (OP-65).
+ */
+export async function adminGetTagged<S extends v.GenericSchema>(
   instance: Instance,
   path: string,
-): Promise<{ readonly value: unknown; readonly etag?: string }> {
+  schema: S,
+): Promise<{ readonly value: v.InferOutput<S>; readonly etag?: string }> {
   const r = await adminRead(instance, path);
-  if (!r.ok) throw await problemOf(r);
   const etag = r.headers.get("etag");
-  const value: unknown = await r.json();
+  const value = await answer(r, schema);
   return { value, ...(etag === null ? {} : { etag }) };
 }
 

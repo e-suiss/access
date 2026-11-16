@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@access/ui/components/dialog";
-import { useCallback, useState, type ReactElement } from "react";
+import { type ReactElement, useCallback, useState } from "react";
 
 import { t } from "../lib/i18n.js";
 import type { Confirm, SignatureView } from "../lib/instance.js";

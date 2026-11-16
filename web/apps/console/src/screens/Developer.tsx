@@ -2,10 +2,9 @@
 // for a domain here (no accept control exists), OAuth words appear only qualified as protocol
 // terms, the lab's answers are advisory and never recorded, and a sandbox is an ordinary domain
 // in the domain list, never a switch.
-import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
-import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
+import { FieldLabel, Field as FieldRoot } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 import {
   Table,
@@ -16,22 +15,24 @@ import {
   TableRow,
 } from "@access/ui/components/table";
 import { Textarea } from "@access/ui/components/textarea";
+import { type ReactElement, useState } from "react";
+import * as v from "valibot";
 
-import { t, type Key } from "../i18n/index.js";
-import { adminGetAs } from "../lib/admin.js";
-import { check, explain, type Explained, search, type SearchAnswer } from "../lib/adp.js";
+import { type Key, t } from "../i18n/index.js";
+import { adminGet, items } from "../lib/admin.js";
+import { check, type Explained, explain, type SearchAnswer, search } from "../lib/adp.js";
 import type { Wanted } from "../lib/intents.js";
 import {
   type PackageDraft,
-  publicationStatus,
   type PublicationStatus,
-  publish,
   type Published,
+  publicationStatus,
+  publish,
 } from "../lib/meta.js";
-import { Explanation } from "./Explanation.js";
-import { Advisory, type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
-import { type Publication, PublicationView } from "./Reports.js";
 import { ACTIONS, BULLETS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
+import { Explanation } from "./Explanation.js";
+import { Advisory, type Ctx, Field, Panel, readKey, Show, useLoad, useRun } from "./parts.js";
+import { type Publication, PublicationView } from "./Reports.js";
 
 function lines(text: string): string[] {
   return text
@@ -323,42 +324,47 @@ export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
-interface Items<T> {
-  readonly items: readonly T[];
-}
+// OP-159 m.46 (f)
+const Clients = items(
+  v.looseObject({
+    client_id: v.string(),
+    display_name: v.exactOptional(v.string()),
+    token_endpoint_auth_method: v.exactOptional(v.string()),
+    redirect_uris: v.exactOptional(v.array(v.string())),
+    grant_types: v.exactOptional(v.array(v.string())),
+    status: v.exactOptional(v.string()),
+  }),
+);
 
-interface Client {
-  readonly client_id: string;
-  readonly display_name?: string;
-  readonly token_endpoint_auth_method?: string;
-  readonly redirect_uris?: readonly string[];
-  readonly grant_types?: readonly string[];
-  readonly status?: string;
-}
+const Hooks = items(
+  v.looseObject({
+    hook_id: v.string(),
+    point: v.string(),
+    url: v.string(),
+    on_no_answer: v.string(),
+    status: v.exactOptional(v.string()),
+  }),
+);
 
-interface Hook {
-  readonly hook_id: string;
-  readonly point: string;
-  readonly url: string;
-  readonly on_no_answer: string;
-  readonly status?: string;
-}
+const Webhooks = items(
+  v.looseObject({
+    webhook_id: v.string(),
+    url: v.string(),
+    events: v.array(v.string()),
+    status: v.exactOptional(v.string()),
+  }),
+);
 
-interface Webhook {
-  readonly webhook_id: string;
-  readonly url: string;
-  readonly events: readonly string[];
-  readonly status?: string;
-}
-
-interface Delivery {
-  readonly event_id: string;
-  readonly event: string;
-  readonly state: string;
-  readonly attempts: number;
-  readonly last_status?: number | null;
-  readonly occurred_at: string;
-}
+const Deliveries_ = items(
+  v.looseObject({
+    event_id: v.string(),
+    event: v.string(),
+    state: v.string(),
+    attempts: v.number(),
+    last_status: v.exactOptional(v.nullable(v.number())),
+    occurred_at: v.string(),
+  }),
+);
 
 /** TN-136, OP-151 m.20 (e), Ek B 3108: a webhook's delivery log, newest first, never a body. */
 function Deliveries({
@@ -373,9 +379,10 @@ function Deliveries({
   const l = useLoad(
     readKey(ctx, `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`),
     () =>
-      adminGetAs<Items<Delivery>>(
+      adminGet(
         ctx.instance,
         `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`,
+        Deliveries_,
       ),
   );
   return (
@@ -406,13 +413,13 @@ function Deliveries({
 export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const base = `envs/${encodeURIComponent(ctx.session.environment)}`;
   const clients = useLoad(readKey(ctx, `${base}/clients`), () =>
-    adminGetAs<Items<Client>>(ctx.instance, `${base}/clients`),
+    adminGet(ctx.instance, `${base}/clients`, Clients),
   );
   const hooks = useLoad(readKey(ctx, `${base}/hooks`), () =>
-    adminGetAs<Items<Hook>>(ctx.instance, `${base}/hooks`),
+    adminGet(ctx.instance, `${base}/hooks`, Hooks),
   );
   const webhooks = useLoad(readKey(ctx, `${base}/webhooks`), () =>
-    adminGetAs<Items<Webhook>>(ctx.instance, `${base}/webhooks`),
+    adminGet(ctx.instance, `${base}/webhooks`, Webhooks),
   );
   return (
     <>
@@ -582,27 +589,25 @@ function Connectors(): ReactElement {
   );
 }
 
-interface Sandbox {
-  readonly items: readonly { readonly slug: string; readonly domain: string }[];
-}
+const Sandboxes = items(v.looseObject({ slug: v.string(), domain: v.string() }));
 
-interface EnvironmentMetadata {
-  readonly tenant_id?: string;
-}
+const EnvironmentMetadata = v.looseObject({ tenant_id: v.exactOptional(v.string()) });
 
 /** D7, L25, X21: the domains the lab can ask: this one and its tenant's sandbox domains. */
 function useDomains(ctx: Ctx) {
   return useLoad(readKey(ctx, "lab-domains"), async () => {
     const own = [{ slug: ctx.session.environment, domain: ctx.session.domain }];
     try {
-      const m = await adminGetAs<EnvironmentMetadata>(
+      const m = await adminGet(
         ctx.instance,
         `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
+        EnvironmentMetadata,
       );
       if (m.tenant_id === undefined) return own;
-      const s = await adminGetAs<Sandbox>(
+      const s = await adminGet(
         ctx.instance,
         `platform/tenants/${encodeURIComponent(m.tenant_id)}/sandbox-domains`,
+        Sandboxes,
       );
       return [...own, ...s.items.filter((x) => x.slug !== ctx.session.environment)];
     } catch {
