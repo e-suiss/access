@@ -87,7 +87,35 @@ export async function draftHolds(instance: Instance, c: Change, d: IntentDraft):
   if (d.domain !== b64url(instance.domain)) return false;
   if (!Object.entries(c.body).every(([k, v]) => same(d.body[k], v))) return false;
   const k = await loadKernel();
-  return b64url(k.intentDigest(fromB64url(d.intent))) === d.intent_digest;
+  const own = digestBytes(k.intentDigest(fromB64url(d.intent)));
+  return own !== undefined && b64url(own) === d.intent_digest;
+}
+
+/** The hash bytes of a CBOR `digest` (`[alg, bstr]` or a bare `bstr`); the API sends them bare. */
+export function digestBytes(cbor: Uint8Array): Uint8Array | undefined {
+  let at = 0;
+  if (cbor[at] === 0x82) {
+    at += 1;
+    const alg = cbor[at];
+    if (alg === undefined) return undefined;
+    if (alg <= 0x37) at += 1;
+    else if (alg === 0x38) at += 2;
+    else if (alg === 0x39) at += 3;
+    else return undefined;
+  }
+  const head = cbor[at];
+  if (head === undefined) return undefined;
+  let len: number;
+  if (head >= 0x40 && head <= 0x57) {
+    len = head - 0x40;
+    at += 1;
+  } else if (head === 0x58) {
+    len = cbor[at + 1] ?? -1;
+    at += 2;
+  } else {
+    return undefined;
+  }
+  return len >= 0 && at + len === cbor.length ? cbor.slice(at) : undefined;
 }
 
 /** Drafts `c` in realm `slug`: a read (OP-151 m.11 (a)) that changes nothing. */

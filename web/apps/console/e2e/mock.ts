@@ -11,6 +11,14 @@ import { loadKernel, type Kernel } from "@esuiss/access";
 
 import { type Cbor, encode } from "./cbor.js";
 
+/** The API's `intent_digest`: the hash bytes of the Kernel's `[alg, bstr]` digest, as the server sends them. */
+function bareDigest(cbor: Uint8Array): string {
+  if (cbor.length !== 36 || cbor[0] !== 0x82 || cbor[2] !== 0x58 || cbor[3] !== 0x20) {
+    throw new Error("unexpected digest encoding");
+  }
+  return Buffer.from(cbor.subarray(4)).toString("base64url");
+}
+
 export const COOKIE = "__Host-access-console";
 export const CSRF = "__Host-access-console-csrf";
 
@@ -517,7 +525,7 @@ export class ConsoleMock {
           domain: DOMAIN,
           pep: "access-identity",
           intent: Buffer.from(d.envelope).toString("base64url"),
-          intent_digest: Buffer.from(kernel.intentDigest(d.envelope)).toString("base64url"),
+          intent_digest: bareDigest(kernel.intentDigest(d.envelope)),
         });
       }
       if (drafting) {
@@ -542,7 +550,7 @@ export class ConsoleMock {
           domain: DOMAIN,
           pep: "access-admin",
           intent: Buffer.from(d.envelope).toString("base64url"),
-          intent_digest: Buffer.from(kernel.intentDigest(d.envelope)).toString("base64url"),
+          intent_digest: bareDigest(kernel.intentDigest(d.envelope)),
         });
       }
       if (!read) {
