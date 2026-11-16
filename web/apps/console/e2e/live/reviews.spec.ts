@@ -30,7 +30,7 @@ test.describe("@live console access reviews", () => {
   test("@live the review screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/reviews");
+    const r = await page.goto("/console/acme/admin/reviews");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("review-items")).toHaveCount(0);
   });
@@ -46,7 +46,7 @@ test.describe("@live console access reviews", () => {
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page);
-    await registerAndOpen(page, "/console/admin/reviews");
+    await registerAndOpen(page, "/console/acme/admin/reviews");
     await expect(page.getByRole("heading", { level: 2, name: "Access reviews" })).toBeVisible();
     const campaign = page
       .getByTestId("reviews")

@@ -13,7 +13,7 @@ test.describe("@live console hosting", () => {
   });
 
   test("@live the hosting line is part of the durability screen only", async ({ page }) => {
-    const r = await page.goto("/console/admin/durability");
+    const r = await page.goto("/console/acme/admin/durability");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("durability-hosting")).toHaveCount(0);
   });

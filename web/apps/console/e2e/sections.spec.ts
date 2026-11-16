@@ -16,7 +16,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // IA-5, XI-11: each screen appears only for an action the viewer can exercise; no stubs
 test("only the screens the viewer can exercise are listed", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
   const nav = page.getByRole("navigation", { name: "Console sections" });
   await expect(nav.getByRole("link", { name: "Developer" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "Audit" })).toHaveCount(0);
@@ -30,7 +30,7 @@ test("each screen's probe is asked once however often the page sets the device",
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
   await expect(page.getByRole("heading", { level: 2, name: "Sign-in settings" })).toBeVisible();
   await page.getByRole("link", { name: "Your profile" }).click();
   await page.getByRole("link", { name: "Admin" }).click();
@@ -42,7 +42,7 @@ test("each screen's probe is asked once however often the page sets the device",
 
 // Ek B 2995, §8.11: Sign-in settings is apart from authority admin; billing is not here
 test("Sign-in settings and authority admin are separate screens", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const screens = page.getByRole("navigation", { name: "Screens in this section" });
   await expect(screens.getByRole("link", { name: "Sign-in settings" })).toBeVisible();
   await expect(screens.getByRole("link", { name: "Roles & templates" })).toBeVisible();
@@ -51,7 +51,7 @@ test("Sign-in settings and authority admin are separate screens", async ({ page,
 
 // §8.17.9.2, X20, Ek B 3098: the change-impact preview sentence
 test("a role move shows who gains and who loses an ability", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   const preview = page.getByRole("region", { name: "Change-impact preview" });
   await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
   await preview.getByLabel("Current version").fill("4");
@@ -73,7 +73,7 @@ test("a role move shows who gains and who loses an ability", async ({ page, bff 
 
 // §8.17.9.2, E11, C28, OP-151 m.20 (b), Ek B 3097, 3355, 3354: the role editor saves a version
 test("the role editor saves a new version as one signed change", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   const editor = page.getByRole("region", { name: "Role editor" });
   await editor.getByLabel("Role name").fill("helpdesk");
   await editor.getByRole("button", { name: "Open" }).click();
@@ -101,7 +101,7 @@ test("the role editor saves a new version as one signed change", async ({ page, 
 
 // X20, §8.17.9.8, INV-10, Ek B 3098: the move is an explicit bulk grant_amend, one Exercise each
 test("moving role delegations signs one amend per delegation", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   const preview = page.getByRole("region", { name: "Change-impact preview" });
   await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
   await preview.getByLabel("Current version").fill("4");
@@ -121,7 +121,7 @@ test("moving role delegations signs one amend per delegation", async ({ page, bf
 
 // INV-10, XI-4: a held widening move says it is held, never done
 test("a held move says it waits", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   bff.metaOutcome = "require_action";
   const preview = page.getByRole("region", { name: "Change-impact preview" });
   await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
@@ -139,7 +139,7 @@ test("an admin delegation lists its meta-actions with protected ones apart", asy
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   const region = page.getByRole("region", { name: "What an admin delegation can cover" });
   await region.getByLabel("Admin delegation ID").fill("grant");
   await region.getByRole("button", { name: "Show" }).click();
@@ -155,7 +155,7 @@ test("an admin delegation lists its meta-actions with protected ones apart", asy
 // IA-5, OP-152 m.7 (b): a delegated admin sees a section through its own holding
 test("a delegated admin sees the roles screen through its own holding", async ({ page, bff }) => {
   bff.heldActions.add("access/grant_amend");
-  await open(page, bff, "/console/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
   const screens = page.getByRole("navigation", { name: "Screens in this section" });
   await expect(screens.getByRole("link", { name: "Roles & templates" })).toBeVisible();
   expect(bff.queries.some((q) => q.kind === "holdings" && q.ais)).toBe(true);
@@ -195,7 +195,7 @@ test("offboarding asks for a choice on every channel and labels only a committed
       },
     ],
   });
-  await open(page, bff, "/console/admin/offboarding");
+  await open(page, bff, "/console/acme/admin/offboarding");
   await page.getByLabel("Party ID").fill("cGFydHk");
   await page.getByTestId("preview").click();
   await expect(page.getByTestId("role-ended")).toContainText("Sales role ended (workday");
@@ -238,7 +238,7 @@ test("offboarding asks for a choice on every channel and labels only a committed
 
 // IA-2: Changes is information only
 test("changes lists what changed and asks nothing", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/changes");
+  await open(page, bff, "/console/acme/admin/changes");
   const rows = page.getByTestId("changes").getByRole("listitem");
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText("Role version helpdesk v2 · by you");
@@ -252,7 +252,7 @@ test("publishing names unmapped parameters, then shows where the version waits",
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/developer/schemas");
+  await open(page, bff, "/console/acme/developer/schemas");
   const region = page.getByRole("region", { name: "Publish a version" });
   await region.getByRole("textbox", { name: "Namespace" }).fill("commerce");
   await region.getByLabel("Catalog version").fill("3");
@@ -273,7 +273,7 @@ test("publishing names unmapped parameters, then shows where the version waits",
 
 // TN-110, MD-14, X11: an account change is drafted, shown as decoded and signed before it is sent
 test("suspending an account is one signed change", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/people");
+  await open(page, bff, "/console/acme/admin/people");
   const row = page.getByRole("row").filter({ hasText: "usr_active" });
   await row.getByRole("button", { name: "Suspend" }).click();
   const dialog = page.getByRole("dialog", { name: "Review and sign" });
@@ -289,7 +289,7 @@ test("suspending an account is one signed change", async ({ page, bff }) => {
 
 // TN-110, PI-7: a draft that does not decode to what was asked is never signed or sent
 test("a draft for another action is refused before the signature screen", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   bff.tamper = true;
   await page.getByLabel("Display name on the sign-in page").fill("Acme Shop");
   await page.getByRole("region", { name: "Branding" }).getByRole("button").click();
@@ -302,7 +302,7 @@ test("a draft for another action is refused before the signature screen", async 
 
 // X31, §8.17.7.1, TN-119: own holdings only, unless explicit authority to see more
 test("people & agents shows only the viewer's own authority by default", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/people", [
+  await open(page, bff, "/console/acme/admin/people", [
     "access/instance_terminate",
     "idp.account/suspend",
   ]);
@@ -317,7 +317,7 @@ test("people & agents shows only the viewer's own authority by default", async (
 });
 
 test("audit authority lets the viewer look up another party", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/people");
+  await open(page, bff, "/console/acme/admin/people");
   await page.getByLabel("Party ID to look up").fill("acc_bob");
   await page.getByRole("region", { name: "Authority you may see" }).getByRole("button").click();
   await expect(page.getByTestId("holdings")).toBeVisible();
@@ -329,7 +329,7 @@ test("ending an agent's running copies shows the aftermath, never 'stopped'", as
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/people");
+  await open(page, bff, "/console/acme/admin/people");
   const region = page.getByRole("region", { name: "End this agent's running copies" });
   await region.getByLabel("Running copy ID").fill("inst");
   await region.getByRole("button", { name: "Show" }).click();
@@ -342,7 +342,7 @@ test("ending an agent's running copies shows the aftermath, never 'stopped'", as
 
 // §8.17.9.3, INV-15, Ek B 3818: each source by its use, with its blast radius
 test("sources list each acceptance by use with its blast radius", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sources");
+  await open(page, bff, "/console/acme/admin/sources");
   const membership = page.locator('[data-use="subject-selection"]');
   await expect(membership).toContainText("Membership source");
   await expect(membership).toContainText("Protected change");
@@ -357,14 +357,14 @@ test("sources list each acceptance by use with its blast radius", async ({ page,
 
 // §5.13, Ek B 3372: a partner's authority up to its bridging Grants' ceilings
 test("the domain page shows partner authority up to its ceiling", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/domain");
+  await open(page, bff, "/console/acme/admin/domain");
   await expect(page.getByTestId("partners")).toContainText(
     "Partner authority (up to commerce.refund)",
   );
 });
 
 // §8.17.10.2, X21, Ek B 3104, 3105, 3107, 3330: pending acceptance, no accept button
-for (const path of ["/console/admin/sources", "/console/developer/schemas"]) {
+for (const path of ["/console/acme/admin/sources", "/console/acme/developer/schemas"]) {
   test(`a pending schema shows its fingerprint and diff, and nothing accepts it (${path})`, async ({
     page,
     bff,
@@ -392,7 +392,7 @@ for (const path of ["/console/admin/sources", "/console/developer/schemas"]) {
 
 // E12, Ek B 3106: an authority-relevant parameter without a type is warned about
 test("publishing warns about an unmapped authority-relevant parameter", async ({ page, bff }) => {
-  await open(page, bff, "/console/developer/schemas");
+  await open(page, bff, "/console/acme/developer/schemas");
   await page.getByLabel(/What it affects/).fill("recipient");
   await expect(page.getByTestId("e12-warning")).toHaveText(
     "note affects recipient — map it to a recipient type or it will be rejected",
@@ -406,7 +406,7 @@ test("sign-in settings states delays, missing sources and the first signing time
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const status = page.getByTestId("signal-status");
   await expect(status).toContainText(
     "Signals from Acme IdP delayed since 2026-11-07T14:02:00.000Z — decisions use declared validity windows",
@@ -428,7 +428,7 @@ test("sign-in settings recommend Sign in with Apple next to another social provi
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   await expect(page.getByTestId("social-providers")).toContainText("google");
   await expect(page.getByTestId("social-warning")).toHaveText(
     "Your iOS app offers another social sign-in without Sign in with Apple. The App Store asks for Sign in with Apple next to it: enable Apple too.",
@@ -437,7 +437,7 @@ test("sign-in settings recommend Sign in with Apple next to another social provi
 
 // IDI-4, TN-17, Ek B 3382: the RP ID change needs the passkey count and is marked irreversible
 test("an RP ID change needs the passkey count", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   await page.getByLabel("New sign-in domain").fill("login.acme.example");
   await page.getByLabel("Number of passkeys registered in this realm").fill("2");
   await page.getByRole("region", { name: /RP ID/ }).getByRole("button").click();
@@ -459,7 +459,7 @@ test("the CSP mode is changed with the settings' ETag and says when it loosens",
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const csp = page.getByRole("region", { name: "Page security policy" });
   await expect(page.getByTestId("csp-current")).toContainText("Enforce");
   await expect(page.getByTestId("csp-loosens")).toHaveCount(0);
@@ -480,7 +480,7 @@ test("the CSP mode is changed with the settings' ETag and says when it loosens",
 
 // TN-33, OP-153 m.22 (c), m.25 (b), Ek B 4103: the DBSC switch is a sign-in policy patch
 test("the device key offer is turned off by a sign-in policy patch", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const panel = page.getByRole("region", { name: "Sign-in policy" });
   await expect(page.getByTestId("dbsc-state")).toHaveText("Sign-ins are offered a device key.");
   await panel.getByRole("checkbox").uncheck();
@@ -494,7 +494,7 @@ test("the device key offer is turned off by a sign-in policy patch", async ({ pa
 
 // TN-18, OP-153 m.22 (k): the Related Origins are one list, one change
 test("the related origins are set as one list", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   await page
     .getByLabel("Related origins, one per line (https://…)")
     .fill("https://shop.acme.example\n\nhttps://acme-brand.example ");
@@ -512,7 +512,7 @@ test("the related origins are set as one list", async ({ page, bff }) => {
 
 // OP-151 m.3, GitOps: a section the repository manages is read-only
 test("a GitOps-managed section is read-only", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   bff.admin.set("realms/acme/settings", {
     rp_id: "acme.example",
     branding: { display_name: "Acme" },
@@ -529,7 +529,7 @@ test("the analytics panel shows counts and says they are not a decision input", 
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   await expect(page.getByTestId("analytics-note")).toHaveText(
     "Counts only — not a decision input.",
   );
@@ -549,7 +549,7 @@ test("the decision lab answers advisory and lists the sandbox as a domain", asyn
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/developer/lab");
+  await open(page, bff, "/console/acme/developer/lab");
   await expect(page.getByLabel("Domain").locator("option")).toHaveText(["acme", "acme-sandbox"]);
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.getByLabel("Action namespace").fill("commerce");
@@ -572,7 +572,7 @@ test("the decision lab answers advisory and lists the sandbox as a domain", asyn
 
 // §9.9.2, Ek B 3018: the causal-binding warning
 test("logs warn when a chain link is audit-only", async ({ page, bff }) => {
-  await open(page, bff, "/console/developer/logs");
+  await open(page, bff, "/console/acme/developer/logs");
   await intent(page);
   await page.getByLabel("Record position").fill("12");
   await page.getByRole("button", { name: "Show" }).click();
@@ -583,7 +583,7 @@ test("logs warn when a chain link is audit-only", async ({ page, bff }) => {
 
 // §8.11, Ek B 3109: OAuth words only qualified
 test("integrations name OAuth terms only as protocol terms", async ({ page, bff }) => {
-  await open(page, bff, "/console/developer/integrations");
+  await open(page, bff, "/console/acme/developer/integrations");
   await expect(page.getByRole("columnheader", { name: "OAuth grant type" })).toBeVisible();
   const text = await page.locator("main").innerText();
   for (const m of text.matchAll(/\bgrant type\b/gi)) {
@@ -601,7 +601,7 @@ test("a record at audit depth shows its basis, pseudonyms and both parts of a se
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/audit/records");
+  await open(page, bff, "/console/acme/audit/records");
   await page.getByRole("spinbutton", { name: "Record position" }).fill("12");
   await page.getByLabel("Action (namespace.name)").fill("commerce.refund");
   await page.getByLabel("Resource (namespace:path)").fill("commerce.order:8812");
@@ -617,7 +617,7 @@ test("a record at audit depth shows its basis, pseudonyms and both parts of a se
 
 // OP-151 m.8 (g): totals only within the reader's disclosure
 test("a search beyond the first page gives no total", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/records");
+  await open(page, bff, "/console/acme/audit/records");
   await page.getByRole("button", { name: "Who may do an action on a resource" }).click();
   await expect(page.getByTestId("result-count")).toHaveText(
     "More results you may see exist; totals are not shown beyond your view.",
@@ -627,7 +627,7 @@ test("a search beyond the first page gives no total", async ({ page, bff }) => {
 
 // INV-27: replay reports a mismatch as a finding
 test("replay reports a mismatch", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/replay");
+  await open(page, bff, "/console/acme/audit/replay");
   await intent(page);
   await page.getByLabel("Record position").fill("12");
   await page.getByRole("button", { name: "Replay" }).click();
@@ -636,7 +636,7 @@ test("replay reports a mismatch", async ({ page, bff }) => {
 
 // §5.4, §8.10, Ek B 3226, 3339, 3359, 3360: revocation impact; revoke is "from now on"
 test("revocation impact shows exposure and never offers undo", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/revocation");
+  await open(page, bff, "/console/acme/audit/revocation");
   await page.getByLabel("Delegation ID").fill("g1");
   await page.getByRole("button", { name: "Show" }).click();
   const r = page.getByTestId("revocation-impact");
@@ -652,7 +652,7 @@ test("revocation impact lists where it took effect and calls the rest unknown", 
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/audit/revocation");
+  await open(page, bff, "/console/acme/audit/revocation");
   await page.getByLabel("Delegation ID").fill("g1");
   await page.getByRole("button", { name: "Show" }).click();
   const acks = page.getByTestId("acknowledged");
@@ -665,7 +665,7 @@ test("revocation impact lists where it took effect and calls the rest unknown", 
 
 // EI-22, RR-13, Ek B 3227, 3362: a missing report is "Result unknown"
 test("unknown outcomes say so", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/unknown");
+  await open(page, bff, "/console/acme/audit/unknown");
   await page.getByLabel("ID", { exact: true }).fill("inst");
   await page.getByLabel(/From/).fill("1");
   await page.getByLabel(/Until/).fill("2");
@@ -679,7 +679,7 @@ test("unknown outcomes say so", async ({ page, bff }) => {
 // OP-151 m.8 (b), m.19 (d): the export is a signed `audit_export` Exercise; nothing leaves
 // without the signature screen, the commit goes first and the package is the same request again
 test("an export is never sent without a decoded, signed intent", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/export");
+  await open(page, bff, "/console/acme/audit/export");
   await page.getByLabel("From position").fill("1");
   await page.getByLabel("To position").fill("10");
   await page.getByRole("button", { name: "Review export" }).click();
@@ -705,7 +705,7 @@ test("organizations show roots, membership sources apart from sign-in, domains a
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/organizations");
+  await open(page, bff, "/console/acme/admin/organizations");
   await page.getByRole("button", { name: "Acme <b>Corp</b>" }).click();
   const o = page.getByTestId("organization");
   await expect(o.getByRole("heading", { level: 4 })).toHaveText("Acme <b>Corp</b>");
@@ -731,7 +731,7 @@ test("organizations show roots, membership sources apart from sign-in, domains a
 // TN-94, C10, X20, OP-155 m.3 (i), Ek B 4872: the preview first, service accounts included, and
 // no enforcement until the pending invitations' fate is chosen
 test("SSO enforcement shows its preview and needs the invitations' fate", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/organizations");
+  await open(page, bff, "/console/acme/admin/organizations");
   await page.getByRole("button", { name: "Acme <b>Corp</b>" }).click();
   const sso = page.getByRole("region", { name: "Enterprise sign-in (SSO)" });
   await expect(page.getByTestId("sso-state")).toHaveText("Not enforced");
@@ -757,7 +757,7 @@ test("history lists each recorded change under its record and asks nothing", asy
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/history");
+  await open(page, bff, "/console/acme/admin/history");
   const h = page.getByTestId("history");
   await expect(h.locator(":scope > li")).toHaveCount(2);
   await expect(h).toContainText("Record 42 · 2026-11-07T11:02:00.000Z · by you");
@@ -769,7 +769,7 @@ test("history lists each recorded change under its record and asks nothing", asy
 
 // §8.6, §8.13, §8.17.9.7, Ek B 3921: containment is one signed change per step
 test("containment proposes each step as its own signed change", async ({ page, bff }) => {
-  await open(page, bff, "/console/audit/containment");
+  await open(page, bff, "/console/acme/audit/containment");
   await page.getByLabel("Running copy ID").fill("inst");
   await page.getByLabel("From (Unix ms)").fill("1");
   await page.getByLabel("Until (Unix ms)").fill("2");

@@ -169,12 +169,19 @@ fn the_template_builds_the_recovery_entry_or_says_why_not() {
     assert!(order(joint(2, 3), false).value().get("recovery").is_none());
 }
 
-// TN-16, OP-40
+// TN-16, OP-40, OP-159 m.42 (e)
 #[test]
 fn orders_are_checked_before_a_decision() {
     let mut o = order(joint(2, 2), false);
     o.slug = String::from("A");
     assert_eq!(o.check(), Err(ProvisionInvalid::Slug));
+    for slug in RESERVED_SLUGS {
+        let mut o = order(joint(2, 2), false);
+        o.slug = String::from(slug);
+        assert_eq!(o.check(), Err(ProvisionInvalid::Slug), "{slug}");
+        assert_eq!(check_new_slug(slug), Err(ProvisionInvalid::Slug), "{slug}");
+    }
+    assert_eq!(check_new_slug("apis"), Ok(()));
     let mut o = order(joint(2, 2), false);
     o.placement = String::from("Pool");
     assert_eq!(o.check(), Err(ProvisionInvalid::Placement));

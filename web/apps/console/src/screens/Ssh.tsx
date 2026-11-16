@@ -9,6 +9,7 @@ import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { consoleHref } from "../lib/paths.js";
 import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
@@ -181,7 +182,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <p data-testid="ssh-certificates-note">
           {t("sshCertificatesNote")}{" "}
           <a
-            href="/console/audit/records"
+            href={consoleHref(ctx.session.realm, "audit/records")}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("sshAuditLink")}

@@ -1259,11 +1259,16 @@ fn console_dist() -> std::path::PathBuf {
     dir
 }
 
-// TN-113, TN-128 (S-2)
+// TN-113, TN-128 (S-2), OP-159 m.42 (a)
 #[tokio::test]
 async fn the_console_is_served_at_its_canonical_path() {
     let h = Harness::serving(Some(Assets::load(&console_dist()).unwrap()));
-    for path in ["/console", "/console/admin/people", "/console/profile"] {
+    for path in [
+        "/console",
+        "/console/acme",
+        "/console/acme/admin/people",
+        "/console/acme/profile",
+    ] {
         let (r, body) = h.send(get(path, None), CLIENT).await;
         assert_eq!(r.status(), StatusCode::OK, "{path}");
         assert!(String::from_utf8_lossy(&body).contains("/console/assets/app.js"));
@@ -1271,9 +1276,11 @@ async fn the_console_is_served_at_its_canonical_path() {
     let (r, body) = h.send(get("/console/assets/app.js", None), CLIENT).await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(body, b"export {};");
-    let (r, body) = h.send(get("/console/", None), CLIENT).await;
-    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json(&body)["code"], "path-not-canonical");
+    for path in ["/console/", "/console/acme/"] {
+        let (r, body) = h.send(get(path, None), CLIENT).await;
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST, "{path}");
+        assert_eq!(json(&body)["code"], "path-not-canonical");
+    }
     h.sign_in().await;
 }
 

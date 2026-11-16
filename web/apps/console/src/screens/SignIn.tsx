@@ -1,13 +1,11 @@
-import type { ReactElement, SyntheticEvent } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent, CardHeader } from "@access/ui/components/card";
-import { Field, FieldDescription, FieldLabel } from "@access/ui/components/field";
-import { Input } from "@access/ui/components/input";
 
 import { t, type Key } from "../i18n/index.js";
-import { API } from "../lib/api.js";
-import { Notice } from "../ui.js";
+import { HOME, startSignIn } from "../lib/paths.js";
+import { MONO, Notice } from "../ui.js";
 
 const REASONS: Readonly<Record<string, Key>> = {
   "idle-expired": "reasonIdle",
@@ -17,18 +15,13 @@ const REASONS: Readonly<Record<string, Key>> = {
   revoked: "reasonRevoked",
 };
 
-// TN-128, OP-159 m.29: a navigation, not a form submission, since `form-action 'self'` also
-// governs the redirect to the realm's hosted login on another origin
-function start(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
-  event.preventDefault();
-  const realm = new FormData(event.currentTarget).get("realm");
-  if (typeof realm !== "string") return;
-  window.location.assign(`${API}/sign-in?realm=${encodeURIComponent(realm)}`);
-}
-
-// TN-128: the console session starts at the realm's hosted login and comes back here
-export function SignIn({ reason }: { readonly reason: string | undefined }): ReactElement {
-  const why = reason === undefined ? undefined : REASONS[reason];
+function Frame({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}): ReactElement {
   return (
     <main
       id="main"
@@ -38,34 +31,89 @@ export function SignIn({ reason }: { readonly reason: string | undefined }): Rea
       <Card className="w-full max-w-md">
         <CardHeader>
           <p className="text-sm font-semibold text-muted-foreground">{t("brand")}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("signInTitle")}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          {why !== undefined && (
-            <Notice role="status">{t("signInEnded", { reason: t(why) })}</Notice>
-          )}
-          <p className="text-muted-foreground">{t("signInIntro")}</p>
-          <form onSubmit={start} className="flex flex-col gap-6">
-            <Field className="gap-2">
-              <FieldLabel htmlFor="realm" className="text-sm">
-                {t("realmLabel")}
-              </FieldLabel>
-              <Input
-                id="realm"
-                name="realm"
-                required
-                pattern="[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]"
-                autoComplete="organization"
-                aria-describedby="realm-hint"
-              />
-              <FieldDescription id="realm-hint">{t("realmHint")}</FieldDescription>
-            </Field>
-            <Button type="submit" size="lg" block>
-              {t("signInAction")}
-            </Button>
-          </form>
-        </CardContent>
+        <CardContent className="flex flex-col gap-6">{children}</CardContent>
       </Card>
     </main>
+  );
+}
+
+/** TN-128, OP-159 m.42 (a): the sign-in of `realm`, offered when it does not start on its own. */
+export function SignIn({
+  realm,
+  reason,
+  signedOut,
+}: {
+  readonly realm: string;
+  readonly reason: string | undefined;
+  readonly signedOut: boolean;
+}): ReactElement {
+  const why = reason === undefined ? undefined : REASONS[reason];
+  return (
+    <Frame title={t("signInTitle")}>
+      {why !== undefined && <Notice role="status">{t("signInEnded", { reason: t(why) })}</Notice>}
+      {signedOut && <Notice role="status">{t("signedOutNote")}</Notice>}
+      <p className="text-muted-foreground">{t("signInIntro", { realm })}</p>
+      <Button
+        size="lg"
+        block
+        onClick={() => {
+          startSignIn(realm);
+        }}
+      >
+        {t("signInAction", { realm })}
+      </Button>
+    </Frame>
+  );
+}
+
+/** OP-159 m.42 (a): on the way to the realm's hosted login. */
+export function SigningIn({ realm }: { readonly realm: string }): ReactElement {
+  return (
+    <Frame title={t("signInTitle")}>
+      <p role="status" className="text-muted-foreground">
+        {t("signInOpening", { realm })}
+      </p>
+    </Frame>
+  );
+}
+
+/** OP-159 m.42 (b): no realm in the address and none remembered, so nothing to sign in to. */
+export function NoRealm(): ReactElement {
+  return (
+    <Frame title={t("noRealmTitle")}>
+      <p className="text-muted-foreground">{t("noRealmText")}</p>
+      <p className={`${MONO} break-all`} data-testid="console-link-shape">
+        {`${location.origin}${HOME}/<realm>`}
+      </p>
+    </Frame>
+  );
+}
+
+/** OP-159 m.42 (c): signed in to `current` at the console address of `wanted`. */
+export function OtherRealm({
+  current,
+  wanted,
+  onGo,
+  onSwitch,
+}: {
+  readonly current: string;
+  readonly wanted: string;
+  readonly onGo: () => void;
+  readonly onSwitch: () => void;
+}): ReactElement {
+  return (
+    <Frame title={t("otherRealmTitle")}>
+      <Notice role="status">{t("otherRealmNote", { current, wanted })}</Notice>
+      <div className="flex flex-col gap-3">
+        <Button size="lg" block onClick={onGo}>
+          {t("otherRealmGo", { current })}
+        </Button>
+        <Button size="lg" variant="outline" block onClick={onSwitch}>
+          {t("otherRealmSwitch", { wanted })}
+        </Button>
+      </div>
+    </Frame>
   );
 }

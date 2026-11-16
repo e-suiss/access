@@ -33,7 +33,7 @@ test.describe("@live console break-glass", () => {
   test("@live the break-glass screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/breakglass");
+    const r = await page.goto("/console/acme/admin/breakglass");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "Break-glass accounts" })).toHaveCount(0);
   });
@@ -47,7 +47,7 @@ test.describe("@live console break-glass", () => {
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page);
-    await registerAndOpen(page, "/console/admin/breakglass");
+    await registerAndOpen(page, "/console/acme/admin/breakglass");
     await expect(page.getByRole("heading", { level: 2, name: "Break-glass" })).toBeVisible();
     const accounts = page.getByRole("region", { name: "Break-glass accounts" });
     await expect(accounts).toBeVisible();

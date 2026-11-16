@@ -52,7 +52,9 @@ pub const SIGN_IN_COOKIE: &str = "__Host-access-console-signin";
 pub const SIGN_IN_TTL_S: u64 = 600;
 
 /// The console's page (TN-113: a path has one spelling, and a trailing slash is an empty
-/// segment, so the console is `/console`, its screens `/console/<screen>`).
+/// segment, so the console is `/console`, a realm's console `/console/{realm}` and its screens
+/// `/console/{realm}/<route>/<screen>`, OP-159 m.42). The sign-in returns here and the page
+/// moves on to the session's realm.
 pub const HOME_PATH: &str = "/console";
 
 /// Where the browser returns from the hosted login.

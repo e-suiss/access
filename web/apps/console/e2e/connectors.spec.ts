@@ -14,7 +14,7 @@ test("integrations list the enterprise connectors and what Access gives each", a
 }) => {
   const asked: string[] = [];
   page.on("request", (r) => asked.push(new URL(r.url()).pathname));
-  await open(page, bff, "/console/developer/integrations");
+  await open(page, bff, "/console/acme/developer/integrations");
   const panel = page.getByRole("region", { name: "Enterprise connectors" });
   await expect(panel).toBeVisible();
   const rows = panel.getByTestId("connectors").locator("tbody tr");

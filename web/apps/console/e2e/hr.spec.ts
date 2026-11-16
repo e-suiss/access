@@ -25,7 +25,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (q), §8.17.9.8
 test("an HR source shows Sync from HR only when the domain accepts it", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/hr");
+  await open(page, bff, "/console/acme/admin/hr");
   await expect(page.getByRole("heading", { level: 2, name: "HR" })).toBeVisible();
   const workday = page.locator('[data-testid="hr-source"][data-name="workday"]');
   await expect(workday.getByTestId("hr-sync")).toContainText("Sync from HR (workday)");
@@ -42,7 +42,7 @@ test("sources, imports and connectors change only through signed changes", async
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/hr");
+  await open(page, bff, "/console/acme/admin/hr");
   const sign = async () => {
     await page
       .getByRole("dialog", { name: "Review and sign" })

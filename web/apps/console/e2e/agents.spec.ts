@@ -56,7 +56,7 @@ test("the registry shows each agent as an agent with its operator, sponsors and 
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/agents");
+  await open(page, bff, "/console/acme/admin/agents");
   const list = page.getByTestId("agent-list");
   await expect(list.getByTestId("agent-badge")).toHaveText(`AI agent · operated by ${ROOT}`);
   await expect(list).toContainText("Suspended: it has no sponsor");
@@ -75,7 +75,7 @@ test("the registry shows each agent as an agent with its operator, sponsors and 
 
 // AG-21, OP-154 m.3 (f), §8.6: each running copy ends with its own signed change
 test("a running copy ends only through its own signed change", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/agents");
+  await open(page, bff, "/console/acme/admin/agents");
   await page.getByTestId("agent-list").getByRole("button", { name: "Mail helper" }).click();
   const copies = page.getByTestId("agent-instances");
   await expect(copies).toContainText(COPY);

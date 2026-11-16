@@ -99,7 +99,7 @@ test("the platform section shows only for a viewer whose Grant covers a platform
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform");
+  await openPlatform(page, "/console/platform/platform");
   const nav = page.getByRole("navigation", { name: "Console sections" });
   for (const name of ["Admin", "Developer", "Audit"]) {
     await expect(nav.getByRole("link", { name })).toHaveCount(0);
@@ -121,7 +121,7 @@ test("the platform section shows only for a viewer whose Grant covers a platform
 // IA-5, fail closed: a Grant of one action shows only its screens
 test("a Grant of one platform action shows only that action's screens", async ({ page, bff }) => {
   seedPlatform(bff, ["sandbox_create"]);
-  await openPlatform(page, "/console/platform");
+  await openPlatform(page, "/console/platform/platform");
   const screens = page.getByRole("navigation", { name: "Screens in this section" });
   await expect(screens.getByRole("link")).toHaveText([
     "Tenants",
@@ -142,7 +142,7 @@ test("a platform realm account without a Grant sees no platform section", async 
       name: "Platform",
     }),
   ).toHaveCount(0);
-  await page.goto("/console/platform/tenants");
+  await page.goto("/console/platform/platform/tenants");
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
 });
 
@@ -152,7 +152,7 @@ test("a new tenant is drafted, shown, signed on the platform Grant and listed", 
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/tenants");
+  await openPlatform(page, "/console/platform/platform/tenants");
   await expect(page.getByTestId("tenant-list")).toContainText("tnt_acme");
   const panel = page.getByRole("region", { name: "New tenant" });
   await panel.getByRole("button", { name: "Create tenant" }).click();
@@ -177,8 +177,11 @@ test("a realm's metadata and key state show, and a new realm names its own found
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/realms");
+  await openPlatform(page, "/console/platform/platform/realms");
   await page.getByLabel("Tenant").selectOption("tnt_acme");
+  // OP-159 m.42 (d)
+  await expect(page.getByTestId("realm-console-link")).toHaveText(`${BASE}/console/acme`);
+  await expect(page.getByTestId("realm-console-link")).toHaveAttribute("href", "/console/acme");
   await page.getByRole("button", { name: "acme" }).click();
   await expect(page.getByTestId("realm-key-state")).toHaveAttribute("data-state", "signing");
   await expect(page.getByTestId("realm-meta")).toContainText(
@@ -193,6 +196,7 @@ test("a realm's metadata and key state show, and a new realm names its own found
   await expect(dialog).toContainText("idp.platform.realm_create");
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect(panel.getByRole("status")).toContainText("Recorded as change");
+  await expect(panel.getByTestId("realm-console-created")).toContainText(`${BASE}/console/shop`);
   const w = bff.writes[0];
   expect(w?.path).toBe("platform/tenants/tnt_acme/realms");
   expect(w?.body["root"]).toEqual({
@@ -208,9 +212,10 @@ test("a sandbox domain with a sole founding root needs the no-recovery acknowled
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/sandboxes");
+  await openPlatform(page, "/console/platform/platform/sandboxes");
   await page.getByLabel("Tenant").selectOption("tnt_acme");
   await expect(page.getByTestId("sandbox-domains-list")).toContainText("acme-lab");
+  await expect(page.getByTestId("realm-console-link")).toHaveCount(0);
   const panel = page.getByRole("region", { name: "New sandbox domain" });
   await panel.getByLabel("Short name").fill("acme-try");
   await panel.getByLabel("Only me").check();
@@ -232,7 +237,7 @@ test("a sandbox domain with a sole founding root needs the no-recovery acknowled
 // X11: a draft that is not what was asked for is never signed
 test("a tampered platform draft is refused before the signature screen", async ({ page, bff }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/realms");
+  await openPlatform(page, "/console/platform/platform/realms");
   bff.tamper = true;
   await page.getByLabel("Tenant").selectOption("tnt_acme");
   const panel = page.getByRole("region", { name: "New realm" });
@@ -247,7 +252,7 @@ test("a tampered platform draft is refused before the signature screen", async (
 // OP-159 m.41 (b): the operator's readiness, by check name
 test("operator health shows each readiness check", async ({ page, bff }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/operator");
+  await openPlatform(page, "/console/platform/platform/operator");
   await expect(page.getByTestId("operator-status")).toHaveAttribute("data-status", "degraded");
   await expect(page.getByTestId("operator-checks").locator("[data-ok=false]")).toContainText(
     "identity-signer",
@@ -258,7 +263,7 @@ test("operator health shows each readiness check", async ({ page, bff }) => {
 // OP-83, X24: every platform screen is accessible and uses no forbidden word
 test("every platform screen has no WCAG 2.2 AA violations", async ({ page, bff }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/tenants");
+  await openPlatform(page, "/console/platform/platform/tenants");
   for (const [path, heading] of [
     ["platform/tenants", "Tenants"],
     ["platform/realms", "Realms"],
@@ -268,7 +273,7 @@ test("every platform screen has no WCAG 2.2 AA violations", async ({ page, bff }
     await page.evaluate((p) => {
       history.pushState(null, "", p);
       dispatchEvent(new PopStateEvent("popstate"));
-    }, `/console/${path}`);
+    }, `/console/platform/${path}`);
     await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible();
     await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
     const a11y = await new AxeBuilder({ page })

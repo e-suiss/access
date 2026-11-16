@@ -60,7 +60,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (s), X22, OP-64
 test("sinks are registered and retired only through signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/siem");
+  await open(page, bff, "/console/acme/admin/siem");
   await expect(page.getByRole("heading", { level: 2, name: "SIEM export" })).toBeVisible();
   await expect(page.getByTestId("export-copy-note")).toContainText("a copy, not the record");
   const sinks = page.getByTestId("export-sinks");

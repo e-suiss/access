@@ -11,36 +11,143 @@ async function registerDevice(page: Page) {
   return dialog;
 }
 
-// TN-128: signed out, the console offers only the hosted login hand-off
-test("signed out, the console starts the hosted login for a realm", async ({ page, bff }) => {
-  await page.goto("/console/");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Sign in to the console" }),
-  ).toBeVisible();
+/** Answers the hosted login hand-off with a stand-in page and resolves with the realm it names. */
+async function signInStarted(page: Page): Promise<() => Promise<string | null>> {
+  await page.route("**/console/api/sign-in?**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: "<title>Sign-in</title>" }),
+  );
   const started = page.waitForRequest((r) => r.url().includes("/console/api/sign-in?"));
-  await page.getByLabel("Realm").fill("acme");
-  await page.getByRole("button", { name: "Continue to sign-in" }).click();
-  expect(new URL((await started).url()).searchParams.get("realm")).toBe("acme");
+  return async () => new URL((await started).url()).searchParams.get("realm");
+}
+
+function ended(reason: string) {
+  return {
+    status: 401,
+    contentType: "application/json",
+    body: JSON.stringify({ status: 401, code: "console-session-required", reason }),
+  };
+}
+
+// TN-128, OP-159 m.42 (a): signed out at a realm's console, its hosted login starts on its own
+test("signed out, a realm's console starts that realm's hosted login", async ({ page, bff }) => {
+  const realm = await signInStarted(page);
+  await page.goto("/console/acme/admin/roles");
+  expect(await realm()).toBe("acme");
   expect(bff.seen.some((s) => s.ais)).toBe(false);
 });
 
-// TN-129: an ended console session says why
-test("an idle session explains the sign-out", async ({ page, context }) => {
-  await context.route("**/console/api/session", (route) =>
-    route.fulfill({
-      status: 401,
-      contentType: "application/json",
-      body: JSON.stringify({
-        status: 401,
-        code: "console-session-required",
-        reason: "idle-expired",
-      }),
-    }),
-  );
+// OP-159 m.42 (b): the bare console names no realm and asks for none
+test("signed out at the bare console with no remembered realm, nothing asks for a realm", async ({
+  page,
+}) => {
+  let started = false;
+  page.on("request", (r) => {
+    if (r.url().includes("/console/api/sign-in")) started = true;
+  });
   await page.goto("/console/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Use your organization's console link" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("console-link-shape")).toHaveText(`${BASE}/console/<realm>`);
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.locator("input")).toHaveCount(0);
+  expect(started).toBe(false);
+});
+
+// OP-159 m.42 (b): the realm this browser last signed in to
+test("signed out at the bare console, the remembered realm's console opens", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() => {
+    localStorage.setItem("access-console-realm", "shop");
+  });
+  const realm = await signInStarted(page);
+  await page.goto("/console/");
+  expect(await realm()).toBe("shop");
+});
+
+// OP-159 m.42 (b): an unreadable store is no remembered realm
+test("a browser that refuses storage still gets the bare console page", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+  });
+  await page.goto("/console/");
+  await expect(page.getByTestId("console-link-shape")).toBeVisible();
+});
+
+// OP-159 m.42 (a), (b): signed in, the bare console moves to the session's realm and remembers it
+test("signed in at the bare console, the console moves to the session's realm", async ({
+  page,
+  context,
+  bff,
+}) => {
+  await bff.signIn(context, BASE);
+  await page.goto("/console/");
+  await expect(page).toHaveURL(`${BASE}/console/acme`);
+  await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("access-console-realm"))).toBe("acme");
+  await page.getByRole("link", { name: "Your profile" }).click();
+  await expect(page).toHaveURL(`${BASE}/console/acme/profile`);
+});
+
+// OP-159 m.42 (c): signed in to one realm at another realm's console, nothing switches silently
+test("signed in to another realm, the console says so and offers both ways", async ({
+  page,
+  context,
+  bff,
+}) => {
+  await bff.signIn(context, BASE);
+  await page.goto("/console/shop/admin");
+  await expect(page.getByRole("status")).toHaveText(
+    "You're signed in to acme. This address is the console of shop.",
+  );
+  await expect(page.getByRole("navigation")).toHaveCount(0);
+  await page.getByRole("button", { name: "Go to acme" }).click();
+  await expect(page).toHaveURL(`${BASE}/console/acme`);
+  await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
+
+  await page.goto("/console/shop");
+  const realm = await signInStarted(page);
+  await page.getByRole("button", { name: "Sign out and sign in to shop" }).click();
+  expect(await realm()).toBe("shop");
+  expect(bff.seen.find((s) => s.path === "/sign-out")?.status).toBe(204);
+});
+
+// TN-129, OP-159 m.42 (a): an ended console session says why and waits for the viewer
+test("an idle session explains the sign-out and offers the realm's sign-in", async ({
+  page,
+  context,
+}) => {
+  let started = false;
+  page.on("request", (r) => {
+    if (r.url().includes("/console/api/sign-in")) started = true;
+  });
+  await context.route("**/console/api/session", (route) => route.fulfill(ended("idle-expired")));
+  await page.goto("/console/acme");
   await expect(page.getByRole("status")).toHaveText(
     "You were signed out: the console was idle for 15 minutes.",
   );
+  expect(started).toBe(false);
+  const realm = await signInStarted(page);
+  await page.getByRole("button", { name: "Sign in to acme" }).click();
+  expect(await realm()).toBe("acme");
+});
+
+// OP-159 m.42 (a): a sign-in that came back without a session does not start again on its own
+test("a sign-in that just started is not started again on its own", async ({ page }) => {
+  const realm = await signInStarted(page);
+  await page.goto("/console/acme");
+  expect(await realm()).toBe("acme");
+  await page.goto("/console/acme");
+  await expect(page.getByRole("button", { name: "Sign in to acme" })).toBeVisible();
 });
 
 // X11, OP-151 m.3 (e), OP-149 m.6: registering the browser shows the Kernel's decoding of the
@@ -83,7 +190,7 @@ test("Admin, Developer and Audit appear only for an eligible viewer with a devic
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect(nav.getByRole("link", { name: "Admin" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Audit" })).toBeVisible();
-  await page.goto("/console/audit");
+  await page.goto("/console/acme/audit");
   await expect(page.getByRole("heading", { level: 1, name: "Audit" })).toBeVisible();
 });
 
@@ -98,7 +205,7 @@ test("a viewer without eligibility sees no section and no stub", async ({ page, 
   for (const name of ["Admin", "Developer", "Audit"]) {
     await expect(nav.getByRole("link", { name })).toHaveCount(0);
   }
-  await page.goto("/console/admin");
+  await page.goto("/console/acme/admin");
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
 });
 
@@ -109,7 +216,7 @@ test("own profile and sign-ins need only the cookie", async ({ page, context, br
   await bff.signIn(elsewhere, BASE);
   const other = [...bff.sessions.values()][1];
   if (other === undefined) throw new Error("no second session");
-  await page.goto("/console/profile");
+  await page.goto("/console/acme/profile");
   await expect(page.getByRole("heading", { level: 1, name: "Your profile" })).toBeVisible();
   await page.getByRole("link", { name: "Your sign-ins" }).click();
   const rows = page.getByRole("row");
@@ -126,7 +233,7 @@ test("own profile and sign-ins need only the cookie", async ({ page, context, br
 // Ek B 3090
 test("About shows the Kernel and server versions", async ({ page, context, bff }) => {
   await bff.signIn(context, BASE);
-  await page.goto("/console/about");
+  await page.goto("/console/acme/about");
   await expect(page.getByTestId("kernel-api-version")).toHaveText("0.0");
   await expect(page.getByTestId("server-version")).toHaveText("0.3.1");
 });

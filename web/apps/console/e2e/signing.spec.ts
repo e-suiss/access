@@ -26,7 +26,7 @@ test("the signing screen turns the post-quantum profile on as one change", async
   bff,
 }) => {
   bff.admin.set("realms/acme/signing", VIEW);
-  await open(page, bff, "/console/admin/signing");
+  await open(page, bff, "/console/acme/admin/signing");
   await expect(page.getByRole("heading", { level: 2, name: "Signing" })).toBeVisible();
   await expect(page.locator("#signing-profile-title")).toHaveText("Classical signatures only");
   await expect(page.getByTestId("signing-algorithms")).toHaveText("ES256");
@@ -56,7 +56,7 @@ test("an open profile shows its algorithm and anchor and turns off as one change
     kex_share: "advertise-only",
     pq_reanchor: { size: 42, time: 1_767_225_600_000, witnesses: ["witness.example"] },
   });
-  await open(page, bff, "/console/admin/signing");
+  await open(page, bff, "/console/acme/admin/signing");
   await expect(page.locator("#signing-profile-title")).toHaveText(
     "Post-quantum signatures on (ML-DSA-65)",
   );
@@ -74,7 +74,7 @@ test("an open profile shows its algorithm and anchor and turns off as one change
 // CR-44, HL-27, OP-159 m.3 (r)
 test("a FIPS realm cannot turn the post-quantum profile on", async ({ page, bff }) => {
   bff.admin.set("realms/acme/signing", { ...VIEW, fips: true });
-  await open(page, bff, "/console/admin/signing");
+  await open(page, bff, "/console/acme/admin/signing");
   await expect(page.getByTestId("signing-fips-exclusive")).toHaveText(
     "FIPS and post-quantum profiles can't be combined",
   );
@@ -86,7 +86,7 @@ test("a FIPS realm cannot turn the post-quantum profile on", async ({ page, bff 
 test("without an HSM that holds post-quantum keys the refusal is said", async ({ page, bff }) => {
   bff.admin.set("realms/acme/signing", VIEW);
   bff.refuse.set("realms/acme/settings/signing-profile", [409, "pq-key-unavailable"]);
-  await open(page, bff, "/console/admin/signing");
+  await open(page, bff, "/console/acme/admin/signing");
   const panel = page.locator(PROFILE);
   await panel.getByRole("button").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
@@ -99,7 +99,7 @@ test("without an HSM that holds post-quantum keys the refusal is said", async ({
 // CR-12 m.3, OP-159 m.3 (t)
 test("the key exchange share policy is one change", async ({ page, bff }) => {
   bff.admin.set("realms/acme/signing", VIEW);
-  await open(page, bff, "/console/admin/signing");
+  await open(page, bff, "/console/acme/admin/signing");
   const kex = page.getByRole("region", { name: /Post-quantum key exchange/ });
   await kex.getByLabel("Send the classical key share first and offer post-quantum").check();
   await kex.getByRole("button").click();

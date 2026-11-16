@@ -25,6 +25,22 @@ pub const NAMESPACE: &str = "idp.platform";
 /// Version of the platform catalog; the `idp.*` catalogs are versioned apart (OP-153 m.3 (a)).
 pub const CATALOG_VERSION: u64 = 1;
 
+/// Slugs no realm can take: the console's own paths under `/console/` (OP-159 m.42 (e)).
+pub const RESERVED_SLUGS: [&str; 2] = ["api", "assets"];
+
+/// Checks the slug of a realm being created: a realm slug (TN-16) that is not reserved
+/// (OP-159 m.42 (e)).
+///
+/// # Errors
+/// [`ProvisionInvalid::Slug`].
+pub fn check_new_slug(slug: &str) -> Result<(), ProvisionInvalid> {
+    check_slug(slug).map_err(|_| ProvisionInvalid::Slug)?;
+    if RESERVED_SLUGS.contains(&slug) {
+        return Err(ProvisionInvalid::Slug);
+    }
+    Ok(())
+}
+
 /// The placement new tenants and realms take unless the caller names one (OP-40).
 pub const DEFAULT_PLACEMENT: &str = "pool-default";
 
@@ -107,7 +123,8 @@ pub fn catalog(publisher: Id) -> Spp {
 /// Why a provisioning request is refused before any decision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ProvisionInvalid {
-    /// A slug outside `^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$` (TN-16).
+    /// A slug outside `^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$` (TN-16), or a reserved one
+    /// (OP-159 m.42 (e)).
     #[error("invalid slug")]
     Slug,
     /// A placement outside `^[a-z0-9][a-z0-9-]{0,62}$` (OP-40).
@@ -380,7 +397,7 @@ impl RealmOrder {
     /// # Errors
     /// [`ProvisionInvalid`].
     pub fn check(&self) -> Result<(), ProvisionInvalid> {
-        check_slug(&self.slug).map_err(|_| ProvisionInvalid::Slug)?;
+        check_new_slug(&self.slug)?;
         check_placement(&self.placement)?;
         check_root(&self.root, self.acknowledge_no_recovery)?;
         if let Some(d) = self.ct3_delay_s

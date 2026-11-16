@@ -37,7 +37,7 @@ test("renders tenant-controlled strings as text", async ({ page, context, bff })
     dialogs += 1;
     void d.dismiss();
   });
-  await page.goto("/console/profile");
+  await page.goto("/console/acme/profile");
   await expect(page.getByTestId("display-name")).toHaveText("<img src=x onerror=alert(1)>Ada");
   await expect(page.locator("main img")).toHaveCount(0);
   expect(dialogs).toBe(0);
@@ -64,7 +64,7 @@ test("loads nothing from another origin", async ({ page, context, bff }) => {
   await bff.signIn(context, BASE);
   const origins = new Set<string>();
   page.on("request", (r) => origins.add(new URL(r.url()).origin));
-  await page.goto("/console/about");
+  await page.goto("/console/acme/about");
   await expect(page.getByTestId("kernel-api-version")).toHaveText("0.0");
   expect([...origins]).toEqual([BASE]);
 });

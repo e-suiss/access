@@ -24,7 +24,7 @@ test.describe("@live console SIEM export", () => {
   test("@live the SIEM export screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/siem");
+    const r = await page.goto("/console/acme/admin/siem");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "Export sinks" })).toHaveCount(0);
   });

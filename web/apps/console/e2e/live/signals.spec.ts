@@ -18,7 +18,7 @@ test.describe("@live console signal sources", () => {
   test("@live the signal sources panel is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/sign-in");
+    const r = await page.goto("/console/acme/admin/sign-in");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "Signal sources" })).toHaveCount(0);
   });

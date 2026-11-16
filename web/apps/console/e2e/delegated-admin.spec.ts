@@ -9,7 +9,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-157 m.3 (t), §12.5.2
 test("opening and closing admin roles are signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   await expect(page.getByRole("heading", { name: "Delegated administration" })).toBeVisible();
   expect(bff.writes).toEqual([]);
 

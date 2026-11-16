@@ -16,8 +16,10 @@ browser                                  management listener (access-server)
 └──────────────────────────────┘         └──────────────────────────────────────────┘
 ```
 
-- **Sign-in.** The console sends you to your realm's hosted login and the BFF opens a console
-  session when you come back.
+- **Sign-in.** A realm's console lives at `/console/<realm>`, for example `/console/acme`; the
+  console never asks for a realm name. Opening that link sends you to the realm's hosted login,
+  and the BFF opens a console session when you come back. Every screen's address carries the
+  realm: `/console/<realm>/<section>/<screen>`.
 - **Session.** One cookie, `__Host-access-console`: `Secure`, `HttpOnly`, `SameSite=Strict`,
   host-only. A console session lasts at most 12 hours, ends after 15 minutes without use, and is
   bound to the network you signed in from (your autonomous system when a GeoIP source is

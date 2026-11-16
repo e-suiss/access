@@ -691,7 +691,7 @@ impl Suiss {
         let platform = self
             .platform_realm
             .as_deref()
-            .is_none_or(|s| access_identity_oauth::domain::issuer::check_slug(s).is_ok());
+            .is_none_or(|s| access_identity_admin::domain::provision::check_new_slug(s).is_ok());
         let relay_product = self
             .relay_product
             .as_deref()

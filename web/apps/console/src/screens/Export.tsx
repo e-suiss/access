@@ -12,6 +12,7 @@ import { Textarea } from "@access/ui/components/textarea";
 
 import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { consoleHref } from "../lib/paths.js";
 import { FORM, HINT, MONO, Notice } from "../ui.js";
 import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 
@@ -113,7 +114,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Notice role="note" data-testid="export-copy-note">
           {t("exportCopyNote")}{" "}
           <a
-            href="/console/audit/records"
+            href={consoleHref(ctx.session.realm, "audit/records")}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("exportRecordsLink")}

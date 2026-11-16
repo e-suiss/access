@@ -51,7 +51,7 @@ test("keep records a check and remove is the reviewer's own revoke of one Grant"
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/reviews");
+  await open(page, bff, "/console/acme/admin/reviews");
   await expect(page.getByRole("heading", { level: 2, name: "Access reviews" })).toBeVisible();
   await expect(page.getByTestId("reviews")).toContainText("Next review");
   expect(bff.writes).toEqual([]);
@@ -90,7 +90,7 @@ test("keep records a check and remove is the reviewer's own revoke of one Grant"
 
 // OP-157 m.6 (f)
 test("scheduling names a period and the manager's team", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/reviews");
+  await open(page, bff, "/console/acme/admin/reviews");
   await page.getByLabel("Name").fill("q1");
   await page.getByLabel("Every (days)").fill("30");
   await page.getByRole("button", { name: "Schedule a review" }).click();

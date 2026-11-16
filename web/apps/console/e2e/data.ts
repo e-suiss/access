@@ -562,7 +562,7 @@ export async function open(
     audit: "Audit",
     platform: "Platform",
   };
-  const section = names[path.split("/")[2] ?? ""];
+  const section = names[path.split("/")[3] ?? ""];
   if (section !== undefined) {
     await expect(
       page

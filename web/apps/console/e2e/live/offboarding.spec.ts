@@ -35,7 +35,7 @@ test.describe("@live console offboarding", () => {
   test("@live the offboarding screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/offboarding");
+    const r = await page.goto("/console/acme/admin/offboarding");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("depart")).toHaveCount(0);
   });

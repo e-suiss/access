@@ -10,7 +10,7 @@ test.describe("@live console recovery", () => {
   });
 
   test("@live the recovery screen is not offered without a session", async ({ page }) => {
-    const r = await page.goto("/console/audit/recovery");
+    const r = await page.goto("/console/acme/audit/recovery");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("recovery")).toHaveCount(0);
   });

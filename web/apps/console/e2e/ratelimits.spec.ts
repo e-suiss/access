@@ -42,7 +42,7 @@ test("the rate limits screen shows each bucket, the heaviest consumers and the r
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/ratelimits");
+  await open(page, bff, "/console/acme/admin/ratelimits");
   await expect(page.getByRole("heading", { level: 2, name: "Rate limits" })).toBeVisible();
   const realm = page.locator('[data-testid="rate-limits-bucket"][data-name="realm-request"]');
   await expect(realm).toContainText("92%");

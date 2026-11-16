@@ -12,7 +12,7 @@ test("a pending domain shows its records and a served one its certificate", asyn
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const panel = page.getByRole("region", { name: "Custom domains" });
   await expect(panel.getByTestId("domain-txt").first()).toHaveText("challenge-value");
   await expect(panel.getByTestId("domain-cname").first()).toContainText("acme.access.test");

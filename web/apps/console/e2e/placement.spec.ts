@@ -39,7 +39,7 @@ test("the placement screen shows the cell, the residency and a rehome waiting fo
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/placement");
+  await open(page, bff, "/console/acme/admin/placement");
   await expect(page.getByRole("heading", { level: 2, name: "Placement" })).toBeVisible();
   await expect(page.getByTestId("placement-realm-cell")).toHaveText("eu-central-1");
   await expect(page.getByTestId("placement-domain-cell")).toContainText("eu-central-1");
@@ -57,7 +57,7 @@ test("the durability screen says single node and never shows revocations as conf
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/durability");
+  await open(page, bff, "/console/acme/admin/durability");
   await expect(page.getByRole("heading", { level: 2, name: "Durability" })).toBeVisible();
   await expect(page.getByTestId("durability-profile")).toHaveAttribute(
     "data-durability",
@@ -92,7 +92,7 @@ test("the durability screen says there is no post-quantum anchor yet and marks a
     acknowledges: true,
     pq_reanchor: null,
   });
-  await open(page, bff, "/console/admin/durability");
+  await open(page, bff, "/console/acme/admin/durability");
   await expect(page.getByTestId("durability-pq-anchor")).toHaveText("No post-quantum anchor yet");
   await expect(page.getByTestId("durability-proposed")).toHaveCount(1);
   await expect(page.getByTestId("durability-witnesses")).toContainText(
@@ -120,7 +120,7 @@ test("the durability screen shows the last post-quantum anchor and claims nothin
     acknowledges: false,
     pq_reanchor: { size: 42, time: 1800000000000, witnesses: ["w-pq"] },
   });
-  await open(page, bff, "/console/admin/durability");
+  await open(page, bff, "/console/acme/admin/durability");
   await expect(page.getByTestId("durability-pq-anchor")).toHaveText(
     "Post-quantum anchor at log size 42, 2027-01-15T08:00:00.000Z",
   );
@@ -134,7 +134,7 @@ test("the durability screen shows the co-tenant risk when the hosting is shared 
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/admin/durability");
+  await open(page, bff, "/console/acme/admin/durability");
   const hosting = page.getByTestId("durability-hosting");
   await expect(hosting).toHaveAttribute("data-hsm", "shared");
   await expect(hosting).toHaveAttribute("data-compute", "shared");

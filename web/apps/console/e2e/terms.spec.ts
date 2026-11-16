@@ -87,12 +87,12 @@ test("no rendered screen uses a forbidden term or a stop-all control", async ({
   bff,
 }) => {
   await bff.signIn(context, BASE);
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   for (const s of SCREENS) {
     await page.evaluate((p) => {
       history.pushState(null, "", p);
       dispatchEvent(new PopStateEvent("popstate"));
-    }, `/console/${s}`);
+    }, `/console/acme/${s}`);
     await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
     const text = await page.locator("body").innerText();
     expect(offending(text, FORBIDDEN), s).toEqual([]);

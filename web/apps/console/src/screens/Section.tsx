@@ -6,6 +6,7 @@ import type { MouseEvent, ReactElement } from "react";
 import { cn } from "@access/ui/lib/utils";
 
 import { t, type Key } from "../i18n/index.js";
+import { consoleHref } from "../lib/paths.js";
 import { Page } from "../ui.js";
 import { type Screen, SCREENS, type Section } from "../lib/sections.js";
 import * as A from "./Admin.js";
@@ -198,7 +199,7 @@ export function SectionPage({
           {shown.map((s) => (
             <li key={s}>
               <a
-                href={`/console/${section}/${s}`}
+                href={consoleHref(ctx.session.realm, `${section}/${s}`)}
                 aria-current={s === current ? "page" : undefined}
                 onClick={go(`${section}/${s}`)}
                 className={cn(

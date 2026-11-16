@@ -7,7 +7,7 @@ test.describe("@live console enterprise connectors", () => {
   test("@live the catalogue is not offered without the viewer's eligibility", async ({ page }) => {
     const asked: string[] = [];
     page.on("request", (r) => asked.push(new URL(r.url()).pathname));
-    const r = await page.goto("/console/developer/integrations");
+    const r = await page.goto("/console/acme/developer/integrations");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "Enterprise connectors" })).toHaveCount(0);
     expect(asked.filter((p) => p.includes("connector"))).toEqual([]);

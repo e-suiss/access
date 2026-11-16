@@ -9,7 +9,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (r)
 test("a signal source is registered and retired only by signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/sign-in");
+  await open(page, bff, "/console/acme/admin/sign-in");
   const panel = page.getByRole("region", { name: "Signal sources" });
   await expect(panel.getByTestId("signal-sources")).toContainText("Acme MDM");
   await expect(panel.getByTestId("signal-sources")).toContainText("posture_mdm");

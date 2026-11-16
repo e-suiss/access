@@ -19,7 +19,7 @@ test.describe("@live console HR", () => {
   });
 
   test("@live the HR screen is not offered without the viewer's eligibility", async ({ page }) => {
-    const r = await page.goto("/console/admin/hr");
+    const r = await page.goto("/console/acme/admin/hr");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "HR sources" })).toHaveCount(0);
   });

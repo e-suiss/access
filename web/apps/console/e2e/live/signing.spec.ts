@@ -20,7 +20,7 @@ test.describe("@live console signing", () => {
     test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user");
     test.setTimeout(120_000);
     await signIn(page);
-    await registerAndOpen(page, "/console/admin/signing");
+    await registerAndOpen(page, "/console/acme/admin/signing");
     await expect(page.getByTestId("signing")).toHaveCount(0);
   });
 });

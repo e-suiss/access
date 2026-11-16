@@ -19,7 +19,7 @@ test.describe("@live console post-quantum anchor", () => {
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page);
-    await registerAndOpen(page, "/console/admin/durability");
+    await registerAndOpen(page, "/console/acme/admin/durability");
     await expect(page.getByTestId("durability")).toHaveCount(0);
     await expect(page.getByTestId("durability-pq-anchor")).toHaveCount(0);
   });

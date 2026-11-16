@@ -18,7 +18,7 @@ test('a domain without a recovery entry says "Recovery not available"', async ({
     recovery_reason: "no-recovery-entry",
     history: [],
   });
-  await open(page, bff, "/console/audit/recovery");
+  await open(page, bff, "/console/acme/audit/recovery");
   await expect(page.getByTestId("recovery-not-available")).toContainText("Recovery not available");
   await expect(page.getByTestId("recovery-banner")).toHaveCount(0);
   expect(bff.writes).toEqual([]);
@@ -46,7 +46,7 @@ test("after a forced recovery the banner says what may be lost and the history l
       },
     ],
   });
-  await open(page, bff, "/console/audit/recovery");
+  await open(page, bff, "/console/acme/audit/recovery");
   const banner = page.getByTestId("recovery-banner");
   await expect(banner).toContainText("Recovered from previous provider at record position 120");
   await expect(banner).toContainText("revoke it again");

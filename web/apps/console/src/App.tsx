@@ -1,4 +1,4 @@
-// TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b): the console shell. Admin, Developer, Audit and
+// TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b), m.42: the console shell. Admin, Developer, Audit and
 // Platform appear only when the eligibility check says the viewer can exercise one of their actions; without this browser's
 // device key nothing is probed and nothing appears.
 import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from "react";
@@ -21,6 +21,15 @@ import { t, type Key } from "./i18n/index.js";
 import { json, Problem, type SessionInfo } from "./lib/api.js";
 import { find, type Instance } from "./lib/instance.js";
 import {
+  clearSignInStarted,
+  consoleHref,
+  lastRealm,
+  rememberRealm,
+  signInJustStarted,
+  splitPath,
+  startSignIn,
+} from "./lib/paths.js";
+import {
   type Screen,
   SCREENS,
   type Section,
@@ -30,21 +39,11 @@ import {
 import { Authority } from "./screens/Authority.js";
 import { About, Profile, Sessions } from "./screens/Own.js";
 import { SectionPage } from "./screens/Section.js";
-import { SignIn } from "./screens/SignIn.js";
+import { NoRealm, OtherRealm, SignIn, SigningIn } from "./screens/SignIn.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
 import { Busy, Failure, MONO } from "./ui.js";
 
-const BASE = "/console/";
-
 const SECTIONS: ReadonlySet<string> = new Set<Section>(["admin", "developer", "audit", "platform"]);
-
-// TN-113: a path has one spelling and a trailing slash is an empty segment, so the console's
-// own page is `/console` and every screen is `/console/<route>`
-const HOME = "/console";
-
-function hrefOf(r: string): string {
-  return r === "" ? HOME : `${BASE}${r}`;
-}
 
 type Route = "" | "profile" | "sessions" | "about" | Section;
 
@@ -60,23 +59,29 @@ const ROUTES: readonly Route[] = [
 ];
 
 interface Where {
+  readonly realm: string | undefined;
   readonly route: Route;
   readonly screen: Screen | undefined;
 }
 
+// OP-159 m.42 (a), TN-113
 function routeOf(path: string): Where {
-  const r = path.startsWith(BASE) ? path.slice(BASE.length).replace(/\/$/, "") : "";
-  const [head = "", sub] = r.split("/", 2);
-  if (!(ROUTES as readonly string[]).includes(head)) return { route: "", screen: undefined };
+  const { realm, rest } = splitPath(path);
+  const [head = "", sub] = rest.split("/", 2);
+  if (!(ROUTES as readonly string[]).includes(head)) return { realm, route: "", screen: undefined };
   const route = head as Route;
   const screens: readonly string[] = SECTIONS.has(route) ? SCREENS[route as Section] : [];
   const screen = sub !== undefined && screens.includes(sub) ? (sub as Screen) : undefined;
-  return { route, screen };
+  return { realm, route, screen };
 }
 
 type State =
   | { readonly status: "loading" }
-  | { readonly status: "signed-out"; readonly reason: string | undefined }
+  | {
+      readonly status: "signed-out";
+      readonly reason: string | undefined;
+      readonly signedOut: boolean;
+    }
   | { readonly status: "unavailable" }
   | { readonly status: "signed-in"; readonly session: SessionInfo };
 
@@ -118,11 +123,13 @@ function NavToggle(): ReactElement {
 }
 
 function NavGroup({
+  realm,
   items,
   current,
   go,
   onNavigate,
 }: {
+  readonly realm: string;
   readonly items: readonly NavItem[];
   readonly current: Route;
   readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
@@ -139,7 +146,7 @@ function NavGroup({
                 render={(p) => (
                   <a
                     {...p}
-                    href={hrefOf(n.route)}
+                    href={consoleHref(realm, n.route)}
                     aria-current={current === n.route ? "page" : undefined}
                     onClick={(e) => {
                       go(n.route)(e);
@@ -159,10 +166,12 @@ function NavGroup({
 }
 
 function Nav({
+  realm,
   items,
   current,
   go,
 }: {
+  readonly realm: string;
   readonly items: readonly NavItem[];
   readonly current: Route;
   readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
@@ -173,9 +182,17 @@ function Nav({
   };
   return (
     <nav aria-label={t("navLabel")} className="flex flex-col">
-      <NavGroup items={items} current={current} go={go} onNavigate={close} />
-      <NavGroup items={OWN} current={current} go={go} onNavigate={close} />
+      <NavGroup realm={realm} items={items} current={current} go={go} onNavigate={close} />
+      <NavGroup realm={realm} items={OWN} current={current} go={go} onNavigate={close} />
     </nav>
+  );
+}
+
+function Waiting(): ReactElement {
+  return (
+    <main id="main" className="mx-auto flex w-full max-w-md flex-col p-8">
+      <Busy />
+    </main>
   );
 }
 
@@ -185,21 +202,38 @@ export function App(): ReactElement {
   const [instance, setInstance] = useState<Instance | undefined>(undefined);
   const [screens, setScreens] = useState<ReadonlySet<Screen>>(new Set());
   const [confirm, signatureScreen] = useSignatureScreen();
+  const [justStarted] = useState(signInJustStarted);
 
+  const navigate = useCallback((path: string, replace = false) => {
+    if (replace) history.replaceState(null, "", path);
+    else history.pushState(null, "", path);
+    setWhere(routeOf(path));
+  }, []);
+
+  // OP-159 m.42 (a), (b)
   const loadSession = useCallback(() => {
     json<SessionInfo>("/session").then(
       (session) => {
+        rememberRealm(session.realm);
+        clearSignInStarted();
+        if (routeOf(location.pathname).realm === undefined) {
+          navigate(consoleHref(session.realm), true);
+        }
         setState({ status: "signed-in", session });
       },
       (e: unknown) => {
         if (e instanceof Problem && e.status === 401) {
-          setState({ status: "signed-out", reason: e.reason });
+          const last = lastRealm();
+          if (routeOf(location.pathname).realm === undefined && last !== undefined) {
+            navigate(consoleHref(last), true);
+          }
+          setState({ status: "signed-out", reason: e.reason, signedOut: false });
         } else {
           setState({ status: "unavailable" });
         }
       },
     );
-  }, []);
+  }, [navigate]);
 
   useEffect(loadSession, [loadSession]);
 
@@ -214,6 +248,18 @@ export function App(): ReactElement {
   }, []);
 
   const session = state.status === "signed-in" ? state.session : undefined;
+  const realm = where.realm ?? (session === undefined ? lastRealm() : session.realm);
+  const autoSignIn =
+    state.status === "signed-out" &&
+    realm !== undefined &&
+    state.reason === undefined &&
+    !state.signedOut &&
+    !justStarted;
+
+  // OP-159 m.42 (a)
+  useEffect(() => {
+    if (autoSignIn) startSignIn(realm);
+  }, [autoSignIn, realm]);
 
   useEffect(() => {
     if (session === undefined) return;
@@ -239,14 +285,13 @@ export function App(): ReactElement {
 
   const go = (r: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    history.pushState(null, "", hrefOf(r));
-    setWhere(routeOf(hrefOf(r)));
+    navigate(consoleHref(session?.realm ?? "", r));
   };
 
   const signOut = () => {
     json("/sign-out", { method: "POST" }).then(
       () => {
-        setState({ status: "signed-out", reason: undefined });
+        setState({ status: "signed-out", reason: undefined, signedOut: true });
       },
       () => {
         setState({ status: "unavailable" });
@@ -254,13 +299,7 @@ export function App(): ReactElement {
     );
   };
 
-  if (state.status === "loading") {
-    return (
-      <main id="main" className="mx-auto flex w-full max-w-md flex-col p-8">
-        <Busy />
-      </main>
-    );
-  }
+  if (state.status === "loading") return <Waiting />;
   if (state.status === "unavailable") {
     return (
       <main id="main" className="mx-auto flex w-full max-w-md flex-col gap-4 p-8">
@@ -269,9 +308,35 @@ export function App(): ReactElement {
       </main>
     );
   }
-  if (state.status === "signed-out") return <SignIn reason={state.reason} />;
+  if (state.status === "signed-out") {
+    if (realm === undefined) return <NoRealm />;
+    if (autoSignIn) return <SigningIn realm={realm} />;
+    return <SignIn realm={realm} reason={state.reason} signedOut={state.signedOut} />;
+  }
 
   const s = state.session;
+  if (realm !== undefined && realm !== s.realm) {
+    const wanted = realm;
+    return (
+      <OtherRealm
+        current={s.realm}
+        wanted={wanted}
+        onGo={() => {
+          navigate(consoleHref(s.realm));
+        }}
+        onSwitch={() => {
+          json("/sign-out", { method: "POST" }).then(
+            () => {
+              startSignIn(wanted);
+            },
+            () => {
+              setState({ status: "unavailable" });
+            },
+          );
+        }}
+      />
+    );
+  }
   const shownScreens: ReadonlySet<Screen> = instance === undefined ? new Set() : screens;
   const visible: ReadonlySet<Section> = visibleSections(shownScreens);
   const route = where.route;
@@ -317,7 +382,7 @@ export function App(): ReactElement {
           <p className="px-3 py-2 text-base font-semibold">{t("brand")}</p>
         </SidebarHeader>
         <SidebarContent>
-          <Nav items={shown} current={current} go={go} />
+          <Nav realm={s.realm} items={shown} current={current} go={go} />
         </SidebarContent>
       </Sidebar>
       <div className="flex min-w-0 flex-1 flex-col">

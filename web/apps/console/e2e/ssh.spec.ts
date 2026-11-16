@@ -17,7 +17,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (o)
 test("the CA and its server groups change only through signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/ssh");
+  await open(page, bff, "/console/acme/admin/ssh");
   await expect(page.getByRole("heading", { level: 2, name: "SSH access" })).toBeVisible();
   await expect(page.getByTestId("ssh-ca-url")).toHaveText("/realms/acme/ssh/ca.pub");
   await expect(page.getByTestId("ssh-krl-url")).toHaveText("/realms/acme/ssh/krl");

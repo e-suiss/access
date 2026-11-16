@@ -29,7 +29,7 @@ async function signIn(page: Page): Promise<void> {
   await code.waitFor();
   await code.fill(totp(SEED, await nextStep()));
   await code.press("Enter");
-  await page.waitForURL(/\/console(?:[?#]|$)/);
+  await page.waitForURL(/\/console\/acme(?:[/?#]|$)/);
 }
 
 test.describe("@live console agents", () => {
@@ -45,7 +45,7 @@ test.describe("@live console agents", () => {
   test("@live the Agents screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/agents");
+    const r = await page.goto("/console/acme/admin/agents");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("agent-list")).toHaveCount(0);
     await expect(page.getByText("Human", { exact: true })).toHaveCount(0);
@@ -68,7 +68,7 @@ test.describe("@live console agents", () => {
     const list = await page.request.get("/console/api/proxy/admin/realms/acme/agents");
     expect([401, 403]).toContain(list.status());
     expect(await list.text()).not.toContain(SAMPLE_AGENT);
-    await page.goto("/console/admin/agents");
+    await page.goto("/console/acme/admin/agents");
     await expect(page.getByTestId("agent-list")).toHaveCount(0);
     await expect(page.getByText(SAMPLE_AGENT)).toHaveCount(0);
     // XI-17

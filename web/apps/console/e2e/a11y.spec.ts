@@ -13,9 +13,22 @@ async function clean(page: Page) {
   expect((await new AxeBuilder({ page }).withTags(wcag22aa).analyze()).violations).toEqual([]);
 }
 
-test("sign-in has no WCAG 2.2 AA violations", async ({ page }) => {
+// OP-159 m.42 (a), (b)
+test("sign-in has no WCAG 2.2 AA violations", async ({ page, context }) => {
   await page.goto("/console/");
-  await expect(page.getByLabel("Realm")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Use your organization's console link" }),
+  ).toBeVisible();
+  await clean(page);
+  await context.route("**/console/api/session", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ status: 401, code: "console-session-required", reason: "expired" }),
+    }),
+  );
+  await page.goto("/console/acme");
+  await expect(page.getByRole("button", { name: "Sign in to acme" })).toBeVisible();
   await clean(page);
 });
 
@@ -33,9 +46,9 @@ test("every signed-in screen and the signature screen have no WCAG 2.2 AA violat
   await clean(page);
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   for (const [path, heading] of [
-    ["/console/profile", "Your profile"],
-    ["/console/sessions", "Your sign-ins"],
-    ["/console/about", "About"],
+    ["/console/acme/profile", "Your profile"],
+    ["/console/acme/sessions", "Your sign-ins"],
+    ["/console/acme/about", "About"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -68,12 +81,12 @@ const SCREENS = [
 // OP-83: every Admin, Developer and Audit screen, with its answers shown
 test("every section screen has no WCAG 2.2 AA violations", async ({ page, context, bff }) => {
   await bff.signIn(context, BASE);
-  await open(page, bff, "/console/admin/roles");
+  await open(page, bff, "/console/acme/admin/roles");
   for (const [path, heading] of SCREENS) {
     await page.evaluate((p) => {
       history.pushState(null, "", p);
       dispatchEvent(new PopStateEvent("popstate"));
-    }, `/console/${path}`);
+    }, `/console/acme/${path}`);
     await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible();
     await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
     await clean(page);

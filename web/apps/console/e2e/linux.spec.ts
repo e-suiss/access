@@ -37,7 +37,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (p)
 test("hosts change only through signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/linux");
+  await open(page, bff, "/console/acme/admin/linux");
   await expect(page.getByRole("heading", { level: 2, name: "Linux computers" })).toBeVisible();
   const hosts = page.getByTestId("linux-hosts");
   await expect(hosts).toContainText("users known for 12 h, sign-in reused for 8 h");

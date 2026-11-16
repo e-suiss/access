@@ -20,7 +20,7 @@ test.describe("@live console placement and durability", () => {
 
   test("@live the screens are not offered without the viewer's eligibility", async ({ page }) => {
     for (const screen of ["placement", "durability"]) {
-      const r = await page.goto(`/console/admin/${screen}`);
+      const r = await page.goto(`/console/acme/admin/${screen}`);
       expect(r?.status()).toBe(200);
       await expect(page.getByTestId(screen)).toHaveCount(0);
     }

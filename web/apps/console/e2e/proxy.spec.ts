@@ -35,7 +35,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-156 m.3 (l), (m)
 test("proxies are registered and retired only through signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/proxy");
+  await open(page, bff, "/console/acme/admin/proxy");
   await expect(page.getByRole("heading", { level: 2, name: "Application proxies" })).toBeVisible();
   const list = page.getByTestId("proxies");
   await expect(list).toContainText("wiki.example.com");

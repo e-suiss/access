@@ -9,11 +9,9 @@ export const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.ex
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
-/** The console's sign-in from its own button: the realm's authorize, then the hosted login. */
+/** The console's sign-in at its realm's address (OP-159 m.42 (a)): the realm's authorize, then the hosted login. */
 export async function signIn(page: Page): Promise<void> {
-  await page.goto("/console");
-  await page.getByLabel("Realm").fill("acme");
-  await page.getByRole("button", { name: "Continue to sign-in" }).click();
+  await page.goto("/console/acme");
   await page.waitForURL(/\/realms\/acme\/login\?/);
   await page.getByLabel("Email or username").fill(IDENTIFIER);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -26,7 +24,7 @@ export async function signIn(page: Page): Promise<void> {
   );
   await code.fill(totp(SEED, await nextStep()));
   await code.press("Enter");
-  await page.waitForURL(/\/console(?:[?#]|$)/);
+  await page.waitForURL(/\/console\/acme(?:[/?#]|$)/);
 }
 
 /** Registers this browser's device key, signed on the console's signature screen, and opens

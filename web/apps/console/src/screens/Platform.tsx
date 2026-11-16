@@ -2,7 +2,8 @@
 // realms and sandbox domains in them, a realm's metadata with the state of its signing keys, and
 // the deployment's readiness. Nothing here shows or changes a realm's accounts, apps, authority,
 // records or settings: managing a realm means signing in to it. Each creation is one signed
-// `idp.platform.*` Exercise on the viewer's own Grant.
+// `idp.platform.*` Exercise on the viewer's own Grant. OP-159 m.42 (d): each realm shows its
+// console link.
 import { useEffect, useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
@@ -21,6 +22,7 @@ import {
 
 import { t } from "../i18n/index.js";
 import { adminGet, type WriteResult } from "../lib/admin.js";
+import { consoleHref, consoleLink } from "../lib/paths.js";
 import { platformChange, type PlatformChange } from "../lib/platform.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, HINT, MONO, Notice, ROWS } from "../ui.js";
 import { at, type Ctx, Field, type Loaded, Panel, Show, useRun } from "./parts.js";
@@ -72,6 +74,19 @@ function Recorded({ w }: { readonly w: Loaded<WriteResult> }): ReactElement {
     <Show l={w}>
       {(r) => <Notice role="status">{t("changeRecorded", { exercise: r.exercise_id })}</Notice>}
     </Show>
+  );
+}
+
+/** OP-159 m.42 (d): the console link of realm `slug`. */
+function ConsoleLink({ slug }: { readonly slug: string }): ReactElement {
+  return (
+    <a
+      href={consoleHref(slug)}
+      data-testid="realm-console-link"
+      className={`${MONO} break-all text-primary underline underline-offset-2 hover:text-foreground`}
+    >
+      {consoleLink(slug)}
+    </a>
   );
 }
 
@@ -218,6 +233,7 @@ function CreateRealm({
   const [k, setK] = useState("2");
   const [acknowledged, setAcknowledged] = useState(false);
   const [w, write] = useRun<WriteResult>();
+  const [made, setMade] = useState("");
   const listed = parties
     .split(/[\s,]+/)
     .map((p) => p.trim())
@@ -251,8 +267,10 @@ function CreateRealm({
           path: `platform/tenants/${encodeURIComponent(tenant)}/realms`,
           body,
         };
+    const wanted = slug;
     write(async () => {
       const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.realm, c);
+      setMade(wanted);
       onCreated();
       return r;
     });
@@ -365,6 +383,11 @@ function CreateRealm({
         </div>
       </form>
       <Recorded w={w} />
+      {!sandbox && w.status === "done" && made !== "" && (
+        <p data-testid="realm-console-created">
+          {t("platformConsoleLinkCreated")} <ConsoleLink slug={made} />
+        </p>
+      )}
     </Panel>
   );
 }
@@ -503,6 +526,7 @@ function TenantRealms({
                     <TableHead scope="col">{t("platformSlug")}</TableHead>
                     <TableHead scope="col">{t("platformStatus")}</TableHead>
                     <TableHead scope="col">{t("platformCreated")}</TableHead>
+                    {!sandbox && <TableHead scope="col">{t("platformConsoleLink")}</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -527,6 +551,11 @@ function TenantRealms({
                       </TableCell>
                       <TableCell>{r.status ?? ""}</TableCell>
                       <TableCell>{at(r.created_at)}</TableCell>
+                      {!sandbox && (
+                        <TableCell className="whitespace-normal">
+                          <ConsoleLink slug={r.slug} />
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

@@ -23,7 +23,7 @@ test.describe("@live console custom domains", () => {
   test("@live the custom domains panel is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/sign-in");
+    const r = await page.goto("/console/acme/admin/sign-in");
     expect(r?.status()).toBe(200);
     await expect(page.getByRole("region", { name: "Custom domains" })).toHaveCount(0);
   });

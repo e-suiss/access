@@ -44,7 +44,7 @@ use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::recovery_policy::{self, RecoveryPolicy};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
-use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{Issuer, IssuerError, IssuerStyle, RealmBase};
 use access_internal_api::idp::{ACTOR_BINDING, GenesisOrder, Submission, Verdict};
 use access_internal_api::instances::PlatformProduct;
 use access_kernel::claim::body::Class;
@@ -297,6 +297,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         r: &NewRealm<'_>,
         recovery: Option<access_kernel::recovery::RecoveryEntry>,
     ) -> Result<CreatedRealm, AdminError> {
+        // OP-159 m.42 (e)
+        if crate::domain::provision::RESERVED_SLUGS.contains(&r.slug) {
+            return Err(IssuerError::Slug.into());
+        }
         let issuer = self.base.issuer(r.slug, r.style)?;
         // §10.1.4 rule 3, OP-150 L2
         let claim_issuer = issuer::new_party()?;

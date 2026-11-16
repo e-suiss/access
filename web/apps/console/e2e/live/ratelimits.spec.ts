@@ -18,7 +18,7 @@ test.describe("@live console rate limits", () => {
   test("@live the rate limits screen is not offered without the viewer's eligibility", async ({
     page,
   }) => {
-    const r = await page.goto("/console/admin/ratelimits");
+    const r = await page.goto("/console/acme/admin/ratelimits");
     expect(r?.status()).toBe(200);
     await expect(page.getByTestId("rate-limits")).toHaveCount(0);
   });

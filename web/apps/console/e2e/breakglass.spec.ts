@@ -42,7 +42,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // OP-157 m.3 (h), §12.3.8 (4)
 test("a mark and a review change only through signed changes", async ({ page, bff }) => {
-  await open(page, bff, "/console/admin/breakglass");
+  await open(page, bff, "/console/acme/admin/breakglass");
   await expect(page.getByRole("heading", { level: 2, name: "Break-glass" })).toBeVisible();
   await expect(page.getByTestId("breakglass-accounts")).toContainText("Acme Security");
   await expect(page.getByTestId("breakglass-minimum-two")).toContainText("at least two");

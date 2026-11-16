@@ -412,7 +412,8 @@ start:
     (umask 077; docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/platform-admin-totp > target/local-platform-totp)
     echo
     echo "Access:          https://127.0.0.1:8443"
-    echo "Console:         https://access-server.local:9443/console (once: echo '127.0.0.1 access-server access-server.local' | sudo tee -a /etc/hosts)"
+    echo "Console:         https://access-server.local:9443/console/acme (once: echo '127.0.0.1 access-server access-server.local' | sudo tee -a /etc/hosts)"
+    echo "Platform:        https://access-server.local:9443/console/platform"
     echo "Test user:       the sample realm's test user above, password: $ACCESS_LOCAL_TEST_PASSWORD"
     echo "Second factor:   just totp (the code of the test user's authenticator app; its key is in target/local-test-totp)"
     echo "Platform admin:  realm platform, user admin@platform.local, the same password; second factor: just totp platform (its key is in target/local-platform-totp)"
