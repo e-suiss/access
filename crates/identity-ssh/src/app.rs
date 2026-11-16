@@ -1,5 +1,5 @@
 //! The certificate authority's use cases (OP-63): a certificate for an allowed projection,
-//! drawn and signed by the realm's CA key and checked before it is handed out.
+//! drawn and signed by the environment's CA key and checked before it is handed out.
 
 use crate::SshError;
 use crate::domain::cert::{Certificate, Fields};
@@ -12,7 +12,7 @@ const DRAWS: usize = 4;
 /// Why no certificate was made.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum IssueError {
-    /// The realm's CA is off.
+    /// The environment's CA is off.
     #[error("certificate authority off")]
     Off,
     /// The fields are refused.
@@ -56,7 +56,7 @@ pub fn draw(random: &impl Random) -> Result<Drawn, Unavailable> {
     Err(Unavailable)
 }
 
-/// The certificate of `projection` in `realm`, signed by the key that signs now. A rotation in
+/// The certificate of `projection` in `environment`, signed by the key that signs now. A rotation in
 /// between is tried once more with the new key; the signature is checked before it is returned.
 ///
 /// # Errors
@@ -64,14 +64,14 @@ pub fn draw(random: &impl Random) -> Result<Drawn, Unavailable> {
 pub async fn certify(
     ca: &impl CaKey,
     random: &impl Random,
-    realm: [u8; 16],
+    environment: [u8; 16],
     projection: &Projection,
 ) -> Result<Issued, IssueError> {
     for _ in 0..2 {
-        let key = ca.active(realm).await?.ok_or(IssueError::Off)?;
+        let key = ca.active(environment).await?.ok_or(IssueError::Off)?;
         let fields = projection.fields(key, draw(random)?);
         let tbs = fields.to_be_signed().map_err(IssueError::Refused)?;
-        let signature = match ca.sign(realm, key, tbs.clone()).await {
+        let signature = match ca.sign(environment, key, tbs.clone()).await {
             Ok(s) => s,
             Err(CaRefusal::Changed) => continue,
             Err(CaRefusal::Off) => return Err(IssueError::Off),

@@ -1,6 +1,6 @@
-//! The device authorization grant (RFC 8628, OP-154 m.3 (p), CR-38): the realm's decided setting,
+//! The device authorization grant (RFC 8628, OP-154 m.3 (p), CR-38): the environment's decided setting,
 //! the device authorizations by the SHA-256 of their codes, and the wrong user codes the entry
-//! limits count. Scoped to the transaction's realm by row-level security; nothing is deleted
+//! limits count. Scoped to the transaction's environment by row-level security; nothing is deleted
 //! (OP-73).
 
 use sqlx::types::Uuid;
@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -97,24 +97,24 @@ macro_rules! row_of {
 }
 
 impl TenantTx {
-    /// Whether the realm decided to offer the device authorization grant.
+    /// Whether the environment decided to offer the device authorization grant.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn device_code_enabled(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT enabled FROM access.idp_device_code_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next device code setting under `bound` (`idp.realm.device_code`,
+    /// Writes the next device code setting under `bound` (`idp.environment.device_code`,
     /// `device_code_close`).
     ///
     /// # Errors
@@ -124,16 +124,16 @@ impl TenantTx {
         bound: &Bound,
         enabled: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_device_code_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_device_code_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             enabled,
             bound.domain().as_bytes().as_slice(),
             i64_of(bound.position())?,
@@ -148,14 +148,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_device_code(&mut self, d: &NewDeviceCode<'_>) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.oauth_device_codes (tenant_id, realm_id, device_hash, user_hash,
+            "INSERT INTO access.oauth_device_codes (tenant_id, environment_id, device_hash, user_hash,
                     client_uuid, scope, ip_prefix, country, created_ms, expires_ms, interval_s)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             ON CONFLICT (tenant_id, realm_id, user_hash) WHERE decision IS NULL DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, user_hash) WHERE decision IS NULL DO NOTHING",
             tenant,
-            realm,
+            environment,
             d.device_hash.as_slice(),
             d.user_hash.as_slice(),
             Uuid::from_bytes(d.client),
@@ -180,14 +180,14 @@ impl TenantTx {
         &mut self,
         device_hash: &[u8; 32],
     ) -> Result<Option<DeviceCodeRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT device_id, client_uuid, scope, ip_prefix, country, expires_ms, interval_s,
                     polled_ms, decision, subject_id, session_id, used_ms
                FROM access.oauth_device_codes
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_hash = $3 FOR UPDATE",
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_hash = $3 FOR UPDATE",
             tenant,
-            realm,
+            environment,
             device_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -203,15 +203,15 @@ impl TenantTx {
         &mut self,
         user_hash: &[u8; 32],
     ) -> Result<Option<DeviceCodeRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT device_id, client_uuid, scope, ip_prefix, country, expires_ms, interval_s,
                     polled_ms, decision, subject_id, session_id, used_ms
                FROM access.oauth_device_codes
-              WHERE tenant_id = $1 AND realm_id = $2 AND user_hash = $3 AND decision IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND user_hash = $3 AND decision IS NULL
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             user_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -229,12 +229,12 @@ impl TenantTx {
         now_ms: u64,
         interval_s: u32,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_device_codes SET polled_ms = $4, interval_s = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(device),
             i64_of(now_ms)?,
             i32::try_from(interval_s).map_err(|_| StoreError::Range)?,
@@ -254,7 +254,7 @@ impl TenantTx {
         approved: Option<([u8; 16], [u8; 16])>,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let decision = if approved.is_some() {
             "approved"
         } else {
@@ -263,9 +263,9 @@ impl TenantTx {
         let n = sqlx::query!(
             "UPDATE access.oauth_device_codes
                 SET decision = $4, decided_ms = $5, subject_id = $6, session_id = $7
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3 AND decision IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3 AND decision IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(device),
             decision,
             i64_of(now_ms)?,
@@ -287,13 +287,13 @@ impl TenantTx {
         device: [u8; 16],
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_device_codes SET used_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3
                 AND decision = 'approved' AND used_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(device),
             i64_of(now_ms)?,
         )
@@ -313,12 +313,12 @@ impl TenantTx {
         subject: [u8; 16],
         now_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.oauth_device_misses (tenant_id, realm_id, ip_prefix, subject_id, at_ms)
+            "INSERT INTO access.oauth_device_misses (tenant_id, environment_id, ip_prefix, subject_id, at_ms)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             ip_prefix,
             Uuid::from_bytes(subject),
             i64_of(now_ms)?,
@@ -340,14 +340,14 @@ impl TenantTx {
         subject: [u8; 16],
         subject_since_ms: u64,
     ) -> Result<(u64, u64), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             r#"SELECT
                  count(*) FILTER (WHERE ip_prefix = $3 AND at_ms >= $4) AS "ip!",
                  count(*) FILTER (WHERE subject_id = $5 AND at_ms >= $6) AS "subject!"
-               FROM access.oauth_device_misses WHERE tenant_id = $1 AND realm_id = $2"#,
+               FROM access.oauth_device_misses WHERE tenant_id = $1 AND environment_id = $2"#,
             tenant,
-            realm,
+            environment,
             ip_prefix,
             i64_of(ip_since_ms)?,
             Uuid::from_bytes(subject),

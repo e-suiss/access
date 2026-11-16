@@ -1,4 +1,4 @@
-//! Ek B Stage 5 "Bu aşamada doğrulanacak sınırlar": what the realm authorization server must
+//! Ek B Stage 5 "Bu aşamada doğrulanacak sınırlar": what the environment authorization server must
 //! never offer, checked against the served metadata and the running server.
 
 use access_crypto::dpop::NoncePolicy;
@@ -13,23 +13,23 @@ use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 // IDP-24, OP-155 m.3 (k), Ek B 5096, 5088, 5092
 #[test]
 fn legacy_surfaces_are_declared_only_when_enabled() {
-    use access_identity_oauth::domain::metadata::{RealmFacts, authorization_server_of};
+    use access_identity_oauth::domain::metadata::{EnvironmentFacts, authorization_server_of};
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
     let off: Value = serde_json::from_str(&authorization_server_of(
         &issuer,
         &SERVED,
-        &RealmFacts::default(),
+        &EnvironmentFacts::default(),
     ))
     .unwrap();
     let methods = off["token_endpoint_auth_methods_supported"].to_string();
     assert!(!methods.contains("client_secret_post") && !methods.contains("client_secret_jwt"));
     assert!(methods.contains("tls_client_auth"));
     assert!(off.get("frontchannel_logout_supported").is_none());
-    let on = RealmFacts {
+    let on = EnvironmentFacts {
         frontchannel: true,
         secret_post: true,
         secret_jwt: true,
-        ..RealmFacts::default()
+        ..EnvironmentFacts::default()
     };
     let m: Value = serde_json::from_str(&authorization_server_of(&issuer, &SERVED, &on)).unwrap();
     assert_eq!(m["frontchannel_logout_supported"], true);
@@ -40,13 +40,13 @@ fn legacy_surfaces_are_declared_only_when_enabled() {
 
 // TN-35 OP-154 m.3 (dd) (j) Ek B 4649
 #[test]
-fn device_code_and_registration_are_declared_only_when_the_realm_enabled_them() {
-    use access_identity_oauth::domain::metadata::{RealmFacts, authorization_server_of};
+fn device_code_and_registration_are_declared_only_when_the_environment_enabled_them() {
+    use access_identity_oauth::domain::metadata::{EnvironmentFacts, authorization_server_of};
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
-    let on = RealmFacts {
+    let on = EnvironmentFacts {
         device_code: true,
         dcr: true,
-        ..RealmFacts::default()
+        ..EnvironmentFacts::default()
     };
     let m: Value = serde_json::from_str(&authorization_server_of(&issuer, &SERVED, &on)).unwrap();
     assert_eq!(
@@ -159,15 +159,15 @@ async fn the_issuer_never_comes_from_host() {
         ("bnd-a.id.test@evil.test", false),
         ("id.test", false),
     ] {
-        let r = c.oauth.realm(authority, None).await.unwrap();
+        let r = c.oauth.environment(authority, None).await.unwrap();
         assert_eq!(r.is_some(), found, "{authority}");
-        if let Some(realm) = r {
-            assert_eq!(realm.issuer.as_str(), a.issuer(), "{authority}");
+        if let Some(environment) = r {
+            assert_eq!(environment.issuer.as_str(), a.issuer(), "{authority}");
         }
     }
     assert!(
         c.oauth
-            .realm("id.test", Some("bnd-a"))
+            .environment("id.test", Some("bnd-a"))
             .await
             .unwrap()
             .is_none()
@@ -261,10 +261,13 @@ async fn a_dbsc_bound_session_does_not_authorize_without_its_bound_cookie() {
     );
     let value = <[u8; 32]>::try_from(b64url_decode(&cookie).unwrap()).unwrap();
     let bound = [0x42_u8; 32];
-    let mut tx =
-        access_store::identity::TenantTx::begin(&c.db.app, a.f.realm.tenant, a.f.realm.realm)
-            .await
-            .unwrap();
+    let mut tx = access_store::identity::TenantTx::begin(
+        &c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let row = tx
         .session_by_cookie(&cookie_digest(&value))
         .await

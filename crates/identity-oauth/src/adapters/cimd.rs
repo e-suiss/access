@@ -2,18 +2,19 @@
 //! m.3 (i), §11.3.6): the SSRF guard of [`Outbound`] for the URL and for every URL the
 //! document names, no redirect followed, only `200`, the read cut at the limit, one deadline
 //! for the fetch and a shorter one for the connection, and the declared rates per URL and per
-//! realm. Nothing is cached here: the realm's snapshot is the cache, and a refused fetch writes
+//! environment. Nothing is cached here: the environment's snapshot is the cache, and a refused fetch writes
 //! nothing (§11.3.5).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use access_store::identity::RealmId;
+use access_store::identity::EnvironmentId;
 
 use crate::adapters::outbound::{Outbound, OutboundError};
 use crate::domain::cimd::{
-    CONNECT_TIMEOUT_MS, FETCH_TIMEOUT_MS, PER_REALM_PER_MINUTE, PER_URL_PER_MINUTE, USER_AGENT,
+    CONNECT_TIMEOUT_MS, FETCH_TIMEOUT_MS, PER_ENVIRONMENT_PER_MINUTE, PER_URL_PER_MINUTE,
+    USER_AGENT,
 };
 use crate::ports::oauth::{ClientDocuments, Fetch, FetchRefused, Fetched};
 
@@ -46,14 +47,17 @@ impl Windows {
 #[derive(Debug, Default)]
 pub struct FetchRates {
     urls: Windows,
-    realms: Windows,
+    environments: Windows,
 }
 
 impl FetchRates {
-    /// Takes one fetch of `url` for `realm` at `now`; false when either rate is spent.
-    pub fn take(&mut self, realm: RealmId, url: &str, now: Instant) -> bool {
-        let realm_key = format!("{:x?}", realm.as_bytes());
-        if !self.realms.take(&realm_key, PER_REALM_PER_MINUTE, now) {
+    /// Takes one fetch of `url` for `environment` at `now`; false when either rate is spent.
+    pub fn take(&mut self, environment: EnvironmentId, url: &str, now: Instant) -> bool {
+        let environment_key = format!("{:x?}", environment.as_bytes());
+        if !self
+            .environments
+            .take(&environment_key, PER_ENVIRONMENT_PER_MINUTE, now)
+        {
             return false;
         }
         self.urls.take(url, PER_URL_PER_MINUTE, now)
@@ -103,7 +107,7 @@ impl ClientDocuments for HttpClientDocuments {
 
     fn fetch<'a>(
         &'a self,
-        realm: RealmId,
+        environment: EnvironmentId,
         url: &'a str,
         accept: &'a str,
         max_body: usize,
@@ -112,7 +116,7 @@ impl ClientDocuments for HttpClientDocuments {
             let allowed = self
                 .rates
                 .lock()
-                .is_ok_and(|mut r| r.take(realm, url, Instant::now()));
+                .is_ok_and(|mut r| r.take(environment, url, Instant::now()));
             if !allowed {
                 return Err(FetchRefused::Limited);
             }
@@ -139,22 +143,22 @@ mod tests {
 
     // OP-154 m.3 (i), Ek B 4536, 4172
     #[test]
-    fn fetch_rates_hold_per_url_and_per_realm() {
+    fn fetch_rates_hold_per_url_and_per_environment() {
         let mut rates = FetchRates::default();
         let at = Instant::now();
-        let acme = RealmId::from_bytes([1; 16]);
+        let acme = EnvironmentId::from_bytes([1; 16]);
         for _ in 0..PER_URL_PER_MINUTE {
             assert!(rates.take(acme, "https://a.example/c", at));
         }
         assert!(!rates.take(acme, "https://a.example/c", at));
         assert!(rates.take(acme, "https://a.example/d", at));
         assert!(rates.take(acme, "https://a.example/c", at + WINDOW));
-        let beta = RealmId::from_bytes([2; 16]);
+        let beta = EnvironmentId::from_bytes([2; 16]);
         let mut taken = 0;
         while rates.take(beta, &format!("https://b.example/{taken}"), at) {
             taken += 1;
         }
-        assert_eq!(taken, PER_REALM_PER_MINUTE);
+        assert_eq!(taken, PER_ENVIRONMENT_PER_MINUTE);
     }
 
     // §11.3.6, RFC 6890, Ek B 4535

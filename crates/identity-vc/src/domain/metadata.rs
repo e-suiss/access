@@ -1,6 +1,6 @@
 //! The OID4VCI issuer metadata (`/.well-known/openid-credential-issuer`, OID4VCI 1.0 §12.2) and
 //! the pre-authorized credential offer the account page makes (§4.1). Only the person-attribute
-//! types are configured; the realm issuer is also the authorization server of the
+//! types are configured; the environment issuer is also the authorization server of the
 //! pre-authorized code.
 
 use serde_json::{Map, Value, json};
@@ -13,7 +13,7 @@ pub const PRE_AUTHORIZED_GRANT: &str = "urn:ietf:params:oauth:grant-type:pre-aut
 /// The key proof JWT `typ` (OID4VCI 1.0 Appendix F.1).
 pub const PROOF_TYP: &str = "openid4vci-proof+jwt";
 
-/// The issuer metadata of the realm issuer `issuer`.
+/// The issuer metadata of the environment issuer `issuer`.
 #[must_use]
 pub fn issuer_metadata(issuer: &str) -> Value {
     let base = issuer.trim_end_matches('/');

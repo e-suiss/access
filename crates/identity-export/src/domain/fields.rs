@@ -64,7 +64,7 @@ pub fn sample(event: &str) -> AuditRecord {
         recorded_at_ms: 2,
         checkpoint_at_ms: Some(3),
         tenant: Some([1; 16]),
-        scope: Scope::Realm([2; 16]),
+        scope: Scope::Environment([2; 16]),
         actor: String::from("actor"),
         target: String::from("target"),
         reason: Some(String::from("reason")),

@@ -2,10 +2,10 @@
 //!
 //! A protocol gateway connects with its own client certificate, whose SAN URI names it
 //! (`urn:suiss:access:gw:<kind>:<name>`). This crate finds the registered gateway, holds every
-//! call to the gateway's realm and its kind's authentication method (§13.2 blast radius), and
-//! turns an edge authentication into the realm issuer's `authentication` Claim. The gateway
+//! call to the gateway's environment and its kind's authentication method (§13.2 blast radius), and
+//! turns an edge authentication into the environment issuer's `authentication` Claim. The gateway
 //! signs nothing and never reaches the authority plane: the Claim is queued in the identity
-//! plane's outbox and issued by the realm issuer (P-ID-5).
+//! plane's outbox and issued by the environment issuer (P-ID-5).
 
 pub mod adapters;
 pub mod app;

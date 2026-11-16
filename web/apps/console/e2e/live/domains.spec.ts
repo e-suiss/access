@@ -8,13 +8,13 @@ test.describe("@live console custom domains", () => {
   test("@live the custom domains route reads and writes nothing without a session", async ({
     page,
   }) => {
-    const list = await page.request.get("/console/api/proxy/admin/realms/acme/domains");
+    const list = await page.request.get("/console/api/proxy/admin/envs/acme/domains");
     expect([401, 403]).toContain(list.status());
     const one = await page.request.get(
-      "/console/api/proxy/admin/realms/acme/domains/login.acme.example",
+      "/console/api/proxy/admin/envs/acme/domains/login.acme.example",
     );
     expect([401, 403]).toContain(one.status());
-    const write = await page.request.post("/console/api/proxy/admin/realms/acme/domains", {
+    const write = await page.request.post("/console/api/proxy/admin/envs/acme/domains", {
       data: { host: "login.acme.example" },
     });
     expect([401, 403]).toContain(write.status());

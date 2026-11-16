@@ -1,5 +1,5 @@
 //! A platform client's stream status (SSF 1.0 §8.1.2, OP-149 m.19 (f), m.26 (c)) through the
-//! platform routes, and its service token for another product (OP-149 m.31 (a)) at the realm's
+//! platform routes, and its service token for another product (OP-149 m.31 (a)) at the environment's
 //! token endpoint, both authenticated by an RFC 7523 client assertion the product's client key
 //! signs (OP-149 m.19 (e)).
 
@@ -16,7 +16,7 @@ const ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-be
 pub struct PlatformClient<'a> {
     /// The deployment's API base, e.g. `https://access-server:8443`.
     pub api_base: &'a str,
-    /// The platform realm's issuer: the assertion's `aud`.
+    /// The platform environment's issuer: the assertion's `aud`.
     pub issuer: &'a str,
     /// The `client_id`.
     pub client_id: &'a str,

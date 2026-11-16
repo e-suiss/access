@@ -1,6 +1,6 @@
-//! Adapters of the identity signer's ports: a key factory that creates realm keys in the
-//! signer process and seals each one under the realm's KEK (CR-21 m.3, T31), a directory
-//! vault keyed by realm, and the Unix domain socket server and client (CMP-22b).
+//! Adapters of the identity signer's ports: a key factory that creates environment keys in the
+//! signer process and seals each one under the environment's KEK (CR-21 m.3, T31), a directory
+//! vault keyed by environment, and the Unix domain socket server and client (CMP-22b).
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -11,7 +11,7 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::ports::{Vault, VaultError};
-use crate::protocol::{self, Realm, Request, Response};
+use crate::protocol::{self, Environment, Request, Response};
 use crate::service::Service;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
@@ -23,7 +23,7 @@ use crate::ports::{Generated, KeyFactory};
 pub mod token;
 
 /// Binds the sealed key to what it is for; distinct from the authority's operational keys.
-const SEAL_CONTEXT: &[u8] = b"access/identity-signer/realm-key";
+const SEAL_CONTEXT: &[u8] = b"access/identity-signer/environment-key";
 
 /// Binds a sealed `rsa-id` key to its purpose (OP-155 m.3 (k)).
 const RSA_ID_CONTEXT: &[u8] = b"access/identity-signer/rsa-id";
@@ -31,11 +31,11 @@ const RSA_ID_CONTEXT: &[u8] = b"access/identity-signer/rsa-id";
 /// Binds a sealed SAML key to its purpose (OP-155 m.3 (d)).
 const SAML_CONTEXT: &[u8] = b"access/identity-signer/saml";
 
-/// Binds a sealed ML-DSA seed to the realm's post-quantum key set (CR-41 m.3, OP-159 m.3 (d)).
-const PQ_CONTEXT: &[u8] = b"access/identity-signer/realm-pq-seed";
+/// Binds a sealed ML-DSA seed to the environment's post-quantum key set (CR-41 m.3, OP-159 m.3 (d)).
+const PQ_CONTEXT: &[u8] = b"access/identity-signer/environment-pq-seed";
 
-/// Creates realm keys on aws-lc-rs and seals each PKCS#8 document under its own DEK, wrapped
-/// by the realm's KEK; the plaintext never leaves memory (CR-21 m.3).
+/// Creates environment keys on aws-lc-rs and seals each PKCS#8 document under its own DEK, wrapped
+/// by the environment's KEK; the plaintext never leaves memory (CR-21 m.3).
 pub struct SealedFactory<K> {
     kek: K,
     pager: Option<Arc<Pager>>,
@@ -47,7 +47,7 @@ impl<K: Kek> SealedFactory<K> {
         Self { kek, pager: None }
     }
 
-    /// This factory keeping each opened realm key's document only in `pager`'s protected
+    /// This factory keeping each opened environment key's document only in `pager`'s protected
     /// memory (CR-34, SAI-45, OP-158 m.3 (y)).
     #[must_use]
     pub fn with_pager(mut self, pager: Arc<Pager>) -> Self {
@@ -206,8 +206,8 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
     }
 }
 
-fn hex(realm: &Realm) -> String {
-    realm
+fn hex(environment: &Environment) -> String {
+    environment
         .0
         .iter()
         .fold(String::with_capacity(32), |mut out, b| {
@@ -216,7 +216,7 @@ fn hex(realm: &Realm) -> String {
         })
 }
 
-/// One file per realm in a directory only the identity signer reads and writes; a write
+/// One file per environment in a directory only the identity signer reads and writes; a write
 /// replaces the file atomically, so a dropped key's sealed material is gone with the old file
 /// (OP-73).
 pub struct DirVault {
@@ -245,8 +245,8 @@ impl Vault for DirVault {
         Ok(out)
     }
 
-    fn put(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let name = hex(realm);
+    fn put(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        let name = hex(environment);
         let tmp = self.dir.join(format!("{name}.tmp"));
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(format!("{name}.cbor"))).map_err(|_| VaultError)
@@ -266,88 +266,88 @@ impl Vault for DirVault {
         std::fs::rename(&tmp, self.dir.join(CELL_FILE)).map_err(|_| VaultError)
     }
 
-    fn issuer(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        match std::fs::read(self.dir.join(issuer_file(realm))) {
+    fn issuer(&mut self, environment: &Environment) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(issuer_file(environment))) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err(VaultError),
         }
     }
 
-    fn put_issuer(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let tmp = self.dir.join(format!("{}.issuer.tmp", hex(realm)));
+    fn put_issuer(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.issuer.tmp", hex(environment)));
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
-        std::fs::rename(&tmp, self.dir.join(issuer_file(realm))).map_err(|_| VaultError)
+        std::fs::rename(&tmp, self.dir.join(issuer_file(environment))).map_err(|_| VaultError)
     }
 
-    fn rsa_id(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        match std::fs::read(self.dir.join(rsa_id_file(realm))) {
+    fn rsa_id(&mut self, environment: &Environment) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(rsa_id_file(environment))) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err(VaultError),
         }
     }
 
-    fn put_rsa_id(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let tmp = self.dir.join(format!("{}.rsa-id.tmp", hex(realm)));
+    fn put_rsa_id(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.rsa-id.tmp", hex(environment)));
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
-        std::fs::rename(&tmp, self.dir.join(rsa_id_file(realm))).map_err(|_| VaultError)
+        std::fs::rename(&tmp, self.dir.join(rsa_id_file(environment))).map_err(|_| VaultError)
     }
 
-    fn saml(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        match std::fs::read(self.dir.join(saml_file(realm))) {
+    fn saml(&mut self, environment: &Environment) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(saml_file(environment))) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err(VaultError),
         }
     }
 
-    fn put_saml(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let tmp = self.dir.join(format!("{}.saml.tmp", hex(realm)));
+    fn put_saml(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.saml.tmp", hex(environment)));
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
-        std::fs::rename(&tmp, self.dir.join(saml_file(realm))).map_err(|_| VaultError)
+        std::fs::rename(&tmp, self.dir.join(saml_file(environment))).map_err(|_| VaultError)
     }
 
-    fn ssh(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        match std::fs::read(self.dir.join(ssh_file(realm))) {
+    fn ssh(&mut self, environment: &Environment) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(ssh_file(environment))) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err(VaultError),
         }
     }
 
-    fn put_ssh(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let tmp = self.dir.join(format!("{}.ssh-ca.tmp", hex(realm)));
+    fn put_ssh(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.ssh-ca.tmp", hex(environment)));
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
-        std::fs::rename(&tmp, self.dir.join(ssh_file(realm))).map_err(|_| VaultError)
+        std::fs::rename(&tmp, self.dir.join(ssh_file(environment))).map_err(|_| VaultError)
     }
 }
 
-/// A realm's `rsa-id` key file; not `.cbor`, so it is never read as a realm key set.
-fn rsa_id_file(realm: &Realm) -> String {
+/// An environment's `rsa-id` key file; not `.cbor`, so it is never read as an environment key set.
+fn rsa_id_file(environment: &Environment) -> String {
     format!(
         "{}.{}.key",
-        hex(realm),
+        hex(environment),
         crate::purpose::KeyPurpose::RsaId.label()
     )
 }
 
-/// A realm's SAML key file; not `.cbor`, so it is never read as a realm key set.
-fn saml_file(realm: &Realm) -> String {
-    format!("{}.{}.key", hex(realm), crate::saml::LABEL)
+/// An environment's SAML key file; not `.cbor`, so it is never read as an environment key set.
+fn saml_file(environment: &Environment) -> String {
+    format!("{}.{}.key", hex(environment), crate::saml::LABEL)
 }
 
-/// A realm's SSH CA key file; not `.cbor`, so it is never read as a realm key set.
-fn ssh_file(realm: &Realm) -> String {
-    format!("{}.{}.key", hex(realm), crate::ssh::LABEL)
+/// An environment's SSH CA key file; not `.cbor`, so it is never read as an environment key set.
+fn ssh_file(environment: &Environment) -> String {
+    format!("{}.{}.key", hex(environment), crate::ssh::LABEL)
 }
 
-/// A realm's Claim issuer key file; not `.cbor`, so it is never read as a realm key set.
-fn issuer_file(realm: &Realm) -> String {
-    format!("{}.{}.key", hex(realm), crate::issuer::LABEL)
+/// An environment's Claim issuer key file; not `.cbor`, so it is never read as an environment key set.
+fn issuer_file(environment: &Environment) -> String {
+    format!("{}.{}.key", hex(environment), crate::issuer::LABEL)
 }
 
-/// The cell key's file; not `.cbor`, so it is never read as a realm.
+/// The cell key's file; not `.cbor`, so it is never read as an environment.
 const CELL_FILE: &str = "audit-checkpoint.key";
 
 /// Milliseconds since the Unix epoch.

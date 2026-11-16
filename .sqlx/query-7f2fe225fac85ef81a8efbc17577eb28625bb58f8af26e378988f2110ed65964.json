@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.first_contact_keys\n               (tenant_id, environment_id, period, token_key_id, token_key, sealed_key)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT (tenant_id, environment_id, period) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7f2fe225fac85ef81a8efbc17577eb28625bb58f8af26e378988f2110ed65964"
+}

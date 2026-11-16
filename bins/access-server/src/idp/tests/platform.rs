@@ -67,7 +67,7 @@ pub(super) struct Product {
 pub(super) const ISSUER: &str = "https://platform.id.test";
 
 impl Product {
-    /// A fresh `private_key_jwt` assertion for the platform realm (RFC 7523).
+    /// A fresh `private_key_jwt` assertion for the platform environment (RFC 7523).
     pub(super) fn assertion(&self, aud: &str) -> String {
         let n = self.jti.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let header = r#"{"alg":"ES256","typ":"JWT"}"#;
@@ -159,7 +159,7 @@ impl Product {
             b64url_encode(&sign(&s, seed))
         };
         let mut out = json!({
-            "realm": target["realm"],
+            "environment": target["environment"],
             "challenge": target["challenge"],
             "ais": ais(&target["instance_create"]),
         });
@@ -169,7 +169,7 @@ impl Product {
         out
     }
 
-    /// Challenges and pairs every live realm of `tenant`.
+    /// Challenges and pairs every live environment of `tenant`.
     async fn pair(&self, tenant: &str) -> Json {
         let (s, v) = self
             .call(
@@ -248,17 +248,20 @@ fn meets_schema(value: &Json, name: &str) {
     );
 }
 
-/// The platform realm, the Work platform client with an ES256 client key, service key
+/// The platform environment, the Work platform client with an ES256 client key, service key
 /// `SERVICE_SEED` and an event receiver, and the platform API over the real authority plane.
-async fn product(w: &World) -> (Product, TenantId, RealmId) {
+async fn product(w: &World) -> (Product, TenantId, EnvironmentId) {
     let (mut ps, pt, pr) = Box::pin(products(w, &[("work", SERVICE_SEED)])).await;
     (ps.remove(0), pt, pr)
 }
 
-/// The platform realm and one platform client per `(product name, service key seed)`, each with
+/// The platform environment and one platform client per `(product name, service key seed)`, each with
 /// its own ES256 client key and an event receiver, over the real authority plane.
-pub(super) async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, RealmId) {
-    let (pt, pr, pd) = w.realm("platform").await;
+pub(super) async fn products(
+    w: &World,
+    named: &[(&str, u8)],
+) -> (Vec<Product>, TenantId, EnvironmentId) {
+    let (pt, pr, pd) = w.environment("platform").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let platform = Admin {
         platform_tenant: Some(pt),
@@ -331,7 +334,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     // TN-50, CR-24, OP-62
     let w = World::new().await;
     let (p, _, _) = Box::pin(product(&w)).await;
-    let (t2, r2, d2) = w.realm("acme").await;
+    let (t2, r2, d2) = w.environment("acme").await;
     let tnt = p.tenant(t2);
     let challenges = format!("/access/v1/tenants/{tnt}/pairing/challenges");
 
@@ -343,7 +346,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     let t = &v["targets"][0];
     assert_eq!(t["status"], "unpaired");
     assert_eq!(
-        t["realm"],
+        t["environment"],
         access_identity_events::domain::catalog::uuid(r2.as_bytes())
     );
     assert_eq!(t["domain"], b64url_encode(&d2.0));
@@ -432,7 +435,7 @@ async fn the_platform_api_takes_a_fresh_client_assertion() {
     // §10.4.5, TN-30
     let w = World::new().await;
     let (p, _, _) = Box::pin(product(&w)).await;
-    let (t2, _, _) = w.realm("acme").await;
+    let (t2, _, _) = w.environment("acme").await;
     let path = format!("/access/v1/tenants/{}/pairing/challenges", p.tenant(t2));
     let (s, v) = p.call_as("POST", &path, None, None).await;
     assert_eq!(
@@ -462,12 +465,12 @@ async fn the_platform_api_takes_a_fresh_client_assertion() {
         .call(
             "POST",
             &path,
-            Some(&json!({ "realms": ["01010101-0101-0101-0101-010101010101"] })),
+            Some(&json!({ "environments": ["01010101-0101-0101-0101-010101010101"] })),
         )
         .await;
     assert_eq!(
         (s, v["code"].as_str()),
-        (StatusCode::NOT_FOUND, Some("realm-unknown"))
+        (StatusCode::NOT_FOUND, Some("environment-unknown"))
     );
 }
 
@@ -478,8 +481,8 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
     // §8.1.1
     let w = World::new().await;
     let (p, _, _) = Box::pin(product(&w)).await;
-    let (t2, _, _) = w.realm("acme").await;
-    let (t3, _, _) = w.realm("beta").await;
+    let (t2, _, _) = w.environment("acme").await;
+    let (t3, _, _) = w.environment("beta").await;
     let first = p.pair(&p.tenant(t2)).await;
     let second = p.pair(&p.tenant(t3)).await;
     assert_eq!(first["targets"][0]["status"], "paired");
@@ -590,7 +593,7 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
         )
         .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
-    let (t4, _, _) = w.realm("gamma").await;
+    let (t4, _, _) = w.environment("gamma").await;
     let third = p.pair(&p.tenant(t4)).await;
     assert_ne!(third["event_stream"], first["event_stream"]);
 }
@@ -606,7 +609,7 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
         &[("work", SERVICE_SEED), (third, SERVICE_SEED + 2)],
     ))
     .await;
-    let (t2, r2, d2) = w.realm("acme").await;
+    let (t2, r2, d2) = w.environment("acme").await;
     let tnt = ps[0].tenant(t2);
     let challenges = format!("/access/v1/tenants/{tnt}/pairing/challenges");
     let ExerciseBasis::Public(grant) = bootstrap_basis(&d2) else {
@@ -734,7 +737,7 @@ async fn a_paired_product_reads_its_tenant_with_its_assertion() {
     // MD-10, OP-141 m.22 (f)
     let w = World::new().await;
     let (p, _, _) = Box::pin(product(&w)).await;
-    let (t2, r2, _) = w.realm("acme").await;
+    let (t2, r2, _) = w.environment("acme").await;
     let tnt = p.tenant(t2);
     let paired = p.pair(&tnt).await;
     let party = paired["targets"][0]["party"].as_str().unwrap().to_owned();
@@ -782,8 +785,8 @@ async fn a_paired_product_reads_its_tenant_with_its_assertion() {
     assert_eq!(s, StatusCode::OK, "{v}");
     meets_schema(&v, "TenantSnapshot");
     assert_eq!(v["tenant"], tnt.as_str());
-    let realm = access_identity_events::domain::catalog::uuid(r2.as_bytes());
-    assert_eq!(v["realms"][0]["id"], realm);
+    let environment = access_identity_events::domain::catalog::uuid(r2.as_bytes());
+    assert_eq!(v["environments"][0]["id"], environment);
     let (s, v) = call(Some(once), "GET", snapshot.clone(), None).await;
     assert_eq!(
         (s, v["code"].as_str()),
@@ -791,7 +794,7 @@ async fn a_paired_product_reads_its_tenant_with_its_assertion() {
         "a replayed jti"
     );
     let resolve = format!("/access/v1/tenants/{tnt}/subjects:resolve");
-    let ask = json!({ "realm": realm, "client_id": p.client, "parties": [party] });
+    let ask = json!({ "environment": environment, "client_id": p.client, "parties": [party] });
     let (s, v) = call(
         Some(p.assertion(ISSUER)),
         "POST",
@@ -805,7 +808,7 @@ async fn a_paired_product_reads_its_tenant_with_its_assertion() {
     let sub = v["resolved"][0]["sub"].as_str().unwrap().to_owned();
     assert_eq!(sub.len(), 43);
     assert_eq!(v["unknown"], json!([]));
-    let back = json!({ "realm": realm, "client_id": p.client, "subs": [sub] });
+    let back = json!({ "environment": environment, "client_id": p.client, "subs": [sub] });
     let (s, v) = call(
         Some(p.assertion(ISSUER)),
         "POST",

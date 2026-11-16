@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_dcr_policies\n               (tenant_id, environment_id, version, enabled, domains, tokens, domain_id, decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.idp_dcr_policies\n                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                    $3, $4, $5, $6, $7",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "TextArray",
+        "ByteaArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "32db94bbdcc6ec4e936dcb6a0232adb3f1896173fea5a924670a36cc259317a7"
+}

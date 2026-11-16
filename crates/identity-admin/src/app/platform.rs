@@ -1,8 +1,8 @@
 //! The platform product API (OP-149 m.4, m.16 (a), m.17 (e), (g)): a platform client,
-//! authenticated by `private_key_jwt` (RFC 7523), pairs with a tenant's realms by signing its own
+//! authenticated by `private_key_jwt` (RFC 7523), pairs with a tenant's environments by signing its own
 //! `party_register` and `instance_create` (L0-META-7), and manages its event streams.
 //!
-//! Pairing has two steps. A challenge request returns, for every realm asked for, what the
+//! Pairing has two steps. A challenge request returns, for every environment asked for, what the
 //! product's Exercises name: the governing domain, the bootstrap basis, the identity plane's
 //! PEP, the product's Party there, the nonces (the challenge, and for a new Party the challenge
 //! followed by `0x01`), the validity window and the intent digests. The product signs the AIS
@@ -37,7 +37,7 @@ use access_kernel::model::{Id, Window};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::platform::PairingRow;
 use access_store::{idp, tenancy};
 use serde_json::{Map, Value, json};
@@ -48,7 +48,7 @@ use crate::ports::Instances;
 /// How long a pairing challenge and the intents it names stay valid, ms (PD).
 pub const PAIRING_TTL_MS: u64 = 10 * 60 * 1000;
 
-/// Most realms one pairing request names (PD).
+/// Most environments one pairing request names (PD).
 pub const MAX_TARGETS: usize = 64;
 
 /// Longest AIS accepted, bytes.
@@ -66,7 +66,7 @@ pub enum PlatformError {
     /// The request is not valid; the code says why.
     #[error("invalid: {0}")]
     Invalid(&'static str),
-    /// No such tenant, realm or stream.
+    /// No such tenant, environment or stream.
     #[error("not found: {0}")]
     NotFound(&'static str),
     /// The state does not allow it.
@@ -109,13 +109,13 @@ impl From<StreamError> for PlatformError {
     }
 }
 
-/// An authenticated platform client: its realm in the platform tenant and what it registered.
+/// An authenticated platform client: its environment in the platform tenant and what it registered.
 #[derive(Clone)]
 pub struct Caller {
     /// The platform tenant.
     pub tenant: TenantId,
-    /// The client's realm.
-    pub realm: RealmId,
+    /// The client's environment.
+    pub environment: EnvironmentId,
     /// The `client_id`.
     pub client_id: String,
     /// The product.
@@ -130,9 +130,9 @@ pub struct Caller {
 pub struct PlatformApi<D, C, I, K, R, T> {
     /// `access_app`.
     pub app: Pool,
-    /// `access_router`, for a tenant's live realms.
+    /// `access_router`, for a tenant's live environments.
     pub router: Pool,
-    /// The realm directory: a client is found in the realm its assertion's `aud` names.
+    /// The environment directory: a client is found in the environment its assertion's `aud` names.
     pub directory: D,
     /// Client JWKS documents.
     pub client_keys: C,
@@ -180,10 +180,15 @@ fn b64(text: Option<&Value>, min: usize, max: usize) -> Result<Vec<u8>, Platform
         .ok_or(PlatformError::Invalid("invalid-request"))
 }
 
-/// The realm, Party and Instance of a paired target.
-fn paired_json(realm: &[u8; 16], party: &[u8; 16], instance: &[u8; 16], kid: &[u8; 32]) -> Value {
+/// The environment, Party and Instance of a paired target.
+fn paired_json(
+    environment: &[u8; 16],
+    party: &[u8; 16],
+    instance: &[u8; 16],
+    kid: &[u8; 32],
+) -> Value {
     json!({
-        "realm": uuid_text(realm),
+        "environment": uuid_text(environment),
         "status": "paired",
         "party": b64url_encode(party),
         "instance": b64url_encode(instance),
@@ -232,7 +237,7 @@ where
         self.clock.now().map_err(|_| PlatformError::Unavailable)
     }
 
-    /// RFC 7523 for a platform client outside the realm's own endpoints: the realm is the one
+    /// RFC 7523 for a platform client outside the environment's own endpoints: the environment is the one
     /// whose issuer the assertion's single `aud` names; the client must be an active
     /// `private_key_jwt` platform client of it; `aud` must be that issuer or `endpoint`; the
     /// `jti` is recorded once.
@@ -251,13 +256,13 @@ where
         if slug.is_none() && !issuer.path().is_empty() {
             return Err(NO);
         }
-        let realm = resolve(&self.directory, issuer.authority(), slug)
+        let environment = resolve(&self.directory, issuer.authority(), slug)
             .await
             .map_err(|_| PlatformError::Unavailable)?
             .filter(|r| r.issuer.as_str() == aud)
             .ok_or(NO)?;
         let client_id = assertion_subject(assertion).map_err(|_| NO)?;
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm).await?;
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment).await?;
         let row = idp::client(&mut t, &client_id).await?;
         t.commit().await?;
         let row = row.filter(|r| r.active).ok_or(NO)?;
@@ -291,14 +296,14 @@ where
             &keys,
             &AssertionRules {
                 client_id: &client.id,
-                issuer: realm.issuer.as_str(),
+                issuer: environment.issuer.as_str(),
                 endpoint,
                 now_ms: now,
                 rs256: client.rs256,
             },
         )
         .map_err(|_| NO)?;
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm).await?;
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment).await?;
         let first = t
             .assertion_first_use(day(verified.exp_ms), &verified.replay_key)
             .await?;
@@ -307,8 +312,8 @@ where
             return Err(NO);
         }
         Ok(Caller {
-            tenant: realm.tenant,
-            realm: realm.realm,
+            tenant: environment.tenant,
+            environment: environment.environment,
             client_id,
             product,
             service_key,
@@ -330,44 +335,48 @@ where
             .ok_or(PlatformError::NotFound("tenant-unknown"))
     }
 
-    /// The live realms of `tenant` a request names; all of them when it names none.
+    /// The live environments of `tenant` a request names; all of them when it names none.
     async fn targets(
         &self,
         tenant: TenantId,
         named: Option<BTreeSet<[u8; 16]>>,
-    ) -> Result<Vec<RealmId>, PlatformError> {
-        let live: Vec<RealmId> = tenancy::tenant_routes(&self.router, &[tenant])
+    ) -> Result<Vec<EnvironmentId>, PlatformError> {
+        let live: Vec<EnvironmentId> = tenancy::tenant_routes(&self.router, &[tenant])
             .await?
             .into_iter()
-            .map(|r| r.realm)
+            .map(|r| r.environment)
             .collect();
         match named {
             None => Ok(live),
             Some(set) => {
                 let mut out = Vec::with_capacity(set.len());
                 for r in set {
-                    let realm = live
+                    let environment = live
                         .iter()
                         .copied()
                         .find(|l| *l.as_bytes() == r)
-                        .ok_or(PlatformError::NotFound("realm-unknown"))?;
-                    out.push(realm);
+                        .ok_or(PlatformError::NotFound("environment-unknown"))?;
+                    out.push(environment);
                 }
                 Ok(out)
             }
         }
     }
 
-    async fn domain(&self, tenant: TenantId, realm: RealmId) -> Result<Digest, PlatformError> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+    async fn domain(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<Digest, PlatformError> {
+        let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
         let g = idp::governance(&mut t).await?;
         t.commit().await?;
         g.map(|g| Digest(*g.domain.as_bytes()))
-            .ok_or(PlatformError::NotFound("realm-unknown"))
+            .ok_or(PlatformError::NotFound("environment-unknown"))
     }
 
     /// `POST /access/v1/tenants/{tenant}/pairing/challenges` (OP-149 m.4, m.16 (a), (d)): for
-    /// every realm named, or every live realm of the tenant when `body` names none, either the
+    /// every environment named, or every live environment of the tenant when `body` names none, either the
     /// Instance an earlier pairing with the current service key opened, or a challenge and what
     /// the product's two Exercises name. A challenge still valid is handed out again.
     ///
@@ -388,10 +397,10 @@ where
             let o = v
                 .as_object()
                 .ok_or(PlatformError::Invalid("invalid-request"))?;
-            if o.keys().any(|k| k != "realms") {
+            if o.keys().any(|k| k != "environments") {
                 return Err(PlatformError::Invalid("unknown-member"));
             }
-            match o.get("realms") {
+            match o.get("environments") {
                 None => None,
                 Some(Value::Array(list)) if !list.is_empty() && list.len() <= MAX_TARGETS => {
                     let mut set = BTreeSet::new();
@@ -399,20 +408,20 @@ where
                         let id = r
                             .as_str()
                             .and_then(parse_uuid)
-                            .ok_or(PlatformError::Invalid("realms"))?;
+                            .ok_or(PlatformError::Invalid("environments"))?;
                         set.insert(id);
                     }
                     Some(set)
                 }
-                Some(_) => return Err(PlatformError::Invalid("realms")),
+                Some(_) => return Err(PlatformError::Invalid("environments")),
             }
         };
         let kid = thumbprint(&caller.service_key);
         let now = self.now()?;
         let mut targets = Vec::new();
-        for realm in self.targets(tenant, named).await? {
-            let domain = self.domain(tenant, realm).await?;
-            let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+        for environment in self.targets(tenant, named).await? {
+            let domain = self.domain(tenant, environment).await?;
+            let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
             let current = t.current_pairing(&caller.client_id, &kid, now).await?;
             let row = if let Some(row) = current {
                 row
@@ -438,7 +447,7 @@ where
                 row
             };
             t.commit().await?;
-            targets.push(self.target_json(caller, realm, &domain, &row)?);
+            targets.push(self.target_json(caller, environment, &domain, &row)?);
         }
         Ok(json!({
             "tenant": tenant_text,
@@ -449,13 +458,13 @@ where
     fn target_json(
         &self,
         caller: &Caller,
-        realm: RealmId,
+        environment: EnvironmentId,
         domain: &Digest,
         row: &PairingRow,
     ) -> Result<Value, PlatformError> {
         if let Some(instance) = &row.instance {
             return Ok(paired_json(
-                realm.as_bytes(),
+                environment.as_bytes(),
                 &row.party,
                 instance,
                 &row.kid,
@@ -471,7 +480,10 @@ where
         };
         let signed = Signed::of(party, &caller.service_key);
         let mut m = Map::new();
-        m.insert("realm".into(), uuid_text(realm.as_bytes()).into());
+        m.insert(
+            "environment".into(),
+            uuid_text(environment.as_bytes()).into(),
+        );
         m.insert("status".into(), "unpaired".into());
         m.insert("domain".into(), b64url_encode(&domain.0).into());
         m.insert("basis".into(), b64url_encode(&grant.0).into());
@@ -533,17 +545,20 @@ where
         let mut any = false;
         for item in list {
             let o = item.as_object().ok_or(PlatformError::Invalid("targets"))?;
-            if o.keys()
-                .any(|k| !matches!(k.as_str(), "realm" | "challenge" | "ais" | "register_ais"))
-            {
+            if o.keys().any(|k| {
+                !matches!(
+                    k.as_str(),
+                    "environment" | "challenge" | "ais" | "register_ais"
+                )
+            }) {
                 return Err(PlatformError::Invalid("unknown-member"));
             }
-            let realm = o
-                .get("realm")
+            let environment = o
+                .get("environment")
                 .and_then(Value::as_str)
                 .and_then(parse_uuid)
                 .and_then(|r| live.iter().copied().find(|l| *l.as_bytes() == r))
-                .ok_or(PlatformError::NotFound("realm-unknown"))?;
+                .ok_or(PlatformError::NotFound("environment-unknown"))?;
             let challenge = <[u8; 32]>::try_from(b64(o.get("challenge"), 32, 32)?)
                 .map_err(|_| PlatformError::Invalid("invalid-request"))?;
             let ais = b64(o.get("ais"), 1, MAX_AIS)?;
@@ -552,7 +567,7 @@ where
                 v => Some(b64(v, 1, MAX_AIS)?),
             };
             let answer = self
-                .pair_one(caller, tenant, realm, &challenge, ais, register_ais)
+                .pair_one(caller, tenant, environment, &challenge, ais, register_ais)
                 .await?;
             any |= answer.get("status").and_then(Value::as_str) == Some("paired");
             out.push(answer);
@@ -563,7 +578,12 @@ where
         {
             let id = self
                 .streams
-                .ensure_platform_push(caller.tenant, caller.realm, &caller.client_id, receiver)
+                .ensure_platform_push(
+                    caller.tenant,
+                    caller.environment,
+                    &caller.client_id,
+                    receiver,
+                )
                 .await?;
             m.insert("event_stream".into(), uuid_text(&id).into());
         }
@@ -574,15 +594,15 @@ where
         &self,
         caller: &Caller,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         challenge: &[u8; 32],
         ais: Vec<u8>,
         register_ais: Option<Vec<u8>>,
     ) -> Result<Value, PlatformError> {
         let kid = thumbprint(&caller.service_key);
-        let domain = self.domain(tenant, realm).await?;
+        let domain = self.domain(tenant, environment).await?;
         let now = self.now()?;
-        let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
         let row = t.pairing(challenge).await?;
         let bound = t.platform_party(&caller.client_id).await?;
         t.commit().await?;
@@ -590,7 +610,12 @@ where
             .filter(|r| r.client_id == caller.client_id && r.kid == kid)
             .ok_or(PlatformError::Invalid("invalid-challenge"))?;
         if let Some(instance) = &row.instance {
-            return Ok(paired_json(realm.as_bytes(), &row.party, instance, &kid));
+            return Ok(paired_json(
+                environment.as_bytes(),
+                &row.party,
+                instance,
+                &kid,
+            ));
         }
         if now > row.valid_until_ms {
             return Err(PlatformError::Invalid("invalid-challenge"));
@@ -636,14 +661,14 @@ where
             .map_err(|_| PlatformError::Unavailable)?;
         match verdict {
             RegistrationVerdict::Registered(r) => {
-                let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+                let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
                 if row.register && !t.bind_platform_party(&caller.client_id, &r.party.0).await? {
                     tracing::warn!("platform party already bound");
                 }
                 t.record_pairing(challenge, &r.instance.0).await?;
                 t.commit().await?;
                 Ok(paired_json(
-                    realm.as_bytes(),
+                    environment.as_bytes(),
                     &r.party.0,
                     &r.instance.0,
                     &r.kid,
@@ -652,7 +677,7 @@ where
             RegistrationVerdict::Refused { code } => {
                 tracing::info!(%code, "platform pairing refused");
                 Ok(json!({
-                    "realm": uuid_text(realm.as_bytes()),
+                    "environment": uuid_text(environment.as_bytes()),
                     "status": "refused",
                     "code": code,
                 }))
@@ -661,7 +686,7 @@ where
     }
 
     /// `POST /access/v1/platform/streams` (OP-149 m.17 (e), (g)): a stream the client owns in
-    /// its realm, from an SSF stream request; it receives every tenant's events. A webhook
+    /// its environment, from an SSF stream request; it receives every tenant's events. A webhook
     /// secret or poll credential is shown once.
     ///
     /// # Errors
@@ -674,7 +699,7 @@ where
         let req = parse_stream(body).map_err(|e| PlatformError::Invalid(e.0))?;
         let created = self
             .streams
-            .create_for_platform(caller.tenant, caller.realm, &req, &caller.client_id)
+            .create_for_platform(caller.tenant, caller.environment, &req, &caller.client_id)
             .await?;
         let mut out = created.stream.clone();
         if let Some(m) = out.as_object_mut() {
@@ -695,7 +720,7 @@ where
     pub async fn streams(&self, caller: &Caller) -> Result<Value, PlatformError> {
         let list = self
             .streams
-            .owned(caller.tenant, caller.realm, &caller.client_id)
+            .owned(caller.tenant, caller.environment, &caller.client_id)
             .await?;
         Ok(json!({ "streams": list }))
     }
@@ -708,7 +733,7 @@ where
         let id = parse_uuid(id).ok_or(PlatformError::NotFound("no-such-stream"))?;
         Ok(self
             .streams
-            .get_owned(caller.tenant, caller.realm, &caller.client_id, id)
+            .get_owned(caller.tenant, caller.environment, &caller.client_id, id)
             .await?)
     }
 
@@ -721,7 +746,7 @@ where
         let id = parse_uuid(id).ok_or(PlatformError::NotFound("no-such-stream"))?;
         Ok(self
             .streams
-            .disable_owned(caller.tenant, caller.realm, &caller.client_id, id)
+            .disable_owned(caller.tenant, caller.environment, &caller.client_id, id)
             .await?)
     }
 
@@ -734,7 +759,7 @@ where
         let id = parse_uuid(id).ok_or(PlatformError::NotFound("no-such-stream"))?;
         Ok(self
             .streams
-            .status_owned(caller.tenant, caller.realm, &caller.client_id, id)
+            .status_owned(caller.tenant, caller.environment, &caller.client_id, id)
             .await?)
     }
 
@@ -759,7 +784,7 @@ where
             .streams
             .set_status_owned(
                 caller.tenant,
-                caller.realm,
+                caller.environment,
                 &caller.client_id,
                 parsed,
                 &update,

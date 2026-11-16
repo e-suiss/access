@@ -1,6 +1,6 @@
 //! Keyed pseudonyms of client addresses (OP-151 m.1 (b), OP-47): what the risk engine keeps of
 //! an IP instead of the address. The key lives in the PKCS#11 token and never leaves it; one
-//! pseudonym per realm, so two realms cannot link one address.
+//! pseudonym per environment, so two environments cannot link one address.
 
 #[cfg(any(test, feature = "testing"))]
 use aws_lc_rs::hmac;
@@ -57,7 +57,7 @@ impl IpPseudonymKey {
         Self(Key::Memory(key))
     }
 
-    /// `HMAC-SHA-256(K, "access/ip-pseudonym/v1" ‖ 0x00 ‖ tenant ‖ realm ‖ address)`, where the
+    /// `HMAC-SHA-256(K, "access/ip-pseudonym/v1" ‖ 0x00 ‖ tenant ‖ environment ‖ address)`, where the
     /// address is its 16-byte IPv6 form (IPv4 mapped).
     ///
     /// # Errors
@@ -65,13 +65,13 @@ impl IpPseudonymKey {
     pub fn pseudonym(
         &self,
         tenant: &[u8; 16],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         address: &[u8; 16],
     ) -> Result<[u8; 32], HsmError> {
-        self.mac(CONTEXT, tenant, realm, address)
+        self.mac(CONTEXT, tenant, environment, address)
     }
 
-    /// `HMAC-SHA-256(K, "access/ip-prefix-pseudonym/v1" ‖ 0x00 ‖ tenant ‖ realm ‖ prefix)`, where
+    /// `HMAC-SHA-256(K, "access/ip-prefix-pseudonym/v1" ‖ 0x00 ‖ tenant ‖ environment ‖ prefix)`, where
     /// the prefix is [`prefix`] of the address: the bootstrap rate context (OP-152 m.5 (b)).
     ///
     /// # Errors
@@ -79,22 +79,22 @@ impl IpPseudonymKey {
     pub fn prefix_pseudonym(
         &self,
         tenant: &[u8; 16],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         address: &[u8; 16],
     ) -> Result<[u8; 32], HsmError> {
-        self.mac(PREFIX_CONTEXT, tenant, realm, &prefix(address))
+        self.mac(PREFIX_CONTEXT, tenant, environment, &prefix(address))
     }
 
     fn mac(
         &self,
         context: &[u8],
         tenant: &[u8; 16],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         address: &[u8; 16],
     ) -> Result<[u8; 32], HsmError> {
         let mut message = context.to_vec();
         message.extend_from_slice(tenant);
-        message.extend_from_slice(realm);
+        message.extend_from_slice(environment);
         message.extend_from_slice(address);
         match &self.0 {
             Key::Token(mac) => mac.mac(&message),
@@ -117,7 +117,7 @@ mod tests {
 
     // OP-151 m.1 (b)
     #[test]
-    fn pseudonyms_are_per_realm() {
+    fn pseudonyms_are_per_environment() {
         let a = IpPseudonymKey::new(Secret::new([1; 32]));
         let b = IpPseudonymKey::new(Secret::new([2; 32]));
         let ip = [9; 16];

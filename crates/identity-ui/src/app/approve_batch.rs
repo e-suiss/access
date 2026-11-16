@@ -1,10 +1,10 @@
 //! CT1 batch approval (OP-157 m.3 (m), §13.7.3, §8.17.6.3, SEC26): at most ten requests of one
-//! requester and one action class, in a realm that opened `idp.realm.approval_batch`. Every
+//! requester and one action class, in an environment that opened `idp.environment.approval_batch`. Every
 //! item is shown, has its own statement and its own assertion, and becomes its own
 //! contribution. A single item outside these rules refuses the whole batch; nothing here
 //! approves "all".
 
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::tier::Tier;
 use access_store::approvals::{self as store, ApprovalChannel};
@@ -20,7 +20,7 @@ use crate::domain::approval::{
 };
 use crate::domain::frontend::{ApproveQuery, rfc3339};
 use crate::domain::message::TextId;
-use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
+use crate::ports::{ApprovalClaims, Approvals, EnvironmentKit, Kits, Messages};
 
 const FLOW_LEN: usize = 16;
 
@@ -68,8 +68,8 @@ where
     C: crate::ports::Clock + Sync,
     M: Messages,
 {
-    async fn batch_open(&self, kit: &RealmKit) -> Result<bool, Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn batch_open(&self, kit: &EnvironmentKit) -> Result<bool, Reply> {
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let open = store::approval_channel_enabled(&mut t, ApprovalChannel::Batch)
@@ -88,7 +88,7 @@ where
     pub async fn start_batch<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &BatchStart,
     ) -> Reply {
@@ -102,7 +102,7 @@ where
         }
         match self.batch_open(&kit).await {
             Ok(true) => {}
-            Ok(false) => return invalid("Batch approval is not open in this realm"),
+            Ok(false) => return invalid("Batch approval is not open in this environment"),
             Err(r) => return r,
         }
         let session = match self.approver_session(&kit, b).await {
@@ -162,7 +162,7 @@ where
         let mut ids = Vec::with_capacity(opened.len());
         for (row, p) in &opened {
             let started = async {
-                let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+                let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
                 let ok = store::start_approval(
                     &mut t,
                     &row.id,
@@ -209,7 +209,7 @@ where
     pub async fn finish_batch<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         flow: &str,
         body: &BatchFinish,
@@ -268,7 +268,7 @@ where
         }
         let actor = kit.ids.encode("usr", session.subject).unwrap_or_default();
         let audited = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.audit(&access_store::audit::AuditEvent {
                 event_type: "approval.batch",
                 actor: &actor,

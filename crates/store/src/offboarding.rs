@@ -7,10 +7,10 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -70,15 +70,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn record_offboarding(&mut self, o: &NewOffboarding<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.offboarding_previews (tenant_id, realm_id, party, version,
+            "INSERT INTO access.offboarding_previews (tenant_id, environment_id, party, version,
                     subject_id, choices, reentry, departure, departure_pos, actor)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9
                FROM access.offboarding_previews
-              WHERE tenant_id = $1 AND realm_id = $2 AND party = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND party = $3",
             tenant,
-            realm,
+            environment,
             o.party.as_slice(),
             o.subject.map(Uuid::from_bytes),
             o.choices,
@@ -100,15 +100,15 @@ impl TenantTx {
         &mut self,
         party: [u8; 16],
     ) -> Result<Option<OffboardingRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             r#"SELECT version, subject_id, choices, reentry, departure, departure_pos,
                       (extract(epoch FROM committed_at) * 1000)::bigint AS "committed_ms!"
                  FROM access.offboarding_previews
-                WHERE tenant_id = $1 AND realm_id = $2 AND party = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND party = $3
                 ORDER BY version DESC LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -133,13 +133,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn reentry_blocked(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query_scalar!(
             "SELECT reentry FROM access.offboarding_previews
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
               ORDER BY committed_at DESC, version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_optional(&mut *self.tx)

@@ -26,7 +26,7 @@ pub async fn emit<T: AccountTx>(tx: &mut T, signal: &Signal) -> Result<(), Accou
     tx.outbox(&signal.kind.outbox_kind(), &bytes).await
 }
 
-/// Queues `signal` in a realm transaction of the store.
+/// Queues `signal` in an environment transaction of the store.
 ///
 /// # Errors
 /// [`AccountError`].

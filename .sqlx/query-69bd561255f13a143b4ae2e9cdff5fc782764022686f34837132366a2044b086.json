@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_mailboxes (tenant_id, environment_id, identifier_id, subject_id, owner_since_ms)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69bd561255f13a143b4ae2e9cdff5fc782764022686f34837132366a2044b086"
+}

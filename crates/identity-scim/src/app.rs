@@ -1,5 +1,5 @@
 //! The SCIM server's use cases (RFC 7644 §3; OP-155 m.3 (g), IDP-23, TN-75, TN-76): each request
-//! runs in one transaction of the client's realm with its audit row, events and Claim orders. A
+//! runs in one transaction of the client's environment with its audit row, events and Claim orders. A
 //! User is an account: it is created, moved along TN-49 and its identifier released through the
 //! account use cases, and its attributes are sealed under its subject's profile key. A client
 //! sees and changes only its own resources; a group has one membership issuer, the client that
@@ -18,14 +18,14 @@ use access_identity_account::adapters::pg::{PgAccounts, PgTx};
 use access_identity_account::app::accounts::{status_claim, status_moved};
 use access_identity_account::app::sealing::new_subject_key;
 use access_identity_account::app::vault::{self, PiiClass, Vault};
-use access_identity_account::app::{Actor, Realm, events};
+use access_identity_account::app::{Actor, Environment, events};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb, AccountTx};
 use access_identity_events::domain::catalog::{IdentityEvent, IdentityKind, ScimResource};
 use access_store::Pool;
 use access_store::audit::AuditEvent;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scim::{ResourceRow, ResourceWrite};
 use serde_json::{Map, Value, json};
 use suiss_crypto::envelope::Sealed;
@@ -52,22 +52,22 @@ type UserSubject = ([u8; 16], [u8; 16]);
 /// Most resources a filter that no index answers is evaluated over before it is `tooMany`.
 pub const MAX_SCAN: i64 = 10_000;
 
-/// The realm a request reached.
+/// The environment a request reached.
 #[derive(Clone)]
-pub struct RealmRef {
+pub struct EnvironmentRef {
     /// Tenant.
     pub tenant: TenantId,
-    /// Realm.
-    pub realm: RealmId,
-    /// The realm's SCIM base URL, for `meta.location`.
+    /// Environment.
+    pub environment: EnvironmentId,
+    /// The environment's SCIM base URL, for `meta.location`.
     pub base: String,
 }
 
 /// The authenticated client of a request.
 #[derive(Clone)]
 pub struct Client {
-    /// Its realm.
-    pub realm: RealmRef,
+    /// Its environment.
+    pub environment: EnvironmentRef,
     /// Its name.
     pub name: String,
     /// Its tolerance profile.
@@ -218,32 +218,36 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         }
     }
 
-    fn vault(&self, r: &RealmRef) -> Result<Vault, ScimError> {
+    fn vault(&self, r: &EnvironmentRef) -> Result<Vault, ScimError> {
         self.vaults
-            .vault(r.tenant, r.realm)
+            .vault(r.tenant, r.environment)
             .ok_or(ScimError::UNAVAILABLE)
     }
 
-    async fn begin(&self, r: &RealmRef) -> Result<(PgTx, Vault), ScimError> {
+    async fn begin(&self, r: &EnvironmentRef) -> Result<(PgTx, Vault), ScimError> {
         let vault = self.vault(r)?;
         let tx = PgAccounts::sealed(self.app.clone(), vault.clone())
-            .begin(r.tenant, r.realm)
+            .begin(r.tenant, r.environment)
             .await
             .map_err(account)?;
         Ok((tx, vault))
     }
 
-    /// The live client of `realm` whose bearer secret is `secret` (§13.2: a client acts only in
-    /// its realm). An unknown, rotated-out or retired secret is `401`.
+    /// The live client of `environment` whose bearer secret is `secret` (§13.2: a client acts only in
+    /// its environment). An unknown, rotated-out or retired secret is `401`.
     ///
     /// # Errors
     /// [`ScimError::UNAUTHORIZED`]; [`ScimError::UNAVAILABLE`].
-    pub async fn authenticate(&self, realm: &RealmRef, secret: &str) -> Result<Client, ScimError> {
+    pub async fn authenticate(
+        &self,
+        environment: &EnvironmentRef,
+        secret: &str,
+    ) -> Result<Client, ScimError> {
         if secret.is_empty() || secret.len() > 256 {
             return Err(ScimError::UNAUTHORIZED);
         }
         let digest = suiss_crypto::digest::sha256(secret.as_bytes());
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(unavailable)?;
         let c = access_store::scim::client_by_secret(&mut t, &digest)
@@ -256,7 +260,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
             Some(p) => crate::domain::tolerance::shipped(p).ok_or(ScimError::UNAVAILABLE)?,
         };
         Ok(Client {
-            realm: realm.clone(),
+            environment: environment.clone(),
             name: c.name,
             profile,
             issuer: c.issuer,
@@ -264,7 +268,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
     }
 
     fn location(c: &Client, kind: Kind, id: &[u8; 16]) -> String {
-        format!("{}/{}/{}", c.realm.base, kind.endpoint(), id_text(id))
+        format!("{}/{}/{}", c.environment.base, kind.endpoint(), id_text(id))
     }
 
     fn representation(c: &Client, kind: Kind, row: &ResourceRow, stored: &Value) -> Value {
@@ -353,7 +357,11 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         };
         let key = format!("scim\0{}\0{}\0{ext}", c.name, kind.stored());
         vault
-            .index_of(c.realm.tenant.as_bytes(), c.realm.realm.as_bytes(), &key)
+            .index_of(
+                c.environment.tenant.as_bytes(),
+                c.environment.environment.as_bytes(),
+                &key,
+            )
             .map(Some)
             .map_err(account)
     }
@@ -393,7 +401,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         let e = IdentityEvent::scim(
             k,
             event_id,
-            c.realm.realm.as_bytes(),
+            c.environment.environment.as_bytes(),
             (&c.name, scim_resource(kind), &id_text(id)),
             self.clock.now_ms(),
         );
@@ -402,10 +410,10 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
             .map_err(unavailable)
     }
 
-    fn naming<'a>(&'a self, c: &Client, vault: &'a Vault) -> Realm<'a> {
-        Realm {
-            tenant: c.realm.tenant,
-            realm: c.realm.realm,
+    fn naming<'a>(&'a self, c: &Client, vault: &'a Vault) -> Environment<'a> {
+        Environment {
+            tenant: c.environment.tenant,
+            environment: c.environment.environment,
             kek: &*vault.kek,
             ids: &self.ids,
         }
@@ -567,7 +575,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
     )]
     pub async fn create(&self, c: &Client, kind: Kind, body: &Value) -> Result<Answer, ScimError> {
         let canon = resource::canonical(kind, body, &c.profile)?;
-        let (mut tx, vault) = self.begin(&c.realm).await?;
+        let (mut tx, vault) = self.begin(&c.environment).await?;
         let id = new_id()?;
         let txn = txn()?;
         let external_index = Self::external_index(c, &vault, kind, &canon)?;
@@ -598,8 +606,8 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                 {
                     return Err(ScimError::UNIQUENESS);
                 }
-                let realm = self.naming(c, &vault);
-                let wrapped = new_subject_key(&realm).map_err(account)?;
+                let environment = self.naming(c, &vault);
+                let wrapped = new_subject_key(&environment).map_err(account)?;
                 let status = if active_of(&canon) {
                     AccountStatus::Active
                 } else {
@@ -637,7 +645,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                 {
                     return Err(ScimError::UNIQUENESS);
                 }
-                events::created(&mut tx, &realm, subject)
+                events::created(&mut tx, &environment, subject)
                     .await
                     .map_err(account)?;
                 // TN-49, Ek B 4860
@@ -647,7 +655,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                 // IDP-35, Ek B 4925
                 self.hr_claims(&mut tx, c, subject, (None, Some(&canon)))
                     .await?;
-                realm.external(subject).map_err(account)?
+                environment.external(subject).map_err(account)?
             }
             Kind::Group | Kind::Device => {
                 let users = if kind == Kind::Group {
@@ -727,7 +735,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
     ) -> Result<Answer, ScimError> {
         let attributes = project::selection(kind, q.attributes.as_deref())?;
         let excluded = project::selection(kind, q.excluded.as_deref())?;
-        let (mut tx, vault) = self.begin(&c.realm).await?;
+        let (mut tx, vault) = self.begin(&c.environment).await?;
         let (row, stored) = Self::load(&mut tx, &vault, c, kind, id, false).await?;
         let repr = Self::representation(c, kind, &row, &stored);
         let repr = Self::with_groups(&mut tx, c, &row, repr).await?;
@@ -915,7 +923,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                 })?)
             }
         };
-        let (mut tx, vault) = self.begin(&c.realm).await?;
+        let (mut tx, vault) = self.begin(&c.environment).await?;
         let mut matched: Vec<(ResourceRow, Value)> = self
             .candidates(&mut tx, &vault, c, kind, expr.as_ref())
             .await?
@@ -1077,7 +1085,11 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                     }
                     if let Some(old) = user_name(before) {
                         let index = vault
-                            .index_of(c.realm.tenant.as_bytes(), c.realm.realm.as_bytes(), &old)
+                            .index_of(
+                                c.environment.tenant.as_bytes(),
+                                c.environment.environment.as_bytes(),
+                                &old,
+                            )
                             .map_err(account)?;
                         tx.0.release_identifier(subject, &index, &vault::folded(&old))
                             .await
@@ -1112,7 +1124,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         if_match: Option<&str>,
         next: impl FnOnce(&Value) -> Result<Value, ScimError>,
     ) -> Result<Answer, ScimError> {
-        let (mut tx, vault) = self.begin(&c.realm).await?;
+        let (mut tx, vault) = self.begin(&c.environment).await?;
         let (row, before) = Self::load(&mut tx, &vault, c, kind, id, true).await?;
         check_match(if_match, row.version)?;
         let after = next(&before)?;
@@ -1215,7 +1227,7 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         id: &str,
         if_match: Option<&str>,
     ) -> Result<Answer, ScimError> {
-        let (mut tx, vault) = self.begin(&c.realm).await?;
+        let (mut tx, vault) = self.begin(&c.environment).await?;
         let (row, before) = Self::load(&mut tx, &vault, c, kind, id, true).await?;
         check_match(if_match, row.version)?;
         let txn = txn()?;
@@ -1233,7 +1245,11 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
                     .await?;
                 if let Some(name) = before.get("userName").and_then(Value::as_str) {
                     let index = vault
-                        .index_of(c.realm.tenant.as_bytes(), c.realm.realm.as_bytes(), name)
+                        .index_of(
+                            c.environment.tenant.as_bytes(),
+                            c.environment.environment.as_bytes(),
+                            name,
+                        )
                         .map_err(account)?;
                     tx.0.release_identifier(subject, &index, &vault::folded(name))
                         .await
@@ -1321,13 +1337,13 @@ impl<V: Vaults, C: Clock> outbound::Local for Scim<V, C> {
     fn read<'a>(
         &'a self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         push: &'a outbound::Push,
     ) -> outbound::Pending<'a, Option<Value>> {
         Box::pin(async move {
-            let r = RealmRef {
+            let r = EnvironmentRef {
                 tenant,
-                realm,
+                environment,
                 base: String::new(),
             };
             let (mut tx, vault) = self.begin(&r).await.ok()?;

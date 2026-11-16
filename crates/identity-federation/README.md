@@ -1,7 +1,7 @@
 # access-identity-federation
 
 Social and upstream sign-in for the Access identity plane: Google, Apple, Microsoft, GitHub,
-LinkedIn and Facebook out of the box, and any OpenID Connect provider a realm registers.
+LinkedIn and Facebook out of the box, and any OpenID Connect provider an environment registers.
 
 ## Presets are data
 
@@ -34,31 +34,31 @@ combines accounts; linking is an explicit action of a signed-in user who just re
 
 ## Development clients
 
-The operator may configure shared development clients. A sandbox realm can use them, so social
-sign-in works right away. Any other realm must bring its own client: a shared client is refused
+The operator may configure shared development clients. A sandbox environment can use them, so social
+sign-in works right away. Any other environment must bring its own client: a shared client is refused
 both when the provider is enabled and at every sign-in.
 
 ## Apple's client secret
 
-Apple takes no stored client secret. The realm's secret reference names its Sign in with Apple
+Apple takes no stored client secret. The environment's secret reference names its Sign in with Apple
 key: the `.p8` file as Apple issues it, after two lines `team_id=…` and `key_id=…`. Access signs
 a fresh five-minute ES256 assertion with it for every code exchange.
 
 ## Any other provider
 
 - An OAuth 2.0 provider without ID tokens is one more preset file: the operator puts it in the
-  directory `social.presets_dir` names, and realms enable it like a shipped preset. A file whose
+  directory `social.presets_dir` names, and environments enable it like a shipped preset. A file whose
   id is already taken stops the server at start-up.
 
 ## Enterprise connections
 
-A realm registers an enterprise identity provider (Entra, Okta, Google Workspace, Keycloak, ADFS,
+An environment registers an enterprise identity provider (Entra, Okta, Google Workspace, Keycloak, ADFS,
 e-Devlet, an operator's mobile signature service) as a connection. Registering it and trusting
 it are two separate, reserved decisions; until the governing domain accepts the connection's
 issuer, it signs nobody in.
 
 - **Its own profile.** OpenID Connect or SAML 2.0; the subject key (`sub`, or Entra's
-  `[tid, oid]`); client authentication, `private_key_jwt` with a key of the realm unless a secret
+  `[tid, oid]`); client authentication, `private_key_jwt` with a key of the environment unless a secret
   method is chosen; an optional preset; the organization it belongs to.
 - **Algorithms from discovery.** The discovery document's `issuer` must be the registered one.
   ID token algorithms are the upstream's, cut down to ES256 and RS256: never `none`, never HMAC.

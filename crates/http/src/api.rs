@@ -1,5 +1,5 @@
-//! The management API's common layer (OP-65, OP-151 m.2 M0): the realm-admin surface under
-//! `/admin/v1/realms/{slug}/…` and the platform-admin surface under `/admin/v1/platform/…`,
+//! The management API's common layer (OP-65, OP-151 m.2 M0): the environment-admin surface under
+//! `/admin/v1/envs/{slug}/…` and the platform-admin surface under `/admin/v1/platform/…`,
 //! served on the management listener only (CMP-15.5, §17.9.6). The contract is
 //! `sdks/openapi/admin-v1.json`, generated from [`schema::openapi`] (`just admin-contract`).
 //!
@@ -26,10 +26,10 @@
 pub mod adapters;
 pub mod app;
 pub mod domain;
+pub mod environment;
 pub mod manifest;
 pub mod platform;
 pub mod ports;
-pub mod realm;
 pub mod schema;
 
 pub use app::{Api, router};

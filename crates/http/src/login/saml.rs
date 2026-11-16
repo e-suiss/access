@@ -1,7 +1,7 @@
 //! The SAML identity provider and WS-Federation on axum (OP-155 m.3 (c), (e), (f); §10.6.1;
 //! IDI-7): `/saml/metadata`, `/saml/sso` (HTTP-Redirect and HTTP-POST), `/saml/sso/{sp}`
-//! (IdP-initiated), `/saml/slo`, `/saml/ecp`, `/wsfed` and `/wsfed/metadata`, at the realm's host
-//! and under `/realms/{slug}`. access-server keeps the cookies: each request opens a flow, which
+//! (IdP-initiated), `/saml/slo`, `/saml/ecp`, `/wsfed` and `/wsfed/metadata`, at the environment's host
+//! and under `/env/{slug}`. access-server keeps the cookies: each request opens a flow, which
 //! the [`SamlFront`] forwards to the SAML gateway with the attested session and decides itself.
 //! A posted message is first moved to a top-level navigation so the `SameSite=Lax` session cookie
 //! comes with it. Only outcomes access-server wrote are rendered; an ACS that does not match is an
@@ -17,7 +17,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use access_identity_oauth::app::Discovery;
-use access_identity_oauth::ports::{Directory, Keys, RealmEntry};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Keys};
 use access_identity_saml::binding;
 use access_identity_saml::wire::Binding;
 use access_identity_session::app::sessions::SessionView;
@@ -30,7 +30,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
 
-use super::web::{Jar, realm};
+use super::web::{Jar, environment};
 use super::{Peer, Shared};
 
 /// Largest form or SOAP body.
@@ -72,23 +72,26 @@ pub enum Outcome {
 
 /// The SAML identity provider behind these routes (access-server).
 pub trait SamlFront: Send + Sync + 'static {
-    /// The realm's signed metadata.
-    fn metadata(&self, entry: &RealmEntry) -> impl Future<Output = Option<String>> + Send;
+    /// The environment's signed metadata.
+    fn metadata(&self, entry: &EnvironmentEntry) -> impl Future<Output = Option<String>> + Send;
 
-    /// The realm's WS-Federation metadata.
-    fn wsfed_metadata(&self, entry: &RealmEntry) -> impl Future<Output = Option<String>> + Send;
+    /// The environment's WS-Federation metadata.
+    fn wsfed_metadata(
+        &self,
+        entry: &EnvironmentEntry,
+    ) -> impl Future<Output = Option<String>> + Send;
 
     /// Opens a flow; returns its key, or a refusal code.
     fn open(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         opening: Opening,
     ) -> impl Future<Output = Result<String, String>> + Send;
 
     /// Runs flow `key` with the browser's live session, if any.
     fn run(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         key: &str,
         session: Option<SessionView>,
         correlation: &str,
@@ -103,7 +106,7 @@ struct Svc<D, K, KI, C, M, S> {
 type St<D, K, KI, C, M, S> = State<Arc<Svc<D, K, KI, C, M, S>>>;
 type Params0 = Path<HashMap<String, String>>;
 
-/// The SAML and WS-Federation routes, at the realm's host and under `/realms/{slug}`.
+/// The SAML and WS-Federation routes, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M, S>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -126,7 +129,7 @@ where
         front: front.into(),
     });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r
             .route(
                 &format!("{prefix}/saml/metadata"),
@@ -254,11 +257,11 @@ fn redirect(to: &str, status: StatusCode) -> Response {
     hardened(r, "default-src 'none'; frame-ancestors 'none'")
 }
 
-fn flow_path(entry: &RealmEntry, endpoint: &str, key: &str) -> String {
+fn flow_path(entry: &EnvironmentEntry, endpoint: &str, key: &str) -> String {
     format!("{}{endpoint}?flow={key}", entry.issuer.path())
 }
 
-fn render(entry: &RealmEntry, endpoint: &str, key: &str, outcome: Outcome) -> Response {
+fn render(entry: &EnvironmentEntry, endpoint: &str, key: &str, outcome: Outcome) -> Response {
     match outcome {
         Outcome::Post { action, fields } => {
             let n = nonce();
@@ -333,7 +336,7 @@ macro_rules! handler {
             M: Messages,
             S: SamlFront,
         {
-            let $entry = match realm(&$s.login, &$p, &$uri, &$headers).await {
+            let $entry = match environment(&$s.login, &$p, &$uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };
@@ -348,7 +351,7 @@ macro_rules! handler {
 
 async fn run_flow<D, K, KI, C, M, S>(
     s: &Svc<D, K, KI, C, M, S>,
-    entry: &RealmEntry,
+    entry: &EnvironmentEntry,
     jar: &Jar,
     endpoint: &str,
     key: &str,
@@ -369,7 +372,7 @@ where
 
 async fn open_and_run<D, K, KI, C, M, S>(
     s: &Svc<D, K, KI, C, M, S>,
-    entry: &RealmEntry,
+    entry: &EnvironmentEntry,
     jar: &Jar,
     endpoint: &str,
     opening: Opening,
@@ -485,7 +488,7 @@ handler! {
 
 async fn slo<D, K, KI, C, M, S>(
     s: &Svc<D, K, KI, C, M, S>,
-    entry: &RealmEntry,
+    entry: &EnvironmentEntry,
     jar: &Jar,
     opening: Opening,
 ) -> Response
@@ -574,7 +577,7 @@ handler! {
 
 async fn wsfed<D, K, KI, C, M, S>(
     s: &Svc<D, K, KI, C, M, S>,
-    entry: &RealmEntry,
+    entry: &EnvironmentEntry,
     jar: &Jar,
     values: Vec<(String, String)>,
 ) -> Response

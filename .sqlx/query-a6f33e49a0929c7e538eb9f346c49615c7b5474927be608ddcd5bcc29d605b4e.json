@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.event_subscription\n                SET events = $4, status = $5, description = $6, updated_at = now()\n              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3\n                AND disabled_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a6f33e49a0929c7e538eb9f346c49615c7b5474927be608ddcd5bcc29d605b4e"
+}

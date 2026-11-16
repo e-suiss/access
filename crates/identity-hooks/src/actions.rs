@@ -1,6 +1,6 @@
 //! The `idp.hook.*` and `idp.webhook.*` domain actions (TN-135, TN-136, MD-14, OP-151 m.3 (i),
-//! (j), m.4): the rows the realm-admin catalogue merges. Registering a hook or a webhook widens
-//! what leaves the realm, so it is irreversible and CT2; retiring narrows and is CT1.
+//! (j), m.4): the rows the environment-admin catalogue merges. Registering a hook or a webhook widens
+//! what leaves the environment, so it is irreversible and CT2; retiring narrows and is CT1.
 
 use access_internal_api::idp::IdpAction;
 use access_kernel::model::{ActionRef, Id};
@@ -11,7 +11,7 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp};
 pub const NAMESPACES: [&str; 2] = ["idp.hook", "idp.webhook"];
 
 /// One extension point action: a view of its [`IdpAction`], which alone defines its name,
-/// effect and schema (OP-151 m.4: the realm-admin catalogue holds every `idp.*` row).
+/// effect and schema (OP-151 m.4: the environment-admin catalogue holds every `idp.*` row).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ExtensionAction {
     /// Registers an inline hook at one call point (TN-135): CT2.
@@ -129,7 +129,7 @@ mod tests {
             assert_eq!(
                 IdpAction::from_label(&a.label()),
                 Some(a.idp()),
-                "the realm-admin catalogue defines every label once"
+                "the environment-admin catalogue defines every label once"
             );
             assert!(access_internal_api::idp::NAMESPACES.contains(&a.namespace()));
         }

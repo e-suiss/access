@@ -1,4 +1,4 @@
-//! The Claims sign-in queues for the realm issuer (§10.1.2, §10.1.5, F17, TN-103, TN-63, OP-150
+//! The Claims sign-in queues for the environment issuer (§10.1.2, §10.1.5, F17, TN-103, TN-63, OP-150
 //! L2): the `authentication` Claim of a login or step-up, bound to the session's device Instance;
 //! a passkey's `authenticator_binding` when it is registered; and risk signals. Each is queued in
 //! the transaction of its event and issued later by the courier, so sign-in never waits for the

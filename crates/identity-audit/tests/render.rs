@@ -32,7 +32,7 @@ fn record(v: &Value) -> AuditRecord {
     let text = |k: &str| v[k].as_str().unwrap().to_owned();
     let scope = match v["scope"].as_str().unwrap() {
         "none" => Scope::None,
-        s if s.starts_with("realm:") => Scope::Realm(uuid(&s[6..])),
+        s if s.starts_with("environment:") => Scope::Environment(uuid(&s[12..])),
         s => Scope::Domain(
             b64url_decode(s.strip_prefix("domain:").unwrap())
                 .unwrap()

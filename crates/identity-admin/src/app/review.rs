@@ -16,7 +16,7 @@ use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::ExerciseBasis;
 use access_kernel::model::{Id, SubjectSelector};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::Bound;
 use access_store::review::{NewReviewSchedule, ReviewScheduleRow};
 use serde_json::{Value as Json, json};
@@ -25,7 +25,7 @@ use super::Admin;
 use super::rest::{cbor_json, rfc3339};
 use crate::AdminError;
 use crate::domain::review::ReviewChange;
-use crate::ports::{Decider, Governance, Instances, RealmKeys, TeamGrant};
+use crate::ports::{Decider, EnvironmentKeys, Governance, Instances, TeamGrant};
 
 const DAY_MS: u64 = 86_400_000;
 
@@ -178,11 +178,11 @@ pub fn item_view(review: &str, g: &TeamGrant) -> Json {
     })
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     async fn domain_of(t: &mut TenantTx) -> Result<Digest, AdminError> {
         let g = access_store::idp::governance(t)
             .await?
-            .ok_or(AdminError::NoRealm)?;
+            .ok_or(AdminError::NoEnvironment)?;
         Ok(Digest(*g.domain.as_bytes()))
     }
 
@@ -253,7 +253,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn keep_review(
         &self,
-        place: (TenantId, RealmId),
+        place: (TenantId, EnvironmentId),
         review: &str,
         grant: &str,
         kid: [u8; 32],

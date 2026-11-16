@@ -48,7 +48,7 @@ const ACCESS_PREFIXES: [&str; 11] = [
     "/.well-known/access-",
     "/.well-known/authzen-",
     "/.well-known/suiss-",
-    "/realms/",
+    "/env/",
     "/proxy/",
     "/ssf/",
     "/admin/",
@@ -484,8 +484,8 @@ mod tests {
             "/.well-known/access-domain-metadata/{}"
         );
         let found = access_literals(
-            "const A: &str = \"/realms/{realm}/v1/x\";\n#[cfg(test)]\nmod tests {\n const B: &str = \"/internal/v1/y\";\n}\n",
+            "const A: &str = \"/env/{environment}/v1/x\";\n#[cfg(test)]\nmod tests {\n const B: &str = \"/internal/v1/y\";\n}\n",
         );
-        assert_eq!(found, BTreeSet::from([String::from("/realms/{}/v1/x")]));
+        assert_eq!(found, BTreeSet::from([String::from("/env/{}/v1/x")]));
     }
 }

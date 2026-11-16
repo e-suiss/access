@@ -1,8 +1,8 @@
 {
   "cases": [
     {
-      "cbor": "a2657265616c6d64636f72706767617465776179781f75726e3a73756973733a6163636573733a67773a6c6461703a636f72702d31",
-      "edn": "{\"gateway\": \"urn:suiss:access:gw:ldap:corp-1\", \"realm\": \"corp\"}",
+      "cbor": "a26767617465776179781f75726e3a73756973733a6163636573733a67773a6c6461703a636f72702d316b656e7669726f6e6d656e7464636f7270",
+      "edn": "{\"gateway\": \"urn:suiss:access:gw:ldap:corp-1\", \"environment\": \"corp\"}",
       "id": "hello",
       "valid": true
     },
@@ -67,7 +67,7 @@
       "valid": true
     },
     {
-      "edn": "{\"gateway\": \"spiffe://corp/gw\", \"realm\": \"corp\"}",
+      "edn": "{\"gateway\": \"spiffe://corp/gw\", \"environment\": \"corp\"}",
       "id": "hello-with-a-foreign-uri",
       "valid": false
     },

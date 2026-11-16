@@ -128,7 +128,7 @@ pub(super) fn basis_json(b: ExerciseBasis) -> serde_json::Value {
     }
 }
 
-/// A role over `actions` on the realm's `idp` resources.
+/// A role over `actions` on the environment's `idp` resources.
 pub(super) fn role(actions: &[IdpAction]) -> AuthoritySet {
     AuthoritySet {
         actions: ActionSet {
@@ -629,7 +629,7 @@ impl Console {
         }
     }
 
-    /// A Grant of `v1`-shaped authority to the founder, issued from the realm's `idp` Anchor.
+    /// A Grant of `v1`-shaped authority to the founder, issued from the environment's `idp` Anchor.
     pub(super) async fn issue_to_founder(&self) -> Id {
         let idp = kmeta::object_id(&self.domain, kind::ANCHOR, IDP_ANCHOR);
         let issue = serde_json::json!({ "grant_issue": {
@@ -680,7 +680,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
         }));
     }
     let job = serde_json::json!({ "mode": "sequential", "operations": operations });
-    let drafts = "/admin/v1/realms/acme/intents";
+    let drafts = "/admin/v1/envs/acme/intents";
     let proof = c.browser.ais(
         c.domain,
         &access_crypto::random::bytes::<16>().unwrap(),
@@ -693,7 +693,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
         c.browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/intents",
+                "/console/api/proxy/admin/envs/acme/intents",
                 "x",
             )
             .header("x-access-ais", proof)
@@ -724,7 +724,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
         c.browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/jobs",
+                "/console/api/proxy/admin/envs/acme/jobs",
                 "x",
             )
             .header("x-access-ais", envelope_ais)
@@ -746,7 +746,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
     let mut done = serde_json::Value::Null;
     for _ in 0..2_000 {
         done = c
-            .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}"))
+            .admin_get(&format!("/admin/v1/envs/acme/jobs/{id}"))
             .await
             .body;
         if done["status"] != "running" {
@@ -755,7 +755,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
         tokio::task::yield_now().await;
     }
     let items = c
-        .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}/items"))
+        .admin_get(&format!("/admin/v1/envs/acme/jobs/{id}/items"))
         .await
         .body;
     assert_eq!(done["status"], "succeeded", "{done} {items}");
@@ -860,15 +860,15 @@ async fn the_sources_read_lists_each_acceptance_by_use_with_its_blast_radius() {
         .unwrap_or_else(|| panic!("{report}"));
     assert_eq!(account["protected"], true);
     assert!(account["dependents"].as_u64().unwrap() >= 1, "{account}");
-    let realm = sources
+    let environment = sources
         .iter()
         .filter(|s| s["use"] == "actor-binding" || s["use"] == "predicate-input")
         .collect::<Vec<_>>();
-    assert!(!realm.is_empty(), "{report}");
-    assert!(realm.iter().all(|s| s["protected"] == false));
+    assert!(!environment.is_empty(), "{report}");
+    assert!(environment.iter().all(|s| s["protected"] == false));
     // INV-15
     assert!(
-        realm
+        environment
             .iter()
             .all(|s| s["issuer"]["party"].is_string() && s["use"] != "subject-selection")
     );

@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:breakglass.used`. A break-glass Grant was exercised on the account with at least two approvals. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "account",
     "exercise",
     "organization",
@@ -16,7 +16,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "account": {

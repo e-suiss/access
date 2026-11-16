@@ -22,7 +22,7 @@ use crate::AccountError;
 use crate::adapters::pg::{PgAccounts, PgTx};
 use crate::app::accounts::status_moved;
 use crate::app::vault::{self, PiiClass};
-use crate::app::{Actor, Realm};
+use crate::app::{Actor, Environment};
 use crate::domain::status::AccountStatus;
 use crate::notify::message::{Address, Body, IysChannel, IysRecipient, Message};
 use crate::notify::ports::Notifier;
@@ -31,8 +31,8 @@ use crate::ports::{AccountDb, AccountTx};
 /// The channels a preference names (OP-153 m.3 (ee)).
 pub const CHANNELS: [&str; 4] = ["email", "sms", "call", "push"];
 
-/// The topics every realm has (OP-153 m.3 (ee)); a realm adds its own with
-/// `idp.realm.preference_topics`.
+/// The topics every environment has (OP-153 m.3 (ee)); an environment adds its own with
+/// `idp.environment.preference_topics`.
 pub const BUILT_IN_TOPICS: [&str; 3] = ["campaign", "newsletter", "product_news"];
 
 /// How a preference or acceptance was given.
@@ -41,7 +41,7 @@ pub const METHODS: [&str; 4] = ["self_service", "admin", "import", "app"];
 /// The destruction delay after the tombstone (OP-153 m.3 (aa), TN-77): 30 days.
 pub const DESTROY_AFTER_S: i64 = 30 * 86_400;
 
-/// The shortest destruction delay a realm may set (TN-77): 24 hours.
+/// The shortest destruction delay an environment may set (TN-77): 24 hours.
 pub const DESTROY_AFTER_MIN_S: i64 = 86_400;
 
 /// A data subject request is answered within this many days (KVKK m.13, TN-78).
@@ -93,8 +93,8 @@ async fn outbox(tx: &mut PgTx, kind: &str, payload: Value) -> Result<(), Account
     tx.outbox(kind, &bytes).await
 }
 
-fn realm_uuid(realm: &Realm<'_>) -> String {
-    let b = realm.realm.as_bytes();
+fn environment_uuid(environment: &Environment<'_>) -> String {
+    let b = environment.environment.as_bytes();
     let h = hex(b);
     format!(
         "{}-{}-{}-{}-{}",
@@ -146,9 +146,9 @@ pub fn preference_digest(account: &str, c: &PreferenceChange<'_>, method: &str) 
 
 /// Records preference changes in one transaction: a row, an audit row binding its digest, and
 /// one `preference.changed` event naming the topics (IDP-37, OP-153 m.3 (ee)). A topic is a
-/// built-in one or one of the realm's own (`idp.realm.preference_topics`).
+/// built-in one or one of the environment's own (`idp.environment.preference_topics`).
 ///
-/// With the realm's İYS switch on (`idp.realm.iys`, OP-156 m.3 (c)), every commercial channel
+/// With the environment's İYS switch on (`idp.environment.iys`, OP-156 m.3 (c)), every commercial channel
 /// the change touches also gets one İYS consent record: a sealed Relay message to the address
 /// it is about, with the channel, the recipient type, approved or rejected, the source and the
 /// time (IDP-37 (4), B23). Relay alone writes to İYS; the event names the channels, never the
@@ -158,7 +158,7 @@ pub fn preference_digest(account: &str, c: &PreferenceChange<'_>, method: &str) 
 /// [`AccountError::Invalid`] for an unknown channel, topic or method; [`AccountError`].
 pub async fn set_preferences<N: Notifier + Sync>(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     changes: &[PreferenceChange<'_>],
     method: &str,
@@ -172,7 +172,9 @@ pub async fn set_preferences<N: Notifier + Sync>(
     {
         return Err(AccountError::Invalid);
     }
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, true).await?;
     let own = tx.0.preference_topics().await?;
     if changes
@@ -181,7 +183,7 @@ pub async fn set_preferences<N: Notifier + Sync>(
     {
         return Err(AccountError::Invalid);
     }
-    let account = realm.external(subject)?;
+    let account = environment.external(subject)?;
     let mut topics: Vec<&str> = Vec::new();
     let mut at = 0_i64;
     for c in changes {
@@ -202,7 +204,7 @@ pub async fn set_preferences<N: Notifier + Sync>(
     }
     let at_ms = u64::try_from(at).unwrap_or_default();
     let mut payload = json!({
-        "realm": realm_uuid(realm),
+        "environment": environment_uuid(environment),
         "account": account,
         "topics": topics,
         "at": at_ms,
@@ -332,17 +334,19 @@ async fn iys_record<N: Notifier + Sync>(
 }
 
 /// The subject's preferences as they stand and their history, oldest first, and with the
-/// realm's İYS switch on, each commercial channel's latest record and what Relay reported on it:
+/// environment's İYS switch on, each commercial channel's latest record and what Relay reported on it:
 /// `recorded`, `failed`, or `pending` while Relay has not reported (OP-156 m.3 (c)).
 ///
 /// # Errors
 /// [`AccountError`].
 pub async fn preferences(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
 ) -> Result<Value, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, false).await?;
     let rows = tx.0.preferences(subject).await?;
     let own = tx.0.preference_topics().await?;
@@ -422,7 +426,7 @@ pub struct Acceptance<'a> {
 /// [`AccountError::Invalid`] for a malformed field; [`AccountError`].
 pub async fn accept_document(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     a: &Acceptance<'_>,
     who: &Actor<'_>,
@@ -441,9 +445,11 @@ pub async fn accept_document(
     {
         return Err(AccountError::Invalid);
     }
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, true).await?;
-    let account = realm.external(subject)?;
+    let account = environment.external(subject)?;
     let body = json!({
         "account": account,
         "document_type": a.document_type,
@@ -483,7 +489,7 @@ pub async fn accept_document(
         &mut tx,
         "event.document.accepted",
         json!({
-            "realm": realm_uuid(realm),
+            "environment": environment_uuid(environment),
             "account": account,
             "document": a.document_type,
             "version": a.version,
@@ -495,19 +501,21 @@ pub async fn accept_document(
 }
 
 /// Whether the subject must accept `version` of `document_type` again: it never accepted that
-/// version (TN-132, OP-153 m.3 (ee)). A realm marks a version `requires_reacceptance` with
-/// `idp.realm.consent_documents`.
+/// version (TN-132, OP-153 m.3 (ee)). An environment marks a version `requires_reacceptance` with
+/// `idp.environment.consent_documents`.
 ///
 /// # Errors
 /// [`AccountError`].
 pub async fn must_accept(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     document_type: &str,
     version: &str,
 ) -> Result<bool, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let rows = tx.0.acceptances(subject).await?;
     tx.commit().await?;
     Ok(!rows
@@ -521,10 +529,12 @@ pub async fn must_accept(
 /// [`AccountError`].
 pub async fn acceptances(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
 ) -> Result<Vec<Value>, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let rows = tx.0.acceptances(subject).await?;
     tx.commit().await?;
     Ok(rows
@@ -558,7 +568,7 @@ pub fn rfc3339(ms: i64) -> Value {
 /// Who asked for a deletion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeletionSource {
-    /// A realm administrator's `idp.account.delete`.
+    /// An environment administrator's `idp.account.delete`.
     Admin,
     /// The person's own `idp.account.delete`.
     SelfService,
@@ -615,7 +625,7 @@ impl Scheduled {
 /// [`AccountError::NotFound`] for a missing or already deleted account; [`AccountError`].
 pub async fn request_deletion(
     tx: &mut PgTx,
-    realm: &impl crate::app::Naming,
+    environment: &impl crate::app::Naming,
     subject: [u8; 16],
     source: DeletionSource,
     exercise: Option<&[u8; 32]>,
@@ -639,7 +649,7 @@ pub async fn request_deletion(
             tx,
             "account.deletion_requested",
             who,
-            &realm.external(subject)?,
+            &environment.external(subject)?,
         )
         .await?;
     }
@@ -663,11 +673,13 @@ pub async fn request_deletion(
 /// [`AccountError`].
 pub async fn cancel_deletion(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     who: &Actor<'_>,
 ) -> Result<bool, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, true).await?;
     let done = tx.0.cancel_deletion(subject).await?;
     if done {
@@ -675,7 +687,7 @@ pub async fn cancel_deletion(
             &mut tx,
             "account.deletion_cancelled",
             who,
-            &realm.external(subject)?,
+            &environment.external(subject)?,
         )
         .await?;
     }
@@ -691,10 +703,12 @@ pub async fn cancel_deletion(
 /// [`AccountError`].
 pub async fn tombstone_due(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     who: &Actor<'_>,
 ) -> Result<u32, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let due = tx.0.due_tombstones(64).await?;
     let mut n = 0_u32;
     for d in due {
@@ -712,7 +726,7 @@ pub async fn tombstone_due(
             }
             status_moved(
                 &mut tx,
-                realm,
+                environment,
                 d.subject,
                 (from, AccountStatus::Deactivated),
                 who,
@@ -729,7 +743,7 @@ pub async fn tombstone_due(
             }
             status_moved(
                 &mut tx,
-                realm,
+                environment,
                 d.subject,
                 (from, AccountStatus::Tombstone),
                 who,
@@ -755,9 +769,9 @@ pub struct Destroyed {
     pub subjects: Vec<[u8; 16]>,
 }
 
-fn hold_of(tenant: [u8; 16], realm: &Realm<'_>, h: &HoldRow) -> Option<Hold> {
+fn hold_of(tenant: [u8; 16], environment: &Environment<'_>, h: &HoldRow) -> Option<Hold> {
     let scope = match h.scope.as_str() {
-        "subject" => HoldScope::Subject(SubjectId::new(subject_ref(realm, h.subject?))),
+        "subject" => HoldScope::Subject(SubjectId::new(subject_ref(environment, h.subject?))),
         "classes" => HoldScope::Classes(
             h.classes
                 .iter()
@@ -786,8 +800,12 @@ fn hold_of(tenant: [u8; 16], realm: &Realm<'_>, h: &HoldRow) -> Option<Hold> {
     })
 }
 
-fn subject_ref(realm: &Realm<'_>, subject: [u8; 16]) -> String {
-    format!("{}/{}", hex(realm.realm.as_bytes()), hex(&subject))
+fn subject_ref(environment: &Environment<'_>, subject: [u8; 16]) -> String {
+    format!(
+        "{}/{}",
+        hex(environment.environment.as_bytes()),
+        hex(&subject)
+    )
 }
 
 /// The schedule the destruction delay is under: `class` for `delay_s` after the tombstone
@@ -811,14 +829,14 @@ pub fn schedule(tenant: [u8; 16], class: Class, delay_s: i64) -> Schedule {
 /// the tenant's holds and a fresh snapshot, per class (OP-147 m.2). Anything else keeps it.
 pub fn may_destroy_subject(
     tenant: [u8; 16],
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     d: &DeletionRow,
     holds: &[HoldRow],
     now_ms: u64,
 ) -> Decision {
     let holds: Vec<Hold> = holds
         .iter()
-        .filter_map(|h| hold_of(tenant, realm, h))
+        .filter_map(|h| hold_of(tenant, environment, h))
         .collect();
     let Some(deleted) = d.deleted_ms.and_then(|m| u64::try_from(m).ok()) else {
         return Decision::Defer(suiss_retention::Defer::UnknownStart);
@@ -838,7 +856,7 @@ pub fn may_destroy_subject(
         let record = Record {
             tenant: RetTenant::new(hex(&tenant)),
             class,
-            subject: Some(SubjectId::new(subject_ref(realm, d.subject))),
+            subject: Some(SubjectId::new(subject_ref(environment, d.subject))),
             start: Occurrence::At(Timestamp::from_unix_millis(deleted)),
             end: Occurrence::NotYet,
         };
@@ -886,16 +904,20 @@ pub fn destruction_proof(
 /// [`AccountError`].
 pub async fn destroy_due(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     who: &Actor<'_>,
 ) -> Result<Destroyed, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let now = tx.server_time().await?;
     let holds = tx.0.holds().await?;
     let due = tx.0.due_destructions(64).await?;
     let mut out = Destroyed::default();
     for d in due {
-        if !may_destroy_subject(*realm.tenant.as_bytes(), realm, &d, &holds, now).is_destroy() {
+        if !may_destroy_subject(*environment.tenant.as_bytes(), environment, &d, &holds, now)
+            .is_destroy()
+        {
             out.kept = out.kept.saturating_add(1);
             continue;
         }
@@ -913,7 +935,7 @@ pub async fn destroy_due(
             }
             status_moved(
                 &mut tx,
-                realm,
+                environment,
                 d.subject,
                 (from, AccountStatus::Purging),
                 who,
@@ -927,7 +949,7 @@ pub async fn destroy_due(
                 &mut tx,
                 "account.destroyed",
                 who,
-                &format!("{}:proof:{}", realm.external(d.subject)?, hex(&proof)),
+                &format!("{}:proof:{}", environment.external(d.subject)?, hex(&proof)),
             )
             .await?;
             out.destroyed = out.destroyed.saturating_add(1);
@@ -938,23 +960,25 @@ pub async fn destroy_due(
     Ok(out)
 }
 
-/// Seals up to `limit` identifiers of the realm still written in plaintext (OP-153 m.3 (aa)).
+/// Seals up to `limit` identifiers of the environment still written in plaintext (OP-153 m.3 (aa)).
 ///
 /// # Errors
 /// [`AccountError`].
 pub async fn seal_plaintext(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     limit: i64,
 ) -> Result<u64, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let v = tx.vault()?.clone();
     let n = vault::seal_plaintext(&mut tx.0, &v, limit).await?;
     tx.commit().await?;
     Ok(n)
 }
 
-/// When a realm's inactivity sweep notifies and deactivates (TN-51, OP-153 m.3 (dd)).
+/// When an environment's inactivity sweep notifies and deactivates (TN-51, OP-153 m.3 (dd)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InactivityPolicy {
     /// Idle seconds before the notice.
@@ -999,12 +1023,14 @@ pub struct Swept {
 /// [`AccountError`].
 pub async fn inactivity_sweep(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     policy: InactivityPolicy,
     exempt: &[[u8; 16]],
     who: &Actor<'_>,
 ) -> Result<Swept, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let statuses = vec![String::from("active"), String::from("locked")];
     let mut out = Swept::default();
     for (subject, _) in
@@ -1028,7 +1054,7 @@ pub async fn inactivity_sweep(
         }
         status_moved(
             &mut tx,
-            realm,
+            environment,
             subject,
             (from, AccountStatus::Deactivated),
             who,
@@ -1047,7 +1073,7 @@ pub async fn inactivity_sweep(
             &mut tx,
             "account.inactivity_notice",
             who,
-            &realm.external(subject)?,
+            &environment.external(subject)?,
         )
         .await?;
         out.notified = out.notified.saturating_add(1);
@@ -1093,14 +1119,16 @@ pub fn history_category(event_type: &str) -> Option<&'static str> {
 /// [`AccountError`].
 pub async fn security_history(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
 ) -> Result<Value, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, false).await?;
     let now = i64::try_from(tx.server_time().await?).map_err(|_| AccountError::Corrupt)?;
     let since = now.saturating_sub(HISTORY_DAYS * 86_400_000);
-    let who = realm.external(subject)?;
+    let who = environment.external(subject)?;
     let rows = tx.0.history(&who, since, HISTORY_LIMIT).await?;
     let last = tx.0.last_sign_in(subject).await?;
     tx.commit().await?;
@@ -1135,10 +1163,12 @@ pub async fn security_history(
 /// [`AccountError`].
 pub async fn person_export(
     db: &PgAccounts,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
 ) -> Result<Value, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     live(&mut tx, subject, false).await?;
     let v = tx.vault()?.clone();
     let mut identifiers = Vec::new();
@@ -1183,7 +1213,7 @@ pub async fn person_export(
                 })
             })
             .collect();
-    let who = realm.external(subject)?;
+    let who = environment.external(subject)?;
     let status_history: Vec<Value> =
         tx.0.history(&who, 0, 1_000)
             .await?
@@ -1210,8 +1240,8 @@ pub async fn person_export(
         .await?
         .ok_or(AccountError::Corrupt)?;
     tx.commit().await?;
-    let preferences = preferences(db, realm, subject).await?;
-    let documents = acceptances(db, realm, subject).await?;
+    let preferences = preferences(db, environment, subject).await?;
+    let documents = acceptances(db, environment, subject).await?;
     Ok(json!({
         "format": "urn:suiss:access:person-export:1",
         "account": {"id": who, "status": row.status},

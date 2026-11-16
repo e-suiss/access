@@ -1,4 +1,4 @@
-//! The Linux client's rows (OP-156 m.3 (p), IDP-32): the realm's hosts under `idp.linux.*`
+//! The Linux client's rows (OP-156 m.3 (p), IDP-32): the environment's hosts under `idp.linux.*`
 //! decisions and the NSS ids handed to its Linux users and groups. Nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -7,14 +7,14 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 use crate::idp::Bound;
 
-/// The first NSS id a realm hands out, above every local account.
+/// The first NSS id an environment hands out, above every local account.
 pub const FIRST_ID: u32 = 200_000;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -63,17 +63,17 @@ impl TenantTx {
         bound: &Bound,
         h: &LinuxHostRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.linux_hosts (tenant_id, realm_id, name, version, state, host_group,
+            "INSERT INTO access.linux_hosts (tenant_id, environment_id, name, version, state, host_group,
                     certificate, nss_ttl_s, console_ttl_s, sudo_ct, shell, break_glass, domain_id,
                     decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11,
                     $12, $13
                FROM access.linux_hosts
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             h.name,
             if h.live { "live" } else { "retired" },
             h.host_group,
@@ -96,15 +96,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn linux_hosts(&mut self) -> Result<Vec<LinuxHostRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (name) name, state, host_group, certificate, nss_ttl_s,
                     console_ttl_s, sudo_ct, shell, break_glass, version, decision_pos
                FROM access.linux_hosts
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY name, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -143,21 +143,21 @@ impl TenantTx {
     }
 
     /// The NSS id of the `kind` (`user` or `group`) named `name`, handed out now if it has none:
-    /// one above the realm's highest, from [`FIRST_ID`]. `None` when a concurrent writer took
+    /// one above the environment's highest, from [`FIRST_ID`]. `None` when a concurrent writer took
     /// the id; the caller asks again.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn linux_id(&mut self, kind: &str, name: &str) -> Result<Option<u32>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.linux_ids (tenant_id, realm_id, kind, name, id)
+            "INSERT INTO access.linux_ids (tenant_id, environment_id, kind, name, id)
              SELECT $1, $2, $3, $4, GREATEST(COALESCE(MAX(id) + 1, $5), $5)
                FROM access.linux_ids
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             kind,
             name,
             i64::from(FIRST_ID),
@@ -166,9 +166,9 @@ impl TenantTx {
         .await?;
         let id = sqlx::query_scalar!(
             "SELECT id FROM access.linux_ids
-              WHERE tenant_id = $1 AND realm_id = $2 AND kind = $3 AND name = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND kind = $3 AND name = $4",
             tenant,
-            realm,
+            environment,
             kind,
             name,
         )

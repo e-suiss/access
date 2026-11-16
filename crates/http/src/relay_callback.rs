@@ -51,8 +51,8 @@ impl Status {
 pub struct Report {
     /// The tenant's external id (`tnt_`).
     pub tenant: String,
-    /// The realm's id.
-    pub realm: [u8; 16],
+    /// The environment's id.
+    pub environment: [u8; 16],
     /// The record: the `CloudEvents` id of its Relay message.
     pub record: [u8; 16],
     /// The state.
@@ -68,7 +68,7 @@ pub struct Report {
 pub enum Kept {
     /// Kept.
     Kept,
-    /// No such record in that realm.
+    /// No such record in that environment.
     NoRecord,
 }
 
@@ -87,7 +87,7 @@ pub trait IysReports: Send + Sync {
 #[serde(deny_unknown_fields)]
 struct Body {
     tenant: String,
-    realm: String,
+    environment: String,
     record: String,
     status: String,
     #[serde(default)]
@@ -135,7 +135,7 @@ pub fn parse(body: &[u8]) -> Option<Report> {
     }
     Some(Report {
         tenant: b.tenant,
-        realm: uuid(&b.realm)?,
+        environment: uuid(&b.environment)?,
         record: uuid(&b.record)?,
         status,
         reason: b.reason,
@@ -241,16 +241,16 @@ mod tests {
     // OP-156 m.3 (c)
     #[test]
     fn a_report_parses_only_in_its_one_shape() {
-        let ok = br#"{"tenant":"tnt_x","realm":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"failed","reason":"quota","at":5}"#;
+        let ok = br#"{"tenant":"tnt_x","environment":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"failed","reason":"quota","at":5}"#;
         let r = parse(ok).unwrap();
         assert_eq!(r.status, Status::Failed);
         assert_eq!(r.reason.as_deref(), Some("quota"));
         for bad in [
-            &br#"{"tenant":"tnt_x","realm":"x","record":"01234567-89ab-4def-8123-456789abcdef","status":"failed","at":5}"#[..],
-            br#"{"tenant":"tnt_x","realm":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","reason":"x","at":5}"#,
-            br#"{"tenant":"tnt_x","realm":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"done","at":5}"#,
-            br#"{"tenant":"x","realm":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","at":5}"#,
-            br#"{"tenant":"tnt_x","realm":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","at":5,"address":"a@b"}"#,
+            &br#"{"tenant":"tnt_x","environment":"x","record":"01234567-89ab-4def-8123-456789abcdef","status":"failed","at":5}"#[..],
+            br#"{"tenant":"tnt_x","environment":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","reason":"x","at":5}"#,
+            br#"{"tenant":"tnt_x","environment":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"done","at":5}"#,
+            br#"{"tenant":"x","environment":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","at":5}"#,
+            br#"{"tenant":"tnt_x","environment":"01234567-89ab-cdef-0123-456789abcdef","record":"01234567-89ab-4def-8123-456789abcdef","status":"recorded","at":5,"address":"a@b"}"#,
         ] {
             assert!(parse(bad).is_none(), "{}", String::from_utf8_lossy(bad));
         }

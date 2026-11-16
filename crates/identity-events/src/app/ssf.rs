@@ -1,10 +1,10 @@
-//! The SSF transmitter's HTTP surface without HTTP (SSF 1.0 §7, §8; RFC 8936): the realm the
+//! The SSF transmitter's HTTP surface without HTTP (SSF 1.0 §7, §8; RFC 8936): the environment the
 //! request reached, the transmitter metadata, a stream read, update or disable by its bearer
 //! credential, and poll.
 
 use access_identity_oauth::app::resolve;
 use access_identity_oauth::domain::metadata::JWKS_PATH;
-use access_identity_oauth::ports::{Directory, RealmEntry};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry};
 use access_store::events::SubscriptionRow;
 use serde_json::Value;
 
@@ -42,7 +42,7 @@ pub enum StreamCall<'a> {
     Disable,
 }
 
-/// The transmitter of every realm.
+/// The transmitter of every environment.
 pub struct Transmitter<D, K, R, S, C> {
     directory: D,
     streams: Streams<K, R>,
@@ -72,7 +72,11 @@ where
         }
     }
 
-    async fn realm(&self, authority: &str, slug: Option<&str>) -> Result<RealmEntry, SsfReply> {
+    async fn environment(
+        &self,
+        authority: &str,
+        slug: Option<&str>,
+    ) -> Result<EnvironmentEntry, SsfReply> {
         match resolve(&self.directory, authority, slug).await {
             Ok(Some(r)) => Ok(r),
             Ok(None) => Err(NOT_FOUND),
@@ -80,9 +84,9 @@ where
         }
     }
 
-    /// `/.well-known/ssf-configuration` of the realm the request reached.
+    /// `/.well-known/ssf-configuration` of the environment the request reached.
     pub async fn configuration(&self, authority: &str, slug: Option<&str>) -> SsfReply {
-        match self.realm(authority, slug).await {
+        match self.environment(authority, slug).await {
             Ok(r) => SsfReply::Json(ssf_configuration(
                 r.issuer.as_str(),
                 &r.issuer.endpoint(JWKS_PATH),
@@ -99,23 +103,27 @@ where
         bearer: Option<&str>,
         call: StreamCall<'_>,
     ) -> SsfReply {
-        let r = match self.realm(authority, slug).await {
+        let r = match self.environment(authority, slug).await {
             Ok(r) => r,
             Err(e) => return e,
         };
         let Some(token) = bearer else {
             return UNAUTHORIZED;
         };
-        let s = match self.streams.by_token(r.tenant, r.realm, token).await {
+        let s = match self.streams.by_token(r.tenant, r.environment, token).await {
             Ok(s) => s,
             Err(StreamError::NotFound) => return UNAUTHORIZED,
             Err(e) => return e.into(),
         };
         let done = match call {
-            StreamCall::Read => self.streams.get(r.tenant, r.realm, s.id).await,
-            StreamCall::Update(body) => self.streams.update(r.tenant, r.realm, s.id, body).await,
+            StreamCall::Read => self.streams.get(r.tenant, r.environment, s.id).await,
+            StreamCall::Update(body) => {
+                self.streams
+                    .update(r.tenant, r.environment, s.id, body)
+                    .await
+            }
             StreamCall::Disable => {
-                return match self.streams.disable(r.tenant, r.realm, s.id).await {
+                return match self.streams.disable(r.tenant, r.environment, s.id).await {
                     Ok(()) => SsfReply::NoContent,
                     Err(e) => e.into(),
                 };
@@ -124,16 +132,16 @@ where
         done.map_or_else(SsfReply::from, SsfReply::Json)
     }
 
-    /// The live stream of `bearer` in the realm the request reached.
+    /// The live stream of `bearer` in the environment the request reached.
     async fn own_stream(
         &self,
         authority: &str,
         slug: Option<&str>,
         bearer: Option<&str>,
-    ) -> Result<(RealmEntry, SubscriptionRow), SsfReply> {
-        let r = self.realm(authority, slug).await?;
+    ) -> Result<(EnvironmentEntry, SubscriptionRow), SsfReply> {
+        let r = self.environment(authority, slug).await?;
         let token = bearer.ok_or(UNAUTHORIZED)?;
-        match self.streams.by_token(r.tenant, r.realm, token).await {
+        match self.streams.by_token(r.tenant, r.environment, token).await {
             Ok(s) => Ok((r, s)),
             Err(StreamError::NotFound) => Err(UNAUTHORIZED),
             Err(e) => Err(e.into()),
@@ -177,7 +185,7 @@ where
             Err(e) => return StreamError::from(e).into(),
         };
         self.streams
-            .set_status(r.tenant, r.realm, &s, &update)
+            .set_status(r.tenant, r.environment, &s, &update)
             .await
             .map_or_else(SsfReply::from, SsfReply::Json)
     }
@@ -204,7 +212,7 @@ where
         };
         match self
             .streams
-            .verify(r.tenant, r.realm, &s, &request, now)
+            .verify(r.tenant, r.environment, &s, &request, now)
             .await
         {
             Ok(()) => SsfReply::NoContent,
@@ -230,7 +238,7 @@ where
             Ok(a) => a,
             Err(e) => return StreamError::from(e).into(),
         };
-        match self.streams.ack(r.tenant, r.realm, &s, &ack).await {
+        match self.streams.ack(r.tenant, r.environment, &s, &ack).await {
             Ok(true) => SsfReply::NoContent,
             Ok(false) => SsfReply::Problem(404, "no-such-event"),
             Err(e) => e.into(),
@@ -245,7 +253,7 @@ where
         bearer: Option<&str>,
         body: &[u8],
     ) -> SsfReply {
-        let r = match self.realm(authority, slug).await {
+        let r = match self.environment(authority, slug).await {
             Ok(r) => r,
             Err(e) => return e,
         };
@@ -254,7 +262,14 @@ where
         };
         match self
             .streams
-            .poll(&self.signer, &self.clock, r.tenant, r.realm, token, body)
+            .poll(
+                &self.signer,
+                &self.clock,
+                r.tenant,
+                r.environment,
+                token,
+                body,
+            )
             .await
         {
             Ok(v) => SsfReply::Json(v),

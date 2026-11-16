@@ -1,5 +1,5 @@
-//! The cell's `audit-checkpoint` key: one Ed25519 key per cell, apart from every realm key so
-//! that realm rotation never touches it, which signs the identity audit log's checkpoints as
+//! The cell's `audit-checkpoint` key: one Ed25519 key per cell, apart from every environment key so
+//! that environment rotation never touches it, which signs the identity audit log's checkpoints as
 //! C2SP signed notes (CMP-22b, §17.6.5, OP-134 m.4, OP-143 m.10, OP-150 m.3 (h)).
 
 use access_crypto::jose::JwsAlg;
@@ -38,29 +38,29 @@ pub fn operational_origin(identity_origin: &str) -> Option<String> {
         .map(|cell| format!("{cell}{OPERATIONAL_CHAIN}"))
 }
 
-/// The path segment between the identity log's origin and a realm's id in that realm's own
+/// The path segment between the identity log's origin and an environment's id in that environment's own
 /// audit tree origin.
-pub const REALM_CHAIN: &str = "realm";
+pub const ENVIRONMENT_CHAIN: &str = "environment";
 
-/// The origin of realm `realm`'s own audit tree under the identity log `identity_origin`
-/// (OP-152 m.7 (d), Ek B 2527): the realm's rows in the cell's integration order, signed by the
-/// same cell key, so a realm proves inclusion of its events without the cell tree's size.
+/// The origin of environment `environment`'s own audit tree under the identity log `identity_origin`
+/// (OP-152 m.7 (d), Ek B 2527): the environment's rows in the cell's integration order, signed by the
+/// same cell key, so an environment proves inclusion of its events without the cell tree's size.
 #[must_use]
-pub fn realm_origin(identity_origin: &str, realm: &[u8; 16]) -> String {
+pub fn environment_origin(identity_origin: &str, environment: &[u8; 16]) -> String {
     use core::fmt::Write as _;
     let mut hex = String::with_capacity(32);
-    for b in realm {
+    for b in environment {
         let _ = write!(hex, "{b:02x}");
     }
-    format!("{identity_origin}/{REALM_CHAIN}/{hex}")
+    format!("{identity_origin}/{ENVIRONMENT_CHAIN}/{hex}")
 }
 
-/// Whether `origin` is a realm audit tree origin under `identity_origin`.
-fn is_realm_origin(identity_origin: &str, origin: &str) -> bool {
+/// Whether `origin` is an environment audit tree origin under `identity_origin`.
+fn is_environment_origin(identity_origin: &str, origin: &str) -> bool {
     origin
         .strip_prefix(identity_origin)
         .and_then(|rest| rest.strip_prefix('/'))
-        .and_then(|rest| rest.strip_prefix(REALM_CHAIN))
+        .and_then(|rest| rest.strip_prefix(ENVIRONMENT_CHAIN))
         .and_then(|rest| rest.strip_prefix('/'))
         .is_some_and(|hex| {
             hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
@@ -182,7 +182,7 @@ impl CellKey {
     }
 
     /// The note signature line over a checkpoint body of this cell's audit log, of its
-    /// operational chain or of one realm's audit tree (L2-CKP-3, OP-44, OP-152 m.7 (d)).
+    /// operational chain or of one environment's audit tree (L2-CKP-3, OP-44, OP-152 m.7 (d)).
     ///
     /// # Errors
     /// [`SignerError::Note`] for a body that is not a canonical checkpoint of one of these
@@ -191,7 +191,7 @@ impl CellKey {
         let cp = Checkpoint::parse(body).map_err(|_| SignerError::Note)?;
         let known = cp.origin == self.origin
             || operational_origin(&self.origin).as_deref() == Some(cp.origin.as_str())
-            || is_realm_origin(&self.origin, &cp.origin);
+            || is_environment_origin(&self.origin, &cp.origin);
         if !known || cp.to_body().ok().as_deref() != Some(body) {
             return Err(SignerError::Note);
         }

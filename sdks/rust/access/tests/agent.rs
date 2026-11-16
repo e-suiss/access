@@ -794,21 +794,21 @@ fn an_agent_card_is_a_claim_only_under_an_accepted_key() {
 // AG-34, §11.15, Ek B 4193
 #[test]
 fn security_schemes_list_the_flows_the_identity_plane_serves() {
-    let doc = r#"{"issuer":"https://access.example/realms/acme","authorization_endpoint":"https://access.example/realms/acme/authorize","token_endpoint":"https://access.example/realms/acme/token","grant_types_supported":["authorization_code","refresh_token","client_credentials"]}"#;
+    let doc = r#"{"issuer":"https://access.example/env/acme","authorization_endpoint":"https://access.example/env/acme/authorize","token_endpoint":"https://access.example/env/acme/token","grant_types_supported":["authorization_code","refresh_token","client_credentials"]}"#;
     let s = security_schemes(doc.as_bytes()).unwrap();
     let j = json::parse(s.as_bytes(), 1 << 16).unwrap();
     assert_eq!(
         j.get("access_openid")
             .and_then(|o| o.get("openIdConnectUrl"))
             .and_then(Json::as_str),
-        Some("https://access.example/realms/acme/.well-known/openid-configuration")
+        Some("https://access.example/env/acme/.well-known/openid-configuration")
     );
     let flows = j.get("access_oauth2").unwrap().get("flows").unwrap();
     assert!(flows.get("authorizationCode").is_some());
     assert!(flows.get("clientCredentials").is_some());
     assert!(flows.get("deviceCode").is_none());
     assert!(j.get("access_mtls").is_none());
-    let all = r#"{"issuer":"https://access.example/realms/acme","authorization_endpoint":"https://access.example/realms/acme/authorize","token_endpoint":"https://access.example/realms/acme/token","device_authorization_endpoint":"https://access.example/realms/acme/device_authorization","grant_types_supported":["authorization_code","urn:ietf:params:oauth:grant-type:device_code"],"tls_client_certificate_bound_access_tokens":true}"#;
+    let all = r#"{"issuer":"https://access.example/env/acme","authorization_endpoint":"https://access.example/env/acme/authorize","token_endpoint":"https://access.example/env/acme/token","device_authorization_endpoint":"https://access.example/env/acme/device_authorization","grant_types_supported":["authorization_code","urn:ietf:params:oauth:grant-type:device_code"],"tls_client_certificate_bound_access_tokens":true}"#;
     let j = json::parse(
         security_schemes(all.as_bytes()).unwrap().as_bytes(),
         1 << 16,
@@ -820,7 +820,7 @@ fn security_schemes_list_the_flows_the_identity_plane_serves() {
             .get("deviceCode")
             .and_then(|f| f.get("deviceAuthorizationUrl"))
             .and_then(Json::as_str),
-        Some("https://access.example/realms/acme/device_authorization")
+        Some("https://access.example/env/acme/device_authorization")
     );
     assert!(flows.get("clientCredentials").is_none());
     assert_eq!(

@@ -13,7 +13,7 @@
 //!   key; the certificate's `x5t#S256` is the `pep` of the proxy registration.
 //! - `ACCESS_MCP_GATEWAY_UPSTREAM`: the MCP server's endpoint, `https://…`;
 //!   `ACCESS_MCP_GATEWAY_UPSTREAM_CA`: PEM file of the roots it chains to.
-//! - `ACCESS_MCP_GATEWAY_DOMAIN`: base64url of the realm's governing domain.
+//! - `ACCESS_MCP_GATEWAY_DOMAIN`: base64url of the environment's governing domain.
 //! - `ACCESS_MCP_GATEWAY_PROXY`, `ACCESS_MCP_GATEWAY_NAMESPACE`: the registration's name and
 //!   resource namespace; `ACCESS_MCP_GATEWAY_ACTION`: its action as
 //!   `namespace/name/major/schema` (schema base64url).

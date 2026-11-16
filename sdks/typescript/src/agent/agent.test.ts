@@ -397,15 +397,15 @@ describe("agent over A2A", () => {
   // AG-34, Ek B 4193
   it("lists the identity plane's flows in securitySchemes", () => {
     const s = securitySchemes({
-      issuer: "https://access.example/realms/acme",
-      authorization_endpoint: "https://access.example/realms/acme/authorize",
-      token_endpoint: "https://access.example/realms/acme/token",
-      device_authorization_endpoint: "https://access.example/realms/acme/device_authorization",
+      issuer: "https://access.example/env/acme",
+      authorization_endpoint: "https://access.example/env/acme/authorize",
+      token_endpoint: "https://access.example/env/acme/token",
+      device_authorization_endpoint: "https://access.example/env/acme/device_authorization",
       grant_types_supported: ["authorization_code", "client_credentials"],
       tls_client_certificate_bound_access_tokens: true,
     }) as Record<string, { flows?: Record<string, unknown>; openIdConnectUrl?: string }>;
     expect(s["access_openid"]?.openIdConnectUrl).toBe(
-      "https://access.example/realms/acme/.well-known/openid-configuration",
+      "https://access.example/env/acme/.well-known/openid-configuration",
     );
     expect(Object.keys(s["access_oauth2"]?.flows ?? {})).toEqual([
       "authorizationCode",

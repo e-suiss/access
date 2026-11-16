@@ -1,4 +1,4 @@
-//! The identity signer service: one key set per realm, the schedule for all of them, and the
+//! The identity signer service: one key set per environment, the schedule for all of them, and the
 //! requests of the protocol (CMP-22b, OP-143 m.9 (e)).
 
 use std::collections::BTreeMap;
@@ -13,7 +13,7 @@ use crate::app::{Keyring, Round, Saved};
 use crate::cell::{CellError, CellKey};
 use crate::issuer::{IssuerError, IssuerKey};
 use crate::ports::{KeyFactory, Vault, VaultError};
-use crate::protocol::{Realm, Request, Response, alg_of, policy_of, policy_value};
+use crate::protocol::{Environment, Request, Response, alg_of, policy_of, policy_value};
 
 /// How far a requested signing time may be from the signer's clock (PD).
 pub const MAX_SKEW_MS: u64 = 60_000;
@@ -22,21 +22,21 @@ pub const MAX_SKEW_MS: u64 = 60_000;
 /// operational and writes no Exercise (§10.1.7, OP-157 m.3 (x)).
 pub const AUDIT_EVENT_ROTATED: &str = "signer.rotated";
 
-/// What one schedule round did across the realms (CR-23, CR-27).
+/// What one schedule round did across the environments (CR-23, CR-27).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Report {
-    /// Realms whose round failed or hit a key-generation outage.
-    pub troubled: Vec<Realm>,
-    /// Each applied step; each is a realm audit event (CR-27).
-    pub transitions: Vec<(Realm, Step)>,
-    /// Realms whose active key is past its rotation time after the round, and by how many
+    /// Environments whose round failed or hit a key-generation outage.
+    pub troubled: Vec<Environment>,
+    /// Each applied step; each is an environment audit event (CR-27).
+    pub transitions: Vec<(Environment, Step)>,
+    /// Environments whose active key is past its rotation time after the round, and by how many
     /// milliseconds: the rotation delay alarm (CR-23).
-    pub delayed: Vec<(Realm, u64)>,
+    pub delayed: Vec<(Environment, u64)>,
 }
 
 impl Report {
-    /// Each key the round made a realm's signing key: one [`AUDIT_EVENT_ROTATED`] event each.
-    pub fn rotated(&self) -> impl Iterator<Item = (&Realm, &[u8; 32])> {
+    /// Each key the round made an environment's signing key: one [`AUDIT_EVENT_ROTATED`] event each.
+    pub fn rotated(&self) -> impl Iterator<Item = (&Environment, &[u8; 32])> {
         self.transitions.iter().filter_map(|(d, step)| match step {
             Step::Activate(kid) => Some((d, kid)),
             _ => None,
@@ -46,21 +46,21 @@ impl Report {
 
 /// The identity signer of one process.
 pub struct Service<F, V> {
-    rings: BTreeMap<Realm, (JwsAlg, Keyring)>,
+    rings: BTreeMap<Environment, (JwsAlg, Keyring)>,
     factory: F,
     vault: V,
     policy: Policy,
     cell: Option<CellKey>,
-    issuers: BTreeMap<Realm, IssuerKey>,
-    rsa_ids: BTreeMap<Realm, access_crypto::rsa_id::RsaIdKey>,
-    federation: BTreeMap<Realm, Keyring>,
-    saml: BTreeMap<Realm, crate::saml::Ring>,
+    issuers: BTreeMap<Environment, IssuerKey>,
+    rsa_ids: BTreeMap<Environment, access_crypto::rsa_id::RsaIdKey>,
+    federation: BTreeMap<Environment, Keyring>,
+    saml: BTreeMap<Environment, crate::saml::Ring>,
     acme: Option<crate::acme::AcmeKey>,
-    ssh: BTreeMap<Realm, crate::ssh::Ring>,
-    pq: BTreeMap<Realm, Keyring>,
+    ssh: BTreeMap<Environment, crate::ssh::Ring>,
+    pq: BTreeMap<Environment, Keyring>,
 }
 
-/// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
+/// The JWS types only an environment's `federation` key signs, and the environment JOSE key never does
 /// (OP-155 m.3 (j), MD-6).
 pub const FEDERATION_TYPES: [&str; 4] = [
     "entity-statement+jwt",
@@ -73,14 +73,17 @@ pub const FEDERATION_TYPES: [&str; 4] = [
 const FEDERATION: &str = "federation";
 
 /// The purpose word of a post-quantum key set's vault entry (OP-159 m.3 (o)).
-const PQ: &str = "realm-pq";
+const PQ: &str = "environment-pq";
 
-/// The vault slot of `realm`'s `federation` key set, apart from its JOSE key set.
-fn federation_slot(realm: Realm) -> Realm {
-    let d = suiss_crypto::digest::context_digest("access/identity-signer/federation/v1", &realm.0);
+/// The vault slot of `environment`'s `federation` key set, apart from its JOSE key set.
+fn federation_slot(environment: Environment) -> Environment {
+    let d = suiss_crypto::digest::context_digest(
+        "access/identity-signer/federation/v1",
+        &environment.0,
+    );
     let mut out = [0; 16];
     out.copy_from_slice(&d.0[..16]);
-    Realm(out)
+    Environment(out)
 }
 
 const STATES: [(&str, State); 5] = [
@@ -182,21 +185,26 @@ fn saved_of(v: &Value) -> Option<Saved> {
     })
 }
 
-/// A realm's vault entry: its identifier, the algorithm of its new keys, its rotation policy
+/// An environment's vault entry: its identifier, the algorithm of its new keys, its rotation policy
 /// and its keys.
-fn stored(realm: Realm, alg: JwsAlg, policy: &Policy, saved: &[Saved]) -> Option<Vec<u8>> {
-    stored_as(None, realm, alg, policy, saved)
+fn stored(
+    environment: Environment,
+    alg: JwsAlg,
+    policy: &Policy,
+    saved: &[Saved],
+) -> Option<Vec<u8>> {
+    stored_as(None, environment, alg, policy, saved)
 }
 
 fn stored_as(
     purpose: Option<&str>,
-    realm: Realm,
+    environment: Environment,
     alg: JwsAlg,
     policy: &Policy,
     saved: &[Saved],
 ) -> Option<Vec<u8>> {
     let v = map(vec![
-        ("realm", Some(Value::Bytes(realm.0.to_vec()))),
+        ("environment", Some(Value::Bytes(environment.0.to_vec()))),
         ("purpose", purpose.map(Value::text)),
         ("alg", Some(Value::text(alg.name()))),
         ("policy", Some(policy_value(policy))),
@@ -208,7 +216,7 @@ fn stored_as(
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-/// Which key set of a realm a vault entry holds.
+/// Which key set of an environment a vault entry holds.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Slot {
     Jose,
@@ -216,7 +224,7 @@ enum Slot {
     Pq,
 }
 
-type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>, Slot);
+type Restored = (Environment, JwsAlg, Option<Policy>, Vec<Saved>, Slot);
 
 fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
@@ -226,7 +234,7 @@ fn restored(b: &[u8]) -> Option<Restored> {
         Some(Value::Text(t)) if t == PQ => Slot::Pq,
         Some(_) => return None,
     };
-    let realm = Realm(bytes(v.get("realm"))?.try_into().ok()?);
+    let environment = Environment(bytes(v.get("environment"))?.try_into().ok()?);
     let alg = match (v.get("alg"), slot) {
         (Some(Value::Text(t)), Slot::Pq) => JwsAlg::ml_dsa(t)?,
         (Some(Value::Text(t)), _) => alg_of(t)?,
@@ -237,7 +245,7 @@ fn restored(b: &[u8]) -> Option<Restored> {
     };
     let policy = v.get("policy").and_then(|p| policy_of(p).ok());
     Some((
-        realm,
+        environment,
         alg,
         policy,
         keys.iter().filter_map(saved_of).collect(),
@@ -246,12 +254,12 @@ fn restored(b: &[u8]) -> Option<Restored> {
 }
 
 impl<F: KeyFactory, V: Vault> Service<F, V> {
-    /// A service that restores every realm the vault holds (CR-23).
+    /// A service that restores every environment the vault holds (CR-23).
     ///
     /// # Errors
-    /// The vault cannot be read, or a realm's open post-quantum key set cannot be loaded back:
+    /// The vault cannot be read, or an environment's open post-quantum key set cannot be loaded back:
     /// with the profile open and no key, the signer does not start (OP-159 m.3 (d)). Any other
-    /// realm that cannot be restored is left closed.
+    /// environment that cannot be restored is left closed.
     pub fn start(factory: F, mut vault: V, policy: Policy) -> Result<Self, VaultError> {
         let all = vault.all()?;
         let mut s = Self {
@@ -268,15 +276,15 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             ssh: BTreeMap::new(),
             pq: BTreeMap::new(),
         };
-        for (realm, alg, policy, saved, slot) in all.iter().filter_map(|b| restored(b)) {
+        for (environment, alg, policy, saved, slot) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
             let ring = Keyring::restore(alg, policy, saved, &mut s.factory);
             match (slot, ring) {
                 (Slot::Federation, Ok(ring)) => {
-                    s.federation.insert(realm, ring);
+                    s.federation.insert(environment, ring);
                 }
                 (Slot::Jose, Ok(ring)) => {
-                    s.rings.insert(realm, (alg, ring));
+                    s.rings.insert(environment, (alg, ring));
                 }
                 // OP-159 m.3 (d)
                 (Slot::Pq, Ok(ring))
@@ -285,7 +293,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     return Err(VaultError);
                 }
                 (Slot::Pq, Ok(ring)) if ring.live() => {
-                    s.pq.insert(realm, ring);
+                    s.pq.insert(environment, ring);
                 }
                 (Slot::Pq, Err(_)) => return Err(VaultError),
                 _ => {}
@@ -313,91 +321,107 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         Ok(())
     }
 
-    /// The realms whose key sets are open.
+    /// The environments whose key sets are open.
     #[must_use]
-    pub fn realms(&self) -> Vec<Realm> {
+    pub fn environments(&self) -> Vec<Environment> {
         self.rings.keys().copied().collect()
     }
 
-    fn persist(&mut self, realm: Realm) -> bool {
-        let Some((alg, ring)) = self.rings.get(&realm) else {
+    fn persist(&mut self, environment: Environment) -> bool {
+        let Some((alg, ring)) = self.rings.get(&environment) else {
             return false;
         };
-        stored(realm, *alg, &ring.policy(), &ring.saved())
-            .is_some_and(|b| self.vault.put(&realm, &b).is_ok())
+        stored(environment, *alg, &ring.policy(), &ring.saved())
+            .is_some_and(|b| self.vault.put(&environment, &b).is_ok())
     }
 
-    fn tick_one(&mut self, realm: Realm, now: u64, draw: u64) -> bool {
+    fn tick_one(&mut self, environment: Environment, now: u64, draw: u64) -> bool {
         let mut report = Report::default();
-        self.round_one(realm, now, draw, &mut report);
+        self.round_one(environment, now, draw, &mut report);
         report.troubled.is_empty()
     }
 
-    fn round_one(&mut self, realm: Realm, now: u64, draw: u64, report: &mut Report) {
+    fn round_one(&mut self, environment: Environment, now: u64, draw: u64, report: &mut Report) {
         let round = self
             .rings
-            .get_mut(&realm)
+            .get_mut(&environment)
             .map(|(_, ring)| ring.tick(&mut self.factory, now, draw));
         let ok = round.as_ref().is_some_and(|r| !r.outage);
-        if !(self.persist(realm) && ok) {
-            report.troubled.push(realm);
+        if !(self.persist(environment) && ok) {
+            report.troubled.push(environment);
         }
         for step in round.map(|r| r.applied).unwrap_or_default() {
-            report.transitions.push((realm, step));
+            report.transitions.push((environment, step));
         }
-        if let Some(late) = self.rings.get(&realm).and_then(|(_, r)| r.overdue(now)) {
-            report.delayed.push((realm, late));
+        if let Some(late) = self
+            .rings
+            .get(&environment)
+            .and_then(|(_, r)| r.overdue(now))
+        {
+            report.delayed.push((environment, late));
         }
     }
 
-    /// Runs the schedule of every realm at `now` and keeps the vault current; returns the
-    /// realms whose round failed or hit a key-generation outage (CR-23).
-    pub fn tick(&mut self, now: u64, draw: u64) -> Vec<Realm> {
+    /// Runs the schedule of every environment at `now` and keeps the vault current; returns the
+    /// environments whose round failed or hit a key-generation outage (CR-23).
+    pub fn tick(&mut self, now: u64, draw: u64) -> Vec<Environment> {
         self.round(now, draw).troubled
     }
 
     /// [`Self::tick`], reporting every applied step and every delayed rotation (CR-23, CR-27).
     pub fn round(&mut self, now: u64, draw: u64) -> Report {
         let mut report = Report::default();
-        for realm in self.realms() {
-            self.round_one(realm, now, draw, &mut report);
+        for environment in self.environments() {
+            self.round_one(environment, now, draw, &mut report);
         }
-        let federated: Vec<Realm> = self.federation.keys().copied().collect();
-        for realm in federated {
-            if !self.federation_round(realm, now, draw) {
-                report.troubled.push(realm);
+        let federated: Vec<Environment> = self.federation.keys().copied().collect();
+        for environment in federated {
+            if !self.federation_round(environment, now, draw) {
+                report.troubled.push(environment);
             }
         }
-        let pq: Vec<Realm> = self.pq.keys().copied().collect();
-        for realm in pq {
-            if !self.pq_round(realm, now, draw, &mut report) {
-                report.troubled.push(realm);
+        let pq: Vec<Environment> = self.pq.keys().copied().collect();
+        for environment in pq {
+            if !self.pq_round(environment, now, draw, &mut report) {
+                report.troubled.push(environment);
             }
         }
         report
     }
 
-    fn persist_pq(&mut self, realm: Realm) -> bool {
-        let Some(ring) = self.pq.get(&realm) else {
+    fn persist_pq(&mut self, environment: Environment) -> bool {
+        let Some(ring) = self.pq.get(&environment) else {
             return false;
         };
-        stored_as(Some(PQ), realm, ring.alg(), &ring.policy(), &ring.saved())
-            .is_some_and(|b| self.vault.put(&crate::pq::slot(realm), &b).is_ok())
+        stored_as(
+            Some(PQ),
+            environment,
+            ring.alg(),
+            &ring.policy(),
+            &ring.saved(),
+        )
+        .is_some_and(|b| self.vault.put(&crate::pq::slot(environment), &b).is_ok())
     }
 
-    fn pq_round(&mut self, realm: Realm, now: u64, draw: u64, report: &mut Report) -> bool {
+    fn pq_round(
+        &mut self,
+        environment: Environment,
+        now: u64,
+        draw: u64,
+        report: &mut Report,
+    ) -> bool {
         let round = self
             .pq
-            .get_mut(&realm)
+            .get_mut(&environment)
             .map(|ring| ring.tick(&mut self.factory, now, draw));
         let ok = round.as_ref().is_some_and(|r| !r.outage);
         for step in round.map(|r| r.applied).unwrap_or_default() {
-            report.transitions.push((realm, step));
+            report.transitions.push((environment, step));
         }
-        self.persist_pq(realm) && ok
+        self.persist_pq(environment) && ok
     }
 
-    /// Answers a request about a realm's post-quantum key set (CR-41, OP-159 m.3 (o), (d)).
+    /// Answers a request about an environment's post-quantum key set (CR-41, OP-159 m.3 (o), (d)).
     fn handle_pq(&mut self, request: crate::pq::PqRequest, now: u64, draw: u64) -> Response {
         use crate::pq::{NO_PQ, PQ_KEY_UNAVAILABLE, PqRequest};
         match request {
@@ -408,10 +432,10 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Response::Error(String::from(PQ_KEY_UNAVAILABLE))
                 }
             }
-            PqRequest::Open { realm, alg } => {
+            PqRequest::Open { environment, alg } => {
                 if self
                     .pq
-                    .get(&realm)
+                    .get(&environment)
                     .is_some_and(|r| r.alg() == alg && r.live())
                 {
                     return Response::Opened;
@@ -420,40 +444,40 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if !alg.post_quantum() || !self.factory.pq_ready(alg) {
                     return Response::Error(String::from(PQ_KEY_UNAVAILABLE));
                 }
-                if let Some(old) = self.pq.get_mut(&realm) {
+                if let Some(old) = self.pq.get_mut(&environment) {
                     old.close(now);
-                    if !self.persist_pq(realm) {
+                    if !self.persist_pq(environment) {
                         return Response::Error(String::from("signer-outage"));
                     }
                 }
                 let policy = self
                     .rings
-                    .get(&realm)
+                    .get(&environment)
                     .map_or(self.policy, |(_, r)| r.policy());
                 let Ok(ring) = Keyring::new(alg, policy) else {
                     return Response::Error(String::from("signer-policy"));
                 };
-                self.pq.insert(realm, ring);
+                self.pq.insert(environment, ring);
                 let mut report = Report::default();
-                if !self.pq_round(realm, now, draw, &mut report) {
-                    self.pq.remove(&realm);
+                if !self.pq_round(environment, now, draw, &mut report) {
+                    self.pq.remove(&environment);
                     return Response::Error(String::from(PQ_KEY_UNAVAILABLE));
                 }
                 Response::Opened
             }
-            PqRequest::Close { realm } => {
-                let Some(ring) = self.pq.get_mut(&realm) else {
+            PqRequest::Close { environment } => {
+                let Some(ring) = self.pq.get_mut(&environment) else {
                     return Response::Opened;
                 };
                 ring.close(now);
-                if !self.persist_pq(realm) {
+                if !self.persist_pq(environment) {
                     return Response::Error(String::from("signer-outage"));
                 }
-                self.pq.remove(&realm);
+                self.pq.remove(&environment);
                 Response::Opened
             }
             PqRequest::Sign {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
@@ -464,11 +488,11 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if FEDERATION_TYPES.contains(&typ.as_str()) {
                     return Response::Error(String::from(crate::SignerError::Payload.code()));
                 }
-                let Some(ring) = self.pq.get_mut(&realm) else {
+                let Some(ring) = self.pq.get_mut(&environment) else {
                     return Response::Error(String::from(NO_PQ));
                 };
                 let signed = ring.sign(&typ, &payload, at);
-                let kept = self.persist_pq(realm);
+                let kept = self.persist_pq(environment);
                 match signed {
                     Ok(s) if kept => Response::Signed {
                         token: s.token,
@@ -481,48 +505,48 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
     }
 
-    fn persist_federation(&mut self, realm: Realm) -> bool {
-        let Some(ring) = self.federation.get(&realm) else {
+    fn persist_federation(&mut self, environment: Environment) -> bool {
+        let Some(ring) = self.federation.get(&environment) else {
             return false;
         };
         stored_as(
             Some(FEDERATION),
-            realm,
+            environment,
             JwsAlg::Es256,
             &ring.policy(),
             &ring.saved(),
         )
-        .is_some_and(|b| self.vault.put(&federation_slot(realm), &b).is_ok())
+        .is_some_and(|b| self.vault.put(&federation_slot(environment), &b).is_ok())
     }
 
-    fn federation_round(&mut self, realm: Realm, now: u64, draw: u64) -> bool {
+    fn federation_round(&mut self, environment: Environment, now: u64, draw: u64) -> bool {
         let ok = self
             .federation
-            .get_mut(&realm)
+            .get_mut(&environment)
             .map(|ring| ring.tick(&mut self.factory, now, draw))
             .is_some_and(|r| !r.outage);
-        self.persist_federation(realm) && ok
+        self.persist_federation(environment) && ok
     }
 
     /// Answers the `federation` key's requests (OP-155 m.3 (j)): its key set is made on the first
     /// request, P-256 only, and it signs only federation types.
     fn handle_federation(&mut self, request: Request, now: u64, draw: u64) -> Response {
-        let realm = match &request {
-            Request::FederationJwks(r) | Request::SignFederation { realm: r, .. } => *r,
+        let environment = match &request {
+            Request::FederationJwks(r) | Request::SignFederation { environment: r, .. } => *r,
             _ => return Response::Error(String::from("signer-frame")),
         };
-        if !self.federation.contains_key(&realm) {
+        if !self.federation.contains_key(&environment) {
             let Ok(ring) = Keyring::new(JwsAlg::Es256, self.policy) else {
                 return Response::Error(String::from("signer-policy"));
             };
-            self.federation.insert(realm, ring);
-            if !self.federation_round(realm, now, draw) {
-                self.federation.remove(&realm);
+            self.federation.insert(environment, ring);
+            if !self.federation_round(environment, now, draw) {
+                self.federation.remove(&environment);
                 return Response::Error(String::from("signer-outage"));
             }
         }
-        let Some(ring) = self.federation.get_mut(&realm) else {
-            return Response::Error(String::from(UNKNOWN_REALM));
+        let Some(ring) = self.federation.get_mut(&environment) else {
+            return Response::Error(String::from(UNKNOWN_ENVIRONMENT));
         };
         match request {
             Request::SignFederation {
@@ -546,21 +570,21 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
     }
 
-    /// Changes `realm`'s key set outside the schedule and keeps the vault current (TN-118,
+    /// Changes `environment`'s key set outside the schedule and keeps the vault current (TN-118,
     /// §13.2); a change the vault cannot keep is an outage.
     fn rekey(
         &mut self,
-        realm: Realm,
+        environment: Environment,
         change: impl FnOnce(&mut Keyring, &mut dyn KeyFactory) -> Result<Round, SignerError>,
     ) -> Response {
-        let Some((_, ring)) = self.rings.get_mut(&realm) else {
-            return Response::Error(String::from(UNKNOWN_REALM));
+        let Some((_, ring)) = self.rings.get_mut(&environment) else {
+            return Response::Error(String::from(UNKNOWN_ENVIRONMENT));
         };
         if let Err(e) = change(ring, &mut self.factory) {
             return Response::Error(String::from(e.code()));
         }
         let jwks = ring.jwks().to_owned();
-        if !self.persist(realm) {
+        if !self.persist(environment) {
             return Response::Error(String::from("signer-outage"));
         }
         Response::Rekeyed(jwks)
@@ -571,37 +595,37 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     pub fn handle(&mut self, request: Request, now: u64, draw: u64) -> Response {
         match request {
             Request::Ping => Response::Pong,
-            Request::Open { realm, alg } => {
-                if let Some((current, ring)) = self.rings.get_mut(&realm)
+            Request::Open { environment, alg } => {
+                if let Some((current, ring)) = self.rings.get_mut(&environment)
                     && *current != alg
                 {
                     *current = alg;
                     ring.set_alg(alg);
-                    if !self.persist(realm) {
+                    if !self.persist(environment) {
                         return Response::Error(String::from("signer-outage"));
                     }
                 }
-                if !self.rings.contains_key(&realm) {
+                if !self.rings.contains_key(&environment) {
                     let Ok(ring) = Keyring::new(alg, self.policy) else {
                         return Response::Error(String::from("signer-policy"));
                     };
-                    self.rings.insert(realm, (alg, ring));
-                    if !self.tick_one(realm, now, draw) {
+                    self.rings.insert(environment, (alg, ring));
+                    if !self.tick_one(environment, now, draw) {
                         return Response::Error(String::from("signer-outage"));
                     }
                 }
                 Response::Opened
             }
-            Request::Jwks(realm) => self.jwks(realm),
+            Request::Jwks(environment) => self.jwks(environment),
             // MD-6, CR-2, OP-155 m.3 (k)
             Request::SignRs256 {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
-            } => self.sign_rs256(realm, &typ, &payload, at, now),
+            } => self.sign_rs256(environment, &typ, &payload, at, now),
             Request::Sign {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
@@ -613,8 +637,8 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if FEDERATION_TYPES.contains(&typ.as_str()) {
                     return Response::Error(String::from(crate::SignerError::Payload.code()));
                 }
-                let Some((_, ring)) = self.rings.get_mut(&realm) else {
-                    return Response::Error(String::from(UNKNOWN_REALM));
+                let Some((_, ring)) = self.rings.get_mut(&environment) else {
+                    return Response::Error(String::from(UNKNOWN_ENVIRONMENT));
                 };
                 match ring.sign(&typ, &payload, at) {
                     Ok(s) => Response::Signed {
@@ -625,7 +649,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 }
             }
             Request::SignCose {
-                realm,
+                environment,
                 content_type,
                 payload,
                 at,
@@ -636,21 +660,25 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if PROTOCOL_TYPES.contains(&content_type.as_str()) {
                     return Response::Error(String::from(crate::SignerError::Payload.code()));
                 }
-                let Some((_, ring)) = self.rings.get_mut(&realm) else {
-                    return Response::Error(String::from(UNKNOWN_REALM));
+                let Some((_, ring)) = self.rings.get_mut(&environment) else {
+                    return Response::Error(String::from(UNKNOWN_ENVIRONMENT));
                 };
                 match ring.sign_cose(&content_type, &payload, at) {
                     Ok((sign1, kid)) => Response::SignedCose { sign1, kid },
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
-            Request::Rotate { realm, retire } => {
-                self.rekey(realm, |ring, f| ring.rotate(f, &retire, now, draw))
+            Request::Rotate {
+                environment,
+                retire,
+            } => self.rekey(environment, |ring, f| ring.rotate(f, &retire, now, draw)),
+            Request::DropKey { environment, kid } => {
+                self.rekey(environment, |ring, f| ring.drop_key(f, &kid, now, draw))
             }
-            Request::DropKey { realm, kid } => {
-                self.rekey(realm, |ring, f| ring.drop_key(f, &kid, now, draw))
-            }
-            Request::SetPolicy { realm, policy } => self.rekey(realm, |ring, _| {
+            Request::SetPolicy {
+                environment,
+                policy,
+            } => self.rekey(environment, |ring, _| {
                 ring.set_policy(policy)?;
                 Ok(Round::default())
             }),
@@ -709,9 +737,9 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
 
     /// Answers the Claim issuer key's requests (§10.1.7).
     fn handle_issuer(&mut self, request: &Request, now: u64) -> Response {
-        let (realm, at) = match request {
-            Request::OpenIssuer { realm, party } => {
-                return match self.open_issuer(*realm, *party) {
+        let (environment, at) = match request {
+            Request::OpenIssuer { environment, party } => {
+                return match self.open_issuer(*environment, *party) {
                     Ok(k) => Response::Issuer {
                         party: k.party(),
                         key: k.key(),
@@ -720,17 +748,19 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 };
             }
-            Request::SignClaim { realm, at, .. } => (*realm, *at),
+            Request::SignClaim {
+                environment, at, ..
+            } => (*environment, *at),
             Request::SignIssuerRegistration {
-                realm,
+                environment,
                 registration,
-            } => (*realm, registration.iat),
+            } => (*environment, registration.iat),
             _ => return Response::Error(String::from("signer-frame")),
         };
         if at.abs_diff(now) > MAX_SKEW_MS {
             return Response::Error(String::from("signer-time"));
         }
-        let Some(k) = self.issuer(realm) else {
+        let Some(k) = self.issuer(environment) else {
             return Response::Error(String::from(NO_ISSUER));
         };
         let signed = match request {
@@ -749,39 +779,39 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
     }
 
-    /// The Claim issuer key of `realm`: the open one, the stored one, or a new one stored before
+    /// The Claim issuer key of `environment`: the open one, the stored one, or a new one stored before
     /// it is used, bound to `party` (§10.1.7). A key bound to another Party is refused.
     ///
     /// # Errors
     /// [`IssuerError`]; [`IssuerError::Stored`] also when the vault cannot be read or written.
     pub fn open_issuer(
         &mut self,
-        realm: Realm,
+        environment: Environment,
         party: [u8; 16],
     ) -> Result<&IssuerKey, IssuerError> {
-        if self.issuer(realm).is_none() {
-            let key = IssuerKey::generate(realm.0, party, &mut self.factory)?;
+        if self.issuer(environment).is_none() {
+            let key = IssuerKey::generate(environment.0, party, &mut self.factory)?;
             let stored = key.stored().ok_or(IssuerError::Stored)?;
             self.vault
-                .put_issuer(&realm, &stored)
+                .put_issuer(&environment, &stored)
                 .map_err(|_| IssuerError::Stored)?;
-            self.issuers.insert(realm, key);
+            self.issuers.insert(environment, key);
         }
-        match self.issuers.get(&realm) {
+        match self.issuers.get(&environment) {
             Some(k) if k.party() == party => Ok(k),
             Some(_) => Err(IssuerError::OtherIssuer),
             None => Err(IssuerError::Stored),
         }
     }
 
-    /// The realm's JWKS, its `rsa-id` key after the JOSE keys when it has one.
-    fn jwks(&mut self, realm: Realm) -> Response {
+    /// The environment's JWKS, its `rsa-id` key after the JOSE keys when it has one.
+    fn jwks(&mut self, environment: Environment) -> Response {
         let rsa = self
-            .rsa_id(realm)
+            .rsa_id(environment)
             .map(access_crypto::rsa_id::RsaIdKey::public_jwk);
-        let pq = self.pq.get(&realm).map(|r| r.jwks().to_owned());
-        self.rings.get(&realm).map_or_else(
-            || Response::Error(String::from(UNKNOWN_REALM)),
+        let pq = self.pq.get(&environment).map(|r| r.jwks().to_owned());
+        self.rings.get(&environment).map_or_else(
+            || Response::Error(String::from(UNKNOWN_ENVIRONMENT)),
             |(_, ring)| {
                 // OP-159 m.3 (o)
                 let jose = pq.as_deref().map_or_else(
@@ -793,10 +823,10 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         )
     }
 
-    /// Signs `payload` as an RS256 JWS of `typ` with the realm's `rsa-id` key (MD-6, CR-2).
+    /// Signs `payload` as an RS256 JWS of `typ` with the environment's `rsa-id` key (MD-6, CR-2).
     fn sign_rs256(
         &mut self,
-        realm: Realm,
+        environment: Environment,
         typ: &str,
         payload: &[u8],
         at: u64,
@@ -805,10 +835,10 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         if at.abs_diff(now) > MAX_SKEW_MS {
             return Response::Error(String::from("signer-time"));
         }
-        if !self.rings.contains_key(&realm) {
-            return Response::Error(String::from(UNKNOWN_REALM));
+        if !self.rings.contains_key(&environment) {
+            return Response::Error(String::from(UNKNOWN_ENVIRONMENT));
         }
-        let Some(key) = self.open_rsa_id(realm) else {
+        let Some(key) = self.open_rsa_id(environment) else {
             return Response::Error(String::from("signer-outage"));
         };
         match key.sign_compact(typ, payload) {
@@ -820,38 +850,41 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
     }
 
-    /// The realm's `rsa-id` key when one was made, loaded from the vault after a restart.
-    fn rsa_id(&mut self, realm: Realm) -> Option<&access_crypto::rsa_id::RsaIdKey> {
-        if !self.rsa_ids.contains_key(&realm) {
-            let stored = self.vault.rsa_id(&realm).ok().flatten()?;
+    /// The environment's `rsa-id` key when one was made, loaded from the vault after a restart.
+    fn rsa_id(&mut self, environment: Environment) -> Option<&access_crypto::rsa_id::RsaIdKey> {
+        if !self.rsa_ids.contains_key(&environment) {
+            let stored = self.vault.rsa_id(&environment).ok().flatten()?;
             let key = self.factory.load_rsa_id(&stored).ok()?;
-            self.rsa_ids.insert(realm, key);
+            self.rsa_ids.insert(environment, key);
         }
-        self.rsa_ids.get(&realm)
+        self.rsa_ids.get(&environment)
     }
 
-    /// The realm's `rsa-id` key, made and stored before its first use (MD-6).
-    fn open_rsa_id(&mut self, realm: Realm) -> Option<&access_crypto::rsa_id::RsaIdKey> {
-        if self.rsa_id(realm).is_none() {
+    /// The environment's `rsa-id` key, made and stored before its first use (MD-6).
+    fn open_rsa_id(
+        &mut self,
+        environment: Environment,
+    ) -> Option<&access_crypto::rsa_id::RsaIdKey> {
+        if self.rsa_id(environment).is_none() {
             let (key, sealed) = self.factory.generate_rsa_id().ok()?;
-            self.vault.put_rsa_id(&realm, &sealed).ok()?;
-            self.rsa_ids.insert(realm, key);
+            self.vault.put_rsa_id(&environment, &sealed).ok()?;
+            self.rsa_ids.insert(environment, key);
         }
-        self.rsa_ids.get(&realm)
+        self.rsa_ids.get(&environment)
     }
 
-    /// The realm's open Claim issuer key, loaded from the vault after a restart.
-    fn issuer(&mut self, realm: Realm) -> Option<&IssuerKey> {
-        if !self.issuers.contains_key(&realm) {
-            let stored = self.vault.issuer(&realm).ok().flatten()?;
-            let key = IssuerKey::restore(realm.0, &stored, &mut self.factory).ok()?;
-            self.issuers.insert(realm, key);
+    /// The environment's open Claim issuer key, loaded from the vault after a restart.
+    fn issuer(&mut self, environment: Environment) -> Option<&IssuerKey> {
+        if !self.issuers.contains_key(&environment) {
+            let stored = self.vault.issuer(&environment).ok().flatten()?;
+            let key = IssuerKey::restore(environment.0, &stored, &mut self.factory).ok()?;
+            self.issuers.insert(environment, key);
         }
-        self.issuers.get(&realm)
+        self.issuers.get(&environment)
     }
 }
 
-/// The realm's JWKS with its `rsa-id` key appended after the JOSE keys, when it has one
+/// The environment's JWKS with its `rsa-id` key appended after the JOSE keys, when it has one
 /// (OP-155 m.3 (k)).
 fn with_rsa(jwks: &str, rsa: Option<&str>) -> String {
     let Some(rsa) = rsa else {
@@ -869,19 +902,19 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     /// outage and is not answered as done.
     fn handle_saml(&mut self, request: &crate::saml::SamlRequest, now: u64) -> Response {
         use crate::saml::{Ring, SamlKeyError, SamlRequest, SamlResponse};
-        let realm = request.realm();
-        if !self.saml.contains_key(&realm) {
-            let ring = match self.vault.saml(&realm) {
-                Ok(Some(stored)) => match Ring::restore(realm, &stored, &mut self.factory) {
+        let environment = request.environment();
+        if !self.saml.contains_key(&environment) {
+            let ring = match self.vault.saml(&environment) {
+                Ok(Some(stored)) => match Ring::restore(environment, &stored, &mut self.factory) {
                     Ok(r) => r,
                     Err(e) => return Response::Error(String::from(e.code())),
                 },
-                Ok(None) => Ring::new(realm),
+                Ok(None) => Ring::new(environment),
                 Err(_) => return Response::Error(String::from(SamlKeyError::Stored.code())),
             };
-            self.saml.insert(realm, ring);
+            self.saml.insert(environment, ring);
         }
-        let Some(ring) = self.saml.get_mut(&realm) else {
+        let Some(ring) = self.saml.get_mut(&environment) else {
             return Response::Error(String::from(SamlKeyError::Stored.code()));
         };
         let changed = match request {
@@ -905,16 +938,20 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             Ok(true) => {
                 let kept = ring
                     .stored()
-                    .is_some_and(|b| self.vault.put_saml(&realm, &b).is_ok());
+                    .is_some_and(|b| self.vault.put_saml(&environment, &b).is_ok());
                 if !kept {
-                    self.saml.remove(&realm);
+                    self.saml.remove(&environment);
                     return Response::Error(String::from(SamlKeyError::Stored.code()));
                 }
             }
             Ok(false) => {}
             Err(e) => return Response::Error(String::from(e.code())),
         }
-        let keys = self.saml.get(&realm).map(Ring::keys).unwrap_or_default();
+        let keys = self
+            .saml
+            .get(&environment)
+            .map(Ring::keys)
+            .unwrap_or_default();
         Response::Saml(SamlResponse::Keys(keys))
     }
 }
@@ -924,19 +961,19 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     /// outage and is not answered as done.
     fn handle_ssh(&mut self, request: &crate::ssh::SshRequest, now: u64) -> Response {
         use crate::ssh::{Ring, SshKeyError, SshRequest, SshResponse};
-        let realm = request.realm();
-        if !self.ssh.contains_key(&realm) {
-            let ring = match self.vault.ssh(&realm) {
-                Ok(Some(stored)) => match Ring::restore(realm, &stored, &mut self.factory) {
+        let environment = request.environment();
+        if !self.ssh.contains_key(&environment) {
+            let ring = match self.vault.ssh(&environment) {
+                Ok(Some(stored)) => match Ring::restore(environment, &stored, &mut self.factory) {
                     Ok(r) => r,
                     Err(e) => return Response::Error(String::from(e.code())),
                 },
-                Ok(None) => Ring::new(realm),
+                Ok(None) => Ring::new(environment),
                 Err(_) => return Response::Error(String::from(SshKeyError::Stored.code())),
             };
-            self.ssh.insert(realm, ring);
+            self.ssh.insert(environment, ring);
         }
-        let Some(ring) = self.ssh.get_mut(&realm) else {
+        let Some(ring) = self.ssh.get_mut(&environment) else {
             return Response::Error(String::from(SshKeyError::Stored.code()));
         };
         let changed = match request {
@@ -956,24 +993,28 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             Ok(true) => {
                 let kept = ring
                     .stored()
-                    .is_some_and(|b| self.vault.put_ssh(&realm, &b).is_ok());
+                    .is_some_and(|b| self.vault.put_ssh(&environment, &b).is_ok());
                 if !kept {
-                    self.ssh.remove(&realm);
+                    self.ssh.remove(&environment);
                     return Response::Error(String::from(SshKeyError::Stored.code()));
                 }
             }
             Ok(false) => {}
             Err(e) => return Response::Error(String::from(e.code())),
         }
-        let keys = self.ssh.get(&realm).map(Ring::keys).unwrap_or_default();
+        let keys = self
+            .ssh
+            .get(&environment)
+            .map(Ring::keys)
+            .unwrap_or_default();
         Response::Ssh(SshResponse::Keys(keys))
     }
 }
 
-/// The refusal for a realm whose Claim issuer key was never opened.
+/// The refusal for an environment whose Claim issuer key was never opened.
 pub const NO_ISSUER: &str = "signer-no-issuer";
 
-/// The content types of Access protocol artefacts, which only their own keys sign: a realm's
+/// The content types of Access protocol artefacts, which only their own keys sign: an environment's
 /// token key never signs a Claim, an AIS, an AAS, a PAP or a receipt (§10.1.7, MD-6).
 pub const PROTOCOL_TYPES: [&str; 5] = [
     access_kernel::claim::CONTENT_TYPE,
@@ -986,8 +1027,8 @@ pub const PROTOCOL_TYPES: [&str; 5] = [
 /// The refusal when the cell's `audit-checkpoint` key is not open.
 pub const NO_CELL: &str = "signer-no-cell";
 
-/// The refusal for a realm whose key set is not open.
-pub const UNKNOWN_REALM: &str = "signer-unknown-realm";
+/// The refusal for an environment whose key set is not open.
+pub const UNKNOWN_ENVIRONMENT: &str = "signer-unknown-environment";
 
 #[cfg(test)]
 mod tests;

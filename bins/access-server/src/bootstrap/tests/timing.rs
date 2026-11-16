@@ -1,5 +1,5 @@
 //! Response times an MCP client waits for (§11.4.5 #25, §11.5.6 #25, OP-153 m.3 (gg)): the
-//! realm's discovery documents and its token endpoint answer within 10 s through the real
+//! environment's discovery documents and its token endpoint answer within 10 s through the real
 //! routers on the real sequencer and `SoftHSM`; the MCP server's protected resource metadata
 //! within 5 s. Every answer is a whole body, and a stream tells a buffering reverse proxy not to
 //! hold it.
@@ -7,20 +7,20 @@
 use std::time::{Duration, Instant};
 
 use access_identity_oauth::adapters::PgDirectory;
-use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
 use access_sdk::mcp::server::Stream;
 use axum::body::{Body, HttpBody as _, to_bytes};
 use axum::http::{Request as HttpRequest, StatusCode, header};
 use tower::ServiceExt as _;
 
-use super::exchange::{ACCESS_TOKEN_TYPE, ISSUER, Realm, UPSTREAM};
+use super::exchange::{ACCESS_TOKEN_TYPE, Environment, ISSUER, UPSTREAM};
 use super::mcp::metadata_answer;
 use super::*;
 
 const TOKEN_AND_DISCOVERY: Duration = Duration::from_secs(10);
 const RESOURCE_METADATA: Duration = Duration::from_secs(5);
 
-/// A `GET` of `path` on the realm's discovery routes: status, whether the body is whole (its
+/// A `GET` of `path` on the environment's discovery routes: status, whether the body is whole (its
 /// size known before it is sent, no chunked stream for a proxy to hold), and the time taken.
 async fn discover(router: &axum::Router, path: &str) -> (StatusCode, bool, Duration) {
     let started = Instant::now();
@@ -46,15 +46,15 @@ async fn discover(router: &axum::Router, path: &str) -> (StatusCode, bool, Durat
 // §11.4.5 item 25, AG-17, OP-154 m.3 (gg), Ek B 4579
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn discovery_and_the_token_endpoint_answer_within_ten_seconds() {
-    let r = Realm::open("l10-timing").await;
-    let discovery = access_http::realm::router(RealmDiscovery::new(
+    let r = Environment::open("l10-timing").await;
+    let discovery = access_http::environment::router(EnvironmentDiscovery::new(
         PgDirectory::new(r.w.db.router.clone()),
         access_identity_oauth::adapters::SignerKeys::new(r.w.identity_signer.clone()),
     ));
     for path in [
-        "/realms/acme/.well-known/openid-configuration",
-        "/.well-known/oauth-authorization-server/realms/acme",
-        "/realms/acme/jwks.json",
+        "/env/acme/.well-known/openid-configuration",
+        "/.well-known/oauth-authorization-server/env/acme",
+        "/env/acme/jwks.json",
     ] {
         let (status, whole, took) = discover(&discovery, path).await;
         assert_eq!(status, StatusCode::OK, "{path}");

@@ -1,6 +1,6 @@
 //! `idp.scim.*` changes (OP-155 m.3 (a), (g), IDP-23, IDP-29): inbound SCIM clients and outbound
 //! SCIM targets. A target's bearer secret never enters the intent: the change carries its SHA-256
-//! and the secret itself is sealed under the realm KEK when the decision is written.
+//! and the secret itself is sealed under the environment KEK when the decision is written.
 
 use access_identity_scim::app::clients::{check_register, check_target, valid_name};
 use access_internal_api::idp::IdpAction;
@@ -140,7 +140,7 @@ impl ScimChange {
         Value::Map(fields)
     }
 
-    /// Its resource path under the realm's slug: `scim-client/<name>` or `scim-target/<name>`.
+    /// Its resource path under the environment's slug: `scim-client/<name>` or `scim-target/<name>`.
     #[must_use]
     pub fn path(&self) -> [String; 2] {
         let kind = match self {

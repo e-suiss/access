@@ -45,21 +45,21 @@ enum Command {
     /// Applies the schema migrations as the migration role and prints what it applied
     /// (OP-55, OP-138).
     Migrate(commands::migrate::Args),
-    /// Reads and writes realm-admin resources; every write is one Exercise signed with the
+    /// Reads and writes environment-admin resources; every write is one Exercise signed with the
     /// Instance key (TN-110).
     Admin(commands::admin::AdminArgs),
-    /// Writes the realm's configuration as deterministic YAML (TN-123).
+    /// Writes the environment's configuration as deterministic YAML (TN-123).
     Export(commands::export::ExportArgs),
     /// Shows the plan from the runtime state to a desired document (TN-123).
     Diff(commands::diff::DiffArgs),
-    /// Reconciles the realm to a desired document, one Exercise per change; reserved changes
+    /// Reconciles the environment to a desired document, one Exercise per change; reserved changes
     /// and emergency releases are only proposed (TN-122, TN-124).
     Apply(commands::apply::ApplyArgs),
     /// Re-evaluates a recorded decision with the Kernel (INV-21).
     Replay(commands::replay::ReplayArgs),
-    /// Applies a realm template, one Exercise per setting (OP-153 m.3 (r)), or reports the
-    /// realm's settings against a profile (OP-159 m.3 (ii)).
-    Realm(commands::realm::RealmArgs),
+    /// Applies an environment template, one Exercise per setting (OP-153 m.3 (r)), or reports the
+    /// environment's settings against a profile (OP-159 m.3 (ii)).
+    Environment(commands::environment::EnvironmentArgs),
     /// Lists undelivered Relay messages and resends one (OP-156 m.3 (c)).
     Relay(commands::relay::RelayArgs),
     /// Gets a short-lived SSH certificate after a browser sign-in (IDP-32, OP-156 m.3 (o)).
@@ -103,7 +103,7 @@ fn main() -> ExitCode {
                     Command::Export(a) => Box::pin(commands::export::run(a)).await,
                     Command::Diff(a) => Box::pin(commands::diff::run(a)).await,
                     Command::Apply(a) => Box::pin(commands::apply::run(a)).await,
-                    Command::Realm(a) => Box::pin(commands::realm::run(a)).await,
+                    Command::Environment(a) => Box::pin(commands::environment::run(a)).await,
                     Command::Relay(a) => Box::pin(commands::relay::run(a)).await,
                     Command::Ssh(a) => Box::pin(commands::ssh::run(a)).await,
                     Command::Incident(a) => Box::pin(commands::incident::run(&cli.config, a)).await,

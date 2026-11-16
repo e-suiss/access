@@ -549,7 +549,7 @@ impl ExportChange {
         }
     }
 
-    /// The resource path below the realm.
+    /// The resource path below the environment.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         vec![String::from("export-sink"), String::from(self.name())]

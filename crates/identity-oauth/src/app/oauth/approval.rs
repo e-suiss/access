@@ -1,4 +1,4 @@
-//! The Approval Surface's side of an authorization by a client the realm did not register
+//! The Approval Surface's side of an authorization by a client the environment did not register
 //! (§11.6, P58, EI-18, OP-154 m.3 (k)): what the consent screen shows, read from the waiting
 //! request and the client's snapshot, and the consent record kept once the person's own
 //! `grant.issue` is allowed. The screen is never a decision: a record names a Grant that stands,
@@ -14,7 +14,7 @@ use access_kernel::model::{Id, Window};
 use access_store::clients::NewConsentRecord;
 
 use super::authorize::{REQUEST_CONTEXT, consent_resource};
-use super::{Env, OAuth, Realm, bound_live, decode32, from_day, session_live, unsigned};
+use super::{Env, Environment, OAuth, bound_live, decode32, from_day, session_live, unsigned};
 use crate::domain::cimd::{self, loopback_only, new_app, redirect_hosts};
 use crate::domain::client::Client;
 use crate::domain::login::return_to_ok;
@@ -56,7 +56,7 @@ pub struct ApprovalView {
 }
 
 /// The `grant.issue` Exercise the consent page has the person's device Instance sign (EI-18,
-/// §11.6): a Grant to themselves from a holding of theirs, in the realm's governing domain.
+/// §11.6): a Grant to themselves from a holding of theirs, in the environment's governing domain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApprovalDraft {
     /// The governing domain.
@@ -117,7 +117,7 @@ impl<E: Env> OAuth<E> {
     async fn waiting(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         return_to: &str,
         now: u64,
@@ -133,7 +133,7 @@ impl<E: Env> OAuth<E> {
         let Some(session) = session else {
             return Ok(Err(NotApproved::SignIn));
         };
-        if !return_to_ok(&realm.issuer, return_to) {
+        if !return_to_ok(&environment.issuer, return_to) {
             return Ok(Err(NotApproved::NoRequest));
         }
         let Some(handle) = request_handle(return_to) else {
@@ -182,13 +182,16 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn approval_view(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         return_to: &str,
     ) -> Result<Result<ApprovalView, NotApproved>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
-        let w = match self.waiting(&mut tx, realm, cookie, return_to, now).await? {
+        let mut tx = self.begin(environment).await?;
+        let w = match self
+            .waiting(&mut tx, environment, cookie, return_to, now)
+            .await?
+        {
             Ok(w) => w,
             Err(n) => return Ok(Err(n)),
         };
@@ -256,13 +259,16 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn decline_approval(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         return_to: &str,
     ) -> Result<Result<String, NotApproved>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
-        let w = match self.waiting(&mut tx, realm, cookie, return_to, now).await? {
+        let mut tx = self.begin(environment).await?;
+        let w = match self
+            .waiting(&mut tx, environment, cookie, return_to, now)
+            .await?
+        {
             Ok(w) => w,
             Err(n) => return Ok(Err(n)),
         };
@@ -271,7 +277,7 @@ impl<E: Env> OAuth<E> {
             &w.request.redirect_uri,
             AuthError::ACCESS_DENIED,
             w.request.state.as_deref(),
-            &realm.issuer,
+            &environment.issuer,
         )))
     }
 
@@ -283,15 +289,18 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn approve(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         return_to: &str,
         domain: [u8; 32],
         exercise: [u8; 32],
     ) -> Result<Result<String, NotApproved>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
-        let w = match self.waiting(&mut tx, realm, cookie, return_to, now).await? {
+        let mut tx = self.begin(environment).await?;
+        let w = match self
+            .waiting(&mut tx, environment, cookie, return_to, now)
+            .await?
+        {
             Ok(w) => w,
             Err(n) => return Ok(Err(n)),
         };

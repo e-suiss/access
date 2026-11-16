@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT map FROM access.idp_upstream_assurance_maps\n              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3\n              ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "map",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_upstream_assurance_maps",
+            "name": "map"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5cf6c406679ac6268d0d57a3464055706293acbb9603508ccd1899b2fc2ea861"
+}

@@ -1,4 +1,4 @@
-//! First-contact tokens on the Frontend API (E58, OP-156 m.3 (z), Ek B 4495): the realm's
+//! First-contact tokens on the Frontend API (E58, OP-156 m.3 (z), Ek B 4495): the environment's
 //! RFC 9578 issuer directory, public, and the signed-in person's blind token issuance. A token
 //! names nobody and produces no authority; Relay verifies and spends it.
 
@@ -8,7 +8,7 @@ use access_identity_account::app::Actor;
 use access_identity_account::app::first_contact::{self, DAILY_LIMIT, Refused, TokenRequest};
 use access_identity_account::domain::login::Problem;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use serde::Deserialize;
@@ -72,19 +72,19 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// `GET /v1/first-contact/keys`: the RFC 9578 §4 issuer directory of the realm, the
+    /// `GET /v1/first-contact/keys`: the RFC 9578 §4 issuer directory of the environment, the
     /// current key first.
-    pub async fn first_contact_keys(&self, entry: &RealmEntry) -> Reply {
+    pub async fn first_contact_keys(&self, entry: &EnvironmentEntry) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let read = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
-            let keys = first_contact::directory(&mut tx, &realm).await?;
+            let keys = first_contact::directory(&mut tx, &environment).await?;
             tx.commit().await?;
             Ok::<_, AccountError>(keys)
         };
@@ -115,7 +115,7 @@ where
     /// [`DAILY_LIMIT`] a day (E58).
     pub async fn issue_first_contact_token(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &TokenRequestBody,
     ) -> Reply {
@@ -131,8 +131,8 @@ where
             truncated_key_id: body.truncated_key_id,
             blinded_msg,
         };
-        let realm = kit.realm();
-        let Ok(actor) = realm.external(me) else {
+        let environment = kit.environment();
+        let Ok(actor) = environment.external(me) else {
             return unavailable();
         };
         let who = Actor {
@@ -141,9 +141,9 @@ where
         };
         let made = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
-            let out = first_contact::issue(&mut tx, &realm, me, &request, &who).await?;
+            let out = first_contact::issue(&mut tx, &environment, me, &request, &who).await?;
             tx.commit().await?;
             Ok::<_, AccountError>(out)
         };

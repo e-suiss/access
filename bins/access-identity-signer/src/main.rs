@@ -230,7 +230,7 @@ fn pager(arena: Arc<suiss_sandbox::SecretArena>) -> Arc<suiss_crypto::signer::Pa
     })
 }
 
-/// The service with every realm restored and the cell's `audit-checkpoint` key open (CR-23,
+/// The service with every environment restored and the cell's `audit-checkpoint` key open (CR-23,
 /// OP-150 m.3 (h)).
 fn start(
     config: &Config,
@@ -240,7 +240,7 @@ fn start(
     let mut service = match Service::start(
         SealedFactory::new(kek).with_pager(pager(arena)),
         DirVault::new(&config.vault),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     ) {
         Ok(service) => service,
         Err(error) => {
@@ -262,39 +262,39 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
-/// CR-23, CR-27: each realm key transition is logged as an audit event; a rotation the round
+/// CR-23, CR-27: each environment key transition is logged as an audit event; a rotation the round
 /// could not make raises the rotation delay alarm.
 fn audit(report: &access_identity_signer::service::Report) {
-    for (realm, step) in &report.transitions {
+    for (environment, step) in &report.transitions {
         tracing::info!(
             event = "key.rotation",
             step = step.name(),
-            realm = hex(&realm.0),
+            environment = hex(&environment.0),
             kid = step.kid().map(|k| hex(k)).unwrap_or_default(),
         );
     }
     // §10.1.7, OP-157 m.3 (x)
-    for (realm, kid) in report.rotated() {
+    for (environment, kid) in report.rotated() {
         tracing::info!(
             event = "signer.rotated",
-            realm = hex(&realm.0),
+            environment = hex(&environment.0),
             kid = hex(kid),
             trigger = "schedule",
             "a scheduled rotation made a new signing key; no Exercise"
         );
     }
-    for (realm, late_ms) in &report.delayed {
+    for (environment, late_ms) in &report.delayed {
         tracing::error!(
             event = "key.rotation.delayed",
-            realm = hex(&realm.0),
+            environment = hex(&environment.0),
             late_ms,
-            "realm key rotation delayed (CR-23)"
+            "environment key rotation delayed (CR-23)"
         );
     }
     if !report.troubled.is_empty() {
         tracing::warn!(
-            realms = report.troubled.len(),
-            "realm key schedule round failed (CR-23)"
+            environments = report.troubled.len(),
+            "environment key schedule round failed (CR-23)"
         );
     }
 }

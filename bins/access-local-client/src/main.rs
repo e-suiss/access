@@ -4,12 +4,12 @@
 //! environment variables and the PKCS#11 token, never from arguments.
 //!
 //! ```text
-//! access-local-client login --issuer <realm issuer> --ca <ca.crt> --client-id <id>
+//! access-local-client login --issuer <environment issuer> --ca <ca.crt> --client-id <id>
 //!     --redirect-uri <uri> --identifier <login>
 //!     (--password-env <VAR> [--passkey <label>] | --passkey <label>) [--device-key <label>]
 //!     [--hsm-module <path> --hsm-token <label> --hsm-pin-file <path>]
 //!     [--resource <client_id>] [--scope <scopes>] [--connect <ip:port>]
-//! access-local-client approve --issuer <realm issuer> --api <base> --ca <ca.crt>
+//! access-local-client approve --issuer <environment issuer> --api <base> --ca <ca.crt>
 //!     --cert <pep.crt> --key <pep.key> --redirect-uri <uri> --identifier <login>
 //!     --hsm-module <path> --hsm-token <label> --hsm-pin-file <path>
 //!     --device-key <label> --passkey <label> --domain <b64url> --party <b64url>
@@ -17,7 +17,7 @@
 //!     --contribute-since <position> (--intent <envelope.json> | --intent-json <json>)
 //!     [--instance <b64url>] [--reason <text>] [--request <pushed-request.json>] [--connect <ip:port>]
 //! access-local-client push <the approve options but --request>
-//! access-local-client support-episode --issuer <realm issuer> --api <base> --ca <ca.crt>
+//! access-local-client support-episode --issuer <environment issuer> --api <base> --ca <ca.crt>
 //!     --cert <pep.crt> --key <pep.key> --hsm-module <path> --hsm-token <label>
 //!     --hsm-pin-file <path> --domain <b64url> --operator <login> --operator-password-env <VAR>
 //!     --operator-device-key <label> --operator-party <b64url> --identifier <login>
@@ -29,13 +29,13 @@
 //! access-local-client stream-status --api <base> --issuer <platform issuer> --ca <ca.crt>
 //!     --client-id <id> --client-key <private.jwk> --stream <id> [--status <enabled|paused|disabled>
 //!     [--reason <text>]] [--connect <ip:port>]
-//! access-local-client service-token --issuer <the caller's realm issuer> --ca <ca.crt>
+//! access-local-client service-token --issuer <the caller's environment issuer> --ca <ca.crt>
 //!     --client-id <id> --client-key <private.jwk> --resource <the product's client_id>
 //!     [--connect <ip:port>]
 //! ```
 //!
-//! `service-token` serves a platform product (OP-149 m.31 (a)) and a tenant realm's
-//! `private_key_jwt` API client (m.34 (b)) alike: the issuer is the caller's realm.
+//! `service-token` serves a platform product (OP-149 m.31 (a)) and a tenant environment's
+//! `private_key_jwt` API client (m.34 (b)) alike: the issuer is the caller's environment.
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -161,7 +161,7 @@ fn http(o: &Options, identity: Option<&Identity>) -> Result<Http, String> {
 }
 
 /// `login`: the code flow with the password, the passkey, or the password and the passkey as
-/// the second factor the realm asks for once the account holds one (OP-149 m.26 (b), (e)); with
+/// the second factor the environment asks for once the account holds one (OP-149 m.26 (b), (e)); with
 /// `--device-key`, the new session is bound to the known device's Instance (OP-149 m.32).
 async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();

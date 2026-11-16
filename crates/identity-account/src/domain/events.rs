@@ -137,13 +137,13 @@ fn uuid(b: &[u8; 16]) -> String {
 }
 
 impl EventOrder {
-    /// `account.created` of `account` (its `usr_` id) in `realm`.
+    /// `account.created` of `account` (its `usr_` id) in `environment`.
     #[must_use]
-    pub fn created(id: [u8; 32], realm: &[u8; 16], account: &str, at: u64) -> Self {
+    pub fn created(id: [u8; 32], environment: &[u8; 16], account: &str, at: u64) -> Self {
         Self {
             kind: AccountEvent::Created,
             id,
-            payload: json!({"realm": uuid(realm), "account": account, "at": at}),
+            payload: json!({"environment": uuid(environment), "account": account, "at": at}),
         }
     }
 
@@ -152,7 +152,7 @@ impl EventOrder {
     pub fn status(
         kind: AccountEvent,
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         to: AccountStatus,
         at: u64,
@@ -161,7 +161,7 @@ impl EventOrder {
             kind,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "status": to.name(),
                 "at": at,
@@ -173,7 +173,7 @@ impl EventOrder {
     #[must_use]
     pub fn session_revoked(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         rev: i64,
         at: u64,
@@ -181,7 +181,7 @@ impl EventOrder {
         Self {
             kind: AccountEvent::SessionRevoked,
             id,
-            payload: json!({"realm": uuid(realm), "account": account, "rev": rev, "at": at}),
+            payload: json!({"environment": uuid(environment), "account": account, "rev": rev, "at": at}),
         }
     }
 
@@ -190,7 +190,7 @@ impl EventOrder {
     #[must_use]
     pub fn credential(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         credential_kind: &str,
         change: CredentialChange,
@@ -200,7 +200,7 @@ impl EventOrder {
             kind: AccountEvent::CredentialChanged,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "credential": credential_kind,
                 "change": change.name(),
@@ -270,7 +270,10 @@ mod tests {
         );
         let mut keys: Vec<&String> = e.payload.as_object().unwrap().keys().collect();
         keys.sort();
-        assert_eq!(keys, ["account", "at", "change", "credential", "realm"]);
+        assert_eq!(
+            keys,
+            ["account", "at", "change", "credential", "environment"]
+        );
         let back: Value = serde_json::from_slice(&e.to_outbox().unwrap()).unwrap();
         assert_eq!(back["payload"], e.payload);
     }

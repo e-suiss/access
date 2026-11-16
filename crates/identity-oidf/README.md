@@ -9,7 +9,7 @@ clock.
 - **Entity statements.** Validates entity configurations and subordinate statements: compact
   JWS with `typ` `entity-statement+jwt`, ES256 or RS256 only, a `kid` naming exactly one key,
   `iat`/`exp` with a 60 second skew, no unknown `crit`, and claims only where they belong.
-- **Trust chains.** Validates a chain leaf first, up to a trust anchor whose keys the realm
+- **Trust chains.** Validates a chain leaf first, up to a trust anchor whose keys the environment
   pinned. A chain holds at most 8 statements, has no entity twice, honours `max_path_length`
   and `allowed_entity_types`, and is valid until its smallest `exp`. Offline
   `trust-chain+json` documents and the `trust_chain` header are accepted.

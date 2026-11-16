@@ -1,4 +1,4 @@
-//! The Claims SL2 asks the realm issuer for (TN-46, OP-150 m.12): the subject's `risk_level`,
+//! The Claims SL2 asks the environment issuer for (TN-46, OP-150 m.12): the subject's `risk_level`,
 //! one line per subject so each level supersedes the last, and one `risk_signal` per fired
 //! signal. Both classes only narrow (CI-2): they carry no assurance level and bind no intent, and
 //! Claim Ingest refuses a `risk_*` Claim that does.

@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:event:login.failed_surge:1",
-  "title": "Failed sign-ins in a realm rose above the surge threshold within a window (OP-151 m.3 (i))",
+  "title": "Failed sign-ins in an environment rose above the surge threshold within a window (OP-151 m.3 (i))",
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:login.failed_surge`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "failures",
     "window_ms",
     "at",
@@ -13,7 +13,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "failures": {

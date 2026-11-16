@@ -4,7 +4,7 @@ use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::app::WebAuthn;
 use access_identity_webauthn::domain::ceremony::Signal;
 use access_identity_webauthn::domain::credential::CredentialRecord;
-use access_identity_webauthn::domain::ids::{CredentialId, RealmId, UserHandle};
+use access_identity_webauthn::domain::ids::{CredentialId, EnvironmentId, UserHandle};
 use access_identity_webauthn::ports::{
     Clock as WaClockPort, CredentialRegistry, DecoySource, Inserted, Random as WaRandomPort,
     SignalSink,
@@ -30,55 +30,56 @@ impl<P: CredentialRegistry + Sync> CredentialRegistry for Registry<'_, P> {
 
     fn find(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
     ) -> impl Future<Output = Result<Option<CredentialRecord>, WebAuthnError>> + Send {
-        self.0.find(realm, id)
+        self.0.find(environment, id)
     }
 
     fn list(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         user: &UserHandle,
     ) -> impl Future<Output = Result<Vec<CredentialRecord>, WebAuthnError>> + Send {
-        self.0.list(realm, user)
+        self.0.list(environment, user)
     }
 
     fn record_use(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         sign_count: u32,
         backup_state: bool,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
-        self.0.record_use(realm, id, sign_count, backup_state, at)
+        self.0
+            .record_use(environment, id, sign_count, backup_state, at)
     }
 
     fn soft_delete(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
-        self.0.soft_delete(realm, id, at)
+        self.0.soft_delete(environment, id, at)
     }
 }
 
 impl<S: SignalSink + Sync> SignalSink for Signals<'_, S> {
     fn emit(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         credential: &CredentialId,
         signal: Signal,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
-        self.0.emit(realm, credential, signal)
+        self.0.emit(environment, credential, signal)
     }
 }
 
 impl DecoySource for Decoys<'_> {
-    fn derive(&self, realm: RealmId, input: &[u8]) -> Result<[u8; 32], WebAuthnError> {
-        self.0.derive(realm, input)
+    fn derive(&self, environment: EnvironmentId, input: &[u8]) -> Result<[u8; 32], WebAuthnError> {
+        self.0.derive(environment, input)
     }
 }
 
@@ -116,7 +117,7 @@ where
         }
     }
 
-    pub(crate) fn wa_realm(&self) -> RealmId {
-        RealmId::from_bytes(*self.realm.realm.as_bytes())
+    pub(crate) fn wa_environment(&self) -> EnvironmentId {
+        EnvironmentId::from_bytes(*self.environment.environment.as_bytes())
     }
 }

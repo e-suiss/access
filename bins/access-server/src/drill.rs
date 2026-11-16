@@ -31,7 +31,7 @@ pub(crate) struct DomainMark {
 pub(crate) struct Baseline {
     /// When it was taken, Unix milliseconds: the PITR target unless the input names another.
     pub(crate) at_ms: u64,
-    /// Every live realm's JWKS `kid`s, by slug.
+    /// Every live environment's JWKS `kid`s, by slug.
     pub(crate) kids: BTreeMap<String, BTreeSet<String>>,
     /// Every domain's head, by base64url domain id.
     pub(crate) domains: BTreeMap<String, DomainMark>,
@@ -88,7 +88,7 @@ pub(crate) struct Env<'a, R> {
     pub(crate) router: &'a Pool,
     pub(crate) sequencer: &'a Pool,
     pub(crate) migrator: Option<&'a Pool>,
-    pub(crate) realm_keys: &'a R,
+    pub(crate) environment_keys: &'a R,
     pub(crate) event_key: &'a (dyn Fn(&Digest) -> bool + Sync),
     pub(crate) cold: Option<&'a access_identity_export::adapters::cold_file::FileCold>,
     pub(crate) breakglass: Option<&'a (dyn Fn() -> Result<usize, String> + Sync)>,
@@ -98,17 +98,17 @@ fn b64(d: &Digest) -> String {
     access_kernel::json::b64url_encode(&d.0)
 }
 
-/// Every live realm and the domains bound to it.
+/// Every live environment and the domains bound to it.
 async fn domains(app: &Pool, router: &Pool) -> Result<Vec<Digest>, String> {
     let mut out = BTreeSet::new();
     for r in access_store::tenancy::routes(router)
         .await
         .map_err(|e| e.to_string())?
     {
-        let mut t = TenantTx::begin(app, r.tenant, r.realm)
+        let mut t = TenantTx::begin(app, r.tenant, r.environment)
             .await
             .map_err(|e| e.to_string())?;
-        for (d, _) in access_store::realm_binding::domains(&mut t, r.realm)
+        for (d, _) in access_store::environment_binding::domains(&mut t, r.environment)
             .await
             .map_err(|e| e.to_string())?
         {
@@ -129,7 +129,7 @@ fn kids_of(jwks: &str) -> BTreeSet<String> {
         .collect()
 }
 
-async fn kids<R: access_identity_admin::ports::RealmKeys>(
+async fn kids<R: access_identity_admin::ports::EnvironmentKeys>(
     router: &Pool,
     keys: &R,
 ) -> Result<BTreeMap<String, BTreeSet<String>>, String> {
@@ -139,9 +139,9 @@ async fn kids<R: access_identity_admin::ports::RealmKeys>(
         .map_err(|e| e.to_string())?
     {
         let jwks = keys
-            .jwks(r.realm)
+            .jwks(r.environment)
             .await
-            .map_err(|_| format!("realm {}: the JWKS does not load", r.slug))?;
+            .map_err(|_| format!("environment {}: the JWKS does not load", r.slug))?;
         out.insert(r.slug, kids_of(&jwks));
     }
     Ok(out)
@@ -151,7 +151,7 @@ async fn kids<R: access_identity_admin::ports::RealmKeys>(
 ///
 /// # Errors
 /// What could not be read.
-pub(crate) async fn baseline<R: access_identity_admin::ports::RealmKeys>(
+pub(crate) async fn baseline<R: access_identity_admin::ports::EnvironmentKeys>(
     env: &Env<'_, R>,
     at_ms: u64,
 ) -> Result<Baseline, String> {
@@ -175,7 +175,7 @@ pub(crate) async fn baseline<R: access_identity_admin::ports::RealmKeys>(
     }
     Ok(Baseline {
         at_ms,
-        kids: kids(env.router, env.realm_keys).await?,
+        kids: kids(env.router, env.environment_keys).await?,
         domains: marks,
         ..Baseline::default()
     })
@@ -263,7 +263,7 @@ async fn domain_log(
 /// # Errors
 /// Only when the report cannot be recorded; a failed item is a failed report, not an error.
 #[expect(clippy::too_many_lines, reason = "the nine items in their order")]
-pub(crate) async fn restore<R: access_identity_admin::ports::RealmKeys>(
+pub(crate) async fn restore<R: access_identity_admin::ports::EnvironmentKeys>(
     env: &Env<'_, R>,
     base: &Baseline,
 ) -> Result<Report, String> {
@@ -278,7 +278,7 @@ pub(crate) async fn restore<R: access_identity_admin::ports::RealmKeys>(
             Err(e) => Err(e.clone()),
         },
     ));
-    let now_kids = kids(env.router, env.realm_keys).await;
+    let now_kids = kids(env.router, env.environment_keys).await;
     items.push(item(2, "signing keys restored together", {
         let missing: Vec<String> = listed
             .iter()
@@ -289,7 +289,7 @@ pub(crate) async fn restore<R: access_identity_admin::ports::RealmKeys>(
             (Err(e), _) => Err(e.clone()),
             (Ok(_), false) => Err(format!("no event key for {}", missing.join(", "))),
             (Ok(k), true) => Ok(Some(format!(
-                "{} realms' key sets and {} domains' keys load",
+                "{} environments' key sets and {} domains' keys load",
                 k.len(),
                 listed.len()
             ))),
@@ -300,9 +300,9 @@ pub(crate) async fn restore<R: access_identity_admin::ports::RealmKeys>(
         "JWKS serves the same kids",
         match &now_kids {
             Err(e) => Err(e.clone()),
-            Ok(k) if *k == base.kids => Ok(Some(format!("{} realms match", k.len()))),
+            Ok(k) if *k == base.kids => Ok(Some(format!("{} environments match", k.len()))),
             Ok(k) => Err(format!(
-                "realms differ: {:?}",
+                "environments differ: {:?}",
                 k.iter()
                     .filter(|(slug, set)| base.kids.get(*slug) != Some(*set))
                     .map(|(slug, _)| slug.as_str())

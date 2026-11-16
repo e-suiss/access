@@ -3,7 +3,7 @@
 //!
 //! - [`domain::cert`]: the certificate fields path validation does not expose, read with the
 //!   bounded DER reader (CR-10: at most 8 KB).
-//! - [`domain::path`]: path validation with rustls-webpki to the realm's accepted CAs, for client
+//! - [`domain::path`]: path validation with rustls-webpki to the environment's accepted CAs, for client
 //!   authentication.
 //! - [`domain::ocsp`]: the in-house RFC 6960 client: a bounded DER request and the checks of a
 //!   signed response.
@@ -29,7 +29,7 @@ pub enum X509Error {
     /// No path to an accepted CA for client authentication.
     #[error("no valid path")]
     Path,
-    /// The certificate names no identifier the realm's rule maps, or more than one.
+    /// The certificate names no identifier the environment's rule maps, or more than one.
     #[error("no identifier")]
     Identifier,
 }

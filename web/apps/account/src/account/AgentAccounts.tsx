@@ -1,5 +1,5 @@
 // S2, S11 (§8.5, §12.4.1, TN-133, OP-154 m.3 (e), (t)): the accounts this person connected for
-// agents and which agent used each, by the agent's name, from the realm's own agent-connections
+// agents and which agent used each, by the agent's name, from the environment's own agent-connections
 // route on the session cookie; never a token. Disconnect is one click and keeps the record (OP-73).
 import { agents } from "@access/ui";
 import { Card, CardContent } from "@access/ui/components/card";

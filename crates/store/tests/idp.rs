@@ -1,5 +1,5 @@
 //! MD-14, EI-25, TN-110, OP-146 I10: identity plane configuration is written only against a
-//! committed ALLOW of an `idp.*` action in the realm's governing domain.
+//! committed ALLOW of an `idp.*` action in the environment's governing domain.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,13 +15,13 @@ use std::time::Duration;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{
     ClientRow, Decision, SettingsRow, bind, client, create_settings, governance, insert_client,
     mappers, retire_client, set_mapper, settings, update_client, update_settings,
 };
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -90,12 +90,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, slug, "pool-default")
+    let r = create_environment(&mut tx, d, slug, "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     tx.commit().await.unwrap();
     r
@@ -145,7 +145,7 @@ async fn a_client_is_written_against_its_committed_allow() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 10, 3).await;
-    let r = realm(&db, t, &d, "acme").await;
+    let r = environment(&db, t, &d, "acme").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let gov = governance(&mut tx).await.unwrap().unwrap();
@@ -193,7 +193,7 @@ async fn a_client_is_written_against_its_committed_allow() {
     assert!(!client(&mut tx, &c.client_id).await.unwrap().unwrap().active);
 }
 
-async fn refused(db: &TestDb, t: TenantId, r: RealmId, d: &Decision<'_>) {
+async fn refused(db: &TestDb, t: TenantId, r: EnvironmentId, d: &Decision<'_>) {
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(bind(&mut tx, d).await.is_err());
 }
@@ -207,7 +207,7 @@ async fn only_an_allow_of_the_governing_domain_binds() {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 20, 1).await;
     let other = domain(&db, t, 40, 1).await;
-    let r = realm(&db, t, &d, "acme-b").await;
+    let r = environment(&db, t, &d, "acme-b").await;
     let deny = decision(&d, 2, &[2; 16], "idp.client.register");
     refused(&db, t, r, &deny).await;
     refused(&db, t, r, &decision(&d, 9, &[9; 16], "idp.client.register")).await;
@@ -230,17 +230,17 @@ async fn the_database_refuses_unbound_configuration() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 50, 2).await;
-    let r = realm(&db, t, &d, "acme-c").await;
+    let r = environment(&db, t, &d, "acme-c").await;
     let hex: String = d.as_bytes().iter().fold(String::new(), |mut out, b| {
         let _ = write!(out, "{b:02x}");
         out
     });
     let insert = |pos: u64, uuid: &str| {
         format!(
-            "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
+            "INSERT INTO access.idp_clients (tenant_id, environment_id, client_uuid, client_id, display_name,
                auth_method, redirect_uris, domain_id, decision_pos)
-             SELECT tenant_id, realm_id, '{uuid}', 'cli_bbbbbbbbbbbbbbbbbbbbbbbbbb', 'x', 'none', '{{}}',
-               '\\x{hex}', {pos} FROM access.realms"
+             SELECT tenant_id, environment_id, '{uuid}', 'cli_bbbbbbbbbbbbbbbbbbbbbbbbbb', 'x', 'none', '{{}}',
+               '\\x{hex}', {pos} FROM access.environments"
         )
     };
     let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
@@ -277,13 +277,13 @@ async fn the_database_refuses_unbound_configuration() {
 
     let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(
-        tx.raw_rows("UPDATE access.idp_realm_settings SET jose_alg = 'Ed25519'")
+        tx.raw_rows("UPDATE access.idp_environment_settings SET jose_alg = 'Ed25519'")
             .await
             .is_err()
     );
     let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(
-        tx.raw_rows("UPDATE access.idp_config_log SET action = 'idp.realm.rp_id'")
+        tx.raw_rows("UPDATE access.idp_config_log SET action = 'idp.environment.rp_id'")
             .await
             .is_err()
     );
@@ -303,35 +303,41 @@ fn defaults() -> SettingsRow {
 
 // OP-146 m.4 (f), OP-33, m.8 (e), IDP-5
 #[tokio::test]
-async fn realm_settings_start_on_defaults_and_argon2_only_rises() {
+async fn environment_settings_start_on_defaults_and_argon2_only_rises() {
     // TN-111, IDP-5, IDI-4, CR-36
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 60, 2).await;
-    let r = realm(&db, t, &d, "acme-d").await;
+    let r = environment(&db, t, &d, "acme-d").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert_eq!(settings(&mut tx).await.unwrap(), Some(defaults()));
-    let b = bind(&mut tx, &decision(&d, 1, &ALLOW_NONCE, "idp.realm.argon2"))
-        .await
-        .unwrap()
-        .unwrap();
+    let b = bind(
+        &mut tx,
+        &decision(&d, 1, &ALLOW_NONCE, "idp.environment.argon2"),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     let mut raised = defaults();
     raised.argon2_m_kib = 19 * 1024;
     assert!(update_settings(&mut tx, &b, &raised).await.unwrap());
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    let b = bind(&mut tx, &decision(&d, 2, &[2; 16], "idp.realm.argon2"))
-        .await
-        .unwrap()
-        .unwrap();
+    let b = bind(
+        &mut tx,
+        &decision(&d, 2, &[2; 16], "idp.environment.argon2"),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert!(update_settings(&mut tx, &b, &defaults()).await.is_err());
 
     let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(
         tx.raw_rows(
-            "INSERT INTO access.idp_realm_settings (tenant_id, realm_id, jose_alg)
-             SELECT tenant_id, realm_id, 'Ed25519' FROM access.realms"
+            "INSERT INTO access.idp_environment_settings (tenant_id, environment_id, jose_alg)
+             SELECT tenant_id, environment_id, 'Ed25519' FROM access.environments"
         )
         .await
         .is_err()
@@ -345,7 +351,7 @@ async fn reserved_claims_cannot_be_mapped() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 70, 2).await;
-    let r = realm(&db, t, &d, "acme-e").await;
+    let r = environment(&db, t, &d, "acme-e").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let b = bind(&mut tx, &decision(&d, 1, &ALLOW_NONCE, "idp.mapper.set"))
         .await
@@ -388,8 +394,8 @@ async fn a_client_id_is_global() {
     let b = create_tenant(&db.app, "pool-default").await.unwrap();
     let da = domain(&db, a, 80, 1).await;
     let db_ = domain(&db, b, 90, 1).await;
-    let ra = realm(&db, a, &da, "acme-f").await;
-    let rb = realm(&db, b, &db_, "acme-g").await;
+    let ra = environment(&db, a, &da, "acme-f").await;
+    let rb = environment(&db, b, &db_, "acme-g").await;
     for (t, r, d, seed) in [(a, ra, da, 1), (b, rb, db_, 2)] {
         let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
         let bound = bind(
@@ -435,7 +441,7 @@ async fn an_inbound_transmitter_is_bound_to_its_decisions() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 60, 3).await;
-    let r = realm(&db, t, &d, "acme-ssf").await;
+    let r = environment(&db, t, &d, "acme-ssf").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let b = bind(
@@ -450,11 +456,11 @@ async fn an_inbound_transmitter_is_bound_to_its_decisions() {
     let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(
         tx.raw_rows(
-            "INSERT INTO access.ssf_transmitter (tenant_id, realm_id, transmitter_id, issuer,
+            "INSERT INTO access.ssf_transmitter (tenant_id, environment_id, transmitter_id, issuer,
                jwks_uri, audience, events, delivery, expected_interval_s)
-             SELECT tenant_id, realm_id, '019a0000-0000-7000-8000-000000000009',
+             SELECT tenant_id, environment_id, '019a0000-0000-7000-8000-000000000009',
                'https://other.example', 'https://other.example/jwks', 'a', '{}', 'push', 3600
-               FROM access.realms"
+               FROM access.environments"
         )
         .await
         .is_err()

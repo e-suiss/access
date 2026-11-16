@@ -7,12 +7,12 @@
 )]
 
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::quota::{
     CommitRefusal, Rate, RequestRefusal, set_billing_hold, take_commit, take_request,
 };
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 const NOW: u64 = 1_000_000;
@@ -32,9 +32,9 @@ async fn domain(db: &TestDb, tenant: TenantId, seed: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, tenant: TenantId, d: &DomainId, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, tenant: TenantId, d: &DomainId, slug: &str) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let r = create_realm(&mut tx, d, slug, "pool-default")
+    let r = create_environment(&mut tx, d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -153,12 +153,12 @@ async fn a_malformed_limit_is_an_error_never_an_admission() {
 
 // OP-35, TN-24
 #[tokio::test]
-async fn a_realm_request_quota_follows_its_rate_limit() {
+async fn a_environment_request_quota_follows_its_rate_limit() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 8).await;
-    let busy = realm(&db, t, &d, "busy").await;
-    let calm = realm(&db, t, &d, "calm").await;
+    let busy = environment(&db, t, &d, "busy").await;
+    let calm = environment(&db, t, &d, "calm").await;
     let take = |r| take_request(&db.app, (t, r), NOW, (2, 1_000), 1);
     let first = take(busy).await.unwrap();
     assert_eq!((first.refused, first.used_percent), (None, 50));
@@ -166,7 +166,7 @@ async fn a_realm_request_quota_follows_its_rate_limit() {
     let over = take(busy).await.unwrap();
     assert_eq!(
         (over.refused, over.used_percent),
-        (Some(RequestRefusal::Realm), 100)
+        (Some(RequestRefusal::Environment), 100)
     );
     assert_eq!(take(calm).await.unwrap().refused, None);
     assert_eq!(

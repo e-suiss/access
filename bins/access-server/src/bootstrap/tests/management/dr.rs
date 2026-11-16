@@ -1,6 +1,6 @@
 //! The async DR profile and promote on the real server path (OP-29, HL-31, §16.7.1, §17.4.8,
-//! FA-13, OP-158 m.3 (r)): `putDrProfile` commits `idp.realm.dr_profile`; `dr-promote` refuses a
-//! cell with a realm that declared none, and otherwise ends every session and refresh family,
+//! FA-13, OP-158 m.3 (r)): `putDrProfile` commits `idp.environment.dr_profile`; `dr-promote` refuses a
+//! cell with an environment that declared none, and otherwise ends every session and refresh family,
 //! keeps the server closed until the re-shred, and leaves every authority domain unled until it
 //! continues under a fence proof.
 
@@ -21,7 +21,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     assert!(
         refused
             .as_ref()
-            .is_err_and(|e| e.contains("realm acme declares no async DR profile")),
+            .is_err_and(|e| e.contains("environment acme declares no async DR profile")),
         "{refused:?}"
     );
     assert_eq!(
@@ -39,7 +39,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
         )
         .await;
     assert_eq!(set.status, StatusCode::OK, "{}", set.body);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -52,11 +52,11 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     assert!(
         still
             .as_ref()
-            .is_err_and(|e| e.contains("realm platform declares no async DR profile")),
+            .is_err_and(|e| e.contains("environment platform declares no async DR profile")),
         "{still:?}"
     );
     let platform = routes.iter().find(|r| r.slug == "platform").unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, platform.tenant, platform.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, platform.tenant, platform.environment)
         .await
         .unwrap();
     let governing = access_store::idp::governance(&mut t)
@@ -72,7 +72,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
         app: &c.w.db.app,
         router: &c.w.db.router,
         plane: &c.w.plane,
-        realm_keys: &c.w.keyring,
+        environment_keys: &c.w.keyring,
         hsm: &c.w.keys,
         base: &c.w.base,
         declared: &declared,
@@ -81,7 +81,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     let admin = b.admin(&ids, None);
     b.change(
         &admin,
-        (platform.tenant, platform.realm),
+        (platform.tenant, platform.environment),
         Digest(*governing.domain.as_bytes()),
         &crate::bootstrap::root_key(&c.w.keys).unwrap(),
         access_identity_admin::domain::Change::DrProfile(Some(
@@ -95,9 +95,9 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     let promoted = crate::dr::promote(&c.w.db.app, &c.w.db.router)
         .await
         .unwrap();
-    assert_eq!(promoted.realms.len(), 2);
-    assert_eq!(promoted.realms[1].rpo_s, 600);
-    let acme = &promoted.realms[0];
+    assert_eq!(promoted.environments.len(), 2);
+    assert_eq!(promoted.environments[1].rpo_s, 600);
+    let acme = &promoted.environments[0];
     // HL-31
     assert_eq!((acme.slug.as_str(), acme.rpo_s), ("acme", 300));
     assert!(acme.signed_out >= 1, "{promoted:?}");

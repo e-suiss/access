@@ -1,4 +1,4 @@
-//! `no-tenant-labels` (OP-47, OP-151 m.3 (p)): no metric carries a tenant, realm, domain or
+//! `no-tenant-labels` (OP-47, OP-151 m.3 (p)): no metric carries a tenant, environment, domain or
 //! personal identifier label. OpenTelemetry is used only behind the `crates/telemetry` facade;
 //! inside it every attribute name is a [`Label`] name or a resource attribute; the label
 //! allowlist names none of [`FORBIDDEN`]; alert rules and dashboards group by none of them.
@@ -24,7 +24,7 @@ const EVENTS_RULE: &str = "event-names";
 /// OP-47: label names never allowed on a metric.
 const FORBIDDEN: &[&str] = &[
     "tenant_id",
-    "realm_id",
+    "environment_id",
     "domain_id",
     "client_id",
     "sub",
@@ -417,10 +417,10 @@ mod tests {
     // OP-47
     #[test]
     fn attribute_names_are_found() {
-        let src = "let a = KeyValue::new(\"realm_id\", v);\nKeyValue::new( \"outcome\", x)";
+        let src = "let a = KeyValue::new(\"environment_id\", v);\nKeyValue::new( \"outcome\", x)";
         assert_eq!(
             attribute_names(src),
-            vec![(1, "realm_id".to_owned()), (2, "outcome".to_owned())]
+            vec![(1, "environment_id".to_owned()), (2, "outcome".to_owned())]
         );
     }
 

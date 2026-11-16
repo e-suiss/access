@@ -1,6 +1,6 @@
 //! Account recovery as a typed state machine (§12.3.2, TN-52–TN-63, OP-153 m.3 (c)–(f)): the
 //! recovery classes and their assurance labels, the AAL a set of evidence reaches, the cooling
-//! table, the realm's recovery policy and its tightening rule, the restricted actions of the
+//! table, the environment's recovery policy and its tightening rule, the restricted actions of the
 //! grace period and the codes people read. Pure: time and randomness come from the caller.
 
 use crate::domain::assurance::Aal;

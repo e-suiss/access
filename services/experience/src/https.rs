@@ -204,8 +204,8 @@ impl Upstream for Https {
         }
     }
 
-    async fn discovery(&self, realm: &str) -> Answer {
-        let path = format!("/.well-known/suiss-configuration/realms/{realm}");
+    async fn discovery(&self, environment: &str) -> Answer {
+        let path = format!("/.well-known/suiss-configuration/env/{environment}");
         self.get(&self.default, &path).await
     }
 
@@ -331,10 +331,10 @@ mod tests {
     #[test]
     fn the_poll_target_is_an_https_path_and_one_credential_token() {
         let (at, path, auth) =
-            poll_target("https://access.test:8443/realms/acme/ssf/poll", " t0k ").unwrap();
+            poll_target("https://access.test:8443/env/acme/ssf/poll", " t0k ").unwrap();
         assert_eq!(
             (at.port, path.as_str(), auth.as_str()),
-            (8443, "/realms/acme/ssf/poll", "Bearer t0k")
+            (8443, "/env/acme/ssf/poll", "Bearer t0k")
         );
         assert!(poll_target("https://access.test", "t").is_none());
         assert!(poll_target("http://access.test/ssf/poll", "t").is_none());

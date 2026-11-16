@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_credentials SET otp_last_step = $4, last_used_at = now()\n              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'\n                AND (otp_last_step IS NULL OR otp_last_step < $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ed96bd18c91ed7d000ac492ecbee4e96745c37be4f14bf88cfb59c3b0d020404"
+}

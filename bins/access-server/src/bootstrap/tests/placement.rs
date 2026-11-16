@@ -2,7 +2,7 @@
 //! m.3 (gg)): the Placement Directory routes through the real ADP router and never decides; a
 //! single-node cell publishes `durability: single-node` and acknowledges no revocation without a
 //! replica and an independent witness; a silo move takes a tenant's domains to a dedicated cell
-//! of its own; a realm rehome needs a committed Exercise in both governing domains.
+//! of its own; an environment rehome needs a committed Exercise in both governing domains.
 
 #![allow(
     clippy::unwrap_used,
@@ -293,17 +293,17 @@ async fn tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_o
     assert_eq!(headers["access-cell"], "cell-acme");
 }
 
-/// The root's rehome proposal of `realm` in `tenant` to `to`, on `from`'s IDP anchor.
+/// The root's rehome proposal of `environment` in `tenant` to `to`, on `from`'s IDP anchor.
 async fn rehome_proposal(
     w: &World,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     from: Digest,
     to: Digest,
 ) -> (Proposal, Moment) {
     let at = Moment::at(server_time(&w.db.app).await.unwrap());
     let proposal = Proposal {
         tenant,
-        realm,
+        environment,
         change: Change::Rehome(Rehome { domain: to.0 }),
         nonce: access_crypto::random::bytes::<16>().unwrap().to_vec(),
         validity: at.validity,
@@ -316,7 +316,7 @@ async fn rehome_proposal(
 
 // E14, MD-5a, §5.16, §12.1.1 2a, OP-158 m.3 (o), m.18 (e), Ek B 5725
 #[tokio::test(flavor = "multi_thread")]
-async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_domains() {
+async fn e14_a_rehome_moves_the_environment_only_with_an_exercise_in_both_governing_domains() {
     let w = World::new("w9-rehome").await;
     w.run(&plan()).await;
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
@@ -326,7 +326,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -335,7 +335,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     let admin = b.admin(&ids, None);
     let root = root_key(&w.keys).unwrap();
     let party = root_party(&root.public_key());
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let from = Digest(
@@ -351,7 +351,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         .await
         .unwrap();
     let other = admin
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant: route.tenant,
             slug: "acme-two",
             style: IssuerStyle::Path,
@@ -367,7 +367,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         .await
         .unwrap();
     let to = other.domain;
-    b.onboard(route.tenant, other.realm, to, &root, party)
+    b.onboard(route.tenant, other.environment, to, &root, party)
         .await
         .unwrap();
     // E14
@@ -397,7 +397,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     b.lead(from).await.unwrap();
     b.lead(to).await.unwrap();
     let governing = || async {
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let g = idp::governance(&mut t).await.unwrap().unwrap().domain;
@@ -407,7 +407,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     };
 
     // E14
-    let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
+    let (p, at) = rehome_proposal(&w, (route.tenant, route.environment), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     assert_eq!(prepared.domain, from);
     let ais = sign(
@@ -432,7 +432,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     );
 
     // E14
-    let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
+    let (p, at) = rehome_proposal(&w, (route.tenant, route.environment), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     let ais = sign(
         &root,
@@ -455,7 +455,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     assert_eq!(governing().await.0, from);
 
     // E14
-    let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
+    let (p, at) = rehome_proposal(&w, (route.tenant, route.environment), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     let ais = sign(
         &root,
@@ -476,16 +476,19 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         open, 1,
         "the expired end completes nothing; the second attempt's from end is used and the third's stays unused"
     );
-    let placed = placement::cell_of(&w.db.app, &Subject::Realm(*route.realm.as_bytes()))
-        .await
-        .unwrap()
-        .unwrap();
+    let placed = placement::cell_of(
+        &w.db.app,
+        &Subject::Environment(*route.environment.as_bytes()),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(placed.cell, "cell-a");
     // MD-5a
     let after = b
         .change_as(
             &admin,
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             (&root, ExerciseBasis::Anchor(covering)),
             (
                 Change::DrProfile(Some(access_identity_admin::domain::resilience::DrProfile {
@@ -539,7 +542,7 @@ async fn a_witness_only_the_provider_declared_is_a_proposal_and_no_anchor_is_cla
     assert!(published.acknowledges(), "the operator's own statement");
     let canonical = access_authority_core::adapters::canonical_sets(&p.w.db.app, p.domain).await;
     assert!(canonical.is_empty(), "the Genesis root approved no set");
-    let view = crate::admin::realm::declared_view(&published, &canonical);
+    let view = crate::admin::environment::declared_view(&published, &canonical);
     // OP-159 m.3 (j)
     assert_eq!(view["witnesses"][0]["canonical"], false, "{view:?}");
     assert_eq!(view["replicas"][0]["canonical"], false, "{view:?}");
@@ -548,7 +551,7 @@ async fn a_witness_only_the_provider_declared_is_a_proposal_and_no_anchor_is_cla
     assert_eq!(view["pq_reanchor"], Json::Null);
     let approved =
         access_kernel::meta::RootSets::new(published.witnesses.clone(), published.replicas.clone());
-    let view = crate::admin::realm::declared_view(&published, &approved);
+    let view = crate::admin::environment::declared_view(&published, &approved);
     assert_eq!(view["acknowledges"], true);
     assert_eq!(view["witnesses"][0]["canonical"], true);
     // SEC23

@@ -1,7 +1,7 @@
 //! A protected resource's access tokens in the algorithm its registration names (CR-41, CR-43,
 //! OP-159 m.3 (o), m.21 (b), (g), OP-153 m.3 (gg)): real PostgreSQL and a real identity signer.
-//! While the realm's signing profile holds ML-DSA-65 the token is ML-DSA-65 and verifies with the
-//! realm's `AKP` keys; once the profile closes the token is refused, never signed classically.
+//! While the environment's signing profile holds ML-DSA-65 the token is ML-DSA-65 and verifies with the
+//! environment's `AKP` keys; once the profile closes the token is refused, never signed classically.
 
 #![allow(
     clippy::unwrap_used,
@@ -28,9 +28,13 @@ const CB: &str = "https://app.example/cb";
 const GRANT: [u8; 16] = [7; 16];
 
 async fn consent(a: &At<'_>, resource: &str) {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let client = tx.cimd_client(APP).await.unwrap().unwrap().client_uuid;
     tx.put_consent_record(&NewConsentRecord {
         subject: a.f.subject,
@@ -112,8 +116,14 @@ async fn a_resource_registered_for_ml_dsa_gets_ml_dsa_access_tokens_or_none() {
             .check(token.len())
             .is_ok()
     );
-    let jwks = c.oauth.env().signer.jwks(a.f.realm.realm).await.unwrap();
-    let keys = access_identity_oauth::domain::jwt::realm_key_set(jwks.as_bytes()).unwrap();
+    let jwks = c
+        .oauth
+        .env()
+        .signer
+        .jwks(a.f.environment.environment)
+        .await
+        .unwrap();
+    let keys = access_identity_oauth::domain::jwt::environment_key_set(jwks.as_bytes()).unwrap();
     let v = verify_compact(
         &suiss_crypto::aws::AwsLcBackend,
         token,
@@ -129,7 +139,7 @@ async fn a_resource_registered_for_ml_dsa_gets_ml_dsa_access_tokens_or_none() {
     assert_ne!(
         header(t["access_token"].as_str().unwrap())["alg"],
         "ML-DSA-65",
-        "a resource without its own algorithm takes the realm's"
+        "a resource without its own algorithm takes the environment's"
     );
 
     // OP-159 m.21 (b)

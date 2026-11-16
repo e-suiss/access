@@ -1,4 +1,4 @@
-//! Realm configuration as code (§12.5.3, TN-122…TN-124): the document `export` writes and
+//! Environment configuration as code (§12.5.3, TN-122…TN-124): the document `export` writes and
 //! `diff`/`apply` read, and the plan between a desired document and the runtime state.
 //!
 //! - Deterministic (TN-123 item 1): resources sorted by natural key, keys sorted, server-generated
@@ -33,7 +33,7 @@ pub(crate) struct Kind {
     pub(crate) retire: &'static str,
 }
 
-/// The resource lists of a realm's configuration. Accounts and memberships are data, not
+/// The resource lists of an environment's configuration. Accounts and memberships are data, not
 /// configuration, and are not exported.
 pub(crate) const KINDS: [Kind; 3] = [
     Kind {
@@ -91,9 +91,9 @@ pub(crate) enum DocError {
     /// A secret value instead of a reference (TN-123 item 2).
     #[error("secret value at {0}: use a `*_ref` member with a `secret://` reference")]
     Secret(String),
-    /// Another realm's document.
-    #[error("the document is for realm {0}")]
-    Realm(String),
+    /// Another environment's document.
+    #[error("the document is for environment {0}")]
+    Environment(String),
 }
 
 fn secret_like(name: &str) -> bool {
@@ -167,12 +167,15 @@ pub(crate) struct Runtime {
 /// The export document of `runtime` (TN-123 item 1).
 pub(crate) fn export(
     contract: &Contract,
-    realm: &str,
+    environment: &str,
     runtime: &Runtime,
     opts: ExportOptions,
 ) -> Result<Value, DocError> {
     let mut doc = Map::new();
-    doc.insert(String::from("realm"), Value::String(realm.to_owned()));
+    doc.insert(
+        String::from("environment"),
+        Value::String(environment.to_owned()),
+    );
     for kind in KINDS {
         let mut items: Vec<Value> = runtime
             .lists
@@ -570,7 +573,7 @@ fn plan_mappers(
 /// The plan from `runtime` to `desired`.
 pub(crate) fn plan(
     contract: &Contract,
-    realm: &str,
+    environment: &str,
     desired: &Value,
     runtime: &Runtime,
     opts: &PlanOptions,
@@ -579,14 +582,14 @@ pub(crate) fn plan(
         return Err(DocError::Shape(String::from("the document is a mapping")));
     }
     check_secrets(desired, "")?;
-    match desired.get("realm").and_then(Value::as_str) {
-        Some(r) if r == realm => {}
-        Some(r) => return Err(DocError::Realm(r.to_owned())),
-        None => return Err(DocError::Shape(String::from("`realm` is required"))),
+    match desired.get("environment").and_then(Value::as_str) {
+        Some(r) if r == environment => {}
+        Some(r) => return Err(DocError::Environment(r.to_owned())),
+        None => return Err(DocError::Shape(String::from("`environment` is required"))),
     }
     if let Some(Value::Object(o)) = Some(desired)
         && let Some(k) = o.keys().find(|k| {
-            k.as_str() != "realm"
+            k.as_str() != "environment"
                 && k.as_str() != "settings"
                 && !KINDS.iter().any(|kind| kind.member == k.as_str())
         })

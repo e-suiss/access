@@ -1,5 +1,5 @@
 //! The MCP resource server SDK against the real server (OP-154 m.3 (v), OP-153 m.3 (gg)): a
-//! bootstrapped realm whose sample subject holds a Grant of the sample action, tokens decided
+//! bootstrapped environment whose sample subject holds a Grant of the sample action, tokens decided
 //! and signed by the authority plane and its signer over the real sequencer and `SoftHSM`, Domain
 //! Metadata and Token Status Lists from their real routes, and every `tools/call`, list check and
 //! stream decision asked through the real ADP router with the MCP server as PEP.
@@ -47,7 +47,7 @@ const MCP: &str = "https://mcp.access.test/mcp";
 /// The MCP server's PEP identity, as its client certificate names it to ADP.
 const MCP_PEP: &str = "mcp-reference";
 const MCP_HOST: &str = "mcp.access.test";
-const ISSUER: &str = "https://access.test/realms/acme";
+const ISSUER: &str = "https://access.test/env/acme";
 
 fn wall() -> u64 {
     now_ms()
@@ -211,7 +211,7 @@ impl Revocations for Live {
     }
 }
 
-/// A bootstrapped realm with the sample subject's Grant, a Public Grant of the sample action and
+/// A bootstrapped environment with the sample subject's Grant, a Public Grant of the sample action and
 /// a Grant of it that waits on an approval, and the MCP server's configuration.
 struct Mcp {
     w: World,
@@ -561,7 +561,7 @@ impl Mcp {
             subscriptions,
             state: &self.state,
             cache,
-            approval_surface: "https://access.test/realms/acme/approve",
+            approval_surface: "https://access.test/env/acme/approve",
             list_ttl_ms: 30_000,
             discover: None,
             name: "mcp-reference",
@@ -853,7 +853,7 @@ async fn a_replayed_or_rebound_request_state_never_reaches_a_decision() {
     assert_eq!(elicitation.get("mode").and_then(Json::as_str), Some("url"));
     assert_eq!(
         elicitation.get("url").and_then(Json::as_str),
-        Some("https://access.test/realms/acme/approve")
+        Some("https://access.test/env/acme/approve")
     );
     let state = result
         .get("requestState")
@@ -1009,7 +1009,7 @@ fn raw(
 }
 
 /// The protected resource metadata as the server answers a `GET` for it on a bootstrapped
-/// realm, and how long that answer took.
+/// environment, and how long that answer took.
 pub(super) async fn metadata_answer(name: &str) -> (Response, std::time::Duration) {
     let m = Mcp::open(name).await;
     let tools = Tools::new(vec![tool("approve", &m.action, None)]).unwrap();

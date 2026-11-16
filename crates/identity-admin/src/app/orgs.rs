@@ -38,10 +38,10 @@ pub(crate) async fn membership_event(
     (subject, org): ([u8; 16], [u8; 16]),
     at: u64,
 ) -> Result<(), AdminError> {
-    let realm = t.realm().ok_or(AdminError::NoRealm)?;
+    let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
     let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
     let account = ids.encode(SUBJECT_PREFIX, subject)?;
-    let event = IdentityEvent::membership(kind, id, realm.as_bytes(), &account, &org, at);
+    let event = IdentityEvent::membership(kind, id, environment.as_bytes(), &account, &org, at);
     emit(t, &event).await?;
     Ok(())
 }
@@ -118,13 +118,13 @@ pub fn reputable(sent: i64, accepted: i64) -> bool {
 
 /// What a committed `idp.org.invite` writes with (TN-89, OP-153 m.3 (o)).
 pub(crate) struct Invite<'a> {
-    /// The realm's vault keys.
+    /// The environment's vault keys.
     pub vault: &'a access_identity_account::app::vault::Vault,
     /// The cell's id key.
     pub ids: &'a IdKey,
     /// The inviter's subject and Party.
     pub inviter: ([u8; 16], [u8; 16]),
-    /// The realm's issuer, which the accept link lives under.
+    /// The environment's issuer, which the accept link lives under.
     pub issuer: &'a str,
     /// The Exercise that allowed it.
     pub exercise: &'a [u8; 32],
@@ -132,7 +132,7 @@ pub(crate) struct Invite<'a> {
     pub at: u64,
 }
 
-/// Records the invitation as hashes of its link token and magic code and the realm's blind
+/// Records the invitation as hashes of its link token and magic code and the environment's blind
 /// index of the invitee, and queues its mail through Relay in the same transaction; the token
 /// and code exist only in the mail (TN-89, OP-153 m.3 (o)). The mail is sealed under the
 /// inviter's subject key: the invitee may have no account yet.
@@ -150,7 +150,7 @@ pub(crate) async fn invite(
     use access_identity_account::notify::ports::Notifier as _;
 
     let org = live_org(t, i.org).await?;
-    let realm = t.realm().ok_or(AdminError::NoRealm)?;
+    let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
     let tenant = t.tenant();
     let token = access_kernel::json::b64url_encode(
         &access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?,
@@ -159,7 +159,7 @@ pub(crate) async fn invite(
     let invitee = w
         .vault
         .index
-        .index(tenant.as_bytes(), realm.as_bytes(), &i.email)
+        .index(tenant.as_bytes(), environment.as_bytes(), &i.email)
         .map_err(|e| AdminError::Unavailable(e.to_string()))?;
     let ttl_s = i64::from(i.days).saturating_mul(DAY_S);
     let id = t
@@ -175,9 +175,9 @@ pub(crate) async fn invite(
             ttl_s,
         })
         .await?;
-    let named = access_identity_account::app::Realm {
+    let named = access_identity_account::app::Environment {
         tenant,
-        realm,
+        environment,
         kek: &*w.vault.kek,
         ids: w.ids,
     };
@@ -206,7 +206,7 @@ pub(crate) async fn invite(
     Ok(id)
 }
 
-/// TN-98, §10.2.6: the organization lives; home realm discovery goes on only with a verified
+/// TN-98, §10.2.6: the organization lives; home environment discovery goes on only with a verified
 /// domain of it that no other organization claims.
 pub(crate) async fn update_current(
     t: &mut TenantTx,

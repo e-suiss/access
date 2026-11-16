@@ -33,19 +33,19 @@ impl Credential<'_> {
     }
 }
 
-/// The bundle `realm` uses for `trust_domain` at `now_ms`, fetched from `endpoint` when none
+/// The bundle `environment` uses for `trust_domain` at `now_ms`, fetched from `endpoint` when none
 /// is kept or it is due; `None` when there is none to use.
 ///
 /// # Errors
 /// [`Unavailable`].
 pub async fn current_bundle<B: Bundles + ?Sized>(
     bundles: &B,
-    realm: Scope,
+    environment: Scope,
     (trust_domain, endpoint): (&str, &str),
     now_ms: u64,
 ) -> Result<Option<(Bundle, u64)>, Unavailable> {
     let kept = bundles
-        .kept(realm, trust_domain)
+        .kept(environment, trust_domain)
         .await?
         .filter(|k| k.endpoint == endpoint)
         .and_then(|k| {
@@ -71,7 +71,7 @@ pub async fn current_bundle<B: Bundles + ?Sized>(
     }
     bundles
         .keep(
-            realm,
+            environment,
             trust_domain,
             Kept {
                 endpoint: String::from(endpoint),
@@ -90,7 +90,7 @@ pub async fn current_bundle<B: Bundles + ?Sized>(
 /// [`Unavailable`]; a refusal is the inner [`SvidError`].
 pub async fn verify<B: Bundles + ?Sized>(
     bundles: &B,
-    realm: Scope,
+    environment: Scope,
     endpoint: &str,
     (credential, issuer): (Credential<'_>, &str),
     now_ms: u64,
@@ -99,8 +99,13 @@ pub async fn verify<B: Bundles + ?Sized>(
         Ok(s) => s,
         Err(e) => return Ok(Err(e)),
     };
-    let Some((bundle, fetched_ms)) =
-        current_bundle(bundles, realm, (subject.trust_domain(), endpoint), now_ms).await?
+    let Some((bundle, fetched_ms)) = current_bundle(
+        bundles,
+        environment,
+        (subject.trust_domain(), endpoint),
+        now_ms,
+    )
+    .await?
     else {
         return Ok(Err(SvidError::Key));
     };
@@ -153,7 +158,7 @@ mod tests {
     const EP: &str = "https://bundle.acme.example/bundle.json";
     const S: Scope = Scope {
         tenant: [1; 16],
-        realm: [2; 16],
+        environment: [2; 16],
     };
 
     fn doc(seq: u64) -> Vec<u8> {

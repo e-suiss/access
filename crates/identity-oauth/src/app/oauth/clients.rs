@@ -1,5 +1,5 @@
 //! The one client resolver (IDP-1, IDI-10, OP-154 m.3 (i), OP-155 m.3 (j)): a local id is read
-//! from the realm's registry; a URL id goes to OpenID Federation first when the realm is a
+//! from the environment's registry; a URL id goes to OpenID Federation first when the environment is a
 //! federation leaf, then to CIMD, and never to the local or DCR registry. A CIMD document is fetched
 //! outside any transaction, through the guarded outbound client, checked, and kept as the
 //! client's snapshot; a failure cancels the request and writes nothing (AG-4, §11.3.5).
@@ -14,17 +14,17 @@ use crate::ports::Unavailable;
 use crate::ports::oauth::{FetchRefused, OAuthDb, OAuthTx};
 use access_store::clients::{CimdRow, CimdSnapshot};
 
-use super::{Env, OAuth, Realm, unsigned};
+use super::{Env, Environment, OAuth, unsigned};
 
 /// Why a URL `client_id` did not resolve; each is `invalid_client` and cancels the request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// An OpenID Federation request (`trust_chain`) whose chain does not resolve, or a realm
+    /// An OpenID Federation request (`trust_chain`) whose chain does not resolve, or an environment
     /// that is no federation leaf.
     Federation,
-    /// The realm does not accept CIMD clients.
+    /// The environment does not accept CIMD clients.
     Disabled,
-    /// The URL's domain is not one the realm's policy admits (AS-A2).
+    /// The URL's domain is not one the environment's policy admits (AS-A2).
     Domain,
     /// Not a Client Identifier URL.
     Url,
@@ -118,7 +118,7 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn prepare_client(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
     ) -> Result<Result<(), Refusal>, Unavailable> {
         let Some(id) = params.get("client_id") else {
@@ -130,7 +130,7 @@ impl<E: Env> OAuth<E> {
         }
         // IDP-1, OP-155 m.3 (j)
         if access_identity_oidf::statement::entity_id_ok(id)
-            && let Some(decided) = self.prepare_federated(realm, params, id).await?
+            && let Some(decided) = self.prepare_federated(environment, params, id).await?
         {
             return Ok(decided);
         }
@@ -138,7 +138,7 @@ impl<E: Env> OAuth<E> {
             return Ok(Err(Refusal::Url));
         }
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let (enabled, domains) = tx.cimd_policy().await?;
         let row = tx.cimd_client(id).await?;
         if !admitted(enabled, &domains, id) {
@@ -160,7 +160,7 @@ impl<E: Env> OAuth<E> {
             return Ok(Ok(()));
         }
         tx.commit().await?;
-        let fetched = match self.fetch_document(realm, id).await {
+        let fetched = match self.fetch_document(environment, id).await {
             Ok(f) => f,
             Err(r) => {
                 tracing::info!(reason = ?r, "CIMD client refused");
@@ -178,7 +178,7 @@ impl<E: Env> OAuth<E> {
             fetched_ms,
             fresh_until_ms: fetched_ms.saturating_add(keep_s(max_age_s).saturating_mul(1000)),
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         match tx.cimd_client(id).await? {
             Some(r) => {
                 let moved = change(
@@ -201,13 +201,13 @@ impl<E: Env> OAuth<E> {
         Ok(Ok(()))
     }
 
-    /// The OpenID Federation step of the resolver (IDP-1, IDP-19, OP-155 m.3 (j)): in a realm that
+    /// The OpenID Federation step of the resolver (IDP-1, IDP-19, OP-155 m.3 (j)): in an environment that
     /// is a federation leaf, a URL `client_id` whose trust chain resolves to a pinned anchor is
     /// the client its chain's `openid_relying_party` metadata describes. `None` lets CIMD try,
     /// unless the request named its own `trust_chain`: a chain that does not hold then refuses.
     async fn prepare_federated(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         id: &str,
     ) -> Result<Option<Result<(), Refusal>>, Unavailable> {
@@ -224,7 +224,7 @@ impl<E: Env> OAuth<E> {
                 (None, None) => None,
             };
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let fed = tx.federation().await?;
         // IDI-10, OP-154 m.3 (i), §10.7.1 rule 7
         if !fed.enabled || (carried.is_some() && !fed.registration_open) {
@@ -249,7 +249,7 @@ impl<E: Env> OAuth<E> {
         } else {
             let fetch = crate::adapters::oidf::GuardedFetch {
                 documents: self.env.documents(),
-                realm: realm.realm,
+                environment: environment.environment,
             };
             access_identity_oidf::app::resolve(&fetch, id, anchors, now).await
         };
@@ -260,7 +260,7 @@ impl<E: Env> OAuth<E> {
         let Some((c, metadata)) = snapshot else {
             tracing::info!("OIDF client chain did not resolve");
             if let Some(r) = &row {
-                let mut tx = self.begin(realm).await?;
+                let mut tx = self.begin(environment).await?;
                 tx.retire_oidf_client(r.client_uuid, "chain_lost", now)
                     .await?;
                 tx.commit().await?;
@@ -270,10 +270,10 @@ impl<E: Env> OAuth<E> {
         let mut registration = access_store::oidf::OidfRegistration::Resolved;
         if let (Some(object), Some(_)) = (object, &carried) {
             // §10.7.1 rule 7, IDP-19
-            let Some(replay) = automatic(&c, object, id, realm.issuer.as_str(), now) else {
+            let Some(replay) = automatic(&c, object, id, environment.issuer.as_str(), now) else {
                 return Ok(Some(Err(Refusal::Federation)));
             };
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             let first = tx.oidf_jti_first(&replay.0, replay.1).await?;
             tx.commit().await?;
             if !first {
@@ -296,7 +296,7 @@ impl<E: Env> OAuth<E> {
             fetched_ms: now,
             chain_exp_ms: c.exp_ms,
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let existing = tx.oidf_client(id).await?.map(|r| r.client_uuid);
         tx.put_oidf_client(existing, id, &snap).await?;
         tx.commit().await?;
@@ -307,7 +307,7 @@ impl<E: Env> OAuth<E> {
     /// names, and its logo.
     async fn fetch_document(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         url: &str,
     ) -> Result<
         (
@@ -321,7 +321,7 @@ impl<E: Env> OAuth<E> {
         let docs = self.env.documents();
         docs.vet(url).await.map_err(Refusal::Fetch)?;
         let f = docs
-            .fetch(realm.realm, url, ACCEPT, MAX_DOCUMENT)
+            .fetch(environment.environment, url, ACCEPT, MAX_DOCUMENT)
             .await
             .map_err(Refusal::Fetch)?;
         if f.status != 200 {
@@ -336,7 +336,10 @@ impl<E: Env> OAuth<E> {
         let logo = match &doc.logo_uri {
             Some(u) => {
                 let accept = LOGO_TYPES.join(", ");
-                match docs.fetch(realm.realm, u, &accept, MAX_LOGO).await {
+                match docs
+                    .fetch(environment.environment, u, &accept, MAX_LOGO)
+                    .await
+                {
                     Ok(l) if l.status == 200 => l
                         .content_type
                         .as_deref()
@@ -352,7 +355,7 @@ impl<E: Env> OAuth<E> {
     }
 
     /// The client `client_id` names in this transaction (IDP-1): the local registry for a local
-    /// id; for a URL id only its live CIMD snapshot while the realm's policy admits it, never the
+    /// id; for a URL id only its live CIMD snapshot while the environment's policy admits it, never the
     /// local registry (IDI-10).
     ///
     /// # Errors

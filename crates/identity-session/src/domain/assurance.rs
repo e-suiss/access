@@ -26,7 +26,7 @@ pub enum MethodClass {
     AppControlled,
     /// A social or upstream provider's checked assertion (IDP-31, OP-153 m.3 (l)): AAL1, no CT.
     Federated,
-    /// A client certificate whose issuer policy the realm mapped as hardware-bound PIV, CAC or
+    /// A client certificate whose issuer policy the environment mapped as hardware-bound PIV, CAC or
     /// smart card, presented on the mTLS listener (OP-155 m.3 (m)).
     SmartCard,
     /// Any other client certificate presented on the mTLS listener: a software key (OP-155
@@ -290,7 +290,7 @@ impl Factor {
     }
 
     /// A client certificate on the mTLS listener (§10.2.5, OP-155 m.3 (m)): channel binding, so
-    /// phishing resistant. A certificate whose issuer policy the realm mapped as hardware-bound
+    /// phishing resistant. A certificate whose issuer policy the environment mapped as hardware-bound
     /// PIV is a device-bound key activated by the card's PIN (AAL3, CT3); any other is a software
     /// key of one category, which never reaches CT3.
     #[must_use]
@@ -514,7 +514,7 @@ pub fn ct_ceiling(factors: &[Factor]) -> CtCeiling {
         .unwrap_or(CtCeiling::None)
 }
 
-/// IDP-8 under a realm's assurance profile (MD-11, SA-54, OP-156 m.3 (e)): the TR payment
+/// IDP-8 under an environment's assurance profile (MD-11, SA-54, OP-156 m.3 (e)): the TR payment
 /// profile asks CT2 and CT3 for a phishing-resistant step **and** an app-controlled factor, so
 /// without one the ceiling stays at CT1. Nothing here raises [`ct_ceiling`].
 #[must_use]
@@ -527,7 +527,7 @@ pub fn ct_ceiling_in(factors: &[Factor], profile: AssuranceProfile) -> CtCeiling
     }
 }
 
-/// A realm's assurance profile (MD-11, SA-54): realm settings and requirement narrowing only,
+/// An environment's assurance profile (MD-11, SA-54): environment settings and requirement narrowing only,
 /// never a widening.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -584,14 +584,14 @@ pub const fn eidas_from_upstream(aal: Aal, upstream_high: bool) -> LoaEidas {
 }
 
 /// The single typed value between authentication and token issuance (TN-103): method,
-/// assurance, authenticators and realm. Token issuance never sees the path that produced it;
+/// assurance, authenticators and environment. Token issuance never sees the path that produced it;
 /// `tenant` is routing context only, never an authority input (TN-1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthenticationResult {
     /// Tenant, as routing context.
     pub tenant: [u8; 16],
-    /// Realm.
-    pub realm: [u8; 16],
+    /// Environment.
+    pub environment: [u8; 16],
     /// The authenticated subject.
     pub subject: [u8; 16],
     /// Methods used, in completion order.
@@ -607,10 +607,15 @@ pub struct AuthenticationResult {
 impl AuthenticationResult {
     /// The result of a completed list of steps.
     #[must_use]
-    pub fn of(tenant: [u8; 16], realm: [u8; 16], subject: [u8; 16], factors: &[Factor]) -> Self {
+    pub fn of(
+        tenant: [u8; 16],
+        environment: [u8; 16],
+        subject: [u8; 16],
+        factors: &[Factor],
+    ) -> Self {
         Self {
             tenant,
-            realm,
+            environment,
             subject,
             methods: factors.iter().map(|f| f.method).collect(),
             authenticators: factors.iter().filter_map(|f| f.credential).collect(),

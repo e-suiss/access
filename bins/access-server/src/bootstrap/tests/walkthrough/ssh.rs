@@ -1,10 +1,10 @@
-//! The realm SSH certificate authority on the real server (OP-156 m.3 (o), IDP-32, OP-153 m.3
+//! The environment SSH certificate authority on the real server (OP-156 m.3 (o), IDP-32, OP-153 m.3
 //! (gg)): the CA is turned on and its server group registered by committed `idp.ssh.*`
 //! decisions; the test user P signs in with the software passkey through `/authorize` and
-//! `/token` (PKCE, DPoP) and asks `POST /realms/acme/ssh/certificate` with the access token for
+//! `/token` (PKCE, DPoP) and asks `POST /env/acme/ssh/certificate` with the access token for
 //! an ephemeral key; the draft comes from P's `ssh.login` Grant, P's device Instance signs it,
 //! the real sequencer decides it and the identity signer over `SoftHSM` signs the certificate.
-//! `ssh-keygen` reads the certificate and the KRL the realm publishes.
+//! `ssh-keygen` reads the certificate and the KRL the environment publishes.
 
 #![allow(
     clippy::too_many_lines,
@@ -97,7 +97,7 @@ fn keygen(args: &[&str], at: &std::path::Path) -> (bool, String) {
 }
 
 impl Desk {
-    /// Commits an `idp.ssh.*` change as the realm's root.
+    /// Commits an `idp.ssh.*` change as the environment's root.
     async fn ssh_change(&self, change: SshChange) {
         let route = route_by_slug(&self.w.db.router, "acme")
             .await
@@ -108,7 +108,7 @@ impl Desk {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -117,7 +117,7 @@ impl Desk {
         let ids = cell_ids(&self.w.db.app, &self.w.keys).await.unwrap();
         b.change(
             &b.admin(&ids, None),
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             self.domain,
             &root_key(&self.w.keys).unwrap(),
             access_identity_admin::domain::Change::Ssh(change),
@@ -168,7 +168,7 @@ impl Desk {
     }
 
     /// One `POST /ssh/certificate` with the access token and a fresh DPoP proof, retried once
-    /// with the nonce the realm asks for.
+    /// with the nonce the environment asks for.
     async fn ssh_post(&self, who: &SignedIn, body: &JsonValue) -> (u16, JsonValue) {
         let url = format!("{}/ssh/certificate", self.user.issuer);
         let mut nonce: Option<String> = None;

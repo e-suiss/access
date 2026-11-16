@@ -1,5 +1,5 @@
 //! Account recovery (§12.3.2, TN-52–TN-62, OP-153 m.3 (c)–(f)): notice addresses, recovery
-//! methods, the account's and the realm's recovery policies, attempts with their append-only
+//! methods, the account's and the environment's recovery policies, attempts with their append-only
 //! transitions, the evidence an attempt consumes, the single-use tokens that open a
 //! credential-only window, and a forwarded `instance_recover`. Nothing is ever deleted (OP-73).
 
@@ -103,7 +103,7 @@ pub struct NewAttempt<'a> {
     pub path: &'a str,
     /// The AAL the account needs (TN-53 rule 1).
     pub required_aal: &'a str,
-    /// The realm's cooling table when it started, encoded: the attempt keeps it whatever the
+    /// The environment's cooling table when it started, encoded: the attempt keeps it whatever the
     /// table becomes (TN-55).
     pub cooling: &'a [u8],
     /// A high-value account.
@@ -278,12 +278,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_code_set(&mut self, subject: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
-            "INSERT INTO access.recovery_code_sets (tenant_id, realm_id, subject_id)
+            "INSERT INTO access.recovery_code_sets (tenant_id, environment_id, subject_id)
              VALUES ($1, $2, $3)",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)
@@ -296,15 +296,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn acknowledge_code_set(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.recovery_code_sets SET acknowledged_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND acknowledged_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND acknowledged_at IS NULL
                 AND set_id = (SELECT s.set_id FROM access.recovery_code_sets s
-                               WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.subject_id = $3
+                               WHERE s.tenant_id = $1 AND s.environment_id = $2 AND s.subject_id = $3
                                ORDER BY s.issued_at DESC, s.set_id DESC LIMIT 1)",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)
@@ -318,13 +318,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn code_set_pending(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let pending = sqlx::query_scalar!(
             r#"SELECT acknowledged_at IS NULL AS "pending!" FROM access.recovery_code_sets
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY issued_at DESC, set_id DESC LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -333,8 +333,8 @@ impl TenantTx {
     }
 
     fn recovery_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Serialises the transactions that move one attempt or one subject's recovery (TN-54): a
@@ -362,15 +362,15 @@ impl TenantTx {
         &mut self,
         a: &NewAddress<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.notification_addresses
-               (tenant_id, realm_id, subject_id, kind, identifier_id, nonce, ciphertext,
+               (tenant_id, environment_id, subject_id, kind, identifier_id, nonce, ciphertext,
                 recovery_target, recovery_contact)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING address_id",
             tenant,
-            realm,
+            environment,
             uuid(a.subject),
             a.kind,
             a.identifier.map(uuid),
@@ -392,16 +392,16 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<AddressRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let rows = sqlx::query!(
             r#"SELECT address_id, kind, identifier_id, nonce, ciphertext, recovery_target,
                     recovery_contact,
                     (extract(epoch FROM created_at) * 1000)::bigint AS "since_ms!"
                FROM access.notification_addresses
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND retired_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND retired_at IS NULL
               ORDER BY address_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -437,13 +437,13 @@ impl TenantTx {
         subject: [u8; 16],
         address: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.notification_addresses SET retired_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND address_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND address_id = $4
                 AND retired_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(address),
         )
@@ -464,14 +464,14 @@ impl TenantTx {
         assurance: &str,
         address: Option<[u8; 16]>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.recovery_methods
-               (tenant_id, realm_id, subject_id, class, assurance, address_id)
+               (tenant_id, environment_id, subject_id, class, assurance, address_id)
              VALUES ($1, $2, $3, $4, $5::text::access.aal, $6)
              RETURNING method_id",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             class,
             assurance,
@@ -490,14 +490,14 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<MethodRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let rows = sqlx::query!(
             r#"SELECT method_id, class, assurance::text AS "assurance!", address_id
                  FROM access.recovery_methods
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND retired_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND retired_at IS NULL
                 ORDER BY method_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -522,13 +522,13 @@ impl TenantTx {
         subject: [u8; 16],
         method: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.recovery_methods SET retired_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND method_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND method_id = $4
                 AND retired_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(method),
         )
@@ -547,15 +547,15 @@ impl TenantTx {
         subject: [u8; 16],
         p: &AccountPolicyRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
             "INSERT INTO access.account_recovery_policies
-               (tenant_id, realm_id, subject_id, assisted_recovery, permanent_loss_acknowledged_at,
+               (tenant_id, environment_id, subject_id, assisted_recovery, permanent_loss_acknowledged_at,
                 high_value)
              VALUES ($1, $2, $3, $4,
                      CASE WHEN $5::float8 IS NULL THEN NULL ELSE to_timestamp($5::float8) END, $6)",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             p.assisted_recovery,
             p.permanent_loss_acknowledged_ms.map(seconds),
@@ -574,15 +574,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<AccountPolicyRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let row = sqlx::query!(
             r#"SELECT assisted_recovery, high_value,
                       (extract(epoch FROM permanent_loss_acknowledged_at) * 1000)::bigint AS ack
                  FROM access.account_recovery_policies
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY change_id DESC LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -594,22 +594,22 @@ impl TenantTx {
         }))
     }
 
-    /// Records the realm's recovery policy under the committed decision `bound` (EI-25).
+    /// Records the environment's recovery policy under the committed decision `bound` (EI-25).
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn insert_recovery_realm_policy(
+    pub async fn insert_recovery_environment_policy(
         &mut self,
         policy: &[u8],
         bound: &crate::idp::Bound,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
-            "INSERT INTO access.recovery_realm_policies
-               (tenant_id, realm_id, policy, domain_id, decision_pos)
+            "INSERT INTO access.recovery_environment_policies
+               (tenant_id, environment_id, policy, domain_id, decision_pos)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             policy,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -619,18 +619,18 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The realm's latest recovery policy, encoded.
+    /// The environment's latest recovery policy, encoded.
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn recovery_realm_policy(&mut self) -> Result<Option<Vec<u8>>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+    pub async fn recovery_environment_policy(&mut self) -> Result<Option<Vec<u8>>, StoreError> {
+        let (tenant, environment) = self.recovery_scope()?;
         Ok(sqlx::query_scalar!(
-            "SELECT policy FROM access.recovery_realm_policies
-              WHERE tenant_id = $1 AND realm_id = $2
+            "SELECT policy FROM access.recovery_environment_policies
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY change_id DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?)
@@ -644,15 +644,15 @@ impl TenantTx {
         &mut self,
         a: &NewAttempt<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.recovery_attempts
-               (tenant_id, realm_id, subject_id, handle_hash, path, required_aal, cooling,
+               (tenant_id, environment_id, subject_id, handle_hash, path, required_aal, cooling,
                 high_value, opened_at)
              VALUES ($1, $2, $3, $4, $5, $6::text::access.aal, $7, $8, to_timestamp($9::float8))
              RETURNING attempt_id",
             tenant,
-            realm,
+            environment,
             a.subject.map(uuid),
             a.handle_hash.as_slice(),
             a.path,
@@ -674,14 +674,14 @@ impl TenantTx {
         &mut self,
         handle_hash: &[u8; 32],
     ) -> Result<Option<AttemptRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let row = sqlx::query!(
             r#"SELECT attempt_id, subject_id, path, required_aal::text AS "required!", cooling,
                       high_value, (extract(epoch FROM opened_at) * 1000)::bigint AS "opened!"
                  FROM access.recovery_attempts
-                WHERE tenant_id = $1 AND realm_id = $2 AND handle_hash = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND handle_hash = $3"#,
             tenant,
-            realm,
+            environment,
             handle_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -705,14 +705,14 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<AttemptRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let row = sqlx::query!(
             r#"SELECT attempt_id, subject_id, path, required_aal::text AS "required!", cooling,
                       high_value, (extract(epoch FROM opened_at) * 1000)::bigint AS "opened!"
                  FROM access.recovery_attempts
-                WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3"#,
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -737,16 +737,16 @@ impl TenantTx {
         subject: [u8; 16],
         since_ms: i64,
     ) -> Result<Vec<AttemptRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let rows = sqlx::query!(
             r#"SELECT attempt_id, subject_id, path, required_aal::text AS "required!", cooling,
                       high_value, (extract(epoch FROM opened_at) * 1000)::bigint AS "opened!"
                  FROM access.recovery_attempts
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                   AND opened_at >= to_timestamp($4::float8)
                 ORDER BY attempt_id DESC"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             seconds(since_ms),
         )
@@ -777,20 +777,20 @@ impl TenantTx {
         subject: [u8; 16],
         now_ms: i64,
     ) -> Result<Option<i64>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let until = sqlx::query_scalar!(
             r#"SELECT max((extract(epoch FROM t.until) * 1000)::bigint) AS until_ms
                  FROM access.recovery_attempts a
                  JOIN LATERAL (
                    SELECT state, until FROM access.recovery_transitions r
-                    WHERE r.tenant_id = a.tenant_id AND r.realm_id = a.realm_id
+                    WHERE r.tenant_id = a.tenant_id AND r.environment_id = a.environment_id
                       AND r.attempt_id = a.attempt_id
                     ORDER BY seq DESC LIMIT 1
                  ) t ON true
-                WHERE a.tenant_id = $1 AND a.realm_id = $2 AND a.subject_id = $3
+                WHERE a.tenant_id = $1 AND a.environment_id = $2 AND a.subject_id = $3
                   AND t.state = 'grace_period' AND t.until > to_timestamp($4::float8)"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             seconds(now_ms),
         )
@@ -799,7 +799,7 @@ impl TenantTx {
         Ok(until)
     }
 
-    /// Records a change of the realm's RP ID (RR-45, TN-17); `previous` is the stored value it
+    /// Records a change of the environment's RP ID (RR-45, TN-17); `previous` is the stored value it
     /// replaces, `None` for the issuer's host.
     ///
     /// # Errors
@@ -809,12 +809,12 @@ impl TenantTx {
         previous: Option<&str>,
         rp_id: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
-            "INSERT INTO access.realm_rp_id_changes (tenant_id, realm_id, previous, rp_id)
+            "INSERT INTO access.environment_rp_id_changes (tenant_id, environment_id, previous, rp_id)
              VALUES ($1, $2, $3, $4)",
             tenant,
-            realm,
+            environment,
             previous,
             rp_id,
         )
@@ -823,17 +823,17 @@ impl TenantTx {
         Ok(())
     }
 
-    /// When the realm's RP ID last changed, Unix ms (RR-45); `None` when it never did.
+    /// When the environment's RP ID last changed, Unix ms (RR-45); `None` when it never did.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn last_rp_id_change(&mut self) -> Result<Option<i64>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT max((extract(epoch FROM changed_at) * 1000)::bigint) AS at_ms
-                 FROM access.realm_rp_id_changes WHERE tenant_id = $1 AND realm_id = $2"#,
+                 FROM access.environment_rp_id_changes WHERE tenant_id = $1 AND environment_id = $2"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?)
@@ -847,16 +847,16 @@ impl TenantTx {
         &mut self,
         attempt: [u8; 16],
     ) -> Result<Vec<TransitionRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let rows = sqlx::query!(
             r#"SELECT seq, state, required_aal::text AS required, achieved_aal::text AS achieved,
                       evidence, reason, (extract(epoch FROM until) * 1000)::bigint AS until_ms,
                       (extract(epoch FROM at) * 1000)::bigint AS "at_ms!"
                  FROM access.recovery_transitions
-                WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3
                 ORDER BY seq"#,
             tenant,
-            realm,
+            environment,
             uuid(attempt),
         )
         .fetch_all(&mut *self.tx)
@@ -886,16 +886,16 @@ impl TenantTx {
         attempt: [u8; 16],
         t: &NewTransition<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
             "INSERT INTO access.recovery_transitions
-               (tenant_id, realm_id, attempt_id, seq, state, required_aal, achieved_aal, evidence,
+               (tenant_id, environment_id, attempt_id, seq, state, required_aal, achieved_aal, evidence,
                 reason, until, at)
              VALUES ($1, $2, $3, $4, $5, $6::text::access.aal, $7::text::access.aal, $8, $9,
                      CASE WHEN $10::float8 IS NULL THEN NULL ELSE to_timestamp($10::float8) END,
                      to_timestamp($11::float8))",
             tenant,
-            realm,
+            environment,
             uuid(attempt),
             t.seq,
             t.state,
@@ -925,15 +925,15 @@ impl TenantTx {
         tries: i16,
         expires_ms: i64,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.recovery_evidence
-               (tenant_id, realm_id, attempt_id, class, code_hash, address_id, tries_left,
+               (tenant_id, environment_id, attempt_id, class, code_hash, address_id, tries_left,
                 expires_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::float8))
              RETURNING evidence_id",
             tenant,
-            realm,
+            environment,
             uuid(attempt),
             class,
             code_hash.as_slice(),
@@ -954,16 +954,16 @@ impl TenantTx {
         &mut self,
         attempt: [u8; 16],
     ) -> Result<Vec<EvidenceRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let rows = sqlx::query!(
             r#"SELECT evidence_id, class, code_hash, tries_left,
                       (extract(epoch FROM expires_at) * 1000)::bigint AS "expires!"
                  FROM access.recovery_evidence
-                WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3
                   AND consumed_at IS NULL AND tries_left > 0
                 ORDER BY evidence_id"#,
             tenant,
-            realm,
+            environment,
             uuid(attempt),
         )
         .fetch_all(&mut *self.tx)
@@ -991,12 +991,12 @@ impl TenantTx {
         evidence: [u8; 16],
         at_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.recovery_evidence SET consumed_at = to_timestamp($4::float8)
-              WHERE tenant_id = $1 AND realm_id = $2 AND evidence_id = $3 AND consumed_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND evidence_id = $3 AND consumed_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(evidence),
             seconds(at_ms),
         )
@@ -1012,15 +1012,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn extend_contact_codes(&mut self, attempt: [u8; 16]) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.recovery_evidence
                 SET expires_at = expires_at + interval '24 hours', extended_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3
                 AND class = 'recovery_contact' AND consumed_at IS NULL AND extended_at IS NULL
                 AND expires_at > clock_timestamp()",
             tenant,
-            realm,
+            environment,
             uuid(attempt),
         )
         .execute(&mut *self.tx)
@@ -1034,13 +1034,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn spend_recovery_try(&mut self, evidence: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         sqlx::query!(
             "UPDATE access.recovery_evidence SET tries_left = tries_left - 1
-              WHERE tenant_id = $1 AND realm_id = $2 AND evidence_id = $3 AND consumed_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND evidence_id = $3 AND consumed_at IS NULL
                 AND tries_left > 0",
             tenant,
-            realm,
+            environment,
             uuid(evidence),
         )
         .execute(&mut *self.tx)
@@ -1056,16 +1056,16 @@ impl TenantTx {
         &mut self,
         t: &NewToken<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.recovery_tokens
-               (tenant_id, realm_id, subject_id, kind, token_hash, attempt_id, exercise_id,
+               (tenant_id, environment_id, subject_id, kind, token_hash, attempt_id, exercise_id,
                 address_id, entropy_bits, one_time, issued_at, expires_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11::float8),
                      to_timestamp($12::float8))
              RETURNING token_id",
             tenant,
-            realm,
+            environment,
             uuid(t.subject),
             t.kind,
             t.token_hash.as_slice(),
@@ -1093,16 +1093,16 @@ impl TenantTx {
         kinds: &[String],
         at_ms: i64,
     ) -> Result<Option<TokenRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let row = sqlx::query!(
             r#"SELECT token_id, subject_id, kind, attempt_id, one_time, uses,
                       (extract(epoch FROM expires_at) * 1000)::bigint AS "expires!"
                  FROM access.recovery_tokens
-                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND token_hash = $3
                   AND kind = ANY($4) AND used_at IS NULL AND revoked_at IS NULL
                   AND expires_at > to_timestamp($5::float8)"#,
             tenant,
-            realm,
+            environment,
             token_hash.as_slice(),
             kinds,
             seconds(at_ms),
@@ -1130,15 +1130,15 @@ impl TenantTx {
         token: [u8; 16],
         at_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "UPDATE access.recovery_tokens
                 SET uses = uses + 1,
                     used_at = CASE WHEN one_time THEN to_timestamp($4::float8) ELSE NULL END
-              WHERE tenant_id = $1 AND realm_id = $2 AND token_id = $3 AND used_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND token_id = $3 AND used_at IS NULL
                 AND revoked_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(token),
             seconds(at_ms),
         )
@@ -1157,13 +1157,13 @@ impl TenantTx {
         subject: [u8; 16],
         kinds: &[String],
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         Ok(sqlx::query!(
             "UPDATE access.recovery_tokens SET revoked_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND kind = ANY($4)
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kind = ANY($4)
                 AND used_at IS NULL AND revoked_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             kinds,
         )
@@ -1181,15 +1181,15 @@ impl TenantTx {
         subject: [u8; 16],
         r: &RebindRow,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query!(
             "INSERT INTO access.recovery_rebinds
-               (tenant_id, realm_id, attempt_id, subject_id, predecessor, nonce, public_key,
+               (tenant_id, environment_id, attempt_id, subject_id, predecessor, nonce, public_key,
                 key_type, valid_from, valid_until, ais, claim_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(r.attempt),
             uuid(subject),
             uuid(r.predecessor),
@@ -1215,14 +1215,14 @@ impl TenantTx {
         &mut self,
         attempt: [u8; 16],
     ) -> Result<Option<RebindRow>, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let row = sqlx::query!(
             "SELECT attempt_id, predecessor, nonce, public_key, key_type, valid_from, valid_until,
                     ais, claim_id
                FROM access.recovery_rebinds
-              WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3",
             tenant,
-            realm,
+            environment,
             uuid(attempt),
         )
         .fetch_optional(&mut *self.tx)
@@ -1247,12 +1247,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn federated_links(&mut self, subject: [u8; 16]) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         let n = sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.upstream_subject
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_one(&mut *self.tx)
@@ -1265,12 +1265,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn release_federated_links(&mut self, subject: [u8; 16]) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.recovery_scope()?;
+        let (tenant, environment) = self.recovery_scope()?;
         Ok(sqlx::query!(
             "UPDATE access.upstream_subject SET status = 'released'
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)

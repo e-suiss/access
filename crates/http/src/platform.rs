@@ -1,7 +1,7 @@
 //! The platform product API over HTTP (OP-149 m.4, m.16 (a), m.17 (e), (g)): pairing with a
 //! tenant and the platform client's event streams. The caller is a platform client
 //! authenticated by `private_key_jwt` (RFC 7523): `Authorization: Bearer` carries a client
-//! assertion whose `aud` is its realm's issuer. Answers are `no-store`. The contract is
+//! assertion whose `aud` is its environment's issuer. Answers are `no-store`. The contract is
 //! `sdks/openapi/access-v1.json`.
 
 use std::sync::Arc;
@@ -21,9 +21,9 @@ use serde_json::Value;
 
 use crate::Problem;
 
-/// `POST`: a pairing challenge per realm of a tenant.
+/// `POST`: a pairing challenge per environment of a tenant.
 pub const CHALLENGES_PATH: &str = "/access/v1/tenants/{tenant}/pairing/challenges";
-/// `POST`: the product's signed Exercises for those realms.
+/// `POST`: the product's signed Exercises for those environments.
 pub const PAIRING_PATH: &str = "/access/v1/tenants/{tenant}/pairing";
 /// `POST` creates, `GET` lists the platform client's streams.
 pub const STREAMS_PATH: &str = "/access/v1/platform/streams";

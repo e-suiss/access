@@ -1,7 +1,7 @@
 //! The identity-assertion service token for a platform product (OP-149 m.31 (a), m.34 (b), §9
 //! "two token classes" (ii), E39, MD-7): `client_credentials` with `resource=<the product's
 //! client_id>` (RFC 8707) and no `authorization_details`, by another platform product or by a
-//! confidential client of a tenant realm. It says who is calling and from which tenant, bound by
+//! confidential client of a tenant environment. It says who is calling and from which tenant, bound by
 //! `cnf.jkt` (TN-27); it carries no authority (no details, no contract, no family, no status) and
 //! the product it is for reads it as "who is calling" only. Authority is asked of Access
 //! separately. A request with `authorization_details` is the holder's `projection.issue` as before
@@ -11,7 +11,7 @@ use access_kernel::json::b64url_encode;
 use serde_json::json;
 
 use super::resource::AccessToken;
-use super::{Env, OAuth, Realm, Reply};
+use super::{Env, Environment, OAuth, Reply};
 use crate::domain::authority::DETAILS_PARAM;
 use crate::domain::client::Client;
 use crate::domain::dpop::{ClientType, Jkt};
@@ -23,9 +23,9 @@ use crate::ports::oauth::{OAuthDb, OAuthTx, TokenSigner as _};
 /// Whom the product reads the caller as (MD-10, OP-149 m.34 (b)).
 #[derive(Clone, Copy)]
 pub(crate) enum Caller {
-    /// A platform product: its service Party in this realm (OP-149 m.4).
+    /// A platform product: its service Party in this environment (OP-149 m.4).
     Party([u8; 16]),
-    /// A tenant realm's API client, which has no Party: the client itself.
+    /// A tenant environment's API client, which has no Party: the client itself.
     Client([u8; 16]),
 }
 
@@ -49,7 +49,7 @@ fn active_false() -> Reply {
 
 impl<E: Env> OAuth<E> {
     /// Whom the product `sector` reads `client` as, by the stored pairwise value or a fresh one
-    /// (MD-10): `None` when a platform product has no service Party in this realm yet.
+    /// (MD-10): `None` when a platform product has no service Party in this environment yet.
     async fn caller(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
@@ -75,13 +75,13 @@ impl<E: Env> OAuth<E> {
     }
 
     /// Whether a `client_credentials` request is for a service token (OP-149 m.31 (a),
-    /// m.34 (b)), and for which product. `None` is not one: no `resource`, the realm itself, or
+    /// m.34 (b)), and for which product. `None` is not one: no `resource`, the environment itself, or
     /// `authorization_details` present, which is the projection path unchanged. A registered
     /// platform product of the deployment is the only resource (RFC 8707 §2, OP-149 m.26 (a),
     /// AG-8); a product never names itself; a public client gets no service token.
     pub(crate) async fn service_target(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
     ) -> Result<Option<Result<ServiceTarget, Reply>>, Unavailable> {
@@ -90,7 +90,7 @@ impl<E: Env> OAuth<E> {
         }
         let Some(resource) = params
             .get("resource")
-            .filter(|r| *r != realm.issuer.as_str())
+            .filter(|r| *r != environment.issuer.as_str())
         else {
             return Ok(None);
         };
@@ -109,14 +109,14 @@ impl<E: Env> OAuth<E> {
                 "a product is not its own resource",
             ))));
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let caller = self.caller(&mut tx, client).await?;
         tx.commit().await?;
         let Some(caller) = caller else {
             return Ok(Some(Err(Reply::oauth_error(
                 400,
                 "unauthorized_client",
-                "the client has no service Party in this realm",
+                "the client has no service Party in this environment",
             ))));
         };
         Ok(Some(Ok(ServiceTarget {
@@ -127,19 +127,19 @@ impl<E: Env> OAuth<E> {
     }
 
     /// Issues the service token of `client` for `target` (RFC 6749 §4.4.3, RFC 9068, OP-149
-    /// m.31 (a), m.34 (b)): `iss` the caller's realm, `aud` the target, `sub` the pairwise value
+    /// m.31 (a), m.34 (b)): `iss` the caller's environment, `aud` the target, `sub` the pairwise value
     /// the target reads of the caller, `access_tenant` the caller's tenant, `cnf.jkt` the proof
     /// key; no refresh token, no scope.
     pub(crate) async fn service_token(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         target: &ServiceTarget,
         jkt: Jkt,
         now: u64,
     ) -> Result<Reply, Unavailable> {
-        let tenant = self.tenant_name(realm)?;
-        let mut tx = self.begin(realm).await?;
+        let tenant = self.tenant_name(environment)?;
+        let mut tx = self.begin(environment).await?;
         let sub = self
             .caller_sub(&mut tx, target.caller, target.sector)
             .await?
@@ -147,7 +147,7 @@ impl<E: Env> OAuth<E> {
         let alg = tx.jose_alg().await?;
         tx.commit().await?;
         let facts = ServiceFacts {
-            issuer: &realm.issuer,
+            issuer: &environment.issuer,
             audience: &target.client_id,
             client_id: &client.id,
             sub: &sub,
@@ -159,7 +159,7 @@ impl<E: Env> OAuth<E> {
             .env()
             .signer()
             .sign(
-                realm.realm,
+                environment.environment,
                 alg,
                 ACCESS_TYP,
                 &service_token_claims(&facts, &jti, &jkt.text()),
@@ -178,13 +178,13 @@ impl<E: Env> OAuth<E> {
 
     /// RFC 7662 for a service token (OP-149 m.31 (a), m.34 (b), MD-8): active while it is
     /// unexpired, the product is still registered, the caller is still a confidential client of
-    /// this realm (with its Party, for a product), the tenant is this realm's and the `sub` is
+    /// this environment (with its Party, for a product), the tenant is this environment's and the `sub` is
     /// still the one the product reads of the caller. The caller or the product may ask
     /// (RFC 7662 §2.1); anyone else, or anything unprovable, is `active: false`.
     pub(crate) async fn introspect_service(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         asking: &Client,
         at: &AccessToken,
         now: u64,
@@ -196,7 +196,7 @@ impl<E: Env> OAuth<E> {
         if expired || (asking.id != at.client_id && asking.id != at.aud) {
             return Ok(active_false());
         }
-        if *tenant != self.tenant_name(realm)? {
+        if *tenant != self.tenant_name(environment)? {
             return Ok(active_false());
         }
         let caller = tx
@@ -220,7 +220,7 @@ impl<E: Env> OAuth<E> {
             200,
             &json!({
                 "active": true,
-                "iss": realm.issuer.as_str(),
+                "iss": environment.issuer.as_str(),
                 "sub": at.sub,
                 "aud": at.aud,
                 "client_id": at.client_id,

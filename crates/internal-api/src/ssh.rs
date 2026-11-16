@@ -1,4 +1,4 @@
-//! The authority reads of the realm's SSH certificate authority (OP-156 m.3 (o), IDP-32): the
+//! The authority reads of the environment's SSH certificate authority (OP-156 m.3 (o), IDP-32): the
 //! live Grants a Party holds that cover `ssh.login`, which a certificate is drafted from and
 //! held within, and whether an allowed projection's basis still stands, which decides whether
 //! its certificate is in the KRL. Both are derived; neither records anything.

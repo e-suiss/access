@@ -143,7 +143,7 @@ impl<'a> Session<'a> {
         self.chain = chain;
     }
 
-    /// Writes the audit event `name` as the realm's log names it (`edge.<event>.<outcome>`).
+    /// Writes the audit event `name` as the environment's log names it (`edge.<event>.<outcome>`).
     async fn audit(&self, name: &str) {
         let Some((event, outcome)) = name
             .strip_prefix("edge.")
@@ -220,7 +220,7 @@ impl<'a> Session<'a> {
                     );
                 }
                 let q = Authenticate {
-                    realm: String::new(),
+                    environment: String::new(),
                     mechanism: Mechanism::External,
                     name: None,
                     secret: None,
@@ -261,7 +261,7 @@ impl<'a> Session<'a> {
             );
         }
         let q = Authenticate {
-            realm: String::new(),
+            environment: String::new(),
             mechanism: Mechanism::Simple,
             name: Some(String::from(dn)),
             secret: Some(secret.into_bytes()),
@@ -282,7 +282,7 @@ impl<'a> Session<'a> {
     }
 
     async fn check(&self, mut q: Authenticate) -> Result<Authenticated, EdgeError> {
-        q.realm = String::from(self.core.realm(None)?);
+        q.environment = String::from(self.core.environment(None)?);
         self.call(Call::Authenticate, q.encode(), Authenticated::decode)
             .await
     }
@@ -392,7 +392,7 @@ impl<'a> Session<'a> {
             );
         };
         let q = Authenticate {
-            realm: String::new(),
+            environment: String::new(),
             mechanism: Mechanism::Simple,
             name: Some(bound.dn.clone()),
             secret: Some(old.into_bytes()),
@@ -434,7 +434,10 @@ impl<'a> Session<'a> {
         let attrs = translate::attributes(&s.attrs);
         if base.is_empty() && s.scope == LdapSearchScope::Base {
             let e = dse::select(
-                dse::root(self.core.realm(None).unwrap_or_default(), self.starttls),
+                dse::root(
+                    self.core.environment(None).unwrap_or_default(),
+                    self.starttls,
+                ),
                 &attrs,
                 s.typesonly,
             );
@@ -480,9 +483,9 @@ impl<'a> Session<'a> {
                 "filter too deep or too large",
             )];
         };
-        let realm = String::from(self.core.realm(None).unwrap_or_default());
+        let environment = String::from(self.core.environment(None).unwrap_or_default());
         let base = if s.base.trim().is_empty() {
-            format!("o={realm}")
+            format!("o={environment}")
         } else {
             s.base.clone()
         };
@@ -513,7 +516,7 @@ impl<'a> Session<'a> {
         let mut sent = 0_u32;
         let outcome = loop {
             let q = DirectoryRead {
-                realm: realm.clone(),
+                environment: environment.clone(),
                 bind: bound.handle.clone(),
                 base: base.clone(),
                 scope,

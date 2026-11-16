@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.tenant_id, g.environment_id, r.slug, g.kind, g.name\n           FROM access.edge_gateways g\n           JOIN access.environments r ON r.tenant_id = g.tenant_id AND r.environment_id = g.environment_id\n          WHERE g.kind = $1 AND g.name = $2 AND g.cert_sha256 = $3 AND g.state = 'live'\n            AND r.status = 'active'\n            AND g.version = (SELECT MAX(n.version) FROM access.edge_gateways n\n                              WHERE n.tenant_id = g.tenant_id AND n.environment_id = g.environment_id\n                                AND n.kind = g.kind AND n.name = g.name)\n          LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1a2907b703cf456667ca8ed5b132698f18a59d2497ae1d14bc5e733b0a900d16"
+}

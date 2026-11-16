@@ -1,0 +1,2919 @@
+-- OP-159 m.45
+SET LOCAL ROLE access_migrator;
+
+ALTER TABLE access.idp_realm_branding RENAME TO idp_environment_branding;
+ALTER TABLE access.idp_realm_hrd_settings RENAME TO idp_environment_hrd_settings;
+ALTER TABLE access.idp_realm_key_changes RENAME TO idp_environment_key_changes;
+ALTER TABLE access.idp_realm_locale_overrides RENAME TO idp_environment_locale_overrides;
+ALTER TABLE access.idp_realm_policies RENAME TO idp_environment_policies;
+ALTER TABLE access.idp_realm_related_origins RENAME TO idp_environment_related_origins;
+ALTER TABLE access.idp_realm_settings RENAME TO idp_environment_settings;
+ALTER TABLE access.oauth_realm_frontchannel RENAME TO oauth_environment_frontchannel;
+ALTER TABLE access.realm_claim_issuer RENAME TO environment_claim_issuer;
+ALTER TABLE access.realm_crypto RENAME TO environment_crypto;
+ALTER TABLE access.realm_domain_binding RENAME TO environment_domain_binding;
+ALTER TABLE access.realm_domains RENAME TO environment_domains;
+ALTER TABLE access.realm_dr_profiles RENAME TO environment_dr_profiles;
+ALTER TABLE access.realm_governors RENAME TO environment_governors;
+ALTER TABLE access.realm_hostnames RENAME TO environment_hostnames;
+ALTER TABLE access.realm_protection RENAME TO environment_protection;
+ALTER TABLE access.realm_provisions RENAME TO environment_provisions;
+ALTER TABLE access.realm_rate_limits RENAME TO environment_rate_limits;
+ALTER TABLE access.realm_rehomes RENAME TO environment_rehomes;
+ALTER TABLE access.realm_residency RENAME TO environment_residency;
+ALTER TABLE access.realm_rp_id_changes RENAME TO environment_rp_id_changes;
+ALTER TABLE access.realms RENAME TO environments;
+ALTER TABLE access.recovery_realm_policies RENAME TO recovery_environment_policies;
+ALTER TABLE access_ops.audit_realm_checkpoint RENAME TO audit_environment_checkpoint;
+
+ALTER TABLE access.account_recovery_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.acme_orders RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.admin_job_items RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.admin_jobs RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.agent_sponsors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.agent_templates RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.agents RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.analytics_alert RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.analytics_daily RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.app_factor_answers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.approval_invites RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.approval_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.auth_flows RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.backchannel_undelivered RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.breakglass_reviews RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.claim_issuer_instance RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.client_assertion_replay RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.client_subjects RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.cloud_key_permission_ends RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.cloud_key_permissions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.csp_reports RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.device_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.device_markers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.domain_certificates RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.dpop_replay RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.edge_gateways RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.edge_keytab_kvnos RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.edge_keytab_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.edge_radius_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.event_ack RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.event_delivery RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.event_subscription RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.event_subscription_ssf RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.export_cursors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.export_sinks RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.federation_issuer_state RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.first_contact_issued RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.first_contact_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.guardianships RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.handle_events RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.handles RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_connectors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_due RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_imports RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_record_claims RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_records RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.hr_sources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_address_challenges RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_audit RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_binding_halves RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_claim_consents RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_combinations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_combine_tickets RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_credentials RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_data_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_deletion_facts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_device_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_document_acceptances RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_federated RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_identifier_tombstones RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_identifiers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_mailboxes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_outbox RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_preferences RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_profile_fields RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_social_attempts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_subject_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.identity_subjects RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_account_changes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_approval_channels RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_audit_tiers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_certificate_login_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_ciba_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_claim_mappers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_client_workloads RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_config_log RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_coordinator_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_cross_app_connections RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_dcr_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_device_code_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_federation_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_federation_trust_anchors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_group_members RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_groups RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_hooks RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_mtls_alias_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_protected_resources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_push_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_branding RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_hrd_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_key_changes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_locale_overrides RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_related_origins RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_environment_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_sms_otp_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_social_providers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_spc_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_upstream_assurance_maps RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_upstreams RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_webhook_attempts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_webhook_deliveries RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_webhook_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.idp_webhooks RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.issued_claims RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.iys_records RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.iys_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.iys_status RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.kek_rotations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ldap_credentials RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.linux_hosts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.linux_ids RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.login_sessions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.login_throttle RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.mcp_tool_pins RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.notification_addresses RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_ciba_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_cimd_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_client_profiles RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_codes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_consent_records RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_dcr_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_device_codes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_device_misses RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_grants RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_oidf_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_oidf_jti RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_environment_frontchannel RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_refresh_tokens RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.oauth_workload_bundles RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.offboarding_previews RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_access_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_domains RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_invitations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_memberships RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_party_anchors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_scim_sources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_setup_links RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_sso_drafts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_sso_enforcements RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.org_transfers RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.organizations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.pairwise_subjects RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.parent_consents RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.platform_pairing RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.platform_party RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.platform_party_subjects RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.preference_topics RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.proxy_registrations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.proxy_sessions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.push_challenges RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_claim_issuer RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_crypto RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_domain_binding RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_domains RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_dr_profiles RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_governors RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_hostnames RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_protection RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_provisions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_rate_limits RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_rehomes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_residency RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environment_rp_id_changes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.environments RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_attempts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_code_sets RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_evidence RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_methods RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_environment_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_rebinds RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_tokens RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.recovery_transitions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.rehome_ends RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.relay_notice_settings RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.relay_resends RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.relay_undelivered RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.retention_holds RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.review_schedules RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.risk_canary RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.risk_review RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.risk_subject RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.saml_cert_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.saml_flows RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.saml_request_ids RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.saml_sps RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.sandbox_domains RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.scim_clients RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.scim_outbound_log RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.scim_resources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.scim_target_links RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.scim_targets RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.session_instances RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.signal_sources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.sms_codes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssf_inbound_set RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssf_transmitter RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssh_ca_changes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssh_ca_keys RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssh_certificates RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssh_host_groups RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.ssh_revocations RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.subject_party RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_artifact_policies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_artifacts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_blocks RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_case_systems RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_request_outcomes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.support_requests RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.upstream_assertions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.upstream_domain_assertions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.upstream_sessions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.upstream_subject RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.upstream_subject_conflicts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.user_keyed_copies RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.user_keyed_erasures RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_connect_attempts RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_connections RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_release_modes RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_releases RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_resources RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.vault_token_sets RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.webauthn_credentials RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access.webauthn_users RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access_ops.console_sessions RENAME COLUMN realm_id TO environment_id;
+ALTER TABLE access_ops.dr_promotions RENAME COLUMN realms TO environments;
+
+ALTER TABLE access.account_recovery_policies RENAME CONSTRAINT account_recovery_policies_realm_id_not_null TO account_recovery_policies_environment_id_not_null;
+ALTER TABLE access.account_recovery_policies RENAME CONSTRAINT account_recovery_policies_tenant_id_realm_id_subject_id_fkey TO account_recovery_policies_tenant_id_environment_id_subject_fkey;
+ALTER TABLE access.acme_orders RENAME CONSTRAINT acme_orders_realm_id_not_null TO acme_orders_environment_id_not_null;
+ALTER TABLE access.acme_orders RENAME CONSTRAINT acme_orders_tenant_id_realm_id_domain_uuid_fkey TO acme_orders_tenant_id_environment_id_domain_uuid_fkey;
+ALTER TABLE access.admin_job_items RENAME CONSTRAINT admin_job_items_realm_id_not_null TO admin_job_items_environment_id_not_null;
+ALTER TABLE access.admin_job_items RENAME CONSTRAINT admin_job_items_tenant_id_realm_id_job_id_fkey TO admin_job_items_tenant_id_environment_id_job_id_fkey;
+ALTER TABLE access.admin_jobs RENAME CONSTRAINT admin_jobs_realm_id_not_null TO admin_jobs_environment_id_not_null;
+ALTER TABLE access.admin_jobs RENAME CONSTRAINT admin_jobs_tenant_id_realm_id_fkey TO admin_jobs_tenant_id_environment_id_fkey;
+ALTER TABLE access.agent_sponsors RENAME CONSTRAINT agent_sponsors_realm_id_not_null TO agent_sponsors_environment_id_not_null;
+ALTER TABLE access.agent_sponsors RENAME CONSTRAINT agent_sponsors_tenant_id_realm_id_agent_fkey TO agent_sponsors_tenant_id_environment_id_agent_fkey;
+ALTER TABLE access.agent_sponsors RENAME CONSTRAINT agent_sponsors_tenant_id_realm_id_subject_id_fkey TO agent_sponsors_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.agent_templates RENAME CONSTRAINT agent_templates_realm_id_not_null TO agent_templates_environment_id_not_null;
+ALTER TABLE access.agents RENAME CONSTRAINT agents_realm_id_not_null TO agents_environment_id_not_null;
+ALTER TABLE access.analytics_alert RENAME CONSTRAINT analytics_alert_realm_id_not_null TO analytics_alert_environment_id_not_null;
+ALTER TABLE access.analytics_alert RENAME CONSTRAINT analytics_alert_tenant_id_realm_id_fkey TO analytics_alert_tenant_id_environment_id_fkey;
+ALTER TABLE access.analytics_daily RENAME CONSTRAINT analytics_daily_realm_id_not_null TO analytics_daily_environment_id_not_null;
+ALTER TABLE access.analytics_daily RENAME CONSTRAINT analytics_daily_tenant_id_realm_id_fkey TO analytics_daily_tenant_id_environment_id_fkey;
+ALTER TABLE access.app_factor_answers RENAME CONSTRAINT app_factor_answers_realm_id_not_null TO app_factor_answers_environment_id_not_null;
+ALTER TABLE access.app_factor_answers RENAME CONSTRAINT app_factor_answers_tenant_id_realm_id_challenge_id_fkey TO app_factor_answers_tenant_id_environment_id_challenge_id_fkey;
+ALTER TABLE access.app_factor_answers RENAME CONSTRAINT app_factor_answers_tenant_id_realm_id_device_id_fkey TO app_factor_answers_tenant_id_environment_id_device_id_fkey;
+ALTER TABLE access.approval_invites RENAME CONSTRAINT approval_invites_realm_id_not_null TO approval_invites_environment_id_not_null;
+ALTER TABLE access.approval_invites RENAME CONSTRAINT approval_invites_tenant_id_realm_id_approver_fkey TO approval_invites_tenant_id_environment_id_approver_fkey;
+ALTER TABLE access.approval_invites RENAME CONSTRAINT approval_invites_tenant_id_realm_id_approver_intent_key TO approval_invites_tenant_id_environment_id_approver_intent_key;
+ALTER TABLE access.approval_invites RENAME CONSTRAINT approval_invites_tenant_id_realm_id_request_id_fkey TO approval_invites_tenant_id_environment_id_request_id_fkey;
+ALTER TABLE access.approval_requests RENAME CONSTRAINT approval_requests_realm_id_not_null TO approval_requests_environment_id_not_null;
+ALTER TABLE access.approval_requests RENAME CONSTRAINT approval_requests_tenant_id_realm_id_fkey TO approval_requests_tenant_id_environment_id_fkey;
+ALTER TABLE access.approval_requests RENAME CONSTRAINT approval_requests_tenant_id_realm_id_request_uri_key TO approval_requests_tenant_id_environment_id_request_uri_key;
+ALTER TABLE access.auth_flows RENAME CONSTRAINT auth_flows_realm_id_not_null TO auth_flows_environment_id_not_null;
+ALTER TABLE access.backchannel_undelivered RENAME CONSTRAINT backchannel_undelivered_realm_id_not_null TO backchannel_undelivered_environment_id_not_null;
+ALTER TABLE access.breakglass_reviews RENAME CONSTRAINT breakglass_reviews_realm_id_not_null TO breakglass_reviews_environment_id_not_null;
+ALTER TABLE access.breakglass_reviews RENAME CONSTRAINT breakglass_reviews_tenant_id_realm_id_fkey TO breakglass_reviews_tenant_id_environment_id_fkey;
+ALTER TABLE access.claim_issuer_instance RENAME CONSTRAINT claim_issuer_instance_realm_id_not_null TO claim_issuer_instance_environment_id_not_null;
+ALTER TABLE access.claim_issuer_instance RENAME CONSTRAINT claim_issuer_instance_tenant_id_realm_id_fkey TO claim_issuer_instance_tenant_id_environment_id_fkey;
+ALTER TABLE access.client_assertion_replay RENAME CONSTRAINT client_assertion_replay_realm_id_not_null TO client_assertion_replay_environment_id_not_null;
+ALTER TABLE access.client_subjects RENAME CONSTRAINT client_subjects_realm_id_not_null TO client_subjects_environment_id_not_null;
+ALTER TABLE access.client_subjects RENAME CONSTRAINT client_subjects_tenant_id_realm_id_client_uuid_fkey TO client_subjects_tenant_id_environment_id_client_uuid_fkey;
+ALTER TABLE access.client_subjects RENAME CONSTRAINT client_subjects_tenant_id_realm_id_value_key TO client_subjects_tenant_id_environment_id_value_key;
+ALTER TABLE access.cloud_key_permission_ends RENAME CONSTRAINT cloud_key_permission_ends_realm_id_not_null TO cloud_key_permission_ends_environment_id_not_null;
+ALTER TABLE access.cloud_key_permission_ends RENAME CONSTRAINT cloud_key_permission_ends_tenant_id_realm_id_permission_id_fkey TO cloud_key_permission_ends_tenant_id_environment_id_permiss_fkey;
+ALTER TABLE access.cloud_key_permissions RENAME CONSTRAINT cloud_key_permissions_realm_id_not_null TO cloud_key_permissions_environment_id_not_null;
+ALTER TABLE access.cloud_key_permissions RENAME CONSTRAINT cloud_key_permissions_tenant_id_realm_id_subject_id_fkey TO cloud_key_permissions_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.csp_reports RENAME CONSTRAINT csp_reports_realm_id_not_null TO csp_reports_environment_id_not_null;
+ALTER TABLE access.device_keys RENAME CONSTRAINT device_keys_realm_id_not_null TO device_keys_environment_id_not_null;
+ALTER TABLE access.device_keys RENAME CONSTRAINT device_keys_tenant_id_realm_id_instance_id_key TO device_keys_tenant_id_environment_id_instance_id_key;
+ALTER TABLE access.device_keys RENAME CONSTRAINT device_keys_tenant_id_realm_id_subject_id_fkey TO device_keys_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.device_markers RENAME CONSTRAINT device_markers_realm_id_not_null TO device_markers_environment_id_not_null;
+ALTER TABLE access.device_markers RENAME CONSTRAINT device_markers_tenant_id_realm_id_subject_id_fkey TO device_markers_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.domain_certificates RENAME CONSTRAINT domain_certificates_realm_id_not_null TO domain_certificates_environment_id_not_null;
+ALTER TABLE access.domain_certificates RENAME CONSTRAINT domain_certificates_tenant_id_realm_id_domain_uuid_fkey TO domain_certificates_tenant_id_environment_id_domain_uuid_fkey;
+ALTER TABLE access.dpop_replay RENAME CONSTRAINT dpop_replay_realm_id_not_null TO dpop_replay_environment_id_not_null;
+ALTER TABLE access.edge_gateways RENAME CONSTRAINT edge_gateways_realm_id_not_null TO edge_gateways_environment_id_not_null;
+ALTER TABLE access.edge_gateways RENAME CONSTRAINT edge_gateways_tenant_id_realm_id_fkey TO edge_gateways_tenant_id_environment_id_fkey;
+ALTER TABLE access.edge_keytab_kvnos RENAME CONSTRAINT edge_keytab_kvnos_realm_id_not_null TO edge_keytab_kvnos_environment_id_not_null;
+ALTER TABLE access.edge_keytab_kvnos RENAME CONSTRAINT edge_keytab_kvnos_tenant_id_realm_id_fkey TO edge_keytab_kvnos_tenant_id_environment_id_fkey;
+ALTER TABLE access.edge_keytab_policies RENAME CONSTRAINT edge_keytab_policies_realm_id_not_null TO edge_keytab_policies_environment_id_not_null;
+ALTER TABLE access.edge_keytab_policies RENAME CONSTRAINT edge_keytab_policies_tenant_id_realm_id_fkey TO edge_keytab_policies_tenant_id_environment_id_fkey;
+ALTER TABLE access.edge_radius_clients RENAME CONSTRAINT edge_radius_clients_realm_id_not_null TO edge_radius_clients_environment_id_not_null;
+ALTER TABLE access.edge_radius_clients RENAME CONSTRAINT edge_radius_clients_tenant_id_realm_id_fkey TO edge_radius_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.event_ack RENAME CONSTRAINT event_ack_realm_id_not_null TO event_ack_environment_id_not_null;
+ALTER TABLE access.event_ack RENAME CONSTRAINT event_ack_tenant_id_realm_id_subscription_id_fkey TO event_ack_tenant_id_environment_id_subscription_id_fkey;
+ALTER TABLE access.event_delivery RENAME CONSTRAINT event_delivery_realm_id_not_null TO event_delivery_environment_id_not_null;
+ALTER TABLE access.event_delivery RENAME CONSTRAINT event_delivery_tenant_id_realm_id_subscription_id_fkey TO event_delivery_tenant_id_environment_id_subscription_id_fkey;
+ALTER TABLE access.event_subscription RENAME CONSTRAINT event_subscription_realm_id_not_null TO event_subscription_environment_id_not_null;
+ALTER TABLE access.event_subscription_ssf RENAME CONSTRAINT event_subscription_ssf_realm_id_not_null TO event_subscription_ssf_environment_id_not_null;
+ALTER TABLE access.event_subscription_ssf RENAME CONSTRAINT event_subscription_ssf_tenant_id_realm_id_subscription_id_fkey TO event_subscription_ssf_tenant_id_environment_id_subscripti_fkey;
+ALTER TABLE access.export_cursors RENAME CONSTRAINT export_cursors_realm_id_not_null TO export_cursors_environment_id_not_null;
+ALTER TABLE access.export_cursors RENAME CONSTRAINT export_cursors_tenant_id_realm_id_fkey TO export_cursors_tenant_id_environment_id_fkey;
+ALTER TABLE access.export_sinks RENAME CONSTRAINT export_sinks_realm_id_not_null TO export_sinks_environment_id_not_null;
+ALTER TABLE access.export_sinks RENAME CONSTRAINT export_sinks_tenant_id_realm_id_fkey TO export_sinks_tenant_id_environment_id_fkey;
+ALTER TABLE access.federation_issuer_state RENAME CONSTRAINT federation_issuer_state_realm_id_not_null TO federation_issuer_state_environment_id_not_null;
+ALTER TABLE access.federation_issuer_state RENAME CONSTRAINT federation_issuer_state_tenant_id_realm_id_fkey TO federation_issuer_state_tenant_id_environment_id_fkey;
+ALTER TABLE access.first_contact_issued RENAME CONSTRAINT first_contact_issued_realm_id_not_null TO first_contact_issued_environment_id_not_null;
+ALTER TABLE access.first_contact_issued RENAME CONSTRAINT first_contact_issued_tenant_id_realm_id_period_fkey TO first_contact_issued_tenant_id_environment_id_period_fkey;
+ALTER TABLE access.first_contact_issued RENAME CONSTRAINT first_contact_issued_tenant_id_realm_id_subject_id_fkey TO first_contact_issued_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.first_contact_keys RENAME CONSTRAINT first_contact_keys_realm_id_not_null TO first_contact_keys_environment_id_not_null;
+ALTER TABLE access.first_contact_keys RENAME CONSTRAINT first_contact_keys_tenant_id_realm_id_fkey TO first_contact_keys_tenant_id_environment_id_fkey;
+ALTER TABLE access.guardianships RENAME CONSTRAINT guardianships_realm_id_not_null TO guardianships_environment_id_not_null;
+ALTER TABLE access.guardianships RENAME CONSTRAINT guardianships_tenant_id_realm_id_guardian_subject_fkey TO guardianships_tenant_id_environment_id_guardian_subject_fkey;
+ALTER TABLE access.guardianships RENAME CONSTRAINT guardianships_tenant_id_realm_id_ward_subject_fkey TO guardianships_tenant_id_environment_id_ward_subject_fkey;
+ALTER TABLE access.handle_events RENAME CONSTRAINT handle_events_realm_id_not_null TO handle_events_environment_id_not_null;
+ALTER TABLE access.handle_events RENAME CONSTRAINT handle_events_tenant_id_realm_id_handle_id_fkey TO handle_events_tenant_id_environment_id_handle_id_fkey;
+ALTER TABLE access.handles RENAME CONSTRAINT handles_realm_id_not_null TO handles_environment_id_not_null;
+ALTER TABLE access.handles RENAME CONSTRAINT handles_tenant_id_realm_id_handle_key TO handles_tenant_id_environment_id_handle_key;
+ALTER TABLE access.handles RENAME CONSTRAINT handles_tenant_id_realm_id_subject_id_fkey TO handles_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.hr_connectors RENAME CONSTRAINT hr_connectors_realm_id_not_null TO hr_connectors_environment_id_not_null;
+ALTER TABLE access.hr_connectors RENAME CONSTRAINT hr_connectors_tenant_id_realm_id_fkey TO hr_connectors_tenant_id_environment_id_fkey;
+ALTER TABLE access.hr_due RENAME CONSTRAINT hr_due_realm_id_not_null TO hr_due_environment_id_not_null;
+ALTER TABLE access.hr_due RENAME CONSTRAINT hr_due_tenant_id_realm_id_subject_id_fkey TO hr_due_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.hr_imports RENAME CONSTRAINT hr_imports_realm_id_not_null TO hr_imports_environment_id_not_null;
+ALTER TABLE access.hr_imports RENAME CONSTRAINT hr_imports_tenant_id_realm_id_fkey TO hr_imports_tenant_id_environment_id_fkey;
+ALTER TABLE access.hr_record_claims RENAME CONSTRAINT hr_record_claims_realm_id_not_null TO hr_record_claims_environment_id_not_null;
+ALTER TABLE access.hr_record_claims RENAME CONSTRAINT hr_record_claims_tenant_id_realm_id_source_person_version_fkey TO hr_record_claims_tenant_id_environment_id_source_person_ve_fkey;
+ALTER TABLE access.hr_records RENAME CONSTRAINT hr_records_realm_id_not_null TO hr_records_environment_id_not_null;
+ALTER TABLE access.hr_records RENAME CONSTRAINT hr_records_tenant_id_realm_id_import_domain_import_pos_fkey TO hr_records_tenant_id_environment_id_import_domain_import_p_fkey;
+ALTER TABLE access.hr_records RENAME CONSTRAINT hr_records_tenant_id_realm_id_subject_id_fkey TO hr_records_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.hr_sources RENAME CONSTRAINT hr_sources_realm_id_not_null TO hr_sources_environment_id_not_null;
+ALTER TABLE access.hr_sources RENAME CONSTRAINT hr_sources_tenant_id_realm_id_fkey TO hr_sources_tenant_id_environment_id_fkey;
+ALTER TABLE access.identity_address_challenges RENAME CONSTRAINT identity_address_challenges_realm_id_not_null TO identity_address_challenges_environment_id_not_null;
+ALTER TABLE access.identity_address_challenges RENAME CONSTRAINT identity_address_challenges_tenant_id_realm_id_fkey TO identity_address_challenges_tenant_id_environment_id_fkey;
+ALTER TABLE access.identity_address_challenges RENAME CONSTRAINT identity_address_challenges_tenant_id_realm_id_subject_id_fkey TO identity_address_challenges_tenant_id_environment_id_subje_fkey;
+ALTER TABLE access.identity_audit RENAME CONSTRAINT identity_audit_realm_id_not_null TO identity_audit_environment_id_not_null;
+ALTER TABLE access.identity_binding_halves RENAME CONSTRAINT identity_binding_halves_realm_id_not_null TO identity_binding_halves_environment_id_not_null;
+ALTER TABLE access.identity_binding_halves RENAME CONSTRAINT identity_binding_halves_tenant_id_realm_id_subject_id_fkey TO identity_binding_halves_tenant_id_environment_id_subject_i_fkey;
+ALTER TABLE access.identity_claim_consents RENAME CONSTRAINT identity_claim_consents_realm_id_not_null TO identity_claim_consents_environment_id_not_null;
+ALTER TABLE access.identity_claim_consents RENAME CONSTRAINT identity_claim_consents_tenant_id_realm_id_client_uuid_fkey TO identity_claim_consents_tenant_id_environment_id_client_uu_fkey;
+ALTER TABLE access.identity_claim_consents RENAME CONSTRAINT identity_claim_consents_tenant_id_realm_id_subject_id_fkey TO identity_claim_consents_tenant_id_environment_id_subject_i_fkey;
+ALTER TABLE access.identity_combinations RENAME CONSTRAINT identity_combinations_realm_id_not_null TO identity_combinations_environment_id_not_null;
+ALTER TABLE access.identity_combinations RENAME CONSTRAINT identity_combinations_tenant_id_realm_id_absorbed_id_fkey TO identity_combinations_tenant_id_environment_id_absorbed_id_fkey;
+ALTER TABLE access.identity_combinations RENAME CONSTRAINT identity_combinations_tenant_id_realm_id_survivor_id_fkey TO identity_combinations_tenant_id_environment_id_survivor_id_fkey;
+ALTER TABLE access.identity_combine_tickets RENAME CONSTRAINT identity_combine_tickets_realm_id_not_null TO identity_combine_tickets_environment_id_not_null;
+ALTER TABLE access.identity_combine_tickets RENAME CONSTRAINT identity_combine_tickets_tenant_id_realm_id_subject_id_fkey TO identity_combine_tickets_tenant_id_environment_id_subject__fkey;
+ALTER TABLE access.identity_credentials RENAME CONSTRAINT identity_credentials_realm_id_not_null TO identity_credentials_environment_id_not_null;
+ALTER TABLE access.identity_credentials RENAME CONSTRAINT identity_credentials_tenant_id_realm_id_subject_id_fkey TO identity_credentials_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_data_requests RENAME CONSTRAINT identity_data_requests_realm_id_not_null TO identity_data_requests_environment_id_not_null;
+ALTER TABLE access.identity_data_requests RENAME CONSTRAINT identity_data_requests_tenant_id_realm_id_subject_id_fkey TO identity_data_requests_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_deletion_facts RENAME CONSTRAINT identity_deletion_facts_realm_id_not_null TO identity_deletion_facts_environment_id_not_null;
+ALTER TABLE access.identity_deletion_facts RENAME CONSTRAINT identity_deletion_facts_tenant_id_realm_id_subject_id_fkey TO identity_deletion_facts_tenant_id_environment_id_subject_i_fkey;
+ALTER TABLE access.identity_device_keys RENAME CONSTRAINT identity_device_keys_realm_id_not_null TO identity_device_keys_environment_id_not_null;
+ALTER TABLE access.identity_device_keys RENAME CONSTRAINT identity_device_keys_tenant_id_realm_id_identity_subject_i_fkey TO identity_device_keys_tenant_id_environment_id_identity_sub_fkey;
+ALTER TABLE access.identity_device_keys RENAME CONSTRAINT identity_device_keys_tenant_id_realm_id_thumbprint_key TO identity_device_keys_tenant_id_environment_id_thumbprint_key;
+ALTER TABLE access.identity_document_acceptances RENAME CONSTRAINT identity_document_acceptances_realm_id_not_null TO identity_document_acceptances_environment_id_not_null;
+ALTER TABLE access.identity_document_acceptances RENAME CONSTRAINT identity_document_acceptances_tenant_id_realm_id_subject_i_fkey TO identity_document_acceptances_tenant_id_environment_id_sub_fkey;
+ALTER TABLE access.identity_federated RENAME CONSTRAINT identity_federated_realm_id_not_null TO identity_federated_environment_id_not_null;
+ALTER TABLE access.identity_federated RENAME CONSTRAINT identity_federated_tenant_id_realm_id_subject_id_fkey TO identity_federated_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_identifier_tombstones RENAME CONSTRAINT identity_identifier_tombstone_tenant_id_realm_id_subject_i_fkey TO identity_identifier_tombstone_tenant_id_environment_id_sub_fkey;
+ALTER TABLE access.identity_identifier_tombstones RENAME CONSTRAINT identity_identifier_tombstones_realm_id_not_null TO identity_identifier_tombstones_environment_id_not_null;
+ALTER TABLE access.identity_identifiers RENAME CONSTRAINT identity_identifiers_realm_id_not_null TO identity_identifiers_environment_id_not_null;
+ALTER TABLE access.identity_identifiers RENAME CONSTRAINT identity_identifiers_tenant_id_realm_id_subject_id_fkey TO identity_identifiers_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_mailboxes RENAME CONSTRAINT identity_mailboxes_realm_id_not_null TO identity_mailboxes_environment_id_not_null;
+ALTER TABLE access.identity_mailboxes RENAME CONSTRAINT identity_mailboxes_tenant_id_realm_id_identifier_id_fkey TO identity_mailboxes_tenant_id_environment_id_identifier_id_fkey;
+ALTER TABLE access.identity_mailboxes RENAME CONSTRAINT identity_mailboxes_tenant_id_realm_id_subject_id_fkey TO identity_mailboxes_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_outbox RENAME CONSTRAINT identity_outbox_realm_id_not_null TO identity_outbox_environment_id_not_null;
+ALTER TABLE access.identity_preferences RENAME CONSTRAINT identity_preferences_realm_id_not_null TO identity_preferences_environment_id_not_null;
+ALTER TABLE access.identity_preferences RENAME CONSTRAINT identity_preferences_tenant_id_realm_id_subject_id_fkey TO identity_preferences_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_profile_fields RENAME CONSTRAINT identity_profile_fields_realm_id_not_null TO identity_profile_fields_environment_id_not_null;
+ALTER TABLE access.identity_profile_fields RENAME CONSTRAINT identity_profile_fields_tenant_id_realm_id_subject_id_fkey TO identity_profile_fields_tenant_id_environment_id_subject_i_fkey;
+ALTER TABLE access.identity_social_attempts RENAME CONSTRAINT identity_social_attempts_realm_id_not_null TO identity_social_attempts_environment_id_not_null;
+ALTER TABLE access.identity_social_attempts RENAME CONSTRAINT identity_social_attempts_tenant_id_realm_id_fkey TO identity_social_attempts_tenant_id_environment_id_fkey;
+ALTER TABLE access.identity_social_attempts RENAME CONSTRAINT identity_social_attempts_tenant_id_realm_id_subject_id_fkey TO identity_social_attempts_tenant_id_environment_id_subject__fkey;
+ALTER TABLE access.identity_subject_keys RENAME CONSTRAINT identity_subject_keys_realm_id_not_null TO identity_subject_keys_environment_id_not_null;
+ALTER TABLE access.identity_subject_keys RENAME CONSTRAINT identity_subject_keys_tenant_id_realm_id_subject_id_fkey TO identity_subject_keys_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.identity_subjects RENAME CONSTRAINT identity_subjects_realm_id_not_null TO identity_subjects_environment_id_not_null;
+ALTER TABLE access.identity_subjects RENAME CONSTRAINT identity_subjects_tenant_id_realm_id_fkey TO identity_subjects_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_account_changes RENAME CONSTRAINT idp_account_changes_realm_id_not_null TO idp_account_changes_environment_id_not_null;
+ALTER TABLE access.idp_account_changes RENAME CONSTRAINT idp_account_changes_tenant_id_realm_id_subject_id_fkey TO idp_account_changes_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.idp_approval_channels RENAME CONSTRAINT idp_approval_channels_realm_id_not_null TO idp_approval_channels_environment_id_not_null;
+ALTER TABLE access.idp_approval_channels RENAME CONSTRAINT idp_approval_channels_tenant_id_realm_id_fkey TO idp_approval_channels_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_audit_tiers RENAME CONSTRAINT idp_audit_tiers_realm_id_not_null TO idp_audit_tiers_environment_id_not_null;
+ALTER TABLE access.idp_audit_tiers RENAME CONSTRAINT idp_audit_tiers_tenant_id_realm_id_fkey TO idp_audit_tiers_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_certificate_login_settings RENAME CONSTRAINT idp_certificate_login_settings_realm_id_not_null TO idp_certificate_login_settings_environment_id_not_null;
+ALTER TABLE access.idp_certificate_login_settings RENAME CONSTRAINT idp_certificate_login_settings_tenant_id_realm_id_fkey TO idp_certificate_login_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_ciba_settings RENAME CONSTRAINT idp_ciba_settings_realm_id_not_null TO idp_ciba_settings_environment_id_not_null;
+ALTER TABLE access.idp_ciba_settings RENAME CONSTRAINT idp_ciba_settings_tenant_id_realm_id_fkey TO idp_ciba_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_claim_mappers RENAME CONSTRAINT idp_claim_mappers_realm_id_not_null TO idp_claim_mappers_environment_id_not_null;
+ALTER TABLE access.idp_claim_mappers RENAME CONSTRAINT idp_claim_mappers_tenant_id_realm_id_fkey TO idp_claim_mappers_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_client_workloads RENAME CONSTRAINT idp_client_workloads_realm_id_not_null TO idp_client_workloads_environment_id_not_null;
+ALTER TABLE access.idp_client_workloads RENAME CONSTRAINT idp_client_workloads_tenant_id_realm_id_client_uuid_fkey TO idp_client_workloads_tenant_id_environment_id_client_uuid_fkey;
+ALTER TABLE access.idp_clients RENAME CONSTRAINT idp_clients_realm_id_not_null TO idp_clients_environment_id_not_null;
+ALTER TABLE access.idp_clients RENAME CONSTRAINT idp_clients_tenant_id_realm_id_fkey TO idp_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_config_log RENAME CONSTRAINT idp_config_log_realm_id_not_null TO idp_config_log_environment_id_not_null;
+ALTER TABLE access.idp_coordinator_settings RENAME CONSTRAINT idp_coordinator_settings_realm_id_not_null TO idp_coordinator_settings_environment_id_not_null;
+ALTER TABLE access.idp_coordinator_settings RENAME CONSTRAINT idp_coordinator_settings_tenant_id_realm_id_fkey TO idp_coordinator_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_cross_app_connections RENAME CONSTRAINT idp_cross_app_connections_realm_id_not_null TO idp_cross_app_connections_environment_id_not_null;
+ALTER TABLE access.idp_cross_app_connections RENAME CONSTRAINT idp_cross_app_connections_tenant_id_realm_id_fkey TO idp_cross_app_connections_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_dcr_policies RENAME CONSTRAINT idp_dcr_policies_realm_id_not_null TO idp_dcr_policies_environment_id_not_null;
+ALTER TABLE access.idp_dcr_policies RENAME CONSTRAINT idp_dcr_policies_tenant_id_realm_id_fkey TO idp_dcr_policies_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_device_code_settings RENAME CONSTRAINT idp_device_code_settings_realm_id_not_null TO idp_device_code_settings_environment_id_not_null;
+ALTER TABLE access.idp_device_code_settings RENAME CONSTRAINT idp_device_code_settings_tenant_id_realm_id_fkey TO idp_device_code_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_federation_settings RENAME CONSTRAINT idp_federation_settings_realm_id_not_null TO idp_federation_settings_environment_id_not_null;
+ALTER TABLE access.idp_federation_settings RENAME CONSTRAINT idp_federation_settings_tenant_id_realm_id_fkey TO idp_federation_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_federation_trust_anchors RENAME CONSTRAINT idp_federation_trust_anchors_realm_id_not_null TO idp_federation_trust_anchors_environment_id_not_null;
+ALTER TABLE access.idp_federation_trust_anchors RENAME CONSTRAINT idp_federation_trust_anchors_tenant_id_realm_id_fkey TO idp_federation_trust_anchors_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_group_members RENAME CONSTRAINT idp_group_members_realm_id_not_null TO idp_group_members_environment_id_not_null;
+ALTER TABLE access.idp_group_members RENAME CONSTRAINT idp_group_members_tenant_id_realm_id_group_name_fkey TO idp_group_members_tenant_id_environment_id_group_name_fkey;
+ALTER TABLE access.idp_group_members RENAME CONSTRAINT idp_group_members_tenant_id_realm_id_subject_id_fkey TO idp_group_members_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.idp_groups RENAME CONSTRAINT idp_groups_realm_id_not_null TO idp_groups_environment_id_not_null;
+ALTER TABLE access.idp_groups RENAME CONSTRAINT idp_groups_tenant_id_realm_id_fkey TO idp_groups_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_hooks RENAME CONSTRAINT idp_hooks_realm_id_not_null TO idp_hooks_environment_id_not_null;
+ALTER TABLE access.idp_hooks RENAME CONSTRAINT idp_hooks_tenant_id_realm_id_fkey TO idp_hooks_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_mtls_alias_settings RENAME CONSTRAINT idp_mtls_alias_settings_realm_id_not_null TO idp_mtls_alias_settings_environment_id_not_null;
+ALTER TABLE access.idp_mtls_alias_settings RENAME CONSTRAINT idp_mtls_alias_settings_tenant_id_realm_id_fkey TO idp_mtls_alias_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_protected_resources RENAME CONSTRAINT idp_protected_resources_realm_id_not_null TO idp_protected_resources_environment_id_not_null;
+ALTER TABLE access.idp_protected_resources RENAME CONSTRAINT idp_protected_resources_tenant_id_realm_id_fkey TO idp_protected_resources_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_push_settings RENAME CONSTRAINT idp_push_settings_realm_id_not_null TO idp_push_settings_environment_id_not_null;
+ALTER TABLE access.idp_push_settings RENAME CONSTRAINT idp_push_settings_tenant_id_realm_id_fkey TO idp_push_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_branding_check TO idp_environment_branding_branding_check;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_branding_not_null TO idp_environment_branding_branding_not_null;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_decision_pos_not_null TO idp_environment_branding_decision_pos_not_null;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_domain_id_not_null TO idp_environment_branding_domain_id_not_null;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_pkey TO idp_environment_branding_pkey;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_realm_id_not_null TO idp_environment_branding_environment_id_not_null;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_tenant_id_domain_id_decision_pos_fkey TO idp_environment_branding_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_tenant_id_not_null TO idp_environment_branding_tenant_id_not_null;
+ALTER TABLE access.idp_environment_branding RENAME CONSTRAINT idp_realm_branding_tenant_id_realm_id_fkey TO idp_environment_branding_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_created_at_not_null TO idp_environment_hrd_settings_created_at_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_decision_pos_not_null TO idp_environment_hrd_settings_decision_pos_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_domain_id_not_null TO idp_environment_hrd_settings_domain_id_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_enabled_not_null TO idp_environment_hrd_settings_enabled_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_pkey TO idp_environment_hrd_settings_pkey;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_realm_id_not_null TO idp_environment_hrd_settings_environment_id_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_tenant_id_domain_id_decision_pos_fkey TO idp_environment_hrd_settings_tenant_id_domain_id_decision__fkey;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_tenant_id_not_null TO idp_environment_hrd_settings_tenant_id_not_null;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_tenant_id_realm_id_fkey TO idp_environment_hrd_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_version_check TO idp_environment_hrd_settings_version_check;
+ALTER TABLE access.idp_environment_hrd_settings RENAME CONSTRAINT idp_realm_hrd_settings_version_not_null TO idp_environment_hrd_settings_version_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_action_check TO idp_environment_key_changes_action_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_action_not_null TO idp_environment_key_changes_action_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_check TO idp_environment_key_changes_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_check1 TO idp_environment_key_changes_check1;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_check2 TO idp_environment_key_changes_check2;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_check3 TO idp_environment_key_changes_check3;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_compromised_at_ms_check TO idp_environment_key_changes_compromised_at_ms_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_cutoff_at_ms_check TO idp_environment_key_changes_cutoff_at_ms_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_decision_pos_not_null TO idp_environment_key_changes_decision_pos_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_declared_at_ms_check TO idp_environment_key_changes_declared_at_ms_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_declared_at_ms_not_null TO idp_environment_key_changes_declared_at_ms_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_domain_id_not_null TO idp_environment_key_changes_domain_id_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_kid_check TO idp_environment_key_changes_kid_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_pkey TO idp_environment_key_changes_pkey;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_policy_check TO idp_environment_key_changes_policy_check;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_realm_id_not_null TO idp_environment_key_changes_environment_id_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_tenant_id_domain_id_decision_pos_fkey TO idp_environment_key_changes_tenant_id_domain_id_decision_p_fkey;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_tenant_id_not_null TO idp_environment_key_changes_tenant_id_not_null;
+ALTER TABLE access.idp_environment_key_changes RENAME CONSTRAINT idp_realm_key_changes_tenant_id_realm_id_fkey TO idp_environment_key_changes_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_decision_pos_not_null TO idp_environment_locale_overrides_decision_pos_not_null;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_domain_id_not_null TO idp_environment_locale_overrides_domain_id_not_null;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_overrides_check TO idp_environment_locale_overrides_overrides_check;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_overrides_not_null TO idp_environment_locale_overrides_overrides_not_null;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_pkey TO idp_environment_locale_overrides_pkey;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_realm_id_not_null TO idp_environment_locale_overrides_environment_id_not_null;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_tenant_id_domain_id_decision_po_fkey TO idp_environment_locale_overrides_tenant_id_domain_id_decis_fkey;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_tenant_id_not_null TO idp_environment_locale_overrides_tenant_id_not_null;
+ALTER TABLE access.idp_environment_locale_overrides RENAME CONSTRAINT idp_realm_locale_overrides_tenant_id_realm_id_fkey TO idp_environment_locale_overrides_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_decision_pos_not_null TO idp_environment_policies_decision_pos_not_null;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_domain_id_not_null TO idp_environment_policies_domain_id_not_null;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_extension_policy_check TO idp_environment_policies_extension_policy_check;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_pkey TO idp_environment_policies_pkey;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_realm_id_not_null TO idp_environment_policies_environment_id_not_null;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_session_policy_check TO idp_environment_policies_session_policy_check;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_signin_policy_check TO idp_environment_policies_signin_policy_check;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_tenant_id_domain_id_decision_pos_fkey TO idp_environment_policies_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_tenant_id_not_null TO idp_environment_policies_tenant_id_not_null;
+ALTER TABLE access.idp_environment_policies RENAME CONSTRAINT idp_realm_policies_tenant_id_realm_id_fkey TO idp_environment_policies_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_decision_pos_not_null TO idp_environment_related_origins_decision_pos_not_null;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_domain_id_not_null TO idp_environment_related_origins_domain_id_not_null;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_origins_check TO idp_environment_related_origins_origins_check;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_origins_not_null TO idp_environment_related_origins_origins_not_null;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_pkey TO idp_environment_related_origins_pkey;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_realm_id_not_null TO idp_environment_related_origins_environment_id_not_null;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_tenant_id_domain_id_decision_pos_fkey TO idp_environment_related_origins_tenant_id_domain_id_decisi_fkey;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_tenant_id_not_null TO idp_environment_related_origins_tenant_id_not_null;
+ALTER TABLE access.idp_environment_related_origins RENAME CONSTRAINT idp_realm_related_origins_tenant_id_realm_id_fkey TO idp_environment_related_origins_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_m_kib_check TO idp_environment_settings_argon2_m_kib_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_m_kib_not_null TO idp_environment_settings_argon2_m_kib_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_p_check TO idp_environment_settings_argon2_p_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_p_not_null TO idp_environment_settings_argon2_p_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_t_check TO idp_environment_settings_argon2_t_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_argon2_t_not_null TO idp_environment_settings_argon2_t_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_check TO idp_environment_settings_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_check1 TO idp_environment_settings_check1;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_cimd_domains_check TO idp_environment_settings_cimd_domains_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_cimd_domains_not_null TO idp_environment_settings_cimd_domains_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_cimd_enabled_not_null TO idp_environment_settings_cimd_enabled_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_jose_alg_check TO idp_environment_settings_jose_alg_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_jose_alg_not_null TO idp_environment_settings_jose_alg_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_pkey TO idp_environment_settings_pkey;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_realm_id_not_null TO idp_environment_settings_environment_id_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_rp_id_check TO idp_environment_settings_rp_id_check;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_tenant_id_domain_id_decision_pos_fkey TO idp_environment_settings_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_tenant_id_not_null TO idp_environment_settings_tenant_id_not_null;
+ALTER TABLE access.idp_environment_settings RENAME CONSTRAINT idp_realm_settings_tenant_id_realm_id_fkey TO idp_environment_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_sms_otp_settings RENAME CONSTRAINT idp_sms_otp_settings_realm_id_not_null TO idp_sms_otp_settings_environment_id_not_null;
+ALTER TABLE access.idp_sms_otp_settings RENAME CONSTRAINT idp_sms_otp_settings_tenant_id_realm_id_fkey TO idp_sms_otp_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_social_providers RENAME CONSTRAINT idp_social_providers_realm_id_not_null TO idp_social_providers_environment_id_not_null;
+ALTER TABLE access.idp_social_providers RENAME CONSTRAINT idp_social_providers_tenant_id_realm_id_fkey TO idp_social_providers_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_spc_settings RENAME CONSTRAINT idp_spc_settings_realm_id_not_null TO idp_spc_settings_environment_id_not_null;
+ALTER TABLE access.idp_spc_settings RENAME CONSTRAINT idp_spc_settings_tenant_id_realm_id_fkey TO idp_spc_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_upstream_assurance_maps RENAME CONSTRAINT idp_upstream_assurance_maps_realm_id_not_null TO idp_upstream_assurance_maps_environment_id_not_null;
+ALTER TABLE access.idp_upstream_assurance_maps RENAME CONSTRAINT idp_upstream_assurance_maps_tenant_id_realm_id_name_fkey TO idp_upstream_assurance_maps_tenant_id_environment_id_name_fkey;
+ALTER TABLE access.idp_upstreams RENAME CONSTRAINT idp_upstreams_realm_id_not_null TO idp_upstreams_environment_id_not_null;
+ALTER TABLE access.idp_upstreams RENAME CONSTRAINT idp_upstreams_tenant_id_realm_id_fkey TO idp_upstreams_tenant_id_environment_id_fkey;
+ALTER TABLE access.idp_webhook_attempts RENAME CONSTRAINT idp_webhook_attempts_realm_id_not_null TO idp_webhook_attempts_environment_id_not_null;
+ALTER TABLE access.idp_webhook_attempts RENAME CONSTRAINT idp_webhook_attempts_tenant_id_realm_id_webhook_id_event_i_fkey TO idp_webhook_attempts_tenant_id_environment_id_webhook_id_e_fkey;
+ALTER TABLE access.idp_webhook_deliveries RENAME CONSTRAINT idp_webhook_deliveries_realm_id_not_null TO idp_webhook_deliveries_environment_id_not_null;
+ALTER TABLE access.idp_webhook_deliveries RENAME CONSTRAINT idp_webhook_deliveries_tenant_id_realm_id_webhook_id_fkey TO idp_webhook_deliveries_tenant_id_environment_id_webhook_id_fkey;
+ALTER TABLE access.idp_webhook_keys RENAME CONSTRAINT idp_webhook_keys_realm_id_not_null TO idp_webhook_keys_environment_id_not_null;
+ALTER TABLE access.idp_webhook_keys RENAME CONSTRAINT idp_webhook_keys_tenant_id_realm_id_webhook_id_fkey TO idp_webhook_keys_tenant_id_environment_id_webhook_id_fkey;
+ALTER TABLE access.idp_webhooks RENAME CONSTRAINT idp_webhooks_realm_id_not_null TO idp_webhooks_environment_id_not_null;
+ALTER TABLE access.idp_webhooks RENAME CONSTRAINT idp_webhooks_tenant_id_realm_id_fkey TO idp_webhooks_tenant_id_environment_id_fkey;
+ALTER TABLE access.issued_claims RENAME CONSTRAINT issued_claims_realm_id_not_null TO issued_claims_environment_id_not_null;
+ALTER TABLE access.iys_records RENAME CONSTRAINT iys_records_realm_id_not_null TO iys_records_environment_id_not_null;
+ALTER TABLE access.iys_records RENAME CONSTRAINT iys_records_tenant_id_realm_id_subject_id_fkey TO iys_records_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.iys_settings RENAME CONSTRAINT iys_settings_realm_id_not_null TO iys_settings_environment_id_not_null;
+ALTER TABLE access.iys_settings RENAME CONSTRAINT iys_settings_tenant_id_realm_id_fkey TO iys_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.iys_status RENAME CONSTRAINT iys_status_realm_id_not_null TO iys_status_environment_id_not_null;
+ALTER TABLE access.iys_status RENAME CONSTRAINT iys_status_tenant_id_realm_id_record_id_fkey TO iys_status_tenant_id_environment_id_record_id_fkey;
+ALTER TABLE access.kek_rotations RENAME CONSTRAINT kek_rotations_realm_id_not_null TO kek_rotations_environment_id_not_null;
+ALTER TABLE access.kek_rotations RENAME CONSTRAINT kek_rotations_tenant_id_realm_id_fkey TO kek_rotations_tenant_id_environment_id_fkey;
+ALTER TABLE access.ldap_credentials RENAME CONSTRAINT ldap_credentials_realm_id_not_null TO ldap_credentials_environment_id_not_null;
+ALTER TABLE access.ldap_credentials RENAME CONSTRAINT ldap_credentials_tenant_id_realm_id_subject_id_fkey TO ldap_credentials_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.linux_hosts RENAME CONSTRAINT linux_hosts_realm_id_not_null TO linux_hosts_environment_id_not_null;
+ALTER TABLE access.linux_hosts RENAME CONSTRAINT linux_hosts_tenant_id_realm_id_fkey TO linux_hosts_tenant_id_environment_id_fkey;
+ALTER TABLE access.linux_ids RENAME CONSTRAINT linux_ids_realm_id_not_null TO linux_ids_environment_id_not_null;
+ALTER TABLE access.linux_ids RENAME CONSTRAINT linux_ids_tenant_id_realm_id_fkey TO linux_ids_tenant_id_environment_id_fkey;
+ALTER TABLE access.linux_ids RENAME CONSTRAINT linux_ids_tenant_id_realm_id_id_key TO linux_ids_tenant_id_environment_id_id_key;
+ALTER TABLE access.login_sessions RENAME CONSTRAINT login_sessions_realm_id_not_null TO login_sessions_environment_id_not_null;
+ALTER TABLE access.login_sessions RENAME CONSTRAINT login_sessions_tenant_id_realm_id_cookie_hash_key TO login_sessions_tenant_id_environment_id_cookie_hash_key;
+ALTER TABLE access.login_sessions RENAME CONSTRAINT login_sessions_tenant_id_realm_id_subject_id_fkey TO login_sessions_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.login_throttle RENAME CONSTRAINT login_throttle_realm_id_not_null TO login_throttle_environment_id_not_null;
+ALTER TABLE access.mcp_tool_pins RENAME CONSTRAINT mcp_tool_pins_realm_id_not_null TO mcp_tool_pins_environment_id_not_null;
+ALTER TABLE access.mcp_tool_pins RENAME CONSTRAINT mcp_tool_pins_tenant_id_realm_id_fkey TO mcp_tool_pins_tenant_id_environment_id_fkey;
+ALTER TABLE access.notification_addresses RENAME CONSTRAINT notification_addresses_realm_id_not_null TO notification_addresses_environment_id_not_null;
+ALTER TABLE access.notification_addresses RENAME CONSTRAINT notification_addresses_tenant_id_realm_id_identifier_id_fkey TO notification_addresses_tenant_id_environment_id_identifier_fkey;
+ALTER TABLE access.notification_addresses RENAME CONSTRAINT notification_addresses_tenant_id_realm_id_subject_id_fkey TO notification_addresses_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.oauth_ciba_requests RENAME CONSTRAINT oauth_ciba_requests_realm_id_not_null TO oauth_ciba_requests_environment_id_not_null;
+ALTER TABLE access.oauth_ciba_requests RENAME CONSTRAINT oauth_ciba_requests_tenant_id_realm_id_client_uuid_fkey TO oauth_ciba_requests_tenant_id_environment_id_client_uuid_fkey;
+ALTER TABLE access.oauth_ciba_requests RENAME CONSTRAINT oauth_ciba_requests_tenant_id_realm_id_fkey TO oauth_ciba_requests_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_ciba_requests RENAME CONSTRAINT oauth_ciba_requests_tenant_id_realm_id_handle_hash_key TO oauth_ciba_requests_tenant_id_environment_id_handle_hash_key;
+ALTER TABLE access.oauth_ciba_requests RENAME CONSTRAINT oauth_ciba_requests_tenant_id_realm_id_subject_id_fkey TO oauth_ciba_requests_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.oauth_cimd_clients RENAME CONSTRAINT oauth_cimd_clients_realm_id_not_null TO oauth_cimd_clients_environment_id_not_null;
+ALTER TABLE access.oauth_cimd_clients RENAME CONSTRAINT oauth_cimd_clients_tenant_id_realm_id_fkey TO oauth_cimd_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_client_profiles RENAME CONSTRAINT oauth_client_profiles_realm_id_not_null TO oauth_client_profiles_environment_id_not_null;
+ALTER TABLE access.oauth_client_profiles RENAME CONSTRAINT oauth_client_profiles_tenant_id_realm_id_fkey TO oauth_client_profiles_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_codes RENAME CONSTRAINT oauth_codes_realm_id_not_null TO oauth_codes_environment_id_not_null;
+ALTER TABLE access.oauth_consent_records RENAME CONSTRAINT oauth_consent_records_realm_id_not_null TO oauth_consent_records_environment_id_not_null;
+ALTER TABLE access.oauth_consent_records RENAME CONSTRAINT oauth_consent_records_tenant_id_realm_id_subject_id_fkey TO oauth_consent_records_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.oauth_dcr_clients RENAME CONSTRAINT oauth_dcr_clients_realm_id_not_null TO oauth_dcr_clients_environment_id_not_null;
+ALTER TABLE access.oauth_dcr_clients RENAME CONSTRAINT oauth_dcr_clients_tenant_id_realm_id_client_id_key TO oauth_dcr_clients_tenant_id_environment_id_client_id_key;
+ALTER TABLE access.oauth_dcr_clients RENAME CONSTRAINT oauth_dcr_clients_tenant_id_realm_id_fkey TO oauth_dcr_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_device_codes RENAME CONSTRAINT oauth_device_codes_realm_id_not_null TO oauth_device_codes_environment_id_not_null;
+ALTER TABLE access.oauth_device_codes RENAME CONSTRAINT oauth_device_codes_tenant_id_realm_id_client_uuid_fkey TO oauth_device_codes_tenant_id_environment_id_client_uuid_fkey;
+ALTER TABLE access.oauth_device_codes RENAME CONSTRAINT oauth_device_codes_tenant_id_realm_id_device_hash_key TO oauth_device_codes_tenant_id_environment_id_device_hash_key;
+ALTER TABLE access.oauth_device_codes RENAME CONSTRAINT oauth_device_codes_tenant_id_realm_id_fkey TO oauth_device_codes_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_device_codes RENAME CONSTRAINT oauth_device_codes_tenant_id_realm_id_subject_id_fkey TO oauth_device_codes_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.oauth_device_misses RENAME CONSTRAINT oauth_device_misses_realm_id_not_null TO oauth_device_misses_environment_id_not_null;
+ALTER TABLE access.oauth_device_misses RENAME CONSTRAINT oauth_device_misses_tenant_id_realm_id_fkey TO oauth_device_misses_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_grants RENAME CONSTRAINT oauth_grants_realm_id_not_null TO oauth_grants_environment_id_not_null;
+ALTER TABLE access.oauth_grants RENAME CONSTRAINT oauth_grants_tenant_id_realm_id_session_id_fkey TO oauth_grants_tenant_id_environment_id_session_id_fkey;
+ALTER TABLE access.oauth_grants RENAME CONSTRAINT oauth_grants_tenant_id_realm_id_sid_key TO oauth_grants_tenant_id_environment_id_sid_key;
+ALTER TABLE access.oauth_grants RENAME CONSTRAINT oauth_grants_tenant_id_realm_id_subject_id_fkey TO oauth_grants_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.oauth_oidf_clients RENAME CONSTRAINT oauth_oidf_clients_realm_id_not_null TO oauth_oidf_clients_environment_id_not_null;
+ALTER TABLE access.oauth_oidf_clients RENAME CONSTRAINT oauth_oidf_clients_tenant_id_realm_id_fkey TO oauth_oidf_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_oidf_jti RENAME CONSTRAINT oauth_oidf_jti_realm_id_not_null TO oauth_oidf_jti_environment_id_not_null;
+ALTER TABLE access.oauth_oidf_jti RENAME CONSTRAINT oauth_oidf_jti_tenant_id_realm_id_fkey TO oauth_oidf_jti_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_created_at_not_null TO oauth_environment_frontchannel_created_at_not_null;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_decision_pos_not_null TO oauth_environment_frontchannel_decision_pos_not_null;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_domain_id_not_null TO oauth_environment_frontchannel_domain_id_not_null;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_pkey TO oauth_environment_frontchannel_pkey;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_realm_id_not_null TO oauth_environment_frontchannel_environment_id_not_null;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_tenant_id_domain_id_decision_pos_fkey TO oauth_environment_frontchannel_tenant_id_domain_id_decisio_fkey;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_tenant_id_not_null TO oauth_environment_frontchannel_tenant_id_not_null;
+ALTER TABLE access.oauth_environment_frontchannel RENAME CONSTRAINT oauth_realm_frontchannel_tenant_id_realm_id_fkey TO oauth_environment_frontchannel_tenant_id_environment_id_fkey;
+ALTER TABLE access.oauth_refresh_tokens RENAME CONSTRAINT oauth_refresh_tokens_realm_id_not_null TO oauth_refresh_tokens_environment_id_not_null;
+ALTER TABLE access.oauth_refresh_tokens RENAME CONSTRAINT oauth_refresh_tokens_tenant_id_realm_id_grant_id_fkey TO oauth_refresh_tokens_tenant_id_environment_id_grant_id_fkey;
+ALTER TABLE access.oauth_requests RENAME CONSTRAINT oauth_requests_realm_id_not_null TO oauth_requests_environment_id_not_null;
+ALTER TABLE access.oauth_workload_bundles RENAME CONSTRAINT oauth_workload_bundles_realm_id_not_null TO oauth_workload_bundles_environment_id_not_null;
+ALTER TABLE access.oauth_workload_bundles RENAME CONSTRAINT oauth_workload_bundles_tenant_id_realm_id_fkey TO oauth_workload_bundles_tenant_id_environment_id_fkey;
+ALTER TABLE access.offboarding_previews RENAME CONSTRAINT offboarding_previews_realm_id_not_null TO offboarding_previews_environment_id_not_null;
+ALTER TABLE access.offboarding_previews RENAME CONSTRAINT offboarding_previews_tenant_id_realm_id_subject_id_fkey TO offboarding_previews_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.org_access_requests RENAME CONSTRAINT org_access_requests_realm_id_not_null TO org_access_requests_environment_id_not_null;
+ALTER TABLE access.org_access_requests RENAME CONSTRAINT org_access_requests_tenant_id_realm_id_org_id_fkey TO org_access_requests_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_access_requests RENAME CONSTRAINT org_access_requests_tenant_id_realm_id_subject_id_fkey TO org_access_requests_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.org_domains RENAME CONSTRAINT org_domains_realm_id_not_null TO org_domains_environment_id_not_null;
+ALTER TABLE access.org_domains RENAME CONSTRAINT org_domains_tenant_id_realm_id_org_id_fkey TO org_domains_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_invitations RENAME CONSTRAINT org_invitations_realm_id_not_null TO org_invitations_environment_id_not_null;
+ALTER TABLE access.org_invitations RENAME CONSTRAINT org_invitations_tenant_id_realm_id_org_id_fkey TO org_invitations_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_invitations RENAME CONSTRAINT org_invitations_tenant_id_realm_id_token_hash_key TO org_invitations_tenant_id_environment_id_token_hash_key;
+ALTER TABLE access.org_memberships RENAME CONSTRAINT org_memberships_realm_id_not_null TO org_memberships_environment_id_not_null;
+ALTER TABLE access.org_memberships RENAME CONSTRAINT org_memberships_tenant_id_realm_id_org_id_fkey TO org_memberships_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_memberships RENAME CONSTRAINT org_memberships_tenant_id_realm_id_subject_id_fkey TO org_memberships_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.org_party_anchors RENAME CONSTRAINT org_party_anchors_realm_id_not_null TO org_party_anchors_environment_id_not_null;
+ALTER TABLE access.org_scim_sources RENAME CONSTRAINT org_scim_sources_realm_id_not_null TO org_scim_sources_environment_id_not_null;
+ALTER TABLE access.org_scim_sources RENAME CONSTRAINT org_scim_sources_tenant_id_realm_id_org_id_fkey TO org_scim_sources_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_setup_links RENAME CONSTRAINT org_setup_links_realm_id_not_null TO org_setup_links_environment_id_not_null;
+ALTER TABLE access.org_setup_links RENAME CONSTRAINT org_setup_links_tenant_id_realm_id_org_id_fkey TO org_setup_links_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_setup_links RENAME CONSTRAINT org_setup_links_tenant_id_realm_id_token_hash_key TO org_setup_links_tenant_id_environment_id_token_hash_key;
+ALTER TABLE access.org_sso_drafts RENAME CONSTRAINT org_sso_drafts_realm_id_not_null TO org_sso_drafts_environment_id_not_null;
+ALTER TABLE access.org_sso_drafts RENAME CONSTRAINT org_sso_drafts_tenant_id_realm_id_org_id_fkey TO org_sso_drafts_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_sso_enforcements RENAME CONSTRAINT org_sso_enforcements_realm_id_not_null TO org_sso_enforcements_environment_id_not_null;
+ALTER TABLE access.org_sso_enforcements RENAME CONSTRAINT org_sso_enforcements_tenant_id_realm_id_org_id_fkey TO org_sso_enforcements_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_transfers RENAME CONSTRAINT org_transfers_realm_id_not_null TO org_transfers_environment_id_not_null;
+ALTER TABLE access.org_transfers RENAME CONSTRAINT org_transfers_tenant_id_realm_id_from_subject_fkey TO org_transfers_tenant_id_environment_id_from_subject_fkey;
+ALTER TABLE access.org_transfers RENAME CONSTRAINT org_transfers_tenant_id_realm_id_org_id_fkey TO org_transfers_tenant_id_environment_id_org_id_fkey;
+ALTER TABLE access.org_transfers RENAME CONSTRAINT org_transfers_tenant_id_realm_id_to_subject_fkey TO org_transfers_tenant_id_environment_id_to_subject_fkey;
+ALTER TABLE access.organizations RENAME CONSTRAINT organizations_realm_id_not_null TO organizations_environment_id_not_null;
+ALTER TABLE access.organizations RENAME CONSTRAINT organizations_tenant_id_realm_id_party_key TO organizations_tenant_id_environment_id_party_key;
+ALTER TABLE access.pairwise_subjects RENAME CONSTRAINT pairwise_subjects_realm_id_not_null TO pairwise_subjects_environment_id_not_null;
+ALTER TABLE access.pairwise_subjects RENAME CONSTRAINT pairwise_subjects_tenant_id_realm_id_subject_id_fkey TO pairwise_subjects_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.pairwise_subjects RENAME CONSTRAINT pairwise_subjects_tenant_id_realm_id_value_key TO pairwise_subjects_tenant_id_environment_id_value_key;
+ALTER TABLE access.parent_consents RENAME CONSTRAINT parent_consents_realm_id_not_null TO parent_consents_environment_id_not_null;
+ALTER TABLE access.parent_consents RENAME CONSTRAINT parent_consents_tenant_id_realm_id_guardianship_id_fkey TO parent_consents_tenant_id_environment_id_guardianship_id_fkey;
+ALTER TABLE access.platform_pairing RENAME CONSTRAINT platform_pairing_realm_id_not_null TO platform_pairing_environment_id_not_null;
+ALTER TABLE access.platform_party RENAME CONSTRAINT platform_party_realm_id_not_null TO platform_party_environment_id_not_null;
+ALTER TABLE access.platform_party RENAME CONSTRAINT platform_party_tenant_id_realm_id_party_id_key TO platform_party_tenant_id_environment_id_party_id_key;
+ALTER TABLE access.platform_party_subjects RENAME CONSTRAINT platform_party_subjects_realm_id_not_null TO platform_party_subjects_environment_id_not_null;
+ALTER TABLE access.platform_party_subjects RENAME CONSTRAINT platform_party_subjects_tenant_id_realm_id_party_id_fkey TO platform_party_subjects_tenant_id_environment_id_party_id_fkey;
+ALTER TABLE access.platform_party_subjects RENAME CONSTRAINT platform_party_subjects_tenant_id_realm_id_value_key TO platform_party_subjects_tenant_id_environment_id_value_key;
+ALTER TABLE access.preference_topics RENAME CONSTRAINT preference_topics_realm_id_not_null TO preference_topics_environment_id_not_null;
+ALTER TABLE access.preference_topics RENAME CONSTRAINT preference_topics_tenant_id_realm_id_fkey TO preference_topics_tenant_id_environment_id_fkey;
+ALTER TABLE access.proxy_registrations RENAME CONSTRAINT proxy_registrations_realm_id_not_null TO proxy_registrations_environment_id_not_null;
+ALTER TABLE access.proxy_registrations RENAME CONSTRAINT proxy_registrations_tenant_id_realm_id_fkey TO proxy_registrations_tenant_id_environment_id_fkey;
+ALTER TABLE access.proxy_sessions RENAME CONSTRAINT proxy_sessions_realm_id_not_null TO proxy_sessions_environment_id_not_null;
+ALTER TABLE access.proxy_sessions RENAME CONSTRAINT proxy_sessions_tenant_id_realm_id_fkey TO proxy_sessions_tenant_id_environment_id_fkey;
+ALTER TABLE access.proxy_sessions RENAME CONSTRAINT proxy_sessions_tenant_id_realm_id_kind_digest_key TO proxy_sessions_tenant_id_environment_id_kind_digest_key;
+ALTER TABLE access.push_challenges RENAME CONSTRAINT push_challenges_realm_id_not_null TO push_challenges_environment_id_not_null;
+ALTER TABLE access.push_challenges RENAME CONSTRAINT push_challenges_tenant_id_realm_id_challenge_hash_key TO push_challenges_tenant_id_environment_id_challenge_hash_key;
+ALTER TABLE access.push_challenges RENAME CONSTRAINT push_challenges_tenant_id_realm_id_device_id_fkey TO push_challenges_tenant_id_environment_id_device_id_fkey;
+ALTER TABLE access.push_challenges RENAME CONSTRAINT push_challenges_tenant_id_realm_id_origin_device_fkey TO push_challenges_tenant_id_environment_id_origin_device_fkey;
+ALTER TABLE access.push_challenges RENAME CONSTRAINT push_challenges_tenant_id_realm_id_subject_id_fkey TO push_challenges_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_created_at_not_null TO environment_claim_issuer_created_at_not_null;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_party_id_check TO environment_claim_issuer_party_id_check;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_party_id_not_null TO environment_claim_issuer_party_id_not_null;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_pkey TO environment_claim_issuer_pkey;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_realm_id_not_null TO environment_claim_issuer_environment_id_not_null;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_tenant_id_not_null TO environment_claim_issuer_tenant_id_not_null;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_tenant_id_party_id_key TO environment_claim_issuer_tenant_id_party_id_key;
+ALTER TABLE access.environment_claim_issuer RENAME CONSTRAINT realm_claim_issuer_tenant_id_realm_id_fkey TO environment_claim_issuer_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_created_at_not_null TO environment_crypto_created_at_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_decision_pos_not_null TO environment_crypto_decision_pos_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_domain_id_not_null TO environment_crypto_domain_id_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_fips_not_null TO environment_crypto_fips_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_hash_profile_check TO environment_crypto_hash_profile_check;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_hash_profile_not_null TO environment_crypto_hash_profile_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_pkey TO environment_crypto_pkey;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_realm_id_not_null TO environment_crypto_environment_id_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_tenant_id_domain_id_decision_pos_fkey TO environment_crypto_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_tenant_id_not_null TO environment_crypto_tenant_id_not_null;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_tenant_id_realm_id_fkey TO environment_crypto_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_version_check TO environment_crypto_version_check;
+ALTER TABLE access.environment_crypto RENAME CONSTRAINT realm_crypto_version_not_null TO environment_crypto_version_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_acceptance_id_check TO environment_domain_binding_acceptance_id_check;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_check TO environment_domain_binding_check;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_created_at_not_null TO environment_domain_binding_created_at_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_domain_id_not_null TO environment_domain_binding_domain_id_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_pkey TO environment_domain_binding_pkey;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_realm_id_not_null TO environment_domain_binding_environment_id_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_role_check TO environment_domain_binding_role_check;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_role_not_null TO environment_domain_binding_role_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_tenant_id_domain_id_fkey TO environment_domain_binding_tenant_id_domain_id_fkey;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_tenant_id_not_null TO environment_domain_binding_tenant_id_not_null;
+ALTER TABLE access.environment_domain_binding RENAME CONSTRAINT realm_domain_binding_tenant_id_realm_id_fkey TO environment_domain_binding_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_acme_error_check TO environment_domains_acme_error_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_acme_failures_check TO environment_domains_acme_failures_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_acme_failures_not_null TO environment_domains_acme_failures_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_bound_as_check TO environment_domains_bound_as_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_challenge_check TO environment_domains_challenge_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_challenge_not_null TO environment_domains_challenge_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_check TO environment_domains_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_check1 TO environment_domains_check1;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_check2 TO environment_domains_check2;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_check3 TO environment_domains_check3;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_check4 TO environment_domains_check4;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_cname_target_check TO environment_domains_cname_target_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_cname_target_not_null TO environment_domains_cname_target_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_decision_pos_not_null TO environment_domains_decision_pos_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_domain_id_not_null TO environment_domains_domain_id_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_domain_uuid_not_null TO environment_domains_domain_uuid_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_finding_check TO environment_domains_finding_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_hostname_check TO environment_domains_hostname_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_hostname_not_null TO environment_domains_hostname_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_pkey TO environment_domains_pkey;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_realm_id_not_null TO environment_domains_environment_id_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_registered_at_not_null TO environment_domains_registered_at_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_status_check TO environment_domains_status_check;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_status_not_null TO environment_domains_status_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_tenant_id_domain_id_bind_pos_fkey TO environment_domains_tenant_id_domain_id_bind_pos_fkey;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_tenant_id_domain_id_decision_pos_fkey TO environment_domains_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_tenant_id_domain_id_retire_pos_fkey TO environment_domains_tenant_id_domain_id_retire_pos_fkey;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_tenant_id_not_null TO environment_domains_tenant_id_not_null;
+ALTER TABLE access.environment_domains RENAME CONSTRAINT realm_domains_tenant_id_realm_id_fkey TO environment_domains_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_created_at_not_null TO environment_dr_profiles_created_at_not_null;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_decision_pos_not_null TO environment_dr_profiles_decision_pos_not_null;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_domain_id_check TO environment_dr_profiles_domain_id_check;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_domain_id_not_null TO environment_dr_profiles_domain_id_not_null;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_pkey TO environment_dr_profiles_pkey;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_realm_id_not_null TO environment_dr_profiles_environment_id_not_null;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_rpo_s_check TO environment_dr_profiles_rpo_s_check;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_tenant_id_not_null TO environment_dr_profiles_tenant_id_not_null;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_tenant_id_realm_id_fkey TO environment_dr_profiles_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_version_check TO environment_dr_profiles_version_check;
+ALTER TABLE access.environment_dr_profiles RENAME CONSTRAINT realm_dr_profiles_version_not_null TO environment_dr_profiles_version_not_null;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_created_at_not_null TO environment_governors_created_at_not_null;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_domain_id_check TO environment_governors_domain_id_check;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_domain_id_not_null TO environment_governors_domain_id_not_null;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_pkey TO environment_governors_pkey;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_realm_id_not_null TO environment_governors_environment_id_not_null;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_tenant_id_domain_id_fkey TO environment_governors_tenant_id_domain_id_fkey;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_tenant_id_not_null TO environment_governors_tenant_id_not_null;
+ALTER TABLE access.environment_governors RENAME CONSTRAINT realm_governors_tenant_id_realm_id_fkey TO environment_governors_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_check TO environment_hostnames_check;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_hostname_check TO environment_hostnames_hostname_check;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_hostname_not_null TO environment_hostnames_hostname_not_null;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_kind_check TO environment_hostnames_kind_check;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_kind_not_null TO environment_hostnames_kind_not_null;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_pkey TO environment_hostnames_pkey;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_realm_id_not_null TO environment_hostnames_environment_id_not_null;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_status_check TO environment_hostnames_status_check;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_status_not_null TO environment_hostnames_status_not_null;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_tenant_id_not_null TO environment_hostnames_tenant_id_not_null;
+ALTER TABLE access.environment_hostnames RENAME CONSTRAINT realm_hostnames_tenant_id_realm_id_fkey TO environment_hostnames_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_bot_check TO environment_protection_bot_check;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_bot_not_null TO environment_protection_bot_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_breached_password_check TO environment_protection_breached_password_check;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_breached_password_not_null TO environment_protection_breached_password_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_decision_pos_not_null TO environment_protection_decision_pos_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_denied_asns_check TO environment_protection_denied_asns_check;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_denied_asns_not_null TO environment_protection_denied_asns_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_domain_id_not_null TO environment_protection_domain_id_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_pkey TO environment_protection_pkey;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_realm_id_not_null TO environment_protection_environment_id_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_sl2_check TO environment_protection_sl2_check;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_sl2_not_null TO environment_protection_sl2_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_suspicious_ip_check TO environment_protection_suspicious_ip_check;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_suspicious_ip_not_null TO environment_protection_suspicious_ip_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_tenant_id_domain_id_decision_pos_fkey TO environment_protection_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_tenant_id_not_null TO environment_protection_tenant_id_not_null;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_tenant_id_realm_id_fkey TO environment_protection_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_protection RENAME CONSTRAINT realm_protection_updated_at_not_null TO environment_protection_updated_at_not_null;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_created_at_not_null TO environment_provisions_created_at_not_null;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_exercise_id_check TO environment_provisions_exercise_id_check;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_exercise_id_not_null TO environment_provisions_exercise_id_not_null;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_pkey TO environment_provisions_pkey;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_realm_id_not_null TO environment_provisions_environment_id_not_null;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_tenant_id_not_null TO environment_provisions_tenant_id_not_null;
+ALTER TABLE access.environment_provisions RENAME CONSTRAINT realm_provisions_tenant_id_realm_id_fkey TO environment_provisions_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_created_at_not_null TO environment_rate_limits_created_at_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_decision_pos_not_null TO environment_rate_limits_decision_pos_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_domain_id_check TO environment_rate_limits_domain_id_check;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_domain_id_not_null TO environment_rate_limits_domain_id_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_pkey TO environment_rate_limits_pkey;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_realm_id_not_null TO environment_rate_limits_environment_id_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_rps_check TO environment_rate_limits_rps_check;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_rps_not_null TO environment_rate_limits_rps_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_tenant_id_not_null TO environment_rate_limits_tenant_id_not_null;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_tenant_id_realm_id_fkey TO environment_rate_limits_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_version_check TO environment_rate_limits_version_check;
+ALTER TABLE access.environment_rate_limits RENAME CONSTRAINT realm_rate_limits_version_not_null TO environment_rate_limits_version_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_created_at_not_null TO environment_rehomes_created_at_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_from_domain_not_null TO environment_rehomes_from_domain_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_from_pos_not_null TO environment_rehomes_from_pos_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_pkey TO environment_rehomes_pkey;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_realm_id_not_null TO environment_rehomes_environment_id_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_tenant_id_from_domain_from_pos_fkey TO environment_rehomes_tenant_id_from_domain_from_pos_fkey;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_tenant_id_from_domain_from_pos_key TO environment_rehomes_tenant_id_from_domain_from_pos_key;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_tenant_id_not_null TO environment_rehomes_tenant_id_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_tenant_id_to_domain_to_pos_fkey TO environment_rehomes_tenant_id_to_domain_to_pos_fkey;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_tenant_id_to_domain_to_pos_key TO environment_rehomes_tenant_id_to_domain_to_pos_key;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_to_domain_not_null TO environment_rehomes_to_domain_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_to_pos_not_null TO environment_rehomes_to_pos_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_version_check TO environment_rehomes_version_check;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_version_not_null TO environment_rehomes_version_not_null;
+ALTER TABLE access.environment_rehomes RENAME CONSTRAINT realm_rehomes_xact_not_null TO environment_rehomes_xact_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_class_check TO environment_residency_class_check;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_class_not_null TO environment_residency_class_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_created_at_not_null TO environment_residency_created_at_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_decision_pos_not_null TO environment_residency_decision_pos_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_domain_id_check TO environment_residency_domain_id_check;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_domain_id_not_null TO environment_residency_domain_id_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_pkey TO environment_residency_pkey;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_realm_id_not_null TO environment_residency_environment_id_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_region_check TO environment_residency_region_check;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_region_not_null TO environment_residency_region_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_tenant_id_domain_id_decision_pos_fkey TO environment_residency_tenant_id_domain_id_decision_pos_fkey;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_tenant_id_not_null TO environment_residency_tenant_id_not_null;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_tenant_id_realm_id_fkey TO environment_residency_tenant_id_environment_id_fkey;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_version_check TO environment_residency_version_check;
+ALTER TABLE access.environment_residency RENAME CONSTRAINT realm_residency_version_not_null TO environment_residency_version_not_null;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_change_id_not_null TO environment_rp_id_changes_change_id_not_null;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_changed_at_not_null TO environment_rp_id_changes_changed_at_not_null;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_check TO environment_rp_id_changes_check;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_pkey TO environment_rp_id_changes_pkey;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_previous_check TO environment_rp_id_changes_previous_check;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_realm_id_not_null TO environment_rp_id_changes_environment_id_not_null;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_rp_id_check TO environment_rp_id_changes_rp_id_check;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_rp_id_not_null TO environment_rp_id_changes_rp_id_not_null;
+ALTER TABLE access.environment_rp_id_changes RENAME CONSTRAINT realm_rp_id_changes_tenant_id_not_null TO environment_rp_id_changes_tenant_id_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_audit_hot_days_check TO environments_audit_hot_days_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_check TO environments_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_created_at_not_null TO environments_created_at_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_governing_domain_id_not_null TO environments_governing_domain_id_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_issuer_check TO environments_issuer_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_kex_share_check TO environments_kex_share_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_kex_share_not_null TO environments_kex_share_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_pkey TO environments_pkey;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_placement_id_check TO environments_placement_id_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_placement_id_not_null TO environments_placement_id_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_realm_id_not_null TO environments_environment_id_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_signing_profile_check TO environments_signing_profile_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_slug_check TO environments_slug_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_slug_not_null TO environments_slug_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_status_check TO environments_status_check;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_status_not_null TO environments_status_not_null;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_tenant_id_fkey TO environments_tenant_id_fkey;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_tenant_id_governing_domain_id_fkey TO environments_tenant_id_governing_domain_id_fkey;
+ALTER TABLE access.environments RENAME CONSTRAINT realms_tenant_id_not_null TO environments_tenant_id_not_null;
+ALTER TABLE access.recovery_attempts RENAME CONSTRAINT recovery_attempts_realm_id_not_null TO recovery_attempts_environment_id_not_null;
+ALTER TABLE access.recovery_attempts RENAME CONSTRAINT recovery_attempts_tenant_id_realm_id_subject_id_fkey TO recovery_attempts_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.recovery_code_sets RENAME CONSTRAINT recovery_code_sets_realm_id_not_null TO recovery_code_sets_environment_id_not_null;
+ALTER TABLE access.recovery_code_sets RENAME CONSTRAINT recovery_code_sets_tenant_id_realm_id_subject_id_fkey TO recovery_code_sets_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.recovery_evidence RENAME CONSTRAINT recovery_evidence_realm_id_not_null TO recovery_evidence_environment_id_not_null;
+ALTER TABLE access.recovery_evidence RENAME CONSTRAINT recovery_evidence_tenant_id_realm_id_address_id_fkey TO recovery_evidence_tenant_id_environment_id_address_id_fkey;
+ALTER TABLE access.recovery_evidence RENAME CONSTRAINT recovery_evidence_tenant_id_realm_id_attempt_id_fkey TO recovery_evidence_tenant_id_environment_id_attempt_id_fkey;
+ALTER TABLE access.recovery_methods RENAME CONSTRAINT recovery_methods_realm_id_not_null TO recovery_methods_environment_id_not_null;
+ALTER TABLE access.recovery_methods RENAME CONSTRAINT recovery_methods_tenant_id_realm_id_address_id_fkey TO recovery_methods_tenant_id_environment_id_address_id_fkey;
+ALTER TABLE access.recovery_methods RENAME CONSTRAINT recovery_methods_tenant_id_realm_id_subject_id_fkey TO recovery_methods_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_change_id_not_null TO recovery_environment_policies_change_id_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_changed_at_not_null TO recovery_environment_policies_changed_at_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_decision_pos_check TO recovery_environment_policies_decision_pos_check;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_decision_pos_not_null TO recovery_environment_policies_decision_pos_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_domain_id_check TO recovery_environment_policies_domain_id_check;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_domain_id_not_null TO recovery_environment_policies_domain_id_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_pkey TO recovery_environment_policies_pkey;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_policy_check TO recovery_environment_policies_policy_check;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_policy_not_null TO recovery_environment_policies_policy_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_realm_id_not_null TO recovery_environment_policies_environment_id_not_null;
+ALTER TABLE access.recovery_environment_policies RENAME CONSTRAINT recovery_realm_policies_tenant_id_not_null TO recovery_environment_policies_tenant_id_not_null;
+ALTER TABLE access.recovery_rebinds RENAME CONSTRAINT recovery_rebinds_realm_id_not_null TO recovery_rebinds_environment_id_not_null;
+ALTER TABLE access.recovery_rebinds RENAME CONSTRAINT recovery_rebinds_tenant_id_realm_id_attempt_id_fkey TO recovery_rebinds_tenant_id_environment_id_attempt_id_fkey;
+ALTER TABLE access.recovery_rebinds RENAME CONSTRAINT recovery_rebinds_tenant_id_realm_id_subject_id_fkey TO recovery_rebinds_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.recovery_tokens RENAME CONSTRAINT recovery_tokens_realm_id_not_null TO recovery_tokens_environment_id_not_null;
+ALTER TABLE access.recovery_tokens RENAME CONSTRAINT recovery_tokens_tenant_id_realm_id_address_id_fkey TO recovery_tokens_tenant_id_environment_id_address_id_fkey;
+ALTER TABLE access.recovery_tokens RENAME CONSTRAINT recovery_tokens_tenant_id_realm_id_attempt_id_fkey TO recovery_tokens_tenant_id_environment_id_attempt_id_fkey;
+ALTER TABLE access.recovery_tokens RENAME CONSTRAINT recovery_tokens_tenant_id_realm_id_subject_id_fkey TO recovery_tokens_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.recovery_transitions RENAME CONSTRAINT recovery_transitions_realm_id_not_null TO recovery_transitions_environment_id_not_null;
+ALTER TABLE access.recovery_transitions RENAME CONSTRAINT recovery_transitions_tenant_id_realm_id_attempt_id_fkey TO recovery_transitions_tenant_id_environment_id_attempt_id_fkey;
+ALTER TABLE access.rehome_ends RENAME CONSTRAINT rehome_ends_realm_id_not_null TO rehome_ends_environment_id_not_null;
+ALTER TABLE access.rehome_ends RENAME CONSTRAINT rehome_ends_tenant_id_realm_id_fkey TO rehome_ends_tenant_id_environment_id_fkey;
+ALTER TABLE access.relay_notice_settings RENAME CONSTRAINT relay_notice_settings_realm_id_not_null TO relay_notice_settings_environment_id_not_null;
+ALTER TABLE access.relay_notice_settings RENAME CONSTRAINT relay_notice_settings_tenant_id_realm_id_fkey TO relay_notice_settings_tenant_id_environment_id_fkey;
+ALTER TABLE access.relay_resends RENAME CONSTRAINT relay_resends_realm_id_not_null TO relay_resends_environment_id_not_null;
+ALTER TABLE access.relay_resends RENAME CONSTRAINT relay_resends_tenant_id_realm_id_original_event_id_fkey TO relay_resends_tenant_id_environment_id_original_event_id_fkey;
+ALTER TABLE access.relay_undelivered RENAME CONSTRAINT relay_undelivered_realm_id_not_null TO relay_undelivered_environment_id_not_null;
+ALTER TABLE access.review_schedules RENAME CONSTRAINT review_schedules_realm_id_not_null TO review_schedules_environment_id_not_null;
+ALTER TABLE access.review_schedules RENAME CONSTRAINT review_schedules_tenant_id_realm_id_fkey TO review_schedules_tenant_id_environment_id_fkey;
+ALTER TABLE access.risk_canary RENAME CONSTRAINT risk_canary_realm_id_not_null TO risk_canary_environment_id_not_null;
+ALTER TABLE access.risk_canary RENAME CONSTRAINT risk_canary_tenant_id_realm_id_subject_id_fkey TO risk_canary_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.risk_review RENAME CONSTRAINT risk_review_realm_id_not_null TO risk_review_environment_id_not_null;
+ALTER TABLE access.risk_review RENAME CONSTRAINT risk_review_tenant_id_realm_id_subject_id_fkey TO risk_review_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.risk_subject RENAME CONSTRAINT risk_subject_realm_id_not_null TO risk_subject_environment_id_not_null;
+ALTER TABLE access.risk_subject RENAME CONSTRAINT risk_subject_tenant_id_realm_id_subject_id_fkey TO risk_subject_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.saml_cert_policies RENAME CONSTRAINT saml_cert_policies_realm_id_not_null TO saml_cert_policies_environment_id_not_null;
+ALTER TABLE access.saml_cert_policies RENAME CONSTRAINT saml_cert_policies_tenant_id_realm_id_fkey TO saml_cert_policies_tenant_id_environment_id_fkey;
+ALTER TABLE access.saml_flows RENAME CONSTRAINT saml_flows_realm_id_not_null TO saml_flows_environment_id_not_null;
+ALTER TABLE access.saml_flows RENAME CONSTRAINT saml_flows_tenant_id_realm_id_fkey TO saml_flows_tenant_id_environment_id_fkey;
+ALTER TABLE access.saml_request_ids RENAME CONSTRAINT saml_request_ids_realm_id_not_null TO saml_request_ids_environment_id_not_null;
+ALTER TABLE access.saml_request_ids RENAME CONSTRAINT saml_request_ids_tenant_id_realm_id_fkey TO saml_request_ids_tenant_id_environment_id_fkey;
+ALTER TABLE access.saml_sps RENAME CONSTRAINT saml_sps_realm_id_not_null TO saml_sps_environment_id_not_null;
+ALTER TABLE access.saml_sps RENAME CONSTRAINT saml_sps_tenant_id_realm_id_fkey TO saml_sps_tenant_id_environment_id_fkey;
+ALTER TABLE access.sandbox_domains RENAME CONSTRAINT sandbox_domains_realm_id_not_null TO sandbox_domains_environment_id_not_null;
+ALTER TABLE access.sandbox_domains RENAME CONSTRAINT sandbox_domains_tenant_id_realm_id_domain_id_fkey TO sandbox_domains_tenant_id_environment_id_domain_id_fkey;
+ALTER TABLE access.scim_clients RENAME CONSTRAINT scim_clients_realm_id_not_null TO scim_clients_environment_id_not_null;
+ALTER TABLE access.scim_clients RENAME CONSTRAINT scim_clients_tenant_id_realm_id_fkey TO scim_clients_tenant_id_environment_id_fkey;
+ALTER TABLE access.scim_outbound_log RENAME CONSTRAINT scim_outbound_log_realm_id_not_null TO scim_outbound_log_environment_id_not_null;
+ALTER TABLE access.scim_outbound_log RENAME CONSTRAINT scim_outbound_log_tenant_id_realm_id_fkey TO scim_outbound_log_tenant_id_environment_id_fkey;
+ALTER TABLE access.scim_resources RENAME CONSTRAINT scim_resources_realm_id_not_null TO scim_resources_environment_id_not_null;
+ALTER TABLE access.scim_resources RENAME CONSTRAINT scim_resources_tenant_id_realm_id_fkey TO scim_resources_tenant_id_environment_id_fkey;
+ALTER TABLE access.scim_resources RENAME CONSTRAINT scim_resources_tenant_id_realm_id_subject_id_fkey TO scim_resources_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.scim_target_links RENAME CONSTRAINT scim_target_links_realm_id_not_null TO scim_target_links_environment_id_not_null;
+ALTER TABLE access.scim_target_links RENAME CONSTRAINT scim_target_links_tenant_id_realm_id_fkey TO scim_target_links_tenant_id_environment_id_fkey;
+ALTER TABLE access.scim_targets RENAME CONSTRAINT scim_targets_realm_id_not_null TO scim_targets_environment_id_not_null;
+ALTER TABLE access.scim_targets RENAME CONSTRAINT scim_targets_tenant_id_realm_id_fkey TO scim_targets_tenant_id_environment_id_fkey;
+ALTER TABLE access.session_instances RENAME CONSTRAINT session_instances_realm_id_not_null TO session_instances_environment_id_not_null;
+ALTER TABLE access.session_instances RENAME CONSTRAINT session_instances_tenant_id_realm_id_device_id_fkey TO session_instances_tenant_id_environment_id_device_id_fkey;
+ALTER TABLE access.session_instances RENAME CONSTRAINT session_instances_tenant_id_realm_id_subject_id_fkey TO session_instances_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.signal_sources RENAME CONSTRAINT signal_sources_realm_id_not_null TO signal_sources_environment_id_not_null;
+ALTER TABLE access.signal_sources RENAME CONSTRAINT signal_sources_tenant_id_realm_id_fkey TO signal_sources_tenant_id_environment_id_fkey;
+ALTER TABLE access.sms_codes RENAME CONSTRAINT sms_codes_realm_id_not_null TO sms_codes_environment_id_not_null;
+ALTER TABLE access.sms_codes RENAME CONSTRAINT sms_codes_tenant_id_realm_id_subject_id_fkey TO sms_codes_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.ssf_inbound_set RENAME CONSTRAINT ssf_inbound_set_realm_id_not_null TO ssf_inbound_set_environment_id_not_null;
+ALTER TABLE access.ssf_inbound_set RENAME CONSTRAINT ssf_inbound_set_tenant_id_realm_id_transmitter_id_fkey TO ssf_inbound_set_tenant_id_environment_id_transmitter_id_fkey;
+ALTER TABLE access.ssf_transmitter RENAME CONSTRAINT ssf_transmitter_realm_id_not_null TO ssf_transmitter_environment_id_not_null;
+ALTER TABLE access.ssh_ca_changes RENAME CONSTRAINT ssh_ca_changes_realm_id_not_null TO ssh_ca_changes_environment_id_not_null;
+ALTER TABLE access.ssh_ca_changes RENAME CONSTRAINT ssh_ca_changes_tenant_id_realm_id_fkey TO ssh_ca_changes_tenant_id_environment_id_fkey;
+ALTER TABLE access.ssh_ca_keys RENAME CONSTRAINT ssh_ca_keys_realm_id_not_null TO ssh_ca_keys_environment_id_not_null;
+ALTER TABLE access.ssh_ca_keys RENAME CONSTRAINT ssh_ca_keys_tenant_id_realm_id_change_version_fkey TO ssh_ca_keys_tenant_id_environment_id_change_version_fkey;
+ALTER TABLE access.ssh_certificates RENAME CONSTRAINT ssh_certificates_realm_id_not_null TO ssh_certificates_environment_id_not_null;
+ALTER TABLE access.ssh_certificates RENAME CONSTRAINT ssh_certificates_tenant_id_realm_id_fkey TO ssh_certificates_tenant_id_environment_id_fkey;
+ALTER TABLE access.ssh_host_groups RENAME CONSTRAINT ssh_host_groups_realm_id_not_null TO ssh_host_groups_environment_id_not_null;
+ALTER TABLE access.ssh_host_groups RENAME CONSTRAINT ssh_host_groups_tenant_id_realm_id_fkey TO ssh_host_groups_tenant_id_environment_id_fkey;
+ALTER TABLE access.ssh_revocations RENAME CONSTRAINT ssh_revocations_realm_id_not_null TO ssh_revocations_environment_id_not_null;
+ALTER TABLE access.ssh_revocations RENAME CONSTRAINT ssh_revocations_tenant_id_realm_id_ca_key_serial_fkey TO ssh_revocations_tenant_id_environment_id_ca_key_serial_fkey;
+ALTER TABLE access.subject_party RENAME CONSTRAINT subject_party_realm_id_not_null TO subject_party_environment_id_not_null;
+ALTER TABLE access.subject_party RENAME CONSTRAINT subject_party_tenant_id_realm_id_party_id_key TO subject_party_tenant_id_environment_id_party_id_key;
+ALTER TABLE access.subject_party RENAME CONSTRAINT subject_party_tenant_id_realm_id_subject_id_fkey TO subject_party_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.support_artifact_policies RENAME CONSTRAINT support_artifact_policies_realm_id_not_null TO support_artifact_policies_environment_id_not_null;
+ALTER TABLE access.support_artifact_policies RENAME CONSTRAINT support_artifact_policies_tenant_id_realm_id_fkey TO support_artifact_policies_tenant_id_environment_id_fkey;
+ALTER TABLE access.support_artifacts RENAME CONSTRAINT support_artifacts_realm_id_not_null TO support_artifacts_environment_id_not_null;
+ALTER TABLE access.support_artifacts RENAME CONSTRAINT support_artifacts_tenant_id_realm_id_subject_id_fkey TO support_artifacts_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.support_blocks RENAME CONSTRAINT support_blocks_realm_id_not_null TO support_blocks_environment_id_not_null;
+ALTER TABLE access.support_blocks RENAME CONSTRAINT support_blocks_tenant_id_realm_id_subject_id_fkey TO support_blocks_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.support_case_systems RENAME CONSTRAINT support_case_systems_realm_id_not_null TO support_case_systems_environment_id_not_null;
+ALTER TABLE access.support_case_systems RENAME CONSTRAINT support_case_systems_tenant_id_realm_id_fkey TO support_case_systems_tenant_id_environment_id_fkey;
+ALTER TABLE access.support_request_outcomes RENAME CONSTRAINT support_request_outcomes_realm_id_not_null TO support_request_outcomes_environment_id_not_null;
+ALTER TABLE access.support_request_outcomes RENAME CONSTRAINT support_request_outcomes_tenant_id_realm_id_request_id_fkey TO support_request_outcomes_tenant_id_environment_id_request__fkey;
+ALTER TABLE access.support_requests RENAME CONSTRAINT support_requests_realm_id_not_null TO support_requests_environment_id_not_null;
+ALTER TABLE access.support_requests RENAME CONSTRAINT support_requests_tenant_id_realm_id_operator_id_fkey TO support_requests_tenant_id_environment_id_operator_id_fkey;
+ALTER TABLE access.support_requests RENAME CONSTRAINT support_requests_tenant_id_realm_id_subject_id_fkey TO support_requests_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.upstream_assertions RENAME CONSTRAINT upstream_assertions_realm_id_not_null TO upstream_assertions_environment_id_not_null;
+ALTER TABLE access.upstream_assertions RENAME CONSTRAINT upstream_assertions_tenant_id_realm_id_subject_id_fkey TO upstream_assertions_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.upstream_domain_assertions RENAME CONSTRAINT upstream_domain_assertions_realm_id_not_null TO upstream_domain_assertions_environment_id_not_null;
+ALTER TABLE access.upstream_domain_assertions RENAME CONSTRAINT upstream_domain_assertions_tenant_id_realm_id_fkey TO upstream_domain_assertions_tenant_id_environment_id_fkey;
+ALTER TABLE access.upstream_sessions RENAME CONSTRAINT upstream_sessions_realm_id_not_null TO upstream_sessions_environment_id_not_null;
+ALTER TABLE access.upstream_sessions RENAME CONSTRAINT upstream_sessions_tenant_id_realm_id_session_id_fkey TO upstream_sessions_tenant_id_environment_id_session_id_fkey;
+ALTER TABLE access.upstream_subject RENAME CONSTRAINT upstream_subject_realm_id_not_null TO upstream_subject_environment_id_not_null;
+ALTER TABLE access.upstream_subject RENAME CONSTRAINT upstream_subject_tenant_id_realm_id_subject_id_fkey TO upstream_subject_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.upstream_subject_conflicts RENAME CONSTRAINT upstream_subject_conflicts_realm_id_not_null TO upstream_subject_conflicts_environment_id_not_null;
+ALTER TABLE access.upstream_subject_conflicts RENAME CONSTRAINT upstream_subject_conflicts_tenant_id_realm_id_subject_id_fkey TO upstream_subject_conflicts_tenant_id_environment_id_subjec_fkey;
+ALTER TABLE access.user_keyed_copies RENAME CONSTRAINT user_keyed_copies_realm_id_not_null TO user_keyed_copies_environment_id_not_null;
+ALTER TABLE access.user_keyed_erasures RENAME CONSTRAINT user_keyed_erasures_realm_id_not_null TO user_keyed_erasures_environment_id_not_null;
+ALTER TABLE access.vault_connect_attempts RENAME CONSTRAINT vault_connect_attempts_realm_id_not_null TO vault_connect_attempts_environment_id_not_null;
+ALTER TABLE access.vault_connect_attempts RENAME CONSTRAINT vault_connect_attempts_tenant_id_realm_id_connection_id_fkey TO vault_connect_attempts_tenant_id_environment_id_connection_fkey;
+ALTER TABLE access.vault_connections RENAME CONSTRAINT vault_connections_realm_id_not_null TO vault_connections_environment_id_not_null;
+ALTER TABLE access.vault_connections RENAME CONSTRAINT vault_connections_tenant_id_realm_id_resource_resource_ver_fkey TO vault_connections_tenant_id_environment_id_resource_resour_fkey;
+ALTER TABLE access.vault_connections RENAME CONSTRAINT vault_connections_tenant_id_realm_id_subject_id_fkey TO vault_connections_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.vault_release_modes RENAME CONSTRAINT vault_release_modes_realm_id_not_null TO vault_release_modes_environment_id_not_null;
+ALTER TABLE access.vault_release_modes RENAME CONSTRAINT vault_release_modes_tenant_id_realm_id_fkey TO vault_release_modes_tenant_id_environment_id_fkey;
+ALTER TABLE access.vault_releases RENAME CONSTRAINT vault_releases_realm_id_not_null TO vault_releases_environment_id_not_null;
+ALTER TABLE access.vault_releases RENAME CONSTRAINT vault_releases_tenant_id_realm_id_connection_id_token_set__fkey TO vault_releases_tenant_id_environment_id_connection_id_toke_fkey;
+ALTER TABLE access.vault_resources RENAME CONSTRAINT vault_resources_realm_id_not_null TO vault_resources_environment_id_not_null;
+ALTER TABLE access.vault_resources RENAME CONSTRAINT vault_resources_tenant_id_realm_id_fkey TO vault_resources_tenant_id_environment_id_fkey;
+ALTER TABLE access.vault_token_sets RENAME CONSTRAINT vault_token_sets_realm_id_not_null TO vault_token_sets_environment_id_not_null;
+ALTER TABLE access.vault_token_sets RENAME CONSTRAINT vault_token_sets_tenant_id_realm_id_connection_id_fkey TO vault_token_sets_tenant_id_environment_id_connection_id_fkey;
+ALTER TABLE access.webauthn_credentials RENAME CONSTRAINT webauthn_credentials_realm_id_not_null TO webauthn_credentials_environment_id_not_null;
+ALTER TABLE access.webauthn_credentials RENAME CONSTRAINT webauthn_credentials_tenant_id_realm_id_credential_id_fkey TO webauthn_credentials_tenant_id_environment_id_credential_i_fkey;
+ALTER TABLE access.webauthn_credentials RENAME CONSTRAINT webauthn_credentials_tenant_id_realm_id_credential_id_key TO webauthn_credentials_tenant_id_environment_id_credential_id_key;
+ALTER TABLE access.webauthn_credentials RENAME CONSTRAINT webauthn_credentials_tenant_id_realm_id_user_handle_fkey TO webauthn_credentials_tenant_id_environment_id_user_handle_fkey;
+ALTER TABLE access.webauthn_users RENAME CONSTRAINT webauthn_users_realm_id_not_null TO webauthn_users_environment_id_not_null;
+ALTER TABLE access.webauthn_users RENAME CONSTRAINT webauthn_users_tenant_id_realm_id_subject_id_fkey TO webauthn_users_tenant_id_environment_id_subject_id_fkey;
+ALTER TABLE access.webauthn_users RENAME CONSTRAINT webauthn_users_tenant_id_realm_id_user_handle_key TO webauthn_users_tenant_id_environment_id_user_handle_key;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_cell_size_not_null TO audit_environment_checkpoint_cell_size_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_check TO audit_environment_checkpoint_check;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_created_at_not_null TO audit_environment_checkpoint_created_at_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_frontier_not_null TO audit_environment_checkpoint_frontier_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_id_not_null TO audit_environment_checkpoint_id_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_note_check TO audit_environment_checkpoint_note_check;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_note_not_null TO audit_environment_checkpoint_note_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_pkey TO audit_environment_checkpoint_pkey;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_realm_id_not_null TO audit_environment_checkpoint_environment_id_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_root_check TO audit_environment_checkpoint_root_check;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_root_not_null TO audit_environment_checkpoint_root_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_size_check TO audit_environment_checkpoint_size_check;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_size_not_null TO audit_environment_checkpoint_size_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_tenant_id_not_null TO audit_environment_checkpoint_tenant_id_not_null;
+ALTER TABLE access_ops.audit_environment_checkpoint RENAME CONSTRAINT audit_realm_checkpoint_xid_not_null TO audit_environment_checkpoint_xid_not_null;
+ALTER TABLE access_ops.console_sessions RENAME CONSTRAINT console_sessions_realm_id_not_null TO console_sessions_environment_id_not_null;
+ALTER TABLE access_ops.dr_promotions RENAME CONSTRAINT dr_promotions_realms_check TO dr_promotions_environments_check;
+ALTER TABLE access_ops.dr_promotions RENAME CONSTRAINT dr_promotions_realms_not_null TO dr_promotions_environments_not_null;
+
+ALTER INDEX access.auth_flows_default_tenant_id_realm_id_day_resume_hash_idx RENAME TO auth_flows_default_tenant_id_environment_id_day_resume_hash_idx;
+ALTER INDEX access.federation_issuer_state_realm RENAME TO federation_issuer_state_environment;
+ALTER INDEX access.realm_domain_binding_governing RENAME TO environment_domain_binding_governing;
+ALTER INDEX access.realm_domains_live RENAME TO environment_domains_live;
+ALTER INDEX access.realm_domains_one_issuer RENAME TO environment_domains_one_issuer;
+ALTER INDEX access.realm_domains_verified RENAME TO environment_domains_verified;
+ALTER INDEX access.realm_hostnames_live RENAME TO environment_hostnames_live;
+ALTER INDEX access.realm_rp_id_changes_at RENAME TO environment_rp_id_changes_at;
+ALTER INDEX access.realms_governing RENAME TO environments_governing;
+ALTER INDEX access.realms_slug RENAME TO environments_slug;
+ALTER INDEX access.recovery_realm_policies_latest RENAME TO recovery_environment_policies_latest;
+
+ALTER POLICY realm_scope ON access.admin_job_items RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.admin_jobs RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.analytics_alert RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.analytics_daily RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.approval_invites RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.approval_requests RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.claim_issuer_instance RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.device_keys RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.event_ack RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.event_delivery RENAME TO environment_scope;
+ALTER POLICY realm_scope_deletes ON access.event_subscription RENAME TO environment_scope_deletes;
+ALTER POLICY realm_scope_inserts ON access.event_subscription RENAME TO environment_scope_inserts;
+ALTER POLICY realm_scope_reads ON access.event_subscription RENAME TO environment_scope_reads;
+ALTER POLICY realm_scope_updates ON access.event_subscription RENAME TO environment_scope_updates;
+ALTER POLICY realm_scope ON access.event_subscription_ssf RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.identity_outbox RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_account_changes RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_approval_channels RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_claim_mappers RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_clients RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_config_log RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_group_members RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_groups RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_hooks RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_branding RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_key_changes RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_locale_overrides RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_policies RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_related_origins RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_environment_settings RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_upstreams RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_webhook_attempts RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_webhook_deliveries RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.idp_webhook_keys RENAME TO environment_scope;
+ALTER POLICY realm_scope_deletes ON access.idp_webhooks RENAME TO environment_scope_deletes;
+ALTER POLICY realm_scope_inserts ON access.idp_webhooks RENAME TO environment_scope_inserts;
+ALTER POLICY realm_scope_reads ON access.idp_webhooks RENAME TO environment_scope_reads;
+ALTER POLICY realm_scope_updates ON access.idp_webhooks RENAME TO environment_scope_updates;
+ALTER POLICY realm_scope ON access.issued_claims RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.environment_claim_issuer RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.environment_hostnames RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.environment_protection RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.environment_provisions RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.recovery_code_sets RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.risk_canary RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.risk_review RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.risk_subject RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.session_instances RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.ssf_inbound_set RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.ssf_transmitter RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.subject_party RENAME TO environment_scope;
+ALTER POLICY realm_scope ON access.upstream_subject RENAME TO environment_scope;
+
+ALTER TRIGGER realm_domain_bound ON access.environment_domains RENAME TO environment_domain_bound;
+ALTER TRIGGER realm_rehome_ends ON access.environment_rehomes RENAME TO environment_rehome_ends;
+ALTER TRIGGER realm_governance_moved ON access.environments RENAME TO environment_governance_moved;
+ALTER TRIGGER realm_governed ON access.environments RENAME TO environment_governed;
+ALTER TRIGGER realm_names_fixed ON access.environments RENAME TO environment_names_fixed;
+
+ALTER TABLE access.idp_environment_key_changes DROP CONSTRAINT idp_environment_key_changes_action_check;
+ALTER TABLE access.idp_environment_key_changes ADD CONSTRAINT idp_environment_key_changes_action_check CHECK ((action = ANY (ARRAY['idp.environment.key_policy'::text, 'idp.environment.key_rotate'::text, 'idp.environment.key_drop'::text]))) NOT VALID;
+ALTER TABLE access.idp_environment_key_changes VALIDATE CONSTRAINT idp_environment_key_changes_action_check;
+ALTER TABLE access.idp_environment_key_changes DROP CONSTRAINT idp_environment_key_changes_check;
+ALTER TABLE access.idp_environment_key_changes ADD CONSTRAINT idp_environment_key_changes_check CHECK (((action = 'idp.environment.key_policy'::text) = (policy IS NOT NULL))) NOT VALID;
+ALTER TABLE access.idp_environment_key_changes VALIDATE CONSTRAINT idp_environment_key_changes_check;
+ALTER TABLE access.idp_environment_key_changes DROP CONSTRAINT idp_environment_key_changes_check1;
+ALTER TABLE access.idp_environment_key_changes ADD CONSTRAINT idp_environment_key_changes_check1 CHECK (((action = 'idp.environment.key_policy'::text) = (kid IS NULL))) NOT VALID;
+ALTER TABLE access.idp_environment_key_changes VALIDATE CONSTRAINT idp_environment_key_changes_check1;
+ALTER TABLE access.idp_environment_key_changes DROP CONSTRAINT idp_environment_key_changes_check2;
+ALTER TABLE access.idp_environment_key_changes ADD CONSTRAINT idp_environment_key_changes_check2 CHECK (((action = 'idp.environment.key_drop'::text) = (cutoff_at_ms IS NOT NULL))) NOT VALID;
+ALTER TABLE access.idp_environment_key_changes VALIDATE CONSTRAINT idp_environment_key_changes_check2;
+ALTER TABLE access.idp_environment_key_changes DROP CONSTRAINT idp_environment_key_changes_check3;
+ALTER TABLE access.idp_environment_key_changes ADD CONSTRAINT idp_environment_key_changes_check3 CHECK (((compromised_at_ms IS NULL) OR (action = 'idp.environment.key_drop'::text))) NOT VALID;
+ALTER TABLE access.idp_environment_key_changes VALIDATE CONSTRAINT idp_environment_key_changes_check3;
+ALTER TABLE access.placement DROP CONSTRAINT placement_subject_kind_check;
+ALTER TABLE access.placement ADD CONSTRAINT placement_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['tenant'::text, 'environment'::text, 'domain'::text]))) NOT VALID;
+ALTER TABLE access.placement VALIDATE CONSTRAINT placement_subject_kind_check;
+ALTER TABLE access.quota_counters DROP CONSTRAINT quota_counters_dimension_check;
+ALTER TABLE access.quota_counters ADD CONSTRAINT quota_counters_dimension_check CHECK ((dimension = ANY (ARRAY['tenant'::text, 'environment'::text, 'domain'::text]))) NOT VALID;
+ALTER TABLE access.quota_counters VALIDATE CONSTRAINT quota_counters_dimension_check;
+ALTER TABLE access.vault_resources DROP CONSTRAINT vault_resources_origin_check;
+ALTER TABLE access.vault_resources ADD CONSTRAINT vault_resources_origin_check CHECK ((origin = ANY (ARRAY['catalog'::text, 'environment'::text]))) NOT VALID;
+ALTER TABLE access.vault_resources VALIDATE CONSTRAINT vault_resources_origin_check;
+
+CREATE OR REPLACE FUNCTION access.address_challenge_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_address_challenges: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.challenge_id, NEW.purpose, NEW.flow_hash, NEW.device_hash,
+      NEW.kek_id, NEW.nonce, NEW.ciphertext, NEW.address_index, NEW.canonical_index, NEW.code_digest,
+      NEW.step_up, NEW.score, NEW.created_ms, NEW.expires_ms)
+     IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.challenge_id, OLD.purpose, OLD.flow_hash,
+                       OLD.device_hash, OLD.kek_id, OLD.nonce, OLD.ciphertext, OLD.address_index,
+                       OLD.canonical_index, OLD.code_digest, OLD.step_up, OLD.score, OLD.created_ms,
+                       OLD.expires_ms)
+     OR NEW.attempts_left > OLD.attempts_left
+     OR (OLD.status <> 'open' AND (NEW.status, NEW.ended_ms, NEW.subject_id, NEW.attempts_left)
+                                  IS DISTINCT FROM (OLD.status, OLD.ended_ms, OLD.subject_id, OLD.attempts_left))
+     OR (OLD.subject_id IS NOT NULL AND NEW.subject_id IS DISTINCT FROM OLD.subject_id)
+     OR (OLD.shredded_at IS NOT NULL AND (NEW.wrapped_dek, NEW.shredded_at) IS DISTINCT FROM (OLD.wrapped_dek, OLD.shredded_at)) THEN
+    RAISE EXCEPTION 'identity_address_challenges: a challenge only loses attempts, ends once and is shredded once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.admin_job_once()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF OLD.status NOT IN ('running', 'pending')
+     OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.job_id IS DISTINCT FROM OLD.job_id THEN
+    RAISE EXCEPTION '%: a finished row stays as it is', TG_TABLE_NAME
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+DROP FUNCTION access.audit_partition_rows(name text, after_xid xid8, after_id bigint, lim integer);
+CREATE OR REPLACE FUNCTION access.audit_partition_rows(name text, after_xid xid8, after_id bigint, lim integer)
+ RETURNS TABLE(tenant_id uuid, environment_id uuid, at timestamp with time zone, id bigint, xid xid8, event_type text, actor text, target text, correlation text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  PERFORM access.audit_leaf(name);
+  RETURN QUERY EXECUTE format(
+    'SELECT a.tenant_id, a.environment_id, a.at, a.id, a.xid, a.event_type, a.actor, a.target, a.correlation '
+    '  FROM access.%I a WHERE (a.xid, a.id) > ($1, $2) ORDER BY a.xid, a.id LIMIT $3', name)
+    USING after_xid, after_id, least(greatest(lim, 0), 10000);
+END
+$function$;
+GRANT EXECUTE ON FUNCTION access.audit_partition_rows(name text, after_xid xid8, after_id bigint, lim integer) TO access_archive;
+REVOKE ALL ON FUNCTION access.audit_partition_rows(name text, after_xid xid8, after_id bigint, lim integer) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION access.audit_partitions_due()
+ RETURNS TABLE(partition text, tenant_id uuid, month date, rows bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  leaf record;
+  hot integer;
+  cell_xid xid8;
+  cell_id bigint;
+  open_rows boolean;
+BEGIN
+  SELECT c.xid, c.id INTO cell_xid, cell_id FROM access_ops.audit_checkpoint c ORDER BY c.size DESC LIMIT 1;
+  FOR leaf IN
+    SELECT c.relname::text AS name FROM pg_partition_tree('access.identity_audit') p
+      JOIN pg_class c ON c.oid = p.relid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE p.isleaf AND n.nspname = 'access' AND c.relname <> 'identity_audit_default'
+       AND c.relname ~ '^identity_audit_[0-9]{6}(_t[0-9a-f]{32}|_default)?$'
+     ORDER BY 1
+  LOOP
+    partition := leaf.name;
+    SELECT l.tenant, l.month INTO tenant_id, month FROM access.audit_leaf(leaf.name) l;
+    SELECT greatest(coalesce(max(t.audit_hot_days), 90), coalesce(max(r.audit_hot_days), 0),
+                    coalesce(max(v.hot_days), 0)) INTO hot
+      FROM access.tenants t
+      LEFT JOIN access.environments r ON r.tenant_id = t.tenant_id
+      LEFT JOIN LATERAL (
+        SELECT a.hot_days FROM access.idp_audit_tiers a
+         WHERE a.tenant_id = r.tenant_id AND a.environment_id = r.environment_id
+         ORDER BY a.version DESC LIMIT 1) v ON true
+     WHERE audit_partitions_due.tenant_id IS NULL OR t.tenant_id = audit_partitions_due.tenant_id;
+    CONTINUE WHEN (month + interval '1 month')::date + hot > current_date;
+    EXECUTE format('SELECT count(*) FROM access.%I', leaf.name) INTO rows;
+    IF rows > 0 THEN
+      CONTINUE WHEN cell_xid IS NULL;
+      EXECUTE format(
+        'SELECT EXISTS (SELECT FROM access.%I a WHERE (a.xid, a.id) > ($1, $2)) '
+        '    OR EXISTS (SELECT FROM access.%I a WHERE NOT EXISTS ('
+        '         SELECT FROM access_ops.audit_environment_checkpoint r '
+        '          WHERE r.tenant_id = a.tenant_id AND r.environment_id = a.environment_id AND (r.xid, r.id) >= (a.xid, a.id)))',
+        leaf.name, leaf.name) INTO open_rows USING cell_xid, cell_id;
+      CONTINUE WHEN open_rows;
+    END IF;
+    RETURN NEXT;
+  END LOOP;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.credential_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_credentials: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.credential_id IS DISTINCT FROM OLD.credential_id OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+     OR NEW.kind IS DISTINCT FROM OLD.kind OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'identity_credentials: identity columns never change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.status = 'revoked' AND (NEW.status <> 'revoked' OR NEW.ciphertext IS DISTINCT FROM OLD.ciphertext) THEN
+    RAISE EXCEPTION 'identity_credentials: a revoked credential stays revoked' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.data_request_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_data_requests: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.answered_at IS NOT NULL OR NEW.answered_at IS NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.request_id, NEW.subject_id, NEW.kind, NEW.received_at, NEW.due_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.request_id, OLD.subject_id, OLD.kind,
+                          OLD.received_at, OLD.due_at) THEN
+    RAISE EXCEPTION 'identity_data_requests: a request is only answered, once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.deletion_fact_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_deletion_facts: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.deletion_id, NEW.subject_id, NEW.source, NEW.requested_by,
+      NEW.exercise_id, NEW.requested_at, NEW.effective_at)
+     IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.deletion_id, OLD.subject_id, OLD.source,
+                       OLD.requested_by, OLD.exercise_id, OLD.requested_at, OLD.effective_at)
+     OR (OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at)
+     OR (OLD.deleted_at IS NOT NULL AND (NEW.deleted_at, NEW.destroy_after) IS DISTINCT FROM (OLD.deleted_at, OLD.destroy_after))
+     OR (OLD.destroyed_at IS NOT NULL AND (NEW.destroyed_at, NEW.destruction_proof) IS DISTINCT FROM (OLD.destroyed_at, OLD.destruction_proof)) THEN
+    RAISE EXCEPTION 'identity_deletion_facts: each step of a deletion is written once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+DROP FUNCTION access.dr_profiled_realms();
+CREATE OR REPLACE FUNCTION access.dr_profiled_environments()
+ RETURNS TABLE(tenant_id uuid, environment_id uuid, rpo_s bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+  SELECT DISTINCT ON (p.tenant_id, p.environment_id) p.tenant_id, p.environment_id, p.rpo_s
+    FROM access.environment_dr_profiles p
+   ORDER BY p.tenant_id, p.environment_id, p.version DESC
+$function$;
+GRANT EXECUTE ON FUNCTION access.dr_profiled_environments() TO access_app;
+REVOKE ALL ON FUNCTION access.dr_profiled_environments() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION access.export_cursor_forward()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.sink_uuid IS DISTINCT FROM OLD.sink_uuid OR NEW.created_at IS DISTINCT FROM OLD.created_at
+     OR (NEW.after_xid, NEW.after_id) < (OLD.after_xid, OLD.after_id) OR NEW.sent < OLD.sent THEN
+    RAISE EXCEPTION 'export_cursors: a cursor only moves forward'
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.export_sink_fixed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.name IS DISTINCT FROM OLD.name OR NEW.version IS DISTINCT FROM OLD.version
+     OR NEW.sink_uuid IS DISTINCT FROM OLD.sink_uuid OR NEW.state IS DISTINCT FROM OLD.state
+     OR NEW.adapter IS DISTINCT FROM OLD.adapter OR NEW.preset IS DISTINCT FROM OLD.preset
+     OR NEW.format IS DISTINCT FROM OLD.format OR NEW.endpoint IS DISTINCT FROM OLD.endpoint
+     OR NEW.settings IS DISTINCT FROM OLD.settings OR NEW.domain_id IS DISTINCT FROM OLD.domain_id
+     OR NEW.decision_pos IS DISTINCT FROM OLD.decision_pos
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+     OR NEW.secret_sealed IS NOT NULL THEN
+    RAISE EXCEPTION 'export_sinks: a version is fixed; its secret is only shredded'
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.federation_issuer_state_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE'
+     OR (NEW.domain_id, NEW.entity_id, NEW.issuer_id, NEW.tenant_id, NEW.environment_id, NEW.tracked_ms)
+        IS DISTINCT FROM (OLD.domain_id, OLD.entity_id, OLD.issuer_id, OLD.tenant_id,
+                          OLD.environment_id, OLD.tracked_ms)
+     OR (OLD.untracked_ms IS NOT NULL AND NEW.untracked_ms IS DISTINCT FROM OLD.untracked_ms) THEN
+    RAISE EXCEPTION 'federation_issuer_state: an issuer keeps its identity and stays untracked'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.hold_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'retention_holds: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.until IS NOT NULL
+     OR (NEW.tenant_id, NEW.hold_id, NEW.scope, NEW.environment_id, NEW.subject_id, NEW.classes, NEW.kind,
+         NEW.suspicious_activity, NEW.placed_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.hold_id, OLD.scope, OLD.environment_id, OLD.subject_id,
+                          OLD.classes, OLD.kind, OLD.suspicious_activity, OLD.placed_at) THEN
+    RAISE EXCEPTION 'retention_holds: a hold only gains its end, once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_binding_half_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.binding_id, NEW.subject_id, NEW.role, NEW.proof,
+         NEW.secret_hash, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.binding_id, OLD.subject_id, OLD.role,
+                          OLD.proof, OLD.secret_hash, OLD.created_ms, OLD.expires_ms)
+     OR NOT ((OLD.state = 'offered' AND NEW.state IN ('committed', 'ended'))
+             OR (OLD.state = 'committed' AND NEW.state = 'ended'))
+     OR (OLD.state = 'committed'
+         AND (NEW.peer_evidence, NEW.committed_ms) IS DISTINCT FROM (OLD.peer_evidence, OLD.committed_ms)) THEN
+    RAISE EXCEPTION 'identity_binding_halves: a half is committed once and ends once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_claim_consent_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.ended_ms IS NOT NULL OR NEW.ended_ms IS NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.consent_id, NEW.subject_id, NEW.client_uuid, NEW.claims,
+         NEW.created_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.consent_id, OLD.subject_id,
+                          OLD.client_uuid, OLD.claims, OLD.created_ms) THEN
+    RAISE EXCEPTION 'identity_claim_consents: a consent only ends, once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_combine_ticket_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.used_ms IS NOT NULL OR NEW.used_ms IS NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.ticket_hash, NEW.subject_id, NEW.auth_ms, NEW.created_ms,
+         NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.ticket_hash, OLD.subject_id, OLD.auth_ms,
+                          OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'identity_combine_tickets: a ticket is spent once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_device_key_fixed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF (NEW.tenant_id, NEW.environment_id, NEW.device_id, NEW.identity_subject_id, NEW.thumbprint,
+      NEW.public_key, NEW.key_type, NEW.algorithm, NEW.created_at)
+     IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.device_id, OLD.identity_subject_id,
+                       OLD.thumbprint, OLD.public_key, OLD.key_type, OLD.algorithm, OLD.created_at)
+     OR OLD.status = 'retired' THEN
+    RAISE EXCEPTION 'device key %: the key and its subject are fixed and a retired key stays retired',
+      OLD.device_id USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_federated_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_federated: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.link_id, NEW.subject_id, NEW.provider, NEW.identity_key,
+      NEW.created_ms, NEW.address_nonce, NEW.address_ciphertext, NEW.address_index,
+      NEW.address_vouched)
+     IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.link_id, OLD.subject_id, OLD.provider,
+                       OLD.identity_key, OLD.created_ms, OLD.address_nonce, OLD.address_ciphertext,
+                       OLD.address_index, OLD.address_vouched)
+     OR NEW.verified_ms < OLD.verified_ms
+     OR (OLD.ended_ms IS NOT NULL AND (NEW.ended_ms, NEW.end_reason, NEW.verified_ms)
+                                      IS DISTINCT FROM (OLD.ended_ms, OLD.end_reason, OLD.verified_ms)) THEN
+    RAISE EXCEPTION 'identity_federated: a link only proves itself again and ends once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.identity_social_attempt_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_social_attempts: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.status <> 'open' OR NEW.status <> 'used'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.attempt_id, NEW.state_hash, NEW.device_hash, NEW.provider,
+         NEW.purpose, NEW.subject_id, NEW.nonce, NEW.verifier, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.attempt_id, OLD.state_hash, OLD.device_hash,
+                          OLD.provider, OLD.purpose, OLD.subject_id, OLD.nonce, OLD.verifier,
+                          OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'identity_social_attempts: an attempt is used once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.idp_argon2_raise()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.argon2_m_kib < OLD.argon2_m_kib OR NEW.argon2_t < OLD.argon2_t OR NEW.argon2_p < OLD.argon2_p THEN
+    RAISE EXCEPTION 'environment %: Argon2 parameters may only be raised', OLD.environment_id
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.idp_bound()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.decision_pos IS NULL THEN
+    IF TG_OP = 'INSERT' AND TG_NARGS = 0 THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION '%: a change needs a committed idp.* ALLOW', TG_TABLE_NAME
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.domain_id = OLD.domain_id AND NEW.decision_pos = OLD.decision_pos THEN
+    RAISE EXCEPTION '%: a change needs its own committed idp.* ALLOW', TG_TABLE_NAME
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM access.idp_config_log l
+                  WHERE l.tenant_id = NEW.tenant_id AND l.environment_id = NEW.environment_id
+                    AND l.domain_id = NEW.domain_id AND l.decision_pos = NEW.decision_pos
+                    AND l.bound_xact = pg_current_xact_id() AND l.action = ANY (TG_ARGV)) THEN
+    RAISE EXCEPTION '%: not bound to a committed ALLOW of %', TG_TABLE_NAME, TG_ARGV
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.idp_client_workload_fixed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.client_uuid)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.client_uuid) THEN
+    RAISE EXCEPTION 'idp_client_workloads: a workload client keeps its client'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.idp_log_governing()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM access.environments r
+                  WHERE r.tenant_id = NEW.tenant_id AND r.environment_id = NEW.environment_id
+                    AND r.governing_domain_id = NEW.domain_id FOR SHARE) THEN
+    RAISE EXCEPTION 'idp_config_log: % is not the environment''s governing domain', encode(NEW.domain_id, 'hex')
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.idp_member_admin_issued()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM access.idp_groups g
+                  WHERE g.tenant_id = NEW.tenant_id AND g.environment_id = NEW.environment_id
+                    AND g.name = NEW.group_name AND g.membership_issuer = 'admin'
+                    AND (g.status = 'active' OR NEW.status = 'removed')) THEN
+    RAISE EXCEPTION 'group %: members are issued elsewhere or the group is retired', NEW.group_name
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.keep_last_method()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF EXISTS (SELECT 1 FROM access.identity_subjects s
+              WHERE s.tenant_id = NEW.tenant_id AND s.environment_id = NEW.environment_id
+                AND s.subject_id = NEW.subject_id AND s.status NOT IN ('tombstone', 'purging'))
+     AND NOT EXISTS (SELECT 1 FROM access.identity_credentials c
+                      WHERE c.tenant_id = NEW.tenant_id AND c.environment_id = NEW.environment_id
+                        AND c.subject_id = NEW.subject_id AND c.status = 'active')
+     AND NOT EXISTS (SELECT 1 FROM access.identity_mailboxes m
+                       JOIN access.identity_identifiers i
+                         ON i.tenant_id = m.tenant_id AND i.environment_id = m.environment_id
+                        AND i.identifier_id = m.identifier_id
+                      WHERE m.tenant_id = NEW.tenant_id AND m.environment_id = NEW.environment_id
+                        AND m.subject_id = NEW.subject_id AND i.status = 'active')
+     AND NOT EXISTS (SELECT 1 FROM access.identity_federated f
+                      WHERE f.tenant_id = NEW.tenant_id AND f.environment_id = NEW.environment_id
+                        AND f.subject_id = NEW.subject_id AND f.ended_ms IS NULL) THEN
+    RAISE EXCEPTION 'the last authentication method stays (TN-68)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'keep_last_method';
+  END IF;
+  RETURN NULL;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.kek_rotation_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'kek_rotations: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.from_kek, NEW.to_kek, NEW.started_at)
+       IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.from_kek, OLD.to_kek, OLD.started_at) THEN
+    RAISE EXCEPTION 'kek_rotations: identity columns never change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.finished_at IS NOT NULL THEN
+    RAISE EXCEPTION 'kek_rotations: a finished rotation is never reopened' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.rewrapped < OLD.rewrapped THEN
+    RAISE EXCEPTION 'kek_rotations: the count only grows' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.notification_address_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'notification_addresses: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.retired_at IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.address_id, NEW.subject_id, NEW.kind, NEW.identifier_id,
+         NEW.nonce, NEW.ciphertext, NEW.recovery_target, NEW.recovery_contact, NEW.created_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.address_id, OLD.subject_id, OLD.kind,
+                          OLD.identifier_id, OLD.nonce, OLD.ciphertext, OLD.recovery_target,
+                          OLD.recovery_contact, OLD.created_at) THEN
+    RAISE EXCEPTION 'notification_addresses: an address only gains its retirement, once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_ciba_request_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.used_ms IS NOT NULL
+     OR (OLD.decision IS NOT NULL AND (NEW.decision, NEW.decided_ms, NEW.session_id, NEW.contribution)
+         IS DISTINCT FROM (OLD.decision, OLD.decided_ms, OLD.session_id, OLD.contribution))
+     OR (NEW.tenant_id, NEW.environment_id, NEW.ciba_id, NEW.handle_hash, NEW.client_uuid, NEW.subject_id,
+         NEW.domain_id, NEW.nonce, NEW.intent, NEW.details, NEW.scope, NEW.binding_message,
+         NEW.mode, NEW.notification_token, NEW.ping_handle, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.ciba_id, OLD.handle_hash,
+                          OLD.client_uuid, OLD.subject_id, OLD.domain_id, OLD.nonce, OLD.intent,
+                          OLD.details, OLD.scope, OLD.binding_message, OLD.mode,
+                          OLD.notification_token, OLD.ping_handle, OLD.created_ms,
+                          OLD.expires_ms) THEN
+    RAISE EXCEPTION 'oauth_ciba_requests: answered once, redeemed once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_cimd_client_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.retired_ms IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.client_uuid, NEW.client_id, NEW.first_seen_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.client_uuid, OLD.client_id,
+                          OLD.first_seen_ms) THEN
+    RAISE EXCEPTION 'oauth_cimd_clients: the URL is the identity and a retired client stays retired'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_consent_record_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.ended_ms IS NOT NULL OR NEW.ended_ms IS NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.consent_id, NEW.subject_id, NEW.client_uuid, NEW.source,
+         NEW.resource, NEW.scopes, NEW.metadata_hash, NEW.grant_domain, NEW.grant_ref,
+         NEW.exercise, NEW.created_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.consent_id, OLD.subject_id,
+                          OLD.client_uuid, OLD.source, OLD.resource, OLD.scopes,
+                          OLD.metadata_hash, OLD.grant_domain, OLD.grant_ref, OLD.exercise,
+                          OLD.created_ms) THEN
+    RAISE EXCEPTION 'oauth_consent_records: a record only ends, once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_dcr_client_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.retired_ms IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.client_uuid, NEW.client_id, NEW.metadata, NEW.issuer,
+         NEW.token, NEW.ip_prefix, NEW.registered_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.client_uuid, OLD.client_id,
+                          OLD.metadata, OLD.issuer, OLD.token, OLD.ip_prefix, OLD.registered_ms) THEN
+    RAISE EXCEPTION 'oauth_dcr_clients: a registration is fixed and a retired client stays retired'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_device_code_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.used_ms IS NOT NULL
+     OR (OLD.decision IS NOT NULL AND NEW.decision IS DISTINCT FROM OLD.decision)
+     OR (NEW.tenant_id, NEW.environment_id, NEW.device_id, NEW.device_hash, NEW.user_hash,
+         NEW.client_uuid, NEW.scope, NEW.ip_prefix, NEW.country, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.device_id, OLD.device_hash,
+                          OLD.user_hash, OLD.client_uuid, OLD.scope, OLD.ip_prefix, OLD.country,
+                          OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'oauth_device_codes: decided once, redeemed once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_grant_client()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM access.idp_clients c
+                  WHERE c.tenant_id = NEW.tenant_id AND c.environment_id = NEW.environment_id
+                    AND c.client_uuid = NEW.client_uuid)
+     AND NOT EXISTS (SELECT 1 FROM access.oauth_cimd_clients c
+                      WHERE c.tenant_id = NEW.tenant_id AND c.environment_id = NEW.environment_id
+                        AND c.client_uuid = NEW.client_uuid)
+     AND NOT EXISTS (SELECT 1 FROM access.oauth_dcr_clients c
+                      WHERE c.tenant_id = NEW.tenant_id AND c.environment_id = NEW.environment_id
+                        AND c.client_uuid = NEW.client_uuid)
+     AND NOT EXISTS (SELECT 1 FROM access.oauth_oidf_clients c
+                      WHERE c.tenant_id = NEW.tenant_id AND c.environment_id = NEW.environment_id
+                        AND c.client_uuid = NEW.client_uuid) THEN
+    RAISE EXCEPTION 'oauth_grants: client % is not a client of the environment', NEW.client_uuid
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_oidf_client_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.retired_ms IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.client_uuid, NEW.client_id, NEW.first_seen_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.client_uuid, OLD.client_id,
+                          OLD.first_seen_ms) THEN
+    RAISE EXCEPTION 'oauth_oidf_clients: a client keeps its identity and a retired client stays retired'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.oauth_workload_bundle_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.trust_domain)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.trust_domain) THEN
+    RAISE EXCEPTION 'oauth_workload_bundles: a kept bundle is only replaced'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.open_dpop_replay_day(d integer)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  name text := format('dpop_replay_d%s', d);
+BEGIN
+  IF d < 0 THEN
+    RAISE EXCEPTION 'negative day' USING ERRCODE = 'check_violation';
+  END IF;
+  IF to_regclass(format('access.%I', name)) IS NOT NULL THEN
+    RETURN name;
+  END IF;
+  EXECUTE format('CREATE TABLE access.%I PARTITION OF access.dpop_replay FOR VALUES FROM (%s) TO (%s)',
+                 name, d, d + 1);
+  EXECUTE format('ALTER TABLE access.%I ENABLE ROW LEVEL SECURITY', name);
+  EXECUTE format('ALTER TABLE access.%I FORCE ROW LEVEL SECURITY', name);
+  EXECUTE format('CREATE POLICY rows ON access.%I AS PERMISSIVE USING (true)', name);
+  EXECUTE format('CREATE POLICY tenant_scope ON access.%I AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope())) '
+                 'WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', name);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.%I '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', name);
+  RETURN name;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.org_membership_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'memberships are never deleted' USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF OLD.ended_at IS NOT NULL
+     OR NEW.org_id <> OLD.org_id OR NEW.subject_id <> OLD.subject_id OR NEW.source <> OLD.source
+     OR NEW.joined_at <> OLD.joined_at OR (NEW.owner AND NOT OLD.owner) THEN
+    RAISE EXCEPTION 'membership transition not allowed' USING ERRCODE = 'restrict_violation';
+  END IF;
+  IF OLD.owner AND (NEW.ended_at IS NOT NULL OR NOT NEW.owner)
+     AND NOT EXISTS (
+       SELECT 1 FROM access.org_memberships m
+       WHERE m.tenant_id = OLD.tenant_id AND m.environment_id = OLD.environment_id AND m.org_id = OLD.org_id
+         AND m.membership_id <> OLD.membership_id AND m.owner AND m.ended_at IS NULL)
+     AND EXISTS (
+       SELECT 1 FROM access.organizations o
+       WHERE o.tenant_id = OLD.tenant_id AND o.environment_id = OLD.environment_id AND o.org_id = OLD.org_id
+         AND o.ended_at IS NULL) THEN
+    RAISE EXCEPTION 'last-owner' USING ERRCODE = 'check_violation', CONSTRAINT = 'org_last_owner';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.profile_field_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_profile_fields: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.superseded_at IS NOT NULL OR NEW.superseded_at IS NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.field_id, NEW.subject_id, NEW.field, NEW.pii_class, NEW.nonce,
+         NEW.ciphertext, NEW.set_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.field_id, OLD.subject_id, OLD.field,
+                          OLD.pii_class, OLD.nonce, OLD.ciphertext, OLD.set_at) THEN
+    RAISE EXCEPTION 'identity_profile_fields: a field is only superseded' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.proxy_session_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'proxy sessions are not deleted' USING ERRCODE = 'check_violation';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.proxy_session_id, NEW.proxy, NEW.kind, NEW.digest,
+      NEW.verifier, NEW.return_to, NEW.sid, NEW.created_ms, NEW.expires_ms)
+     IS DISTINCT FROM
+     (OLD.tenant_id, OLD.environment_id, OLD.proxy_session_id, OLD.proxy, OLD.kind, OLD.digest,
+      OLD.verifier, OLD.return_to, OLD.sid, OLD.created_ms, OLD.expires_ms)
+     OR (OLD.used_ms IS NOT NULL AND NEW.used_ms IS DISTINCT FROM OLD.used_ms)
+     OR (OLD.ended_ms IS NOT NULL AND NEW.ended_ms IS DISTINCT FROM OLD.ended_ms) THEN
+    RAISE EXCEPTION 'a proxy session only records its use and end, once'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION access.push_challenge_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.used_ms IS NOT NULL
+     OR (OLD.decision IS NOT NULL AND (NEW.decision, NEW.decided_ms, NEW.device_id)
+         IS DISTINCT FROM (OLD.decision, OLD.decided_ms, OLD.device_id))
+     OR (NEW.tenant_id, NEW.environment_id, NEW.challenge_id, NEW.challenge_hash, NEW.subject_id,
+         NEW.flow_hash, NEW.number, NEW.origin_device, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.challenge_id, OLD.challenge_hash,
+                          OLD.subject_id, OLD.flow_hash, OLD.number, OLD.origin_device,
+                          OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'push_challenges: answered once, used once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION access.realm_delegated_admin_open(p_domain bytea) RENAME TO environment_delegated_admin_open;
+CREATE OR REPLACE FUNCTION access.environment_delegated_admin_open(p_domain bytea)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+  SELECT coalesce(
+    (SELECT l.action = 'idp.environment.delegated_admin'
+       FROM access.idp_config_log l
+      WHERE l.domain_id = p_domain
+        AND l.action IN ('idp.environment.delegated_admin', 'idp.environment.delegated_admin_close')
+      ORDER BY l.decision_pos DESC
+      LIMIT 1),
+    false)
+$function$;
+
+ALTER FUNCTION access.realm_domain_bound() RENAME TO environment_domain_bound;
+CREATE OR REPLACE FUNCTION access.environment_domain_bound()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  pos bigint;
+  act text;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    pos := NEW.decision_pos;
+    act := 'idp.domain.register';
+    IF NEW.status <> 'pending' OR NEW.bound_as IS NOT NULL OR NEW.retire_pos IS NOT NULL THEN
+      RAISE EXCEPTION 'environment_domains: a registration starts pending'
+        USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  ELSE
+    IF NEW.hostname IS DISTINCT FROM OLD.hostname OR NEW.challenge IS DISTINCT FROM OLD.challenge
+       OR NEW.cname_target IS DISTINCT FROM OLD.cname_target OR NEW.domain_id IS DISTINCT FROM OLD.domain_id
+       OR NEW.decision_pos IS DISTINCT FROM OLD.decision_pos
+       OR NEW.registered_at IS DISTINCT FROM OLD.registered_at
+       OR OLD.status IN ('retired', 'expired')
+       OR (OLD.bound_as IS NOT NULL AND (NEW.bound_as IS DISTINCT FROM OLD.bound_as
+           OR NEW.bind_pos IS DISTINCT FROM OLD.bind_pos)) THEN
+      RAISE EXCEPTION 'environment_domains: the registration is fixed, a binding never comes undone, and a retired or expired one stays so'
+        USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    IF NEW.retire_pos IS NOT NULL AND OLD.retire_pos IS NULL THEN
+      pos := NEW.retire_pos;
+      act := 'idp.domain.retire';
+    ELSIF NEW.bind_pos IS NOT NULL AND OLD.bind_pos IS NULL THEN
+      pos := NEW.bind_pos;
+      act := 'idp.domain.issuer_bind';
+    ELSE
+      RETURN NEW;
+    END IF;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM access.idp_config_log l
+                  WHERE l.tenant_id = NEW.tenant_id AND l.environment_id = NEW.environment_id
+                    AND l.domain_id = NEW.domain_id AND l.decision_pos = pos
+                    AND l.bound_xact = pg_current_xact_id() AND l.action = act) THEN
+    RAISE EXCEPTION 'environment_domains: not bound to a committed ALLOW of %', act
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION access.realm_governance_moved() RENAME TO environment_governance_moved;
+CREATE OR REPLACE FUNCTION access.environment_governance_moved()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.governing_domain_id IS DISTINCT FROM OLD.governing_domain_id
+     AND NOT EXISTS (SELECT 1 FROM access.environment_rehomes h
+                      WHERE h.tenant_id = OLD.tenant_id AND h.environment_id = OLD.environment_id
+                        AND h.from_domain = OLD.governing_domain_id
+                        AND h.to_domain = NEW.governing_domain_id
+                        AND h.xact = pg_current_xact_id()) THEN
+    RAISE EXCEPTION 'environment %: the governing domain changes only by a two-ended rehome', OLD.environment_id
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION access.realm_governed() RENAME TO environment_governed;
+CREATE OR REPLACE FUNCTION access.environment_governed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO access.environment_governors (tenant_id, environment_id, domain_id)
+    VALUES (NEW.tenant_id, NEW.environment_id, NEW.governing_domain_id)
+    ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION access.realm_key_cutoff(p_issuer text, p_kid bytea) RENAME TO environment_key_cutoff;
+CREATE OR REPLACE FUNCTION access.environment_key_cutoff(p_issuer text, p_kid bytea)
+ RETURNS bigint
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+  SELECT min(c.cutoff_at_ms)
+    FROM access.environments r
+    JOIN access.idp_environment_key_changes c
+      ON c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id
+   WHERE r.issuer = p_issuer AND c.kid = p_kid AND c.action = 'idp.environment.key_drop'
+$function$;
+
+ALTER FUNCTION access.realm_names_fixed() RENAME TO environment_names_fixed;
+CREATE OR REPLACE FUNCTION access.environment_names_fixed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.slug IS DISTINCT FROM OLD.slug THEN
+    RAISE EXCEPTION 'environment %: slug and issuer are immutable', OLD.environment_id
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF OLD.issuer IS NOT NULL AND NEW.issuer IS DISTINCT FROM OLD.issuer
+     AND NOT EXISTS (
+       SELECT 1 FROM access.environment_domains d
+         JOIN access.idp_config_log l
+           ON l.tenant_id = d.tenant_id AND l.environment_id = d.environment_id
+          AND l.domain_id = d.domain_id AND l.decision_pos = d.bind_pos
+        WHERE d.tenant_id = OLD.tenant_id AND d.environment_id = OLD.environment_id
+          AND d.bound_as = 'issuer' AND NEW.issuer = 'https://' || d.hostname
+          AND l.action = 'idp.domain.issuer_bind' AND l.bound_xact = pg_current_xact_id()) THEN
+    RAISE EXCEPTION 'environment %: slug and issuer are immutable', OLD.environment_id
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+DROP FUNCTION access.realm_quota(p_tenant uuid, p_realm uuid, p_now bigint, p_default_rps integer, p_tenant_rps integer, p_burst_s integer, OUT refused text, OUT used integer);
+CREATE OR REPLACE FUNCTION access.environment_quota(p_tenant uuid, p_environment uuid, p_now bigint, p_default_rps integer, p_tenant_rps integer, p_burst_s integer, OUT refused text, OUT used integer)
+ RETURNS record
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  rps integer;
+  taken integer[];
+BEGIN
+  IF p_default_rps NOT BETWEEN 1 AND 1000000 OR p_tenant_rps NOT BETWEEN 1 AND 1000000
+     OR p_burst_s < 1 THEN
+    RAISE EXCEPTION 'environment_quota: malformed limit' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  SELECT l.rps INTO rps FROM access.environment_rate_limits l
+   WHERE l.tenant_id = p_tenant AND l.environment_id = p_environment ORDER BY l.version DESC LIMIT 1;
+  rps := coalesce(rps, p_default_rps);
+  taken := access.quota_take(p_tenant, 'request', ARRAY['tenant', 'environment'],
+                               ARRAY[uuid_send(p_tenant), uuid_send(p_environment)], p_now,
+                               ARRAY[(1000000 / p_tenant_rps)::bigint,
+                                     (1000000 / rps)::bigint],
+                               ARRAY[(p_tenant_rps * p_burst_s)::bigint, (rps * p_burst_s)::bigint]);
+  refused := CASE taken[1] WHEN 0 THEN NULL WHEN 1 THEN 'tenant' ELSE 'environment' END;
+  used := taken[2];
+END
+$function$;
+GRANT EXECUTE ON FUNCTION access.environment_quota(p_tenant uuid, p_environment uuid, p_now bigint, p_default_rps integer, p_tenant_rps integer, p_burst_s integer, OUT refused text, OUT used integer) TO access_app;
+REVOKE ALL ON FUNCTION access.environment_quota(p_tenant uuid, p_environment uuid, p_now bigint, p_default_rps integer, p_tenant_rps integer, p_burst_s integer, OUT refused text, OUT used integer) FROM PUBLIC;
+
+ALTER FUNCTION access.realm_rehome_ends() RENAME TO environment_rehome_ends;
+CREATE OR REPLACE FUNCTION access.environment_rehome_ends()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM access.rehome_ends e
+                  WHERE e.tenant_id = NEW.tenant_id AND e.environment_id = NEW.environment_id
+                    AND e.domain_id = NEW.from_domain AND e.decision_pos = NEW.from_pos
+                    AND e.side = 'from' AND e.from_domain = NEW.from_domain
+                    AND e.to_domain = NEW.to_domain
+                    AND e.created_at > now() - interval '24 hours')
+     OR NOT EXISTS (SELECT 1 FROM access.rehome_ends e
+                     WHERE e.tenant_id = NEW.tenant_id AND e.environment_id = NEW.environment_id
+                       AND e.domain_id = NEW.to_domain AND e.decision_pos = NEW.to_pos
+                       AND e.side = 'to' AND e.from_domain = NEW.from_domain
+                       AND e.to_domain = NEW.to_domain
+                       AND e.created_at > now() - interval '24 hours') THEN
+    RAISE EXCEPTION 'environment_rehomes: a rehome needs both of its ends, each recorded within 24 h'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION access.realm_scope() RENAME TO environment_scope;
+CREATE OR REPLACE FUNCTION access.environment_scope()
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog'
+AS $function$ SELECT nullif(current_setting('app.environment_id', true), '')::uuid $function$;
+
+ALTER FUNCTION access.realm_wide() RENAME TO environment_wide;
+CREATE OR REPLACE FUNCTION access.environment_wide()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog'
+AS $function$ SELECT coalesce(current_setting('app.environment_wide', true), '') = 'on'
+               AND nullif(current_setting('app.environment_id', true), '') IS NULL $function$;
+
+CREATE OR REPLACE FUNCTION access.recovery_code_set_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'recovery_code_sets: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.acknowledged_at IS NOT NULL
+     OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.set_id IS DISTINCT FROM OLD.set_id OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+     OR NEW.issued_at IS DISTINCT FROM OLD.issued_at THEN
+    RAISE EXCEPTION 'recovery_code_sets: only one acknowledgement is written' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.recovery_evidence_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'recovery_evidence: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+    IF OLD.consumed_at IS NOT NULL OR OLD.extended_at IS NOT NULL OR NEW.extended_at IS NULL
+       OR OLD.class <> 'recovery_contact' OR OLD.expires_at <= NEW.extended_at
+       OR NEW.expires_at <> OLD.expires_at + interval '24 hours' THEN
+      RAISE EXCEPTION 'recovery_evidence: a contact code is extended once, by 24 hours, before it runs out' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF (NEW.tenant_id, NEW.environment_id, NEW.evidence_id, NEW.attempt_id, NEW.class, NEW.code_hash,
+        NEW.address_id, NEW.created_at, NEW.tries_left, NEW.consumed_at)
+       IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.evidence_id, OLD.attempt_id, OLD.class,
+                         OLD.code_hash, OLD.address_id, OLD.created_at, OLD.tries_left, OLD.consumed_at) THEN
+      RAISE EXCEPTION 'recovery_evidence: an extension changes nothing else' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.consumed_at IS NOT NULL OR NEW.tries_left > OLD.tries_left
+     OR NEW.extended_at IS DISTINCT FROM OLD.extended_at
+     OR (NEW.tenant_id, NEW.environment_id, NEW.evidence_id, NEW.attempt_id, NEW.class, NEW.code_hash,
+         NEW.address_id, NEW.created_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.evidence_id, OLD.attempt_id, OLD.class,
+                          OLD.code_hash, OLD.address_id, OLD.created_at) THEN
+    RAISE EXCEPTION 'recovery_evidence: evidence is spent once and its tries only fall' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.recovery_method_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'recovery_methods: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.retired_at IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.method_id, NEW.subject_id, NEW.class, NEW.assurance,
+         NEW.address_id, NEW.created_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.method_id, OLD.subject_id, OLD.class,
+                          OLD.assurance, OLD.address_id, OLD.created_at) THEN
+    RAISE EXCEPTION 'recovery_methods: a method only gains its retirement, once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.recovery_target_not_sole()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF EXISTS (SELECT 1 FROM access.notification_addresses t
+              WHERE t.tenant_id = NEW.tenant_id AND t.environment_id = NEW.environment_id
+                AND t.subject_id = NEW.subject_id AND t.recovery_target AND t.retired_at IS NULL)
+     AND NOT EXISTS (SELECT 1 FROM access.notification_addresses n
+                      WHERE n.tenant_id = NEW.tenant_id AND n.environment_id = NEW.environment_id
+                        AND n.subject_id = NEW.subject_id AND NOT n.recovery_target
+                        AND n.retired_at IS NULL) THEN
+    RAISE EXCEPTION 'notification_addresses: a recovery target is never the only notice address'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NULL;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.recovery_token_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'recovery_tokens: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.used_at IS NOT NULL OR OLD.revoked_at IS NOT NULL OR NEW.uses < OLD.uses
+     OR (NEW.tenant_id, NEW.environment_id, NEW.token_id, NEW.subject_id, NEW.kind, NEW.token_hash,
+         NEW.attempt_id, NEW.exercise_id, NEW.address_id, NEW.entropy_bits, NEW.one_time,
+         NEW.issued_at, NEW.expires_at)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.token_id, OLD.subject_id, OLD.kind,
+                          OLD.token_hash, OLD.attempt_id, OLD.exercise_id, OLD.address_id,
+                          OLD.entropy_bits, OLD.one_time, OLD.issued_at, OLD.expires_at) THEN
+    RAISE EXCEPTION 'recovery_tokens: a token is used or revoked once' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.rehome_end_governing()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM access.environments r
+                  WHERE r.tenant_id = NEW.tenant_id AND r.environment_id = NEW.environment_id
+                    AND r.governing_domain_id = NEW.from_domain FOR SHARE) THEN
+    RAISE EXCEPTION 'rehome_ends: % does not govern the environment', encode(NEW.from_domain, 'hex')
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.risk_review_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF OLD.state <> 'open' THEN
+    RAISE EXCEPTION 'risk_review: a decided review never changes' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF (NEW.tenant_id, NEW.environment_id, NEW.review_id, NEW.subject_id, NEW.level, NEW.signals, NEW.mode,
+      NEW.reason, NEW.created_at)
+     IS DISTINCT FROM
+     (OLD.tenant_id, OLD.environment_id, OLD.review_id, OLD.subject_id, OLD.level, OLD.signals, OLD.mode,
+      OLD.reason, OLD.created_at) THEN
+    RAISE EXCEPTION 'risk_review: only the decision changes' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.saml_flow_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.decided_ms IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.flow_hash, NEW.binding, NEW.kind, NEW.params,
+         NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.flow_hash, OLD.binding, OLD.kind,
+                          OLD.params, OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'saml_flows: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.secure_audit_leaf(name text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  EXECUTE format('ALTER TABLE access.%I ENABLE ROW LEVEL SECURITY', name);
+  EXECUTE format('ALTER TABLE access.%I FORCE ROW LEVEL SECURITY', name);
+  EXECUTE format('CREATE POLICY rows ON access.%I AS PERMISSIVE USING (true)', name);
+  EXECUTE format('CREATE POLICY tenant_scope ON access.%I AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', name);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.%I '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', name);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.secure_audit_partition(t regclass)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', t);
+  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC', t);
+  EXECUTE format('CREATE POLICY rows ON %s AS PERMISSIVE USING (true)', t);
+  EXECUTE format('CREATE POLICY tenant_scope ON %s AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope())) '
+                 'WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', t);
+  EXECUTE format('CREATE POLICY checkpointer_reads ON %s AS RESTRICTIVE TO access_checkpointer '
+                 'USING (true) WITH CHECK (false)', t);
+  EXECUTE format('CREATE TRIGGER append_only_row BEFORE UPDATE OR DELETE ON %s '
+                 'FOR EACH ROW EXECUTE FUNCTION access.reject_mutation()', t);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON %s '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', t);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.secure_auth_flow_partition(t regclass)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', t);
+  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC', t);
+  EXECUTE format('CREATE POLICY rows ON %s AS PERMISSIVE USING (true)', t);
+  EXECUTE format('CREATE POLICY tenant_scope ON %s AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope())) '
+                 'WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', t);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON %s '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', t);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.secure_oauth_partition(t regclass)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', t);
+  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC', t);
+  EXECUTE format('CREATE POLICY rows ON %s AS PERMISSIVE USING (true)', t);
+  EXECUTE format('CREATE POLICY tenant_scope ON %s AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope())) '
+                 'WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', t);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON %s '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', t);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.secure_throttle_partition(t regclass)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+  EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', t);
+  EXECUTE format('REVOKE ALL ON %s FROM PUBLIC', t);
+  EXECUTE format('CREATE POLICY rows ON %s AS PERMISSIVE USING (true)', t);
+  EXECUTE format('CREATE POLICY tenant_scope ON %s AS RESTRICTIVE TO access_app '
+                 'USING (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope())) '
+                 'WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND environment_id = (SELECT access.environment_scope()))', t);
+  EXECUTE format('CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON %s '
+                 'FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation()', t);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.sms_code_rules()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.used_ms IS NOT NULL OR OLD.attempts >= 3
+     OR NEW.attempts <> OLD.attempts + 1
+     OR (NEW.tenant_id, NEW.environment_id, NEW.code_id, NEW.subject_id, NEW.purpose, NEW.binding,
+         NEW.code_hash, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.code_id, OLD.subject_id, OLD.purpose,
+                          OLD.binding, OLD.code_hash, OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'sms_codes: one try at a time, at most three, used once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.subject_key_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_subject_keys: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.subject_id IS DISTINCT FROM OLD.subject_id OR NEW.class IS DISTINCT FROM OLD.class
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'identity_subject_keys: identity columns never change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.shredded_at IS NOT NULL THEN
+    RAISE EXCEPTION 'identity_subject_keys: a shredded key never returns' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.subject_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'identity_subjects: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.environment_id IS DISTINCT FROM OLD.environment_id
+     OR NEW.subject_id IS DISTINCT FROM OLD.subject_id OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'identity_subjects: identity columns never change' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.session_epoch < OLD.session_epoch THEN
+    RAISE EXCEPTION 'identity_subjects: session_epoch only grows' USING ERRCODE = 'check_violation';
+  END IF;
+  IF OLD.shredded_at IS NOT NULL AND NEW.shredded_at IS DISTINCT FROM OLD.shredded_at THEN
+    RAISE EXCEPTION 'identity_subjects: a shredded key never returns' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.status IS DISTINCT FROM OLD.status AND NOT (OLD.status, NEW.status) IN (
+       ('staged', 'pending_user_action'), ('pending_user_action', 'active'),
+       ('active', 'locked'), ('locked', 'active'), ('active', 'suspended'), ('suspended', 'active'),
+       ('locked', 'suspended'),
+       ('staged', 'deactivated'), ('pending_user_action', 'deactivated'), ('active', 'deactivated'),
+       ('locked', 'deactivated'), ('suspended', 'deactivated'), ('deactivated', 'active'),
+       ('deactivated', 'tombstone'), ('tombstone', 'purging')) THEN
+    RAISE EXCEPTION 'identity_subjects: % -> % is not a TN-49 transition', OLD.status, NEW.status
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'subject_transition';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.support_artifact_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'support_artifacts: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.shredded_at IS NOT NULL
+     OR NEW.shredded_at IS NULL
+     OR NEW.wrapped_dek IS NOT NULL OR NEW.nonce IS NOT NULL OR NEW.ciphertext IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.artifact_id, NEW.subject_id, NEW.subject_party,
+         NEW.case_ref, NEW.format, NEW.size_bytes, NEW.redactions, NEW.digest,
+         NEW.upload_exercise, NEW.kek_id, NEW.created_ms, NEW.retain_until_ms, NEW.created_at)
+        IS DISTINCT FROM
+        (OLD.tenant_id, OLD.environment_id, OLD.artifact_id, OLD.subject_id, OLD.subject_party,
+         OLD.case_ref, OLD.format, OLD.size_bytes, OLD.redactions, OLD.digest,
+         OLD.upload_exercise, OLD.kek_id, OLD.created_ms, OLD.retain_until_ms, OLD.created_at) THEN
+    RAISE EXCEPTION 'support_artifacts: only shredding the key and the ciphertext, once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.tenant_domains(t uuid)
+ RETURNS SETOF bytea
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+  SELECT d FROM (
+    SELECT r.governing_domain_id AS d, r.created_at AS at FROM access.environments r WHERE r.tenant_id = t
+    UNION
+    SELECT g.domain_id, g.created_at FROM access.environment_governors g WHERE g.tenant_id = t
+  ) x GROUP BY d ORDER BY min(at), d
+$function$;
+
+CREATE OR REPLACE FUNCTION access.upstream_conflict_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION 'upstream_subject_conflicts: % is not allowed', TG_OP
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF OLD.resolved_ms IS NOT NULL
+     OR (NEW.tenant_id, NEW.environment_id, NEW.conflict_id, NEW.connection, NEW.subject_id,
+         NEW.identity_key, NEW.created_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.conflict_id, OLD.connection,
+                          OLD.subject_id, OLD.identity_key, OLD.created_ms) THEN
+    RAISE EXCEPTION 'upstream_subject_conflicts: a conflict is only resolved, once'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.user_keyed_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' THEN
+    RAISE EXCEPTION '%: % is not allowed', TG_TABLE_NAME, TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF TG_TABLE_NAME = 'user_keyed_copies' THEN
+    IF ROW(NEW.tenant_id, NEW.environment_id, NEW.subject_id, NEW.class, NEW.record_key, NEW.holder, NEW.holder_id, NEW.created_at)
+       IS DISTINCT FROM ROW(OLD.tenant_id, OLD.environment_id, OLD.subject_id, OLD.class, OLD.record_key, OLD.holder, OLD.holder_id, OLD.created_at)
+       OR OLD.destroyed_at IS NOT NULL OR NEW.destroyed_at IS NULL THEN
+      RAISE EXCEPTION 'user_keyed_copies: a copy is only destroyed, once' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  ELSE
+    IF ROW(NEW.tenant_id, NEW.environment_id, NEW.erasure_id, NEW.subject_id, NEW.target, NEW.class, NEW.record_key, NEW.requested_at)
+       IS DISTINCT FROM ROW(OLD.tenant_id, OLD.environment_id, OLD.erasure_id, OLD.subject_id, OLD.target, OLD.class, OLD.record_key, OLD.requested_at)
+       OR OLD.state = 'applied'
+       OR (OLD.state = 'pending_devices' AND NEW.state = 'pending_hold')
+       OR (NEW.state = 'pending_devices' AND OLD.state = 'pending_devices' AND NOT (NEW.waiting <@ OLD.waiting)) THEN
+      RAISE EXCEPTION 'user_keyed_erasures: an entry only moves forward' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.vault_attempt_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.status <> 'open' OR NEW.status <> 'used'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.state_hash, NEW.device_hash, NEW.connection_id,
+         NEW.verifier, NEW.created_ms, NEW.expires_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.state_hash, OLD.device_hash,
+                          OLD.connection_id, OLD.verifier, OLD.created_ms, OLD.expires_ms) THEN
+    RAISE EXCEPTION 'vault_connect_attempts: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.vault_connection_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.status = 'disconnected'
+     OR (NEW.tenant_id, NEW.environment_id, NEW.connection_id, NEW.subject_id, NEW.party, NEW.resource,
+         NEW.resource_version, NEW.client_id, NEW.created_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.connection_id, OLD.subject_id, OLD.party,
+                          OLD.resource, OLD.resource_version, OLD.client_id, OLD.created_ms) THEN
+    RAISE EXCEPTION 'vault_connections: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION access.vault_token_set_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP <> 'UPDATE' OR OLD.shredded_ms IS NOT NULL
+     OR (OLD.superseded_ms IS NOT NULL AND NEW.superseded_ms IS DISTINCT FROM OLD.superseded_ms)
+     OR (NEW.shredded_ms IS NULL AND (NEW.wrapped_dek, NEW.nonce, NEW.ciphertext)
+           IS DISTINCT FROM (OLD.wrapped_dek, OLD.nonce, OLD.ciphertext))
+     OR (NEW.tenant_id, NEW.environment_id, NEW.connection_id, NEW.version, NEW.kek_id,
+         NEW.access_expires_ms, NEW.refreshable, NEW.created_ms)
+        IS DISTINCT FROM (OLD.tenant_id, OLD.environment_id, OLD.connection_id, OLD.version, OLD.kek_id,
+                          OLD.access_expires_ms, OLD.refreshable, OLD.created_ms) THEN
+    RAISE EXCEPTION 'vault_token_sets: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+DROP TRIGGER idp_bound ON access.idp_certificate_login_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_certificate_login_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.certificate_login');
+DROP TRIGGER idp_bound ON access.idp_ciba_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_ciba_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.ciba', 'idp.environment.ciba_close');
+DROP TRIGGER idp_bound ON access.idp_coordinator_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_coordinator_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.coordinator');
+DROP TRIGGER idp_bound ON access.idp_device_code_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_device_code_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.device_code', 'idp.environment.device_code_close');
+DROP TRIGGER idp_bound ON access.idp_mtls_alias_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_mtls_alias_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.mtls_aliases');
+DROP TRIGGER idp_bound ON access.idp_push_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_push_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.push', 'idp.environment.push_close');
+DROP TRIGGER idp_bound ON access.idp_environment_branding;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_branding FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.branding', 'idp.environment.csp_mode', 'idp.environment.csp_mode_loosen');
+DROP TRIGGER idp_bound_change ON access.idp_environment_branding;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.idp_environment_branding FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.branding', 'idp.environment.csp_mode', 'idp.environment.csp_mode_loosen');
+DROP TRIGGER idp_bound ON access.idp_environment_hrd_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_hrd_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.hrd', 'idp.environment.hrd_close');
+DROP TRIGGER idp_bound ON access.idp_environment_key_changes;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_key_changes FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.key_policy', 'idp.environment.key_rotate', 'idp.environment.key_drop');
+DROP TRIGGER idp_bound ON access.idp_environment_locale_overrides;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_locale_overrides FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.locale_overrides');
+DROP TRIGGER idp_bound_change ON access.idp_environment_locale_overrides;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.idp_environment_locale_overrides FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.locale_overrides');
+DROP TRIGGER idp_bound ON access.idp_environment_policies;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_policies FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.signin_policy', 'idp.environment.session_policy', 'idp.environment.extension_policy');
+DROP TRIGGER idp_bound_change ON access.idp_environment_policies;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.idp_environment_policies FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.signin_policy', 'idp.environment.session_policy', 'idp.environment.extension_policy');
+DROP TRIGGER idp_bound ON access.idp_environment_related_origins;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_environment_related_origins FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.related_origins');
+DROP TRIGGER idp_bound_change ON access.idp_environment_related_origins;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.idp_environment_related_origins FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.related_origins');
+DROP TRIGGER idp_bound_change ON access.idp_environment_settings;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.idp_environment_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.jose_alg', 'idp.environment.argon2', 'idp.environment.rp_id', 'idp.client.cimd_policy', 'idp.domain.issuer_bind');
+DROP TRIGGER idp_bound ON access.idp_sms_otp_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_sms_otp_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.sms_otp', 'idp.environment.sms_otp_close');
+DROP TRIGGER idp_bound ON access.idp_spc_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.idp_spc_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.spc');
+DROP TRIGGER idp_bound ON access.iys_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.iys_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.iys', 'idp.environment.iys_close');
+DROP TRIGGER idp_bound ON access.oauth_environment_frontchannel;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.oauth_environment_frontchannel FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.frontchannel_logout');
+DROP TRIGGER idp_bound ON access.preference_topics;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.preference_topics FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.preference_topics');
+DROP TRIGGER idp_bound ON access.environment_crypto;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.environment_crypto FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.crypto_profile', 'idp.environment.hash_profile');
+DROP TRIGGER idp_bound ON access.environment_protection;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.environment_protection FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.protection_mode', 'idp.environment.protection_mode_loosen');
+DROP TRIGGER idp_bound_change ON access.environment_protection;
+CREATE TRIGGER idp_bound_change BEFORE UPDATE ON access.environment_protection FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.protection_mode', 'idp.environment.protection_mode_loosen');
+DROP TRIGGER idp_bound ON access.environment_residency;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.environment_residency FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.residency');
+DROP TRIGGER idp_bound ON access.relay_notice_settings;
+CREATE TRIGGER idp_bound BEFORE INSERT ON access.relay_notice_settings FOR EACH ROW EXECUTE FUNCTION access.idp_bound('idp.environment.security_notices', 'idp.environment.security_notices_close');
+
+ALTER POLICY tenant_scope ON access.account_recovery_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.acme_orders USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.admin_job_items USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.admin_jobs USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.agent_sponsors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.agent_templates USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.agents USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.analytics_alert USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.analytics_daily USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.app_factor_answers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.approval_invites USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.approval_requests USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.auth_flows USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.auth_flows_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.backchannel_undelivered USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.breakglass_reviews USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.claim_issuer_instance USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.client_assertion_replay USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.client_assertion_replay_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.client_subjects USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.cloud_key_permission_ends USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.cloud_key_permissions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.csp_reports USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.device_keys USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.device_markers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.domain_certificates USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.dpop_replay USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.edge_gateways USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.edge_keytab_kvnos USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.edge_keytab_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.edge_radius_clients USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.event_ack USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.event_delivery USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_deletes ON access.event_subscription USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_inserts ON access.event_subscription WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_reads ON access.event_subscription USING (((environment_id = ( SELECT access.environment_scope() AS environment_scope)) OR ( SELECT access.environment_wide() AS environment_wide)));
+ALTER POLICY environment_scope_updates ON access.event_subscription USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.event_subscription_ssf USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.export_cursors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.export_sinks USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.first_contact_issued USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.first_contact_keys USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.guardianships USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.handle_events USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.handles USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_connectors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_due USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_imports USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_record_claims USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_records USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.hr_sources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_address_challenges USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_audit USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_audit_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_binding_halves USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_claim_consents USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_combinations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_combine_tickets USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_credentials USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_data_requests USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_deletion_facts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_device_keys USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_document_acceptances USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_federated USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_identifier_tombstones USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_identifiers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_mailboxes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.identity_outbox USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.identity_preferences USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_profile_fields USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_social_attempts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_subject_keys USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.identity_subjects USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_account_changes USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_approval_channels USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_audit_tiers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_certificate_login_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_ciba_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_claim_mappers USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_client_workloads USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_clients USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_config_log USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_coordinator_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_cross_app_connections USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_dcr_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_device_code_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_federation_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_federation_trust_anchors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_group_members USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_groups USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_hooks USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_mtls_alias_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_protected_resources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_push_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_environment_branding USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_environment_hrd_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_environment_key_changes USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_environment_locale_overrides USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_environment_policies USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_environment_related_origins USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_environment_settings USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.idp_sms_otp_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_social_providers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_spc_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.idp_upstream_assurance_maps USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.idp_upstreams USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_webhook_attempts USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_webhook_deliveries USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.idp_webhook_keys USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_deletes ON access.idp_webhooks USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_inserts ON access.idp_webhooks WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope_reads ON access.idp_webhooks USING (((environment_id = ( SELECT access.environment_scope() AS environment_scope)) OR ( SELECT access.environment_wide() AS environment_wide)));
+ALTER POLICY environment_scope_updates ON access.idp_webhooks USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.issued_claims USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.iys_records USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.iys_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.iys_status USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.kek_rotations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.ldap_credentials USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.linux_hosts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.linux_ids USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.login_sessions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.login_throttle USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.login_throttle_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.mcp_tool_pins USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.notification_addresses USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_ciba_requests USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_cimd_clients USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_client_profiles USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_codes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_codes_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_consent_records USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_dcr_clients USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_device_codes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_device_misses USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_grants USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_oidf_clients USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_oidf_jti USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_environment_frontchannel USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_refresh_tokens USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_requests USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_requests_default USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.oauth_workload_bundles USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.offboarding_previews USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_access_requests USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_domains USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_invitations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_memberships USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_party_anchors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_scim_sources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_setup_links USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_sso_drafts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_sso_enforcements USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.org_transfers USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.organizations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.pairwise_subjects USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.parent_consents USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.platform_pairing USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.platform_party USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.platform_party_subjects USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.preference_topics USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.proxy_registrations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.proxy_sessions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.push_challenges USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.environment_claim_issuer USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.environment_crypto USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_domains USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_dr_profiles USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_governors USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.environment_hostnames USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.environment_protection USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.environment_provisions USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.environment_rate_limits USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_rehomes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_residency USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.environment_rp_id_changes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_attempts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.recovery_code_sets USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.recovery_evidence USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_methods USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_environment_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_rebinds USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_tokens USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.recovery_transitions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.rehome_ends USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.relay_notice_settings USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.relay_resends USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.relay_undelivered USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.retention_holds USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND ((environment_id IS NULL) OR (( SELECT access.environment_scope() AS environment_scope) IS NULL) OR (environment_id = ( SELECT access.environment_scope() AS environment_scope))))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND ((environment_id IS NULL) OR (environment_id = ( SELECT access.environment_scope() AS environment_scope)))));
+ALTER POLICY tenant_scope ON access.review_schedules USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.risk_canary USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.risk_review USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.risk_subject USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.saml_cert_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.saml_flows USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.saml_request_ids USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.saml_sps USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.scim_clients USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.scim_outbound_log USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.scim_resources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.scim_target_links USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.scim_targets USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.session_instances USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.signal_sources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.sms_codes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.ssf_inbound_set USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY environment_scope ON access.ssf_transmitter USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.ssh_ca_changes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.ssh_ca_keys USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.ssh_certificates USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.ssh_host_groups USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.ssh_revocations USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.subject_party USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.support_artifact_policies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.support_artifacts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.support_blocks USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.support_case_systems USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.support_request_outcomes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.support_requests USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.upstream_assertions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.upstream_domain_assertions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.upstream_sessions USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY environment_scope ON access.upstream_subject USING ((environment_id = ( SELECT access.environment_scope() AS environment_scope))) WITH CHECK ((environment_id = ( SELECT access.environment_scope() AS environment_scope)));
+ALTER POLICY tenant_scope ON access.upstream_subject_conflicts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.user_keyed_copies USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.user_keyed_erasures USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_connect_attempts USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_connections USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_release_modes USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_releases USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_resources USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.vault_token_sets USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.webauthn_credentials USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+ALTER POLICY tenant_scope ON access.webauthn_users USING (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope)))) WITH CHECK (((tenant_id = ( SELECT access.tenant_scope() AS tenant_scope)) AND (environment_id = ( SELECT access.environment_scope() AS environment_scope))));
+
+RESET ROLE;

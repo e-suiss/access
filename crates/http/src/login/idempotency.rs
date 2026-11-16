@@ -4,7 +4,7 @@
 //! (`5xx`) are not kept, so they run again.
 //!
 //! The first answers are kept in process memory only, never at rest: they can carry a session
-//! cookie, a TOTP seed or recovery codes. The key is scoped to the realm host, the path and the
+//! cookie, a TOTP seed or recovery codes. The key is scoped to the environment host, the path and the
 //! browser's flow and session cookies, so another browser cannot read an answer by its key; a
 //! browser with neither cookie (starting its first flow) has nothing to bind an answer to, so
 //! its request runs every time and creates nothing but an anonymous flow.

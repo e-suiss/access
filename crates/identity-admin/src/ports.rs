@@ -10,7 +10,7 @@ use access_kernel::digest::Digest;
 use access_kernel::meta::ActorKind;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
-use access_store::identity::RealmId;
+use access_store::identity::EnvironmentId;
 use suiss_crypto::rotation::Policy;
 
 use crate::domain::JoseAlg;
@@ -32,20 +32,20 @@ pub trait Decider: Send + Sync {
     ) -> impl Future<Output = Result<Option<Id>, Unavailable>> + Send;
 }
 
-/// The keys of a realm that live outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)):
+/// The keys of an environment that live outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)):
 /// its JOSE key set in the identity signer, and its KEK, decoy key and DPoP nonce keys in the
 /// HSM.
-pub trait RealmKeys: Send + Sync {
-    /// Opens what is missing and makes the realm's next JOSE keys use `alg`; repeating it
+pub trait EnvironmentKeys: Send + Sync {
+    /// Opens what is missing and makes the environment's next JOSE keys use `alg`; repeating it
     /// changes nothing.
     fn open(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JoseAlg,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 
     /// Whether the identity signer can hold an ML-DSA key of `alg` (OP-159 m.3 (d)); without
-    /// one the realm's post-quantum profile is refused.
+    /// one the environment's post-quantum profile is refused.
     fn pq_ready(
         &self,
         alg: crate::domain::assurance::MlDsa,
@@ -54,108 +54,117 @@ pub trait RealmKeys: Send + Sync {
         async { Ok(false) }
     }
 
-    /// Opens the realm's post-quantum key set with `alg` (CR-41, OP-159 m.3 (o)); repeating it
+    /// Opens the environment's post-quantum key set with `alg` (CR-41, OP-159 m.3 (o)); repeating it
     /// changes nothing.
     fn pq_open(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: crate::domain::assurance::MlDsa,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send {
-        let _ = (realm, alg);
+        let _ = (environment, alg);
         async { Err(Unavailable(String::from("no post-quantum keys"))) }
     }
 
-    /// Drops every key of the realm's post-quantum key set (OP-159 m.3 (a)); repeating it
+    /// Drops every key of the environment's post-quantum key set (OP-159 m.3 (a)); repeating it
     /// changes nothing.
-    fn pq_close(&self, realm: RealmId) -> impl Future<Output = Result<(), Unavailable>> + Send {
-        let _ = realm;
+    fn pq_close(
+        &self,
+        environment: EnvironmentId,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = environment;
         async { Ok(()) }
     }
 
-    /// The realm's JWKS document as relying parties read it.
-    fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
+    /// The environment's JWKS document as relying parties read it.
+    fn jwks(
+        &self,
+        environment: EnvironmentId,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send;
 
-    /// Rotates the realm's active key `retire` out now (TN-118); once it is no longer active,
+    /// Rotates the environment's active key `retire` out now (TN-118); once it is no longer active,
     /// repeating it changes nothing.
     fn rotate(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         retire: [u8; 32],
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 
-    /// Drops the realm key `kid` at once (§13.2); repeating it changes nothing.
+    /// Drops the environment key `kid` at once (§13.2); repeating it changes nothing.
     fn drop_key(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         kid: [u8; 32],
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 
-    /// Replaces the realm's key rotation policy (TN-118).
+    /// Replaces the environment's key rotation policy (TN-118).
     fn set_policy(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         policy: Policy,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 
-    /// Opens the realm's Claim issuer key for its issuer Party `party` and returns its public key
+    /// Opens the environment's Claim issuer key for its issuer Party `party` and returns its public key
     /// (§10.1.7); repeating it changes nothing.
     fn open_issuer(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         party: [u8; 16],
     ) -> impl Future<Output = Result<PublicKey, Unavailable>> + Send;
 
-    /// Opens the realm's SAML signing key (P-256 when `p256`, else RSA-3072) on the first
+    /// Opens the environment's SAML signing key (P-256 when `p256`, else RSA-3072) on the first
     /// registration that needs it (MD-6, OP-155 m.3 (d)); repeating it changes nothing.
     fn saml_open(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         p256: bool,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send {
-        let _ = (realm, p256);
+        let _ = (environment, p256);
         async { Err(Unavailable(String::from("no SAML keys"))) }
     }
 
-    /// Replaces the realm's SAML signing key at once (`idp.saml.cert_emergency`).
+    /// Replaces the environment's SAML signing key at once (`idp.saml.cert_emergency`).
     fn saml_emergency(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         p256: bool,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send {
-        let _ = (realm, p256);
+        let _ = (environment, p256);
         async { Err(Unavailable(String::from("no SAML keys"))) }
     }
 
-    /// Signs the JSON `claims` as a compact JWS of `typ` with the realm's token key at `at`, Unix
-    /// ms: a realm-signed binding offer (OP-153 m.18 (e)). Without a signer nothing is offered.
+    /// Signs the JSON `claims` as a compact JWS of `typ` with the environment's token key at `at`, Unix
+    /// ms: an environment-signed binding offer (OP-153 m.18 (e)). Without a signer nothing is offered.
     fn sign_jws(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         typ: &str,
         claims: &[u8],
         at: u64,
     ) -> impl Future<Output = Result<String, Unavailable>> + Send {
-        let _ = (realm, typ, claims, at);
+        let _ = (environment, typ, claims, at);
         std::future::ready(Err(Unavailable(String::from("identity-signer"))))
     }
 
-    /// The realm's PII vault keys, its KEK and blind index key (OP-153 m.3 (aa)); `None` when
+    /// The environment's PII vault keys, its KEK and blind index key (OP-153 m.3 (aa)); `None` when
     /// the token refuses them, and nothing personal is written then (TI-9).
-    fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
-        let _ = realm;
+    fn vault(
+        &self,
+        environment: EnvironmentId,
+    ) -> Option<access_identity_account::app::vault::Vault> {
+        let _ = environment;
         None
     }
 
-    /// The AIS of one self-signed registration Exercise of the issuer Party, by the realm's
+    /// The AIS of one self-signed registration Exercise of the issuer Party, by the environment's
     /// Claim issuer key (OP-149 m.16 (a)).
     fn sign_issuer_registration(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         registration: IssuerAis,
     ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send;
 }
 
-/// Opens the governing domain of a new realm (TN-111).
+/// Opens the governing domain of a new environment (TN-111).
 pub trait Governance: Send + Sync {
     /// Writes the Genesis of a new domain.
     fn open(
@@ -209,7 +218,7 @@ pub trait Instances: Send + Sync {
     }
 
     /// Commits a workload's self-signed `instance_create` with no actor binding held: the
-    /// authority plane takes the actor from the realm issuer's `identity_binding_workload`
+    /// authority plane takes the actor from the environment issuer's `identity_binding_workload`
     /// Claim that names the key (OP-154 m.3 (d)).
     fn register_workload(
         &self,
@@ -263,12 +272,12 @@ pub trait Instances: Send + Sync {
     }
 }
 
-/// A workload's first Instance (OP-154 m.3 (d)): the key the realm issuer's
+/// A workload's first Instance (OP-154 m.3 (d)): the key the environment issuer's
 /// `identity_binding_workload` Claim names signs its own `instance_create` under the bootstrap
 /// basis; the Instance still acts only through a Grant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkloadInstance {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The agent Party.
     pub party: Id,
@@ -309,7 +318,7 @@ impl WorkloadInstance {
 pub struct AgentRegistration {
     /// The tenant.
     pub tenant: [u8; 16],
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The agent's Party.
     pub party: Id,
@@ -366,7 +375,7 @@ pub struct PartyKind {
 pub struct OrgRegistration {
     /// The tenant.
     pub tenant: [u8; 16],
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The organization's Party.
     pub party: Id,

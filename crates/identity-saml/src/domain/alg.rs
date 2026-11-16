@@ -15,7 +15,7 @@ pub enum SigAlg {
     RsaSha384,
     /// `xmldsig-more#rsa-sha512`.
     RsaSha512,
-    /// `xmldsig-more#ecdsa-sha256`, with the realm's P-256 SAML key.
+    /// `xmldsig-more#ecdsa-sha256`, with the environment's P-256 SAML key.
     EcdsaSha256,
 }
 
@@ -96,7 +96,7 @@ impl SigAlg {
         }
     }
 
-    /// Whether the realm's ECDSA key signs it, rather than its RSA key.
+    /// Whether the environment's ECDSA key signs it, rather than its RSA key.
     #[must_use]
     pub const fn ecdsa(self) -> bool {
         matches!(self, Self::EcdsaSha256)

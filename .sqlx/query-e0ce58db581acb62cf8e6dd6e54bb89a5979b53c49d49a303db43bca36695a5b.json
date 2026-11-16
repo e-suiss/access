@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_combine_tickets (tenant_id, environment_id, ticket_hash,\n                    subject_id, auth_ms, created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0ce58db581acb62cf8e6dd6e54bb89a5979b53c49d49a303db43bca36695a5b"
+}

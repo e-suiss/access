@@ -1,4 +1,4 @@
-//! TN-130, TN-27, OP-151 m.3 (a), (c): the management read token exchange at the realm's token
+//! TN-130, TN-27, OP-151 m.3 (a), (c): the management read token exchange at the environment's token
 //! endpoint. Real PostgreSQL and identity signer; the authority plane's live Instance keys are
 //! scripted.
 
@@ -15,10 +15,10 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use access_identity_oauth::domain::jwt::realm_key_set;
+use access_identity_oauth::domain::jwt::environment_key_set;
 use access_identity_oauth::domain::management::{
-    ACCESS_TOKEN_TYPE, AIS_TOKEN_TYPE, PLATFORM_AUDIENCE, PLATFORM_READ, READ_TTL_MS, REALM_READ,
-    TOKEN_EXCHANGE, exchange_intent, read_claims,
+    ACCESS_TOKEN_TYPE, AIS_TOKEN_TYPE, ENVIRONMENT_READ, PLATFORM_AUDIENCE, PLATFORM_READ,
+    READ_TTL_MS, TOKEN_EXCHANGE, exchange_intent, read_claims,
 };
 use access_identity_oauth::ports::oauth::TokenSigner as _;
 use access_kernel::ais::{CONTENT_TYPE, Statement};
@@ -83,9 +83,13 @@ impl Instance {
 }
 
 async fn governing(c: &Cluster, at: &At<'_>) -> [u8; 32] {
-    let mut t = TenantTx::begin(&c.db.app, at.f.realm.tenant, at.f.realm.realm)
-        .await
-        .unwrap();
+    let mut t = TenantTx::begin(
+        &c.db.app,
+        at.f.environment.tenant,
+        at.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let g = access_store::idp::governance(&mut t)
         .await
         .unwrap()
@@ -131,29 +135,34 @@ async fn tn_130_an_instance_exchanges_its_statement_for_a_bound_read_token() {
     let i = Instance::new();
     live(&c, domain, &i);
     let at = at.with_key(i.dpop());
-    let audience = "access-admin:realm:mgmtread";
+    let audience = "access-admin:environment:mgmtread";
     let ais = i.ais(
         domain,
-        exchange_intent(audience, REALM_READ),
+        exchange_intent(audience, ENVIRONMENT_READ),
         Mode::Check,
         1,
     );
-    let t = body(&exchange(&at, audience, REALM_READ, &ais).await, 200);
+    let t = body(&exchange(&at, audience, ENVIRONMENT_READ, &ais).await, 200);
     assert_eq!(t["issued_token_type"], ACCESS_TOKEN_TYPE);
     assert_eq!(t["token_type"], "DPoP");
-    assert_eq!(t["scope"], REALM_READ);
+    assert_eq!(t["scope"], ENVIRONMENT_READ);
     assert_eq!(t["expires_in"], READ_TTL_MS / 1000);
-    let jwks = c.env().signer.jwks(at.f.realm.realm).await.unwrap();
-    let keys = realm_key_set(jwks.as_bytes()).unwrap();
+    let jwks = c
+        .env()
+        .signer
+        .jwks(at.f.environment.environment)
+        .await
+        .unwrap();
+    let keys = environment_key_set(jwks.as_bytes()).unwrap();
     let claims = read_claims(t["access_token"].as_str().unwrap(), &keys, at.issuer()).unwrap();
     assert_eq!(claims.aud, audience);
-    assert_eq!(claims.scopes, [REALM_READ]);
+    assert_eq!(claims.scopes, [ENVIRONMENT_READ]);
     assert_eq!(claims.jkt, i.kid());
     assert_eq!(claims.instance, i.kid());
     assert!(claims.exp_ms - claims.iat_ms <= 3_600_000);
     // TN-130
     assert_eq!(
-        error(&exchange(&at, audience, REALM_READ, &ais).await),
+        error(&exchange(&at, audience, ENVIRONMENT_READ, &ais).await),
         "invalid_grant"
     );
 }
@@ -164,20 +173,20 @@ async fn tn_130_the_exchange_refuses_everything_but_the_instances_own_read() {
     let c = Cluster::new(&["mgmtrefuse"]).await;
     let base = c.at(0);
     let domain = governing(&c, &base).await;
-    let audience = "access-admin:realm:mgmtrefuse";
-    let intent = exchange_intent(audience, REALM_READ);
+    let audience = "access-admin:environment:mgmtrefuse";
+    let intent = exchange_intent(audience, ENVIRONMENT_READ);
     let stranger = Instance::new();
     let at = base.with_key(Instance::new().dpop());
     let ais = stranger.ais(domain, intent, Mode::Check, 2);
     assert_eq!(
-        error(&exchange(&at, audience, REALM_READ, &ais).await),
+        error(&exchange(&at, audience, ENVIRONMENT_READ, &ais).await),
         "invalid_grant"
     );
     let unknown = Instance::new();
     let ais = unknown.ais(domain, intent, Mode::Check, 3);
     let at = base.with_key(unknown.dpop());
     assert_eq!(
-        error(&exchange(&at, audience, REALM_READ, &ais).await),
+        error(&exchange(&at, audience, ENVIRONMENT_READ, &ais).await),
         "invalid_grant"
     );
     let i = Instance::new();
@@ -200,12 +209,12 @@ async fn tn_130_the_exchange_refuses_everything_but_the_instances_own_read() {
     let at = base.with_key(i.dpop());
     for ais in [&commit, &wrong, &foreign] {
         assert_eq!(
-            error(&exchange(&at, audience, REALM_READ, ais).await),
+            error(&exchange(&at, audience, ENVIRONMENT_READ, ais).await),
             "invalid_grant"
         );
     }
     assert_eq!(
-        error(&exchange(&at, "access-admin:realm:other", REALM_READ, &ok).await),
+        error(&exchange(&at, "access-admin:environment:other", ENVIRONMENT_READ, &ok).await),
         "invalid_target"
     );
     assert_eq!(
@@ -213,7 +222,7 @@ async fn tn_130_the_exchange_refuses_everything_but_the_instances_own_read() {
         "invalid_target"
     );
     assert_eq!(
-        error(&exchange(&at, audience, "realm.write", &ok).await),
+        error(&exchange(&at, audience, "environment.write", &ok).await),
         "invalid_scope"
     );
     let with_client = at
@@ -243,7 +252,7 @@ async fn tn_130_the_exchange_refuses_everything_but_the_instances_own_read() {
         )
         .await;
     assert_eq!(error(&bearer), "invalid_dpop_proof");
-    *c.env().management.platform.lock().unwrap() = Some(at.f.realm.realm);
+    *c.env().management.platform.lock().unwrap() = Some(at.f.environment.environment);
     let t = body(
         &exchange(&at, PLATFORM_AUDIENCE, PLATFORM_READ, &platform).await,
         200,

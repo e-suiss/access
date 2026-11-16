@@ -51,8 +51,10 @@ const percent = (n: number) => `${String(n)}%`;
 
 /** The rate limits screen. */
 export function RateLimits({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const view = useLoad(() => adminGet<RateLimitsView>(ctx.instance, `realms/${realm}/rate-limits`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const view = useLoad(() =>
+    adminGet<RateLimitsView>(ctx.instance, `envs/${environment}/rate-limits`),
+  );
   return (
     <div data-testid="rate-limits" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("rateLimitsIntro")}</p>

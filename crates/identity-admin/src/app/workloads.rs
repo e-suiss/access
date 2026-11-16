@@ -1,8 +1,8 @@
-//! The Acceptances a realm's governing domain is born with for workloads and attestation
+//! The Acceptances an environment's governing domain is born with for workloads and attestation
 //! (OP-154 m.3 (d), (r), (s), AG-30, AG-31, U20), and the trust domain Acceptance its root
 //! establishes.
 //!
-//! - The realm issuer's `identity_binding_workload` Claim is accepted for actor binding: it is
+//! - The environment issuer's `identity_binding_workload` Claim is accepted for actor binding: it is
 //!   what a workload's self-signed `instance_create` stands on (the platform issuer of m.3 (d)).
 //! - Its `attestation_runtime` Claim is accepted as predicate input: a runtime attestation
 //!   requirement is met by it, bound to the attested Instance (§5.9).
@@ -34,7 +34,7 @@ fn acceptance(issuer: Id, use_: &str, class: Class) -> Value {
     ])
 }
 
-/// OP-154 m.3 (d): the realm issuer's `identity_binding_workload` Claim for actor binding.
+/// OP-154 m.3 (d): the environment issuer's `identity_binding_workload` Claim for actor binding.
 #[must_use]
 pub fn workload_binding(issuer: Id) -> Value {
     acceptance(
@@ -44,7 +44,7 @@ pub fn workload_binding(issuer: Id) -> Value {
     )
 }
 
-/// OP-154 m.3 (s), §5.9: the realm issuer's `attestation_runtime` Claim as predicate input.
+/// OP-154 m.3 (s), §5.9: the environment issuer's `attestation_runtime` Claim as predicate input.
 #[must_use]
 pub fn runtime_attestation(issuer: Id) -> Value {
     acceptance(
@@ -66,10 +66,10 @@ pub fn trust_domain(scheme: Scheme, trust_domain: &str) -> Value {
 }
 
 /// OP-154 m.3 (d), (r): writes a workload client's registration under `bound`; its agent must be
-/// a live agent of the realm.
+/// a live agent of the environment.
 ///
 /// # Errors
-/// [`AdminError`]; [`Invalid::NoAgent`] for an agent the realm does not have or retired.
+/// [`AdminError`]; [`Invalid::NoAgent`] for an agent the environment does not have or retired.
 pub(crate) async fn register(
     t: &mut access_store::identity::TenantTx,
     bound: &access_store::idp::Bound,

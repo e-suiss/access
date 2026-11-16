@@ -2,7 +2,7 @@
 //! SIGTERM the server reports not ready, keeps serving for the drain so the load balancer stops
 //! sending, then stops accepting and lets in-flight requests finish within the shutdown bound;
 //! the pod's grace period covers the preStop sleep, the drain and the shutdown. At a cold start
-//! the server is ready only after every realm's issuer and JWKS loaded (it does not start
+//! the server is ready only after every environment's issuer and JWKS loaded (it does not start
 //! otherwise) and a random start jitter of up to five seconds, so a fleet restart does not
 //! arrive at the database at once. Liveness never waits on readiness or on migrations.
 

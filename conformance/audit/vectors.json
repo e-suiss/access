@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "cef": "CEF:0|Suiss|Access|1|login.password.failed|login.password.failed|6|rt=1793000000123 end=1793000000123 externalId=req_01J9Z7Q4 suser=anonymous duser=usr_7Hx2 outcome=failure cat=authentication cn1Label=ocsfType cn1=300201 cs1Label=eventId cs1=identity-audit:41 cs2Label=checkpointAt cs2=1793000000900 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "cef": "CEF:0|Suiss|Access|1|login.password.failed|login.password.failed|6|rt=1793000000123 end=1793000000123 externalId=req_01J9Z7Q4 suser=anonymous duser=usr_7Hx2 outcome=failure cat=authentication cn1Label=ocsfType cn1=300201 cs1Label=eventId cs1=identity-audit:41 cs2Label=checkpointAt cs2=1793000000900 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=environment:019a0000-0000-7000-8000-0000000000a1",
       "name": "identity sign-in failure, checkpointed",
       "ocsf": {
         "activity_id": 1,
@@ -31,7 +31,7 @@
         "unmapped": {
           "access_class": "authentication",
           "checkpoint_at": 1793000000900,
-          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
           "tenant": "019a0000-0000-7000-8000-000000000001"
         },
         "user": {
@@ -45,7 +45,7 @@
         "id": "identity-audit:41",
         "occurred_at_ms": 1793000000123,
         "recorded_at_ms": 1793000000123,
-        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
         "target": "usr_7Hx2",
         "tenant": "019a0000-0000-7000-8000-000000000001",
         "txn": "req_01J9Z7Q4"
@@ -58,7 +58,7 @@
             "occurred_at": 1793000000123,
             "outcome": "failure",
             "recorded_at": 1793000000123,
-            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
             "target": "usr_7Hx2",
             "tenant": "019a0000-0000-7000-8000-000000000001"
           }
@@ -71,7 +71,7 @@
       }
     },
     {
-      "cef": "CEF:0|Suiss|Access|1|session.created|session.created|3|rt=1793000001000 end=1793000001000 externalId=req_01J9Z7Q5 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=session cn1Label=ocsfType cn1=300399 cs1Label=eventId cs1=identity-audit:42 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "cef": "CEF:0|Suiss|Access|1|session.created|session.created|3|rt=1793000001000 end=1793000001000 externalId=req_01J9Z7Q5 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=session cn1Label=ocsfType cn1=300399 cs1Label=eventId cs1=identity-audit:42 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=environment:019a0000-0000-7000-8000-0000000000a1",
       "name": "identity session, CAEP counterpart, not yet checkpointed",
       "ocsf": {
         "activity_id": 99,
@@ -100,7 +100,7 @@
         "type_uid": 300399,
         "unmapped": {
           "access_class": "session",
-          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
           "tenant": "019a0000-0000-7000-8000-000000000001"
         },
         "user": {
@@ -113,7 +113,7 @@
         "id": "identity-audit:42",
         "occurred_at_ms": 1793000001000,
         "recorded_at_ms": 1793000001000,
-        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
         "target": "usr_7Hx2",
         "tenant": "019a0000-0000-7000-8000-000000000001",
         "txn": "req_01J9Z7Q5"
@@ -126,7 +126,7 @@
             "occurred_at": 1793000001000,
             "outcome": "success",
             "recorded_at": 1793000001000,
-            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
             "target": "usr_7Hx2",
             "tenant": "019a0000-0000-7000-8000-000000000001"
           }
@@ -139,7 +139,7 @@
       }
     },
     {
-      "cef": "CEF:0|Suiss|Access|1|credential.passkey.registered|credential.passkey.registered|3|rt=1793000002000 end=1793000002000 externalId=req_01J9Z7Q6 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=credential cn1Label=ocsfType cn1=300110 cs1Label=eventId cs1=identity-audit:43 cs2Label=checkpointAt cs2=1793000002500 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "cef": "CEF:0|Suiss|Access|1|credential.passkey.registered|credential.passkey.registered|3|rt=1793000002000 end=1793000002000 externalId=req_01J9Z7Q6 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=credential cn1Label=ocsfType cn1=300110 cs1Label=eventId cs1=identity-audit:43 cs2Label=checkpointAt cs2=1793000002500 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=environment:019a0000-0000-7000-8000-0000000000a1",
       "name": "credential change",
       "ocsf": {
         "activity_id": 10,
@@ -169,7 +169,7 @@
         "unmapped": {
           "access_class": "credential",
           "checkpoint_at": 1793000002500,
-          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
           "tenant": "019a0000-0000-7000-8000-000000000001"
         },
         "user": {
@@ -183,7 +183,7 @@
         "id": "identity-audit:43",
         "occurred_at_ms": 1793000002000,
         "recorded_at_ms": 1793000002000,
-        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
         "target": "usr_7Hx2",
         "tenant": "019a0000-0000-7000-8000-000000000001",
         "txn": "req_01J9Z7Q6"
@@ -197,7 +197,7 @@
             "occurred_at": 1793000002000,
             "outcome": "success",
             "recorded_at": 1793000002000,
-            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "scope": "environment:019a0000-0000-7000-8000-0000000000a1",
             "target": "usr_7Hx2",
             "tenant": "019a0000-0000-7000-8000-000000000001"
           }

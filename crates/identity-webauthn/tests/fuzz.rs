@@ -14,13 +14,13 @@ use access_identity_webauthn::domain::ceremony::{
     ClientExtensionResults, RegistrationResponse, RegistrationState, verify_registration,
 };
 use access_identity_webauthn::domain::ids::UserHandle;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use proptest::prelude::*;
 use support::*;
 
 fn fixture() -> (Vec<u8>, Vec<u8>, Vec<u8>, RegistrationState) {
     let state = RegistrationState {
-        realm: REALM,
+        environment: ENVIRONMENT,
         user: UserHandle::from_bytes([1; 64]),
         challenge: [5; 32],
         conditional: false,
@@ -51,7 +51,7 @@ proptest! {
         }
         let _ = verify_registration(
             &rp(),
-            &RealmPolicy::default(),
+            &EnvironmentPolicy::default(),
             &state,
             &RegistrationResponse {
                 raw_id: &id,

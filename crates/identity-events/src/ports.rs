@@ -1,10 +1,10 @@
-//! What delivery needs from the outside world (OP-63). The realm's SET signer, the clock and
+//! What delivery needs from the outside world (OP-63). The environment's SET signer, the clock and
 //! randomness are the identity plane's existing ports.
 
 use std::future::Future;
 
 use access_store::events::SealedKey;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use zeroize::Zeroizing;
 
 pub use access_identity_oauth::ports::Unavailable;
@@ -53,7 +53,7 @@ pub trait PollClient: Send + Sync {
     ) -> impl Future<Output = Result<(u16, Vec<u8>), PostError>> + Send;
 }
 
-/// Seals and opens a webhook subscription's secret under the realm KEK (OP-42, OP-135).
+/// Seals and opens a webhook subscription's secret under the environment KEK (OP-42, OP-135).
 pub trait Sealer: Send + Sync {
     /// Seals `plain` for subscription `id`.
     ///
@@ -62,7 +62,7 @@ pub trait Sealer: Send + Sync {
     fn seal(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         plain: &[u8],
     ) -> Result<SealedKey, Unavailable>;
@@ -74,7 +74,7 @@ pub trait Sealer: Send + Sync {
     fn open(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         sealed: &SealedKey,
     ) -> Result<Zeroizing<Vec<u8>>, Unavailable>;

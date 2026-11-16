@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT MAX(change_version) FROM access.ssh_ca_keys\n              WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d5c54981b9fb3d2d8cc61c0d400a6a6ed323c7369913c5bd013f1936228f72a1"
+}

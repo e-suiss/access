@@ -500,7 +500,7 @@ async fn an_approver_that_started_the_sign_in_itself_approves_without_the_number
 
 // OP-156 m.3 (d)
 #[tokio::test]
-async fn a_realm_without_push_offers_none() {
+async fn a_environment_without_push_offers_none() {
     let e = env(0x98, "q5-off", AuthPolicy::DEFAULT).await;
     e.account("off@example.com").await;
     let mut b = e.browser("b");

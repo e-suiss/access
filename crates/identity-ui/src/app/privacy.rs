@@ -11,14 +11,14 @@ use access_identity_account::app::privacy::{
     self, Acceptance, PreferenceChange, Scheduled, rfc3339,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::ports::Clock;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// One preference in a `PUT /v1/account/preferences`.
 #[derive(Debug, Deserialize)]
@@ -69,12 +69,12 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// The realm kit and the live session's subject; `401` without one (G57).
+    /// The environment kit and the live session's subject; `401` without one (G57).
     pub(super) async fn me(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
-    ) -> Result<(std::sync::Arc<RealmKit>, [u8; 16]), Reply> {
+    ) -> Result<(std::sync::Arc<EnvironmentKit>, [u8; 16]), Reply> {
         let kit = self.kit(entry).await?;
         let Some(cookie) = b.session else {
             return Err(Reply::problem(SESSION_REQUIRED));
@@ -87,17 +87,17 @@ where
         }
     }
 
-    fn db(&self, kit: &RealmKit) -> PgAccounts {
+    fn db(&self, kit: &EnvironmentKit) -> PgAccounts {
         PgAccounts::sealed(self.db.clone(), kit.vault())
     }
 
     /// `GET /v1/account/preferences`: the preferences as they stand and every change.
-    pub async fn preferences(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn preferences(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
         };
-        match privacy::preferences(&self.db(&kit), &kit.realm(), me).await {
+        match privacy::preferences(&self.db(&kit), &kit.environment(), me).await {
             Ok(v) => Reply::json(200, v),
             Err(e) => account_failed(&e),
         }
@@ -106,7 +106,7 @@ where
     /// `PUT /v1/account/preferences` (IDP-37, OP-153 m.3 (ee)).
     pub async fn set_preferences(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &PreferencesBody,
     ) -> Reply {
@@ -114,8 +114,8 @@ where
             Ok(m) => m,
             Err(r) => return r,
         };
-        let realm = kit.realm();
-        let actor = match realm.external(me) {
+        let environment = kit.environment();
+        let actor = match environment.external(me) {
             Ok(a) => a,
             Err(e) => return account_failed(&e),
         };
@@ -133,11 +133,19 @@ where
             correlation: b.correlation,
         };
         let db = self.db(&kit);
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
-        match privacy::set_preferences(&db, &realm, me, &changes, "self_service", &who, &notifier)
-            .await
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
+        match privacy::set_preferences(
+            &db,
+            &environment,
+            me,
+            &changes,
+            "self_service",
+            &who,
+            &notifier,
+        )
+        .await
         {
-            Ok(()) => match privacy::preferences(&db, &realm, me).await {
+            Ok(()) => match privacy::preferences(&db, &environment, me).await {
                 Ok(v) => Reply::json(200, v),
                 Err(e) => account_failed(&e),
             },
@@ -146,12 +154,12 @@ where
     }
 
     /// `GET /v1/account/documents`: the content-free acceptance records (E60).
-    pub async fn documents(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn documents(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
         };
-        match privacy::acceptances(&self.db(&kit), &kit.realm(), me).await {
+        match privacy::acceptances(&self.db(&kit), &kit.environment(), me).await {
             Ok(v) => Reply::json(200, json!({ "acceptances": v })),
             Err(e) => account_failed(&e),
         }
@@ -160,7 +168,7 @@ where
     /// `POST /v1/account/documents` (IDP-37, TN-132).
     pub async fn accept_document(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &DocumentBody,
     ) -> Reply {
@@ -177,8 +185,8 @@ where
         if !["click", "checkbox", "signature"].contains(&body.method.as_str()) {
             return account_failed(&AccountError::Invalid);
         }
-        let realm = kit.realm();
-        let actor = match realm.external(me) {
+        let environment = kit.environment();
+        let actor = match environment.external(me) {
             Ok(a) => a,
             Err(e) => return account_failed(&e),
         };
@@ -194,19 +202,19 @@ where
             method: &body.method,
             client: None,
         };
-        match privacy::accept_document(&self.db(&kit), &realm, me, &a, &who).await {
+        match privacy::accept_document(&self.db(&kit), &environment, me, &a, &who).await {
             Ok(()) => Reply::new(204, super::Body::Empty),
             Err(e) => account_failed(&e),
         }
     }
 
     /// `GET /v1/account/security-history` (OP-43): 90 days, the address masked, no risk score.
-    pub async fn security_history(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn security_history(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
         };
-        match privacy::security_history(&self.db(&kit), &kit.realm(), me).await {
+        match privacy::security_history(&self.db(&kit), &kit.environment(), me).await {
             Ok(v) => Reply::json(200, v),
             Err(e) => account_failed(&e),
         }
@@ -214,7 +222,7 @@ where
 
     /// `GET /v1/account/deletion`: the open deletion with its date and honest statement
     /// (X38, Ek B 3954), or `{"scheduled": false}`.
-    pub async fn deletion(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn deletion(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -222,7 +230,7 @@ where
         let db = self.db(&kit);
         let open = async {
             let mut tx =
-                access_identity_account::ports::AccountDb::begin(&db, kit.tenant, kit.realm)
+                access_identity_account::ports::AccountDb::begin(&db, kit.tenant, kit.environment)
                     .await?;
             let rows = tx.0.deletions(me).await?;
             access_identity_account::ports::AccountTx::commit(tx).await?;
@@ -253,13 +261,13 @@ where
     }
 
     /// `DELETE /v1/account/deletion`: cancels a deletion inside its window (OP-153 m.3 (bb)).
-    pub async fn cancel_deletion(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn cancel_deletion(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
         };
-        let realm = kit.realm();
-        let actor = match realm.external(me) {
+        let environment = kit.environment();
+        let actor = match environment.external(me) {
             Ok(a) => a,
             Err(e) => return account_failed(&e),
         };
@@ -267,7 +275,7 @@ where
             actor: &actor,
             correlation: b.correlation,
         };
-        match privacy::cancel_deletion(&self.db(&kit), &realm, me, &who).await {
+        match privacy::cancel_deletion(&self.db(&kit), &environment, me, &who).await {
             Ok(true) => Reply::new(204, super::Body::Empty),
             Ok(false) => account_failed(&AccountError::NotFound),
             Err(e) => account_failed(&e),
@@ -276,7 +284,7 @@ where
 
     /// `GET /v1/account/data-requests`: the person's requests and their 30-day due dates
     /// (TN-78, Ek B 3953).
-    pub async fn data_requests(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn data_requests(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -284,7 +292,7 @@ where
         let db = self.db(&kit);
         let rows = async {
             let mut tx =
-                access_identity_account::ports::AccountDb::begin(&db, kit.tenant, kit.realm)
+                access_identity_account::ports::AccountDb::begin(&db, kit.tenant, kit.environment)
                     .await?;
             let rows = tx.0.data_requests(Some(me), false, [0; 16], 200).await?;
             access_identity_account::ports::AccountTx::commit(tx).await?;

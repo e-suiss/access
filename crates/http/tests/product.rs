@@ -25,8 +25,8 @@ use access_http::adp::ports::Pdp;
 use access_http::product::adapters::router;
 use access_http::product::app::Service;
 use access_http::product::ports::{
-    AssertionRefused, ClientAssertions, Exercises, KeyDirectory, PlatformClient, Realm, Resolved,
-    Sector, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
+    AssertionRefused, ClientAssertions, Environment, Exercises, KeyDirectory, PlatformClient,
+    Resolved, Sector, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
 };
 use access_http::product::schema::openapi;
 use access_http::{Limits, harden};
@@ -194,7 +194,7 @@ fn tenant(n: u8, status: &str) -> Tenant {
         id: [n; 16],
         status: status.to_owned(),
         organizations: Vec::new(),
-        realms: vec![Realm {
+        environments: vec![Environment {
             id: [n.saturating_add(0xa0); 16],
             issuer: format!("https://shop{n}.id.example"),
             slug: format!("shop{n}"),
@@ -297,10 +297,10 @@ impl Exercises for Ledger {
     }
 }
 
-/// One realm of tenant 1 with client `cli_relay`; Party 2 is subject `sub-2…` to it.
+/// One environment of tenant 1 with client `cli_relay`; Party 2 is subject `sub-2…` to it.
 struct People;
 
-const REALM: [u8; 16] = [0xa1; 16];
+const ENVIRONMENT: [u8; 16] = [0xa1; 16];
 
 fn sub_of(party: u8) -> String {
     b64url_encode(&[party; 32])
@@ -310,16 +310,16 @@ impl Subjects for People {
     async fn resolve(
         &self,
         tenant: [u8; 16],
-        realm: [u8; 16],
+        environment: [u8; 16],
         sector: Sector<'_>,
         lookup: SubjectQuery,
     ) -> Result<Option<Resolved>, Unavailable> {
         let known_sector = match sector {
-            Sector::RealmClient(client_id) => client_id == "cli_relay",
+            Sector::EnvironmentClient(client_id) => client_id == "cli_relay",
             // OP-149 m.37
             Sector::Platform(c) => *c == relay(),
         };
-        if tenant != [1; 16] || realm != REALM || !known_sector {
+        if tenant != [1; 16] || environment != ENVIRONMENT || !known_sector {
             return Ok(None);
         }
         let known = [2_u8, 4];
@@ -352,7 +352,7 @@ impl Subjects for People {
     }
 }
 
-/// The platform realm's issuer, the audience a product's assertion names.
+/// The platform environment's issuer, the audience a product's assertion names.
 const PLATFORM_ISSUER: &str = "https://platform.id.example";
 /// Where the routes are served; an assertion may name the endpoint called instead.
 const API_BASE: &str = "https://access.example";
@@ -361,7 +361,7 @@ const API_BASE: &str = "https://access.example";
 fn relay() -> PlatformClient {
     PlatformClient {
         tenant: [0xf0; 16],
-        realm: [0xf1; 16],
+        environment: [0xf1; 16],
         client_id: "cli_relay".to_owned(),
         product: "relay".to_owned(),
     }
@@ -369,7 +369,7 @@ fn relay() -> PlatformClient {
 
 /// Stands in for the platform API's RFC 7523 verification (OP-149 m.19 (e)) over assertions of
 /// the form `<client_id>|<aud>|<jti>`: the client must be the platform product `cli_relay`, the
-/// audience the platform realm's issuer or the endpoint called, and the `jti` unused before.
+/// audience the platform environment's issuer or the endpoint called, and the `jti` unused before.
 struct Gate(std::sync::Mutex<std::collections::BTreeSet<String>>);
 
 impl ClientAssertions for Gate {
@@ -421,7 +421,7 @@ fn bearing(mut req: Request<Body>, assertion: &str) -> Request<Body> {
     req
 }
 
-/// A fresh assertion of the platform product for the platform realm's issuer.
+/// A fresh assertion of the platform product for the platform environment's issuer.
 fn assertion(jti: &str) -> String {
     format!("cli_relay|{PLATFORM_ISSUER}|{jti}")
 }
@@ -524,7 +524,7 @@ fn get_agency(id: [u8; 32]) -> Request<Body> {
 
 fn parties_request() -> Value {
     json!({
-        "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+        "environment": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
         "client_id": "cli_relay",
         "parties": [b64url_encode(&[2; 16]), b64url_encode(&[3; 16])],
     })
@@ -545,7 +545,7 @@ async fn subjects_resolve_both_ways() {
     assert_eq!(v["consistency_token"], "ct-7");
     // OP-149 m.34 (b)
     let back = json!({
-        "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+        "environment": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
         "client_id": "cli_relay",
         "subs": [sub_of(4), sub_of(9), sub_of(7)],
     });
@@ -566,8 +566,8 @@ async fn subjects_resolve_both_ways() {
         (json!({ "parties": [] }), "parties"),
         (json!({ "subs": [sub_of(4)] }), "parties-or-subs"),
         (
-            json!({ "realm": "A1A1A1A1-A1A1-A1A1-A1A1-A1A1A1A1A1A1" }),
-            "realm",
+            json!({ "environment": "A1A1A1A1-A1A1-A1A1-A1A1-A1A1A1A1A1A1" }),
+            "environment",
         ),
         (json!({ "x": 1 }), "unknown-member"),
     ] {
@@ -1109,9 +1109,12 @@ async fn tenants_are_listed_by_cursor() {
     assert_eq!(v["status"], "suspended");
     assert_eq!(v["region"], "eu-central");
     // OP-149 m.4
-    assert_eq!(v["realms"][0]["slug"], "shop2");
-    assert_eq!(v["realms"][0]["issuer"], "https://shop2.id.example");
-    assert_eq!(v["realms"][0]["id"], "a2a2a2a2-a2a2-a2a2-a2a2-a2a2a2a2a2a2");
+    assert_eq!(v["environments"][0]["slug"], "shop2");
+    assert_eq!(v["environments"][0]["issuer"], "https://shop2.id.example");
+    assert_eq!(
+        v["environments"][0]["id"],
+        "a2a2a2a2-a2a2-a2a2-a2a2-a2a2a2a2a2a2"
+    );
     let (status, _, body) = call(app(true), get("/access/v1/tenants/tnt_09/snapshot")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(

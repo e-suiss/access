@@ -1,6 +1,6 @@
 {
   "alias": "access",
-  "description": "Access realm acme, nightly OIDF conformance (OP-146 I11)",
+  "description": "Access environment acme, nightly OIDF conformance (OP-146 I11)",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

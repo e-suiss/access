@@ -16,7 +16,7 @@ reordered event never widens anything, and decisions rest on declared validity w
 - **SET rules.** Exactly one event per SET, `sub_id` per RFC 9493, `txn`, `typ: secevent+jwt`, no
   top-level `sub`, no `exp`. Event ids are keyed or random, never a hash of the subject.
 - **Algorithm.** A stream may ask for `alg`; ES256 is the default. RS256 is refused with
-  `unsupported_alg` until a realm can hold an RSA signing key.
+  `unsupported_alg` until an environment can hold an RSA signing key.
 
 ### CAEP and RISC events
 
@@ -33,7 +33,7 @@ reordered event never widens anything, and decisions rest on declared validity w
 | RISC `account-disabled` | an account can no longer sign in |
 | RISC `account-purged` | an account is crypto-shredded (the erasure flow is not built yet) |
 | RISC `identifier-recycled` | an identifier moves to another account (identifier release is not built yet) |
-| RISC `credential-compromise` | a realm signing key is dropped as compromised (realm-wide) |
+| RISC `credential-compromise` | an environment signing key is dropped as compromised (environment-wide) |
 
 A subject is named by the receiver's own pairwise `sub` (`iss_sub`), and only when the receiver
 already has one: a receiver never learns of a subject it was not given. Each receiver's copy has
@@ -64,7 +64,7 @@ audience, event types, optional RFC 8936 poll endpoint and credential, expected 
 - **Effects.** An inbound event is a Claim: `session-revoked` ends the linked subject's sessions
   and steps its `session_epoch`; credential, risk and device events become narrowing
   `risk_signal` Claims; `account-disabled` an `account_status` Claim. No inbound event revokes a
-  Grant, and an event about a subject the realm cannot link does nothing.
+  Grant, and an event about a subject the environment cannot link does nothing.
 - **Delay.** A transmitter silent past its expected interval is reported as delayed:
   "Signals from *Provider* delayed since 14:02 UTC — decisions use declared validity windows".
 
@@ -76,7 +76,7 @@ the staleness view.
 
 ## Webhooks
 
-A realm's administrator registers a webhook (an HTTPS URL and the events it wants) through the
+An environment's administrator registers a webhook (an HTTPS URL and the events it wants) through the
 management API's `webhooks` resource, as an `idp.webhook.register` decision. Access then
 delivers every matching event to that URL.
 
@@ -93,10 +93,10 @@ webhook-id: AQMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 webhook-timestamp: 1793750400
 webhook-signature: v1a,fldxM4gAKugP6nnt1hdz3sgGfZ6d99nzrMFnZOELIxbzEHoVmAb2ADpkJK7zgPePmPsle0zV9jSeGlHFG2NVAw==
 
-{"specversion":"1.0","id":"AQMx…","source":"urn:suiss:access:realm:…",
+{"specversion":"1.0","id":"AQMx…","source":"urn:suiss:access:environment:…",
  "type":"urn:suiss:access:event:account.created","time":"2026-11-04T00:00:00.000Z",
- "data":{"iss":"https://id.example/realms/shop","jti":"AQMx…",
-         "events":{"urn:suiss:access:event:account.created":{"realm":"…","account":"usr_…","at":1793750400000}}}}
+ "data":{"iss":"https://id.example/env/shop","jti":"AQMx…",
+         "events":{"urn:suiss:access:event:account.created":{"environment":"…","account":"usr_…","at":1793750400000}}}}
 ```
 
 - `id` equals `webhook-id` and the event's `jti`: deduplicate by it.
@@ -148,13 +148,13 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 | `document.accepted` | an account accepts a version of a document |
 | `agent.suspended` | an agent is suspended |
 | `agent.sponsor_assigned` | a person becomes an agent's sponsor |
-| `login.failed_surge` | failed sign-ins in a realm rise above the surge threshold |
+| `login.failed_surge` | failed sign-ins in an environment rise above the surge threshold |
 | `scim.provisioned` | a SCIM client creates, changes or reactivates a user, group or device |
 | `scim.deprovisioned` | a SCIM client deletes or deactivates one; the account is kept as a tombstone |
 | `org.sso_enforced` | an organization starts signing in only through its own identity provider |
 | `hr.record_due` | a future-dated HR start or end reaches its date |
-| `proxy.registered` | a proxy becomes a policy enforcement point of the realm |
-| `ssh.certificate_issued` | the realm's SSH certificate authority issues a certificate |
+| `proxy.registered` | a proxy becomes a policy enforcement point of the environment |
+| `ssh.certificate_issued` | the environment's SSH certificate authority issues a certificate |
 | `export.sink_failed` | an export sink stops accepting the audit copy |
 | `support.access_changed` | support access to an account is given, starts, ends or is revoked |
 | `breakglass.used` | emergency access is used on an account |
@@ -170,11 +170,11 @@ but no producer yet; a webhook or stream that names them is refused (`invalid-we
 `scim.provisioned`, `scim.deprovisioned` and `org.sso_enforced` are catalogued and refused the
 same way until the SCIM server and SSO enforcement raise them.
 
-`ssh.certificate_issued` is raised by the realm's SSH certificate authority for each
+`ssh.certificate_issued` is raised by the environment's SSH certificate authority for each
 certificate it issues, and `export.sink_failed` by the export pass once a sink has refused three
 batches in a row. `hr.record_due` and `proxy.registered` are catalogued and refused the same
 way until the HR job and proxy registration raise them. `preference.changed` may carry an `iys` member naming
-the commercial message channels a change touched, for realms that record consent with İYS.
+the commercial message channels a change touched, for environments that record consent with İYS.
 
 `support.access_changed` is raised when support access to an account is given, ends or is
 revoked; `breakglass.used` when break-glass is used.

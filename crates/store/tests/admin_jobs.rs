@@ -1,4 +1,4 @@
-//! TN-125, OP-73: bulk job results are kept in the realm's scope, each item recorded once, a job
+//! TN-125, OP-73: bulk job results are kept in the environment's scope, each item recorded once, a job
 //! finished once, and an expired job read as absent without being deleted.
 
 #![allow(
@@ -9,12 +9,12 @@
 
 use access_store::admin_jobs::{self, ItemRow, NewJob};
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
-async fn realm(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> EnvironmentId {
     let d = DomainId::from_bytes([seed; 32]);
     let g = LogRecord {
         pos: 0,
@@ -27,7 +27,7 @@ async fn realm(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> RealmId {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, slug, "pool-default")
+    let r = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -52,8 +52,8 @@ fn item(index: u32, status: &str) -> ItemRow {
 async fn job_results_are_recorded_once_and_expire_softly() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
-    let r = realm(&db, t, 31, "jobs-a").await;
-    let other = realm(&db, t, 32, "jobs-b").await;
+    let r = environment(&db, t, 31, "jobs-a").await;
+    let other = environment(&db, t, 32, "jobs-b").await;
     let items = vec![
         ("suspendAccount".to_owned(), Some("a0".to_owned())),
         ("suspendAccount".to_owned(), Some("a1".to_owned())),

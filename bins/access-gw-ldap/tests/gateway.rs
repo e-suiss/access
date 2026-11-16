@@ -184,7 +184,7 @@ async fn a_primary_password_never_binds() {
             .unwrap();
         access_identity_account::app::accounts::store_password(
             &mut tx,
-            &w.realm(),
+            &w.environment(),
             ada,
             phc.expose(),
             &ADMIN,
@@ -574,7 +574,7 @@ async fn sasl_external_binds_with_an_accepted_certificate() {
     });
     {
         let mut tx = TenantTx::begin(&w.db.app, w.tenant, w.corp).await.unwrap();
-        let b = w.bound(&mut tx, "idp.realm.certificate_login").await;
+        let b = w.bound(&mut tx, "idp.environment.certificate_login").await;
         tx.put_certificate_login(
             &b,
             &access_store::certificate::CertificateLoginRow {

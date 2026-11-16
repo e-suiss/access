@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.pairwise_subjects (tenant_id, environment_id, subject_id, sector, value)\n             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tenant_id, environment_id, subject_id, sector) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c5406144ec331f1ba62c68b9ff8950385500fb64095ef52dc376abee39e092fc"
+}

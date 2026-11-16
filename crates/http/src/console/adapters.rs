@@ -90,7 +90,7 @@ impl ConsoleSessions for NoSessions {
     }
 }
 
-/// No `GeoResolver` source (OP-151 m.1 (b)): sessions bind to the client's prefix; realms set
+/// No `GeoResolver` source (OP-151 m.1 (b)): sessions bind to the client's prefix; environments set
 /// no full address binding.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PrefixOnly;

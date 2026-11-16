@@ -92,9 +92,9 @@ use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
 use access_http::api::app::{RequestIds, request_id};
 use access_http::declarations::{Declarations, router as declared};
+use access_http::environment::router as environment_router;
 use access_http::internal::{Readiness, ReadyFlag, router as internal_router};
 use access_http::login::{Assets, me_router, router as login_router};
-use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
 use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
@@ -108,11 +108,11 @@ use access_identity_oauth::adapters::dpop::SystemClock as OAuthClock;
 use access_identity_oauth::adapters::oauth::{OsRandom, PgLogoutQueue, PgOAuth};
 use access_identity_oauth::adapters::outbound::{DeclaredTarget, Outbound};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
-use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
 use access_identity_oauth::app::backchannel::Courier;
 use access_identity_oauth::app::oauth::OAuth;
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::domain::issuer::RealmBase;
+use access_identity_oauth::domain::issuer::EnvironmentBase;
 use access_identity_ui::adapters::Outbox;
 use access_identity_ui::app::{Devices, Hosted};
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
@@ -196,13 +196,13 @@ enum Command {
     Migrate,
     /// A one-shot job over a local deployment's plan (OP-69, OP-149 m.26 (c)).
     Local(PathBuf, Job),
-    /// `import-accounts <realm slug> <file.jsonl>`: accounts from another identity provider
+    /// `import-accounts <environment slug> <file.jsonl>`: accounts from another identity provider
     /// (§12.3.7, TN-85).
     Import(String, PathBuf),
     /// `reshred`: apply the shred journal again after a restore, then let the server open
     /// (OP-42, OP-57).
     Reshred,
-    /// `rotate-kek <realm slug>`: rotate the realm's KEK, or resume its open rotation
+    /// `rotate-kek <environment slug>`: rotate the environment's KEK, or resume its open rotation
     /// (OP-138, OP-158 m.3 (y)).
     RotateKek(String),
     /// `upgrade-check --to <manifest.json>` or `upgrade-check --manifest` (OP-56, OP-158 m.3 (q)).
@@ -294,7 +294,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
                  <product> <display name> | client-retire <plan.toml> <product> | \
-                 import-accounts <realm> <file.jsonl> | reshred | rotate-kek <realm> | \
+                 import-accounts <environment> <file.jsonl> | reshred | rotate-kek <environment> | \
                  upgrade-check --to <manifest.json> | upgrade-check --manifest | dr-promote | \
                  drill baseline | drill restore <baseline.json>]"
             );
@@ -464,7 +464,7 @@ fn drill_main(config: &Config, baseline: Option<&Path>) -> ExitCode {
         runtime.block_on(async {
             let all = pools(config, &prepared).await?;
             let identity = config.identity.as_ref().ok_or("no identity section")?;
-            let keyring = idp::RealmKeyring::new(
+            let keyring = idp::EnvironmentKeyring::new(
                 SignerKeys::new(identity.signer.clone()),
                 prepared.identity_keys.clone(),
             );
@@ -497,7 +497,7 @@ fn drill_main(config: &Config, baseline: Option<&Path>) -> ExitCode {
                 router: &all.router,
                 sequencer: &all.sequencer,
                 migrator: migrator_pool.as_ref(),
-                realm_keys: &keyring,
+                environment_keys: &keyring,
                 event_key: &event_key,
                 cold: cold.as_ref(),
                 breakglass: None,
@@ -544,7 +544,7 @@ fn drill_main(config: &Config, baseline: Option<&Path>) -> ExitCode {
     }
 }
 
-/// `rotate-kek`: rotates the KEK of the realm named `slug`, or resumes its open rotation, and
+/// `rotate-kek`: rotates the KEK of the environment named `slug`, or resumes its open rotation, and
 /// prints the rotation as JSON (OP-138, OP-158 m.3 (y)).
 fn rotate_kek_main(config: &Config, slug: &str) -> ExitCode {
     let run = || -> Result<String, String> {
@@ -557,12 +557,12 @@ fn rotate_kek_main(config: &Config, slug: &str) -> ExitCode {
                 .map_err(|e| e.to_string())?
                 .into_iter()
                 .find(|r| r.slug == slug)
-                .ok_or_else(|| format!("no live realm {slug}"))?;
-            let keks = login::RealmKeks::new(prepared.login_keys.clone());
+                .ok_or_else(|| format!("no live environment {slug}"))?;
+            let keks = login::EnvironmentKeks::new(prepared.login_keys.clone());
             let run = kek_rotation::rotate(
                 &keks,
                 &all.app,
-                (route.tenant, route.realm),
+                (route.tenant, route.environment),
                 kek_rotation::BATCH,
                 u32::MAX,
             )
@@ -627,7 +627,7 @@ fn reshred_main(config: &Config) -> ExitCode {
     }
 }
 
-/// `import-accounts`: reads the file before the lockdown, then imports it into the realm named
+/// `import-accounts`: reads the file before the lockdown, then imports it into the environment named
 /// `slug` and prints what it did as JSON (§12.3.7, TN-85).
 fn import_main(config: &Config, slug: &str, file: &Path) -> ExitCode {
     let run = || -> Result<String, String> {
@@ -642,20 +642,20 @@ fn import_main(config: &Config, slug: &str, file: &Path) -> ExitCode {
                 .map_err(|e| e.to_string())?
                 .into_iter()
                 .find(|r| r.slug == slug)
-                .ok_or_else(|| format!("no live realm {slug}"))?;
-            let vault = login::RealmKeks::new(prepared.login_keys.clone())
-                .vault(route.realm)
-                .ok_or("the realm's vault keys are unavailable")?;
+                .ok_or_else(|| format!("no live environment {slug}"))?;
+            let vault = login::EnvironmentKeks::new(prepared.login_keys.clone())
+                .vault(route.environment)
+                .ok_or("the environment's vault keys are unavailable")?;
             let id_key = ids::CellIds::new(prepared.identity_keys.clone())
                 .key()
                 .ok_or("the cell id key is unavailable")?;
-            let realm = access_identity_account::app::Realm {
+            let environment = access_identity_account::app::Environment {
                 tenant: route.tenant,
-                realm: route.realm,
+                environment: route.environment,
                 kek: &*vault.kek,
                 ids: &id_key,
             };
-            migration::import(&all.app, vault.clone(), &realm, &text).await
+            migration::import(&all.app, vault.clone(), &environment, &text).await
         })?;
         serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
     };
@@ -797,7 +797,7 @@ async fn seed(
 ) -> Result<serde_json::Value, String> {
     let all = pools(config, &prepared).await?;
     let identity = config.identity.as_ref().ok_or("no identity section")?;
-    let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
+    let base = EnvironmentBase::parse(&identity.environment_base).map_err(|e| e.to_string())?;
     let actors = idp::ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
         sequencer: all.sequencer.clone(),
@@ -820,7 +820,7 @@ async fn seed(
         SourcesClock::new(all.sequencer.clone()),
         actors,
     );
-    let keyring = idp::RealmKeyring::new(
+    let keyring = idp::EnvironmentKeyring::new(
         SignerKeys::new(identity.signer.clone()),
         prepared.identity_keys.clone(),
     );
@@ -829,7 +829,7 @@ async fn seed(
         app: &all.app,
         router: &all.router,
         plane: &plane,
-        realm_keys: &keyring,
+        environment_keys: &keyring,
         hsm: &prepared.identity_keys,
         base: &base,
         declared: &declared,
@@ -1311,8 +1311,8 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     })
 }
 
-/// The realm surface, once the identity plane's start-up checks pass: the signer answers,
-/// every realm's issuer is the one the configuration forms and its JWKS loads (OP-138,
+/// The environment surface, once the identity plane's start-up checks pass: the signer answers,
+/// every environment's issuer is the one the configuration forms and its JWKS loads (OP-138,
 /// §17.9.6, §17.9.7, CMP-22b).
 async fn identity(
     config: &Config,
@@ -1321,12 +1321,12 @@ async fn identity(
     tls_names: Result<(), String>,
 ) -> Result<axum::Router, String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
-    let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
+    let base = EnvironmentBase::parse(&identity.environment_base).map_err(|e| e.to_string())?;
     let suiss = config.suiss.as_ref().ok_or("no suiss section")?;
     let api_base = config.issuer.as_deref().ok_or("no issuer")?;
     // OP-149 m.3
     // MD-10, §9.15.1 k.2
-    let discovery = RealmDiscovery::new(
+    let discovery = EnvironmentDiscovery::new(
         PgDirectory::new(router).with_facts(app),
         SignerKeys::new(identity.signer.clone()),
     )
@@ -1350,7 +1350,7 @@ async fn identity(
     startup::identity(&discovery.check(&base).await, &mut report);
     report.emit();
     report.into_result()?;
-    Ok(realm_router(discovery))
+    Ok(environment_router(discovery))
 }
 
 /// The hosted login of this process.
@@ -1379,7 +1379,7 @@ where
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     // OP-154 m.3 (t)
     let vault = access_http::login::vault_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1397,7 +1397,7 @@ where
     );
     // OP-154 m.3 (aa)
     let did = access_http::login::did_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1406,7 +1406,7 @@ where
     );
     // OP-154 m.3 (d)
     let workloads = access_http::login::workloads_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1417,7 +1417,7 @@ where
     // IDP-31, OP-153 m.3 (l)
     let social_services = Arc::new(social(config, outbound)?);
     let social = access_http::login::social_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1426,7 +1426,7 @@ where
     );
     // OP-155 m.3 (h)
     let upstream = access_http::login::upstream_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1434,7 +1434,7 @@ where
         social_services,
         access_identity_ui::app::upstream::Upstreams {
             trust: Arc::new(plane.clone()),
-            assertions: Arc::new(idp::RealmAssertions(SignerKeys::new(
+            assertions: Arc::new(idp::EnvironmentAssertions(SignerKeys::new(
                 identity.signer.clone(),
             ))),
             reader: Arc::new(upstream_reader(config)),
@@ -1443,7 +1443,7 @@ where
     );
     // OP-155 m.3 (c), (e), (f)
     let saml = access_http::login::saml_router::<_, _, _, _, _, saml::Saml>(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1451,7 +1451,7 @@ where
         saml,
     );
     let me = me_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(router),
             SignerKeys::new(identity.signer.clone()),
         ),
@@ -1478,7 +1478,7 @@ where
     )))
 }
 
-/// The account pages (OP-153 m.3 (w)) on the realm's public listener: the hosted login's
+/// The account pages (OP-153 m.3 (w)) on the environment's public listener: the hosted login's
 /// session, device Instances through the authority plane and ADP in this process, which sees
 /// the pages as their own PEP.
 #[expect(
@@ -1644,8 +1644,8 @@ fn signup(config: &Config) -> Result<access_identity_ui::app::signup::Signup, St
     Ok(s)
 }
 
-/// The host of the configured realm base, without its port (TN-10).
-fn realm_base_host(base: &str) -> String {
+/// The host of the configured environment base, without its port (TN-10).
+fn environment_base_host(base: &str) -> String {
     let authority = base.strip_prefix("https://").unwrap_or(base);
     authority
         .rsplit_once(':')
@@ -1653,14 +1653,14 @@ fn realm_base_host(base: &str) -> String {
         .to_ascii_lowercase()
 }
 
-/// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
-/// realm keys come from the HSM on first use.
+/// The hosted login (OP-146 m.12): the request's `Host` selects the environment as for discovery;
+/// environment keys come from the HSM on first use.
 fn login(
     config: &Config,
     router: Pool,
     app: Pool,
     products: Pool,
-    keks: login::RealmKeks,
+    keks: login::EnvironmentKeks,
     (assets, outbound): (Option<Assets>, Outbound),
     (hooks, risk): (
         Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
@@ -1669,13 +1669,13 @@ fn login(
 ) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
-    let discovery = RealmDiscovery::new(
+    let discovery = EnvironmentDiscovery::new(
         PgDirectory::new(router.clone()),
         SignerKeys::new(identity.signer.clone()),
     );
     let hosted = Arc::new(Hosted {
         kits: login::HsmKits::new(keks, router, app.clone(), lifetimes)
-            .with_base(&realm_base_host(&identity.realm_base))
+            .with_base(&environment_base_host(&identity.environment_base))
             // OP-159 m.3 (ll)
             .with_attestation(Arc::new(
                 access_identity_ui::adapters::CachedAttestationSources {
@@ -1715,7 +1715,7 @@ fn login(
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
 
-/// What the realm authorization server is built over: the application, router and outbox reader
+/// What the environment authorization server is built over: the application, router and outbox reader
 /// pools, the HSM's nonce keys and the outbound client.
 type OAuthInputs = (Pool, Pool, Pool, Arc<KeyStore>, Outbound);
 
@@ -1741,10 +1741,10 @@ fn upstream_reader(config: &Config) -> upstream::ParserReader {
     )
 }
 
-/// The realm authorization server, shared with the ADP's PEP tokens (OP-155 m.3 (q)).
+/// The environment authorization server, shared with the ADP's PEP tokens (OP-155 m.3 (q)).
 type ServerOAuth<P> = Arc<OAuth<oauth::ServerEnv<P>>>;
 
-/// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
+/// The environment authorization server (OP-146 I7) over the application pool, the identity signer,
 /// clients' endpoints, the HSM's DPoP nonce keys and the authority plane's token projections
 /// (OP-150 m.2).
 fn authorization<P>(
@@ -1757,7 +1757,7 @@ fn authorization<P>(
 ) -> Result<(axum::Router, ServerOAuth<P>), String>
 where
     P: access_internal_api::projections::Projections
-        + admin::realm::LiveKeys
+        + admin::environment::LiveKeys
         + access_identity_oauth::ports::oauth::AssertionIssuers
         + access_identity_oauth::ports::oauth::WorkloadTrust
         + access_identity_oauth::ports::oauth::GrantStanding
@@ -1772,7 +1772,7 @@ where
     let ciba = Arc::new(ciba::ServerCiba {
         plane: projections.clone(),
         app: app.clone(),
-        keks: login::RealmKeks::new(nonce_keys.clone()),
+        keks: login::EnvironmentKeks::new(nonce_keys.clone()),
         ids: tenant_ids.clone(),
         outbound: outbound.clone(),
     });
@@ -1808,7 +1808,10 @@ where
     // TN-130
     let management = Arc::new(admin::tokens::PlaneHolders(
         projections.clone(),
-        config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
+        config
+            .suiss
+            .as_ref()
+            .and_then(|s| s.platform_environment.clone()),
     ));
     let env = oauth::ServerEnv {
         // OP-149 m.26 (a)
@@ -1885,7 +1888,7 @@ struct Background {
     /// OP-148, OP-158 m.3 (y)
     metadata: Option<tokio::task::JoinHandle<()>>,
     ready: Readiness,
-    /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
+    /// Every environment's JWKS loaded at start-up (OP-138, §17.9.7).
     jwks: ReadyFlag,
 }
 
@@ -1904,7 +1907,7 @@ impl Background {
         config: &Config,
         pools: &Pools,
         (outbound, relay_prepared): (Outbound, Option<relay::Prepared>),
-        (keks, (id_key, (sni, acme))): (login::RealmKeks, ([u8; 32], DomainServing)),
+        (keks, (id_key, (sni, acme))): (login::EnvironmentKeks, ([u8; 32], DomainServing)),
         ids: &Arc<ids::CellIds>,
         wake: Option<Arc<tokio::sync::Notify>>,
     ) -> Result<Self, String> {
@@ -2019,7 +2022,7 @@ impl Background {
             domains,
             exporting,
             metadata,
-            jwks: ready.flag("jwks.realms"),
+            jwks: ready.flag("jwks.environments"),
             ready,
         })
     }
@@ -2112,7 +2115,7 @@ async fn serve(
 ) -> Result<(), String> {
     let all = pools(config, &prepared).await?;
     let oauth_inputs = oauth_inputs(&all, &prepared);
-    let keks = login::RealmKeks::new(prepared.login_keys);
+    let keks = login::EnvironmentKeks::new(prepared.login_keys);
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
     // OP-42, OP-57 item 7
@@ -2192,7 +2195,7 @@ async fn serve(
     // OP-149 m.7
     let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)
-    let realm_keys = Arc::new(idp::RealmKeyring::new(
+    let environment_keys = Arc::new(idp::EnvironmentKeyring::new(
         signer(),
         prepared.identity_keys.clone(),
     ));
@@ -2220,7 +2223,7 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     // OP-35, OP-158 m.3 (v)
-    let realm_quotas = Arc::new(quota::PgRequestQuotas::new(
+    let environment_quotas = Arc::new(quota::PgRequestQuotas::new(
         router_pool.clone(),
         app.clone(),
         now_ms,
@@ -2245,7 +2248,8 @@ async fn serve(
     )?;
     let directive_router = router_pool.clone();
     let review_router = router_pool.clone();
-    let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
+    let environments =
+        identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     // OP-67 m.3, OP-138
     background.jwks.set(true);
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
@@ -2485,17 +2489,21 @@ async fn serve(
     let management = admin::router(
         (management_origin, identity_section.signer.clone()),
         &prepared.identity_keys,
-        admin::realm::Realms {
+        admin::environment::Environments {
             app: admin_app,
             reads: admin_reads,
             checkpointer: admin_checkpointer,
             router: tenants_pool.clone(),
             ids: admin_ids,
             plane: idp_plane.clone(),
-            base: RealmBase::parse(&identity_section.realm_base).map_err(|e| e.to_string())?,
-            keys: realm_keys,
+            base: EnvironmentBase::parse(&identity_section.environment_base)
+                .map_err(|e| e.to_string())?,
+            keys: environment_keys,
             declared: admin_targets,
-            platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
+            platform: config
+                .suiss
+                .as_ref()
+                .and_then(|s| s.platform_environment.clone()),
             outbound: admin_outbound,
             vault: access_identity_events::adapters::KekSealer(admin_keks),
             geo: admin_geo,
@@ -2536,17 +2544,17 @@ async fn serve(
     );
     // OP-155 m.3 (n)
     let ldap_credentials = access_http::login::ldap_credentials_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
     // OP-156 m.3 (d)
     let push = access_http::login::push_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
     // OP-156 m.3 (e), (f)
     let payment = access_http::login::payment_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
         access_identity_ui::app::payment::AppFactorRoots::embedded(
             config.app_factor.apple_app_ids.clone(),
@@ -2554,37 +2562,37 @@ async fn serve(
     );
     // OP-156 m.3 (z), E58
     let first_contact = access_http::login::first_contact_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
     // OP-155 m.3 (i), TN-134
     let sso_setup = access_http::login::sso_setup_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
     // OP-155 m.3 (m)
     let certificate_login = access_http::login::certificate_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
         certificate::certificates(prepared.outbound.clone(), Arc::new(idp_plane.clone())),
     );
     // E56, OP-156 m.4 Q20
     let handles = access_http::login::handle_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
         access_identity_ui::app::handle::RouterHandles(tenants_pool.clone()),
         handles::OutboundHandles(prepared.outbound.clone()),
     );
     // OP-156 m.3 (w), E59
     let cloud_keys = access_http::login::cloud_key_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
         idp_plane.clone(),
         String::from(IDENTITY_PEP),
     );
     // OP-157 m.3 (f), (g)
     let support = access_http::login::support_router(
-        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        EnvironmentDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
         idp_plane.clone(),
         String::from(IDENTITY_PEP),
@@ -2611,10 +2619,10 @@ async fn serve(
         public_adp
             .merge(products)
             .merge(platform)
-            .merge(realms)
+            .merge(environments)
             .merge(access_http::quota::meter(
                 sign_in.merge(me).merge(certificate_login),
-                realm_quotas.clone(),
+                environment_quotas.clone(),
             ))
             .merge(ldap_credentials)
             .merge(push)
@@ -2626,11 +2634,14 @@ async fn serve(
             .merge(sso_setup)
             .merge(access_http::quota::meter(
                 account_pages,
-                realm_quotas.clone(),
+                environment_quotas.clone(),
             ))
-            .merge(access_http::quota::meter(authorize, realm_quotas.clone()))
+            .merge(access_http::quota::meter(
+                authorize,
+                environment_quotas.clone(),
+            ))
             .merge(edge_calls)
-            .merge(access_http::quota::meter(scim_calls, realm_quotas))
+            .merge(access_http::quota::meter(scim_calls, environment_quotas))
             .merge(declared(&Declarations::of(config.provider)))
             .merge(access_http::stage11::router())
             .merge(access_http::stage12::router())
@@ -2824,10 +2835,10 @@ async fn listen(
     .await
 }
 
-/// The port of the realms' public origin, from `identity.realm_base`; none for 443 (OP-155
+/// The port of the environments' public origin, from `identity.environment_base`; none for 443 (OP-155
 /// m.3 (m)).
 fn public_port(config: &Config) -> Option<u16> {
-    let base = config.identity.as_ref()?.realm_base.as_str();
+    let base = config.identity.as_ref()?.environment_base.as_str();
     let authority = base.strip_prefix("https://")?.split('/').next()?;
     authority.rsplit_once(':').and_then(|(_, p)| p.parse().ok())
 }

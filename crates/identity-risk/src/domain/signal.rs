@@ -9,7 +9,7 @@ pub enum RiskSignal {
     ImpossibleTravel,
     /// No valid device marker for the account on this browser (X33).
     NewDevice,
-    /// The address's ASN is on the realm's deny list (no third-party reputation feed).
+    /// The address's ASN is on the environment's deny list (no third-party reputation feed).
     SuspiciousIp,
     /// The presented password is in the breach corpus (IDP-3).
     BreachedPassword,
@@ -85,7 +85,7 @@ pub enum Source {
     Breach,
     /// The login throttle counters.
     Counters,
-    /// The realm's canary accounts.
+    /// The environment's canary accounts.
     Canary,
 }
 

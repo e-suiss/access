@@ -43,10 +43,10 @@ control = "AU-10"
 status = "met"
 rules = ["G14", "U52"]
 tests = [
-  "crates/http/tests/admin_realm.rs::an_audit_event_proves_its_inclusion_in_the_realm_tree",
+  "crates/http/tests/admin_environment.rs::an_audit_event_proves_its_inclusion_in_the_environment_tree",
   "bins/access-server/src/publication/tests.rs::an_identity_audit_row_is_in_a_signed_checkpoint_at_its_publication_target",
 ]
-note = "Each event has an inclusion proof in its realm's tree, and actions are attributed by the actor's signed statement."
+note = "Each event has an inclusion proof in its environment's tree, and actions are attributed by the actor's signed statement."
 
 [[control]]
 control = "AU-11"
@@ -56,7 +56,7 @@ tests = [
   "crates/identity-export/tests/cold_tier.rs::a_due_partition_moves_to_the_cold_tier_verified_and_detached",
   "crates/identity-export/tests/tiles.rs::every_ended_year_is_frozen_once",
 ]
-note = "Records are kept: 12 months by default, then a verified cold archive (OP-73); longer hot windows are a realm's audit tier."
+note = "Records are kept: 12 months by default, then a verified cold archive (OP-73); longer hot windows are an environment's audit tier."
 
 [[control]]
 control = "AU-12"
@@ -73,7 +73,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
   "crates/identity-webauthn/tests/ceremony.rs::es256_device_bound_passkey_registers_and_authenticates_at_aal3",
 ]
-note = "Users sign in with one or more factors as the realm requires."
+note = "Users sign in with one or more factors as the environment requires."
 
 [[control]]
 control = "IA-2(8)"
@@ -136,7 +136,7 @@ tests = [
   "bins/access-server/src/bootstrap/tests/durability/hybrid.rs::a_hybrid_receipt_from_the_real_server_verifies_only_with_both_components",
   "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
 ]
-note = "Classical algorithms through aws-lc-rs and PKCS#11; a hybrid receipt verifies only with both components and the ML-DSA COSE layer needs a provider. The FIPS 140-3 build profile and realm post-quantum keys wait on lane J3; the FIPS image builds on CI only."
+note = "Classical algorithms through aws-lc-rs and PKCS#11; a hybrid receipt verifies only with both components and the ML-DSA COSE layer needs a provider. The FIPS 140-3 build profile and environment post-quantum keys wait on lane J3; the FIPS image builds on CI only."
 
 [[control]]
 control = "SC-28"

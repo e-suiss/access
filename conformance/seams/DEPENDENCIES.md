@@ -17,7 +17,7 @@ Access endpoints:
 - `/.well-known/access-domain-metadata/{}` (public)
 - `/access/v1/claims:ingest` (public)
 - `/access/v1/evaluation` (public)
-- `/realms/{}/v1/vault/releases` (not in a public contract)
+- `/env/{}/v1/vault/releases` (not in a public contract)
 
 Declared:
 
@@ -36,7 +36,7 @@ Crates:
 
 Access endpoints:
 
-- `/.well-known/suiss-configuration/realms/{}` (public)
+- `/.well-known/suiss-configuration/env/{}` (public)
 - `/access/v1/relay-status` (public)
 - `/access/v1/search/{}` (public)
 
@@ -55,8 +55,8 @@ Crates:
 
 Access endpoints:
 
-- `/admin/v1/realms/{}/hr-sources/{}/records:batch` (public)
-- `/admin/v1/realms/{}/intents` (public)
+- `/admin/v1/envs/{}/hr-sources/{}/records:batch` (public)
+- `/admin/v1/envs/{}/intents` (public)
 
 Declared:
 
@@ -165,7 +165,7 @@ Access endpoints:
 
 Declared:
 
-- Platform client: the platform realm's root registers its client with `idp.client.register` (OP-149 m.4); a third-party product is registered the same way
+- Platform client: the platform environment's root registers its client with `idp.client.register` (OP-149 m.4); a third-party product is registered the same way
 - Client certificate: the transport authenticates it as its own PEP (L1-ADP-2) with a certificate from any CA the deployment trusts
 - Domain Acceptances: its schema and Claims take effect only through the domain's own Acceptance Exercises (§7.9.10.3, PI-3)
 - Custodial key: none: its service and client keys are its own

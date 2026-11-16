@@ -8,14 +8,14 @@ test.describe("@live console SIEM export", () => {
   test("@live the export sinks route reads and writes nothing without a session", async ({
     page,
   }) => {
-    const list = await page.request.get("/console/api/proxy/admin/realms/acme/export-sinks");
+    const list = await page.request.get("/console/api/proxy/admin/envs/acme/export-sinks");
     expect([401, 403]).toContain(list.status());
-    const write = await page.request.post("/console/api/proxy/admin/realms/acme/export-sinks", {
+    const write = await page.request.post("/console/api/proxy/admin/envs/acme/export-sinks", {
       data: { name: "splunk", adapter: "otlp", endpoint: "https://otel.example/v1/logs" },
     });
     expect([401, 403]).toContain(write.status());
     const retire = await page.request.post(
-      "/console/api/proxy/admin/realms/acme/export-sinks/splunk/retire",
+      "/console/api/proxy/admin/envs/acme/export-sinks/splunk/retire",
       { data: {} },
     );
     expect([401, 403]).toContain(retire.status());

@@ -333,7 +333,7 @@ pub enum TextId {
     /// P4: the upstream's subject changed; only an explicit link after a re-authentication resolves it (OP-155 m.3 (h)).
     #[serde(rename = "upstream.subject_conflict")]
     UpstreamSubjectConflict,
-    /// P4: home realm discovery's interstitial title (OP-155 m.3 (h)).
+    /// P4: home environment discovery's interstitial title (OP-155 m.3 (h)).
     #[serde(rename = "hrd.title")]
     HrdTitle,
     /// P4: why the organization's own sign-in page follows.
@@ -342,7 +342,7 @@ pub enum TextId {
     /// P4: going on to the organization's sign-in.
     #[serde(rename = "action.continue_to_organization")]
     HrdContinue,
-    /// P4: staying on the realm's own sign-in.
+    /// P4: staying on the environment's own sign-in.
     #[serde(rename = "action.use_another_way")]
     HrdOtherWay,
     /// P9: certificate, PIV and CAC sign-in (OP-155 m.3 (m)).
@@ -576,7 +576,7 @@ pub enum TextId {
     /// OP-159 m.3 (ll), (qq)).
     #[serde(rename = "passkey.no_pqc")]
     PasskeyNoPqc,
-    /// J11: the authenticator's attestation did not verify under the realm's direct policy
+    /// J11: the authenticator's attestation did not verify under the environment's direct policy
     /// (§10.2.4, OP-159 m.3 (ll)).
     #[serde(rename = "passkey.attestation_refused")]
     PasskeyAttestationRefused,

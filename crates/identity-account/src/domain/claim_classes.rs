@@ -1,4 +1,4 @@
-//! The realm issuer's Claim classes outside the Kernel table (OP-153 m.2 N0): their names,
+//! The environment issuer's Claim classes outside the Kernel table (OP-153 m.2 N0): their names,
 //! value shapes and body digests, as `conformance/cddl/identity-claims.cddl` defines them. The
 //! Kernel accepts these classes unchecked (L2-CLB-2); the identity plane builds them here and
 //! authority-core reads them by the same names.

@@ -1,4 +1,4 @@
-//! `POST /register` (RFC 7591) of the realm's DCR profile (OP-154 m.3 (j)): JSON only, an
+//! `POST /register` (RFC 7591) of the environment's DCR profile (OP-154 m.3 (j)): JSON only, an
 //! initial access token in `Authorization`, the peer's address for the per-prefix limit; a
 //! closed profile answers `404`.
 
@@ -18,12 +18,12 @@ use crate::login::Peer;
 
 type Shared<E> = State<Arc<OAuth<E>>>;
 
-/// The registration routes, at the host root and under `/realms/{slug}`.
+/// The registration routes, at the host root and under `/env/{slug}`.
 pub(super) fn routes<E: Env>() -> Router<Arc<OAuth<E>>> {
     let path = access_identity_oauth::domain::metadata::REGISTER_PATH;
     Router::new()
         .route(path, post(register::<E>))
-        .route(&format!("/realms/{{slug}}{path}"), post(register::<E>))
+        .route(&format!("/env/{{slug}}{path}"), post(register::<E>))
 }
 
 async fn register<E: Env>(
@@ -34,8 +34,8 @@ async fn register<E: Env>(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let realm = match s
-        .realm(
+    let environment = match s
+        .environment(
             authority(&uri, &headers),
             p.as_ref().map(|Path(x)| x.as_str()),
         )
@@ -62,7 +62,7 @@ async fn register<E: Env>(
         .and_then(|v| v.to_str().ok());
     render(
         s.register_client(
-            &realm,
+            &environment,
             authorization,
             &body,
             peer.map(|Extension(Peer(ip))| ip),

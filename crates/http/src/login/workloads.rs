@@ -1,6 +1,6 @@
 //! Workload Instances and their runtime attestation on axum (OP-154 m.3 (d), (s)):
-//! `POST /v1/workloads/instances` and `POST /v1/workloads/attestations` at the realm's host and
-//! under `/realms/{slug}`. A workload is no browser: there is no session or cookie; its key's
+//! `POST /v1/workloads/instances` and `POST /v1/workloads/attestations` at the environment's host and
+//! under `/env/{slug}`. A workload is no browser: there is no session or cookie; its key's
 //! own signature over `instance_create` is the proof of possession, and an attestation binds
 //! only the Instance's own key.
 
@@ -20,7 +20,7 @@ use axum::response::Response;
 use axum::routing::post;
 
 use super::Shared;
-use super::web::{json_only, problem, realm, send};
+use super::web::{environment, json_only, problem, send};
 
 /// Largest request body.
 const MAX_BODY: usize = 16 * 1024;
@@ -61,7 +61,7 @@ where
         roots,
     });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r.route(
             &format!("{prefix}/v1/workloads/instances"),
             post(open::<D, K, KI, C, M, W>),
@@ -90,7 +90,7 @@ where
     M: Messages,
     W: WorkloadInstances + PartyKeys,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -128,7 +128,7 @@ where
     M: Messages,
     W: WorkloadInstances + PartyKeys,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

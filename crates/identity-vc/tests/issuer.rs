@@ -130,7 +130,7 @@ fn present(sd_jwt: &str, holder: &dyn Signer, aud: &str, nonce: &str) -> String 
 // E55, IDP-21, PI-3, Ek B 4196
 #[test]
 fn an_sd_jwt_vc_issued_to_an_agent_key_binding_verifies_with_kb_jwt() {
-    let realm = SoftSigner::generate_p256().unwrap().0;
+    let environment = SoftSigner::generate_p256().unwrap().0;
     let agent = SoftSigner::generate_ed25519().unwrap().0;
     let bound = agent.public_key();
     let key = verify(
@@ -142,7 +142,7 @@ fn an_sd_jwt_vc_issued_to_an_agent_key_binding_verifies_with_kb_jwt() {
     .unwrap();
     assert_eq!(key, bound);
     let credential = issue(
-        &realm,
+        &environment,
         &Credential {
             issuer: ISSUER,
             attribute: PersonAttribute::AgeOver18,
@@ -155,8 +155,11 @@ fn an_sd_jwt_vc_issued_to_an_agent_key_binding_verifies_with_kb_jwt() {
     )
     .unwrap();
     let mut keys = KeySet::default();
-    keys.insert(thumbprint(&realm.public_key()), realm.public_key())
-        .unwrap();
+    keys.insert(
+        thumbprint(&environment.public_key()),
+        environment.public_key(),
+    )
+    .unwrap();
     keys.allowed = BTreeSet::from([Algorithm::Es256, Algorithm::Ed25519]);
     let p = present(&credential, &agent, "https://rp.test", "rp-nonce");
     let v = sd_jwt::verify(
@@ -246,7 +249,7 @@ fn the_key_proof_binds_only_the_holders_key() {
         ),
         Err(ProofError::Claims)
     );
-    let realm = SoftSigner::generate_p256().unwrap().0;
+    let environment = SoftSigner::generate_p256().unwrap().0;
     let base = Credential {
         issuer: ISSUER,
         attribute: PersonAttribute::AgeOver21,
@@ -256,13 +259,13 @@ fn the_key_proof_binds_only_the_holders_key() {
         now_ms: NOW,
         salt: fresh16(),
     };
-    assert_eq!(issue(&realm, &base), Err(IssueError::Value));
+    assert_eq!(issue(&environment, &base), Err(IssueError::Value));
     let named = Credential {
         attribute: PersonAttribute::VerifiedName,
         value: Value::from("Ada Lovelace"),
         ..base
     };
-    assert!(issue(&realm, &named).is_ok());
+    assert!(issue(&environment, &named).is_ok());
 }
 
 struct Verified(bool);
@@ -305,7 +308,7 @@ fn request(name: &str, proof: &str) -> access_kernel::json::Json {
 // E55, PI-3, Ek B 4196, 5039
 #[test]
 fn a_request_gets_only_the_granted_verified_person_attribute() {
-    let realm = SoftSigner::generate_p256().unwrap().0;
+    let environment = SoftSigner::generate_p256().unwrap().0;
     let device = SoftSigner::generate_p256().unwrap().0;
     let grant = Grant {
         subject: fresh16(),
@@ -318,7 +321,7 @@ fn a_request_gets_only_the_granted_verified_person_attribute() {
         status: List,
         clock: Fixed,
         random: Fresh,
-        signer: &realm,
+        signer: &environment,
     };
     let p = proof(&device, true, "c-nonce-1");
     let sd = issuer

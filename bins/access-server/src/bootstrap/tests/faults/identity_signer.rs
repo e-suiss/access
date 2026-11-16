@@ -7,7 +7,7 @@ use super::super::management::send;
 use super::identity;
 
 fn userinfo() -> Request<Body> {
-    Request::get("/realms/acme/userinfo")
+    Request::get("/env/acme/userinfo")
         .header(header::HOST, "access.test")
         .header(
             header::AUTHORIZATION,

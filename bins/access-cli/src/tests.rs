@@ -130,10 +130,10 @@ mod management {
     const CONNECT: [&str; 10] = [
         "--api",
         "https://mgmt.example:9443",
-        "--realm",
+        "--environment",
         "acme",
         "--issuer",
-        "https://login.example/realms/acme",
+        "https://login.example/env/acme",
         "--basis",
         "public:AAAAAAAAAAAAAAAAAAAAAA",
         "--ca",
@@ -258,7 +258,7 @@ mod management {
         release.extend(["--release", "clients/c-1"].map(String::from));
         assert!(Cli::try_parse_from(&release).is_ok());
         let mut both = release.clone();
-        both.extend(["--file", "realm.yaml"].map(String::from));
+        both.extend(["--file", "environment.yaml"].map(String::from));
         assert!(Cli::try_parse_from(&both).is_err());
         assert!(Cli::try_parse_from(&a).is_err());
     }

@@ -317,7 +317,7 @@ impl<K: KeyDirectory, T: Tenants, S, A> Service<K, T, S, A> {
 }
 
 impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects, A> Service<K, T, S, A> {
-    /// `POST /access/v1/tenants/{tenant}/subjects:resolve` (OP-149 A11): between the realm's
+    /// `POST /access/v1/tenants/{tenant}/subjects:resolve` (OP-149 A11): between the environment's
     /// `PartyID`s and the pairwise `sub` the named client sees, one direction per call; what does
     /// not resolve is listed as `unknown`. A Party's `sub` for the client is the one its tokens
     /// carry, assigned now when the client has not seen the subject yet (MD-10). A platform
@@ -332,13 +332,13 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects, A> Service<K, T, S, A
             Err(BadRequest(code)) => return Reply::Bad(code),
         };
         let sector = match caller {
-            Caller::Pep(_) => Sector::RealmClient(&req.client_id),
+            Caller::Pep(_) => Sector::EnvironmentClient(&req.client_id),
             Caller::Client(c) if c.client_id == req.client_id => Sector::Platform(c),
             Caller::Client(_) => return Reply::Bad("client-mismatch"),
         };
         match self
             .subjects
-            .resolve(id, req.realm, sector, req.lookup.clone())
+            .resolve(id, req.environment, sector, req.lookup.clone())
             .await
         {
             Ok(Some(found)) => Reply::Json(domain::resolution_json(&req, &found)),

@@ -65,7 +65,7 @@ export class AccountMock {
   /** The nonces of the commits received, in order. */
   readonly nonces: string[] = [];
   preferences: Record<string, boolean> = { "email:newsletter": false, "sms:campaign": false };
-  /** OP-156 m.3 (c): the İYS state the preferences carry, when the realm records it. */
+  /** OP-156 m.3 (c): the İYS state the preferences carry, when the environment records it. */
   iys: Record<string, { consent: string; status: string; at: string | null }> | null = null;
   /** S11: the sign-in methods `GET /v1/account/methods` lists. */
   methods: S11Methods = {
@@ -379,7 +379,7 @@ export class AccountMock {
     }
     if (path === "/session") {
       return reply(200, {
-        realm: "acme",
+        environment: "acme",
         domain: DOMAIN,
         account: "usr_ada",
         expires_at: "2099-01-01T00:00:00Z",

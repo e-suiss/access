@@ -32,7 +32,7 @@ use access_identity_account::app::accounts::create;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::ldap::{self as credentials, Context};
 use access_identity_account::app::vault::Vault;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
@@ -45,10 +45,10 @@ use access_internal_api::edge::GatewayKind;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -172,7 +172,7 @@ pub async fn domain(db: &TestDb, t: TenantId, seed: u8) -> DomainId {
 pub struct TestVaults(Vault);
 
 impl Vaults for TestVaults {
-    fn vault(&self, _: TenantId, _: RealmId) -> Option<Vault> {
+    fn vault(&self, _: TenantId, _: EnvironmentId) -> Option<Vault> {
         Some(self.0.clone())
     }
 }
@@ -180,7 +180,7 @@ impl Vaults for TestVaults {
 pub struct World {
     pub db: TestDb,
     pub tenant: TenantId,
-    pub corp: RealmId,
+    pub corp: EnvironmentId,
     pub domain: DomainId,
     pub vault: Vault,
     pub kek: SoftKek,
@@ -212,10 +212,10 @@ impl World {
         .unwrap()
     }
 
-    pub fn realm(&self) -> Realm<'_> {
-        Realm {
+    pub fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.corp,
+            environment: self.corp,
             kek: &self.kek,
             ids: &self.ids,
         }
@@ -235,7 +235,9 @@ impl World {
             Identifier::new(IdentifierKind::Username, user).unwrap(),
             Identifier::new(IdentifierKind::Email, &format!("{user}@corp.example")).unwrap(),
         ];
-        let s = create(&pg, &self.realm(), &ids, &ADMIN).await.unwrap();
+        let s = create(&pg, &self.environment(), &ids, &ADMIN)
+            .await
+            .unwrap();
         let mut tx = pg.begin(self.tenant, self.corp).await.unwrap();
         tx.set_status(s, AccountStatus::Staged, AccountStatus::PendingUserAction)
             .await
@@ -249,8 +251,8 @@ impl World {
 
     /// A directory app password of `subject`, as the account surface issues it.
     pub async fn app_password(&self, subject: [u8; 16]) -> String {
-        let realm = self.realm();
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        let environment = self.environment();
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
         let mut tx = self.tx().await;
         let at_ms = tx.server_time().await.unwrap();
         let cx = Context {
@@ -360,12 +362,12 @@ pub async fn world(seed: u8) -> World {
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, tenant, seed).await;
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let corp = create_realm(&mut tx, &d, "corp", "pool-default")
+    let corp = create_environment(&mut tx, &d, "corp", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
     let vault = Vault::in_memory(
-        Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
         [seed; 32],
     );
     let ca = edge_ca();
@@ -411,7 +413,7 @@ pub async fn world(seed: u8) -> World {
         corp,
         domain: d,
         vault,
-        kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        kek: SoftKek::new("environment-kek:1", [seed; 32]),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         next: std::sync::atomic::AtomicU64::new(1),
         hasher: hasher(),

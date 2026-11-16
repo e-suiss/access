@@ -1,5 +1,5 @@
-//! The realm request quota of the identity routes (OP-35, OP-158 m.3 (v), TN-24): each request
-//! to a realm's host draws from the realm's `rate_limit_rps` and its tenant's request quota,
+//! The environment request quota of the identity routes (OP-35, OP-158 m.3 (v), TN-24): each request
+//! to an environment's host draws from the environment's `rate_limit_rps` and its tenant's request quota,
 //! exact counters in layer B. Over a quota the request is `429 quota-exceeded` with
 //! `Retry-After`; a counter that cannot answer refuses with `503` (MD-8). Sign-out, logout,
 //! revocation and every `DELETE` narrow and never draw (B3, B19); static assets draw nothing.
@@ -28,14 +28,14 @@ pub const NARROWING: [&str; 8] = [
     "backchannel-logout",
 ];
 
-/// The bucket the realm request quota shows on the dashboard (§12.5.4).
-pub const BUCKET: &str = "realm-request";
+/// The bucket the environment request quota shows on the dashboard (§12.5.4).
+pub const BUCKET: &str = "environment-request";
 
-/// What a request drew from its realm.
+/// What a request drew from its environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Drawn {
-    /// The realm's slug.
-    pub realm: String,
+    /// The environment's slug.
+    pub environment: String,
     /// The highest share of a burst in use after the draw, percent.
     pub used_percent: u8,
 }
@@ -45,9 +45,9 @@ pub struct Drawn {
 pub enum Taken {
     /// Admitted.
     Admitted(Drawn),
-    /// The host names no realm here; the route answers it.
-    NoRealm,
-    /// Over the quota of the named counter: `tenant` or `realm`.
+    /// The host names no environment here; the route answers it.
+    NoEnvironment,
+    /// Over the quota of the named counter: `tenant` or `environment`.
     Refused(&'static str, Drawn),
 }
 
@@ -56,9 +56,9 @@ pub enum Taken {
 #[error("quota unavailable")]
 pub struct Unavailable;
 
-/// The layer B request counters of the realms a host serves.
+/// The layer B request counters of the environments a host serves.
 pub trait RequestQuotas: Send + Sync + 'static {
-    /// Draws one request of the realm `authority` (and `slug`, for a path issuer) reaches.
+    /// Draws one request of the environment `authority` (and `slug`, for a path issuer) reaches.
     fn take(
         &self,
         authority: &str,
@@ -76,10 +76,10 @@ pub fn free(method: &Method, path: &str) -> bool {
     NARROWING.contains(&last) || path.split('/').any(|s| s == "assets")
 }
 
-/// The realm slug of a path issuer route (`/realms/{slug}/…`).
+/// The environment slug of a path issuer route (`/env/{slug}/…`).
 #[must_use]
 pub fn slug_of(path: &str) -> Option<&str> {
-    let rest = path.strip_prefix("/realms/")?;
+    let rest = path.strip_prefix("/env/")?;
     let slug = rest.split('/').next()?;
     (!slug.is_empty()).then_some(slug)
 }
@@ -94,7 +94,7 @@ fn quota_exceeded(counter: &'static str) -> Response {
     r
 }
 
-/// The middleware: draws the request from its realm's counters before any extractor runs.
+/// The middleware: draws the request from its environment's counters before any extractor runs.
 pub async fn metered<Q: RequestQuotas>(
     State(quotas): State<Arc<Q>>,
     request: Request,
@@ -121,7 +121,7 @@ pub async fn metered<Q: RequestQuotas>(
     let seen = |d: &Drawn, refused| {
         access_telemetry::rate_board::RATE_BOARD.record(
             access_telemetry::rate_board::Seen {
-                scope: &format!("realm:{}", d.realm),
+                scope: &format!("environment:{}", d.environment),
                 bucket: BUCKET,
                 percent: d.used_percent,
                 consumer,
@@ -135,7 +135,7 @@ pub async fn metered<Q: RequestQuotas>(
             seen(&d, None);
             next.run(request).await
         }
-        Ok(Taken::NoRealm) => next.run(request).await,
+        Ok(Taken::NoEnvironment) => next.run(request).await,
         Ok(Taken::Refused(counter, d)) => {
             seen(&d, Some("quota-exceeded"));
             quota_exceeded(counter)
@@ -156,7 +156,7 @@ fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// `routes` behind the realm request quota of `quotas`.
+/// `routes` behind the environment request quota of `quotas`.
 pub fn meter<Q: RequestQuotas>(routes: axum::Router, quotas: Arc<Q>) -> axum::Router {
     routes.layer(axum::middleware::from_fn_with_state(quotas, metered::<Q>))
 }
@@ -170,22 +170,22 @@ mod tests {
     fn narrowing_and_assets_draw_nothing() {
         for path in [
             "/revoke",
-            "/realms/acme/end-session",
+            "/env/acme/end-session",
             "/login/api/v1/sessions/current/sign-out",
             "/login/assets/app.js",
         ] {
             assert!(free(&Method::POST, path), "{path}");
         }
         assert!(free(&Method::DELETE, "/me/devices/1"));
-        for path in ["/token", "/realms/acme/authorize", "/login/api/v1/sessions"] {
+        for path in ["/token", "/env/acme/authorize", "/login/api/v1/sessions"] {
             assert!(!free(&Method::POST, path), "{path}");
         }
     }
 
     #[test]
     fn a_path_issuer_names_its_slug() {
-        assert_eq!(slug_of("/realms/acme/token"), Some("acme"));
-        assert_eq!(slug_of("/realms/"), None);
+        assert_eq!(slug_of("/env/acme/token"), Some("acme"));
+        assert_eq!(slug_of("/env/"), None);
         assert_eq!(slug_of("/token"), None);
     }
 }

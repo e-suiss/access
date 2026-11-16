@@ -1,6 +1,6 @@
 //! The sign-in a proven registration opens (TN-80 step 8, OP-153 m.3 (g)): the returned code is
 //! the e-mail factor of a login flow for the new account, which then completes like any other.
-//! A realm that requires a second step leaves the flow at that step, with nothing enrolled yet.
+//! An environment that requires a second step leaves the flow at that step, with nothing enrolled yet.
 
 use access_identity_account::notify::message::{Address, Body, Message, Notice};
 use access_identity_account::ports::AccountTx as _;
@@ -76,7 +76,7 @@ where
     /// Opens the login flow of `subject` whose enterprise upstream sign-in was checked by the
     /// caller: discovery, `iss`, the connection's Acceptance and the ID token or assertion
     /// (OP-155 m.3 (h)); `factor` is [`Factor::upstream`]. It completes like any other first
-    /// step, so the realm's policy still decides what more it needs (TN-98).
+    /// step, so the environment's policy still decides what more it needs (TN-98).
     ///
     /// # Errors
     /// [`SessionError`].

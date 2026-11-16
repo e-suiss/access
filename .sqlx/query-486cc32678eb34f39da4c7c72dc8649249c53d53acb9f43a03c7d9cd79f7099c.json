@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT outcome, status, latency_ms FROM access.idp_webhook_attempts\n              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND event_id = $4\n              ORDER BY attempt",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_attempts",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_attempts",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "latency_ms",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_attempts",
+            "name": "latency_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "486cc32678eb34f39da4c7c72dc8649249c53d53acb9f43a03c7d9cd79f7099c"
+}

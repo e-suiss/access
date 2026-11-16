@@ -1,6 +1,6 @@
-// §8.17.4.1 identity plane note, E34, MD-14: realm configuration. Every change is drafted, shown
+// §8.17.4.1 identity plane note, E34, MD-14: environment configuration. Every change is drafted, shown
 // on the signature screen and committed as one Exercise. The RP ID change is marked irreversible
-// for passkeys (TN-17, X-L12); a new realm's first 90 minutes are shown (TN-111, CR-25); delayed
+// for passkeys (TN-17, X-L12); a new environment's first 90 minutes are shown (TN-111, CR-25); delayed
 // signals (§8.13) and a missing GeoIP source (OP-151 m.3 (b)) are stated, never hidden. The page
 // CSP mode, the DBSC switch and the Related Origins are set here too (OP-153 m.22 (c), (g), (k)).
 import { useState, type ReactElement } from "react";
@@ -38,7 +38,7 @@ interface Settings {
   readonly managed?: readonly string[];
 }
 
-interface RealmMetadata {
+interface EnvironmentMetadata {
   readonly key_state?: "pending" | "published" | "signing" | "unavailable";
   readonly signing_available_at?: string | null;
 }
@@ -75,13 +75,13 @@ const KEY_STATE = {
   unavailable: "keyUnavailable",
 } as const;
 
-function realmPath(ctx: Ctx, rest = ""): string {
-  return `realms/${encodeURIComponent(ctx.session.realm)}${rest}`;
+function environmentPath(ctx: Ctx, rest = ""): string {
+  return `envs/${encodeURIComponent(ctx.session.environment)}${rest}`;
 }
 
 /** §8.13, Ek B 2963, 3034: delayed signals, missing GeoIP and verifier reports. */
 function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Signals>(ctx.instance, realmPath(ctx, "/signals")));
+  const l = useLoad(() => adminGet<Signals>(ctx.instance, environmentPath(ctx, "/signals")));
   if (l.status !== "done") return <></>;
   const s = l.value;
   return (
@@ -110,9 +110,9 @@ function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 function Keys({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(() =>
-    adminGet<RealmMetadata>(
+    adminGet<EnvironmentMetadata>(
       ctx.instance,
-      `platform/realms/${encodeURIComponent(ctx.session.realm)}`,
+      `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
     ),
   );
   return (
@@ -161,7 +161,7 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
-            change(ctx.instance, ctx.confirm, ctx.session.realm, {
+            change(ctx.instance, ctx.confirm, ctx.session.environment, {
               operation: "putCspMode",
               method: "PUT",
               path: "settings/csp-mode",
@@ -219,7 +219,7 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
-              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+              change(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "patchSigninPolicy",
                 method: "PATCH",
                 path: "settings/signin-policy",
@@ -269,7 +269,7 @@ function RelatedOrigins({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): React
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
-              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+              change(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "putRelatedOrigins",
                 method: "PUT",
                 path: "settings/related-origins",
@@ -321,7 +321,7 @@ function Branding({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElemen
           onSubmit={(e) => {
             e.preventDefault();
             write(() =>
-              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+              change(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "patchBranding",
                 method: "PATCH",
                 path: "settings/branding",
@@ -369,7 +369,7 @@ function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
             e.preventDefault();
             setMismatch(false);
             write(() =>
-              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+              change(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "putRpId",
                 method: "PUT",
                 path: "settings/rp-id",
@@ -427,7 +427,7 @@ function Listing({
   readonly title: string;
   readonly id: string;
 }): ReactElement {
-  const l = useLoad(() => adminGet<Named>(ctx.instance, realmPath(ctx, path)));
+  const l = useLoad(() => adminGet<Named>(ctx.instance, environmentPath(ctx, path)));
   return (
     <Panel id={id} title={title}>
       <Show l={l}>
@@ -476,7 +476,9 @@ function socialWarning(w: SocialWarning): string {
 
 /** IDP-31, TN-87, Ek B 3572, 3655: the social presets and their warnings. */
 function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Socials>(ctx.instance, realmPath(ctx, "/social-providers")));
+  const l = useLoad(() =>
+    adminGet<Socials>(ctx.instance, environmentPath(ctx, "/social-providers")),
+  );
   return (
     <Panel id="social" title={t("settingsSocial")}>
       <Show l={l}>
@@ -505,7 +507,7 @@ function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 /** IDP-36, K14: counts only, never a decision input. */
 export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Analytics>(ctx.instance, realmPath(ctx, "/analytics")));
+  const l = useLoad(() => adminGet<Analytics>(ctx.instance, environmentPath(ctx, "/analytics")));
   return (
     <Panel id="analytics" title={t("analyticsTitle")}>
       <Badge variant="outline" className="self-start" data-testid="analytics-note">
@@ -565,7 +567,7 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(async () => {
-    const r = await adminGetTagged(ctx.instance, realmPath(ctx, "/settings"));
+    const r = await adminGetTagged(ctx.instance, environmentPath(ctx, "/settings"));
     return { s: r.value as Settings, ...(r.etag === undefined ? {} : { etag: r.etag }) };
   });
   return (

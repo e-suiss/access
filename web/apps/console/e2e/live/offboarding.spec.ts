@@ -11,11 +11,11 @@ test.describe("@live console offboarding", () => {
     page,
   }) => {
     const preview = await page.request.get(
-      `/console/api/proxy/admin/realms/acme/offboarding/${PARTY}/preview`,
+      `/console/api/proxy/admin/envs/acme/offboarding/${PARTY}/preview`,
     );
     expect([401, 403]).toContain(preview.status());
     const commit = await page.request.post(
-      `/console/api/proxy/admin/realms/acme/offboarding/${PARTY}/commit`,
+      `/console/api/proxy/admin/envs/acme/offboarding/${PARTY}/commit`,
       {
         data: {
           choices: {

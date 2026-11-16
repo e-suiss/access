@@ -1,6 +1,6 @@
 {
   "alias": "access-logout",
-  "description": "Access realm acme, OIDF RP-initiated, back-channel and front-channel logout (OP-155 m.3 (q)); the client secrets are made by the target at run time",
+  "description": "Access environment acme, OIDF RP-initiated, back-channel and front-channel logout (OP-155 m.3 (q)); the client secrets are made by the target at run time",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

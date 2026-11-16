@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environments SET signing_profile = $3 WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a9a68c082cd05e3218c3a3017d3a8f18b756ced07210798f52e34e38e4f60ce0"
+}

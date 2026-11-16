@@ -1,12 +1,12 @@
 //! Layer B quota counters (OP-158 m.3 (v), T27, TN-24, OP-35, MD-8): exact GCRA counters per
-//! tenant, realm and domain in PostgreSQL, drawn all or none under a row lock. A refusal writes
+//! tenant, environment and domain in PostgreSQL, drawn all or none under a row lock. A refusal writes
 //! nothing; a failure is an error the caller refuses on, never an admission.
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 use crate::scope::{DomainId, DomainTx};
 
@@ -47,8 +47,8 @@ pub enum CommitRefusal {
 pub enum RequestRefusal {
     /// The tenant's request quota.
     Tenant,
-    /// The realm's `rate_limit_rps`.
-    Realm,
+    /// The environment's `rate_limit_rps`.
+    Environment,
 }
 
 fn micros(now_ms: u64) -> Result<i64, StoreError> {
@@ -100,24 +100,24 @@ pub struct RequestTaken {
     pub used_percent: u8,
 }
 
-/// Draws one identity request of `realm` at `now_ms` from its tenant's request quota and the
-/// realm's `rate_limit_rps` (`default_rps` until one is set); bursts are `burst_s` seconds of
+/// Draws one identity request of `environment` at `now_ms` from its tenant's request quota and the
+/// environment's `rate_limit_rps` (`default_rps` until one is set); bursts are `burst_s` seconds of
 /// each rate.
 ///
 /// # Errors
 /// [`StoreError`]; the caller refuses the request.
 pub async fn take_request(
     pool: &PgPool,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     now_ms: u64,
     (default_rps, tenant_rps): (u32, u32),
     burst_s: u32,
 ) -> Result<RequestTaken, StoreError> {
     let int = |v: u32| i32::try_from(v).map_err(|_| StoreError::Range);
     let r = sqlx::query!(
-        "SELECT refused, used FROM access.realm_quota($1, $2, $3, $4, $5, $6)",
+        "SELECT refused, used FROM access.environment_quota($1, $2, $3, $4, $5, $6)",
         Uuid::from_bytes(*tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         micros(now_ms)?,
         int(default_rps)?,
         int(tenant_rps)?,
@@ -128,7 +128,7 @@ pub async fn take_request(
     let refused = match r.refused.as_deref() {
         None => None,
         Some("tenant") => Some(RequestRefusal::Tenant),
-        Some("realm") => Some(RequestRefusal::Realm),
+        Some("environment") => Some(RequestRefusal::Environment),
         Some(_) => return Err(StoreError::Corrupt),
     };
     let used = r.used.ok_or(StoreError::Corrupt)?;
@@ -138,20 +138,20 @@ pub async fn take_request(
     })
 }
 
-/// Writes the next version of the realm's `rate_limit_rps` (`idp.realm.rate_limit`).
+/// Writes the next version of the environment's `rate_limit_rps` (`idp.environment.rate_limit`).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn put_rate_limit(t: &mut TenantTx, bound: &Bound, rps: u32) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
-        "INSERT INTO access.realm_rate_limits (tenant_id, realm_id, version, rps, domain_id, decision_pos)
+        "INSERT INTO access.environment_rate_limits (tenant_id, environment_id, version, rps, domain_id, decision_pos)
          SELECT $1, $2,
-                COALESCE((SELECT max(version) FROM access.realm_rate_limits
-                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                COALESCE((SELECT max(version) FROM access.environment_rate_limits
+                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                 $3, $4, $5",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         i32::try_from(rps).map_err(|_| StoreError::Range)?,
         bound.domain().as_bytes().as_slice(),
         bound.raw_position(),
@@ -161,17 +161,17 @@ pub async fn put_rate_limit(t: &mut TenantTx, bound: &Bound, rps: u32) -> Result
     Ok(())
 }
 
-/// The realm's `rate_limit_rps` in force, `None` while the product default applies.
+/// The environment's `rate_limit_rps` in force, `None` while the product default applies.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn rate_limit(t: &mut TenantTx) -> Result<Option<u32>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let rps = sqlx::query_scalar!(
-        "SELECT rps FROM access.realm_rate_limits
-          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+        "SELECT rps FROM access.environment_rate_limits
+          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(&mut *t.tx)
     .await?;

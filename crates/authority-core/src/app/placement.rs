@@ -1,4 +1,4 @@
-//! Placement of domains, realms and tenants in cells (§17.1.4, §17.4.9, CMP-26, OP-30, TI-17,
+//! Placement of domains, environments and tenants in cells (§17.1.4, §17.4.9, CMP-26, OP-30, TI-17,
 //! T28, TN-9, OP-158 m.3 (o)): the Placement Directory routes a request to the cell that leads
 //! it and is never a decision input. A domain moves between cells only by the source's seal and
 //! the target's replayed acceptance (W7's cell move); its placement changes after the target
@@ -108,7 +108,7 @@ pub struct Siloed {
 
 /// Moves every authority domain of `tenant` to `target`, a cell of its own (TN-9, §12.1.1,
 /// OP-158 m.3 (o)): the tenant is adopted there with its id, each domain is sealed and accepted,
-/// and the tenant's placement names the target in both cells. A realm follows its governing
+/// and the tenant's placement names the target in both cells. An environment follows its governing
 /// domain's cell. The identity plane's rows of the tenant move by the logical transfer path
 /// (HL-32), not here.
 ///

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.domain_certificates (tenant_id, environment_id, cert_uuid, domain_uuid,\n                hostname, chain_pem, kek_id, wrapped_dek, key_nonce, key_sealed, not_before,\n                not_after, renew_after)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11::bigint),\n                 to_timestamp($12::bigint), to_timestamp($13::bigint))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3432db96b6b724442e1304ff7dab033f140e2fdf6cacbf49cdbd62106f09831d"
+}

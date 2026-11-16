@@ -1,5 +1,5 @@
 //! One's cloud key permissions on axum (OP-156 m.3 (w), (g), E59): the `frontend-v1`
-//! `/v1/me/cloud-key-permissions` routes at the realm's host and under `/realms/{slug}`. They ride
+//! `/v1/me/cloud-key-permissions` routes at the environment's host and under `/env/{slug}`. They ride
 //! on the session cookie and the same-origin rule; a grant carries the device Instance's own
 //! signed Exercise. Writes take an `Idempotency-Key`.
 
@@ -19,7 +19,7 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 /// Largest request body.
@@ -61,7 +61,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/me/cloud-key-permissions"),
@@ -118,7 +118,7 @@ where
     M: Messages,
     A: CloudKeyAuthority,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -148,7 +148,7 @@ where
     M: Messages,
     A: CloudKeyAuthority,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -185,7 +185,7 @@ where
     M: Messages,
     A: CloudKeyAuthority,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

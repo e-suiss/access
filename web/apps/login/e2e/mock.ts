@@ -182,7 +182,7 @@ export class LoginMock {
   readonly json = new Map<string, Canned | ((body: unknown) => Canned)>();
   readonly posted: { key: string; body: unknown }[] = [];
   branding: Canned = { status: 200, body: { display_name: null, logo_uri: null } };
-  /** `GET /v1/login/messages`: the realm's text overrides (OP-153 m.22 (k)). */
+  /** `GET /v1/login/messages`: the environment's text overrides (OP-153 m.22 (k)). */
   messages: Canned = { status: 200, body: { overrides: {} } };
   theme = "";
   /** OP-45: when set, every flow request answers this problem (the identity database is down). */

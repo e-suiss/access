@@ -71,7 +71,7 @@ tests = [
   "crates/http/tests/login/payment.rs::an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries",
   "crates/http/tests/login/payment.rs::the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation",
 ]
-note = "SMS codes are a second step only, six digits, five minutes and three tries, and off unless the realm turns them on."
+note = "SMS codes are a second step only, six digits, five minutes and three tries, and off unless the environment turns them on."
 
 [[control]]
 control = "63B 5 session management"

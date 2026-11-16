@@ -15,7 +15,7 @@ use super::*;
 fn agent_plan() -> Plan {
     Plan {
         sample_agent: Some(crate::bootstrap::agent::SampleAgentPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             display_name: String::from("Local sample agent"),
         }),
         ..approve_plan(None)
@@ -119,7 +119,7 @@ async fn the_bootstrap_makes_a_sample_agent_the_test_user_sees_acting_for_them()
     );
     // OP-154 m.3 (c), AG-41
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let row = t.agent(party.0).await.unwrap().unwrap();
@@ -182,7 +182,7 @@ async fn the_bootstrap_makes_a_sample_agent_the_test_user_sees_acting_for_them()
 
 // OP-154 m.15 (i), OP-69
 #[test]
-fn a_sample_agent_needs_the_sample_and_its_sponsor_in_its_realm() {
+fn a_sample_agent_needs_the_sample_and_its_sponsor_in_its_environment() {
     let dir = std::env::temp_dir().join(format!("abs-sample-agent-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let plan = |name: &str, body: &str| {
@@ -194,16 +194,16 @@ fn a_sample_agent_needs_the_sample_and_its_sponsor_in_its_realm() {
         .unwrap();
         Plan::load(&path)
     };
-    let sample = "[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\n";
-    let user = "[test_user]\nrealm = 'acme'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\npassword = 'correct horse battery staple'\n";
-    let agent = "[sample_agent]\nrealm = 'acme'\n";
+    let sample = "[sample]\nenvironment = 'acme'\nnamespace = 'work'\naction = 'approve'\n";
+    let user = "[test_user]\nenvironment = 'acme'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\npassword = 'correct horse battery staple'\n";
+    let agent = "[sample_agent]\nenvironment = 'acme'\n";
     assert!(plan("no-user", &format!("{sample}{agent}")).is_err());
     assert!(plan("no-sample", &format!("{user}{agent}")).is_err());
     assert!(
         plan(
             "long",
             &format!(
-                "{sample}{user}[sample_agent]\nrealm = 'acme'\ndisplay_name = '{}'\n",
+                "{sample}{user}[sample_agent]\nenvironment = 'acme'\ndisplay_name = '{}'\n",
                 "x".repeat(201)
             )
         )

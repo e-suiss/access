@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT r.source, r.person FROM access.hr_records r\n              WHERE r.tenant_id = $1 AND r.environment_id = $2\n                AND NOT EXISTS (SELECT 1 FROM access.hr_record_claims c\n                                 WHERE c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id\n                                   AND c.source = r.source AND c.person = r.person\n                                   AND c.version = r.version)\n              ORDER BY r.source, r.person LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "person",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "person"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9f7a6b2a23bae6b9a77dadc5d515bf2964242972ea1bceb7acac387c9902d29c"
+}

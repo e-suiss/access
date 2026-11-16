@@ -1,28 +1,28 @@
-//! The platform-admin surface's resources in this process (OP-151 m.2 M2): tenant and realm
-//! metadata read across tenants by the router role, never realm content (INV-29, X31), the state
-//! of a realm's signing keys (CR-25, CR-59), and provisioning writes that are `idp.platform.*`
-//! Exercises in the platform realm's governing domain (TN-110), each followed by the Genesis it
+//! The platform-admin surface's resources in this process (OP-151 m.2 M2): tenant and environment
+//! metadata read across tenants by the router role, never environment content (INV-29, X31), the state
+//! of an environment's signing keys (CR-25, CR-59), and provisioning writes that are `idp.platform.*`
+//! Exercises in the platform environment's governing domain (TN-110), each followed by the Genesis it
 //! names (TN-111).
 
 use std::collections::BTreeSet;
 
 use access_crypto::opaque_id::IdKey;
 use access_http::api::domain::caller::WriteCaller;
+use access_http::api::environment::problem_of;
 use access_http::api::ports::{
     Draft, Drafted, Item, Listing, Pending, PlatformKind, PlatformQuery, PlatformResources,
     PlatformWrite, Unavailable, Written,
 };
-use access_http::api::realm::problem_of;
 use access_http::problem::{Code, codes};
 use access_identity_admin::app::provision::{
     Created, Order, Platform, ProvisionError, Provisioned, style,
 };
 use access_identity_admin::app::rest::{self, default_validity, rfc3339};
 use access_identity_admin::domain::provision::{
-    DEFAULT_PLACEMENT, PlatformChange, ProvisionInvalid, RealmOrder, Recovery, RecoveryKey,
+    DEFAULT_PLACEMENT, EnvironmentOrder, PlatformChange, ProvisionInvalid, Recovery, RecoveryKey,
     RecoveryKeys,
 };
-use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_kernel::codec::Canonical;
@@ -30,19 +30,19 @@ use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::Root;
 use access_kernel::model::Id;
 use access_store::identity::TenantId;
-use access_store::sandbox::{self, Budget, RealmMeta, TenantMeta};
+use access_store::sandbox::{self, Budget, EnvironmentMeta, TenantMeta};
 use serde_json::{Map, Value, json};
 use suiss_crypto::dcbor::{self, Limits};
 use suiss_crypto::rotation::Policy;
 
-use super::realm::Realms;
-use crate::idp::RealmKeyring;
+use super::environment::Environments;
+use crate::idp::EnvironmentKeyring;
 
 /// The members a tenant creation takes.
 const TENANT_BODY: &[&str] = &["tenant_id", "placement", rest::VALIDITY];
 
-/// The members a realm or sandbox creation takes.
-const REALM_BODY: &[&str] = &[
+/// The members an environment or sandbox creation takes.
+const ENVIRONMENT_BODY: &[&str] = &[
     "slug",
     "issuer_style",
     "placement",
@@ -55,7 +55,7 @@ const REALM_BODY: &[&str] = &[
     rest::VALIDITY,
 ];
 
-/// Most recovery keys a realm creation names (§13.6).
+/// Most recovery keys an environment creation names (§13.6).
 const MAX_RECOVERY_KEYS: usize = 16;
 
 fn invalid(i: ProvisionInvalid) -> &'static Code {
@@ -93,7 +93,7 @@ fn only(m: &Map<String, Value>, allowed: &[&str]) -> Result<(), &'static Code> {
     if m.keys().all(|k| allowed.contains(&k.as_str())) {
         Ok(())
     } else {
-        Err(&codes::realm::INVALID_BODY)
+        Err(&codes::environment::INVALID_BODY)
     }
 }
 
@@ -125,7 +125,7 @@ fn root(v: Option<&Value>) -> Result<Root, &'static Code> {
 /// `{"held_on": "device" | "offline", "keys": [{"party": <party>, "kid": <thumbprint>}, …]}`: the
 /// founders' recovery keys by thumbprint only (§13.6, SEC20, OP-158 m.3 (m)).
 fn recovery_keys(v: Option<&Value>) -> Result<Option<RecoveryKeys>, &'static Code> {
-    let bad = &codes::realm::INVALID_BODY;
+    let bad = &codes::environment::INVALID_BODY;
     let o = match v {
         None | Some(Value::Null) => return Ok(None),
         Some(Value::Object(o)) => o,
@@ -163,7 +163,7 @@ fn text<'a>(m: &'a Map<String, Value>, k: &str) -> Result<Option<&'a str>, &'sta
     match m.get(k) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s)),
-        Some(_) => Err(&codes::realm::INVALID_BODY),
+        Some(_) => Err(&codes::environment::INVALID_BODY),
     }
 }
 
@@ -181,15 +181,16 @@ fn change(
     let placement = String::from(text(body, "placement")?.unwrap_or(DEFAULT_PLACEMENT));
     if operation == "createTenant" {
         only(body, TENANT_BODY)?;
-        let tenant = tenant_of(ids, text(body, "tenant_id")?).ok_or(&codes::realm::INVALID_BODY)?;
+        let tenant =
+            tenant_of(ids, text(body, "tenant_id")?).ok_or(&codes::environment::INVALID_BODY)?;
         return Ok(PlatformChange::Tenant { tenant, placement });
     }
-    only(body, REALM_BODY)?;
+    only(body, ENVIRONMENT_BODY)?;
     let tenant = tenant_of(ids, tenant).ok_or(&codes::NOT_FOUND)?;
-    let order = RealmOrder {
+    let order = EnvironmentOrder {
         tenant,
         slug: String::from(text(body, "slug")?.ok_or(&codes::platform::INVALID_SLUG)?),
-        style: style(text(body, "issuer_style")?).ok_or(&codes::realm::INVALID_BODY)?,
+        style: style(text(body, "issuer_style")?).ok_or(&codes::environment::INVALID_BODY)?,
         placement,
         root: root(body.get("root"))?,
         ct3_delay_s: match body.get("ct3_delay_s") {
@@ -200,12 +201,12 @@ fn change(
         causal_binding: match body.get("causal_binding") {
             None | Some(Value::Null) => false,
             Some(Value::Bool(b)) => *b,
-            Some(_) => return Err(&codes::realm::INVALID_BODY),
+            Some(_) => return Err(&codes::environment::INVALID_BODY),
         },
         acknowledge_no_recovery: match body.get("acknowledge_no_recovery") {
             None | Some(Value::Null) => false,
             Some(Value::Bool(b)) => *b,
-            Some(_) => return Err(&codes::realm::INVALID_BODY),
+            Some(_) => return Err(&codes::environment::INVALID_BODY),
         },
         // §13.6, OP-158 m.3 (m)
         recovery: recovery_keys(body.get("recovery"))?,
@@ -214,13 +215,13 @@ fn change(
     let sandbox = match body.get("sandbox") {
         None | Some(Value::Null) => operation == "createSandboxDomain",
         Some(Value::Bool(b)) => *b,
-        Some(_) => return Err(&codes::realm::INVALID_BODY),
+        Some(_) => return Err(&codes::environment::INVALID_BODY),
     };
     match (operation, sandbox) {
-        ("createRealm", false) => Ok(PlatformChange::Realm(order)),
-        ("createRealm" | "createSandboxDomain", true) => Ok(PlatformChange::Sandbox(order)),
-        ("createSandboxDomain", false) => Err(&codes::realm::INVALID_BODY),
-        _ => Err(&codes::realm::UNKNOWN_OPERATION),
+        ("createEnvironment", false) => Ok(PlatformChange::Environment(order)),
+        ("createEnvironment" | "createSandboxDomain", true) => Ok(PlatformChange::Sandbox(order)),
+        ("createSandboxDomain", false) => Err(&codes::environment::INVALID_BODY),
+        _ => Err(&codes::environment::UNKNOWN_OPERATION),
     }
 }
 
@@ -240,14 +241,14 @@ fn budget_view(b: Option<Budget>) -> Value {
     })
 }
 
-/// CR-25: the latest a realm's first key may sign; CR-59 may make it sooner.
+/// CR-25: the latest an environment's first key may sign; CR-59 may make it sooner.
 const fn signing_available_ms(created_ms: u64) -> u64 {
-    created_ms.saturating_add(Policy::REALM.publish_lead_ms)
+    created_ms.saturating_add(Policy::ENVIRONMENT.publish_lead_ms)
 }
 
-/// What the realm's JWKS says about its keys at `now_ms` (CR-25, SAI-46, OP-148).
-async fn key_state(keys: &RealmKeyring, m: &RealmMeta, now_ms: u64) -> &'static str {
-    match keys.jwks(m.realm).await {
+/// What the environment's JWKS says about its keys at `now_ms` (CR-25, SAI-46, OP-148).
+async fn key_state(keys: &EnvironmentKeyring, m: &EnvironmentMeta, now_ms: u64) -> &'static str {
+    match keys.jwks(m.environment).await {
         Ok(doc) if access_identity_admin::app::jwks_kids(&doc).is_empty() => "pending",
         Ok(_) if now_ms >= signing_available_ms(m.created_ms) => "signing",
         Ok(_) => "published",
@@ -255,7 +256,7 @@ async fn key_state(keys: &RealmKeyring, m: &RealmMeta, now_ms: u64) -> &'static 
     }
 }
 
-fn realm_view(ids: &IdKey, m: &RealmMeta) -> Result<Value, Unavailable> {
+fn environment_view(ids: &IdKey, m: &EnvironmentMeta) -> Result<Value, Unavailable> {
     Ok(json!({
         "slug": m.slug,
         "tenant_id": ids.encode(TENANT_PREFIX, *m.tenant.as_bytes()).map_err(|e| unavailable(&e))?,
@@ -281,16 +282,19 @@ fn tenant_view(ids: &IdKey, t: &TenantMeta) -> Result<Value, Unavailable> {
     }))
 }
 
-impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms<P> {
+impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Environments<P> {
     async fn platform(&self) -> Result<Option<Platform<'_>>, Unavailable> {
         let Some(slug) = self.platform.as_deref() else {
             return Ok(None);
         };
-        Ok(self.locate(slug).await?.map(|(tenant, realm)| Platform {
-            tenant,
-            realm,
-            router: &self.router,
-        }))
+        Ok(self
+            .locate(slug)
+            .await?
+            .map(|(tenant, environment)| Platform {
+                tenant,
+                environment,
+                router: &self.router,
+            }))
     }
 
     fn page<T>(rows: Vec<T>, limit: u32, key: impl Fn(&T) -> String) -> (Vec<T>, Option<String>) {
@@ -350,10 +354,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     .collect::<Result<_, _>>()?;
                 Ok(Some(Listing { items, last }))
             }
-            PlatformKind::Realms | PlatformKind::SandboxDomains => {
+            PlatformKind::Environments | PlatformKind::SandboxDomains => {
                 let sandbox_only = q.kind == PlatformKind::SandboxDomains;
                 if let Some(slug) = q.key.as_deref() {
-                    let rows = sandbox::realms(
+                    let rows = sandbox::environments(
                         (&self.router, &self.app),
                         Some(slug),
                         None,
@@ -365,7 +369,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     let Some(m) = rows.first() else {
                         return Ok(None);
                     };
-                    let mut body = realm_view(&ids, m)?;
+                    let mut body = environment_view(&ids, m)?;
                     let now = crate::admin::WallClock::now();
                     if let Value::Object(o) = &mut body {
                         o.insert(
@@ -386,7 +390,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 if !self.tenant_exists(tenant).await? {
                     return Ok(None);
                 }
-                let rows = sandbox::realms(
+                let rows = sandbox::environments(
                     (&self.router, &self.app),
                     None,
                     Some(TenantId::from_bytes(tenant)),
@@ -398,7 +402,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 let (rows, last) = Self::page(rows, q.limit, |m| m.slug.clone());
                 let items = rows
                     .iter()
-                    .map(|m| realm_view(&ids, m).map(|body| Item { body, version: 0 }))
+                    .map(|m| environment_view(&ids, m).map(|body| Item { body, version: 0 }))
                     .collect::<Result<_, _>>()?;
                 Ok(Some(Listing { items, last }))
             }
@@ -423,7 +427,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         let checks = [
             ("database", database),
             ("identity-signer", signer),
-            ("platform-realm", platform),
+            ("platform-environment", platform),
             ("opaque-id-key", ids),
         ];
         let ok = checks.iter().all(|(_, ok)| *ok);
@@ -441,7 +445,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         draft: bool,
     ) -> Result<Result<(PlatformChange, Value), &'static Code>, Unavailable> {
         let Some(mut body) = w.body.as_object().cloned() else {
-            return Ok(Err(&codes::realm::INVALID_BODY));
+            return Ok(Err(&codes::environment::INVALID_BODY));
         };
         if draft {
             body.entry(rest::VALIDITY)
@@ -464,7 +468,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Err(code) => return Ok(Drafted::Rejected(code)),
         };
         let Ok(validity) = rest::validity(&body) else {
-            return Ok(Drafted::Rejected(&codes::realm::INVALID_VALIDITY));
+            return Ok(Drafted::Rejected(&codes::environment::INVALID_VALIDITY));
         };
         let Some(platform) = self.platform().await? else {
             return Ok(Drafted::Rejected(&codes::NOT_FOUND));
@@ -502,7 +506,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Err(code) => return Ok(Written::Rejected(code)),
         };
         let Ok(validity) = rest::validity(&body) else {
-            return Ok(Written::Rejected(&codes::realm::INVALID_VALIDITY));
+            return Ok(Written::Rejected(&codes::environment::INVALID_VALIDITY));
         };
         let Some(platform) = self.platform().await? else {
             return Ok(Written::Rejected(&codes::NOT_FOUND));
@@ -534,7 +538,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         })
     }
 
-    /// The created tenant or realm as the platform shows it, and a realm's Genesis summary.
+    /// The created tenant or environment as the platform shows it, and an environment's Genesis summary.
     async fn created_view(
         &self,
         ids: &IdKey,
@@ -549,14 +553,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 let t = rows.first().ok_or(Unavailable)?;
                 tenant_view(ids, t)?
             }
-            Created::Realm {
+            Created::Environment {
                 domain, recovery, ..
             } => {
                 let slug = match change {
-                    PlatformChange::Realm(o) | PlatformChange::Sandbox(o) => o.slug.as_str(),
+                    PlatformChange::Environment(o) | PlatformChange::Sandbox(o) => o.slug.as_str(),
                     PlatformChange::Tenant { .. } => return Err(Unavailable),
                 };
-                let rows = sandbox::realms(
+                let rows = sandbox::environments(
                     (&self.router, &self.app),
                     Some(slug),
                     None,
@@ -566,9 +570,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 .await
                 .map_err(|e| unavailable(&e))?;
                 let m = rows.first().ok_or(Unavailable)?;
-                let mut view = realm_view(ids, m)?;
+                let mut view = environment_view(ids, m)?;
                 let root = match change {
-                    PlatformChange::Realm(o) | PlatformChange::Sandbox(o) => root_view(&o.root),
+                    PlatformChange::Environment(o) | PlatformChange::Sandbox(o) => {
+                        root_view(&o.root)
+                    }
                     PlatformChange::Tenant { .. } => Value::Null,
                 };
                 if let Value::Object(o) = &mut view {
@@ -607,7 +613,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
 }
 
 impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> PlatformResources
-    for Realms<P>
+    for Environments<P>
 {
     fn read(&self, query: PlatformQuery) -> Pending<'_, Option<Listing>> {
         Box::pin(self.platform_read(query))

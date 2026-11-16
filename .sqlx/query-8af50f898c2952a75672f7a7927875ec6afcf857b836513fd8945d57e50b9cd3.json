@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, authority_hints, ta_enabled, subordinates, registration_open\n               FROM access.idp_federation_settings\n              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_settings",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "authority_hints",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_settings",
+            "name": "authority_hints"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ta_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_settings",
+            "name": "ta_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subordinates",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_settings",
+            "name": "subordinates"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "registration_open",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_settings",
+            "name": "registration_open"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8af50f898c2952a75672f7a7927875ec6afcf857b836513fd8945d57e50b9cd3"
+}

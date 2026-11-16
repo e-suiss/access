@@ -100,13 +100,13 @@ fn op_57_backups_go_to_two_encrypted_verified_repositories_with_the_wal_archive(
     assert!(s.contains(r#"args: ["--stanza=access-cell", "verify"]"#));
     let readme = read("backup/README.md");
     // HL-32, OP-59, Ek B 6013, 6095
-    assert!(readme.contains("There is no row-level restore of a tenant or a realm."));
+    assert!(readme.contains("There is no row-level restore of a tenant or an environment."));
     assert!(readme.contains("side restore and a logical copy"));
 }
 
 // HL-32, N-58, OP-59, Ek B 6095
 #[test]
-fn hl_32_no_api_restores_a_tenant_or_a_realm_row_by_row() {
+fn hl_32_no_api_restores_a_tenant_or_an_environment_row_by_row() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sdks/openapi");
     let mut seen = 0;
     for entry in std::fs::read_dir(&root).unwrap() {

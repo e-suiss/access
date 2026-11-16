@@ -10,7 +10,7 @@ use suiss_crypto::cose::{Algorithm, PublicKey};
 use suiss_crypto::signer::{SignError, Signer};
 
 /// A JWS algorithm Access signs with, by its fully-specified name (CR-5, MD-3); `EdDSA` is
-/// never produced. The ML-DSA parameter sets sign only under a realm's post-quantum signing
+/// never produced. The ML-DSA parameter sets sign only under an environment's post-quantum signing
 /// profile (CR-41, OP-159 m.3 (o)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum JwsAlg {
@@ -247,7 +247,7 @@ pub fn confirmation_jwk(key: &PublicKey) -> Result<Json, JoseError> {
 }
 
 /// The public JWK of `key` with its `kid`, `alg` and `use: "sig"`: EC P-256, OKP Ed25519
-/// (RFC 7517, RFC 8037) or, under a realm's post-quantum signing profile, `AKP` with its
+/// (RFC 7517, RFC 8037) or, under an environment's post-quantum signing profile, `AKP` with its
 /// mandatory `alg` and `pub` of the exact length (RFC 9964, CR-41 m.3, OP-159 m.3 (o)).
 ///
 /// # Errors

@@ -20,7 +20,7 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, acquire_lease, commit_batch, read_head,
 };
 use access_store::authority_checkpoint::latest;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::operational::{
     OperationalEvent, last_operational_checkpoint, record_operational,
 };
@@ -31,7 +31,7 @@ use suiss_crypto::note::{Checkpoint, parse_note};
 use super::*;
 
 const T: TenantId = TenantId::from_bytes([0x31; 16]);
-const R: RealmId = RealmId::from_bytes([0x32; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([0x32; 16]);
 
 /// A real identity signer with its cell key open, on a socket of its own.
 fn identity_signer(name: &str) -> PathBuf {
@@ -42,7 +42,7 @@ fn identity_signer(name: &str) -> PathBuf {
     let mut service = access_identity_signer::service::Service::start(
         SealedFactory::new(SoftKek::new("identity-kek", [9; 32])),
         DirVault::new(&dir),
-        suiss_crypto::rotation::Policy::REALM,
+        suiss_crypto::rotation::Policy::ENVIRONMENT,
     )
     .unwrap();
     service.open_cell("cell-f5").unwrap();

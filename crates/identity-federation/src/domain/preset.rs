@@ -61,7 +61,7 @@ pub enum ClientAuth {
     /// `client_secret_post` with the stored secret.
     #[default]
     SecretPost,
-    /// `client_secret_post` with a fresh ES256 assertion signed by the realm's Sign in with
+    /// `client_secret_post` with a fresh ES256 assertion signed by the environment's Sign in with
     /// Apple key (`crate::domain::apple`).
     AppleJwt,
 }

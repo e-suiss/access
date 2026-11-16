@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_methods\n               (tenant_id, environment_id, subject_id, class, assurance, address_id)\n             VALUES ($1, $2, $3, $4, $5::text::access.aal, $6)\n             RETURNING method_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "method_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_methods",
+            "name": "method_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d4645a8ae17abffa3ea317cb751026d674e46b185ec2734d7ec2bc47eef187b0"
+}

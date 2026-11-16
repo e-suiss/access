@@ -27,11 +27,11 @@ fn the_sandbox_flag_picks_the_template() {
     let tenant = k.encode(TENANT_PREFIX, [3; 16]).unwrap();
     let joint =
         json!({ "slug": "shop", "root": { "joint": { "k": 2, "parties": [SOLE, OTHER] } } });
-    let prod = change(&k, "createRealm", Some(&tenant), &body(&joint)).unwrap();
-    assert!(matches!(prod, PlatformChange::Realm(_)));
+    let prod = change(&k, "createEnvironment", Some(&tenant), &body(&joint)).unwrap();
+    assert!(matches!(prod, PlatformChange::Environment(_)));
     let mut flagged = joint.clone();
     flagged["sandbox"] = json!(true);
-    let sandbox = change(&k, "createRealm", Some(&tenant), &body(&flagged)).unwrap();
+    let sandbox = change(&k, "createEnvironment", Some(&tenant), &body(&flagged)).unwrap();
     assert!(matches!(sandbox, PlatformChange::Sandbox(_)));
     assert!(matches!(
         change(&k, "createSandboxDomain", Some(&tenant), &body(&joint)).unwrap(),
@@ -41,7 +41,7 @@ fn the_sandbox_flag_picks_the_template() {
     refused["sandbox"] = json!(false);
     assert_eq!(
         change(&k, "createSandboxDomain", Some(&tenant), &body(&refused)).err(),
-        Some(&codes::realm::INVALID_BODY)
+        Some(&codes::environment::INVALID_BODY)
     );
 }
 
@@ -81,17 +81,17 @@ fn unknown_members_and_foreign_tenant_ids_are_refused() {
     let tenant = k.encode(TENANT_PREFIX, [3; 16]).unwrap();
     let extra = json!({ "slug": "shop", "root": { "sole": SOLE }, "owner_email": "x@y.example" });
     assert_eq!(
-        change(&k, "createRealm", Some(&tenant), &body(&extra)).err(),
-        Some(&codes::realm::INVALID_BODY)
+        change(&k, "createEnvironment", Some(&tenant), &body(&extra)).err(),
+        Some(&codes::environment::INVALID_BODY)
     );
     let ok = json!({ "slug": "shop", "root": { "sole": SOLE } });
     assert_eq!(
-        change(&k, "createRealm", Some("tnt_forged"), &body(&ok)).err(),
+        change(&k, "createEnvironment", Some("tnt_forged"), &body(&ok)).err(),
         Some(&codes::NOT_FOUND)
     );
     assert_eq!(
         change(&k, "createTenant", None, &body(&json!({}))).err(),
-        Some(&codes::realm::INVALID_BODY)
+        Some(&codes::environment::INVALID_BODY)
     );
 }
 

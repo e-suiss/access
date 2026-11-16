@@ -21,7 +21,7 @@ import {
 } from "./auth.js";
 import { reason, reasons } from "./reason.js";
 
-const ISSUER = "https://login.example/realms/acme";
+const ISSUER = "https://login.example/env/acme";
 const META = {
   issuer: ISSUER,
   authorization_endpoint: `${ISSUER}/authorize`,

@@ -55,7 +55,7 @@ pub enum SubjectKey {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientAuthMethod {
-    /// RFC 7523 with a key of the realm (the default).
+    /// RFC 7523 with a key of the environment (the default).
     #[default]
     PrivateKeyJwt,
     /// `client_secret_post`, opted into per connection.

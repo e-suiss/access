@@ -20,8 +20,8 @@ pub const FETCH_TIMEOUT_MS: u64 = 5_000;
 pub const CONNECT_TIMEOUT_MS: u64 = 2_000;
 /// Fetches of one URL per minute (OP-154 m.3 (i)).
 pub const PER_URL_PER_MINUTE: u32 = 10;
-/// Fetches of one realm per minute (OP-154 m.3 (i)).
-pub const PER_REALM_PER_MINUTE: u32 = 100;
+/// Fetches of one environment per minute (OP-154 m.3 (i)).
+pub const PER_ENVIRONMENT_PER_MINUTE: u32 = 100;
 /// The `User-Agent` of every CIMD fetch (OP-154 m.3 (i)).
 pub const USER_AGENT: &str = "Suiss-Access-CIMD/1";
 /// The `Accept` of a document fetch.
@@ -161,7 +161,7 @@ pub fn host(id: &str) -> Option<String> {
     Some(host.trim_end_matches('.').to_ascii_lowercase())
 }
 
-/// Whether the realm's domain policy admits `host` (AS-A2, `idp.client.cimd_policy`): one of
+/// Whether the environment's domain policy admits `host` (AS-A2, `idp.client.cimd_policy`): one of
 /// `domains` exactly, or a subdomain of one written `*.example.com`. An empty list admits none.
 #[must_use]
 pub fn domain_admitted(domains: &[String], host: &str) -> bool {

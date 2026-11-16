@@ -1,4 +1,4 @@
-//! IDP-36, TI-18, OP-47, OP-151 m.3 (n): the analytics summary tables hold the realm, the day and
+//! IDP-36, TI-18, OP-47, OP-151 m.3 (n): the analytics summary tables hold the environment, the day and
 //! counters, nothing that could carry a personal identifier or a pseudonym.
 
 #![allow(
@@ -27,7 +27,7 @@ async fn analytics_columns_cannot_carry_identifiers() {
     }
     for (table, column, ty) in &rows {
         let allowed = match column.as_str() {
-            "tenant_id" | "realm_id" => ty == "uuid",
+            "tenant_id" | "environment_id" => ty == "uuid",
             "day" => ty == "integer",
             "computed_at" | "created_at" => ty == "timestamp with time zone",
             "kind" => table == "analytics_alert" && ty == "text",

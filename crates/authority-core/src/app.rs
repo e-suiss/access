@@ -1025,7 +1025,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok((evaluation, snapshot))
     }
 
-    /// TN-114, OP-157 m.3 (t): a new admin Grant while the realm has not opened delegated
+    /// TN-114, OP-157 m.3 (t): a new admin Grant while the environment has not opened delegated
     /// administration is denied; everything else passes.
     async fn delegation_gate(
         &self,

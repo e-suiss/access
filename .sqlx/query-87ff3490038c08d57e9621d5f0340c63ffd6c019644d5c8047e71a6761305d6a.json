@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_domains (tenant_id, environment_id, domain_uuid, hostname, challenge,\n                cname_target, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "87ff3490038c08d57e9621d5f0340c63ffd6c019644d5c8047e71a6761305d6a"
+}

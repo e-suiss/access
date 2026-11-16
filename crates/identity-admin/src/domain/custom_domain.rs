@@ -1,7 +1,7 @@
 //! `idp.domain.*` changes (OP-156 m.3 (a), (i), §10.2.4, TN-16): registering a custom domain
-//! (CT2), retiring it (CT1), and binding the realm's issuer or passkey RP ID to a verified one
+//! (CT2), retiring it (CT1), and binding the environment's issuer or passkey RP ID to a verified one
 //! (reserved CT3, never undone). The host is checked against the deployment's base when the
-//! change is checked against the realm. Sans-I/O.
+//! change is checked against the environment. Sans-I/O.
 
 use access_internal_api::idp::IdpAction;
 use serde_json::Value as Json;
@@ -12,9 +12,9 @@ use super::Invalid;
 /// What a custom domain is bound as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Binding {
-    /// The realm's issuer, before the realm's first activation (TN-16).
+    /// The environment's issuer, before the environment's first activation (TN-16).
     Issuer,
-    /// The realm's passkey RP ID: the domain's registrable domain (§12.1.2).
+    /// The environment's passkey RP ID: the domain's registrable domain (§12.1.2).
     RpId,
 }
 
@@ -148,7 +148,7 @@ impl DomainChange {
         }
     }
 
-    /// The resource path below the realm.
+    /// The resource path below the environment.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         vec![String::from("domain"), String::from(self.host())]

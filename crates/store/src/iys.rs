@@ -1,5 +1,5 @@
-//! The İYS rows of a realm (OP-156 m.3 (c), IDP-37 (4), B23, E42): the decided switch and the
-//! realm's own preference topics, each consent record Access handed Relay and what Relay
+//! The İYS rows of an environment (OP-156 m.3 (c), IDP-37 (4), B23, E42): the decided switch and the
+//! environment's own preference topics, each consent record Access handed Relay and what Relay
 //! reported back. Access never writes to İYS; nothing here is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -20,12 +20,12 @@ fn i64_of(v: u64) -> Result<i64, StoreError> {
     i64::try_from(v).map_err(|_| StoreError::Range)
 }
 
-/// The realm's İYS switch as decided.
+/// The environment's İYS switch as decided.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IysSetting {
     /// Whether consent records go to Relay.
     pub enabled: bool,
-    /// `individual` or `merchant`: the İYS recipient type of the realm's accounts.
+    /// `individual` or `merchant`: the İYS recipient type of the environment's accounts.
     pub recipient_type: String,
 }
 
@@ -55,15 +55,15 @@ impl TenantTx {
         subject: [u8; 16],
         kind: &str,
     ) -> Result<Option<crate::accounts::StoredValue>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT value, value_index, pii_class, nonce, ciphertext
                FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 AND kind = $4
               ORDER BY identifier_id LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             kind,
         )
@@ -75,17 +75,17 @@ impl TenantTx {
         .transpose()
     }
 
-    /// The realm's İYS switch; off when never decided.
+    /// The environment's İYS switch; off when never decided.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn iys_setting(&mut self) -> Result<Option<IysSetting>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query!(
             "SELECT enabled, recipient_type FROM access.iys_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
@@ -95,7 +95,7 @@ impl TenantTx {
         }))
     }
 
-    /// Writes the next İYS switch under `bound` (`idp.realm.iys`, `iys_close`).
+    /// Writes the next İYS switch under `bound` (`idp.environment.iys`, `iys_close`).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -105,16 +105,16 @@ impl TenantTx {
         enabled: bool,
         recipient_type: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.iys_settings
-               (tenant_id, realm_id, version, enabled, recipient_type, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, recipient_type, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.iys_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5, $6",
             tenant,
-            realm,
+            environment,
             enabled,
             recipient_type,
             bound.domain().as_bytes().as_slice(),
@@ -125,24 +125,24 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The realm's own preference topics as decided; none when never decided.
+    /// The environment's own preference topics as decided; none when never decided.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn preference_topics(&mut self) -> Result<Vec<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT topics FROM access.preference_topics
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or_default())
     }
 
-    /// Writes the realm's next topic list under `bound` (`idp.realm.preference_topics`).
+    /// Writes the environment's next topic list under `bound` (`idp.environment.preference_topics`).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -151,16 +151,16 @@ impl TenantTx {
         bound: &Bound,
         topics: &[String],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.preference_topics
-               (tenant_id, realm_id, version, topics, domain_id, decision_pos)
+               (tenant_id, environment_id, version, topics, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.preference_topics
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             topics,
             bound.domain().as_bytes().as_slice(),
             i64_of(bound.position())?,
@@ -181,13 +181,13 @@ impl TenantTx {
         channel: &str,
         consent: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.iys_records (tenant_id, realm_id, record_id, subject_id, channel,
+            "INSERT INTO access.iys_records (tenant_id, environment_id, record_id, subject_id, channel,
                                              consent)
              VALUES ($1, $2, $3, $4, $5, $6)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(record),
             Uuid::from_bytes(subject),
             channel,
@@ -198,7 +198,7 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Keeps Relay's report on `record`; `false` when the realm has no such record.
+    /// Keeps Relay's report on `record`; `false` when the environment has no such record.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -209,14 +209,14 @@ impl TenantTx {
         reason: Option<&str>,
         reported_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.iys_status (tenant_id, realm_id, record_id, status, reason,
+            "INSERT INTO access.iys_status (tenant_id, environment_id, record_id, status, reason,
                                             reported_ms)
              SELECT $1, $2, record_id, $4, $5, $6 FROM access.iys_records
-              WHERE tenant_id = $1 AND realm_id = $2 AND record_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND record_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(record),
             status,
             reason,
@@ -233,7 +233,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn iys_state(&mut self, subject: [u8; 16]) -> Result<Vec<IysState>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT DISTINCT ON (r.channel)
                       r.channel, r.consent,
@@ -242,13 +242,13 @@ impl TenantTx {
                  FROM access.iys_records r
                  LEFT JOIN LATERAL (
                    SELECT status, reported_ms FROM access.iys_status x
-                    WHERE x.tenant_id = r.tenant_id AND x.realm_id = r.realm_id
+                    WHERE x.tenant_id = r.tenant_id AND x.environment_id = r.environment_id
                       AND x.record_id = r.record_id
                     ORDER BY x.status_id DESC LIMIT 1) s ON true
-                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.subject_id = $3
+                WHERE r.tenant_id = $1 AND r.environment_id = $2 AND r.subject_id = $3
                 ORDER BY r.channel, r.created_at DESC, r.record_id DESC"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)

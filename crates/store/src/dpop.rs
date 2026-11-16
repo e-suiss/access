@@ -16,12 +16,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn dpop_first_use(&mut self, day: u32, key: &[u8; 32]) -> Result<bool, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let done = sqlx::query!(
-            "INSERT INTO access.dpop_replay (tenant_id, realm_id, day, key_hash)
+            "INSERT INTO access.dpop_replay (tenant_id, environment_id, day, key_hash)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             i32::try_from(day).map_err(|_| StoreError::Range)?,
             key.as_slice(),
         )

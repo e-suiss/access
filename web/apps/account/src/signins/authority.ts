@@ -18,7 +18,7 @@ import {
 /** This browser's device Instance, when it has one for the signed-in account. */
 export async function ownInstance(): Promise<Instance | undefined> {
   const s = await json<SessionInfo>(call("/session"));
-  return find(s.realm, s.account, s.instance);
+  return find(s.environment, s.account, s.instance);
 }
 
 function iso(ms: string): string {

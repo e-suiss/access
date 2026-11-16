@@ -1,6 +1,6 @@
-//! What the platform-admin surface provisions (OP-151 m.2 M2): tenants, realms whose governing
+//! What the platform-admin surface provisions (OP-151 m.2 M2): tenants, environments whose governing
 //! domain a Genesis opens (TN-111, §12.5.1) and sandbox domains (OP-151 m.3 (m), X21). Each is
-//! an `idp.platform.*` Exercise in the platform realm's governing domain, so the platform surface
+//! an `idp.platform.*` Exercise in the platform environment's governing domain, so the platform surface
 //! has no write path of its own (TN-110, PI-4, INV-2). The operator holds nothing in the domains
 //! it opens (INV-29): the founding root is the caller's.
 
@@ -19,16 +19,16 @@ use suiss_crypto::digest::context_digest;
 
 use super::{CHANGE_CONTEXT, CHANGE_PARAM};
 
-/// The namespace of the platform actions; only the platform realm's Genesis publishes it.
+/// The namespace of the platform actions; only the platform environment's Genesis publishes it.
 pub const NAMESPACE: &str = "idp.platform";
 
 /// Version of the platform catalog; the `idp.*` catalogs are versioned apart (OP-153 m.3 (a)).
 pub const CATALOG_VERSION: u64 = 1;
 
-/// Slugs no realm can take: the console's own paths under `/console/` (OP-159 m.42 (e)).
+/// Slugs no environment can take: the console's own paths under `/console/` (OP-159 m.42 (e)).
 pub const RESERVED_SLUGS: [&str; 2] = ["api", "assets"];
 
-/// Checks the slug of a realm being created: a realm slug (TN-16) that is not reserved
+/// Checks the slug of an environment being created: an environment slug (TN-16) that is not reserved
 /// (OP-159 m.42 (e)).
 ///
 /// # Errors
@@ -41,7 +41,7 @@ pub fn check_new_slug(slug: &str) -> Result<(), ProvisionInvalid> {
     Ok(())
 }
 
-/// The placement new tenants and realms take unless the caller names one (OP-40).
+/// The placement new tenants and environments take unless the caller names one (OP-40).
 pub const DEFAULT_PLACEMENT: &str = "pool-default";
 
 /// One `idp.platform.*` action. Each opens something that is never removed (OP-73): CT2.
@@ -49,22 +49,26 @@ pub const DEFAULT_PLACEMENT: &str = "pool-default";
 pub enum PlatformAction {
     /// Creates a tenant (TN-1).
     TenantCreate,
-    /// Creates a realm by opening its governing domain with a Genesis (TN-111, §5.16).
-    RealmCreate,
+    /// Creates an environment by opening its governing domain with a Genesis (TN-111, §5.16).
+    EnvironmentCreate,
     /// Creates a sandbox domain from the sandbox template (OP-151 m.3 (m), X21).
     SandboxCreate,
 }
 
 impl PlatformAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 3] = [Self::TenantCreate, Self::RealmCreate, Self::SandboxCreate];
+    pub const ALL: [Self; 3] = [
+        Self::TenantCreate,
+        Self::EnvironmentCreate,
+        Self::SandboxCreate,
+    ];
 
     /// Its name within the namespace.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
             Self::TenantCreate => "tenant_create",
-            Self::RealmCreate => "realm_create",
+            Self::EnvironmentCreate => "environment_create",
             Self::SandboxCreate => "sandbox_create",
         }
     }
@@ -103,8 +107,8 @@ impl PlatformAction {
     }
 }
 
-/// The catalog of the platform actions, published by the platform realm's founder in its Genesis
-/// (OP-141 m.35 (c)); no other realm's domain accepts it.
+/// The catalog of the platform actions, published by the platform environment's founder in its Genesis
+/// (OP-141 m.35 (c)); no other environment's domain accepts it.
 #[must_use]
 pub fn catalog(publisher: Id) -> Spp {
     Spp {
@@ -143,7 +147,7 @@ pub enum ProvisionInvalid {
     /// No such tenant, or one that is not active.
     #[error("no such tenant")]
     NoTenant,
-    /// The slug is taken, now or by a deleted realm (TN-16, INV-32).
+    /// The slug is taken, now or by a deleted environment (TN-16, INV-32).
     #[error("slug taken")]
     SlugTaken,
 }
@@ -367,9 +371,9 @@ pub fn flows(home: Regime, other: Regime) -> bool {
     home == other
 }
 
-/// A realm to open: its tenant, slug, issuer form, placement and founding root (TN-111).
+/// An environment to open: its tenant, slug, issuer form, placement and founding root (TN-111).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RealmOrder {
+pub struct EnvironmentOrder {
     /// The tenant.
     pub tenant: [u8; 16],
     /// The immutable slug.
@@ -391,7 +395,7 @@ pub struct RealmOrder {
     pub recovery: Option<RecoveryKeys>,
 }
 
-impl RealmOrder {
+impl EnvironmentOrder {
     /// Checks the order's own fields.
     ///
     /// # Errors
@@ -466,10 +470,10 @@ pub enum PlatformChange {
         /// Its placement.
         placement: String,
     },
-    /// A production realm.
-    Realm(RealmOrder),
-    /// A sandbox realm and its domain, from the sandbox template.
-    Sandbox(RealmOrder),
+    /// A production environment.
+    Environment(EnvironmentOrder),
+    /// A sandbox environment and its domain, from the sandbox template.
+    Sandbox(EnvironmentOrder),
 }
 
 impl PlatformChange {
@@ -478,7 +482,7 @@ impl PlatformChange {
     pub const fn action(&self) -> PlatformAction {
         match self {
             Self::Tenant { .. } => PlatformAction::TenantCreate,
-            Self::Realm(_) => PlatformAction::RealmCreate,
+            Self::Environment(_) => PlatformAction::EnvironmentCreate,
             Self::Sandbox(_) => PlatformAction::SandboxCreate,
         }
     }
@@ -490,7 +494,7 @@ impl PlatformChange {
     pub fn check(&self) -> Result<(), ProvisionInvalid> {
         match self {
             Self::Tenant { placement, .. } => check_placement(placement),
-            Self::Realm(r) | Self::Sandbox(r) => r.check(),
+            Self::Environment(r) | Self::Sandbox(r) => r.check(),
         }
     }
 
@@ -500,7 +504,7 @@ impl PlatformChange {
                 (Value::text("tenant"), Value::Bytes(tenant.to_vec())),
                 (Value::text("placement"), Value::text(placement)),
             ]),
-            Self::Realm(r) => r.value(),
+            Self::Environment(r) => r.value(),
             Self::Sandbox(r) => {
                 let budget = Value::Map(vec![
                     (
@@ -513,7 +517,7 @@ impl PlatformChange {
                     ),
                 ]);
                 Value::Map(vec![
-                    (Value::text("realm"), r.value()),
+                    (Value::text("environment"), r.value()),
                     (Value::text("budget"), budget),
                 ])
             }
@@ -533,13 +537,13 @@ impl PlatformChange {
         Ok(Digest(context_digest(CHANGE_CONTEXT, &bytes).0))
     }
 
-    /// The resource it creates, under the platform realm `platform`'s `idp` Anchor:
+    /// The resource it creates, under the platform environment `platform`'s `idp` Anchor:
     /// `idp:[platform, "platform", kind, key]`.
     #[must_use]
     pub fn resource(&self, platform: &str) -> ResourceRef {
         let (kind, key) = match self {
             Self::Tenant { tenant, .. } => ("tenant", hex(tenant)),
-            Self::Realm(r) => ("realm", r.slug.clone()),
+            Self::Environment(r) => ("environment", r.slug.clone()),
             Self::Sandbox(r) => ("sandbox", r.slug.clone()),
         };
         ResourceRef {
@@ -554,7 +558,7 @@ impl PlatformChange {
         }
     }
 
-    /// The intent that authorizes it in the platform realm `platform`, valid over `validity`.
+    /// The intent that authorizes it in the platform environment `platform`, valid over `validity`.
     ///
     /// # Errors
     /// [`dcbor::EncodeError`].

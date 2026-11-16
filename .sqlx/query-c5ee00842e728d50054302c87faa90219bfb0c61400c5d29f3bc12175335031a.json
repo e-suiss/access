@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request_id FROM access.support_request_outcomes\n              WHERE tenant_id = $1 AND environment_id = $2 AND grant_id = $3 AND state = 'granted'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c5ee00842e728d50054302c87faa90219bfb0c61400c5d29f3bc12175335031a"
+}

@@ -1,7 +1,7 @@
 # The binding UI glossary (§8.8, §8.9, §8.11, X24, XI-13, TN-108, OP-153 m.3 (s)): one canonical
 # concept, one term per language, and one concept per term. A new language is a new column.
 # `banned` lists words no end-user text says (login, account, hub and mail surfaces); the console
-# is developer and admin UI and may name realms. `classes` narrows a ban to messages of those
+# is developer and admin UI and may name environments. `classes` narrows a ban to messages of those
 # classes. Checked over every `locales/*/*.ftl` by `cargo xtask check` (fluent-catalog).
 
 [[term]]
@@ -172,7 +172,7 @@ tr = "Abonelik"
 # §8.9, §8.11, X24, X33, OP-153 m.2 N0 (Ek B 3591–3593, 3715–3717)
 
 [[banned]]
-en = ["tenant", "tenants", "realm", "realms", "cell", "cells", "session", "sessions", "mandate", "mandates", "merged", "trusted", "verified", "forever", "undo", "nonce", "holdingref", "validitycontract", "tenant_id", "realm_id", "acr", "amr", "sub", "dpop", "dbsc", "jti", "token", "tokens", "impersonate", "impersonation"]
+en = ["tenant", "tenants", "realm", "realms", "cell", "cells", "session", "sessions", "mandate", "mandates", "merged", "trusted", "verified", "forever", "undo", "nonce", "holdingref", "validitycontract", "tenant_id", "environment_id", "acr", "amr", "sub", "dpop", "dbsc", "jti", "token", "tokens", "impersonate", "impersonation"]
 tr = ["kiracı", "kiracılar", "realm", "hücre", "oturum", "oturumlar", "birleştirildi", "güvenilir", "doğrulanmış", "sonsuza", "nonce", "token"]
 reason = "Never shown to an end user (§8.9, §8.11): tenancy and protocol names, and the words §8.10 forbids."
 

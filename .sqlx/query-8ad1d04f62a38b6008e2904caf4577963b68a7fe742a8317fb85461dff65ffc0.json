@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_transfers\n                  SET contributed_at = clock_timestamp(), acceptance = $4\n                WHERE tenant_id = $1 AND environment_id = $2 AND transfer_id = $3\n                  AND contributed_at IS NULL AND cancelled_at IS NULL AND completed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ad1d04f62a38b6008e2904caf4577963b68a7fe742a8317fb85461dff65ffc0"
+}

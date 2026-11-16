@@ -19,7 +19,7 @@ use access_identity_account::domain::registration::{
     DisposableDomains, DisposableListError, FLOOR_MS,
 };
 use access_identity_account::ports::{MailDomains, NoResolver};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::flow::{device_digest, handle_digest};
@@ -36,7 +36,7 @@ use crate::domain::flow::{
 use crate::domain::message::{Message, TextId};
 use crate::domain::node::{Autocomplete, FieldName, InputKind, Method, Node};
 use crate::domain::submission::Submission;
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// The prefix of a sign-up flow handle.
 const PREFIX: char = 'r';
@@ -160,7 +160,7 @@ pub fn address_step(flow: FlowId) -> Ui {
 }
 
 /// The second step, the same for every address: the code and the display name (required when
-/// the realm says so).
+/// the environment says so).
 #[must_use]
 pub fn code_step(flow: FlowId, name_required: bool) -> Ui {
     let mut nodes = vec![Node::input(
@@ -190,7 +190,7 @@ pub fn code_step(flow: FlowId, name_required: bool) -> Ui {
     u
 }
 
-fn rules(kit: &RealmKit, email: &str) -> Rules {
+fn rules(kit: &EnvironmentKit, email: &str) -> Rules {
     Rules {
         domain_allowed: kit.signin.registration_allowed(email),
         name_required: kit.signin.name_required(),
@@ -205,7 +205,7 @@ where
 {
     /// `POST /v1/login/flows` with `kind: registration` (OP-153 m.3 (g)): a new sign-up flow at
     /// its address step, and the flow cookie when the browser has none.
-    pub async fn create_signup(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn create_signup(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         if let Err(r) = self.kit(entry).await {
             return r;
         }
@@ -227,7 +227,12 @@ where
 
     /// `GET /v1/login/flows/{flow}` of a sign-up flow: the address step until a challenge exists
     /// for it, then the code step.
-    pub async fn get_signup(&self, entry: &RealmEntry, b: &Browser<'_>, handle: &str) -> Reply {
+    pub async fn get_signup(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        handle: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -248,7 +253,7 @@ where
     )]
     pub async fn submit_signup(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         handle: &str,
         submission: Submission,
@@ -275,12 +280,12 @@ where
             return Reply::problem(super::INVALID_SUBMISSION);
         };
         let field = |n| checked.get(n).map(str::to_owned);
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
-        let notifier = self.messages.notifier(&realm);
+        let notifier = self.messages.notifier(&environment);
         let registrar = Registrar {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
@@ -404,7 +409,11 @@ where
         }
     }
 
-    async fn fresh_subject(&self, kit: &RealmKit, b: &Browser<'_>) -> Result<[u8; 16], Reply> {
+    async fn fresh_subject(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+    ) -> Result<[u8; 16], Reply> {
         signin!(self, kit, auth);
         let Some(cookie) = b.session else {
             return Err(Reply::problem(SESSION_REQUIRED));
@@ -423,7 +432,7 @@ where
 
     /// `POST /v1/account/credential-export` (TN-86, B19): after a fresh step-up, the owner's
     /// password hash and authenticator app seeds; refused in a recovery's grace period (TN-56).
-    pub async fn export_credentials(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn export_credentials(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -475,7 +484,7 @@ where
     /// address; the answer is the same whether or not another account holds it.
     pub async fn start_email_change(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         email: &str,
     ) -> Reply {
@@ -502,19 +511,19 @@ where
             return Reply::problem(SESSION_REQUIRED);
         };
         let handle = format!("{PREFIX}{}", b64url_encode(&secret));
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
-        let notifier = self.messages.notifier(&realm);
+        let notifier = self.messages.notifier(&environment);
         let registrar = Registrar {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
             mail: self.signup.mail.as_ref(),
             notifier: &notifier,
         };
-        let actor_ref = kit.realm().external(subject).unwrap_or_default();
+        let actor_ref = kit.environment().external(subject).unwrap_or_default();
         let actor = Actor {
             actor: &actor_ref,
             correlation: b.correlation,
@@ -560,7 +569,7 @@ where
     /// makes it the account's; the old address is told and every session ends.
     pub async fn confirm_email_change(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         change: &str,
         code: &str,
@@ -587,19 +596,19 @@ where
         let (Some(secret), Some(session)) = (signup_secret(change), b.session) else {
             return Reply::problem(FLOW_GONE);
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
-        let notifier = self.messages.notifier(&realm);
+        let notifier = self.messages.notifier(&environment);
         let registrar = Registrar {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
             mail: self.signup.mail.as_ref(),
             notifier: &notifier,
         };
-        let actor_ref = kit.realm().external(subject).unwrap_or_default();
+        let actor_ref = kit.environment().external(subject).unwrap_or_default();
         let actor = Actor {
             actor: &actor_ref,
             correlation: b.correlation,

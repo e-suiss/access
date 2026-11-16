@@ -167,7 +167,7 @@ pub struct Asked<'a> {
     pub agent: bool,
 }
 
-/// Decides one release at `now`: `asked` against `allowed` and `held`, with the realm's mode
+/// Decides one release at `now`: `asked` against `allowed` and `held`, with the environment's mode
 /// and the token's facts. Path (b) is given only when every one of its conditions holds and is
 /// otherwise path (a) (AG-40 (4), MD-8).
 ///

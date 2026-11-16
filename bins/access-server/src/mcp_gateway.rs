@@ -1,11 +1,11 @@
 //! The MCP gateway's questions in this process (AG-42, B22, OP-156 m.3 (n)): the proxy
-//! registry of forward-auth, the pinned tool lists in the store, the realm's own ADP router with
+//! registry of forward-auth, the pinned tool lists in the store, the environment's own ADP router with
 //! the gateway as its PEP, the authority core's record of who acted, and the identity audit log.
 
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::ports::Clock;
 use access_http::adp::adapters::Pep;
-use access_identity_oauth::app::oauth::{Env, Realm};
+use access_identity_oauth::app::oauth::{Env, Environment};
 use access_identity_proxy::domain::mcp::{PinnedTool, from_json};
 use access_identity_proxy::domain::registration::Registration;
 use access_identity_proxy::mcp::{Audit, Evaluated, McpPorts};
@@ -40,8 +40,8 @@ where
     S: Salts + Clone,
     C: Clock + Clone,
 {
-    async fn tx(&self, realm: &Realm) -> Result<TenantTx, Unavailable> {
-        TenantTx::begin(&self.proxy.app, realm.tenant, realm.realm)
+    async fn tx(&self, environment: &Environment) -> Result<TenantTx, Unavailable> {
+        TenantTx::begin(&self.proxy.app, environment.tenant, environment.environment)
             .await
             .map_err(down)
     }
@@ -55,29 +55,33 @@ where
     S: Salts + Clone + Send + Sync + 'static,
     C: Clock + Clone + Send + Sync + 'static,
 {
-    type Realm = Realm;
+    type Environment = Environment;
 
     async fn registered(
         &self,
         pep: &str,
         host: &str,
-    ) -> Result<Option<(Realm, Registration)>, Unavailable> {
+    ) -> Result<Option<(Environment, Registration)>, Unavailable> {
         Ok(self
             .proxy
             .registered(pep, host)
             .await?
-            .map(|r| (r.realm, r.registration)))
+            .map(|r| (r.environment, r.registration)))
     }
 
-    async fn governing(&self, realm: &Realm) -> Result<Option<Digest>, Unavailable> {
-        let mut t = self.tx(realm).await?;
+    async fn governing(&self, environment: &Environment) -> Result<Option<Digest>, Unavailable> {
+        let mut t = self.tx(environment).await?;
         let g = access_store::idp::governance(&mut t).await.map_err(down)?;
         t.commit().await.map_err(down)?;
         Ok(g.map(|g| Digest(*g.domain.as_bytes())))
     }
 
-    async fn pins(&self, realm: &Realm, proxy: &str) -> Result<Vec<PinnedTool>, Unavailable> {
-        let mut t = self.tx(realm).await?;
+    async fn pins(
+        &self,
+        environment: &Environment,
+        proxy: &str,
+    ) -> Result<Vec<PinnedTool>, Unavailable> {
+        let mut t = self.tx(environment).await?;
         let row = access_store::mcp_pins::pins(&mut t, proxy)
             .await
             .map_err(down)?;
@@ -133,8 +137,8 @@ where
             .and_then(|r| r.instance))
     }
 
-    async fn audit(&self, realm: &Realm, row: &Audit<'_>) -> Result<(), Unavailable> {
-        let mut t = self.tx(realm).await?;
+    async fn audit(&self, environment: &Environment, row: &Audit<'_>) -> Result<(), Unavailable> {
+        let mut t = self.tx(environment).await?;
         t.audit(&access_store::audit::AuditEvent {
             event_type: row.event,
             actor: row.actor,

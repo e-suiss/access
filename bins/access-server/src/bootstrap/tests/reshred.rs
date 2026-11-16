@@ -2,7 +2,7 @@
 //! closed until the shred journal is applied again, on the real server's world and store.
 
 use access_identity_account::adapters::pg::PgAccounts;
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::app::accounts::{change_status, create};
 use access_identity_account::app::vault;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
@@ -24,10 +24,10 @@ fn cold() -> FileCold {
 
 async fn shredded(
     app: &access_store::Pool,
-    route: &access_store::tenancy::RealmRoute,
+    route: &access_store::tenancy::EnvironmentRoute,
     subject: [u8; 16],
 ) -> Shredded {
-    let mut t = TenantTx::begin(app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(app, route.tenant, route.environment)
         .await
         .unwrap();
     let s = t.subject_shredded(subject).await.unwrap();
@@ -41,12 +41,12 @@ async fn a_restore_before_a_destruction_keeps_the_server_closed_until_it_is_resh
     let c = console("reshred", false).await;
     let route = c.route.clone();
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
-    let v = crate::login::RealmKeks::new(c.w.keys.clone())
-        .vault(route.realm)
+    let v = crate::login::EnvironmentKeks::new(c.w.keys.clone())
+        .vault(route.environment)
         .unwrap();
-    let realm = Realm {
+    let environment = Environment {
         tenant: route.tenant,
-        realm: route.realm,
+        environment: route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
@@ -56,17 +56,19 @@ async fn a_restore_before_a_destruction_keeps_the_server_closed_until_it_is_resh
         actor: "test",
         correlation: "test",
     };
-    let victim = create(&db, &realm, &[email], &who).await.unwrap();
+    let victim = create(&db, &environment, &[email], &who).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, victim, to, &who).await.unwrap();
+        change_status(&db, &environment, victim, to, &who)
+            .await
+            .unwrap();
     }
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     vault::set_profile(&mut tx.0, &v, victim, "name", "Rhea Example")
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let (tenant, realm_id) = (*route.tenant.as_bytes(), *route.realm.as_bytes());
-    let backup = backup_subject(&c.w.db, tenant, realm_id, victim)
+    let (tenant, environment_id) = (*route.tenant.as_bytes(), *route.environment.as_bytes());
+    let backup = backup_subject(&c.w.db, tenant, environment_id, victim)
         .await
         .unwrap();
     let cold = cold();
@@ -74,7 +76,7 @@ async fn a_restore_before_a_destruction_keeps_the_server_closed_until_it_is_resh
         .await
         .unwrap();
 
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     assert!(t.reshred_subject(victim).await.unwrap() >= 2);
@@ -103,7 +105,7 @@ async fn a_restore_before_a_destruction_keeps_the_server_closed_until_it_is_resh
     assert_eq!((done.entries, done.generation), (1, Some(1)));
     assert!(done.keys >= 2);
     assert_eq!(shredded(&c.w.db.app, &route, victim).await, Shredded::Yes);
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     assert_eq!(
         vault::profile(&mut tx.0, &v, victim).await.unwrap(),
         Vec::<(String, String)>::new(),
@@ -122,11 +124,11 @@ async fn a_database_dump_holds_no_plain_secret_or_personal_value() {
     let c = console("dump", false).await;
     let route = c.route.clone();
     let subject = super::recovery::account(&c, "Dora.Dump@Example.com", true).await;
-    let v = crate::login::RealmKeks::new(c.w.keys.clone())
-        .vault(route.realm)
+    let v = crate::login::EnvironmentKeks::new(c.w.keys.clone())
+        .vault(route.environment)
         .unwrap();
     let db = PgAccounts::sealed(c.w.db.app.clone(), v.clone());
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     vault::set_profile(&mut tx.0, &v, subject, "name", "Dora Q. Dumpling")
         .await
         .unwrap();

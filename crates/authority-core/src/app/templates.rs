@@ -11,7 +11,7 @@
 //!   phishing-resistant and carries the application-controlled factor, bound to the payment's
 //!   own intent. Platform biometrics alone never set that factor.
 //!
-//! The realm settings of the TR template (SMS only at setup, the SIM-change rule, no platform
+//! The environment settings of the TR template (SMS only at setup, the SIM-change rule, no platform
 //! biometrics as a factor) belong to the identity plane; this is the authority half.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -46,7 +46,7 @@ pub enum Template {
 /// the domain's actions are payments (`namespace:name`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Install {
-    /// The issuer of the domain's `authentication` Claims: the realm's issuer Party.
+    /// The issuer of the domain's `authentication` Claims: the environment's issuer Party.
     pub issuer: SubjectSelector,
     /// The payment actions.
     pub actions: BTreeSet<String>,

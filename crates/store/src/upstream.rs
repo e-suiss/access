@@ -1,6 +1,6 @@
 //! The upstream federation broker's rows (OP-155 m.3 (h), SEC9, TN-66, TN-98): the decided
-//! assurance maps and home realm discovery switch, the sealed raw assertions, the subject
-//! conflicts and the sessions a connection opened. Scoped to the transaction's realm by
+//! assurance maps and home environment discovery switch, the sealed raw assertions, the subject
+//! conflicts and the sessions a connection opened. Scoped to the transaction's environment by
 //! row-level security; nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -67,13 +67,13 @@ impl TenantTx {
         &mut self,
         name: &str,
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT map FROM access.idp_upstream_assurance_maps
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             name,
         )
         .fetch_optional(&mut *self.tx)
@@ -91,16 +91,16 @@ impl TenantTx {
         name: &str,
         map: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_upstream_assurance_maps
-               (tenant_id, realm_id, name, version, map, domain_id, decision_pos)
+               (tenant_id, environment_id, name, version, map, domain_id, decision_pos)
              SELECT $1, $2, $3,
                     COALESCE((SELECT max(version) FROM access.idp_upstream_assurance_maps
-                               WHERE tenant_id = $1 AND realm_id = $2 AND name = $3), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2 AND name = $3), 0) + 1,
                     $4, $5, $6",
             tenant,
-            realm,
+            environment,
             name,
             map,
             bound.domain().as_bytes().as_slice(),
@@ -111,39 +111,43 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Whether home realm discovery is on; off until decided (TN-98).
+    /// Whether home environment discovery is on; off until decided (TN-98).
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn realm_hrd(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+    pub async fn environment_hrd(&mut self) -> Result<bool, StoreError> {
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
-            "SELECT enabled FROM access.idp_realm_hrd_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+            "SELECT enabled FROM access.idp_environment_hrd_settings
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next home realm discovery switch under `bound` (`idp.realm.hrd`,
-    /// `idp.realm.hrd_close`).
+    /// Writes the next home environment discovery switch under `bound` (`idp.environment.hrd`,
+    /// `idp.environment.hrd_close`).
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn put_realm_hrd(&mut self, bound: &Bound, enabled: bool) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+    pub async fn put_environment_hrd(
+        &mut self,
+        bound: &Bound,
+        enabled: bool,
+    ) -> Result<(), StoreError> {
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.idp_realm_hrd_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+            "INSERT INTO access.idp_environment_hrd_settings
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
-                    COALESCE((SELECT max(version) FROM access.idp_realm_hrd_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                    COALESCE((SELECT max(version) FROM access.idp_environment_hrd_settings
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             enabled,
             bound.domain().as_bytes().as_slice(),
             i64_of(bound.position())?,
@@ -161,14 +165,14 @@ impl TenantTx {
         &mut self,
         a: &NewAssertion<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.upstream_assertions
-               (tenant_id, realm_id, subject_id, connection, evidence, nonce,
+               (tenant_id, environment_id, subject_id, connection, evidence, nonce,
                 assertion_ciphertext, created_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(a.subject),
             a.connection,
             a.evidence.as_slice(),
@@ -190,13 +194,13 @@ impl TenantTx {
         subject: [u8; 16],
         evidence: &[u8; 32],
     ) -> Result<Option<([u8; 12], Vec<u8>)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT nonce, assertion_ciphertext FROM access.upstream_assertions
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND evidence = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND evidence = $4
               ORDER BY assertion_id DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             evidence.as_slice(),
         )
@@ -219,14 +223,14 @@ impl TenantTx {
         provider: &str,
         index: &[u8; 32],
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT subject_id FROM access.identity_federated
-              WHERE tenant_id = $1 AND realm_id = $2 AND provider = $3 AND address_index = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND provider = $3 AND address_index = $4
                 AND ended_ms IS NULL
               ORDER BY created_ms LIMIT 1",
             tenant,
-            realm,
+            environment,
             provider,
             index.as_slice(),
         )
@@ -246,15 +250,15 @@ impl TenantTx {
         key: &[u8; 32],
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "INSERT INTO access.upstream_subject_conflicts
-               (tenant_id, realm_id, connection, subject_id, identity_key, created_ms)
+               (tenant_id, environment_id, connection, subject_id, identity_key, created_ms)
              VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (tenant_id, realm_id, connection, identity_key)
+             ON CONFLICT (tenant_id, environment_id, connection, identity_key)
                WHERE resolved_ms IS NULL DO NOTHING",
             tenant,
-            realm,
+            environment,
             connection,
             Uuid::from_bytes(subject),
             key.as_slice(),
@@ -276,13 +280,13 @@ impl TenantTx {
         key: &[u8; 32],
         now_ms: u64,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query!(
             "UPDATE access.upstream_subject_conflicts SET resolved_ms = $5, resolution = 'linked'
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection = $3 AND identity_key = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection = $3 AND identity_key = $4
                 AND resolved_ms IS NULL",
             tenant,
-            realm,
+            environment,
             connection,
             key.as_slice(),
             i64_of(now_ms)?,
@@ -300,14 +304,14 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<ConflictRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT conflict_id, connection, subject_id, identity_key, created_ms, resolved_ms
                FROM access.upstream_subject_conflicts
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
               ORDER BY conflict_id DESC",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -337,13 +341,13 @@ impl TenantTx {
         connection: &str,
         now_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.upstream_sessions (tenant_id, realm_id, session_id, connection,
+            "INSERT INTO access.upstream_sessions (tenant_id, environment_id, session_id, connection,
                     created_ms)
              VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(session),
             connection,
             i64_of(now_ms)?,
@@ -361,17 +365,17 @@ impl TenantTx {
         &mut self,
         connection: &str,
     ) -> Result<Vec<([u8; 16], [u8; 16])>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT s.session_id, s.subject_id FROM access.upstream_sessions u
                JOIN access.login_sessions s
-                 ON s.tenant_id = u.tenant_id AND s.realm_id = u.realm_id
+                 ON s.tenant_id = u.tenant_id AND s.environment_id = u.environment_id
                 AND s.session_id = u.session_id
-              WHERE u.tenant_id = $1 AND u.realm_id = $2 AND u.connection = $3
+              WHERE u.tenant_id = $1 AND u.environment_id = $2 AND u.connection = $3
                 AND s.ended_ms IS NULL
               ORDER BY s.session_id",
             tenant,
-            realm,
+            environment,
             connection,
         )
         .fetch_all(&mut *self.tx)

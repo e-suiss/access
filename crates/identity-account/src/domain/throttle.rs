@@ -10,7 +10,7 @@ pub const DAY_MS: u64 = 86_400_000;
 /// What a counter key counts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyKind {
-    /// One login identifier in a realm.
+    /// One login identifier in an environment.
     Account,
     /// One identifier from one network (TN-82).
     AccountIp,
@@ -74,7 +74,7 @@ pub struct KeyPolicy {
     pub penalty: Penalty,
 }
 
-/// The realm's throttling rules (PD values).
+/// The environment's throttling rules (PD values).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ThrottlePolicy {
     /// Per identifier.

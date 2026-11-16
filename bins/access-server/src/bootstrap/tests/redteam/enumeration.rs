@@ -40,7 +40,7 @@ fn shape(status: StatusCode, json: &serde_json::Value, headers: &axum::http::Hea
 
 fn relative(action: &str) -> String {
     action
-        .strip_prefix("/realms/acme")
+        .strip_prefix("/env/acme")
         .unwrap_or(action)
         .to_owned()
 }

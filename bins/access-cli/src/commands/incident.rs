@@ -1,6 +1,6 @@
 //! `access-cli incident contain` (§12.2.4, TN-48, SI-4, SI-22, OP-157 m.3 (i), Ek B 5582).
 //!
-//! The command declares a Party compromised as the realm's accepted declarant: an unsigned
+//! The command declares a Party compromised as the environment's accepted declarant: an unsigned
 //! `party_compromise` Claim over the PEP channel to Claim Ingest. Everything after that is an
 //! attributable step of its own, which Access takes when the Claim is admitted:
 //! 1. the Claim, and the end of the Party's Instances set up inside the window;
@@ -61,7 +61,7 @@ pub(crate) enum IncidentVerb {
 pub(crate) struct Declaration {
     /// The public listener, `https://host[:port]`.
     pub(crate) api: String,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub(crate) domain: Digest,
     /// The accepted declarant Party.
     pub(crate) declarant: Id,

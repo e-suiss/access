@@ -138,11 +138,11 @@ function readIntent(method: string, target: string): string {
 
 /** The `idp.*` action each admin operation compiles to (identity-admin). */
 const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
-  patchBranding: ["idp.realm", "branding"],
-  putCspMode: ["idp.realm", "csp_mode"],
-  patchSigninPolicy: ["idp.realm", "signin_policy"],
-  putRelatedOrigins: ["idp.realm", "related_origins"],
-  putRpId: ["idp.realm", "rp_id"],
+  patchBranding: ["idp.environment", "branding"],
+  putCspMode: ["idp.environment", "csp_mode"],
+  patchSigninPolicy: ["idp.environment", "signin_policy"],
+  putRelatedOrigins: ["idp.environment", "related_origins"],
+  putRpId: ["idp.environment", "rp_id"],
   suspendAccount: ["idp.account", "suspend"],
   reactivateAccount: ["idp.account", "reactivate"],
   enforceOrganizationSso: ["idp.org", "sso_enforce"],
@@ -179,24 +179,24 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   reviewBreakglassUse: ["idp.org", "breakglass_review"],
   scheduleReview: ["idp.review", "schedule"],
   closeReview: ["idp.review", "schedule_close"],
-  putDelegatedAdmin: ["idp.realm", "delegated_admin"],
-  putApprovalInline: ["idp.realm", "approval_inline"],
-  putApprovalBatch: ["idp.realm", "approval_batch"],
+  putDelegatedAdmin: ["idp.environment", "delegated_admin"],
+  putApprovalInline: ["idp.environment", "approval_inline"],
+  putApprovalBatch: ["idp.environment", "approval_batch"],
   // V9, OP-157 m.4 (b): the envelope of an offboarding commit
-  commitOffboarding: ["idp.realm", "offboarding"],
+  commitOffboarding: ["idp.environment", "offboarding"],
   // V10, OP-157 m.4 (b): a reviewer's keep, signed over its keep digest
   keepReviewItem: ["idp.review", "keep"],
   // OP-158 m.4 (a)
-  rehomeRealm: ["idp.realm", "rehome"],
-  putResidency: ["idp.realm", "residency"],
-  putDrProfile: ["idp.realm", "dr_profile"],
-  putRateLimit: ["idp.realm", "rate_limit"],
-  putCryptoProfile: ["idp.realm", "crypto_profile"],
-  putHashProfile: ["idp.realm", "hash_profile"],
-  putAuditTier: ["idp.realm", "audit_tier"],
+  rehomeEnvironment: ["idp.environment", "rehome"],
+  putResidency: ["idp.environment", "residency"],
+  putDrProfile: ["idp.environment", "dr_profile"],
+  putRateLimit: ["idp.environment", "rate_limit"],
+  putCryptoProfile: ["idp.environment", "crypto_profile"],
+  putHashProfile: ["idp.environment", "hash_profile"],
+  putAuditTier: ["idp.environment", "audit_tier"],
   // OP-159 m.4 (a)
-  putSigningProfile: ["idp.realm", "signing_profile"],
-  putKexShare: ["idp.realm", "kex_share"],
+  putSigningProfile: ["idp.environment", "signing_profile"],
+  putKexShare: ["idp.environment", "kex_share"],
 };
 
 export interface Write {
@@ -209,7 +209,7 @@ export interface Write {
 /** The `idp.platform.*` action each platform write compiles to (OP-159 m.41). */
 const PLATFORM_OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   createTenant: ["tenant_create", "tenant"],
-  createRealm: ["realm_create", "realm"],
+  createEnvironment: ["environment_create", "environment"],
   createSandboxDomain: ["sandbox_create", "sandbox"],
 };
 
@@ -245,7 +245,7 @@ export class ConsoleMock {
   readonly writes: Write[] = [];
   /** OP-159 m.41: the basis each applied write's AIS names, as the Kernel describes it. */
   readonly bases: unknown[] = [];
-  /** The realm's registered passkeys (IDI-4). */
+  /** The environment's registered passkeys (IDI-4). */
   passkeys = 3;
   /** Draft a different action than asked (a compromised draft). */
   tamper = false;
@@ -261,9 +261,9 @@ export class ConsoleMock {
   readonly published: { package: unknown; domains: unknown }[] = [];
   /** OP-159 m.4 (b) (J3): management writes refused with a problem, by path. */
   readonly refuse = new Map<string, readonly [number, string]>();
-  /** The realm the console session is in (OP-159 m.41: `platform` for the platform realm). */
-  realm = "acme";
-  /** OP-159 m.41, INV-29: whether the viewer is the platform realm's root; nobody is by default. */
+  /** The environment the console session is in (OP-159 m.41: `platform` for the platform environment). */
+  environment = "acme";
+  /** OP-159 m.41, INV-29: whether the viewer is the platform environment's root; nobody is by default. */
   platformRoot = false;
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
@@ -367,7 +367,7 @@ export class ConsoleMock {
       return reply(200, {
         account: s.account,
         display_name: "<img src=x onerror=alert(1)>Ada",
-        realm: this.realm,
+        environment: this.environment,
         domain: DOMAIN,
         expires_at: new Date(Date.now() + 12 * 3600_000).toISOString(),
         idle_timeout_s: "900",
@@ -509,7 +509,7 @@ export class ConsoleMock {
           resources: [
             {
               namespace: "idp",
-              path: [this.realm, "platform", action[1], key],
+              path: [this.environment, "platform", action[1], key],
             },
           ],
         });
@@ -536,7 +536,7 @@ export class ConsoleMock {
         const slug = rest.split("/")[1] ?? "";
         const d = envelopeOf({
           action: { namespace: action[0], name: action[1], major: 1 },
-          resources: [{ namespace: "idp.realm", path: [slug] }],
+          resources: [{ namespace: "idp.environment", path: [slug] }],
         });
         const kernel = await k();
         return reply(200, {
@@ -672,7 +672,7 @@ export class ConsoleMock {
         s.kid !== undefined &&
         this.eligible.has(s.account) &&
         intent !== undefined &&
-        (!platform || (this.realm === "platform" && this.platformRoot)) &&
+        (!platform || (this.environment === "platform" && this.platformRoot)) &&
         (this.eligibleActions.size === 0 || this.eligibleActions.has(act));
       return reply(200, { eligible: yes });
     }

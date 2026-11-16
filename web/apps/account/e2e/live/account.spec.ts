@@ -5,7 +5,7 @@
 // signs before anything is signed.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, REALM } from "./signin.js";
+import { PASSWORD, ENVIRONMENT } from "./signin.js";
 
 test.describe("@live account pages", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");
@@ -16,21 +16,21 @@ test.describe("@live account pages", () => {
     test("@live the shell is served with its headers and shows nothing without a session", async ({
       page,
     }) => {
-      const r = await page.goto(`${REALM}/account`);
+      const r = await page.goto(`${ENVIRONMENT}/account`);
       expect(r?.status()).toBe(200);
       const csp = r?.headers()["content-security-policy"] ?? "";
       expect(csp).toContain("frame-ancestors 'none'");
       expect(csp).toContain("'wasm-unsafe-eval'");
       await expect(page.getByTestId("signed-out")).toBeVisible();
-      const session = await page.request.get(`${REALM}/account/api/session`);
+      const session = await page.request.get(`${ENVIRONMENT}/account/api/session`);
       expect(session.status()).toBe(401);
     });
   });
 
-  test("@live the Account section reads the realm's own privacy routes with the cookie", async ({
+  test("@live the Account section reads the environment's own privacy routes with the cookie", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     await expect(page.getByTestId("brand")).toHaveText("acme");
     await expect(page.getByTestId("preferences").getByRole("checkbox")).toHaveCount(12);
     await expect(page.getByTestId("deletion")).toBeVisible();
@@ -40,7 +40,7 @@ test.describe("@live account pages", () => {
   // OP-156 m.3 (c), IDP-37 (4)
   test("@live the İYS block follows the preferences answer", async ({ page }) => {
     const prefs = page.waitForResponse((r) => r.url().includes("/v1/account/preferences"));
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     const body = (await (await prefs).json()) as { iys?: { channels: Record<string, unknown> } };
     await expect(page.getByTestId("preferences")).toBeVisible();
     if (body.iys === undefined) {
@@ -53,16 +53,16 @@ test.describe("@live account pages", () => {
   });
 
   test("@live the cookie alone reads and changes no authority", async ({ page }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     await expect(page.getByTestId("brand")).toBeVisible();
-    const answers = await page.evaluate(async (realm) => {
+    const answers = await page.evaluate(async (environment) => {
       const csrf =
         document.cookie
           .split(";")
           .map((c) => c.trim().split("="))
           .find(([n]) => n === "__Host-access-account-csrf")?.[1] ?? "";
       const send = async (path: string, body: unknown, token = csrf) => {
-        const r = await fetch(`${realm}/account/api${path}`, {
+        const r = await fetch(`${environment}/account/api${path}`, {
           method: "POST",
           headers: { "content-type": "application/json", "x-csrf-token": token },
           body: JSON.stringify(body),
@@ -75,7 +75,7 @@ test.describe("@live account pages", () => {
         write: await send("/proxy/adp/evaluation", { context: { mode: "commit" } }),
         forged: await send("/instances/challenge", { key: "x" }, "forged"),
       };
-    }, REALM);
+    }, ENVIRONMENT);
     expect(answers.read).toEqual([403, "account-instance-required"]);
     expect(answers.write).toEqual([403, "account-instance-required"]);
     expect(answers.forged).toEqual([403, "csrf-token-invalid"]);
@@ -84,7 +84,7 @@ test.describe("@live account pages", () => {
   test("@live a fresh two-factor sign-in sees what a device signs, and Cancel signs nothing", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account/authority`);
+    await page.goto(`${ENVIRONMENT}/account/authority`);
     await page.getByRole("button", { name: "Set up this device" }).click();
     const dialog = page.getByRole("dialog", { name: "Check what you're signing" });
     await expect(dialog).toContainText("access.instance_create");

@@ -490,7 +490,7 @@ fn flow(out: &mut Out, first: &mut bool, name: &str, members: &[(&str, &str)]) {
 }
 
 /// The identity plane's entries for an Agent Card's `securitySchemes` (`OpenAPI` 3 shapes), from
-/// the realm's OpenID discovery document: OpenID Connect discovery, the OAuth 2.0 flows it
+/// the environment's OpenID discovery document: OpenID Connect discovery, the OAuth 2.0 flows it
 /// serves, and mutual TLS when it binds tokens to client certificates. `None` when the document
 /// is not an `https` issuer's.
 #[must_use]

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_scim_sources SET ended_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dee237a2e2d096cd138fa5f3efed658a25da2b90db752e2a84e913205b6f8075"
+}

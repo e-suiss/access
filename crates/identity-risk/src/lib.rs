@@ -10,7 +10,7 @@
 //!   lock (GDPR art. 22).
 //! - A missing source makes the level `unavailable`; the flow then runs on SL0 and SL1 alone and
 //!   nothing it asks for is dropped (MD-8).
-//! - Tenant analytics are daily counters per realm, never a decision input (TI-18).
+//! - Tenant analytics are daily counters per environment, never a decision input (TI-18).
 
 pub mod adapters;
 pub mod app;

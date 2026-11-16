@@ -1,6 +1,6 @@
 //! The Needs Attention link (§8.17.6.5, IA-1, X5, X6, OP-156 m.3 (t)): Access keeps no queue of
 //! approvals. The hub shows one link, "N approvals waiting for you →", to the coordinator the
-//! realm named with `idp.realm.coordinator`, and the count is the coordinator's, never Access's.
+//! environment named with `idp.environment.coordinator`, and the count is the coordinator's, never Access's.
 
 use crate::contract::Attention;
 
@@ -25,7 +25,7 @@ pub fn link(coordinator: Option<&str>, count: Option<u64>) -> Option<Attention> 
     })
 }
 
-/// The coordinator's Needs Attention endpoint a realm's Suiss discovery document names.
+/// The coordinator's Needs Attention endpoint an environment's Suiss discovery document names.
 #[must_use]
 pub fn coordinator_of(discovery: &serde_json::Value) -> Option<String> {
     discovery

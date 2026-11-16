@@ -1,9 +1,9 @@
-//! The realm's SSF transmitter and receiver over HTTP (OP-149 m.7, OP-151 m.3 (l), SSF 1.0,
+//! The environment's SSF transmitter and receiver over HTTP (OP-149 m.7, OP-151 m.3 (l), SSF 1.0,
 //! RFC 8935, RFC 8936): the metadata at `/.well-known/ssf-configuration`, the stream a bearer
 //! credential names at `/ssf/streams` (`GET`, `PATCH`, `DELETE` disables it), its status at
 //! `/ssf/status`, its verification at `/ssf/verify`, poll at `/ssf/poll`, a receiver's semantic
 //! acknowledgement at `/ssf/ack` (E30), and inbound pushes from a declared transmitter at
-//! `/ssf/inbound/{stream}`; at the host root for a subdomain issuer and under `/realms/{slug}`
+//! `/ssf/inbound/{stream}`; at the host root for a subdomain issuer and under `/env/{slug}`
 //! for a path issuer. Stream and poll answers are `no-store`.
 
 use std::sync::Arc;
@@ -49,7 +49,7 @@ where
             ),
         )
         .route(
-            "/.well-known/ssf-configuration/realms/{slug}",
+            "/.well-known/ssf-configuration/env/{slug}",
             get(
                 |s: Shared<T<D, K, R, S, C>>, p: Path<String>, u: Uri, h: HeaderMap| async move {
                     reply(
@@ -60,7 +60,7 @@ where
             ),
         )
         .route(
-            "/realms/{slug}/.well-known/ssf-configuration",
+            "/env/{slug}/.well-known/ssf-configuration",
             get(
                 |s: Shared<T<D, K, R, S, C>>, p: Path<String>, u: Uri, h: HeaderMap| async move {
                     reply(
@@ -77,7 +77,7 @@ where
                 .delete(streams::<D, K, R, S, C>),
         )
         .route(
-            "/realms/{slug}/ssf/streams",
+            "/env/{slug}/ssf/streams",
             get(streams_under::<D, K, R, S, C>)
                 .patch(streams_under::<D, K, R, S, C>)
                 .delete(streams_under::<D, K, R, S, C>),
@@ -87,18 +87,15 @@ where
             get(status_call::<D, K, R, S, C>).post(status_call::<D, K, R, S, C>),
         )
         .route(
-            "/realms/{slug}/ssf/status",
+            "/env/{slug}/ssf/status",
             get(status_call::<D, K, R, S, C>).post(status_call::<D, K, R, S, C>),
         )
         .route("/ssf/verify", post(verify_call::<D, K, R, S, C>))
-        .route(
-            "/realms/{slug}/ssf/verify",
-            post(verify_call::<D, K, R, S, C>),
-        )
+        .route("/env/{slug}/ssf/verify", post(verify_call::<D, K, R, S, C>))
         .route("/ssf/ack", post(ack_call::<D, K, R, S, C>))
-        .route("/realms/{slug}/ssf/ack", post(ack_call::<D, K, R, S, C>))
+        .route("/env/{slug}/ssf/ack", post(ack_call::<D, K, R, S, C>))
         .route("/ssf/poll", post(poll::<D, K, R, S, C>))
-        .route("/realms/{slug}/ssf/poll", post(poll_under::<D, K, R, S, C>))
+        .route("/env/{slug}/ssf/poll", post(poll_under::<D, K, R, S, C>))
         .with_state(shared)
 }
 
@@ -303,7 +300,7 @@ where
     Router::new()
         .route("/ssf/inbound/{stream}", post(inbound::<D, K, S, C>))
         .route(
-            "/realms/{slug}/ssf/inbound/{stream}",
+            "/env/{slug}/ssf/inbound/{stream}",
             post(inbound_under::<D, K, S, C>),
         )
         .with_state(shared)

@@ -2,7 +2,7 @@
 //!
 //! - Webhook: the stored SET claims as the `data` of a structured `CloudEvent`, signed per
 //!   Standard Webhooks with the subscription's secret.
-//! - SSF push (RFC 8935): the SET signed with the realm's key when it is sent.
+//! - SSF push (RFC 8935): the SET signed with the environment's key when it is sent.
 //! - Either way the SET's `iat` is the time of this attempt (OP-149 m.34 (d)); `jti` and the
 //!   event stay, so a receiver deduplicates a retry by `jti`.
 //! - At least once: a delivery stays `pending` until a `2xx`; a transient failure is tried
@@ -15,10 +15,10 @@ use std::time::Duration;
 use access_crypto::webhook::WebhookSecret;
 use access_identity_account::notify::delivery::Backoff;
 use access_store::events::{self as store, DeliveryRow, Mark, SubscriptionRow};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use serde_json::Value;
 
-use crate::app::{Db, realm_signing};
+use crate::app::{Db, environment_signing};
 use crate::domain::set::{
     CLOUDEVENT_CONTENT_TYPE, SET_CONTENT_TYPE, SET_TYP, cloud_event, stamp_issued,
 };
@@ -117,7 +117,7 @@ where
         let mut step = Step::default();
         for (d, id) in due {
             match self
-                .deliver(d.tenant, d.realm, d.subscription, &id, now)
+                .deliver(d.tenant, d.environment, d.subscription, &id, now)
                 .await?
             {
                 Some(Mark::Delivered { .. }) => step.delivered = step.delivered.saturating_add(1),
@@ -150,16 +150,22 @@ where
     async fn deliver(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         sub: [u8; 16],
         id: &str,
         now: u64,
     ) -> Result<Option<Mark<'static>>, Unavailable> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(fault("begin"))?;
-        let row = t.delivery(realm, sub, id).await.map_err(fault("read"))?;
-        let s = t.subscription(realm, sub).await.map_err(fault("read"))?;
+        let row = t
+            .delivery(environment, sub, id)
+            .await
+            .map_err(fault("read"))?;
+        let s = t
+            .subscription(environment, sub)
+            .await
+            .map_err(fault("read"))?;
         t.commit().await.map_err(fault("read"))?;
         let (Some(row), Some(s)) = (row, s) else {
             return Ok(None);
@@ -177,11 +183,11 @@ where
         } else {
             // OP-149 m.4
             let sent = self
-                .send(tenant, realm, &row, &s, now)
+                .send(tenant, environment, &row, &s, now)
                 .await
                 .unwrap_or_else(|Unavailable| {
                     tracing::warn!(
-                        realm = %uuid_text(realm.as_bytes()),
+                        environment = %uuid_text(environment.as_bytes()),
                         subscription = %hex(&sub),
                         channel = %s.channel,
                         delivery = %id,
@@ -191,10 +197,10 @@ where
                 });
             self.judge(sent, row.attempts, now)
         };
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(fault("begin"))?;
-        t.mark_delivery(realm, sub, id, mark)
+        t.mark_delivery(environment, sub, id, mark)
             .await
             .map_err(fault("mark"))?;
         t.commit().await.map_err(fault("mark"))?;
@@ -240,7 +246,7 @@ where
     async fn send(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         row: &DeliveryRow,
         s: &SubscriptionRow,
         now: u64,
@@ -256,12 +262,12 @@ where
                 let sealed = s.secret.as_ref().ok_or(Unavailable).map_err(at("secret"))?;
                 let raw = self
                     .sealer
-                    .open(tenant, realm, &s.id, sealed)
+                    .open(tenant, environment, &s.id, sealed)
                     .map_err(at("unseal"))?;
                 let secret = WebhookSecret::from_bytes(raw.to_vec()).map_err(fault("secret"))?;
                 let occurred = u64::try_from(row.occurred_ms).map_err(fault("payload"))?;
                 let external = self.db.tenant(tenant).map_err(at("tenant-id"))?;
-                let body = cloud_event(&claims, &external, realm.as_bytes(), occurred)
+                let body = cloud_event(&claims, &external, environment.as_bytes(), occurred)
                     .map_err(fault("cloud-event"))?;
                 let ts = now / 1000;
                 let signature = secret.sign(&row.event_id, ts, &body);
@@ -276,16 +282,16 @@ where
                 )
             }
             Some(Channel::SsfPush) => {
-                let Some((_, alg)) = realm_signing(&self.db.app, tenant, realm)
+                let Some((_, alg)) = environment_signing(&self.db.app, tenant, environment)
                     .await
-                    .map_err(at("realm"))?
+                    .map_err(at("environment"))?
                 else {
                     return Ok(Sent::Unreachable);
                 };
                 let payload = serde_json::to_vec(&claims).map_err(fault("payload"))?;
                 let token = self
                     .signer
-                    .sign(realm, alg, SET_TYP, &payload, now)
+                    .sign(environment, alg, SET_TYP, &payload, now)
                     .await
                     .map_err(at("sign"))?;
                 (

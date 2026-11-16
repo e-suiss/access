@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT reentry FROM access.offboarding_previews\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n              ORDER BY committed_at DESC, version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reentry",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.offboarding_previews",
+            "name": "reentry"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5b29b0537ac778b0948e241b83c688c0fbae0df968fbb922d9cb33b5ed400ff0"
+}

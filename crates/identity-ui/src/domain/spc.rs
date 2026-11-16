@@ -7,7 +7,7 @@ use access_kernel::json::{Json, parse};
 use access_kernel::render::Render;
 use serde_json::{Value, json};
 
-/// The Approval Surface's `Permissions-Policy` once the realm decided `idp.realm.spc`: the
+/// The Approval Surface's `Permissions-Policy` once the environment decided `idp.environment.spc`: the
 /// hosted login's, with `payment` opened to its own origin only.
 pub const SPC_PERMISSIONS_POLICY: &str = "publickey-credentials-get=(self), publickey-credentials-create=(self), camera=(), microphone=(), geolocation=(), payment=(self)";
 
@@ -71,9 +71,9 @@ fn total(text: &str) -> Option<(String, String)> {
 }
 
 /// The SPC display of `render`, `None` when it is not a payment: no amount in a currency or no
-/// payee. The instrument is the render's, or `realm_name`.
+/// payee. The instrument is the render's, or `environment_name`.
 #[must_use]
-pub fn display(render: &Render, realm_name: &str) -> Option<Display> {
+pub fn display(render: &Render, environment_name: &str) -> Option<Display> {
     let field = |name: &str| {
         render
             .fields
@@ -88,7 +88,7 @@ pub fn display(render: &Render, realm_name: &str) -> Option<Display> {
         payee_origin: field(PAYEE_ORIGIN),
         currency,
         value,
-        instrument: field(INSTRUMENT).unwrap_or_else(|| realm_name.to_owned()),
+        instrument: field(INSTRUMENT).unwrap_or_else(|| environment_name.to_owned()),
     })
 }
 

@@ -286,11 +286,11 @@ fn sub_ok(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-/// A resolution request (OP-149 A11): `{realm, client_id, parties | subs}`.
+/// A resolution request (OP-149 A11): `{environment, client_id, parties | subs}`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolveRequest {
-    /// The realm, as the tenant snapshot names it.
-    pub realm: [u8; 16],
+    /// The environment, as the tenant snapshot names it.
+    pub environment: [u8; 16],
     /// The client whose pairwise `sub` is meant: its sector.
     pub client_id: String,
     /// The direction and entries.
@@ -307,10 +307,10 @@ pub fn resolve_request(body: &[u8]) -> Result<ResolveRequest, BadRequest> {
     let Ok(Value::Object(mut m)) = serde_json::from_slice::<Value>(body) else {
         return Err(BadRequest("json"));
     };
-    let realm = m
-        .remove("realm")
+    let environment = m
+        .remove("environment")
         .and_then(|r| r.as_str().and_then(parse_uuid))
-        .ok_or(BadRequest("realm"))?;
+        .ok_or(BadRequest("environment"))?;
     let client_id = match m.remove("client_id") {
         Some(Value::String(c)) if !c.is_empty() && c.len() <= 128 => c,
         _ => return Err(BadRequest("client_id")),
@@ -358,7 +358,7 @@ pub fn resolve_request(body: &[u8]) -> Result<ResolveRequest, BadRequest> {
         return Err(BadRequest("unknown-member"));
     }
     Ok(ResolveRequest {
-        realm,
+        environment,
         client_id,
         lookup,
     })
@@ -397,7 +397,7 @@ pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> 
             .collect(),
     };
     json!({
-        "realm": uuid(&req.realm),
+        "environment": uuid(&req.environment),
         "client_id": req.client_id,
         "resolved": pairs,
         "unknown": unknown,
@@ -488,19 +488,19 @@ pub fn agency_json(
 
 /// The snapshot of `tenant` named `id` (OP-149 m.4): its `version` is the digest of the rest,
 /// so it changes exactly when the snapshot does. The retention section is empty until OP-147
-/// policies are stored. A realm is named by its id as events name it in `accessrealm`, its
+/// policies are stored. An environment is named by its id as events name it in `accessenvironment`, its
 /// issuer and its slug.
 #[must_use]
 pub fn snapshot(id: &str, tenant: &Tenant, region: &str) -> Value {
-    let realms: Vec<Value> = tenant
-        .realms
+    let environments: Vec<Value> = tenant
+        .environments
         .iter()
         .map(|r| json!({ "id": uuid(&r.id), "issuer": r.issuer, "slug": r.slug }))
         .collect();
     let mut body = json!({
         "tenant": id,
         "organizations": tenant.organizations,
-        "realms": realms,
+        "environments": environments,
         "region": region,
         "status": tenant.status,
         "retention": {},

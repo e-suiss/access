@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT branding FROM access.idp_environment_branding WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "branding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_branding",
+            "name": "branding"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a513c92fb25e3ffbe142e0c7c9152d533e871db1e409bead21584d1bf8b31ec8"
+}

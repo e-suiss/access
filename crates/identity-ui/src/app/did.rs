@@ -1,6 +1,6 @@
 //! The `did:web` document of a person or an agent (OP-154 m.3 (aa), E56, MD-10): the keys of
-//! the Party's live Instances in the realm's governing domain as verification methods. The DID
-//! is an identifier, never authority; an RP's `sub` stays pairwise. Only a Party this realm
+//! the Party's live Instances in the environment's governing domain as verification methods. The DID
+//! is an identifier, never authority; an RP's `sub` stays pairwise. Only a Party this environment
 //! binds is served: an active person's account or a registered agent that is not retired.
 
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -85,11 +85,11 @@ fn not_found() -> Reply {
 }
 
 impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
-    /// `GET /u/{party}/did.json` (OP-154 m.3 (aa)): the document of a Party this realm binds;
+    /// `GET /u/{party}/did.json` (OP-154 m.3 (aa)): the document of a Party this environment binds;
     /// any other Party is `404`, the same for one that never existed.
     pub async fn did_document<P: PartyKeys>(
         &self,
-        entry: &access_identity_oauth::ports::RealmEntry,
+        entry: &access_identity_oauth::ports::EnvironmentEntry,
         party: &str,
         keys: &P,
     ) -> Reply {
@@ -106,7 +106,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
         let Some(did) = did_of(&kit.issuer, &party) else {
             return not_found();
         };
-        let Ok(mut t) = TenantTx::begin(&self.db, kit.tenant, kit.realm).await else {
+        let Ok(mut t) = TenantTx::begin(&self.db, kit.tenant, kit.environment).await else {
             return unavailable();
         };
         let bound = match t.agent(party).await {
@@ -156,8 +156,8 @@ mod tests {
         let p = [7; 16];
         let id = b64url_encode(&p);
         assert_eq!(
-            did_of("https://access.test/realms/acme", &p).unwrap(),
-            format!("did:web:access.test:realms:acme:u:{id}")
+            did_of("https://access.test/env/acme", &p).unwrap(),
+            format!("did:web:access.test:env:acme:u:{id}")
         );
         assert_eq!(
             did_of("https://acme.example:8443/", &p).unwrap(),

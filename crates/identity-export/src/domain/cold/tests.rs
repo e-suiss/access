@@ -11,7 +11,7 @@ use super::*;
 fn row(id: i64, event: &str) -> AuditRow {
     AuditRow {
         tenant: [0x11; 16],
-        realm: [0x22; 16],
+        environment: [0x22; 16],
         at_ms: 1_767_225_600_000,
         id,
         xid: 900 + u64::try_from(id).unwrap(),

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_environment_frontchannel (tenant_id, environment_id, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4)\n         ON CONFLICT (tenant_id, environment_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cdee31ce1999457b2acf25f98fd15e2346550de2278ab8728f0f694fb1e44e5f"
+}

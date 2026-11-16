@@ -21,7 +21,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
 
-use admin::{Harness, LEAKED, REALM, ais, platform_domain, read, realm_domain, send};
+use admin::{ENVIRONMENT, Harness, LEAKED, ais, environment_domain, platform_domain, read, send};
 
 fn platform_rows() -> impl Iterator<Item = &'static access_http::api::manifest::Route> {
     MANIFEST.iter().filter(|r| r.surface == Surface::Platform)
@@ -29,35 +29,35 @@ fn platform_rows() -> impl Iterator<Item = &'static access_http::api::manifest::
 
 // TN-119, OP-151 m.3 (a), m.6 (f)
 #[tokio::test]
-async fn a_realm_admin_token_is_refused_on_the_platform_surface() {
+async fn a_environment_admin_token_is_refused_on_the_platform_surface() {
     let h = Harness::new();
     let router = h.router();
-    let realm_token = h.token(
-        "realm-admin",
-        &format!("access-admin:realm:{REALM}"),
-        &["realm.read", "platform.read"],
+    let environment_token = h.token(
+        "environment-admin",
+        &format!("access-admin:environment:{ENVIRONMENT}"),
+        &["environment.read", "platform.read"],
         600_000,
     );
     for path in [
         "/admin/v1/platform",
         "/admin/v1/platform/tenants",
         "/admin/v1/platform/tenants/t1",
-        "/admin/v1/platform/tenants/t1/realms",
+        "/admin/v1/platform/tenants/t1/envs",
         "/admin/v1/platform/tenants/t1/sandbox-domains",
-        "/admin/v1/platform/realms/acme",
+        "/admin/v1/platform/envs/acme",
         "/admin/v1/platform/operator/health",
     ] {
-        let (r, body) = send(&router, read(path, &realm_token)).await;
+        let (r, body) = send(&router, read(path, &environment_token)).await;
         assert_eq!(r.status(), StatusCode::UNAUTHORIZED, "{path}");
         assert_eq!(body["code"], "wrong-audience", "{path}");
     }
     let platform_token = h.token(
         "platform-admin",
         "access-admin:platform",
-        &["platform.read", "realm.read"],
+        &["platform.read", "environment.read"],
         600_000,
     );
-    let (r, body) = send(&router, read("/admin/v1/realms/acme", &platform_token)).await;
+    let (r, body) = send(&router, read("/admin/v1/envs/acme", &platform_token)).await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(body["code"], "wrong-audience");
 }
@@ -152,9 +152,9 @@ async fn platform_reads_drop_what_the_kind_may_not_show() {
     for path in [
         "/admin/v1/platform/tenants",
         "/admin/v1/platform/tenants/t1",
-        "/admin/v1/platform/tenants/t1/realms",
+        "/admin/v1/platform/tenants/t1/envs",
         "/admin/v1/platform/tenants/t1/sandbox-domains",
-        "/admin/v1/platform/realms/acme",
+        "/admin/v1/platform/envs/acme",
         "/admin/v1/platform/operator/health",
     ] {
         let (r, body) = send(&router, read(path, &token)).await;
@@ -169,7 +169,7 @@ async fn platform_reads_drop_what_the_kind_may_not_show() {
 
 // TN-110, TN-111, INV-29
 #[tokio::test]
-async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
+async fn a_environment_creation_answers_with_its_exercise_and_genesis() {
     let h = Harness::new();
     let router = h.router();
     let token = h.token("p", "access-admin:platform", &["platform.read"], 600_000);
@@ -178,7 +178,7 @@ async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
         .header("dpop", admin::proof("POST", "/admin/v1/platform/intents"))
         .header("content-type", "application/json")
         .body(Body::from(
-            json!({ "operation": "createRealm", "key": "t1",
+            json!({ "operation": "createEnvironment", "key": "t1",
                     "body": { "slug": "shop", "root": { "sole": "AQEBAQEBAQEBAQEBAQEBAQ" },
                               "acknowledge_no_recovery": true } })
             .to_string(),
@@ -186,13 +186,13 @@ async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
         .unwrap();
     let (r, drafted) = send(&router, draft).await;
     assert_eq!(r.status(), StatusCode::OK, "{drafted}");
-    assert_eq!(drafted["operation"], "createRealm");
+    assert_eq!(drafted["operation"], "createEnvironment");
     assert_eq!(drafted["domain"], b64url_encode(&platform_domain().0));
     assert_eq!(h.position(), 0, "drafting changes nothing");
 
     let me = h.instance(platform_domain());
     let nonce = [9; 16];
-    let path = "/admin/v1/platform/tenants/t1/realms";
+    let path = "/admin/v1/platform/tenants/t1/envs";
     let request = Request::post(path)
         .header("content-type", "application/json")
         .header("idempotency-key", b64url_encode(&nonce))
@@ -212,7 +212,7 @@ async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
     assert_eq!(h.position(), 1);
 
     // TN-119
-    let other = h.instance(realm_domain());
+    let other = h.instance(environment_domain());
     let nonce = [10; 16];
     let request = Request::post(path)
         .header("content-type", "application/json")
@@ -236,7 +236,7 @@ fn the_platform_surface_has_no_super_admin_shortcut() {
         "",
         "intents",
         "tenants",
-        "realms",
+        "envs",
         "sandbox-domains",
         "streams",
         "operator",
@@ -245,14 +245,14 @@ fn the_platform_surface_has_no_super_admin_shortcut() {
         let rest = row.path.strip_prefix("/admin/v1/platform").unwrap();
         let first = rest.trim_start_matches('/').split('/').next().unwrap_or("");
         assert!(allowed.contains(&first), "{}", row.operation_id);
-        if first == "realms" {
-            assert_eq!(row.path, "/admin/v1/platform/realms/{realm_slug}");
+        if first == "envs" {
+            assert_eq!(row.path, "/admin/v1/platform/envs/{environment_slug}");
             assert_eq!(row.verb, Verb::Get, "{}", row.operation_id);
         }
         if first == "tenants" {
             let last = rest.rsplit('/').next().unwrap();
             assert!(
-                ["tenants", "{tenant_id}", "realms", "sandbox-domains"].contains(&last),
+                ["tenants", "{tenant_id}", "envs", "sandbox-domains"].contains(&last),
                 "{}",
                 row.operation_id
             );

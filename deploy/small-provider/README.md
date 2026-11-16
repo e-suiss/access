@@ -24,7 +24,7 @@ systemd units, and bootstraps the tenants.
 
 `durability = "single-node"`. Every domain this provider leads publishes `durability:
 single-node` and its residency in its Domain Metadata, and `GET
-/admin/v1/realms/{slug}/durability` says the same. An acknowledged write can be lost if the node
+/admin/v1/envs/{slug}/durability` says the same. An acknowledged write can be lost if the node
 or its disk is lost. Revocations and the other writes that need an acknowledgement still wait for
 a declared replica and an independent witness; without them they stay pending, never confirmed.
 

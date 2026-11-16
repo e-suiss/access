@@ -1,4 +1,4 @@
-//! What a gateway may ask for (§13.2 blast radius, OP-155 m.3 (c)): only its own realm, only
+//! What a gateway may ask for (§13.2 blast radius, OP-155 m.3 (c)): only its own environment, only
 //! its kind's authentication method, and only a recent authentication. Sans-I/O.
 
 use std::collections::BTreeMap;
@@ -8,7 +8,7 @@ pub mod kerberos;
 
 use access_internal_api::edge::{GatewayKind, GatewayUri};
 use access_kernel::claim::body::AuthMethod;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
 /// Furthest an edge `auth_time` may lie ahead of the server's clock.
 pub const AUTH_TIME_SKEW_MS: u64 = 3 * 60 * 1000;
@@ -19,11 +19,11 @@ pub const AUTH_TIME_MAX_AGE_MS: u64 = 5 * 60 * 1000;
 /// A live registered gateway.
 #[derive(Clone)]
 pub struct Gateway {
-    /// The tenant of its realm.
+    /// The tenant of its environment.
     pub tenant: TenantId,
-    /// Its realm.
-    pub realm: RealmId,
-    /// The realm's slug.
+    /// Its environment.
+    pub environment: EnvironmentId,
+    /// The environment's slug.
     pub slug: String,
     /// Its identity.
     pub uri: GatewayUri,
@@ -41,8 +41,8 @@ impl core::fmt::Debug for Gateway {
 /// Why a call is outside the gateway's scope.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// Another realm than the gateway's.
-    Realm,
+    /// Another environment than the gateway's.
+    Environment,
     /// Another method than the gateway kind's, or a kind that authenticates nobody.
     Method,
     /// An `auth_time` in the future or too old.
@@ -51,7 +51,7 @@ pub enum Refusal {
     Subject,
     /// An audit event whose type does not fit the audit log.
     Event,
-    /// A `session_attest` handle that names no open flow of the realm: forged, used or
+    /// A `session_attest` handle that names no open flow of the environment: forged, used or
     /// expired (IDI-7).
     Attest,
     /// A `session_attest` body outside the contract.
@@ -77,7 +77,7 @@ impl Refusal {
     #[must_use]
     pub const fn code(self) -> &'static str {
         match self {
-            Self::Realm => "edge-realm",
+            Self::Environment => "edge-environment",
             Self::Method => "edge-method",
             Self::AuthTime => "edge-auth-time",
             Self::Subject => "edge-subject",
@@ -95,15 +95,15 @@ impl Refusal {
     }
 }
 
-/// IDP-26, §13.2: a gateway asks only in its own realm.
+/// IDP-26, §13.2: a gateway asks only in its own environment.
 ///
 /// # Errors
-/// [`Refusal::Realm`].
-pub fn in_scope(g: &Gateway, realm: &str) -> Result<(), Refusal> {
-    if g.slug == realm {
+/// [`Refusal::Environment`].
+pub fn in_scope(g: &Gateway, environment: &str) -> Result<(), Refusal> {
+    if g.slug == environment {
         Ok(())
     } else {
-        Err(Refusal::Realm)
+        Err(Refusal::Environment)
     }
 }
 
@@ -176,7 +176,7 @@ mod tests {
     fn gateway(kind: GatewayKind) -> Gateway {
         Gateway {
             tenant: TenantId::from_bytes([1; 16]),
-            realm: RealmId::from_bytes([2; 16]),
+            environment: EnvironmentId::from_bytes([2; 16]),
             slug: String::from("corp"),
             uri: GatewayUri {
                 kind,
@@ -187,10 +187,10 @@ mod tests {
 
     // IDP-26, §13.2
     #[test]
-    fn a_gateway_asks_only_in_its_realm_and_for_its_method() {
+    fn a_gateway_asks_only_in_its_environment_and_for_its_method() {
         let g = gateway(GatewayKind::Ldap);
         assert!(in_scope(&g, "corp").is_ok());
-        assert_eq!(in_scope(&g, "other"), Err(Refusal::Realm));
+        assert_eq!(in_scope(&g, "other"), Err(Refusal::Environment));
         assert_eq!(method(g.uri.kind, "ldap-bind"), Ok(AuthMethod::LdapBind));
         assert_eq!(method(g.uri.kind, "kerberos"), Err(Refusal::Method));
         assert_eq!(method(g.uri.kind, "webauthn"), Err(Refusal::Method));

@@ -1,7 +1,7 @@
 //! WS-Federation passive requestor (§10.6.5, OP-155 m.3 (f), IDP-18): `wsignin1.0` answers with a
 //! `RequestSecurityTokenResponse` carrying a signed SAML 1.1 or 2.0 token for the relying party,
 //! under the same XML and signature rules as SAML (canonical output, enveloped exclusive-c14n
-//! signature from the realm's SAML key, signed output only from a completed authentication);
+//! signature from the environment's SAML key, signed output only from a completed authentication);
 //! `wsignout1.0` signs the user out locally. The request is query parameters only: nothing is
 //! parsed as XML.
 

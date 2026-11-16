@@ -6,13 +6,13 @@ import { expect, test } from "@playwright/test";
 
 test.describe("@live console HR", () => {
   test("@live the HR routes read and write nothing without a session", async ({ page }) => {
-    const sources = await page.request.get("/console/api/proxy/admin/realms/acme/hr-sources");
+    const sources = await page.request.get("/console/api/proxy/admin/envs/acme/hr-sources");
     expect([401, 403]).toContain(sources.status());
-    const connectors = await page.request.get("/console/api/proxy/admin/realms/acme/hr-connectors");
+    const connectors = await page.request.get("/console/api/proxy/admin/envs/acme/hr-connectors");
     expect([401, 403]).toContain(connectors.status());
     const content = "employee_id,email\nE1,ada@acme.example\n";
     const write = await page.request.post(
-      "/console/api/proxy/admin/realms/acme/hr-sources/workday/records:csv",
+      "/console/api/proxy/admin/envs/acme/hr-sources/workday/records:csv",
       { data: { file: "x", records: 1, content } },
     );
     expect([401, 403]).toContain(write.status());

@@ -1,13 +1,13 @@
-//! The realm KEK rotation job (OP-138, OP-144, OP-158 m.3 (y)): a new KEK generation is made in
+//! The environment KEK rotation job (OP-138, OP-144, OP-158 m.3 (y)): a new KEK generation is made in
 //! the token, every subject DEK under the old one is re-wrapped to it inside the token, and the
 //! rotation record counts what moved. A run that stops resumes from the rows still under the
 //! old KEK; the old KEK stays in the token, so nothing it wraps is ever unreadable.
 
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::kek::Rotation;
 
-use crate::login::{RealmKeks, kek_id_at, kek_label_at, realm_keks};
+use crate::login::{EnvironmentKeks, environment_keks, kek_id_at, kek_label_at};
 
 /// Subject DEKs re-wrapped per transaction (PD).
 pub(crate) const BATCH: u32 = 256;
@@ -32,30 +32,30 @@ pub(crate) enum RotationError {
     Store(#[from] access_store::StoreError),
 }
 
-fn generation_of(realm: &[u8; 16], kek_id: &str) -> Option<u32> {
-    (1..=64).find(|g| kek_id_at(realm, *g) == kek_id)
+fn generation_of(environment: &[u8; 16], kek_id: &str) -> Option<u32> {
+    (1..=64).find(|g| kek_id_at(environment, *g) == kek_id)
 }
 
-/// Starts a rotation of the realm's KEK, or resumes the open one, and runs it to its end at
+/// Starts a rotation of the environment's KEK, or resumes the open one, and runs it to its end at
 /// most `batches` batches of `batch` keys long. Calling it again resumes.
 ///
 /// # Errors
 /// [`RotationError`]; what was committed before stays counted.
 pub(crate) async fn rotate(
-    keks: &RealmKeks,
+    keks: &EnvironmentKeks,
     app: &Pool,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     batch: u32,
     batches: u32,
 ) -> Result<Run, RotationError> {
-    let id = *realm.as_bytes();
-    let mut t = TenantTx::begin(app, tenant, realm).await?;
+    let id = *environment.as_bytes();
+    let mut t = TenantTx::begin(app, tenant, environment).await?;
     let open = t.kek_rotation().await?.filter(|r| !r.finished);
     let rotation = if let Some(open) = open {
         t.commit().await?;
         open
     } else {
-        let current = realm_keks(keks.token(), &id)
+        let current = environment_keks(keks.token(), &id)
             .map_err(RotationError::Hsm)?
             .first()
             .map_or(1, |(g, _)| *g);
@@ -86,7 +86,7 @@ pub(crate) async fn rotate(
     let (from, to) = (hsm(from_gen)?, hsm(to_gen)?);
     let mut moved = 0_u64;
     for _ in 0..batches.max(1) {
-        let mut t = TenantTx::begin(app, tenant, realm).await?;
+        let mut t = TenantTx::begin(app, tenant, environment).await?;
         let found = t.wrapped_by_kek(&rotation.from_kek, batch).await?;
         let mut here = 0_u64;
         for key in &found {
@@ -126,12 +126,12 @@ pub(crate) async fn rotate(
             tracing::info!(
                 to = %rotation.to_kek,
                 rewrapped = rotation.rewrapped.saturating_add(moved),
-                "realm KEK rotated (OP-138)"
+                "environment KEK rotated (OP-138)"
             );
             break;
         }
     }
-    let mut t = TenantTx::begin(app, tenant, realm).await?;
+    let mut t = TenantTx::begin(app, tenant, environment).await?;
     let now = t.kek_rotation().await?.unwrap_or(rotation);
     t.commit().await?;
     Ok(Run {

@@ -11,12 +11,14 @@
 
 use std::time::{Duration, Instant};
 
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId, TenantTx, ack, cursor, poll};
+use access_store::identity::{
+    Cursor, EnvironmentId, OutboxEvent, TenantId, TenantTx, ack, cursor, poll,
+};
 use access_store::testing::{TestDb, fresh};
 use sqlx::{Executor, PgPool, Row};
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 
 async fn write(db: &TestDb, payload: &[u8]) {
     let mut t = TenantTx::begin(&db.app, T, R).await.unwrap();
@@ -110,10 +112,10 @@ async fn savepoints_keep_the_top_level_transaction_id() {
     let mut c = db.app.acquire().await.unwrap();
     c.execute("BEGIN").await.unwrap();
     // OP-132 m.5
-    c.execute("SELECT set_config('app.tenant_id', '01010101-0101-0101-0101-010101010101', true), set_config('app.realm_id', '02020202-0202-0202-0202-020202020202', true)")
+    c.execute("SELECT set_config('app.tenant_id', '01010101-0101-0101-0101-010101010101', true), set_config('app.environment_id', '02020202-0202-0202-0202-020202020202', true)")
         .await
         .unwrap();
-    let ins = "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload) VALUES \
+    let ins = "INSERT INTO access.identity_outbox (tenant_id, environment_id, kind, payload) VALUES \
                ('01010101-0101-0101-0101-010101010101', '02020202-0202-0202-0202-020202020202', 'k', ";
     for (stmt, payload) in [
         ("", Some("01")),
@@ -214,7 +216,7 @@ async fn scope_and_roles() {
         .get(0);
     assert_eq!(seen, 0, "no scope, no rows");
     let err = sqlx::query(
-        "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload) VALUES ($1, $1, 'k', '\\x00')",
+        "INSERT INTO access.identity_outbox (tenant_id, environment_id, kind, payload) VALUES ($1, $1, 'k', '\\x00')",
     )
     .bind(sqlx::types::Uuid::from_bytes([1; 16]))
     .execute(&db.reader)

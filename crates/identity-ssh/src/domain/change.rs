@@ -1,4 +1,4 @@
-//! `idp.ssh.*` changes (catalog 6, OP-156 m.3 (a), (o)): turning the realm's CA on and off,
+//! `idp.ssh.*` changes (catalog 6, OP-156 m.3 (a), (o)): turning the environment's CA on and off,
 //! rotating and replacing its key, and registering and retiring server groups. Sans-I/O: the
 //! REST body becomes one change, which the intent binds (EI-25).
 
@@ -25,7 +25,7 @@ pub enum ChangeError {
 /// An `idp.ssh.*` change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshChange {
-    /// `idp.ssh.ca_enable` (CT2): the realm's CA signs.
+    /// `idp.ssh.ca_enable` (CT2): the environment's CA signs.
     CaEnable,
     /// `idp.ssh.ca_disable` (CT1): nothing signs; every CA key enters the KRL.
     CaDisable,
@@ -185,7 +185,7 @@ impl SshChange {
         }
     }
 
-    /// Its resource path below the realm's slug.
+    /// Its resource path below the environment's slug.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         match self {

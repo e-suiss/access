@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jose_alg, argon2_m_kib, argon2_t, argon2_p, rp_id, cimd_enabled, cimd_domains\n           FROM access.idp_environment_settings WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jose_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "jose_alg"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "argon2_m_kib",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "argon2_m_kib"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "argon2_t",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "argon2_t"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "argon2_p",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "argon2_p"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rp_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "rp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cimd_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "cimd_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cimd_domains",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_settings",
+            "name": "cimd_domains"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "7ed02e81b96130c1c472451a50809761c6ae7839db5fbe718f0b844aa92a4a9f"
+}

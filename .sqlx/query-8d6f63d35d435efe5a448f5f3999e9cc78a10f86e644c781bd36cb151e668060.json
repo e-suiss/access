@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_environment_key_changes (tenant_id, environment_id, domain_id, decision_pos,\n                action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d6f63d35d435efe5a448f5f3999e9cc78a10f86e644c781bd36cb151e668060"
+}

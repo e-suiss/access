@@ -18,7 +18,7 @@ use access_identity_audit::ports::NoteSigner;
 use access_identity_signer::adapters::SealedFactory;
 use access_identity_signer::cell::CellKey;
 use access_store::audit::{AuditEvent, append_checkpoint, last_checkpoint, open_month, pending};
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx};
 use access_store::testing::{TestDb, fresh};
 use suiss_crypto::envelope::SoftKek;
 use suiss_ledger::merkle::Frontier;
@@ -64,7 +64,7 @@ impl NoteSigner for Down {
 const NOW: u64 = 1_793_000_000_000;
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 
 fn event(n: usize) -> (String, String) {
     (format!("usr_{n}"), format!("req_{n}"))
@@ -370,21 +370,21 @@ async fn op_44_the_operational_stream_is_a_separate_chain() {
     assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
 }
 
-mod realm_trees {
+mod environment_trees {
     use access_identity_audit::app::identity_step;
-    use access_identity_audit::domain::realm::{
-        RealmProof, inclusion_path, verify as verify_realm,
+    use access_identity_audit::domain::environment::{
+        EnvironmentProof, inclusion_path, verify as verify_environment,
     };
-    use access_identity_signer::cell::realm_origin;
-    use access_store::audit_realm::last_realm_checkpoint;
+    use access_identity_signer::cell::environment_origin;
+    use access_store::audit_environment::last_environment_checkpoint;
 
     use super::*;
 
-    const OTHER: RealmId = RealmId::from_bytes([3; 16]);
+    const OTHER: EnvironmentId = EnvironmentId::from_bytes([3; 16]);
 
-    async fn audit_in(db: &TestDb, realm: RealmId, n: usize) {
+    async fn audit_in(db: &TestDb, environment: EnvironmentId, n: usize) {
         let (target, corr) = event(n);
-        let mut t = TenantTx::begin(&db.app, T, realm).await.unwrap();
+        let mut t = TenantTx::begin(&db.app, T, environment).await.unwrap();
         t.audit(&AuditEvent {
             event_type: "session.revoked",
             actor: "adm_1",
@@ -396,12 +396,19 @@ mod realm_trees {
         t.commit().await.unwrap();
     }
 
-    async fn proofs(db: &TestDb, realm: RealmId, size: u64) -> Vec<(u64, [u8; 32], Vec<[u8; 32]>)> {
-        let mut t = TenantTx::begin(&db.app, T, realm).await.unwrap();
-        let rows = t.realm_audit_leaves(size).await.unwrap();
+    async fn proofs(
+        db: &TestDb,
+        environment: EnvironmentId,
+        size: u64,
+    ) -> Vec<(u64, [u8; 32], Vec<[u8; 32]>)> {
+        let mut t = TenantTx::begin(&db.app, T, environment).await.unwrap();
+        let rows = t.environment_audit_leaves(size).await.unwrap();
         t.commit().await.unwrap();
         let leaves: Vec<[u8; 32]> = rows.iter().map(|r| leaf(r).unwrap()).collect();
-        assert!(rows.iter().all(|r| r.realm == *realm.as_bytes()));
+        assert!(
+            rows.iter()
+                .all(|r| r.environment == *environment.as_bytes())
+        );
         leaves
             .iter()
             .enumerate()
@@ -411,7 +418,7 @@ mod realm_trees {
 
     // OP-152 m.7 (d), OP-38, OP-44
     #[tokio::test]
-    async fn each_realm_proves_its_events_in_its_own_tree() {
+    async fn each_environment_proves_its_events_in_its_own_tree() {
         let db = fresh().await.unwrap();
         for n in 0..3 {
             audit_in(&db, R, n).await;
@@ -435,35 +442,40 @@ mod realm_trees {
         }
         let (identity, vkey) = CELL.key().await.unwrap();
         let mut notes = Vec::new();
-        for (realm, count) in [(R, 3_u64), (OTHER, 5)] {
-            let cp = last_realm_checkpoint(&db.checkpointer, *T.as_bytes(), *realm.as_bytes())
-                .await
-                .unwrap()
-                .unwrap();
+        for (environment, count) in [(R, 3_u64), (OTHER, 5)] {
+            let cp = last_environment_checkpoint(
+                &db.checkpointer,
+                *T.as_bytes(),
+                *environment.as_bytes(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
             assert_eq!(cp.size, count);
             assert_eq!(cp.note.lines().nth(1), Some(count.to_string().as_str()));
             assert!(
                 !cp.note.lines().any(|l| l == "8"),
-                "the cell tree's size is never in a realm checkpoint"
+                "the cell tree's size is never in an environment checkpoint"
             );
-            let origin = realm_origin(&identity, realm.as_bytes());
-            for (index, leaf, path) in proofs(&db, realm, cp.size).await {
-                let proof = RealmProof {
+            let origin = environment_origin(&identity, environment.as_bytes());
+            for (index, leaf, path) in proofs(&db, environment, cp.size).await {
+                let proof = EnvironmentProof {
                     leaf,
                     index,
                     path,
                     note: cp.note.clone(),
                 };
                 assert_eq!(
-                    verify_realm(&access_crypto::AwsLcBackend, &proof, &origin, &vkey).unwrap(),
+                    verify_environment(&access_crypto::AwsLcBackend, &proof, &origin, &vkey)
+                        .unwrap(),
                     (count, cp.root)
                 );
-                let forged = RealmProof {
+                let forged = EnvironmentProof {
                     leaf: [0xee; 32],
                     ..proof.clone()
                 };
                 assert!(matches!(
-                    verify_realm(&access_crypto::AwsLcBackend, &forged, &origin, &vkey),
+                    verify_environment(&access_crypto::AwsLcBackend, &forged, &origin, &vkey),
                     Err(AuditError::Proof)
                 ));
             }
@@ -471,13 +483,17 @@ mod realm_trees {
         }
         let (first, other) = (&notes[0], &notes[1]);
         let (index, leaf, path) = proofs(&db, R, 3).await.remove(0);
-        let crossed = RealmProof {
+        let crossed = EnvironmentProof {
             leaf,
             index,
             path,
             note: other.1.clone(),
         };
-        assert!(verify_realm(&access_crypto::AwsLcBackend, &crossed, &first.0, &vkey).is_err());
-        assert!(verify_realm(&access_crypto::AwsLcBackend, &crossed, &other.0, &vkey).is_err());
+        assert!(
+            verify_environment(&access_crypto::AwsLcBackend, &crossed, &first.0, &vkey).is_err()
+        );
+        assert!(
+            verify_environment(&access_crypto::AwsLcBackend, &crossed, &other.0, &vkey).is_err()
+        );
     }
 }

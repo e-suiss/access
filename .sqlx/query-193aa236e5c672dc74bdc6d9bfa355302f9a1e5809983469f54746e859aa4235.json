@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT set_config('app.environment_id', $1, true) AS environment",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "environment",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "193aa236e5c672dc74bdc6d9bfa355302f9a1e5809983469f54746e859aa4235"
+}

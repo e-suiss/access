@@ -13,8 +13,8 @@ use serde_json::Value;
 
 const CONTRACT: &str = include_str!("../../../sdks/openapi/admin-v1.json");
 
-/// The realm surface's path prefix.
-pub(crate) const REALM_PREFIX: &str = "/admin/v1/realms/{slug}";
+/// The environment surface's path prefix.
+pub(crate) const ENVIRONMENT_PREFIX: &str = "/admin/v1/envs/{slug}";
 
 /// The operation that drafts a write (OP-151 m.11 (a)).
 pub(crate) const DRAFT: &str = "draftIntent";
@@ -49,12 +49,12 @@ impl Method {
     }
 }
 
-/// One operation of the realm surface.
+/// One operation of the environment surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Operation {
     pub(crate) id: String,
     pub(crate) method: Method,
-    /// The path after the realm prefix, with at most one `{key}` parameter.
+    /// The path after the environment prefix, with at most one `{key}` parameter.
     pub(crate) path: String,
     /// The read scope; `None` for a write (the caller's AIS).
     pub(crate) scope: Option<String>,
@@ -66,7 +66,7 @@ impl Operation {
         self.scope.is_none()
     }
 
-    /// The resource name: the first path segment after the realm prefix.
+    /// The resource name: the first path segment after the environment prefix.
     pub(crate) fn resource(&self) -> &str {
         self.path
             .trim_start_matches('/')
@@ -87,7 +87,7 @@ impl Operation {
 
     /// The concrete path for `slug` and `key`, each percent-encoded as one segment.
     pub(crate) fn url_path(&self, slug: &str, key: Option<&str>) -> String {
-        let mut out = String::from("/admin/v1/realms/");
+        let mut out = String::from("/admin/v1/envs/");
         out.push_str(&segment(slug));
         let mut rest = self.path.as_str();
         while let Some(open) = rest.find('{') {
@@ -127,7 +127,7 @@ fn parse(doc: &Value) -> Contract {
     let mut operations = Vec::new();
     if let Some(paths) = doc.get("paths").and_then(Value::as_object) {
         for (path, item) in paths {
-            let Some(rest) = path.strip_prefix(REALM_PREFIX) else {
+            let Some(rest) = path.strip_prefix(ENVIRONMENT_PREFIX) else {
                 continue;
             };
             let Some(item) = item.as_object() else {
@@ -197,7 +197,7 @@ impl Contract {
         self.operations.iter().find(|o| o.id == id)
     }
 
-    /// Every resource name of the realm surface, sorted.
+    /// Every resource name of the environment surface, sorted.
     pub(crate) fn resources(&self) -> BTreeSet<&str> {
         self.operations
             .iter()
@@ -291,30 +291,30 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "claimOrganizationDomain" => IdpAction::OrgDomainClaim,
         "releaseOrganizationDomain" => IdpAction::OrgDomainRelease,
         "draftOrganizationConnection" => IdpAction::OrgSsoDraft,
-        "putSigninPolicy" | "patchSigninPolicy" => IdpAction::RealmSigninPolicy,
-        "putSessionPolicy" | "patchSessionPolicy" => IdpAction::RealmSessionPolicy,
-        "putBranding" | "patchBranding" => IdpAction::RealmBranding,
-        "putRpId" => IdpAction::RealmRpId,
+        "putSigninPolicy" | "patchSigninPolicy" => IdpAction::EnvironmentSigninPolicy,
+        "putSessionPolicy" | "patchSessionPolicy" => IdpAction::EnvironmentSessionPolicy,
+        "putBranding" | "patchBranding" => IdpAction::EnvironmentBranding,
+        "putRpId" => IdpAction::EnvironmentRpId,
         "putMapper" => IdpAction::MapperSet,
-        "putJoseAlg" => IdpAction::RealmJoseAlg,
+        "putJoseAlg" => IdpAction::EnvironmentJoseAlg,
         "putCimdPolicy" | "patchCimdPolicy" => IdpAction::CimdPolicy,
-        "putProtectionMode" | "patchProtectionMode" => IdpAction::RealmProtectionModeLoosen,
+        "putProtectionMode" | "patchProtectionMode" => IdpAction::EnvironmentProtectionModeLoosen,
         "markCanaryAccount" => IdpAction::AccountCanary,
-        "putExtensionPolicy" | "patchExtensionPolicy" => IdpAction::RealmExtensionPolicy,
+        "putExtensionPolicy" | "patchExtensionPolicy" => IdpAction::EnvironmentExtensionPolicy,
         "registerHook" => IdpAction::HookRegister,
         "retireHook" => IdpAction::HookRetire,
         "registerWebhook" => IdpAction::WebhookRegister,
         "putWebhook" | "patchWebhook" | "rotateWebhookKey" => IdpAction::WebhookUpdate,
         "retireWebhook" => IdpAction::WebhookRetire,
         "deleteAccount" => IdpAction::AccountDelete,
-        "rehomeRealm" => IdpAction::RealmRehome,
+        "rehomeEnvironment" => IdpAction::EnvironmentRehome,
         "createResetIntent" => IdpAction::AccountResetIntent,
         "createTemporaryAccessPass" => IdpAction::AccountTapIssue,
         "putRecoveryPolicy" => IdpAction::AccountRecoveryPolicyLoosen,
         // OP-153 m.22 (g), (k), m.25 (b)
-        "putCspMode" => IdpAction::RealmCspModeLoosen,
-        "putRelatedOrigins" => IdpAction::RealmRelatedOrigins,
-        "putLocaleOverrides" => IdpAction::RealmLocaleOverrides,
+        "putCspMode" => IdpAction::EnvironmentCspModeLoosen,
+        "putRelatedOrigins" => IdpAction::EnvironmentRelatedOrigins,
+        "putLocaleOverrides" => IdpAction::EnvironmentLocaleOverrides,
         "importAccounts" => IdpAction::AccountImport,
         "exportAccounts" => IdpAction::AccountMigrationExport,
         "bindAccount" => IdpAction::AccountBind,
@@ -330,7 +330,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putDcrPolicy" => IdpAction::ClientDcrPolicy,
         "createCrossAppConnection" => IdpAction::ClientCrossAppConnection,
         "retireCrossAppConnection" => IdpAction::ClientCrossAppConnectionRetire,
-        "putDeviceCode" => IdpAction::RealmDeviceCode,
+        "putDeviceCode" => IdpAction::EnvironmentDeviceCode,
         "putVaultResource" => IdpAction::VaultResourceRegister,
         "disableVaultResource" => IdpAction::VaultResourceDisable,
         "putVaultReleaseMode" => IdpAction::VaultReleaseModeOpen,
@@ -364,11 +364,11 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putClientEncryption" => IdpAction::ClientEncryption,
         "putClientSamlBearer" => IdpAction::ClientSamlBearer,
         "putClientLegacyBearer" => IdpAction::ClientLegacyBearer,
-        "putCiba" => IdpAction::RealmCiba,
-        "putCertificateLogin" => IdpAction::RealmCertificateLogin,
-        "putMtlsAliases" => IdpAction::RealmMtlsAliases,
-        "putHrd" => IdpAction::RealmHrd,
-        "putFrontchannelLogout" => IdpAction::RealmFrontchannelLogout,
+        "putCiba" => IdpAction::EnvironmentCiba,
+        "putCertificateLogin" => IdpAction::EnvironmentCertificateLogin,
+        "putMtlsAliases" => IdpAction::EnvironmentMtlsAliases,
+        "putHrd" => IdpAction::EnvironmentHrd,
+        "putFrontchannelLogout" => IdpAction::EnvironmentFrontchannelLogout,
         "enforceOrganizationSso" => IdpAction::OrgSsoEnforce,
         "liftOrganizationSso" => IdpAction::OrgSsoEnforceLift,
         "createOrganizationSetupLink" => IdpAction::OrgSetupLink,
@@ -401,13 +401,13 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "retireExportSink" => IdpAction::ExportSinkRetire,
         "registerSignalSource" => IdpAction::SignalSourceRegister,
         "retireSignalSource" => IdpAction::SignalSourceRetire,
-        "putPush" => IdpAction::RealmPush,
-        "putSmsOtp" => IdpAction::RealmSmsOtp,
-        "putSpc" => IdpAction::RealmSpc,
-        "putCoordinator" => IdpAction::RealmCoordinator,
-        "putIys" => IdpAction::RealmIys,
-        "putPreferenceTopics" => IdpAction::RealmPreferenceTopics,
-        "putSecurityNotices" => IdpAction::RealmSecurityNotices,
+        "putPush" => IdpAction::EnvironmentPush,
+        "putSmsOtp" => IdpAction::EnvironmentSmsOtp,
+        "putSpc" => IdpAction::EnvironmentSpc,
+        "putCoordinator" => IdpAction::EnvironmentCoordinator,
+        "putIys" => IdpAction::EnvironmentIys,
+        "putPreferenceTopics" => IdpAction::EnvironmentPreferenceTopics,
+        "putSecurityNotices" => IdpAction::EnvironmentSecurityNotices,
         "resendRelayMessage" => IdpAction::RelayResend,
         "registerCaseSystem" => IdpAction::SupportCaseSystemRegister,
         "retireCaseSystem" => IdpAction::SupportCaseSystemRetire,
@@ -416,20 +416,20 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "clearBreakglassAccount" => IdpAction::OrgMemberBreakglassClear,
         "scheduleReview" => IdpAction::ReviewSchedule,
         "closeReview" => IdpAction::ReviewScheduleClose,
-        "putDelegatedAdmin" => IdpAction::RealmDelegatedAdmin,
-        "putApprovalInline" => IdpAction::RealmApprovalInline,
-        "putApprovalBatch" => IdpAction::RealmApprovalBatch,
+        "putDelegatedAdmin" => IdpAction::EnvironmentDelegatedAdmin,
+        "putApprovalInline" => IdpAction::EnvironmentApprovalInline,
+        "putApprovalBatch" => IdpAction::EnvironmentApprovalBatch,
         "reviewBreakglassUse" => IdpAction::OrgBreakglassReview,
         // OP-158 m.3 (a)
-        "putResidency" => IdpAction::RealmResidency,
-        "putDrProfile" => IdpAction::RealmDrProfile,
-        "putRateLimit" => IdpAction::RealmRateLimit,
-        "putCryptoProfile" => IdpAction::RealmCryptoProfile,
-        "putHashProfile" => IdpAction::RealmHashProfile,
-        "putAuditTier" => IdpAction::RealmAuditTier,
+        "putResidency" => IdpAction::EnvironmentResidency,
+        "putDrProfile" => IdpAction::EnvironmentDrProfile,
+        "putRateLimit" => IdpAction::EnvironmentRateLimit,
+        "putCryptoProfile" => IdpAction::EnvironmentCryptoProfile,
+        "putHashProfile" => IdpAction::EnvironmentHashProfile,
+        "putAuditTier" => IdpAction::EnvironmentAuditTier,
         // OP-159 m.3 (a)
-        "putSigningProfile" => IdpAction::RealmSigningProfile,
-        "putKexShare" => IdpAction::RealmKexShare,
+        "putSigningProfile" => IdpAction::EnvironmentSigningProfile,
+        "putKexShare" => IdpAction::EnvironmentKexShare,
         _ => return None,
     })
 }
@@ -458,8 +458,10 @@ fn protection_mode(v: &Value) -> Option<ProtectionMode> {
 /// parse is loosening (OP-151 m.3 (o)).
 pub(crate) fn protection_action(current: &Value, desired: &Value) -> IdpAction {
     match (protection_mode(current), protection_mode(desired)) {
-        (Some(from), Some(to)) if tier(&from, &to) == Tier::Ct1 => IdpAction::RealmProtectionMode,
-        _ => IdpAction::RealmProtectionModeLoosen,
+        (Some(from), Some(to)) if tier(&from, &to) == Tier::Ct1 => {
+            IdpAction::EnvironmentProtectionMode
+        }
+        _ => IdpAction::EnvironmentProtectionModeLoosen,
     }
 }
 

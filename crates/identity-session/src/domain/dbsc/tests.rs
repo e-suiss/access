@@ -84,10 +84,10 @@ fn a_tied_session_needs_its_live_bound_cookie() {
 }
 
 #[test]
-fn the_headers_name_the_realm_endpoints() {
+fn the_headers_name_the_environment_endpoints() {
     assert_eq!(
-        registration("/realms/acme", "XYZ"),
-        "(ES256);path=\"/realms/acme/v1/dbsc/register\";challenge=\"XYZ\""
+        registration("/env/acme", "XYZ"),
+        "(ES256);path=\"/env/acme/v1/dbsc/register\";challenge=\"XYZ\""
     );
     assert_eq!(challenge("XYZ", "ses_1"), "\"XYZ\";id=\"ses_1\"");
     let c = session_config("ses_1", "https://acme.example", "");

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FROM access.event_delivery\n              WHERE tenant_id = $1 AND environment_id = $2 AND state IN ('delivered', 'acknowledged')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "db7624917648bd6aaa0829aa3dcd8e1d4df285fbcc2e48543ce0ced8fd3d465e"
+}

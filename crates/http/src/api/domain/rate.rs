@@ -41,9 +41,9 @@ impl Quota {
     }
 }
 
-/// Layer 3, per actor: realm-admin writes per actor Instance (OP-151 m.3 (d)).
-pub const REALM_WRITE: Quota = Quota {
-    name: "realm-write",
+/// Layer 3, per actor: environment-admin writes per actor Instance (OP-151 m.3 (d)).
+pub const ENVIRONMENT_WRITE: Quota = Quota {
+    name: "environment-write",
     limit: 10,
     window_s: 1,
     burst: 50,
@@ -65,9 +65,9 @@ pub const READ: Quota = Quota {
     burst: 60,
 };
 
-/// Layer 1, per surface instance, method and route group: realm-admin writes.
-pub const REALM_GROUP_WRITE: Quota = Quota {
-    name: "realm-group-write",
+/// Layer 1, per surface instance, method and route group: environment-admin writes.
+pub const ENVIRONMENT_GROUP_WRITE: Quota = Quota {
+    name: "environment-group-write",
     limit: 50,
     window_s: 1,
     burst: 200,
@@ -100,7 +100,7 @@ pub const ACTOR_CONCURRENCY: u32 = 8;
 pub const fn group_quota(surface: Surface, write: bool) -> Quota {
     match (surface, write) {
         (_, false) => GROUP_READ,
-        (Surface::Realm, true) => REALM_GROUP_WRITE,
+        (Surface::Environment, true) => ENVIRONMENT_GROUP_WRITE,
         (Surface::Platform, true) => PLATFORM_GROUP_WRITE,
     }
 }
@@ -110,7 +110,7 @@ pub const fn group_quota(surface: Surface, write: bool) -> Quota {
 pub const fn actor_quota(surface: Surface, write: bool) -> Quota {
     match (surface, write) {
         (_, false) => READ,
-        (Surface::Realm, true) => REALM_WRITE,
+        (Surface::Environment, true) => ENVIRONMENT_WRITE,
         (Surface::Platform, true) => PLATFORM_WRITE,
     }
 }

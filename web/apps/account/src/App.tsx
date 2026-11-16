@@ -1,6 +1,6 @@
-// OP-153 m.3 (w): the realm's account shell. "Account" (S11) runs on the session cookie alone and
+// OP-153 m.3 (w): the environment's account shell. "Account" (S11) runs on the session cookie alone and
 // holds no authority; "Authority" (S2, S4, S5, S6, Changes) reads and signs with this browser's
-// device Instance. The realm's name is the brand; no Suiss shell is imposed (X40).
+// device Instance. The environment's name is the brand; no Suiss shell is imposed (X40).
 import { Alert } from "@access/ui/components/alert";
 import { buttonVariants } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
@@ -77,7 +77,7 @@ export function App(): ReactElement {
   useEffect(() => {
     json<SessionInfo>(call("/session"))
       .then(async (session) => {
-        setInstance(await find(session.realm, session.account, session.instance));
+        setInstance(await find(session.environment, session.account, session.instance));
         setLoaded({ kind: "ready", session });
       })
       .catch((e: unknown) => {
@@ -137,7 +137,7 @@ export function App(): ReactElement {
       >
         <SidebarHeader className="px-4 pt-4">
           <strong data-testid="brand" className="text-lg font-semibold wrap-anywhere">
-            {session.realm}
+            {session.environment}
           </strong>
         </SidebarHeader>
         <SidebarContent>

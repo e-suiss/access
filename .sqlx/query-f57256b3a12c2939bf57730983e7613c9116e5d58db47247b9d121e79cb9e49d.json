@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT origins FROM access.idp_environment_related_origins\n          WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "origins",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_related_origins",
+            "name": "origins"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f57256b3a12c2939bf57730983e7613c9116e5d58db47247b9d121e79cb9e49d"
+}

@@ -18,7 +18,7 @@ const MIN_WITNESSES: usize = 2;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct WitnessesFile {
-    realm: String,
+    environment: String,
     endpoints: Vec<String>,
 }
 
@@ -26,7 +26,7 @@ pub(super) struct WitnessesFile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ReplicaFile {
-    realm: String,
+    environment: String,
     endpoint: String,
 }
 
@@ -35,7 +35,7 @@ pub(super) struct ReplicaFile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SecondProviderFile {
-    realm: String,
+    environment: String,
     endpoint: String,
 }
 
@@ -69,7 +69,7 @@ impl Fixtures<'_> {
     /// Checks each section that is present, then refuses it until its lane builds it.
     pub(super) fn check(&self, tenants: &[String]) -> Result<(), BootstrapError> {
         if let Some(w) = self.witnesses {
-            sample_tenant(tenants, "witnesses", &w.realm)?;
+            sample_tenant(tenants, "witnesses", &w.environment)?;
             if w.endpoints.len() < MIN_WITNESSES {
                 return Err(BootstrapError::Plan(format!(
                     "witnesses: at least {MIN_WITNESSES} endpoints"
@@ -81,12 +81,12 @@ impl Fixtures<'_> {
             return Err(not_built("witnesses"));
         }
         if let Some(r) = self.replica {
-            sample_tenant(tenants, "replica", &r.realm)?;
+            sample_tenant(tenants, "replica", &r.environment)?;
             endpoint("replica", &r.endpoint)?;
             return Err(not_built("replica"));
         }
         if let Some(p) = self.second_provider {
-            sample_tenant(tenants, "second_provider", &p.realm)?;
+            sample_tenant(tenants, "second_provider", &p.environment)?;
             endpoint("second_provider", &p.endpoint)?;
             return Err(not_built("second_provider"));
         }
@@ -107,15 +107,15 @@ mod tests {
         for (name, section) in [
             (
                 "witnesses",
-                "[witnesses]\nrealm = \"acme\"\nendpoints = [\"http://127.0.0.1:7801\", \"http://127.0.0.1:7802\"]\n",
+                "[witnesses]\nenvironment = \"acme\"\nendpoints = [\"http://127.0.0.1:7801\", \"http://127.0.0.1:7802\"]\n",
             ),
             (
                 "replica",
-                "[replica]\nrealm = \"acme\"\nendpoint = \"http://127.0.0.1:7811\"\n",
+                "[replica]\nenvironment = \"acme\"\nendpoint = \"http://127.0.0.1:7811\"\n",
             ),
             (
                 "second",
-                "[second_provider]\nrealm = \"acme\"\nendpoint = \"https://provider-b.example\"\n",
+                "[second_provider]\nenvironment = \"acme\"\nendpoint = \"https://provider-b.example\"\n",
             ),
         ] {
             let path = dir.join(format!("{name}.toml"));
@@ -127,7 +127,7 @@ mod tests {
         std::fs::write(
             &one,
             format!(
-                "{head}[witnesses]\nrealm = \"acme\"\nendpoints = [\"http://127.0.0.1:7801\"]\n"
+                "{head}[witnesses]\nenvironment = \"acme\"\nendpoints = [\"http://127.0.0.1:7801\"]\n"
             ),
         )
         .unwrap();

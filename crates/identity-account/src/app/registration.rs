@@ -1,7 +1,7 @@
 //! Self-service registration and e-mail change by proof of the mailbox (§12.3.6, TN-64, TN-66,
 //! TN-80, TN-81, TN-82, TN-83, OP-153 m.3 (g), (h), (i)).
 //!
-//! The order is the spec's: address syntax, the realm's domain lists, the cheap gate per address
+//! The order is the spec's: address syntax, the environment's domain lists, the cheap gate per address
 //! prefix before any hash or lookup, the per-address code limits, the bot signal and the abuse
 //! score (step-up only, never a refusal), then always an out-of-band message. Whether the address
 //! already has an account is decided only inside that message: a new address gets a code, a
@@ -21,7 +21,7 @@ use suiss_crypto::envelope::{Dek, Sealed, open_body, seal_body};
 use crate::AccountError;
 use crate::adapters::pg::PgTx;
 use crate::app::vault::{self, Vault};
-use crate::app::{Actor, Realm, events};
+use crate::app::{Actor, Environment, events};
 use crate::domain::bot::BotSignal;
 use crate::domain::gcra::{Gcra, GcraDecision};
 use crate::domain::identifier::{Identifier, IdentifierKind};
@@ -72,10 +72,10 @@ impl Purpose {
     }
 }
 
-/// The realm's registration rules as the flow reads them (TN-132).
+/// The environment's registration rules as the flow reads them (TN-132).
 #[derive(Clone, Debug, Default)]
 pub struct Rules {
-    /// Whether the address's domain may register (the realm's allow and deny lists).
+    /// Whether the address's domain may register (the environment's allow and deny lists).
     pub domain_allowed: bool,
     /// Whether the display name is required; the hosted page asks for it with the code.
     pub name_required: bool,
@@ -103,7 +103,7 @@ pub struct Start<'a> {
 pub enum Refused {
     /// The address cannot receive mail (TN-80 step 1).
     Address,
-    /// The realm does not take this domain (TN-132).
+    /// The environment does not take this domain (TN-132).
     Domain,
     /// A required field is missing.
     Required,
@@ -142,13 +142,13 @@ pub enum Proven {
     Gone,
 }
 
-/// The registration services of one realm for one request.
+/// The registration services of one environment for one request.
 pub struct Registrar<'a, B, N> {
     /// The `access_app` pool.
     pub pool: &'a Pool,
-    /// The realm.
-    pub realm: &'a Realm<'a>,
-    /// The realm's vault keys.
+    /// The environment.
+    pub environment: &'a Environment<'a>,
+    /// The environment's vault keys.
     pub vault: &'a Vault,
     /// The bot signal.
     pub bots: &'a B,
@@ -211,7 +211,7 @@ pub fn code_digest(flow_hash: &[u8; 32], code: &str) -> [u8; 32] {
 fn seal_context(t: &TenantTx, flow_hash: &[u8; 32]) -> Vec<u8> {
     let mut c = SEAL_CONTEXT.to_vec();
     c.extend_from_slice(t.tenant().as_bytes());
-    if let Some(r) = t.realm() {
+    if let Some(r) = t.environment() {
         c.extend_from_slice(r.as_bytes());
     }
     c.extend_from_slice(flow_hash);
@@ -256,27 +256,35 @@ async fn audit<T: AccountTx>(
 pub async fn account_mail_allowed<T: AccountTx>(
     tx: &mut T,
     tenant: &[u8; 16],
-    realm: &[u8; 16],
+    environment: &[u8; 16],
     subject: [u8; 16],
     now_ms: u64,
 ) -> Result<bool, AccountError> {
-    let key = gate_key(tag::ACCOUNT_MAIL, tenant, realm, &subject);
+    let key = gate_key(tag::ACCOUNT_MAIL, tenant, environment, &subject);
     Ok(gate(tx, &key, ACCOUNT_MAIL_RATE, now_ms).await?.is_none())
 }
 
 impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     async fn begin(&self) -> Result<PgTx, AccountError> {
         Ok(PgTx(
-            TenantTx::begin(self.pool, self.realm.tenant, self.realm.realm).await?,
+            TenantTx::begin(
+                self.pool,
+                self.environment.tenant,
+                self.environment.environment,
+            )
+            .await?,
             Some(self.vault.clone()),
         ))
     }
 
     fn ids(&self) -> ([u8; 16], [u8; 16]) {
-        (*self.realm.tenant.as_bytes(), *self.realm.realm.as_bytes())
+        (
+            *self.environment.tenant.as_bytes(),
+            *self.environment.environment.as_bytes(),
+        )
     }
 
-    /// The registration request (TN-80 steps 1–7). The answer depends on the realm's rules and
+    /// The registration request (TN-80 steps 1–7). The answer depends on the environment's rules and
     /// the limits only, never on whether the address has an account.
     ///
     /// # Errors
@@ -294,20 +302,22 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         if !rules.domain_allowed {
             return Ok(Started::Refused(Refused::Domain));
         }
-        let (tenant, realm) = self.ids();
+        let (tenant, environment) = self.ids();
         let mut tx = self.begin().await?;
         // TN-80, TN-83
-        let ip_key = gate_key(tag::IP, &tenant, &realm, req.prefix);
+        let ip_key = gate_key(tag::IP, &tenant, &environment, req.prefix);
         if let Some(retry_after_ms) = gate(&mut tx, &ip_key, IP_RATE, req.now_ms).await? {
             tx.commit().await?;
             return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
         }
-        let canonical = self.vault.index_of(&tenant, &realm, &email.canonical())?;
+        let canonical = self
+            .vault
+            .index_of(&tenant, &environment, &email.canonical())?;
         for (t, rate) in [
             (tag::EMAIL_HOUR, EMAIL_HOURLY),
             (tag::EMAIL_DAY, EMAIL_DAILY),
         ] {
-            let key = gate_key(t, &tenant, &realm, &canonical);
+            let key = gate_key(t, &tenant, &environment, &canonical);
             if let Some(retry_after_ms) = gate(&mut tx, &key, rate, req.now_ms).await? {
                 tx.commit().await?;
                 return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
@@ -326,7 +336,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         };
         access_telemetry::signals::REGISTRATION_SCORES.incr([assessment.band()]);
         let mut tx = self.begin().await?;
-        let index = self.vault.index_of(&tenant, &realm, email.raw())?;
+        let index = self.vault.index_of(&tenant, &environment, email.raw())?;
         let holder = tx.subject_by_identifier(email.raw()).await?;
         let retired = tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
         let status = match holder {
@@ -372,7 +382,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             .await?;
         } else if let Some(owner) = holder
             && status == Some(AccountStatus::Active)
-            && account_mail_allowed(&mut tx, &tenant, &realm, owner, req.now_ms).await?
+            && account_mail_allowed(&mut tx, &tenant, &environment, owner, req.now_ms).await?
         {
             let since = tx.0.mailbox_since(owner).await?.unwrap_or(1);
             notify(
@@ -418,15 +428,15 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         assessment: &Assessment,
         subject: Option<[u8; 16]>,
     ) -> Result<[u8; 16], AccountError> {
-        let (tenant, realm) = self.ids();
+        let (tenant, environment) = self.ids();
         let dek = Dek::generate()?;
-        let wrapped = self.realm.kek.wrap(&dek)?;
+        let wrapped = self.environment.kek.wrap(&dek)?;
         let sealed = seal_body(
             dek,
             &seal_context(&tx.0, &req.flow_hash),
             email.raw().as_bytes(),
         )?;
-        let index = self.vault.index_of(&tenant, &realm, email.raw())?;
+        let index = self.vault.index_of(&tenant, &environment, email.raw())?;
         let score = i16::from(assessment.score());
         Ok(tx
             .0
@@ -434,7 +444,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
                 purpose: purpose.name(),
                 flow_hash: &req.flow_hash,
                 device_hash: &req.device_hash,
-                kek_id: self.realm.kek.id(),
+                kek_id: self.environment.kek.id(),
                 wrapped_dek: &wrapped,
                 nonce: &sealed.nonce,
                 ciphertext: &sealed.ciphertext,
@@ -459,10 +469,10 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         row: &ChallengeRow,
     ) -> Result<String, AccountError> {
         let wrapped = row.wrapped_dek.as_ref().ok_or(AccountError::Shredded)?;
-        if !self.realm.kek.opens(&row.kek_id) {
+        if !self.environment.kek.opens(&row.kek_id) {
             return Err(AccountError::Corrupt);
         }
-        let dek = self.realm.kek.unwrap(wrapped)?;
+        let dek = self.environment.kek.unwrap(wrapped)?;
         let plain = open_body(
             &dek,
             &seal_context(&tx.0, flow_hash),
@@ -594,7 +604,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             &mut tx,
             "account.registered",
             who.actor,
-            &self.realm.external(subject)?,
+            &self.environment.external(subject)?,
             who.correlation,
         )
         .await?;
@@ -611,9 +621,9 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         identifier: &Identifier,
         who: &Actor<'_>,
     ) -> Result<[u8; 16], AccountError> {
-        let wrapped = crate::app::sealing::new_subject_key(self.realm)?;
+        let wrapped = crate::app::sealing::new_subject_key(self.environment)?;
         let subject = tx
-            .insert_subject(AccountStatus::Active, self.realm.kek.id(), &wrapped)
+            .insert_subject(AccountStatus::Active, self.environment.kek.id(), &wrapped)
             .await?;
         if !tx.add_identifier(subject, identifier).await? {
             return Err(AccountError::IdentifierTaken);
@@ -622,12 +632,12 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             tx,
             "account.created",
             who.actor,
-            &self.realm.external(subject)?,
+            &self.environment.external(subject)?,
             who.correlation,
         )
         .await?;
         // OP-151 m.3 (i)
-        events::created(tx, self.realm, subject).await?;
+        events::created(tx, self.environment, subject).await?;
         crate::app::accounts::status_claim(tx, subject, AccountStatus::Active).await?;
         Ok(subject)
     }
@@ -649,7 +659,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             if !tx.set_status(subject, from, to).await? {
                 return Err(AccountError::Corrupt);
             }
-            crate::app::accounts::status_moved(tx, self.realm, subject, (from, to), who).await?;
+            crate::app::accounts::status_moved(tx, self.environment, subject, (from, to), who)
+                .await?;
         }
         Ok(())
     }
@@ -673,10 +684,12 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         if !rules.domain_allowed {
             return Ok(Started::Refused(Refused::Domain));
         }
-        let (tenant, realm) = self.ids();
+        let (tenant, environment) = self.ids();
         let mut tx = self.begin().await?;
-        let canonical = self.vault.index_of(&tenant, &realm, &email.canonical())?;
-        let key = gate_key(tag::ACCOUNT_MAIL, &tenant, &realm, &subject);
+        let canonical = self
+            .vault
+            .index_of(&tenant, &environment, &email.canonical())?;
+        let key = gate_key(tag::ACCOUNT_MAIL, &tenant, &environment, &subject);
         if let Some(retry_after_ms) = gate(&mut tx, &key, ACCOUNT_MAIL_RATE, req.now_ms).await? {
             tx.commit().await?;
             return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
@@ -686,7 +699,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             tx.commit().await?;
             return Ok(Started::Refused(Refused::Address));
         }
-        let index = self.vault.index_of(&tenant, &realm, email.raw())?;
+        let index = self.vault.index_of(&tenant, &environment, email.raw())?;
         let free = tx.subject_by_identifier(email.raw()).await?.is_none()
             && !tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
         let code = new_code()?;
@@ -729,7 +742,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             &mut tx,
             "account.email_change.started",
             who.actor,
-            &self.realm.external(subject)?,
+            &self.environment.external(subject)?,
             who.correlation,
         )
         .await?;
@@ -740,9 +753,9 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     }
 
     /// The code of an e-mail change (OP-153 m.3 (i), TN-64, TN-66): the new address becomes the
-    /// account's with `mailbox_owner_since` now, the old one is retired under the realm's reuse
+    /// account's with `mailbox_owner_since` now, the old one is retired under the environment's reuse
     /// policy, the old address is told "If this wasn't you: Secure your account", and every other
-    /// session ends. `keep_days` is the realm's "keep N days" (N ≥ 365); `None` never frees it.
+    /// session ends. `keep_days` is the environment's "keep N days" (N ≥ 365); `None` never frees it.
     ///
     /// # Errors
     /// [`AccountError`].
@@ -779,7 +792,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
                 return Ok(p);
             }
         };
-        let (tenant, realm) = self.ids();
+        let (tenant, environment) = self.ids();
         let old = self.old_email(&mut tx, subject).await?;
         let identifier =
             Identifier::new(IdentifierKind::Email, &address).map_err(|_| AccountError::Corrupt)?;
@@ -789,7 +802,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             tx.commit().await?;
             return Ok(Proven::Wrong);
         }
-        let index = self.vault.index_of(&tenant, &realm, &address)?;
+        let index = self.vault.index_of(&tenant, &environment, &address)?;
         let identifier_id =
             tx.0.identifier_id(subject, &index)
                 .await?
@@ -797,7 +810,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         tx.0.insert_mailbox(identifier_id, subject, i64_of(now_ms)?)
             .await?;
         if let Some((old_address, old_since)) = &old {
-            let old_index = self.vault.index_of(&tenant, &realm, old_address)?;
+            let old_index = self.vault.index_of(&tenant, &environment, old_address)?;
             tx.0.release_identifier(subject, &old_index, &vault::folded(old_address))
                 .await?;
             let reusable = keep_days
@@ -825,7 +838,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         }
         // TN-64
         if let Some(epoch) = tx.end_sessions(subject).await? {
-            events::sessions_ended(&mut tx, self.realm, subject, epoch).await?;
+            events::sessions_ended(&mut tx, self.environment, subject, epoch).await?;
         }
         if !tx
             .0
@@ -838,7 +851,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             &mut tx,
             "account.email_changed",
             who.actor,
-            &self.realm.external(subject)?,
+            &self.environment.external(subject)?,
             who.correlation,
         )
         .await?;

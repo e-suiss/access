@@ -1869,7 +1869,7 @@ fn approval_act(
     }
 }
 
-/// The `authentication` Claim ALICE's realm issuer (here ALICE herself) issued for the assertion
+/// The `authentication` Claim ALICE's environment issuer (here ALICE herself) issued for the assertion
 /// over H(AAS) (§9.14.1 A step 3, §10.1.5): bound to the statement, with its assurance.
 fn approval_claim(
     d: Digest,
@@ -8668,7 +8668,7 @@ fn authority_act(d: Digest, req: &Request, render: Digest, act: Act) -> Approval
     }
 }
 
-/// The realm issuer's `authentication` Claim about ROOT for the assertion over `statement`.
+/// The environment issuer's `authentication` Claim about ROOT for the assertion over `statement`.
 fn act_claim(d: Digest, statement: Digest) -> Vec<u8> {
     sign_claim(
         &access_kernel::claim::Statement {

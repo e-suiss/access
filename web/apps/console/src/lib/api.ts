@@ -68,7 +68,7 @@ export async function json<T>(path: string, c: Call = {}): Promise<T> {
 export interface SessionInfo {
   readonly account: string;
   readonly display_name: string;
-  readonly realm: string;
+  readonly environment: string;
   readonly domain: string;
   readonly expires_at: string;
   readonly idle_timeout_s: string;

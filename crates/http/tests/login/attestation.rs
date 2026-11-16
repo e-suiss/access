@@ -1,4 +1,4 @@
-//! WebAuthn attestation on the hosted account surface (§10.2.4, OP-159 m.3 (ll), HL-19): a realm
+//! WebAuthn attestation on the hosted account surface (§10.2.4, OP-159 m.3 (ll), HL-19): an environment
 //! with the `direct` policy verifies each statement against the FIDO metadata held and the CRLs
 //! of its chain, which the server fetches from a local HTTPS twin through the guarded outbound
 //! client and caches in PostgreSQL; a revoked or unreadable chain refuses the registration, the
@@ -170,7 +170,7 @@ async fn enrol(b: &mut Web, key: Key, attestation: Attestation, credential: u8) 
 
 impl Env {
     async fn audited(&self) -> Vec<(String, String)> {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let rows = t.list_audit(200).await.unwrap();
@@ -205,7 +205,7 @@ async fn direct_attestation_is_verified_with_fetched_crls_at_registration() {
     let outbound = twin.outbound();
     let e = env_tweaked(
         (71, "lg-att", AuthPolicy::DEFAULT, false),
-        RealmSignin::default(),
+        EnvironmentSignin::default(),
         access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         None,
         |kit, db| {
@@ -322,7 +322,7 @@ async fn the_none_policy_reads_no_attestation() {
     let outbound = twin.outbound();
     let e = env_tweaked(
         (72, "lg-att-none", AuthPolicy::DEFAULT, false),
-        RealmSignin::default(),
+        EnvironmentSignin::default(),
         access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         None,
         |kit, db| {

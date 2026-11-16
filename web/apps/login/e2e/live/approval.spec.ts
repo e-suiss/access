@@ -9,7 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { PASSWORD, signIn } from "./signin.js";
 
-const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
+const ENVIRONMENT = process.env["ACCESS_LIVE_ENVIRONMENT"] ?? "/env/acme";
 const PUSHED = process.env["ACCESS_LIVE_APPROVAL"];
 const wcag22aa = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -21,13 +21,13 @@ test.describe("@live approval surface", () => {
   // §11.4.5, §11.6, EI-18, Ek B 5426
   test("@live consent is the approval surface and never a form post", async ({ page }) => {
     const query = "request=urn%3Ax&redirect_uri=https%3A%2F%2Fshop.example%2Fa&state=s";
-    const r = await page.request.get(`${REALM}/consent?${query}`, { maxRedirects: 0 });
+    const r = await page.request.get(`${ENVIRONMENT}/consent?${query}`, { maxRedirects: 0 });
     expect(r.status()).toBe(303);
     expect(r.headers()["location"]).toContain(`/v1/approve?${query}`);
-    const login = await page.goto(`${REALM}/login`);
+    const login = await page.goto(`${ENVIRONMENT}/login`);
     expect(login?.status()).toBe(200);
     const origin = new URL(page.url()).origin;
-    const posted = await page.request.post(`${REALM}/consent`, {
+    const posted = await page.request.post(`${ENVIRONMENT}/consent`, {
       form: { approve: "yes" },
       headers: { origin },
     });
@@ -39,7 +39,7 @@ test.describe("@live approval surface", () => {
   test("@live the page script shows the quorum, eligibility and assurance lines", async ({
     page,
   }) => {
-    const r = await page.request.get(`${REALM}/v1/approve/app.js`);
+    const r = await page.request.get(`${ENVIRONMENT}/v1/approve/app.js`);
     expect(r.status()).toBe(200);
     const js = await r.text();
     for (const part of [
@@ -56,7 +56,7 @@ test.describe("@live approval surface", () => {
     expect(js.toLowerCase()).not.toContain("independent");
     expect(js).not.toContain("innerHTML");
     const unknown = await page.goto(
-      `${REALM}/v1/approve?request=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aunknown&redirect_uri=https%3A%2F%2Fshop.example%2Fa&state=s`,
+      `${ENVIRONMENT}/v1/approve?request=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aunknown&redirect_uri=https%3A%2F%2Fshop.example%2Fa&state=s`,
     );
     expect(unknown?.status()).not.toBe(501);
   });
@@ -73,8 +73,8 @@ test.describe("@live approval surface", () => {
     );
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
-    await signIn(page.request, baseURL ?? "", REALM);
-    const r = await page.goto(`${REALM}/v1/approve?${PUSHED ?? ""}`);
+    await signIn(page.request, baseURL ?? "", ENVIRONMENT);
+    const r = await page.goto(`${ENVIRONMENT}/v1/approve?${PUSHED ?? ""}`);
     expect(r?.status()).toBe(200);
     await expect(page.locator("dl.render dd.material").first()).toBeVisible();
     await expect(page.locator("p.capacity")).toContainText("You approve as:");

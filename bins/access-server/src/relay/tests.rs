@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::create;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::notify::delivery::{DiscoveryMismatch, check_discovery};
 use access_identity_account::notify::message::{Address, Body, Message, SignInMethod};
@@ -22,9 +22,9 @@ use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::ports::Notifier as _;
 use access_identity_account::testing::relay::RelayTwin;
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use serde_json::{Value, json};
 use suiss_crypto::pkcs11::KeyStore;
@@ -69,7 +69,7 @@ fn config(twin: &RelayTwin, credential: PathBuf) -> Config {
             relay: twin.base.clone(),
             management_api: "https://api.access.test".to_owned(),
             products: BTreeMap::new(),
-            platform_realm: None,
+            platform_environment: None,
             relay_product: None,
             relay_platform: RelayPlatform {
                 tenant: "access".to_owned(),
@@ -84,9 +84,9 @@ fn config(twin: &RelayTwin, credential: PathBuf) -> Config {
 struct World {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     domain: DomainId,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     store: Arc<KeyStore>,
 }
 
@@ -105,12 +105,12 @@ async fn world() -> World {
         .await
         .unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+    let environment = create_environment(&mut t, &domain, "shop", "pool-default")
         .await
         .unwrap();
-    t.enter_realm(realm).await.unwrap();
+    t.enter_environment(environment).await.unwrap();
     assert!(
-        access_store::tenancy::set_issuer(&mut t, "https://id.test/realms/shop")
+        access_store::tenancy::set_issuer(&mut t, "https://id.test/env/shop")
             .await
             .unwrap()
     );
@@ -123,15 +123,17 @@ async fn world() -> World {
             Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
         })
         .clone();
-    store.generate_kek(&kek_label(realm.as_bytes())).unwrap();
+    store
+        .generate_kek(&kek_label(environment.as_bytes()))
+        .unwrap();
     if store.mac(crate::login::ID_KEY_ROOT).is_err() {
         store.generate_mac(crate::login::ID_KEY_ROOT).unwrap();
     }
     World {
-        keks: RealmKeks::new(store.clone()),
+        keks: EnvironmentKeks::new(store.clone()),
         db,
         tenant,
-        realm,
+        environment,
         domain,
         store,
     }
@@ -189,28 +191,31 @@ async fn authority_event(
 }
 
 impl World {
-    /// A subject of the realm with one sign-in notice queued for it beside a business change.
+    /// A subject of the environment with one sign-in notice queued for it beside a business change.
     async fn queue_notice(&self) -> String {
         self.subject_with_notice().await.1
     }
 
     async fn subject_with_notice(&self) -> ([u8; 16], String) {
-        let kek = self.keks.kek(self.tenant, self.realm).unwrap();
+        let kek = self.keks.kek(self.tenant, self.environment).unwrap();
         let ids = IdKey::new(Secret::new(
             crate::login::id_key_bytes(&self.store).unwrap(),
         ));
-        let realm = Realm {
+        let environment = Environment {
             tenant: self.tenant,
-            realm: self.realm,
+            environment: self.environment,
             kek: &*kek,
             ids: &ids,
         };
-        let pg = PgAccounts::sealed(self.db.app.clone(), self.keks.vault(self.realm).unwrap());
+        let pg = PgAccounts::sealed(
+            self.db.app.clone(),
+            self.keks.vault(self.environment).unwrap(),
+        );
         let who = format!("{}@example.com", random_hex());
         let id = Identifier::new(IdentifierKind::Email, &who).unwrap();
-        let s = create(&pg, &realm, &[id], &ADMIN).await.unwrap();
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let s = create(&pg, &environment, &[id], &ADMIN).await.unwrap();
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         tx.end_sessions(s).await.unwrap();
@@ -476,12 +481,12 @@ async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
         .await
         .unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+    let environment = create_environment(&mut t, &domain, "shop", "pool-default")
         .await
         .unwrap();
-    t.enter_realm(realm).await.unwrap();
+    t.enter_environment(environment).await.unwrap();
     assert!(
-        access_store::tenancy::set_issuer(&mut t, "https://id.test/realms/shop")
+        access_store::tenancy::set_issuer(&mut t, "https://id.test/env/shop")
             .await
             .unwrap()
     );
@@ -494,11 +499,13 @@ async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
             Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
         })
         .clone();
-    store.generate_kek(&kek_label(realm.as_bytes())).unwrap();
+    store
+        .generate_kek(&kek_label(environment.as_bytes()))
+        .unwrap();
     if store.mac(crate::login::ID_KEY_ROOT).is_err() {
         store.generate_mac(crate::login::ID_KEY_ROOT).unwrap();
     }
-    let keks = RealmKeks::new(store.clone());
+    let keks = EnvironmentKeks::new(store.clone());
     let pools = crate::events::EventPools {
         wake: None,
         app: db.app.clone(),
@@ -520,7 +527,7 @@ async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
     let hook = Streams::new(pools.db(), KekSealer(keks.clone()), OsRandom)
         .create(
             tenant,
-            realm,
+            environment,
             &parse_stream(&serde_json::to_vec(&request).unwrap()).unwrap(),
         )
         .await
@@ -619,7 +626,9 @@ async fn an_ended_instance_reaches_its_person_as_a_security_notice_without_actio
     let w = world().await;
     let (subject, _) = w.subject_with_notice().await;
     let party = access_crypto::random::bytes::<16>().unwrap();
-    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+        .await
+        .unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &subject, &party)
             .await
@@ -685,7 +694,7 @@ async fn an_ended_instance_reaches_its_person_as_a_security_notice_without_actio
     assert_eq!(post.event["data"]["event"], "instance_ended");
     assert_eq!(
         post.event["data"]["review_link"],
-        format!("https://id.test/realms/shop{REVIEW_PATH}")
+        format!("https://id.test/env/shop{REVIEW_PATH}")
     );
     let text = post.event.to_string().to_ascii_lowercase();
     assert!(!text.contains("action required") && !text.contains("action_required"));

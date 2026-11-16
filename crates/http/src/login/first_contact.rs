@@ -1,5 +1,5 @@
-//! First-contact tokens on axum (E58, OP-156 m.3 (z)): the realm's public issuer directory and
-//! the signed-in person's blind issuance, at the realm's host and under `/realms/{slug}`, on the
+//! First-contact tokens on axum (E58, OP-156 m.3 (z)): the environment's public issuer directory and
+//! the signed-in person's blind issuance, at the environment's host and under `/env/{slug}`, on the
 //! login surface's session, cookies and same-origin rule. Issuance takes an `Idempotency-Key`.
 
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 type St<D, K, KI, C, M> = State<Arc<Shared<D, K, KI, C, M>>>;
@@ -45,7 +45,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes.route(
             &format!("{prefix}/v1/first-contact/tokens"),
             post(issue::<D, K, KI, C, M>),
@@ -79,7 +79,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -103,7 +103,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

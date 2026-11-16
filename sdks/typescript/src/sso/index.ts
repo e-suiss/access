@@ -1,7 +1,7 @@
 // TN-134, OP-155 m.3 (i): the organization SSO setup portal's client. One API serves the hosted
 // setup page and `<OrganizationSSO />`: `GET /v1/sso-setup/{link}` reads what a one-use link
 // opens and spends nothing; `POST` submits one step. The first step binds the link to this
-// browser by its own cookie, so the calls go to the realm's own origin with credentials.
+// browser by its own cookie, so the calls go to the environment's own origin with credentials.
 
 /** A protocol a wizard drafts. */
 export type Protocol = "saml" | "oidc";
@@ -88,7 +88,7 @@ export function isLink(link: string): boolean {
   return /^[A-Za-z0-9_-]{43}$/.test(link);
 }
 
-/** The path of link `link` under the realm's base path `base` (`""` or `/realms/<slug>`). */
+/** The path of link `link` under the environment's base path `base` (`""` or `/env/<slug>`). */
 export function setupPath(base: string, link: string): string {
   return `${base}/v1/sso-setup/${encodeURIComponent(link)}`;
 }

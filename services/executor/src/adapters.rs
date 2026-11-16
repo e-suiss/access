@@ -141,7 +141,7 @@ fn step_view(s: &crate::domain::history::Step) -> Value {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StartBody {
-    realm: String,
+    environment: String,
     connection: String,
     intent: String,
     ais: String,
@@ -225,7 +225,7 @@ where
     };
     let req = match (bytes(&b.intent), bytes(&b.ais), list(&b.continuations)) {
         (Ok(intent), Ok(ais), Ok(continuations)) => Start {
-            realm: b.realm,
+            environment: b.environment,
             connection: b.connection,
             intent,
             ais,

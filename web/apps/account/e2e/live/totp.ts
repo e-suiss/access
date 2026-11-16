@@ -33,7 +33,7 @@ export function totp(seed: string, step: number): string {
 }
 
 /**
- * TN-59: the realm accepts each step once, and only a later one after it, so a sign-in waits for
+ * TN-59: the environment accepts each step once, and only a later one after it, so a sign-in waits for
  * the next step to begin and answers with its code.
  */
 export async function nextStep(): Promise<number> {

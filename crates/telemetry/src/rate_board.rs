@@ -1,5 +1,5 @@
 //! The rate limit dashboard's numbers (§12.5.4, TN-127, OP-158 m.3 (v)): for each surface scope
-//! (`realm:<slug>` or `platform`) and bucket, the share of the bucket in use now and its 1 h and
+//! (`environment:<slug>` or `platform`) and bucket, the share of the bucket in use now and its 1 h and
 //! 24 h averages, the heaviest consumers of the last 24 h and the refusals by type. A bounded
 //! per-process table: the scope, bucket and consumer are never metric labels (OP-47), and a
 //! consumer is only ever a digest. It is telemetry, never a decision input (TI-18).
@@ -160,7 +160,7 @@ pub struct View {
 /// One request as a bucket saw it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Seen<'a> {
-    /// `realm:<slug>` or `platform`.
+    /// `environment:<slug>` or `platform`.
     pub scope: &'a str,
     /// The bucket's policy name.
     pub bucket: &'static str,
@@ -290,7 +290,7 @@ mod tests {
         refused: Option<&'static str>,
     ) -> Seen<'static> {
         Seen {
-            scope: "realm:acme",
+            scope: "environment:acme",
             bucket,
             percent,
             consumer: Some([who; 32]),
@@ -303,13 +303,13 @@ mod tests {
     fn a_scope_shows_its_buckets_averages_consumers_and_refusals() {
         let board = RateBoard::default();
         let t = 100 * HOUR_MS;
-        board.record(seen("realm-write", 40, 1, None), t);
-        board.record(seen("realm-write", 90, 1, None), t + MINUTE_MS);
+        board.record(seen("environment-write", 40, 1, None), t);
+        board.record(seen("environment-write", 90, 1, None), t + MINUTE_MS);
         board.record(
-            seen("realm-write", 100, 2, Some("rate-limited")),
+            seen("environment-write", 100, 2, Some("rate-limited")),
             t + MINUTE_MS,
         );
-        let v = board.view("realm:acme", t + MINUTE_MS);
+        let v = board.view("environment:acme", t + MINUTE_MS);
         let [b] = v.buckets.as_slice() else {
             panic!("{v:?}")
         };
@@ -325,9 +325,9 @@ mod tests {
                 last_day: 1
             }]
         );
-        let later = board.view("realm:acme", t + 25 * HOUR_MS);
+        let later = board.view("environment:acme", t + 25 * HOUR_MS);
         assert_eq!(later.top_consumers, Vec::new());
         assert_eq!(later.events.first().map(|e| e.last_day), Some(0));
-        assert_eq!(board.view("realm:other", t).buckets, Vec::new());
+        assert_eq!(board.view("environment:other", t).buckets, Vec::new());
     }
 }

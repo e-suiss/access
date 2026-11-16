@@ -1,4 +1,4 @@
-//! Sign-in steps (TN-96, TN-132, TN-102, §10.2): identifier first, then any step the realm
+//! Sign-in steps (TN-96, TN-132, TN-102, §10.2): identifier first, then any step the environment
 //! allows, in any order; the flow completes when the requirement list is empty. The second
 //! answer of identifier-first is the same whether the account exists or not.
 
@@ -80,19 +80,19 @@ pub struct Identify<'a> {
 #[derive(Clone, Debug, PartialEq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each first step the realm offers is one flag (TN-132)"
+    reason = "each first step the environment offers is one flag (TN-132)"
 )]
 pub struct StepOptions {
     /// `PublicKeyCredentialRequestOptionsJSON`, with real or decoy credentials (TN-97).
     pub passkey: Value,
-    /// The password form, when the realm allows it (TN-132).
+    /// The password form, when the environment allows it (TN-132).
     pub password: bool,
-    /// Passkey sign-in, when the realm allows it (TN-132); the options are drawn either way so
+    /// Passkey sign-in, when the environment allows it (TN-132); the options are drawn either way so
     /// the answer's shape does not depend on the policy's internals.
     pub passkey_offered: bool,
-    /// E-mail code, when the realm allows it.
+    /// E-mail code, when the environment allows it.
     pub email_code: bool,
-    /// E-mail link, when the realm allows it.
+    /// E-mail link, when the environment allows it.
     pub magic_link: bool,
 }
 
@@ -228,7 +228,7 @@ fn ceremony_of(state: &AuthenticationState) -> Ceremony {
 }
 
 fn state_of(
-    realm: access_identity_webauthn::domain::ids::RealmId,
+    environment: access_identity_webauthn::domain::ids::EnvironmentId,
     c: &Ceremony,
 ) -> Result<AuthenticationState, SessionError> {
     let user = match &c.user {
@@ -241,7 +241,7 @@ fn state_of(
         .map(|a| CredentialId::new(a).ok_or(SessionError::Corrupt))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(AuthenticationState {
-        realm,
+        environment,
         challenge: c.challenge,
         user,
         allowed,
@@ -269,8 +269,8 @@ where
 
     fn identifier_digest(&self, folded: &str) -> [u8; 32] {
         identifier_digest(
-            self.realm.tenant.as_bytes(),
-            self.realm.realm.as_bytes(),
+            self.environment.tenant.as_bytes(),
+            self.environment.environment.as_bytes(),
             folded,
         )
     }
@@ -392,7 +392,7 @@ where
         };
         let outcome = password_login(
             self.db,
-            &self.realm,
+            &self.environment,
             &services,
             &Attempt {
                 identifier: &folded,
@@ -546,7 +546,7 @@ where
         };
         save(&mut tx, &l, "open", Resume::Keep).await?;
         tx.commit().await?;
-        let state = state_of(self.wa_realm(), &ceremony)?;
+        let state = state_of(self.wa_environment(), &ceremony)?;
         let outcome = self
             .webauthn()
             .finish_authentication(self.passkeys.rp, self.passkeys.policy, &state, response)
@@ -650,8 +650,8 @@ where
         let id = format!("factor:{}:{kind}", encode(&subject));
         counter_key(
             KeyKind::Account,
-            self.realm.tenant.as_bytes(),
-            self.realm.realm.as_bytes(),
+            self.environment.tenant.as_bytes(),
+            self.environment.environment.as_bytes(),
             Some(&id),
             Some(b"second-factor"),
         )
@@ -713,10 +713,10 @@ where
             .subject(subject, false)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let mut matched = None;
         for c in tx.credentials(subject, kind).await? {
-            let secret = open(&self.realm, &dek, &subject, kind, &c.sealed)?;
+            let secret = open(&self.environment, &dek, &subject, kind, &c.sealed)?;
             if kind == TOTP {
                 let key = Secret::new(hex_decode(secret.expose()).ok_or(SessionError::Corrupt)?);
                 let params = access_crypto::totp::TotpParams::DEFAULT;
@@ -774,7 +774,7 @@ where
     /// whether a message was sent or not; only an active account gets one.
     ///
     /// # Errors
-    /// [`SessionError::Invalid`] when the realm does not offer `method`; [`SessionError`].
+    /// [`SessionError::Invalid`] when the environment does not offer `method`; [`SessionError`].
     #[expect(
         clippy::too_many_lines,
         reason = "one suspension: state, audit, cap and message"
@@ -866,8 +866,8 @@ where
             Some(subject) => {
                 !access_identity_account::app::registration::account_mail_allowed(
                     &mut tx,
-                    self.realm.tenant.as_bytes(),
-                    self.realm.realm.as_bytes(),
+                    self.environment.tenant.as_bytes(),
+                    self.environment.environment.as_bytes(),
                     subject,
                     now,
                 )
@@ -1233,7 +1233,7 @@ where
         })
     }
 
-    /// Whether the realm's `post_login` hook refused a login; a refused flow is abandoned and
+    /// Whether the environment's `post_login` hook refused a login; a refused flow is abandoned and
     /// audited (TN-135).
     async fn refused_by_hook(
         &self,
@@ -1251,7 +1251,7 @@ where
         Ok(true)
     }
 
-    /// Whether the realm's `post_login` hook lets the sign-in through (TN-135): no hook does;
+    /// Whether the environment's `post_login` hook lets the sign-in through (TN-135): no hook does;
     /// a refusal, no answer or a bad answer does not (MD-8).
     async fn post_login(&self, result: &AuthenticationResult, account: &str) -> bool {
         use access_identity_hooks::domain::{Call, Outcome, PostLogin};
@@ -1267,7 +1267,7 @@ where
         });
         matches!(
             self.hooks
-                .call(self.realm.tenant, self.realm.realm, call)
+                .call(self.environment.tenant, self.environment.environment, call)
                 .await,
             Outcome::Proceed { .. }
         )
@@ -1324,8 +1324,8 @@ where
             });
         }
         let result = AuthenticationResult::of(
-            *self.realm.tenant.as_bytes(),
-            *self.realm.realm.as_bytes(),
+            *self.environment.tenant.as_bytes(),
+            *self.environment.environment.as_bytes(),
             subject,
             &l.state.factors,
         );
@@ -1465,7 +1465,7 @@ where
         Ok(Step::SignedIn(Box::new(signed)))
     }
 
-    /// The critical alarm of a break-glass account's sign-in to the realm's on-call Parties, the
+    /// The critical alarm of a break-glass account's sign-in to the environment's on-call Parties, the
     /// account itself excepted (OP-157 m.3 (h)); delivery is not guaranteed (N-2).
     async fn breakglass_alarm(
         &self,
@@ -1560,8 +1560,8 @@ where
     ) -> SignIn {
         let note = state.risk.clone().unwrap_or_default();
         SignIn {
-            tenant: *self.realm.tenant.as_bytes(),
-            realm: *self.realm.realm.as_bytes(),
+            tenant: *self.environment.tenant.as_bytes(),
+            environment: *self.environment.environment.as_bytes(),
             subject,
             now_ms: now,
             device_known: self.policy.remember_device_days.map(|_| marker),
@@ -1578,10 +1578,10 @@ where
 /// Whether the sign-in's first factor came through one of the `allowed` connections, the
 /// enforcing organizations' own: the only way an SSO-enforced organization's member signs in
 /// (TN-94, OP-155 m.17 (i)). A social sign-in is not one.
-/// The console page a break-glass alarm opens, under the realm's origin.
+/// The console page a break-glass alarm opens, under the environment's origin.
 const BREAKGLASS_CONSOLE: &str = "/console/breakglass";
 
-/// Whether a break-glass account's factors are the realm's own phishing-resistant hardware
+/// Whether a break-glass account's factors are the environment's own phishing-resistant hardware
 /// method: a device-bound passkey proven against the origin, or a hardware smart card, and no
 /// provider's assertion anywhere (OP-157 m.3 (h), §10.2.5, §10.2.6).
 fn breakglass_signed(factors: &[Factor]) -> bool {

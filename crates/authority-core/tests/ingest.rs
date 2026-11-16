@@ -840,13 +840,13 @@ async fn a_domain_whose_only_actor_binding_issuer_is_an_external_idp_commits_exe
     let issuers = core.assertion_issuers(ISS, NOW).await.unwrap();
     assert_eq!(issuers.len(), 1);
     assert_eq!(issuers[0].0, IDP);
-    for realm in [
-        "https://access.test/realms/acme",
-        "https://acme.access.test",
-    ] {
+    for environment in ["https://access.test/env/acme", "https://acme.access.test"] {
         assert!(
-            core.assertion_issuers(realm, NOW).await.unwrap().is_empty(),
-            "no Suiss realm issuer is accepted: {realm}"
+            core.assertion_issuers(environment, NOW)
+                .await
+                .unwrap()
+                .is_empty(),
+            "no Suiss environment issuer is accepted: {environment}"
         );
     }
 
@@ -1280,15 +1280,15 @@ fn id_token_at(sub: &str, iat: u64, seed: u8) -> Vec<u8> {
     format!("{input}.{}", b64url_encode(&sig.to_bytes())).into_bytes()
 }
 
-/// A realm whose issuer is [`ISS`], with a decided drop of `kid` declaring `cutoff_at`, in a
+/// An environment whose issuer is [`ISS`], with a decided drop of `kid` declaring `cutoff_at`, in a
 /// tenant and governing domain of its own (OP-150 m.11 (c)).
-async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
+async fn dropped_environment_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
     use access_store::authority::{
         CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
     };
     use access_store::identity::TenantTx;
     use access_store::idp::{Decision, KeyChange, bind, create_settings, record_key_change};
-    use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+    use access_store::tenancy::{create_environment, create_tenant, set_issuer};
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let domain = DomainId::from_bytes([0x77; 32]);
     let genesis = LogRecord {
@@ -1345,10 +1345,10 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
         .await
         .unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut t, &domain, "idp", "pool-default")
+    let environment = create_environment(&mut t, &domain, "idp", "pool-default")
         .await
         .unwrap();
-    t.enter_realm(realm).await.unwrap();
+    t.enter_environment(environment).await.unwrap();
     assert!(set_issuer(&mut t, ISS).await.unwrap());
     create_settings(&mut t).await.unwrap();
     let bound = bind(
@@ -1359,7 +1359,7 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
             nonce: &[0x78; 16],
             intent: [9; 32],
             change: [5; 32],
-            action: "idp.realm.key_drop",
+            action: "idp.environment.key_drop",
         },
     )
     .await
@@ -1369,7 +1369,7 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
         &mut t,
         &bound,
         &KeyChange {
-            action: String::from("idp.realm.key_drop"),
+            action: String::from("idp.environment.key_drop"),
             kid: Some(kid),
             policy: None,
             compromised_at: None,
@@ -1384,7 +1384,7 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
 
 // §13.7.7, SEC9, OP-150 m.11 (c), (j)
 #[tokio::test]
-async fn a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff() {
+async fn a_dropped_environment_key_signs_nothing_admitted_after_its_cutoff() {
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(
         &db,
@@ -1418,7 +1418,7 @@ async fn a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff() {
         .unwrap();
     assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
 
-    dropped_realm_key(&db, thumbprint(&public(IDP_KEY)), 6_000).await;
+    dropped_environment_key(&db, thumbprint(&public(IDP_KEY)), 6_000).await;
     let v = core
         .ingest(
             &submit(

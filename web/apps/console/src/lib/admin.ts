@@ -1,4 +1,4 @@
-// TN-110, MD-14, OP-151 m.11 (a): realm administration through the admin proxy. Reads carry a
+// TN-110, MD-14, OP-151 m.11 (a): environment administration through the admin proxy. Reads carry a
 // read proof; every change is drafted first (a read), checked, shown on the signature screen as
 // the Kernel decoded it, and only then signed and sent as one Exercise.
 import { loadKernel } from "@esuiss/access";
@@ -118,13 +118,13 @@ export function digestBytes(cbor: Uint8Array): Uint8Array | undefined {
   return len >= 0 && at + len === cbor.length ? cbor.slice(at) : undefined;
 }
 
-/** Drafts `c` in realm `slug`: a read (OP-151 m.11 (a)) that changes nothing. */
+/** Drafts `c` in environment `slug`: a read (OP-151 m.11 (a)) that changes nothing. */
 export async function draftChange(
   instance: Instance,
   slug: string,
   c: Change,
 ): Promise<IntentDraft> {
-  const path = `realms/${encodeURIComponent(slug)}/intents`;
+  const path = `envs/${encodeURIComponent(slug)}/intents`;
   const body: Record<string, unknown> = { operation: c.operation, body: c.body };
   if (c.key !== undefined) body["key"] = c.key;
   const r = await call(`/proxy/admin/${path}`, {
@@ -149,7 +149,7 @@ export async function change(
     instance,
     confirm,
     c.method,
-    `realms/${encodeURIComponent(slug)}/${c.path}`,
+    `envs/${encodeURIComponent(slug)}/${c.path}`,
     fromB64url(d.intent),
     d.body,
     d.pep,

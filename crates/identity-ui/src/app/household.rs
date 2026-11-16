@@ -10,7 +10,7 @@ use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::message::{Address, Body, Message, Notice};
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::ports::Notifier as _;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::StoreError;
@@ -20,7 +20,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{Browser, Hosted, Reply};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// How long a parent consent request lives: 72 hours (OP-153 m.3 (q), PD).
 pub const CONSENT_TTL_S: i64 = 72 * 3_600;
@@ -148,7 +148,7 @@ fn ms_text(ms: i64) -> String {
 /// at `until_ms` (E53, E47).
 async fn tell_guardian(
     t: &mut TenantTx,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     guardian: [u8; 16],
     now: u64,
     until_ms: u64,
@@ -177,8 +177,8 @@ async fn tell_guardian(
             ),
         )
     };
-    let realm = kit.realm();
-    OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+    let environment = kit.environment();
+    OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock)
         .notify(
             t,
             &Message {
@@ -204,8 +204,8 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn household_tx(&self, kit: &RealmKit) -> Result<TenantTx, Reply> {
-        TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn household_tx(&self, kit: &EnvironmentKit) -> Result<TenantTx, Reply> {
+        TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|e| failed(&e))
     }
@@ -216,7 +216,7 @@ where
     /// its client pushes to the Approval Surface with its own device's `accept_root`
     /// contribution on its Party's self-anchor, targeting the `anchor_transfer` intent the
     /// proposal opened; the committed contribution's `ExerciseID` then goes to `…/contribution`.
-    pub async fn handovers(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn handovers(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -325,7 +325,7 @@ where
     /// once; the domain checks it when the owner completes the handover.
     pub async fn contribute_handover(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         (org, handover): (&str, &str),
         req: &HandoverAcceptance,
@@ -369,7 +369,7 @@ where
     /// the recipient cancels until it commits; the row is kept (OP-73).
     pub async fn cancel_handover(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         org: &str,
         handover: &str,
@@ -405,7 +405,7 @@ where
     /// `require_action` until the guardian decides.
     pub async fn ask_consent(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         ask: &ConsentAsk,
     ) -> Reply {
@@ -499,7 +499,7 @@ where
 
     /// `GET /v1/account/guardian-consents/{consent}` (E47): what the consent answers now, to
     /// its ward or its guardian.
-    pub async fn consent(&self, entry: &RealmEntry, b: &Browser<'_>, id: &str) -> Reply {
+    pub async fn consent(&self, entry: &EnvironmentEntry, b: &Browser<'_>, id: &str) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -529,7 +529,7 @@ where
     /// before the request lapses; nobody else can.
     pub async fn decide_consent(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         id: &str,
         decision: &ConsentDecision,

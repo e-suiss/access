@@ -1,12 +1,12 @@
 // OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, §10.2.2: the bootstrap test user signs in at
-// the realm's hosted login through its JSON steps: identifier, password and, since the realm asks
+// the environment's hosted login through its JSON steps: identifier, password and, since the environment asks
 // for a second factor once one is enrolled, a code of the authenticator app whose seed the
 // bootstrap wrote (RFC 6238: HMAC-SHA-1, six digits, 30-second steps).
 import { expect, type APIRequestContext } from "@playwright/test";
 
 import { nextStep, totp } from "./totp.js";
 
-export const REALM = "/realms/acme";
+export const ENVIRONMENT = "/env/acme";
 export const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
@@ -32,7 +32,7 @@ async function post(
 
 /**
  * Signs `identifier` in on `request` with its password alone, whose cookie jar then holds the
- * session; an account the realm asks a second factor of fails here.
+ * session; an account the environment asks a second factor of fails here.
  */
 export async function signInWithPassword(
   request: APIRequestContext,
@@ -50,13 +50,13 @@ async function passwordStep(
   identifier: string,
   password: string,
 ): Promise<Record<string, unknown>> {
-  const started = await post(request, origin, `${REALM}/v1/login/flows`);
-  const identified = await post(request, origin, `${REALM}${String(started["action"])}`, {
+  const started = await post(request, origin, `${ENVIRONMENT}/v1/login/flows`);
+  const identified = await post(request, origin, `${ENVIRONMENT}${String(started["action"])}`, {
     method: "identifier",
     fields: { identifier },
   });
   expect(identified["step"]).toBe("authenticate");
-  return post(request, origin, `${REALM}${String(identified["action"])}`, {
+  return post(request, origin, `${ENVIRONMENT}${String(identified["action"])}`, {
     method: "password",
     fields: { password },
   });
@@ -71,7 +71,7 @@ export async function signIn(request: APIRequestContext, origin: string): Promis
       SEED,
       "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
     ).not.toBe("");
-    done = await post(request, origin, `${REALM}${String(done["action"])}`, {
+    done = await post(request, origin, `${ENVIRONMENT}${String(done["action"])}`, {
       method: "totp",
       fields: { totp_code: totp(SEED, step) },
     });

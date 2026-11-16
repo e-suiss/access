@@ -11,10 +11,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -62,15 +62,15 @@ pub async fn put_client(
     issuer: &[u8; 16],
     live: bool,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let v = sqlx::query_scalar!(
-        r#"INSERT INTO access.scim_clients (tenant_id, realm_id, name, version, state, secret_sha256,
+        r#"INSERT INTO access.scim_clients (tenant_id, environment_id, name, version, state, secret_sha256,
                 profile, issuer, domain_id, decision_pos)
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9
-           FROM access.scim_clients WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+           FROM access.scim_clients WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         name,
         if live { "live" } else { "retired" },
         secret_sha256.as_slice(),
@@ -84,18 +84,18 @@ pub async fn put_client(
     version(v)
 }
 
-/// The realm's clients, newest version each, by name.
+/// The environment's clients, newest version each, by name.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn clients(t: &mut TenantTx) -> Result<Vec<ClientRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT DISTINCT ON (name) name, version, state, secret_sha256, profile, issuer, decision_pos
-           FROM access.scim_clients WHERE tenant_id = $1 AND realm_id = $2
+           FROM access.scim_clients WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY name, version DESC",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -130,12 +130,12 @@ pub async fn client_by_secret(
     t: &mut TenantTx,
     secret: &[u8; 32],
 ) -> Result<Option<ClientRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let names = sqlx::query_scalar!(
         "SELECT DISTINCT name FROM access.scim_clients
-          WHERE tenant_id = $1 AND realm_id = $2 AND secret_sha256 = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND secret_sha256 = $3",
         tenant,
-        realm,
+        environment,
         secret.as_slice(),
     )
     .fetch_all(&mut *t.tx)
@@ -245,15 +245,15 @@ fn row(
 /// # Errors
 /// [`StoreError`].
 pub async fn insert_resource(t: &mut TenantTx, w: &ResourceWrite<'_>) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n = sqlx::query!(
-        "INSERT INTO access.scim_resources (tenant_id, realm_id, resource_id, client_name, kind,
+        "INSERT INTO access.scim_resources (tenant_id, environment_id, resource_id, client_name, kind,
                 subject_id, external_index, display_name, body, body_nonce, body_ciphertext, version)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text::jsonb, $10, $11, $12)
-         ON CONFLICT (tenant_id, realm_id, client_name, kind, external_index)
+         ON CONFLICT (tenant_id, environment_id, client_name, kind, external_index)
            WHERE deleted_at IS NULL AND external_index IS NOT NULL DO NOTHING",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(w.id),
         w.client,
         w.kind,
@@ -281,14 +281,14 @@ pub async fn update_resource(
     w: &ResourceWrite<'_>,
     expected: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     if let Some(index) = &w.external_index {
         let taken = sqlx::query_scalar!(
             "SELECT 1 AS \"one!\" FROM access.scim_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
                 AND external_index = $5 AND deleted_at IS NULL AND resource_id <> $6",
             tenant,
-            realm,
+            environment,
             w.client,
             w.kind,
             index.as_slice(),
@@ -304,10 +304,10 @@ pub async fn update_resource(
         "UPDATE access.scim_resources
             SET external_index = $5, display_name = $6, body = $7::text::jsonb, body_nonce = $8,
                 body_ciphertext = $9, version = $10, modified_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND resource_id = $3 AND client_name = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND resource_id = $3 AND client_name = $4
             AND deleted_at IS NULL AND version = $11",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(w.id),
         w.client,
         w.external_index.as_ref().map(<[u8; 32]>::as_slice),
@@ -334,14 +334,14 @@ pub async fn delete_resource(
     id: [u8; 16],
     expected: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n = sqlx::query!(
         "UPDATE access.scim_resources
             SET deleted_at = clock_timestamp(), modified_at = clock_timestamp(), version = version + 1
-          WHERE tenant_id = $1 AND realm_id = $2 AND resource_id = $3 AND client_name = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND resource_id = $3 AND client_name = $4
             AND deleted_at IS NULL AND version = $5",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         client,
         signed(expected)?,
@@ -363,7 +363,7 @@ pub async fn resource(
     id: [u8; 16],
     lock: bool,
 ) -> Result<Option<ResourceRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = if lock {
         sqlx::query!(
             r#"SELECT resource_id, client_name, kind, subject_id, external_index, display_name, body::text AS body,
@@ -371,11 +371,11 @@ pub async fn resource(
                     (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                     (extract(epoch FROM modified_at) * 1000)::bigint AS "modified_ms!"
                FROM access.scim_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
                 AND resource_id = $5 AND deleted_at IS NULL
               FOR UPDATE"#,
             tenant,
-            realm,
+            environment,
             client,
             kind,
             Uuid::from_bytes(id),
@@ -402,10 +402,10 @@ pub async fn resource(
                     (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                     (extract(epoch FROM modified_at) * 1000)::bigint AS "modified_ms!"
                FROM access.scim_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
                 AND resource_id = $5 AND deleted_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             client,
             kind,
             Uuid::from_bytes(id),
@@ -440,18 +440,18 @@ pub async fn page(
     after: Option<[u8; 16]>,
     limit: i64,
 ) -> Result<Vec<ResourceRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT resource_id, client_name, kind, subject_id, external_index, display_name, body::text AS body,
                 body_nonce, body_ciphertext, version,
                 (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                 (extract(epoch FROM modified_at) * 1000)::bigint AS "modified_ms!"
            FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
             AND deleted_at IS NULL AND resource_id > $5
           ORDER BY resource_id LIMIT $6"#,
         tenant,
-        realm,
+        environment,
         client,
         kind,
         Uuid::from_bytes(after.unwrap_or([0; 16])),
@@ -481,13 +481,13 @@ pub async fn page(
 /// # Errors
 /// [`StoreError`].
 pub async fn count(t: &mut TenantTx, client: &str, kind: &str) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n = sqlx::query_scalar!(
         "SELECT count(*) AS \"n!\" FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
             AND deleted_at IS NULL",
         tenant,
-        realm,
+        environment,
         client,
         kind,
     )
@@ -506,13 +506,13 @@ pub async fn by_external(
     kind: &str,
     index: &[u8; 32],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let id = sqlx::query_scalar!(
         "SELECT resource_id FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = $4
             AND external_index = $5 AND deleted_at IS NULL",
         tenant,
-        realm,
+        environment,
         client,
         kind,
         index.as_slice(),
@@ -531,13 +531,13 @@ pub async fn user_of_subject(
     client: &str,
     subject: [u8; 16],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let id = sqlx::query_scalar!(
         "SELECT resource_id FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = 'user'
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = 'user'
             AND subject_id = $4 AND deleted_at IS NULL",
         tenant,
-        realm,
+        environment,
         client,
         Uuid::from_bytes(subject),
     )
@@ -551,12 +551,12 @@ pub async fn user_of_subject(
 /// # Errors
 /// [`StoreError`].
 pub async fn subject_provisioned(t: &mut TenantTx, subject: [u8; 16]) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n = sqlx::query_scalar!(
         "SELECT count(*) AS \"n!\" FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND deleted_at IS NULL",
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND deleted_at IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(subject),
     )
     .fetch_one(&mut *t.tx)
@@ -573,14 +573,14 @@ pub async fn user_subjects(
     client: &str,
     ids: &[[u8; 16]],
 ) -> Result<Vec<([u8; 16], [u8; 16])>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let ids: Vec<Uuid> = ids.iter().map(|i| Uuid::from_bytes(*i)).collect();
     let rows = sqlx::query!(
         r#"SELECT resource_id, subject_id AS "subject_id!" FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = 'user'
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = 'user'
             AND deleted_at IS NULL AND resource_id = ANY($4) AND subject_id IS NOT NULL"#,
         tenant,
-        realm,
+        environment,
         client,
         &ids,
     )
@@ -601,7 +601,7 @@ pub async fn groups_of(
     client: &str,
     member: &str,
 ) -> Result<Vec<([u8; 16], String, u64)>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let safe = !member.is_empty()
         && member.len() <= 256
         && member
@@ -613,11 +613,11 @@ pub async fn groups_of(
     let probe = format!(r#"{{"members":[{{"value":"{member}"}}]}}"#);
     let rows = sqlx::query!(
         "SELECT resource_id, display_name, version FROM access.scim_resources
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = 'group'
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND kind = 'group'
             AND deleted_at IS NULL AND body @> $4::text::jsonb
           ORDER BY resource_id",
         tenant,
-        realm,
+        environment,
         client,
         probe,
     )
@@ -669,15 +669,15 @@ pub async fn put_target(
     bound: &Bound,
     w: &TargetWrite<'_>,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let v = sqlx::query_scalar!(
-        r#"INSERT INTO access.scim_targets (tenant_id, realm_id, name, version, state, base_url,
+        r#"INSERT INTO access.scim_targets (tenant_id, environment_id, name, version, state, base_url,
                 secret_wrapped_dek, secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11
-           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+           FROM access.scim_targets WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         w.name,
         if w.live { "live" } else { "retired" },
         w.base_url,
@@ -693,19 +693,19 @@ pub async fn put_target(
     version(v)
 }
 
-/// The realm's targets, newest version each.
+/// The environment's targets, newest version each.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn targets(t: &mut TenantTx) -> Result<Vec<TargetRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT DISTINCT ON (name) name, state, base_url, secret_wrapped_dek, secret_nonce,
                 secret_sealed, kek_id
-           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2
+           FROM access.scim_targets WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY name, version DESC",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -736,12 +736,12 @@ pub async fn link(
     kind: &str,
     local: [u8; 16],
 ) -> Result<Option<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
         "SELECT remote_id FROM access.scim_target_links
-          WHERE tenant_id = $1 AND realm_id = $2 AND target = $3 AND kind = $4 AND local_id = $5",
+          WHERE tenant_id = $1 AND environment_id = $2 AND target = $3 AND kind = $4 AND local_id = $5",
         tenant,
-        realm,
+        environment,
         target,
         kind,
         Uuid::from_bytes(local),
@@ -761,12 +761,12 @@ pub async fn put_link(
     local: [u8; 16],
     remote: &str,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.scim_target_links (tenant_id, realm_id, target, kind, local_id, remote_id)
+        "INSERT INTO access.scim_target_links (tenant_id, environment_id, target, kind, local_id, remote_id)
          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
         tenant,
-        realm,
+        environment,
         target,
         kind,
         Uuid::from_bytes(local),
@@ -801,13 +801,13 @@ pub struct PushLog<'a> {
 /// # Errors
 /// [`StoreError`].
 pub async fn log_push(t: &mut TenantTx, p: &PushLog<'_>) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.scim_outbound_log (tenant_id, realm_id, target, kind, local_id,
+        "INSERT INTO access.scim_outbound_log (tenant_id, environment_id, target, kind, local_id,
                 operation, status, outcome, attempt)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         tenant,
-        realm,
+        environment,
         p.target,
         p.kind,
         Uuid::from_bytes(p.local),
@@ -830,13 +830,13 @@ pub async fn pushes(
     target: &str,
     limit: i64,
 ) -> Result<Vec<(String, [u8; 16], String, Option<u16>, String, u32)>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT kind, local_id, operation, status, outcome, attempt FROM access.scim_outbound_log
-          WHERE tenant_id = $1 AND realm_id = $2 AND target = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND target = $3
           ORDER BY entry_id DESC LIMIT $4",
         tenant,
-        realm,
+        environment,
         target,
         limit,
     )

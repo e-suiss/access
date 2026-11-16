@@ -1,4 +1,4 @@
-//! Issuing one person-attribute SD-JWT VC (RFC 9901, SD-JWT VC; E55, Ek B 4196): the realm
+//! Issuing one person-attribute SD-JWT VC (RFC 9901, SD-JWT VC; E55, Ek B 4196): the environment
 //! issuer signs with its key named by `kid` (its 32-byte thumbprint), the attribute is one
 //! selectively disclosable claim, `cnf.jwk` is the proven holder key, `vct` is under the issuer
 //! and `status.status_list` names the credential's entry. The holder discloses the attribute or
@@ -20,7 +20,7 @@ pub const LIFETIME_MS: u64 = 90 * 24 * 3_600_000;
 /// What one credential says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Credential<'a> {
-    /// The realm issuer.
+    /// The environment issuer.
     pub issuer: &'a str,
     /// The type.
     pub attribute: PersonAttribute,

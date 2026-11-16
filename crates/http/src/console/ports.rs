@@ -26,20 +26,20 @@ pub struct SessionInstance {
     pub key: PublicKey,
 }
 
-/// Who signed in, as the realm's hosted login answered.
+/// Who signed in, as the environment's hosted login answered.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedIn {
-    /// The realm's slug.
-    pub realm: String,
-    /// The realm's governing domain.
+    /// The environment's slug.
+    pub environment: String,
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The account's pseudonymous external id.
     pub account: String,
     /// The display name, tenant-controlled text (TN-131).
     pub display_name: String,
-    /// The realm subject's internal id.
+    /// The environment subject's internal id.
     pub subject: [u8; 16],
-    /// The realm login session the sign-in authenticated with.
+    /// The environment login session the sign-in authenticated with.
     pub login_session: [u8; 16],
     /// When the user authenticated, Unix milliseconds.
     pub auth_time_ms: u64,
@@ -137,23 +137,23 @@ pub trait ConsoleSessions: Send + Sync {
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
 }
 
-/// The hand-off with a realm's hosted login: where the browser goes to sign in, and who came
+/// The hand-off with an environment's hosted login: where the browser goes to sign in, and who came
 /// back.
 pub trait SignIn: Send + Sync {
-    /// The hosted login URL for `realm` that returns to `callback` with `state`; `None` when
-    /// the realm is unknown.
+    /// The hosted login URL for `environment` that returns to `callback` with `state`; `None` when
+    /// the environment is unknown.
     fn start(
         &self,
-        realm: &str,
+        environment: &str,
         state: &str,
         callback: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
 
     /// Who signed in, from the callback's query; `None` when it does not complete a sign-in
-    /// this BFF started for `realm` with `state`.
+    /// this BFF started for `environment` with `state`.
     fn finish(
         &self,
-        realm: &str,
+        environment: &str,
         state: &str,
         query: &str,
     ) -> impl Future<Output = Result<Option<SignedIn>, Unavailable>> + Send;
@@ -164,10 +164,10 @@ pub trait Network: Send + Sync {
     /// The ASN of `ip` from the configured `GeoResolver` source; `None` without a source or an answer.
     fn asn(&self, ip: IpAddr) -> Option<u32>;
 
-    /// The realm session policy's binding settings; the default when the realm sets none.
+    /// The environment session policy's binding settings; the default when the environment sets none.
     fn policy(
         &self,
-        realm: &str,
+        environment: &str,
     ) -> impl Future<Output = Result<BindingPolicy, Unavailable>> + Send;
 }
 
@@ -212,7 +212,7 @@ pub trait Devices: Send + Sync {
         body: Bytes,
     ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send;
 
-    /// The Party the session's realm subject is bound to; `None` before it is bound.
+    /// The Party the session's environment subject is bound to; `None` before it is bound.
     fn party(
         &self,
         session: &ConsoleSession,
@@ -229,8 +229,8 @@ pub struct IssuedRead {
 }
 
 /// Issues management read tokens to a session's device Instance, holder-bound to the session's
-/// DPoP key `jkt` (TN-130, OP-151 m.3 (c)). One surface's read scope only (`realm.read`, or
-/// `platform.read` for a session of the platform realm, OP-159 m.41): it authorises CT0 reads,
+/// DPoP key `jkt` (TN-130, OP-151 m.3 (c)). One surface's read scope only (`environment.read`, or
+/// `platform.read` for a session of the platform environment, OP-159 m.41): it authorises CT0 reads,
 /// never a write.
 pub trait ReadGrants: Send + Sync {
     /// A token for `session` on `surface`, or `None` when the session may not have one.

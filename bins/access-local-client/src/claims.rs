@@ -1,6 +1,6 @@
 //! A `party_compromise` Claim over the PEP channel (§9.13, L2-CLM-5, OP-149 m.26 (c)): the
 //! unsigned Claim a product's PEP hands to `POST /access/v1/claims:ingest` with its client
-//! certificate. The realm's bootstrap accepted the declarant Party it names as issuer; once
+//! certificate. The environment's bootstrap accepted the declarant Party it names as issuer; once
 //! admitted, the domain produces `party.compromised` (OP-149 m.7).
 
 use std::collections::BTreeMap;
@@ -20,7 +20,7 @@ use crate::http::Http;
 pub struct Compromise<'a> {
     /// The deployment's API base, e.g. `https://access-server:8443`.
     pub api_base: &'a str,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The accepted declarant Party (the bootstrap's `compromise.issuer`).
     pub issuer: Id,

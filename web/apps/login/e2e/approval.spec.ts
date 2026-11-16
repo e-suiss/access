@@ -1,4 +1,4 @@
-// §11.6, AS-M14, AG-6, X-L8, OP-154 m.3 (k): the consent screen of a client the realm did not
+// §11.6, AS-M14, AG-6, X-L8, OP-154 m.3 (k): the consent screen of a client the environment did not
 // register shows the hostnames always and the client's name only as its own claim; it never says
 // Allow; declining answers the app with access_denied.
 import { expect, test } from "./fixtures.js";

@@ -1,6 +1,6 @@
 //! The Kerberos gateway's call (§10.6.4, IDP-17, OP-155 m.3 (o)): `authenticate`. The gateway
 //! accepted a ticket with its keytab and reports who, for which SPN, under which key version and
-//! enctype; this holds the facts to the realm's keytab policy, tracks the key version and names
+//! enctype; this holds the facts to the environment's keytab policy, tracks the key version and names
 //! the subject. Access is never a KDC and never sees a ticket.
 
 use access_identity_account::adapters::pg::{PgAccounts, PgTx};
@@ -16,7 +16,7 @@ use crate::domain::kerberos::{admissible, current, user_of};
 use crate::domain::{self, Gateway, Refusal};
 use crate::ports::Vaults;
 
-/// The Kerberos calls over the realms' account tables.
+/// The Kerberos calls over the environments' account tables.
 pub struct Kerberos<V> {
     vaults: V,
     app: Pool,
@@ -45,10 +45,10 @@ impl<V: Vaults> Kerberos<V> {
     async fn begin(&self, g: &Gateway) -> Result<PgTx, EdgeError> {
         let vault = self
             .vaults
-            .vault(g.tenant, g.realm)
+            .vault(g.tenant, g.environment)
             .ok_or_else(|| EdgeError::Unavailable(String::from("vault")))?;
         Ok(PgAccounts::sealed(self.app.clone(), vault)
-            .begin(g.tenant, g.realm)
+            .begin(g.tenant, g.environment)
             .await?)
     }
 
@@ -88,7 +88,7 @@ impl<V: Vaults> Kerberos<V> {
         g: &Gateway,
         q: &Authenticate,
     ) -> Result<Authenticated, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         if g.uri.kind != GatewayKind::Kerberos {
             return Err(Refusal::Method.into());
         }

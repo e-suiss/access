@@ -1,5 +1,5 @@
 //! The account pages end to end against the real decision point (OP-153 m.3 (w), (gg), m.8
-//! (e)): a bootstrapped realm whose root signs in at the hosted login with a second factor;
+//! (e)): a bootstrapped environment whose root signs in at the hosted login with a second factor;
 //! the account BFF reuses that session, registers the browser's key as the session's device
 //! Instance, forwards the hub's reads only with that key's statements and the revoke only as
 //! the commit it signed, through ADP and the sequencer.
@@ -26,7 +26,7 @@ use access_kernel::combinator::Mode;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::{ExerciseBasis, meta_anchor};
 use access_kernel::model::Id;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::sessions::NewSession;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -39,7 +39,7 @@ use super::*;
 const HOST: &str = "access.test";
 const ORIGIN: &str = "https://access.test";
 const SESSION: &str = "__Host-access-session";
-const BASE: &str = "/realms/acme/account/api";
+const BASE: &str = "/env/acme/account/api";
 
 /// The account pages issue no approval Claims.
 struct NoClaims;
@@ -48,7 +48,7 @@ impl ApprovalClaims for NoClaims {
     fn issue(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &ClaimOrder,
     ) -> impl std::future::Future<Output = Result<Issued, access_internal_api::idp::Unavailable>> + Send
     {
@@ -58,7 +58,7 @@ impl ApprovalClaims for NoClaims {
     }
 }
 
-/// The realm's account pages over the token's realm keys and ADP in this process, as `main`
+/// The environment's account pages over the token's environment keys and ADP in this process, as `main`
 /// mounts them.
 fn account_router(c: &super::management::Console) -> axum::Router {
     use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
@@ -72,7 +72,7 @@ fn account_router(c: &super::management::Console) -> axum::Router {
     let w = &c.w;
     let hosted = Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -128,7 +128,7 @@ async fn signed_in(c: &super::management::Console) -> String {
 async fn signed_in_with(c: &super::management::Console, factors: Vec<Factor>) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_session(&NewSession {
@@ -263,7 +263,7 @@ async fn the_account_pages_read_and_revoke_only_with_the_browsers_key() {
     // §17.9.6
     let (r, _) = send(
         &app,
-        page.request(&Method::GET, "/realms/nope/account/api/session")
+        page.request(&Method::GET, "/env/nope/account/api/session")
             .body(Body::empty())
             .unwrap(),
     )
@@ -287,7 +287,7 @@ async fn the_account_pages_read_and_revoke_only_with_the_browsers_key() {
     let csp = r.headers()["content-security-policy"].to_str().unwrap();
     assert!(csp.contains("frame-ancestors 'none'") && csp.contains("'wasm-unsafe-eval'"));
     let s = json_of(&body);
-    assert_eq!(s["realm"], "acme");
+    assert_eq!(s["environment"], "acme");
     assert_eq!(s["pep"], ACCOUNT_PEP);
     assert_eq!(s["party"], b64url_encode(&c.root.0));
     assert!(s["instance"].is_null());

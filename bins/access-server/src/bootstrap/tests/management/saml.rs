@@ -1,7 +1,7 @@
 //! The SAML identity provider and WS-Federation through the real routers (OP-155 m.3 (c) to
 //! (f), OP-153 m.3 (gg), §10.6.1, IDI-7, IDP-15, MD-10, Ek B 4760-4775, 4781, 4790, 4947, 4974,
 //! 4994): service providers and the gateway are registered by REST as `idp.*` decisions; the
-//! browser reaches `/realms/acme/saml/*` and `/realms/acme/wsfed` with a real session; the forward
+//! browser reaches `/env/acme/saml/*` and `/env/acme/wsfed` with a real session; the forward
 //! reaches a gateway stand-in that redeems the handle over the mutual-TLS edge channel against
 //! the real edge router; every signature comes from the real identity signer. The stand-in only
 //! replaces the parser worker, which needs the Linux lockdown (its real-process run is
@@ -84,7 +84,7 @@ impl Idp {
         let w = c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/gateways",
+                "/admin/v1/envs/acme/gateways",
                 ("registerGateway", None),
                 serde_json::json!({ "kind": "saml", "name": "gw1", "cert_sha256": digest }),
                 None,
@@ -92,7 +92,7 @@ impl Idp {
             .await;
         assert_eq!(w.status, StatusCode::CREATED, "{}", w.body);
 
-        let keks = crate::login::RealmKeks::new(Arc::clone(&c.w.keys));
+        let keks = crate::login::EnvironmentKeks::new(Arc::clone(&c.w.keys));
         let forward = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let forward_addr = forward.local_addr().unwrap();
         let saml = Arc::new(crate::saml::Saml::new(
@@ -152,7 +152,7 @@ impl Idp {
             discovery, hosted, saml,
         );
 
-        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
             .await
             .unwrap();
         let issuer = access_store::idp::governance(&mut t)
@@ -194,7 +194,7 @@ impl Idp {
             .c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/saml-sps",
+                "/admin/v1/envs/acme/saml-sps",
                 ("registerSamlSp", None),
                 body,
                 None,
@@ -241,16 +241,20 @@ impl Idp {
         *self.script.lock().unwrap() = Some(Ok(facts));
         let message = binding_value(b"<samlp:AuthnRequest/>");
         self.get(
-            &format!("/realms/acme/saml/sso?SAMLRequest={message}&RelayState=r1"),
+            &format!("/env/acme/saml/sso?SAMLRequest={message}&RelayState=r1"),
             signed_in,
         )
         .await
     }
 
     async fn audit(&self) -> Vec<String> {
-        let mut t = TenantTx::begin(&self.c.w.db.app, self.c.route.tenant, self.c.route.realm)
-            .await
-            .unwrap();
+        let mut t = TenantTx::begin(
+            &self.c.w.db.app,
+            self.c.route.tenant,
+            self.c.route.environment,
+        )
+        .await
+        .unwrap();
         let rows = t.list_audit(10_000).await.unwrap();
         t.commit().await.unwrap();
         rows.into_iter().map(|r| r.event_type).collect()
@@ -326,7 +330,7 @@ async fn stand_in(listener: tokio::net::TcpListener, channel: Channel, script: S
             ) => issue(edge, &f, None).await,
             (_, Some(Ok(facts))) => {
                 let sp = Attest::Sp {
-                    realm: f.realm.clone(),
+                    environment: f.environment.clone(),
                     entity: facts.issuer.clone(),
                 };
                 edge.raw(Call::SessionAttest, &sp.encode()).await.unwrap();
@@ -347,7 +351,7 @@ async fn stand_in(listener: tokio::net::TcpListener, channel: Channel, script: S
 
 async fn issue(edge: &EdgeCore, f: &Forward, facts: Option<Vec<u8>>) -> Done {
     let a = Attest::Issue {
-        realm: f.realm.clone(),
+        environment: f.environment.clone(),
         handle: f.handle,
         facts,
         redirect_signed: false,
@@ -409,7 +413,7 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
     // IDI-7
     let core = idp.core().await;
     let forged = Attest::Issue {
-        realm: String::from("acme"),
+        environment: String::from("acme"),
         handle: access_crypto::random::bytes().unwrap(),
         facts: None,
         redirect_signed: false,
@@ -428,7 +432,7 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let to = location(&r);
     assert!(
-        to.starts_with("/realms/acme/login?return_to=%2Frealms%2Facme%2Fsaml%2Fsso%3Fflow%3D"),
+        to.starts_with("/env/acme/login?return_to=%2Fenv%2Facme%2Fsaml%2Fsso%3Fflow%3D"),
         "{to}"
     );
 
@@ -528,16 +532,16 @@ async fn unsolicited_sso_needs_the_opt_in() {
         serde_json::json!({ "allow_idp_initiated": true }),
     ))
     .await;
-    let (r, page) = idp.get("/realms/acme/saml/sso/closed", true).await;
+    let (r, page) = idp.get("/env/acme/saml/sso/closed", true).await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-unsolicited"));
-    let (r, page) = idp.get("/realms/acme/saml/sso/open", true).await;
+    let (r, page) = idp.get("/env/acme/saml/sso/open", true).await;
     assert_eq!(r.status(), StatusCode::OK, "{page}");
     let xml = response_xml(&page);
     assert!(!xml.contains("InResponseTo"));
     assert!(xml.contains("Destination=\"https://open.sp.test/acs\""));
     let (r, page) = idp
-        .get("/realms/acme/saml/sso/open?RelayState=%2Fapp", true)
+        .get("/env/acme/saml/sso/open?RelayState=%2Fapp", true)
         .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-relay-state"));
@@ -549,7 +553,7 @@ async fn unsolicited_sso_needs_the_opt_in() {
         .c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/saml-sps",
+            "/admin/v1/envs/acme/saml-sps",
             ("registerSamlSp", None),
             slack.clone(),
             None,
@@ -559,7 +563,7 @@ async fn unsolicited_sso_needs_the_opt_in() {
     assert_eq!(w.body["code"], "invalid-saml-sp");
     slack["attributes"] = serde_json::json!([{ "name": "User.Email", "source": "email" }]);
     idp.register(slack).await;
-    let list = idp.c.admin_get("/admin/v1/realms/acme/saml-sps").await;
+    let list = idp.c.admin_get("/admin/v1/envs/acme/saml-sps").await;
     let item = list.body["items"]
         .as_array()
         .unwrap()
@@ -595,7 +599,7 @@ async fn single_logout_signs_out_locally_and_answers_the_sp() {
     let message = binding_value(b"<samlp:LogoutRequest/>");
     let (r, _) = idp
         .get(
-            &format!("/realms/acme/saml/slo?SAMLRequest={message}&RelayState=back"),
+            &format!("/env/acme/saml/slo?SAMLRequest={message}&RelayState=back"),
             true,
         )
         .await;
@@ -696,13 +700,13 @@ async fn an_encrypted_assertion_opens_with_the_sp_key() {
 #[tokio::test]
 async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     let idp = Idp::new("saml-meta").await;
-    let (r, doc) = idp.get("/realms/acme/saml/metadata", false).await;
+    let (r, doc) = idp.get("/env/acme/saml/metadata", false).await;
     assert_eq!(r.status(), StatusCode::OK, "{doc}");
     assert!(doc.starts_with("<md:EntityDescriptor"));
     assert!(doc.contains("cacheDuration=\"PT6H\"") && doc.contains("validUntil=\""));
     assert!(doc.contains("<md:KeyDescriptor use=\"signing\">"));
     assert!(doc.contains("<ds:Signature") && doc.contains("xmldsig-more#rsa-sha256"));
-    let (_, again) = idp.get("/realms/acme/saml/metadata", false).await;
+    let (_, again) = idp.get("/env/acme/saml/metadata", false).await;
     assert_ne!(doc, again);
 
     idp.register(sp(
@@ -712,7 +716,7 @@ async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     .await;
     let (r, page) = idp
         .get(
-            "/realms/acme/wsfed?wa=wsignin1.0&wtrealm=https%3A%2F%2Flegacy.sp.test%2Fmetadata&wreply=https%3A%2F%2Flegacy.sp.test%2Facs&wctx=c1",
+            "/env/acme/wsfed?wa=wsignin1.0&wtrealm=https%3A%2F%2Flegacy.sp.test%2Fmetadata&wreply=https%3A%2F%2Flegacy.sp.test%2Facs&wctx=c1",
             true,
         )
         .await;
@@ -725,7 +729,7 @@ async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     assert!(wresult.contains("<t:RequestSecurityTokenResponse"));
     assert!(wresult.contains("MajorVersion=\"1\"") && wresult.contains("<ds:Signature"));
     let (r, _) = idp
-        .get("/realms/acme/wsfed?wa=wsignin1.0&wtrealm=https%3A%2F%2Flegacy.sp.test%2Fmetadata&wreply=https%3A%2F%2Fevil.test%2F", true)
+        .get("/env/acme/wsfed?wa=wsignin1.0&wtrealm=https%3A%2F%2Flegacy.sp.test%2Fmetadata&wreply=https%3A%2F%2Fevil.test%2F", true)
         .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     idp.c.w.domains.release().await;
@@ -737,7 +741,7 @@ async fn the_saml_idp_suite_finds_no_standards_fault_in_a_real_response_or_metad
     use saml_idp_suite::response::{Expectations, all_ok, check_metadata, check_response};
 
     let idp = Idp::new("saml-suite").await;
-    let (r, md) = idp.get("/realms/acme/saml/metadata", false).await;
+    let (r, md) = idp.get("/env/acme/saml/metadata", false).await;
     assert_eq!(r.status(), StatusCode::OK, "{md}");
     let entity = saml_idp_suite::xml::parse(&md)
         .unwrap()
@@ -797,7 +801,7 @@ pub(super) async fn counterpart(var: &str, args: Vec<String>) {
 /// `IdP` signing certificate, the certificate in the metadata signature and the expected values.
 async fn saml_artifacts(label: &str, entity: &str, acs: &str) -> std::path::PathBuf {
     let idp = Idp::new(label).await;
-    let (_, md) = idp.get("/realms/acme/saml/metadata", false).await;
+    let (_, md) = idp.get("/env/acme/saml/metadata", false).await;
     let parsed = saml_idp_suite::xml::parse(&md).unwrap();
     let idp_entity = parsed.root.attr("entityID").unwrap().to_owned();
     let pem_of = |e: &saml_idp_suite::xml::Element| {
@@ -912,14 +916,14 @@ async fn the_post_quantum_profile_leaves_saml_signing_and_encryption_classical()
         .c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/signing-profile",
+            "/admin/v1/envs/acme/settings/signing-profile",
             ("putSigningProfile", None),
             serde_json::json!({"profile": "ml-dsa-65"}),
             None,
         )
         .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let (r, doc) = idp.get("/realms/acme/saml/metadata", false).await;
+    let (r, doc) = idp.get("/env/acme/saml/metadata", false).await;
     assert_eq!(r.status(), StatusCode::OK, "{doc}");
     assert!(doc.contains("xmldsig-more#rsa-sha256"), "{doc}");
     let lower = doc.to_ascii_lowercase();
@@ -931,7 +935,7 @@ async fn the_post_quantum_profile_leaves_saml_signing_and_encryption_classical()
             .c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/saml-sps",
+                "/admin/v1/envs/acme/saml-sps",
                 ("registerSamlSp", None),
                 sp("quantum", serde_json::json!({ "signature_alg": alg })),
                 None,

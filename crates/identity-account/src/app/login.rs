@@ -17,7 +17,7 @@ use crate::app::accounts::PASSWORD;
 use crate::app::hasher::Hasher;
 use crate::app::local::LocalLimiter;
 use crate::app::sealing::{open_password, seal_password, subject_key};
-use crate::app::{Actor, Realm};
+use crate::app::{Actor, Environment};
 use crate::domain::identifier::normalize;
 use crate::domain::legacy;
 use crate::domain::login::{PasswordLogin, ceil_seconds, counter_key, network};
@@ -33,7 +33,7 @@ pub const ANONYMOUS: &str = "anonymous";
 /// The audit target when no account holds the identifier.
 pub const UNKNOWN: &str = "unknown";
 
-/// Process-wide login state: layer A, the realm policy and the success mean.
+/// Process-wide login state: layer A, the environment policy and the success mean.
 pub struct LoginGate {
     local: LocalLimiter,
     policy: ThrottlePolicy,
@@ -120,8 +120,11 @@ fn row(s: &KeyState) -> ThrottleRow {
     }
 }
 
-fn keys(realm: &Realm<'_>, folded: &str, net: &[u8]) -> [(KeyKind, [u8; 32]); 3] {
-    let (t, r) = (realm.tenant.as_bytes(), realm.realm.as_bytes());
+fn keys(environment: &Environment<'_>, folded: &str, net: &[u8]) -> [(KeyKind, [u8; 32]); 3] {
+    let (t, r) = (
+        environment.tenant.as_bytes(),
+        environment.environment.as_bytes(),
+    );
     [
         (
             KeyKind::Account,
@@ -148,14 +151,14 @@ struct Verified {
     migrated: bool,
 }
 
-/// The counter key of an identifier in a realm, for recovery to clear (I5).
+/// The counter key of an identifier in an environment, for recovery to clear (I5).
 #[must_use]
-pub fn account_key(realm: &Realm<'_>, identifier: &str) -> [u8; 32] {
+pub fn account_key(environment: &Environment<'_>, identifier: &str) -> [u8; 32] {
     let folded = normalize(identifier).to_lowercase();
     counter_key(
         KeyKind::Account,
-        realm.tenant.as_bytes(),
-        realm.realm.as_bytes(),
+        environment.tenant.as_bytes(),
+        environment.environment.as_bytes(),
         Some(&folded),
         None,
     )
@@ -168,14 +171,16 @@ pub fn account_key(realm: &Realm<'_>, identifier: &str) -> [u8; 32] {
 pub async fn clear_account<D: AccountDb, C: Clock>(
     db: &D,
     clock: &C,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     identifier: &str,
     horizon_days: u32,
 ) -> Result<(), AccountError> {
-    let key = account_key(realm, identifier);
+    let key = account_key(environment, identifier);
     let d = day(clock.now_ms())?;
     let horizon = i32::try_from(horizon_days).map_err(|_| AccountError::Corrupt)?;
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let mut s = state(&tx.throttle(&key, d, horizon).await?)?;
     s.failures = 0;
     s.blocked_until_ms = 0;
@@ -193,7 +198,7 @@ enum Admission {
 
 async fn admit<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     policy: &ThrottlePolicy,
     keys: &[(KeyKind, [u8; 32]); 3],
     normalized: &str,
@@ -201,7 +206,9 @@ async fn admit<D: AccountDb>(
 ) -> Result<Admission, AccountError> {
     let horizon = i32::try_from(policy.horizon_days).map_err(|_| AccountError::Corrupt)?;
     let today = day(start)?;
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let mut admitted = [KeyState::default(); 3];
     let mut wait = 0_u64;
     let mut locked = false;
@@ -237,7 +244,7 @@ async fn admit<D: AccountDb>(
 /// whether a rehash was stored.
 async fn record<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     policy: &ThrottlePolicy,
     keys: &[(KeyKind, [u8; 32]); 3],
     outcome: (Option<&Verified>, Option<&Candidate>),
@@ -247,7 +254,9 @@ async fn record<D: AccountDb>(
     let (verified, candidate) = outcome;
     let horizon = i32::try_from(policy.horizon_days).map_err(|_| AccountError::Corrupt)?;
     let today = day(now)?;
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let mut account_locked_now = false;
     for (kind, key) in keys {
         let rules = policy.of(*kind);
@@ -272,7 +281,7 @@ async fn record<D: AccountDb>(
             Some(sealed) => tx.reseal(v.credential, ALGORITHM, sealed).await?,
             None => false,
         };
-        let target = realm.external(v.subject)?;
+        let target = environment.external(v.subject)?;
         // TN-85, CR-37
         if rehashed && v.migrated {
             audit(&mut tx, "credential.password.migrated", &actor, &target).await?;
@@ -282,7 +291,7 @@ async fn record<D: AccountDb>(
         return Ok(rehashed);
     }
     let target = match candidate {
-        Some(c) => realm.external(c.subject.id)?,
+        Some(c) => environment.external(c.subject.id)?,
         None => UNKNOWN.to_owned(),
     };
     if account_locked_now && let Some(c) = candidate {
@@ -309,7 +318,7 @@ async fn record<D: AccountDb>(
 /// turns a failure into an acceptance (MD-8).
 pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     services: &LoginServices<'_, C, E>,
     attempt: &Attempt<'_>,
 ) -> Result<PasswordLogin, AccountError> {
@@ -321,9 +330,13 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
         }));
     }
     let normalized = normalize(attempt.identifier);
-    let keys = keys(realm, &normalized.to_lowercase(), &network(attempt.ip));
+    let keys = keys(
+        environment,
+        &normalized.to_lowercase(),
+        &network(attempt.ip),
+    );
     let (candidate, prior_failures) =
-        match admit(db, realm, &gate.policy, &keys, &normalized, start).await? {
+        match admit(db, environment, &gate.policy, &keys, &normalized, start).await? {
             Admission::Throttled(wait) => {
                 return Ok(observed(PasswordLogin::Throttled {
                     retry_after_s: ceil_seconds(wait),
@@ -333,7 +346,7 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
         };
     let presented = Password::presented(attempt.password);
     let verified = verify(
-        realm,
+        environment,
         services,
         candidate.as_ref(),
         presented.as_ref(),
@@ -342,7 +355,7 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
     .await?;
     let rehashed = record(
         db,
-        realm,
+        environment,
         &gate.policy,
         &keys,
         (verified.as_ref(), candidate.as_ref()),
@@ -417,7 +430,7 @@ async fn audit<T: AccountTx>(
 }
 
 async fn verify<C: Clock, E: Entropy>(
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     services: &LoginServices<'_, C, E>,
     candidate: Option<&Candidate>,
     presented: Option<&Password>,
@@ -436,8 +449,8 @@ async fn verify<C: Clock, E: Entropy>(
         return Ok(None);
     };
     let subject = c.subject.id;
-    let dek = subject_key(realm, &c.subject)?;
-    let (stored, unpeppered) = open_password(realm, &dek, &subject, &cred.sealed)?;
+    let dek = subject_key(environment, &c.subject)?;
+    let (stored, unpeppered) = open_password(environment, &dek, &subject, &cred.sealed)?;
     let algorithm = cred.algorithm.as_str();
     let migrated = legacy::is_legacy(algorithm);
     // TN-85, OP-153 m.11 (h)
@@ -473,7 +486,7 @@ async fn verify<C: Clock, E: Entropy>(
         match services.entropy.salt() {
             Ok(salt) => match services.hasher.hash(pw, salt).await {
                 Ok(fresh) => Some(seal_password(
-                    realm,
+                    environment,
                     &dek,
                     &subject,
                     fresh.expose().as_bytes(),

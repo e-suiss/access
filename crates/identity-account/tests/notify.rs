@@ -22,7 +22,7 @@ use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{change_status, create};
-use access_identity_account::app::{Actor, Realm, SUBJECT_PREFIX};
+use access_identity_account::app::{Actor, Environment, SUBJECT_PREFIX};
 use access_identity_account::domain::events::OUTBOX_PREFIX as EVENT_PREFIX;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
@@ -42,16 +42,16 @@ use access_identity_account::notify::message::{
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
 use access_identity_account::notify::ports::{
-    CourierStore, Notifier, RealmKeys, RelayPort, SubjectKey,
+    CourierStore, EnvironmentKeys, Notifier, RelayPort, SubjectKey,
 };
 use access_identity_account::notify::resend::{ResendError, resend};
 use access_identity_account::ports::Clock;
 use access_identity_account::testing::relay::{Answer, RelayTwin, check, schema_errors};
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, OutboxEvent, TenantId, TenantTx};
 use access_store::relay::Undelivered;
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use serde_json::Value;
 use suiss_crypto::envelope::{Dek, Kek};
@@ -75,11 +75,11 @@ impl Clock for TestClock {
 
 struct Keys(Arc<SoftKek>);
 
-impl RealmKeys for Keys {
+impl EnvironmentKeys for Keys {
     fn kek(
         &self,
         _tenant: TenantId,
-        _realm: RealmId,
+        _environment: EnvironmentId,
         kek_id: &str,
     ) -> Option<Arc<dyn Kek + Send + Sync>> {
         (self.0.id() == kek_id).then(|| self.0.clone() as Arc<dyn Kek + Send + Sync>)
@@ -174,19 +174,19 @@ impl CourierStore for Store {
     async fn subject_key(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> Result<SubjectKey, NotifyError> {
-        self.pg.subject_key(tenant, realm, subject).await
+        self.pg.subject_key(tenant, environment, subject).await
     }
 
     async fn undelivered(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         record: &Undelivered<'_>,
     ) -> Result<(), NotifyError> {
-        self.pg.undelivered(tenant, realm, record).await
+        self.pg.undelivered(tenant, environment, record).await
     }
 }
 
@@ -195,7 +195,7 @@ type TestCourier = Courier<Store, FakeRelay, Keys, TestClock>;
 struct Env {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     kek: SoftKek,
     vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
@@ -221,7 +221,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut tx, &d, slug, "pool-default")
+    let environment = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -236,7 +236,7 @@ async fn env(seed: u8, slug: &str) -> Env {
             fail_ack: AtomicBool::new(false),
         },
         relay.clone(),
-        Keys(Arc::new(SoftKek::new("realm-kek:1", [seed; 32]))),
+        Keys(Arc::new(SoftKek::new("environment-kek:1", [seed; 32]))),
         clock.clone(),
         IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         Backoff::default(),
@@ -245,10 +245,10 @@ async fn env(seed: u8, slug: &str) -> Env {
     Env {
         db,
         tenant,
-        realm,
-        kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        environment,
+        kek: SoftKek::new("environment-kek:1", [seed; 32]),
         vault: access_identity_account::app::vault::Vault::in_memory(
-            std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+            std::sync::Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
             [seed; 32],
         ),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
@@ -288,10 +288,10 @@ fn notice(subject: [u8; 16], at_ms: u64) -> Message {
 }
 
 impl Env {
-    fn realm(&self) -> Realm<'_> {
-        Realm {
+    fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.realm,
+            environment: self.environment,
             kek: &self.kek,
             ids: &self.ids,
         }
@@ -301,7 +301,7 @@ impl Env {
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
         let s = create(
             &PgAccounts::sealed(self.db.app.clone(), self.vault.clone()),
-            &self.realm(),
+            &self.environment(),
             &[id],
             &ADMIN,
         )
@@ -324,9 +324,9 @@ impl Env {
 
     /// Queues `m` together with a business change (a session epoch bump) and commits.
     async fn queue(&self, m: &Message) -> EventId {
-        let realm = self.realm();
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &self.clock);
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let environment = self.environment();
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &self.clock);
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         tx.end_sessions(m.subject).await.unwrap();
@@ -336,7 +336,7 @@ impl Env {
     }
 
     async fn epoch(&self, s: [u8; 16]) -> i64 {
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let row = tx.subject(s, false).await.unwrap().unwrap();
@@ -365,7 +365,7 @@ impl Env {
     }
 
     async fn undelivered(&self) -> Vec<(String, String, Option<u16>)> {
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let rows = tx.list_relay_undelivered(100).await.unwrap();
@@ -434,9 +434,11 @@ async fn a_committed_message_reaches_relay_as_a_cloud_event() {
 async fn a_rolled_back_message_is_never_sent() {
     let e = env(2, "rn-b").await;
     let s = e.subject(EMAIL).await;
-    let realm = e.realm();
-    let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &e.clock);
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let environment = e.environment();
+    let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &e.clock);
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     tx.end_sessions(s).await.unwrap();
     notifier
         .notify(&mut tx, &otp(s, START_MS + 300_000))
@@ -570,7 +572,9 @@ async fn a_poison_message_is_recorded_and_passed_without_loss() {
             Some(422)
         )]
     );
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert_eq!(
         tx.list_relay_undelivered(10).await.unwrap()[0].event_id,
         bad.0
@@ -604,9 +608,13 @@ async fn a_shredded_subject_gets_nothing() {
         AccountStatus::Tombstone,
         AccountStatus::Purging,
     ] {
-        change_status(&pg, &e.realm(), s, to, &ADMIN).await.unwrap();
+        change_status(&pg, &e.environment(), s, to, &ADMIN)
+            .await
+            .unwrap();
     }
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(tx.shred_subject_for_test(s).await.unwrap());
     tx.commit().await.unwrap();
 
@@ -620,7 +628,9 @@ async fn a_shredded_subject_gets_nothing() {
 #[tokio::test]
 async fn other_outbox_kinds_are_skipped() {
     let e = env(9, "rn-i").await;
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     tx.outbox("session.revoked", b"x").await.unwrap();
     tx.commit().await.unwrap();
     let step = e.settle(1).await;
@@ -634,11 +644,13 @@ async fn other_outbox_kinds_are_skipped() {
 
 // OP-12
 #[tokio::test]
-async fn a_message_needs_a_subject_of_the_realm() {
+async fn a_message_needs_a_subject_of_the_environment() {
     let e = env(10, "rn-j").await;
-    let realm = e.realm();
-    let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &e.clock);
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let environment = e.environment();
+    let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &e.clock);
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let r = notifier.notify(&mut tx, &otp([9; 16], START_MS + 1)).await;
     assert!(matches!(r, Err(NotifyError::NoSubject)));
     tx.rollback().await.unwrap();
@@ -682,7 +694,7 @@ async fn secrets_and_addresses_never_show() {
 
     let header = Header {
         tenant: [1; 16],
-        realm: [2; 16],
+        environment: [2; 16],
         event: EventId::from_random([3; 16]),
         subject: s,
         occurred_ms: START_MS,
@@ -701,7 +713,7 @@ fn the_envelope_is_bound_to_its_header_and_key() {
     let s = [7; 16];
     let header = Header {
         tenant: [1; 16],
-        realm: [2; 16],
+        environment: [2; 16],
         event: EventId::from_random([3; 16]),
         subject: s,
         occurred_ms: START_MS,
@@ -1101,7 +1113,7 @@ fn every_kind_matches_the_json_schema() {
         assert_eq!(m.body.kind(), kind);
         let header = Header {
             tenant: [1; 16],
-            realm: [2; 16],
+            environment: [2; 16],
             event: EventId::from_random([3; 16]),
             subject: s,
             occurred_ms: START_MS,
@@ -1113,7 +1125,7 @@ fn every_kind_matches_the_json_schema() {
         assert_eq!(v["id"], "03030303-0303-4303-8303-030303030303");
         assert_eq!(
             v["source"],
-            "urn:suiss:access:realm:02020202-0202-0202-0202-020202020202"
+            "urn:suiss:access:environment:02020202-0202-0202-0202-020202020202"
         );
         let mut broken = v.clone();
         broken["data"]["extra"] = Value::Bool(true);
@@ -1198,7 +1210,7 @@ fn token_file(tag: &str) -> std::path::PathBuf {
 fn sample_event() -> CloudEvent {
     let header = Header {
         tenant: [1; 16],
-        realm: [2; 16],
+        environment: [2; 16],
         event: EventId::from_random([3; 16]),
         subject: [4; 16],
         occurred_ms: START_MS,
@@ -1401,7 +1413,7 @@ fn node(e: &Env, relay: FakeRelay) -> TestCourier {
             fail_ack: AtomicBool::new(false),
         },
         relay,
-        Keys(Arc::new(SoftKek::new("realm-kek:1", [e.seed; 32]))),
+        Keys(Arc::new(SoftKek::new("environment-kek:1", [e.seed; 32]))),
         e.clock.clone(),
         IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
         Backoff::default(),
@@ -1543,8 +1555,18 @@ async fn refused(e: &Env, m: &Message) -> EventId {
 }
 
 async fn resend_of(e: &Env, id: EventId) -> Result<EventId, ResendError> {
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
-    let r = resend(&mut tx, &e.realm(), &SystemEntropy, &e.clock, id, &ADMIN).await;
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    let r = resend(
+        &mut tx,
+        &e.environment(),
+        &SystemEntropy,
+        &e.clock,
+        id,
+        &ADMIN,
+    )
+    .await;
     if r.is_ok() {
         tx.commit().await.unwrap();
     } else {
@@ -1574,7 +1596,9 @@ async fn a_resend_writes_a_new_row_and_leaves_the_original() {
         &rows_before[..],
         "the original row is unchanged"
     );
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert_eq!(tx.relay_resends_of(original.0).await.unwrap(), [again.0]);
     assert_eq!(tx.list_relay_undelivered(10).await.unwrap().len(), 1);
     tx.commit().await.unwrap();
@@ -1602,9 +1626,13 @@ async fn shredded_or_expired_content_is_not_resent() {
         AccountStatus::Tombstone,
         AccountStatus::Purging,
     ] {
-        change_status(&pg, &e.realm(), s, to, &ADMIN).await.unwrap();
+        change_status(&pg, &e.environment(), s, to, &ADMIN)
+            .await
+            .unwrap();
     }
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(tx.shred_subject_for_test(s).await.unwrap());
     tx.commit().await.unwrap();
     assert!(matches!(
@@ -1711,7 +1739,7 @@ async fn the_relay_twin_validates_and_answers_like_relay() {
     let other = cloud_event(
         &Header {
             tenant: [1; 16],
-            realm: [2; 16],
+            environment: [2; 16],
             event: EventId::from_random([5; 16]),
             subject: [4; 16],
             occurred_ms: START_MS,
@@ -1746,7 +1774,7 @@ async fn the_courier_delivers_to_the_twin() {
             fail_ack: AtomicBool::new(false),
         },
         twin_relay(&twin, &token, Duration::from_secs(5)),
-        Keys(Arc::new(SoftKek::new("realm-kek:1", [e.seed; 32]))),
+        Keys(Arc::new(SoftKek::new("environment-kek:1", [e.seed; 32]))),
         e.clock.clone(),
         IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
         Backoff::default(),

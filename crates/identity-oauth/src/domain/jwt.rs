@@ -1,5 +1,5 @@
 //! JWKS reading and the JWT checks of the authorization server: `private_key_jwt` client
-//! assertions (RFC 7523 §3, §10.4.5) and the realm's own tokens it reads back
+//! assertions (RFC 7523 §3, §10.4.5) and the environment's own tokens it reads back
 //! (`id_token_hint`, access tokens at `/userinfo`, `/introspect` and `/revoke`).
 
 use std::collections::BTreeSet;
@@ -15,7 +15,7 @@ pub const MAX_JWKS: usize = 64 * 1024;
 /// Most keys read from one JWKS.
 pub const MAX_KEYS: usize = 32;
 
-/// Client assertion algorithms the realm accepts; RS256 only in the identity plane (CR-2,
+/// Client assertion algorithms the environment accepts; RS256 only in the identity plane (CR-2,
 /// §11.4.5 (a)). The metadata announces the same list.
 pub const ASSERTION_ALGS: [ClientAlg; 2] = [ClientAlg::Es256, ClientAlg::Rs256];
 
@@ -145,12 +145,12 @@ pub fn parse_jwks(doc: &[u8]) -> Result<Vec<Jwk>, JwtError> {
     Ok(out)
 }
 
-/// The realm's own keys as a Kernel key set: `kid` is the base64url RFC 7638 thumbprint
+/// The environment's own keys as a Kernel key set: `kid` is the base64url RFC 7638 thumbprint
 /// (CR-24).
 ///
 /// # Errors
 /// [`JwtError::Jwks`].
-pub fn realm_key_set(doc: &[u8]) -> Result<KeySet, JwtError> {
+pub fn environment_key_set(doc: &[u8]) -> Result<KeySet, JwtError> {
     let mut set = KeySet::default();
     // CR-41 m.3, OP-159 m.3 (o)
     for (kid, alg, key) in akp_keys(doc)? {
@@ -175,7 +175,7 @@ pub fn realm_key_set(doc: &[u8]) -> Result<KeySet, JwtError> {
     Ok(set)
 }
 
-/// The `AKP` keys of a realm JWKS with their mandatory `alg` and exact length (RFC 9964, CR-41
+/// The `AKP` keys of an environment JWKS with their mandatory `alg` and exact length (RFC 9964, CR-41
 /// m.3); any other key is left to [`parse_jwks`].
 fn akp_keys(doc: &[u8]) -> Result<Vec<([u8; 32], Algorithm, PublicKey)>, JwtError> {
     let top = json::parse(doc, MAX_JWKS).map_err(|_| JwtError::Jwks)?;
@@ -294,7 +294,7 @@ pub fn assertion_subject(token: &str) -> Result<String, JwtError> {
 }
 
 /// The single audience a client assertion names, read before its keys are fetched: a caller
-/// outside a realm's own endpoints finds the realm by it (OP-149 m.4). The signature and the
+/// outside an environment's own endpoints finds the environment by it (OP-149 m.4). The signature and the
 /// audience are checked later by [`verify_assertion`].
 ///
 /// # Errors
@@ -314,7 +314,7 @@ pub fn assertion_audience(token: &str) -> Result<String, JwtError> {
 pub struct AssertionRules<'a> {
     /// The client that is authenticating.
     pub client_id: &'a str,
-    /// The realm issuer.
+    /// The environment issuer.
     pub issuer: &'a str,
     /// The endpoint that received it.
     pub endpoint: &'a str,
@@ -489,13 +489,13 @@ fn assertion_claims(c: &Json, rules: &AssertionRules<'_>) -> Result<Assertion, J
     })
 }
 
-/// The algorithms the realm's own tokens are accepted with.
+/// The algorithms the environment's own tokens are accepted with.
 #[must_use]
-pub fn realm_algorithms() -> BTreeSet<Algorithm> {
+pub fn environment_algorithms() -> BTreeSet<Algorithm> {
     [Algorithm::Es256, Algorithm::Ed25519].into_iter().collect()
 }
 
-/// The resource server's own check of a realm access token (`at+jwt`) with the realm JWKS it
+/// The resource server's own check of an environment access token (`at+jwt`) with the environment JWKS it
 /// already holds: signature, `iss`, its audience and times with [`SKEW_MS`]. No database,
 /// introspection or network is asked, so it answers the same while the identity database is
 /// down; the bound is the token's declared lifetime, never a window (§13.11 EP-4, EP-6, U39,
@@ -509,7 +509,7 @@ pub fn verify_local(
     now_ms: u64,
 ) -> Option<Json> {
     use access_kernel::verify::jws::{ClaimRules, Origin, check_claims, verify_compact};
-    let keys = realm_key_set(jwks).ok()?;
+    let keys = environment_key_set(jwks).ok()?;
     let v = verify_compact(
         &access_crypto::AwsLcBackend,
         token,

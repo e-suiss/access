@@ -14,7 +14,7 @@
     "time",
     "datacontenttype",
     "accesstenant",
-    "accessrealm",
+    "accessenvironment",
     "data"
   ],
   "properties": {
@@ -27,7 +27,7 @@
     },
     "source": {
       "type": "string",
-      "pattern": "^urn:suiss:access:realm:[0-9a-f-]{36}$"
+      "pattern": "^urn:suiss:access:environment:[0-9a-f-]{36}$"
     },
     "type": {
       "enum": [
@@ -99,7 +99,7 @@
       "type": "string",
       "format": "uuid"
     },
-    "accessrealm": {
+    "accessenvironment": {
       "type": "string",
       "format": "uuid"
     },

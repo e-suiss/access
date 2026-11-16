@@ -1,4 +1,4 @@
-//! The realm issuer end to end (OP-150 L2, §10.1.4 rule 3, §10.1.7, CMP-8): a new realm's
+//! The environment issuer end to end (OP-150 L2, §10.1.4 rule 3, §10.1.7, CMP-8): a new environment's
 //! governing domain is born accepting its issuer for actor-binding, the issuer's key holds its
 //! Instance there, and the identity plane's Claims reach Claim Ingest through `internal-api`.
 
@@ -17,7 +17,7 @@ use access_identity_account::domain::claims::{
 use access_internal_api::claims::{ClaimVerdict, Quarantine};
 use access_kernel::claim::body::{AttestationResult, AuthMethod, AuthenticatorKind};
 use access_kernel::model::EqValue;
-use access_store::issuer::{issuer_instance, realm_issuer};
+use access_store::issuer::{environment_issuer, issuer_instance};
 
 use super::*;
 use crate::ingest::PgSubmissions;
@@ -41,11 +41,11 @@ pub(super) struct Keyed<'a>(&'a Opened);
 impl ClaimSigner for Keyed<'_> {
     fn sign(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         payload: Vec<u8>,
         at: u64,
     ) -> impl Future<Output = Result<Vec<u8>, NotSigned>> + Send {
-        std::future::ready(self.0.sign_claim(realm, &payload, at))
+        std::future::ready(self.0.sign_claim(environment, &payload, at))
     }
 }
 
@@ -62,10 +62,10 @@ pub(super) fn courier(w: &World) -> Courier<Keyed<'_>, Plane, At> {
     }
 }
 
-async fn subject(w: &World, t: TenantId, r: RealmId, party: Id) -> [u8; 16] {
+async fn subject(w: &World, t: TenantId, r: EnvironmentId, party: Id) -> [u8; 16] {
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
     let s = tx
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(
@@ -100,14 +100,14 @@ fn held(i: &Issued) -> Option<Quarantine> {
 // OP-150 L2, OP-144, §10.1.4 rule 3, §10.1.7, L2-CLM-1, L2-CLM-3, E18, INV-2, INV-12, CI-2
 // IDI-3
 #[tokio::test]
-async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
+async fn the_environment_issuer_claims_are_accepted_for_actor_binding() {
     let w = World::new().await;
-    let (t, r, d) = w.realm("issuer").await;
+    let (t, r, d) = w.environment("issuer").await;
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
-    let issuer = realm_issuer(&mut tx).await.unwrap().unwrap();
+    let issuer = environment_issuer(&mut tx).await.unwrap().unwrap();
     tx.commit().await.unwrap();
     let key = w.keys.open_issuer(r, issuer).await.unwrap();
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
@@ -186,20 +186,20 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
     assert_eq!((report.answered, report.unplaced), (1, 0));
 }
 
-async fn issuer_ready(w: &World, slug: &str) -> (TenantId, RealmId, Digest) {
-    let (t, r, d) = w.realm(slug).await;
+async fn issuer_ready(w: &World, slug: &str) -> (TenantId, EnvironmentId, Digest) {
+    let (t, r, d) = w.environment(slug).await;
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
-    let issuer = realm_issuer(&mut tx).await.unwrap().unwrap();
+    let issuer = environment_issuer(&mut tx).await.unwrap().unwrap();
     tx.commit().await.unwrap();
     w.keys.open_issuer(r, issuer).await.unwrap();
     assert!(w.admin().register_issuer(t, r).await.unwrap().is_some());
     (t, r, d)
 }
 
-async fn queue(w: &World, t: TenantId, r: RealmId, order: &ClaimOrder) {
+async fn queue(w: &World, t: TenantId, r: EnvironmentId, order: &ClaimOrder) {
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(&w.db.app, t, r).await.unwrap(),
     );
@@ -223,7 +223,7 @@ fn login(subject: [u8; 16]) -> ClaimOrder {
 
 // OP-153 m.2 N0, m.3 (o), (p), (q), m.25 (i), L2-CLM-1, CMP-8
 #[tokio::test]
-async fn the_realm_issuer_signs_its_registry_and_org_member_claims() {
+async fn the_environment_issuer_signs_its_registry_and_org_member_claims() {
     let w = World::new().await;
     let (t, r, d) = issuer_ready(&w, "registry").await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
@@ -374,7 +374,7 @@ async fn an_order_the_signer_refuses_never_holds_up_the_orders_after_it() {
 
 // OP-153 m.2 N0, m.25 (i), L2-CLM-1
 #[test]
-fn the_identity_issuer_signs_every_class_the_realm_issuer_queues() {
+fn the_identity_issuer_signs_every_class_the_environment_issuer_queues() {
     use access_identity_signer::issuer::issues;
     for class in IdentityClass::ALL {
         assert!(issues(class.name()), "{}", class.name());

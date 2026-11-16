@@ -1,5 +1,5 @@
 //! Support access as the identity plane keeps it (OP-157 m.3 (f), (g), TN-137, TN-74): operators'
-//! requests and what became of each, the person's "Block support access" setting, the realm's
+//! requests and what became of each, the person's "Block support access" setting, the environment's
 //! artifact policy and the sealed, redacted support artifacts. A request grants nothing; the
 //! person's own `grant.issue` does. Nothing is deleted: an artifact is crypto-shredded (OP-73).
 
@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -197,7 +197,7 @@ impl Raw {
     }
 }
 
-/// The realm's open artifact policy.
+/// The environment's open artifact policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArtifactPolicy {
     /// Largest upload, bytes.
@@ -225,7 +225,7 @@ pub struct NewSupportArtifact<'a> {
     pub digest: [u8; 32],
     /// The `idp.account.artifact_upload` Exercise.
     pub upload_exercise: [u8; 32],
-    /// The realm KEK that wraps `wrapped_dek`.
+    /// The environment KEK that wraps `wrapped_dek`.
     pub kek_id: &'a str,
     /// The artifact's own DEK, wrapped.
     pub wrapped_dek: &'a [u8],
@@ -275,15 +275,15 @@ impl TenantTx {
         &mut self,
         r: &NewSupportRequest<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.support_requests (tenant_id, realm_id, operator_id, operator_party,
+            "INSERT INTO access.support_requests (tenant_id, environment_id, operator_id, operator_party,
                     subject_id, subject_party, case_system, case_label, case_ref, scope, minutes,
                     created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING request_id",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(r.operator),
             r.operator_party.as_slice(),
             Uuid::from_bytes(r.subject),
@@ -314,7 +314,7 @@ impl TenantTx {
         since_ms: u64,
         limit: i64,
     ) -> Result<Vec<SupportRequestRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_as!(
             Raw,
             r#"SELECT r.request_id, r.operator_id, r.operator_party, r.subject_id, r.subject_party,
@@ -326,18 +326,18 @@ impl TenantTx {
                       e.state AS "end_state?", e.at_ms AS "ended_ms?"
                  FROM access.support_requests r
                  LEFT JOIN access.support_request_outcomes a
-                   ON a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id
+                   ON a.tenant_id = r.tenant_id AND a.environment_id = r.environment_id
                   AND a.request_id = r.request_id AND a.state IN ('declined', 'granted')
                  LEFT JOIN access.support_request_outcomes e
-                   ON e.tenant_id = r.tenant_id AND e.realm_id = r.realm_id
+                   ON e.tenant_id = r.tenant_id AND e.environment_id = r.environment_id
                   AND e.request_id = r.request_id AND e.state IN ('ended', 'revoked')
-                WHERE r.tenant_id = $1 AND r.realm_id = $2
+                WHERE r.tenant_id = $1 AND r.environment_id = $2
                   AND (CASE WHEN $3 THEN r.operator_id ELSE r.subject_id END) = $4
                   AND (r.expires_ms >= $5 OR (a.state = 'granted' AND (e.state IS NULL OR e.at_ms >= $5)))
                 ORDER BY r.request_id DESC
                 LIMIT $6"#,
             tenant,
-            realm,
+            environment,
             by,
             Uuid::from_bytes(account),
             signed(since_ms)?,
@@ -356,7 +356,7 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<SupportRequestRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query_as!(
             Raw,
             r#"SELECT r.request_id, r.operator_id, r.operator_party, r.subject_id, r.subject_party,
@@ -368,14 +368,14 @@ impl TenantTx {
                       e.state AS "end_state?", e.at_ms AS "ended_ms?"
                  FROM access.support_requests r
                  LEFT JOIN access.support_request_outcomes a
-                   ON a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id
+                   ON a.tenant_id = r.tenant_id AND a.environment_id = r.environment_id
                   AND a.request_id = r.request_id AND a.state IN ('declined', 'granted')
                  LEFT JOIN access.support_request_outcomes e
-                   ON e.tenant_id = r.tenant_id AND e.realm_id = r.realm_id
+                   ON e.tenant_id = r.tenant_id AND e.environment_id = r.environment_id
                   AND e.request_id = r.request_id AND e.state IN ('ended', 'revoked')
-                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.request_id = $3"#,
+                WHERE r.tenant_id = $1 AND r.environment_id = $2 AND r.request_id = $3"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -391,12 +391,12 @@ impl TenantTx {
         &mut self,
         grant: [u8; 16],
     ) -> Result<Option<SupportRequestRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
             "SELECT request_id FROM access.support_request_outcomes
-              WHERE tenant_id = $1 AND realm_id = $2 AND grant_id = $3 AND state = 'granted'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND grant_id = $3 AND state = 'granted'",
             tenant,
-            realm,
+            environment,
             grant.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -417,7 +417,7 @@ impl TenantTx {
         answer: &Answer,
         at_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let (state, grant, exercise, until, position, template) = match answer {
             Answer::Declined => ("declined", None, None, None, None, None),
             Answer::Granted {
@@ -436,12 +436,12 @@ impl TenantTx {
             ),
         };
         let done = sqlx::query!(
-            "INSERT INTO access.support_request_outcomes (tenant_id, realm_id, request_id, state,
+            "INSERT INTO access.support_request_outcomes (tenant_id, environment_id, request_id, state,
                     grant_id, exercise, until_ms, position, template, at_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             state,
             grant,
@@ -466,16 +466,16 @@ impl TenantTx {
         end: End,
         at_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
-            "INSERT INTO access.support_request_outcomes (tenant_id, realm_id, request_id, state, at_ms)
+            "INSERT INTO access.support_request_outcomes (tenant_id, environment_id, request_id, state, at_ms)
              SELECT $1, $2, $3, $4, $5
               WHERE EXISTS (SELECT 1 FROM access.support_request_outcomes
-                             WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3
+                             WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3
                                AND state = 'granted')
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             end.name(),
             signed(at_ms)?,
@@ -494,19 +494,19 @@ impl TenantTx {
         now_ms: u64,
         limit: i64,
     ) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let ids = sqlx::query_scalar!(
             "SELECT a.request_id FROM access.support_request_outcomes a
-              WHERE a.tenant_id = $1 AND a.realm_id = $2 AND a.state = 'granted'
+              WHERE a.tenant_id = $1 AND a.environment_id = $2 AND a.state = 'granted'
                 AND a.until_ms <= $3
                 AND NOT EXISTS (SELECT 1 FROM access.support_request_outcomes e
-                                 WHERE e.tenant_id = a.tenant_id AND e.realm_id = a.realm_id
+                                 WHERE e.tenant_id = a.tenant_id AND e.environment_id = a.environment_id
                                    AND e.request_id = a.request_id
                                    AND e.state IN ('ended', 'revoked'))
               ORDER BY a.until_ms
               LIMIT $4",
             tenant,
-            realm,
+            environment,
             signed(now_ms)?,
             limit,
         )
@@ -520,13 +520,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn support_blocked(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let blocked = sqlx::query_scalar!(
             "SELECT blocked FROM access.support_blocks
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -544,14 +544,14 @@ impl TenantTx {
         blocked: bool,
         at_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.support_blocks (tenant_id, realm_id, subject_id, version, blocked, at_ms)
+            "INSERT INTO access.support_blocks (tenant_id, environment_id, subject_id, version, blocked, at_ms)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5
                FROM access.support_blocks
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             blocked,
             signed(at_ms)?,
@@ -561,17 +561,17 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The realm's artifact policy when uploads are open.
+    /// The environment's artifact policy when uploads are open.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn support_artifact_policy(&mut self) -> Result<Option<ArtifactPolicy>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT open, max_bytes, retention_days FROM access.support_artifact_policies
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -586,7 +586,7 @@ impl TenantTx {
         }
     }
 
-    /// Writes the realm's next artifact policy under `bound`: open with `policy`, closed
+    /// Writes the environment's next artifact policy under `bound`: open with `policy`, closed
     /// without one.
     ///
     /// # Errors
@@ -596,7 +596,7 @@ impl TenantTx {
         bound: &Bound,
         policy: Option<ArtifactPolicy>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let max = policy
             .map(|p| i32::try_from(p.max_bytes))
             .transpose()
@@ -606,13 +606,13 @@ impl TenantTx {
             .transpose()
             .map_err(|_| StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.support_artifact_policies (tenant_id, realm_id, version, open,
+            "INSERT INTO access.support_artifact_policies (tenant_id, environment_id, version, open,
                     max_bytes, retention_days, domain_id, decision_pos)
              SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7
                FROM access.support_artifact_policies
-              WHERE tenant_id = $1 AND realm_id = $2",
+              WHERE tenant_id = $1 AND environment_id = $2",
             tenant,
-            realm,
+            environment,
             policy.is_some(),
             max,
             days,
@@ -632,15 +632,15 @@ impl TenantTx {
         &mut self,
         a: &NewSupportArtifact<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.support_artifacts (tenant_id, realm_id, subject_id, subject_party,
+            "INSERT INTO access.support_artifacts (tenant_id, environment_id, subject_id, subject_party,
                     case_ref, format, size_bytes, redactions, digest, upload_exercise, kek_id,
                     wrapped_dek, nonce, ciphertext, created_ms, retain_until_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
              RETURNING artifact_id",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(a.subject),
             a.subject_party.as_slice(),
             a.case_ref.as_slice(),
@@ -669,14 +669,14 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<SupportArtifactRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT artifact_id, subject_id, subject_party, case_ref, format, size_bytes,
                     redactions, digest, kek_id, wrapped_dek, nonce, ciphertext, created_ms
                FROM access.support_artifacts
-              WHERE tenant_id = $1 AND realm_id = $2 AND artifact_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND artifact_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -712,13 +712,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn shred_support_artifacts(&mut self, now_ms: u64) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.support_artifacts
                 SET wrapped_dek = NULL, nonce = NULL, ciphertext = NULL, shredded_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND shredded_at IS NULL AND retain_until_ms <= $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND shredded_at IS NULL AND retain_until_ms <= $3",
             tenant,
-            realm,
+            environment,
             signed(now_ms)?,
         )
         .execute(&mut *self.tx)

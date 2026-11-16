@@ -17,12 +17,12 @@ pub mod signin;
 pub mod sms;
 mod webauthn;
 
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::app::hasher::Hasher;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::domain::login::{Problem, REJECTED};
 use access_identity_account::domain::status::AccountStatus;
-use access_identity_webauthn::domain::policy::RealmPolicy as WebAuthnPolicy;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy as WebAuthnPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
 use access_identity_webauthn::ports::{
     AttestationSources, CredentialRegistry, DecoySource, SignalSink,
@@ -53,22 +53,22 @@ pub struct Passkeys<'a, P, S> {
     pub registry: &'a P,
     /// Where risk signals go (TN-63).
     pub signals: &'a S,
-    /// The realm's decoy key (TN-97).
+    /// The environment's decoy key (TN-97).
     pub decoys: &'a (dyn DecoySource + Sync),
     /// The relying party.
     pub rp: &'a RelyingParty,
-    /// The realm's WebAuthn policy.
+    /// The environment's WebAuthn policy.
     pub policy: &'a WebAuthnPolicy,
-    /// What a `direct` realm verifies attestation against (OP-159 m.3 (ll)).
+    /// What a `direct` environment verifies attestation against (OP-159 m.3 (ll)).
     pub attestation: &'a (dyn AttestationSources + Sync),
 }
 
-/// The authentication service of one realm.
+/// The authentication service of one environment.
 pub struct Auth<'a, D, C, R, N, P, S> {
     /// Account, flow and session tables.
     pub db: &'a D,
-    /// The realm and its keys.
-    pub realm: Realm<'a>,
+    /// The environment and its keys.
+    pub environment: Environment<'a>,
     /// Sign-in requirements.
     pub policy: AuthPolicy,
     /// Session lifetimes.
@@ -79,7 +79,7 @@ pub struct Auth<'a, D, C, R, N, P, S> {
     pub random: &'a R,
     /// The Relay seam (I6).
     pub notifier: &'a N,
-    /// The `https` prefix a magic link token is appended to: the realm's confirmation page.
+    /// The `https` prefix a magic link token is appended to: the environment's confirmation page.
     pub link_base: &'a str,
     /// The password step's process state.
     pub gate: &'a LoginGate,
@@ -87,7 +87,7 @@ pub struct Auth<'a, D, C, R, N, P, S> {
     pub hasher: &'a Hasher,
     /// Passkeys.
     pub passkeys: Passkeys<'a, P, S>,
-    /// The realm's inline hooks (TN-135): `post_login` may refuse a sign-in.
+    /// The environment's inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: &'a (dyn HookCaller + Sync),
     /// SL2 risk for this request (TN-46): its sources and the client's address.
     pub risk: Sl2<'a>,
@@ -160,7 +160,7 @@ pub const FLOW_GONE: Problem = Problem {
     retry_after_s: None,
 };
 
-/// The realm's `post_login` hook refused the sign-in or did not answer (TN-135, MD-8).
+/// The environment's `post_login` hook refused the sign-in or did not answer (TN-135, MD-8).
 pub const HOOK_REFUSED: Problem = Problem {
     status: 403,
     code: "sign-in-refused",
@@ -177,7 +177,7 @@ pub const SSO_REQUIRED: Problem = Problem {
     retry_after_s: None,
 };
 
-/// A break-glass account signs in only with the realm's own phishing-resistant hardware method,
+/// A break-glass account signs in only with the environment's own phishing-resistant hardware method,
 /// never through a provider (OP-157 m.3 (h), §10.2.5, §10.2.6).
 pub const BREAKGLASS_SSO_REFUSED: Problem = Problem {
     status: 403,
@@ -374,10 +374,13 @@ where
     }
 
     pub(crate) async fn begin(&self) -> Result<D::Tx, SessionError> {
-        Ok(self.db.begin(self.realm.tenant, self.realm.realm).await?)
+        Ok(self
+            .db
+            .begin(self.environment.tenant, self.environment.environment)
+            .await?)
     }
 
     pub(crate) fn external(&self, subject: [u8; 16]) -> Result<String, SessionError> {
-        Ok(self.realm.external(subject)?)
+        Ok(self.environment.external(subject)?)
     }
 }

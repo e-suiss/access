@@ -38,16 +38,16 @@ describe("fluent", () => {
   });
 
   // OP-153 m.3 (s)
-  it("runs realm locale, realm language, Access locale, Access language, en", () => {
+  it("runs environment locale, environment language, Access locale, Access language, en", () => {
     const c = catalogs();
     const k = "why-past";
-    const realm = new Map([
+    const environment = new Map([
       ["tr-tr", new Map([[k, "Gönderildi (TR)"]])],
       ["tr", new Map([[k, "Gönderildi (dil)"]])],
     ]);
-    c.check(realm);
-    expect(c.pattern(k, "tr-TR", realm)).toBe("Gönderildi (TR)");
-    expect(c.pattern(k, "tr-CY", realm)).toBe("Gönderildi (dil)");
+    c.check(environment);
+    expect(c.pattern(k, "tr-TR", environment)).toBe("Gönderildi (TR)");
+    expect(c.pattern(k, "tr-CY", environment)).toBe("Gönderildi (dil)");
     expect(c.pattern(k, "tr-CY")).toBe(c.catalog("tr")?.get(k));
     expect(c.pattern(k, "de-DE")).toBe("As decided at that time");
     expect(c.pattern(k, "not a tag")).toBe("As decided at that time");
@@ -55,15 +55,15 @@ describe("fluent", () => {
   });
 
   // X35, XI-25
-  it("never lets a realm replace a protected key", () => {
+  it("never lets an environment replace a protected key", () => {
     const c = catalogs();
     const k = "login-failed";
     expect(c.isProtected(k)).toBe(true);
-    const realm = new Map([["en", new Map([[k, "Another text."]])]]);
+    const environment = new Map([["en", new Map([[k, "Another text."]])]]);
     expect(() => {
-      c.check(realm);
+      c.check(environment);
     }).toThrow(FluentError);
-    expect(c.pattern(k, "en", realm)).toBe(c.catalog("en")?.get(k));
+    expect(c.pattern(k, "en", environment)).toBe(c.catalog("en")?.get(k));
     expect(() => {
       c.check(new Map([["en", new Map([["made-up", "x"]])]]));
     }).toThrow(/unknown/);

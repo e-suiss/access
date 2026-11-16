@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_refresh_tokens (tenant_id, environment_id, token_hash, grant_id, created_ms)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee98f225320377a586ab8e4a01f438e0fac2e693c3652e9f27283b5f6f2a967c"
+}

@@ -1,7 +1,7 @@
 # OpenTofu
 
 OpenTofu provisions an Access cell's infrastructure: the namespaces, the secret store roles and
-the Helm release of `deploy/helm/access`. It never configures a realm, a domain or a client:
+the Helm release of `deploy/helm/access`. It never configures an environment, a domain or a client:
 that configuration is an Exercise through the management API, decided and recorded like any
 other change. `cargo xtask check` (`tofu-infra-only`) refuses any file here that names an `idp.*`
 action, the decision or management API, or the Access CLI.

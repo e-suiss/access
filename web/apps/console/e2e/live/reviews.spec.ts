@@ -8,7 +8,7 @@ import { expect, test } from "@playwright/test";
 
 import { PASSWORD, registerAndOpen, signIn } from "./signin.js";
 
-const ADMIN = "/console/api/proxy/admin/realms/acme/reviews";
+const ADMIN = "/console/api/proxy/admin/envs/acme/reviews";
 const REVIEW = process.env["ACCESS_LIVE_REVIEW"];
 
 test.describe("@live console access reviews", () => {

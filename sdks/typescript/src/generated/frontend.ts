@@ -64,7 +64,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the realm issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind. */
+        /** Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the environment issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind. */
         post: operations["recoverInstance"];
         delete?: never;
         options?: never;
@@ -101,7 +101,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8). */
+        /** The session's auth_context artifact, signed by the environment's identity signer key (OP-149 m.8). */
         post: operations["issueAuthContext"];
         delete?: never;
         options?: never;
@@ -135,7 +135,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3). */
+        /** Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m), §13.7.3). */
         post: operations["startBatchApproval"];
         delete?: never;
         options?: never;
@@ -169,7 +169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the realm's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26). */
+        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the environment's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26). */
         post: operations["answerInlineApproval"];
         delete?: never;
         options?: never;
@@ -186,7 +186,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the realm's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing. */
+        /** A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the environment's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing. */
         post: operations["pushApprovalRequest"];
         delete?: never;
         options?: never;
@@ -259,7 +259,7 @@ export interface components {
              * @description When it stops being accepted.
              */
             expires_at: string;
-            /** @description The realm's governing DomainID, 32 bytes. */
+            /** @description The environment's governing DomainID, 32 bytes. */
             domain: string;
             /** @description GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7). */
             basis: string;
@@ -355,7 +355,7 @@ export interface components {
             content_digest: string;
         };
         AuthContextIssued: {
-            /** @description Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c)). */
+            /** @description Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the environment's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c)). */
             auth_context: string;
             /** @description SHA-256("suiss/auth-context/v1" || 0x00 || payload), 32 bytes. */
             digest: string;
@@ -475,9 +475,9 @@ export interface components {
             assertion?: components["schemas"]["InlineAssertion"];
         };
         InlineAssertion: {
-            /** @description rawId of the approver's registered passkey in the realm. */
+            /** @description rawId of the approver's registered passkey in the environment. */
             credential_id: string;
-            /** @description response.authenticatorData; its RP ID hash is the realm's RP ID and UP is set. */
+            /** @description response.authenticatorData; its RP ID hash is the environment's RP ID and UP is set. */
             authenticator_data: string;
             /** @description response.clientDataJSON; type webauthn.get, challenge H(AAS). */
             client_data_json: string;
@@ -539,13 +539,13 @@ export interface components {
             render: components["schemas"]["RenderView"];
             /** @description PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2. */
             options?: Record<string, never>;
-            /** @description Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g)). */
+            /** @description Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the environment decided idp.environment.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g)). */
             spc?: Record<string, never>;
         };
         ApprovalFinish: {
             /** @description The PublicKeyCredential JSON of the assertion (toJSON()), as a string or an object. */
             credential: unknown;
-            /** @description As GET /v1/approve; checked against the realm's clients again. */
+            /** @description As GET /v1/approve; checked against the environment's clients again. */
             redirect_uri: string;
             /** @description As GET /v1/approve. */
             state: string;
@@ -667,7 +667,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered). */
+            /** @description The session already has an active device Instance (instance-exists; INV-13: one per session and environment), or the authority plane did not open the Instance (instance-not-registered). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -738,7 +738,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The session already binds an active device Instance (instance-exists; INV-13: one per session and realm). */
+            /** @description The session already binds an active device Instance (instance-exists; INV-13: one per session and environment). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -959,7 +959,7 @@ export interface operations {
             query: {
                 /** @description The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…). */
                 request: string;
-                /** @description Exactly a redirect URI an active client of the realm registered, or one an active platform product client registered in the platform realm (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match). */
+                /** @description Exactly a redirect URI an active client of the environment registered, or one an active platform product client registered in the platform environment (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match). */
                 redirect_uri: string;
                 /** @description 1 to 512 printable ASCII characters, echoed unchanged. */
                 state: string;
@@ -1039,7 +1039,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused. */
+            /** @description approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the environment did not open; the whole batch is refused. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1258,7 +1258,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApprovalStarted"];
                 };
             };
-            /** @description invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the realm's). */
+            /** @description invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the environment's). */
             400: {
                 headers: {
                     [name: string]: unknown;

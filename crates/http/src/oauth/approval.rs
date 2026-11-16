@@ -1,4 +1,4 @@
-//! The hosted consent of a client the realm did not register (§11.6, P58, EI-18, OP-154 m.3 (k)):
+//! The hosted consent of a client the environment did not register (§11.6, P58, EI-18, OP-154 m.3 (k)):
 //! the consent page reads what it shows and the `grant.issue` it has the person's device Instance
 //! sign, then names the allowed Exercise to keep the consent record, or declines. Same-origin
 //! JSON only, every write with the session-bound CSRF token, nothing framed, no cookie set
@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use access_identity_oauth::app::oauth::{
-    ApprovalDraft, ApprovalView, Env, NotApproved, OAuth, Realm, consent_csrf,
+    ApprovalDraft, ApprovalView, Env, Environment, NotApproved, OAuth, consent_csrf,
 };
 use access_kernel::json::{b64url_decode, b64url_encode};
 use axum::Router;
@@ -49,10 +49,10 @@ struct Approve {
     exercise: String,
 }
 
-/// The consent routes, at the host root and under `/realms/{slug}`.
+/// The consent routes, at the host root and under `/env/{slug}`.
 pub(super) fn routes<E: Env>() -> Router<Arc<OAuth<E>>> {
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r
             .route(
                 &format!("{prefix}/v1/login/approval/preview"),
@@ -161,13 +161,13 @@ fn csrf_ok(headers: &HeaderMap, cookie: Option<&str>, return_to: &str) -> bool {
     }
 }
 
-pub(super) async fn realm_of<E: Env>(
+pub(super) async fn environment_of<E: Env>(
     s: &OAuth<E>,
     uri: &Uri,
     headers: &HeaderMap,
     slug: Option<&str>,
-) -> Result<Realm, Response> {
-    match s.realm(authority(uri, headers), slug).await {
+) -> Result<Environment, Response> {
+    match s.environment(authority(uri, headers), slug).await {
         Ok(Some(r)) => Ok(r),
         Ok(None) => Err(framed_never(crate::not_found_problem().into_response())),
         Err(_) => Err(unavailable()),
@@ -263,7 +263,7 @@ async fn preview<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -275,7 +275,10 @@ async fn preview<E: Env>(
         Err(r) => return r,
     };
     let cookie = session_cookie(&headers);
-    match s.approval_view(&realm, cookie.as_deref(), return_to).await {
+    match s
+        .approval_view(&environment, cookie.as_deref(), return_to)
+        .await
+    {
         Ok(Ok(v)) => {
             let Some(csrf) = cookie.as_deref().and_then(|c| consent_csrf(c, return_to)) else {
                 return not_approved(NotApproved::SignIn);
@@ -299,7 +302,7 @@ async fn approve<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -327,7 +330,7 @@ async fn approve<E: Env>(
         );
     }
     match s
-        .approve(&realm, cookie.as_deref(), return_to, domain, exercise)
+        .approve(&environment, cookie.as_deref(), return_to, domain, exercise)
         .await
     {
         Ok(Ok(to)) => json_reply(StatusCode::OK, &json!({ "redirect_to": to })),
@@ -347,7 +350,7 @@ async fn decline<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, slug_of(p).as_deref()).await {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -367,7 +370,7 @@ async fn decline<E: Env>(
         );
     }
     match s
-        .decline_approval(&realm, cookie.as_deref(), return_to)
+        .decline_approval(&environment, cookie.as_deref(), return_to)
         .await
     {
         Ok(Ok(to)) => json_reply(StatusCode::OK, &json!({ "redirect_to": to })),

@@ -91,7 +91,7 @@ pub struct StreamRequest {
     pub description: Option<String>,
     /// Whether Access events go with or instead of their CAEP counterparts (§9.16).
     pub profile: Profile,
-    /// The SET signing algorithm the receiver asked for; `None` is the realm's (TN-40).
+    /// The SET signing algorithm the receiver asked for; `None` is the environment's (TN-40).
     pub alg: Option<SetAlg>,
 }
 

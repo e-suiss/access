@@ -1,4 +1,4 @@
-//! The realm key set's rules: which rotation policies a realm may take and the JWKS document
+//! The environment key set's rules: which rotation policies an environment may take and the JWKS document
 //! that publishes its keys (CR-19, CR-24 to CR-26, MD-3).
 
 use access_crypto::jose::{JoseError, public_jwk};
@@ -15,11 +15,11 @@ pub const JWKS_CONTENT_TYPE: &str = "application/jwk-set+json";
 /// `stale-while-revalidate` (CR-25).
 pub const JWKS_CACHE_MS: u64 = 900_000;
 
-/// `T_token_max`: the longest identity token a realm key signs; access tokens above 60 minutes
+/// `T_token_max`: the longest identity token an environment key signs; access tokens above 60 minutes
 /// are refused (MD-7, U36).
 pub const TOKEN_MAX_MS: u64 = 3_600_000;
 
-/// Why a realm rotation policy is refused.
+/// Why an environment rotation policy is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum PolicyError {
@@ -42,15 +42,15 @@ impl PolicyError {
     #[must_use]
     pub const fn code(self) -> &'static str {
         match self {
-            Self::Lifetime => "realm-key-lifetime",
-            Self::Retention => "realm-key-retention",
-            Self::Lead => "realm-key-lead",
-            Self::Window => "realm-key-window",
+            Self::Lifetime => "environment-key-lifetime",
+            Self::Retention => "environment-key-retention",
+            Self::Lead => "environment-key-lead",
+            Self::Window => "environment-key-window",
         }
     }
 }
 
-/// Checks a realm's rotation policy against the token ceiling and the JWKS cache time.
+/// Checks an environment's rotation policy against the token ceiling and the JWKS cache time.
 ///
 /// # Errors
 /// [`PolicyError`].

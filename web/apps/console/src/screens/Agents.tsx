@@ -1,4 +1,4 @@
-// §8.5 S7, §11.16, XI-17, AG-19, AG-21, AG-41, OP-154 m.3 (c), (e), (f): the realm's agent
+// §8.5 S7, §11.16, XI-17, AG-19, AG-21, AG-41, OP-154 m.3 (c), (e), (f): the environment's agent
 // registry. Each agent is shown as an agent with its kind, operator, sponsors and status; one
 // without an active sponsor reads suspended; its running copies end one signed change each, as
 // containment ends them, and nothing here changes authority without a signature.
@@ -174,11 +174,14 @@ function AgentView({ a, ctx }: { readonly a: Agent; readonly ctx: Ctx }): ReactE
   );
 }
 
-/** §8.5 S7, OP-154 m.3 (e): the realm's agents, one opened at a time. */
+/** §8.5 S7, OP-154 m.3 (e): the environment's agents, one opened at a time. */
 export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(() =>
-    adminGet<{ readonly items: readonly AgentSummary[] }>(ctx.instance, `realms/${realm}/agents`),
+    adminGet<{ readonly items: readonly AgentSummary[] }>(
+      ctx.instance,
+      `envs/${environment}/agents`,
+    ),
   );
   const [open, setOpen] = useState<string | undefined>(undefined);
   const [one, run] = useRun<Agent>();
@@ -213,7 +216,7 @@ export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
                             run(() =>
                               adminGet<Agent>(
                                 ctx.instance,
-                                `realms/${realm}/agents/${encodeURIComponent(a.agent)}`,
+                                `envs/${environment}/agents/${encodeURIComponent(a.agent)}`,
                               ),
                             );
                           }}

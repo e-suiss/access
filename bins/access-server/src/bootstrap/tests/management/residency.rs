@@ -1,7 +1,7 @@
-//! A realm's residency and its placement and durability reads through the admin REST surface on
+//! An environment's residency and its placement and durability reads through the admin REST surface on
 //! the real server path (CMP-26, OP-30, T28, HL-40, OP-158 m.3 (o), (p)): `putResidency`
-//! commits `idp.realm.residency` only for the region and class this cell declares, and the
-//! placement and durability reads say where the realm is served and what a loss can cost.
+//! commits `idp.environment.residency` only for the region and class this cell declares, and the
+//! placement and durability reads say where the environment is served and what a loss can cost.
 
 use access_store::placement::{self, CellProfile};
 
@@ -19,7 +19,7 @@ fn cell(class: &str) -> CellProfile {
 
 // CMP-26, OP-30, MD-5, T28, OP-158 m.3 (o), Ek B 5721, 5768, 5958, 5959
 #[tokio::test]
-async fn op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_back() {
+async fn op_30_an_environment_declares_residency_only_in_its_cells_region_and_reads_it_back() {
     let c = console("w9-residency", false).await;
     let none = c
         .put_setting(
@@ -66,17 +66,17 @@ async fn op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_
     assert_eq!(set.status, StatusCode::OK, "{}", set.body);
 
     // TI-17
-    let (s, placed, _) = c.rest_read("/admin/v1/realms/acme/placement").await;
+    let (s, placed, _) = c.rest_read("/admin/v1/envs/acme/placement").await;
     assert_eq!(s, StatusCode::OK, "{placed}");
     assert_eq!(placed["cell"], "eu-central-1");
     assert_eq!(placed["region"], "eu-central");
     assert_eq!(placed["residency"]["region"], "eu-central");
     assert_eq!(placed["residency"]["class"], "regional");
     assert_eq!(placed["routing_only"], true);
-    assert_eq!(placed["realm"], serde_json::Value::Null);
+    assert_eq!(placed["environment"], serde_json::Value::Null);
 
     // OP-29, T28
-    let (s, d, _) = c.rest_read("/admin/v1/realms/acme/durability").await;
+    let (s, d, _) = c.rest_read("/admin/v1/envs/acme/durability").await;
     assert_eq!(s, StatusCode::OK, "{d}");
     assert_eq!(d["durability"], "replicated");
     assert_eq!(d["class"], "regional");
@@ -89,7 +89,7 @@ async fn op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_
         )
         .await;
     assert_eq!(dr.status, StatusCode::OK, "{}", dr.body);
-    let (_, d, _) = c.rest_read("/admin/v1/realms/acme/durability").await;
+    let (_, d, _) = c.rest_read("/admin/v1/envs/acme/durability").await;
     assert_eq!(d["rpo_s"], 300);
     assert_eq!(d["dr_profile"]["rpo_s"], 300);
 
@@ -103,7 +103,7 @@ async fn op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_
     )
     .await
     .unwrap();
-    let (_, d, _) = c.rest_read("/admin/v1/realms/acme/durability").await;
+    let (_, d, _) = c.rest_read("/admin/v1/envs/acme/durability").await;
     assert_eq!(d["durability"], "single-node");
     assert_eq!(d["rpo_s"], serde_json::Value::Null);
 }
@@ -115,7 +115,7 @@ async fn hl_17_the_durability_read_shows_shared_hosting_until_dedicated_is_decla
     placement::declare_cell(&c.w.db.app, &cell("regional"))
         .await
         .unwrap();
-    let (s, d, _) = c.rest_read("/admin/v1/realms/acme/durability").await;
+    let (s, d, _) = c.rest_read("/admin/v1/envs/acme/durability").await;
     assert_eq!(s, StatusCode::OK, "{d}");
     assert_eq!(
         d["hosting"],

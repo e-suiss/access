@@ -15,7 +15,7 @@ use crate::ports::dpop::{CacheUnavailable, ClockUnavailable};
 const NOW: u64 = 1_800_000_000_000;
 const HOUR: u64 = 60 * 60 * 1000;
 const URI: &str = "https://login.example.com/token";
-const REALM: [u8; 16] = [6; 16];
+const ENVIRONMENT: [u8; 16] = [6; 16];
 
 #[derive(Default)]
 struct Memory(Mutex<HashSet<(u32, [u8; 32])>>);
@@ -52,7 +52,7 @@ impl Clock for Fixed {
 
 fn ring(role: Role, key: u8) -> NonceRing {
     NonceRing::new(
-        REALM,
+        ENVIRONMENT,
         role,
         NoncePolicy::new(HOUR, MAX_STALE_MS).unwrap(),
         1,

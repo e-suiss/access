@@ -2,7 +2,7 @@
   "tenant": "tnt_0123456789abcdefghjkmnpqrs",
   "targets": [
     {
-      "realm": "019a0000-0000-7000-8000-0000000000a1",
+      "environment": "019a0000-0000-7000-8000-0000000000a1",
       "status": "unpaired",
       "domain": "Ag8bXl3r6kZrS4-2a2vC2QxEoNw5yWg6k2q1mFzT9uI",
       "basis": "kQ3ZbU1cX0b0m2-4A5r9Lg",
@@ -22,7 +22,7 @@
       }
     },
     {
-      "realm": "019a0000-0000-7000-8000-0000000000a2",
+      "environment": "019a0000-0000-7000-8000-0000000000a2",
       "status": "paired",
       "party": "c3Vpc3Mtd29yay1wYXJ0eQ",
       "instance": "AZoAAAAAcACAAAAAAAAAsQ",

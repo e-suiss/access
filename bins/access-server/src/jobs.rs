@@ -8,7 +8,7 @@
 //! (TN-126, OP-151 m.3 (c)): the answer is cleared and the key released in place, never deleted.
 //!
 //! The daily tenant analytics (IDP-36, OP-151 m.3 (n)) run the same way: one node aggregates
-//! yesterday for every live realm, in a transaction scoped to that realm, and sets the
+//! yesterday for every live environment, in a transaction scoped to that environment, and sets the
 //! process-wide SL2 false-positive ratio gauge (OP-151 m.3 (o)). Nothing reads either back to
 //! decide anything (TI-18).
 
@@ -156,20 +156,20 @@ pub(crate) async fn open_now(app: &Pool, archive: &Pool, worker: &str) {
 /// What one [`analytics_tick`] did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AnalyticsTick {
-    /// Realms aggregated.
-    pub(crate) realms: u32,
-    /// Realms whose aggregation failed (retried with the job).
+    /// Environments aggregated.
+    pub(crate) environments: u32,
+    /// Environments whose aggregation failed (retried with the job).
     pub(crate) failed: u32,
     /// Surge alerts raised.
     pub(crate) surges: u32,
 }
 
-/// Schedules yesterday's analytics and runs the jobs this node claims: every live realm's row of
+/// Schedules yesterday's analytics and runs the jobs this node claims: every live environment's row of
 /// the day, then the FP ratio gauge over the last [`FP_WINDOW_DAYS`] days. A job completes once
-/// every realm is aggregated; a realm that failed is tried again on the next claim.
+/// every environment is aggregated; an environment that failed is tried again on the next claim.
 ///
 /// # Errors
-/// [`StoreError`] when the jobs table or the realm list cannot be read.
+/// [`StoreError`] when the jobs table or the environment list cannot be read.
 pub(crate) async fn analytics_tick(
     app: &Pool,
     router: &Pool,
@@ -194,16 +194,17 @@ pub(crate) async fn analytics_tick(
         };
         let mut done = true;
         let (mut fp, mut reviews, mut legacy) = (0_u64, 0_u64, 0_u64);
-        for realm in routes(router).await? {
+        for environment in routes(router).await? {
             let step = async {
-                let mut tx = TenantTx::begin(app, realm.tenant, realm.realm).await?;
+                let mut tx =
+                    TenantTx::begin(app, environment.tenant, environment.environment).await?;
                 let a = aggregate(&mut tx, day).await.map_err(|e| e.to_string());
                 // OP-151 m.3 (i), IDP-36
                 if let Ok(Some(s)) = a.as_ref().map(|a| a.surge) {
                     let id = access_crypto::random::bytes::<32>().map_err(|_| StoreError::Range)?;
                     let event = IdentityEvent::login_failed_surge(
                         id,
-                        realm.realm.as_bytes(),
+                        environment.environment.as_bytes(),
                         u32::try_from(s.observed).unwrap_or(u32::MAX),
                         DAY_MS,
                         now_ms,
@@ -218,7 +219,7 @@ pub(crate) async fn analytics_tick(
             };
             match step.await {
                 Ok((Ok(a), window)) => {
-                    out.realms = out.realms.saturating_add(1);
+                    out.environments = out.environments.saturating_add(1);
                     legacy = legacy.saturating_add(a.day.legacy_password_accounts);
                     out.surges = out.surges.saturating_add(u32::from(a.surge.is_some()));
                     for d in &window {
@@ -229,12 +230,12 @@ pub(crate) async fn analytics_tick(
                 Ok((Err(error), _)) => {
                     done = false;
                     out.failed = out.failed.saturating_add(1);
-                    tracing::warn!(%error, "realm analytics not aggregated");
+                    tracing::warn!(%error, "environment analytics not aggregated");
                 }
                 Err(error) => {
                     done = false;
                     out.failed = out.failed.saturating_add(1);
-                    tracing::warn!(%error, "realm analytics not aggregated");
+                    tracing::warn!(%error, "environment analytics not aggregated");
                 }
             }
         }
@@ -248,7 +249,7 @@ pub(crate) async fn analytics_tick(
         if done && complete(app, job.id, worker).await? {
             tracing::info!(
                 event = "analytics.aggregated",
-                realms = out.realms,
+                environments = out.environments,
                 "tenant analytics aggregated (IDP-36)"
             );
         }
@@ -324,7 +325,7 @@ mod tests {
     async fn analytics_aggregate_yesterday_once() {
         use access_store::authority::{LogRecord, create_domain};
         use access_store::scope::DomainId;
-        use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+        use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 
         let db = fresh().await.unwrap();
         let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
@@ -340,10 +341,10 @@ mod tests {
             .await
             .unwrap();
         let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut tx, &d, "jobs-analytics", "pool-default")
+        let environment = create_environment(&mut tx, &d, "jobs-analytics", "pool-default")
             .await
             .unwrap();
-        tx.enter_realm(realm).await.unwrap();
+        tx.enter_environment(environment).await.unwrap();
         set_issuer(&mut tx, "https://jobs-analytics.example")
             .await
             .unwrap();
@@ -352,12 +353,12 @@ mod tests {
         let first = analytics_tick(&db.app, &db.router, "node-a", now)
             .await
             .unwrap();
-        assert_eq!((first.realms, first.failed), (1, 0));
+        assert_eq!((first.environments, first.failed), (1, 0));
         let again = analytics_tick(&db.app, &db.router, "node-b", now)
             .await
             .unwrap();
         assert_eq!(again, AnalyticsTick::default());
-        let mut tx = TenantTx::begin(&db.app, tenant, realm).await.unwrap();
+        let mut tx = TenantTx::begin(&db.app, tenant, environment).await.unwrap();
         let rows = tx.analytics_days(19_999, 19_999).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].flows_started, 0);
@@ -416,12 +417,12 @@ mod tests {
     #[tokio::test]
     async fn a_month_already_in_the_default_partition_opens_the_next() {
         use access_store::audit::AuditEvent;
-        use access_store::identity::RealmId;
+        use access_store::identity::EnvironmentId;
         let db = fresh().await.unwrap();
         let mut t = TenantTx::begin(
             &db.app,
             access_store::identity::TenantId::from_bytes([0x41; 16]),
-            RealmId::from_bytes([0x42; 16]),
+            EnvironmentId::from_bytes([0x42; 16]),
         )
         .await
         .unwrap();

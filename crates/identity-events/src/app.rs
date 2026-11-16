@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use access_crypto::jose::JwsAlg;
 use access_identity_oauth::domain::issuer::Issuer;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::{Pool, StoreError, idp};
 
 use crate::domain::Invalid;
@@ -33,7 +33,7 @@ pub async fn emit(tx: &mut TenantTx, event: &IdentityEvent) -> Result<(), StoreE
         .await
 }
 
-/// The pools delivery uses: `access_app` for realm-scoped rows and the authority outbox,
+/// The pools delivery uses: `access_app` for environment-scoped rows and the authority outbox,
 /// `access_outbox_reader` for the identity outbox and the due queue (OP-131), and the external
 /// ids the wire forms name tenants by.
 #[derive(Clone)]
@@ -57,13 +57,15 @@ pub(crate) fn down<E>(_: E) -> Unavailable {
     Unavailable
 }
 
-/// A realm's issuer and JOSE algorithm, when the realm is active and has an issuer.
-pub(crate) async fn realm_signing(
+/// An environment's issuer and JOSE algorithm, when the environment is active and has an issuer.
+pub(crate) async fn environment_signing(
     app: &Pool,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
 ) -> Result<Option<(Issuer, JwsAlg)>, Unavailable> {
-    let mut t = TenantTx::begin(app, tenant, realm).await.map_err(down)?;
+    let mut t = TenantTx::begin(app, tenant, environment)
+        .await
+        .map_err(down)?;
     let issuer = idp::governance(&mut t)
         .await
         .map_err(down)?

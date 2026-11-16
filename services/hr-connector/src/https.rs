@@ -1,4 +1,4 @@
-//! The production ports over HTTPS (OP-62): Access's realm-admin surface as any administrator's
+//! The production ports over HTTPS (OP-62): Access's environment-admin surface as any administrator's
 //! tool reaches it, and the HR system's employee listing. One request per connection; a read
 //! token, a credential or a key comes from a file the operator provides, read at each call, never
 //! from the command line. Any failure is a [`Fault`], never a guess.
@@ -203,7 +203,7 @@ impl access_sdk::auth::Random for Rng {
     }
 }
 
-/// Access's realm-admin surface over HTTPS: a draft carries the operator's DPoP-bound read token
+/// Access's environment-admin surface over HTTPS: a draft carries the operator's DPoP-bound read token
 /// with a proof of the Instance key; a commit carries the AIS only (OP-151 m.3 (c)).
 pub struct AccessHttps<C> {
     connector: TlsConnector,
@@ -243,7 +243,7 @@ impl<C: Clock> Access for AccessHttps<C> {
         if !segment(slug) {
             return Err(Fault::Malformed);
         }
-        let path = format!("/admin/v1/realms/{slug}/intents");
+        let path = format!("/admin/v1/envs/{slug}/intents");
         let url = format!("{}{path}", self.origin);
         let token = read_secret(&self.token)?;
         let now = self.key.clock.now().ok_or(Fault::Credential)?;

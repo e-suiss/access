@@ -87,7 +87,7 @@ struct Verified {
     instance: Option<Id>,
     body: Option<(Vec<u8>, Option<Body>)>,
     external: bool,
-    /// Signed by a dropped realm key after its issuer cutoff: held (§13.7.7, SEC9).
+    /// Signed by a dropped environment key after its issuer cutoff: held (§13.7.7, SEC9).
     cut_off: bool,
     /// The head a `checkpoint` Claim states (OP-158 m.6 (j)).
     head: Option<access_kernel::recovery::CheckpointRef>,

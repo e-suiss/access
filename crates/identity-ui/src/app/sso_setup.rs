@@ -6,7 +6,7 @@
 //! Acceptance put a connection into effect (TN-95). Organization names are attacker input,
 //! answered as text.
 
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::domain::session::set_cookie;
 use access_identity_session::ports::Clock;
 use access_kernel::json::b64url_encode;
@@ -19,7 +19,7 @@ use serde_json::json;
 use super::{Hosted, Reply};
 use crate::domain::message::TextId;
 use crate::domain::sso_setup::{self, Draft, Protocol, SETUP_COOKIE};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 use access_identity_account::domain::login::Problem;
 
 /// No such setup link.
@@ -128,8 +128,8 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn setup_tx(&self, kit: &RealmKit) -> Result<TenantTx, Reply> {
-        TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn setup_tx(&self, kit: &EnvironmentKit) -> Result<TenantTx, Reply> {
+        TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|e| store_failed(&e))
     }
@@ -138,7 +138,12 @@ where
     /// organization, the wizards, the values to copy, the domains and how each is verified, the
     /// SCIM address, the drafts and the steps done. A link bound to another browser, finished
     /// or expired is spent.
-    pub async fn sso_setup(&self, entry: &RealmEntry, browser: Option<&str>, link: &str) -> Reply {
+    pub async fn sso_setup(
+        &self,
+        entry: &EnvironmentEntry,
+        browser: Option<&str>,
+        link: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -168,7 +173,7 @@ where
     async fn portal_view(
         &self,
         t: &mut TenantTx,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         row: &SetupLink,
     ) -> Result<serde_json::Value, StoreError> {
         let org = t.org(row.org).await?.filter(|o| !o.ended);
@@ -234,7 +239,7 @@ where
     /// the link.
     pub async fn submit_sso_setup(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         browser: Option<&str>,
         link: &str,
         step: SetupStep,

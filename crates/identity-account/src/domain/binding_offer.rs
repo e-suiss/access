@@ -1,13 +1,13 @@
-//! The realm-signed binding offer (OP-153 m.18 (e), m.25 (b), §12.1.1, TN-65): the proof
-//! `verified_idp_subject` of a cross-realm `IdentityBinding`. Realm A states, under its own JOSE
-//! key, that one of its accounts was signed in through an upstream subject; realm B, where the
+//! The environment-signed binding offer (OP-153 m.18 (e), m.25 (b), §12.1.1, TN-65): the proof
+//! `verified_idp_subject` of a cross-environment `IdentityBinding`. Environment A states, under its own JOSE
+//! key, that one of its accounts was signed in through an upstream subject; environment B, where the
 //! person signed in through the same upstream subject, verifies A's signature from A's JWKS and
-//! compares the subject digest. No account id crosses the realms, only a random binding id and
-//! the digest of the upstream subject both realms verified.
+//! compares the subject digest. No account id crosses the environments, only a random binding id and
+//! the digest of the upstream subject both environments verified.
 //!
 //! An administrator's binding (`idp.account.bind`, proof [`ADMIN_EXERCISE`]) crosses the same
-//! way: the realm whose administrator bound first offers, naming instead of an upstream subject
-//! the [`pair_digest`] of the two realms and accounts, which the peer realm's administrator
+//! way: the environment whose administrator bound first offers, naming instead of an upstream subject
+//! the [`pair_digest`] of the two environments and accounts, which the peer environment's administrator
 //! names again in its own Exercise.
 //!
 //! The offer is a compact JWS with `typ` [`TYP`] whose claims are [`BindingOffer::claims`].
@@ -27,9 +27,9 @@ pub const ADMIN_EXERCISE: &str = "admin_exercise";
 /// What an offer proves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OfferProof {
-    /// Both realms verified the same upstream subject; the digest is [`subject_digest`].
+    /// Both environments verified the same upstream subject; the digest is [`subject_digest`].
     VerifiedIdpSubject,
-    /// An administrator of each realm bound the pair; the digest is [`pair_digest`].
+    /// An administrator of each environment bound the pair; the digest is [`pair_digest`].
     AdminExercise,
 }
 
@@ -53,8 +53,8 @@ impl OfferProof {
 
 const PAIR_CONTEXT: &[u8] = b"access/binding-offer-pair/v1\0";
 
-/// The digest both realms compute of an administrator's binding: the offering realm and
-/// account, then the accepting realm and account (OP-153 m.18 (e)). Its first 16 bytes are the
+/// The digest both environments compute of an administrator's binding: the offering environment and
+/// account, then the accepting environment and account (OP-153 m.18 (e)). Its first 16 bytes are the
 /// binding id.
 #[must_use]
 pub fn pair_digest(offering: ([u8; 16], [u8; 16]), accepting: ([u8; 16], [u8; 16])) -> [u8; 32] {
@@ -70,7 +70,7 @@ pub const OFFER_TTL_S: u64 = 600;
 
 const SUBJECT_CONTEXT: &[u8] = b"access/binding-offer-subject/v1\0";
 
-/// The digest both realms compute of an upstream subject: its issuer and `sub`.
+/// The digest both environments compute of an upstream subject: its issuer and `sub`.
 #[must_use]
 pub fn subject_digest(upstream_issuer: &str, sub: &str) -> [u8; 32] {
     let mut m = SUBJECT_CONTEXT.to_vec();
@@ -83,15 +83,15 @@ pub fn subject_digest(upstream_issuer: &str, sub: &str) -> [u8; 32] {
 /// What an offer states.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BindingOffer {
-    /// The offering realm's issuer: the JWS signer.
+    /// The offering environment's issuer: the JWS signer.
     pub issuer: String,
-    /// The realm the offer is for.
+    /// The environment the offer is for.
     pub audience: String,
     /// The binding id both halves share.
     pub binding: [u8; 16],
     /// What it proves.
     pub proof: OfferProof,
-    /// [`subject_digest`] of the upstream subject realm A verified, or the [`pair_digest`] of an
+    /// [`subject_digest`] of the upstream subject environment A verified, or the [`pair_digest`] of an
     /// administrator's binding.
     pub subject: [u8; 32],
     /// Issued at, Unix seconds.
@@ -106,8 +106,8 @@ pub enum OfferRefused {
     /// Not the claim set of an offer.
     #[error("not a binding offer")]
     Shape,
-    /// For another realm.
-    #[error("binding offer for another realm")]
+    /// For another environment.
+    #[error("binding offer for another environment")]
     Audience,
     /// Expired, not yet valid, or longer than an offer holds.
     #[error("binding offer out of its time")]
@@ -136,7 +136,7 @@ impl BindingOffer {
     }
 
     /// Reads the claims of an offer whose signature the caller verified against `issuer`'s
-    /// keys, for realm `audience` at `now_s`.
+    /// keys, for environment `audience` at `now_s`.
     ///
     /// # Errors
     /// [`OfferRefused`].
@@ -186,8 +186,8 @@ mod tests {
 
     fn offer() -> BindingOffer {
         BindingOffer {
-            issuer: String::from("https://a.example/realms/a"),
-            audience: String::from("https://a.example/realms/b"),
+            issuer: String::from("https://a.example/env/a"),
+            audience: String::from("https://a.example/env/b"),
             binding: [1; 16],
             proof: OfferProof::VerifiedIdpSubject,
             subject: subject_digest("https://accounts.google.com", "1234"),
@@ -198,15 +198,15 @@ mod tests {
 
     // OP-153 m.18 (e), m.25 (b), TN-65
     #[test]
-    fn an_offer_reads_back_only_for_its_realm_and_time() {
+    fn an_offer_reads_back_only_for_its_environment_and_time() {
         let o = offer();
-        let b = "https://a.example/realms/b";
+        let b = "https://a.example/env/b";
         assert_eq!(
             BindingOffer::from_claims(&o.claims(), b, 1_001),
             Ok(o.clone())
         );
         assert_eq!(
-            BindingOffer::from_claims(&o.claims(), "https://a.example/realms/c", 1_001),
+            BindingOffer::from_claims(&o.claims(), "https://a.example/env/c", 1_001),
             Err(OfferRefused::Audience)
         );
         assert_eq!(

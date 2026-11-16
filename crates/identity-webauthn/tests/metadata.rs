@@ -21,14 +21,14 @@ use access_identity_webauthn::domain::ceremony::{
 use access_identity_webauthn::domain::credential::{AttestationKind, CredentialRecord};
 use access_identity_webauthn::domain::ids::{Aaguid, UserHandle};
 use access_identity_webauthn::domain::mds::{MdsBlob, MdsError, verify_blob};
-use access_identity_webauthn::domain::policy::{AttestationPolicy, RealmPolicy};
+use access_identity_webauthn::domain::policy::{AttestationPolicy, EnvironmentPolicy};
 use support::*;
 
 const KEY_MODEL: [u8; 16] = [0x42; 16];
 
 fn state() -> RegistrationState {
     RegistrationState {
-        realm: REALM,
+        environment: ENVIRONMENT,
         user: UserHandle::from_bytes([1; 64]),
         challenge: [5; 32],
         conditional: false,
@@ -37,19 +37,19 @@ fn state() -> RegistrationState {
     }
 }
 
-fn direct(aaguids: Vec<Aaguid>) -> RealmPolicy {
-    RealmPolicy {
+fn direct(aaguids: Vec<Aaguid>) -> EnvironmentPolicy {
+    EnvironmentPolicy {
         attestation: AttestationPolicy::Direct {
             aaguids,
             enterprise: false,
         },
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     }
 }
 
 fn run(
     a: &mut Authenticator,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     metadata: Option<&MdsBlob>,
 ) -> Result<CredentialRecord, Rejection> {
     let st = state();
@@ -188,7 +188,7 @@ async fn refresh_job_with_file_source() {
 // §10.2.4
 #[test]
 fn none_policy_never_trusts_attestation() {
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = key_with(Attestation::PackedSelf);
     assert_eq!(
         run(&mut a, &policy, None).unwrap().attestation,

@@ -1,6 +1,6 @@
 //! The writes of `idp.scim.*` decisions (OP-155 m.3 (a), (g), MD-14, IDI-1): a client is
 //! registered with an opaque bearer secret shown once and kept as its SHA-256, its secret is
-//! replaced, or it is retired; a target is registered with its secret sealed under the realm KEK
+//! replaced, or it is retired; a target is registered with its secret sealed under the environment KEK
 //! or retired. Each runs in the transaction that bound the decision. A name, once used, is never
 //! registered again, so neither a client's issuer Party nor its resources pass to another
 //! (INV-32).
@@ -83,15 +83,15 @@ pub fn new_secret() -> Result<Secret, ClientError> {
     Ok(Secret(b64url_encode(&raw)))
 }
 
-/// The issuer Party of client `name` of the transaction's realm: the same for every version of
-/// it, different for every realm and name.
+/// The issuer Party of client `name` of the transaction's environment: the same for every version of
+/// it, different for every environment and name.
 ///
 /// # Errors
-/// [`ClientError::Store`] outside a realm.
+/// [`ClientError::Store`] outside an environment.
 pub fn issuer_party(t: &TenantTx, name: &str) -> Result<[u8; 16], ClientError> {
-    let realm = t.realm().ok_or(access_store::StoreError::Range)?;
+    let environment = t.environment().ok_or(access_store::StoreError::Range)?;
     let mut input = t.tenant().as_bytes().to_vec();
-    input.extend_from_slice(realm.as_bytes());
+    input.extend_from_slice(environment.as_bytes());
     input.extend_from_slice(name.as_bytes());
     let d = suiss_crypto::digest::context_digest(ISSUER_CONTEXT, &input).0;
     let mut id = [0; 16];

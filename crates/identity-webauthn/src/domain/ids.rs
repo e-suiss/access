@@ -2,17 +2,17 @@
 
 use core::fmt;
 
-/// An identity realm. `Debug` does not print the value.
+/// An identity environment. `Debug` does not print the value.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RealmId([u8; 16]);
+pub struct EnvironmentId([u8; 16]);
 
-impl fmt::Debug for RealmId {
+impl fmt::Debug for EnvironmentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("RealmId(..)")
+        f.write_str("EnvironmentId(..)")
     }
 }
 
-impl RealmId {
+impl EnvironmentId {
     /// From UUID bytes.
     #[must_use]
     pub const fn from_bytes(b: [u8; 16]) -> Self {
@@ -53,7 +53,7 @@ impl fmt::Debug for CredentialId {
     }
 }
 
-/// The WebAuthn `user.id`: 64 random bytes per account and realm, never derived from an
+/// The WebAuthn `user.id`: 64 random bytes per account and environment, never derived from an
 /// e-mail address or its digest (§12.3.6 invariant 10, TN-17).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UserHandle([u8; 64]);

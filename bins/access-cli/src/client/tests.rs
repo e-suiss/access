@@ -30,7 +30,7 @@ use crate::commands::apply::reconcile;
 use crate::http::{HttpError, Request, Response, Transport};
 
 const API: &str = "https://mgmt.example:9443";
-const ISSUER: &str = "https://login.example/realms/acme";
+const ISSUER: &str = "https://login.example/env/acme";
 const DOMAIN: [u8; 32] = [7; 32];
 
 struct Fixed;
@@ -57,13 +57,13 @@ fn envelope() -> IntentEnvelope {
     IntentEnvelope {
         provenance: BTreeMap::new(),
         action: ActionRef {
-            namespace: "idp.realm".into(),
+            namespace: "idp.environment".into(),
             name: "branding".into(),
             major: 1,
             schema: Digest([3; 32]),
         },
         resources: vec![ResourceRef {
-            namespace: "idp.realm".into(),
+            namespace: "idp.environment".into(),
             path: vec!["acme".into()],
             incarnation: 0,
         }],
@@ -158,7 +158,7 @@ impl Fake {
             );
         }
         match (r.method, path) {
-            ("GET", "/admin/v1/realms/acme") => {
+            ("GET", "/admin/v1/envs/acme") => {
                 assert!(read);
                 reply(200, &json!({"domain": b64url_encode(&DOMAIN)}), &[])
             }
@@ -169,10 +169,10 @@ impl Fake {
             {
                 reply(200, &json!({"items": []}), &[])
             }
-            ("GET", "/admin/v1/realms/acme/settings") => {
+            ("GET", "/admin/v1/envs/acme/settings") => {
                 reply(200, &self.settings.borrow(), &[("etag", "\"s-1\"")])
             }
-            ("POST", "/admin/v1/realms/acme/intents") => {
+            ("POST", "/admin/v1/envs/acme/intents") => {
                 assert!(read, "drafting is a read with the token");
                 let asked: Value = serde_json::from_slice(&r.body.as_ref().unwrap().1).unwrap();
                 let mut body = asked["body"].as_object().cloned().unwrap_or_default();
@@ -196,7 +196,7 @@ impl Fake {
                     &[],
                 )
             }
-            (_, p) if p.starts_with("/admin/v1/realms/acme/") => {
+            (_, p) if p.starts_with("/admin/v1/envs/acme/") => {
                 assert!(!read, "a write carries no token (TN-110, TN-130)");
                 self.writes.set(self.writes.get() + 1);
                 reply(200, &json!({"exercise_id": "ex-1", "position": "42"}), &[])
@@ -260,7 +260,7 @@ fn key() -> InstanceKey {
 fn target() -> Target {
     Target {
         api: API.into(),
-        realm: "acme".into(),
+        environment: "acme".into(),
         issuer: ISSUER.into(),
         basis: ExerciseBasis::Public(Id([5; 16])),
     }
@@ -295,11 +295,7 @@ async fn a_write_signs_the_drafted_intent_and_sends_the_nonce_as_idempotency_key
     let seen = fake.seen.borrow();
     let write = seen.last().unwrap();
     assert_eq!(write.method, "PUT");
-    assert!(
-        write
-            .url
-            .ends_with("/admin/v1/realms/acme/settings/branding")
-    );
+    assert!(write.url.ends_with("/admin/v1/envs/acme/settings/branding"));
     assert_eq!(write.header("if-match"), Some("\"s-1\""));
     let ais = b64url_decode(write.header("x-access-ais").unwrap()).unwrap();
     let mut keys = KeySet::default();
@@ -353,14 +349,14 @@ async fn a_bearer_or_long_lived_read_token_is_refused() {
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
     assert!(matches!(
-        c.get("/admin/v1/realms/acme/settings").await.unwrap_err(),
+        c.get("/admin/v1/envs/acme/settings").await.unwrap_err(),
         ClientError::TokenShape(_)
     ));
     let fake = Fake::new();
     fake.expires_in.set(2 * 60 * 60);
     let c = Client::new(&fake, &k, &t, &Fixed);
     assert!(matches!(
-        c.get("/admin/v1/realms/acme/settings").await.unwrap_err(),
+        c.get("/admin/v1/envs/acme/settings").await.unwrap_err(),
         ClientError::TokenShape(_)
     ));
 }
@@ -381,7 +377,7 @@ async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statemen
     let k = key();
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
-    c.get("/admin/v1/realms/acme/settings").await.unwrap();
+    c.get("/admin/v1/envs/acme/settings").await.unwrap();
     let requests = token_requests(&fake);
     let [request] = requests.as_slice() else {
         panic!("one token request");
@@ -402,8 +398,8 @@ async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statemen
     assert_eq!(form["grant_type"], TOKEN_EXCHANGE);
     assert_eq!(form["subject_token_type"], AIS_TOKEN_TYPE);
     assert_eq!(form["requested_token_type"], ACCESS_TOKEN_TYPE);
-    assert_eq!(form["audience"], "access-admin:realm:acme");
-    assert_eq!(form["scope"], REALM_READ);
+    assert_eq!(form["audience"], "access-admin:environment:acme");
+    assert_eq!(form["scope"], ENVIRONMENT_READ);
     assert!(request.header("authorization").is_none());
 
     let ais = b64url_decode(&form["subject_token"]).unwrap();
@@ -417,7 +413,7 @@ async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statemen
     assert_eq!(s.domain, Digest(DOMAIN));
     assert_eq!(
         s.intent,
-        exchange_intent("access-admin:realm:acme", REALM_READ)
+        exchange_intent("access-admin:environment:acme", ENVIRONMENT_READ)
     );
     assert_eq!(s.nonce.len(), 32);
     assert_eq!(s.iat, Fixed.now_ms());
@@ -449,7 +445,7 @@ async fn the_exchange_retries_once_with_the_token_endpoints_dpop_nonce() {
     let k = key();
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
-    c.get("/admin/v1/realms/acme/settings").await.unwrap();
+    c.get("/admin/v1/envs/acme/settings").await.unwrap();
     let requests = token_requests(&fake);
     assert_eq!(requests.len(), 2);
     let retry = proof_claims(requests[1].header("dpop").unwrap());
@@ -465,7 +461,7 @@ async fn no_governing_domain_in_the_metadata_means_no_token() {
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
     assert!(matches!(
-        c.get("/admin/v1/realms/acme/settings").await.unwrap_err(),
+        c.get("/admin/v1/envs/acme/settings").await.unwrap_err(),
         ClientError::Unexpected("governing domain")
     ));
     assert_eq!(token_requests(&fake).len(), 0);
@@ -476,7 +472,7 @@ async fn no_governing_domain_in_the_metadata_means_no_token() {
 fn the_exchange_matches_the_identity_planes_contract() {
     use access_identity_oauth::domain::management as server;
     for (audience, scope) in [
-        ("access-admin:realm:acme", REALM_READ),
+        ("access-admin:environment:acme", ENVIRONMENT_READ),
         (server::PLATFORM_AUDIENCE, server::PLATFORM_READ),
     ] {
         assert_eq!(
@@ -488,7 +484,7 @@ fn the_exchange_matches_the_identity_planes_contract() {
     assert_eq!(AIS_TOKEN_TYPE, server::AIS_TOKEN_TYPE);
     assert_eq!(ACCESS_TOKEN_TYPE, server::ACCESS_TOKEN_TYPE);
     assert_eq!(EXCHANGE_CONTEXT, server::EXCHANGE_CONTEXT);
-    assert_eq!(REALM_READ, server::REALM_READ);
+    assert_eq!(ENVIRONMENT_READ, server::ENVIRONMENT_READ);
 }
 
 // §9.15.1 k.2
@@ -515,7 +511,7 @@ async fn the_reconciler_applies_one_exercise_per_change_and_proposes_reserved_on
     let k = key();
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
-    let doc = json!({"realm": "acme", "settings": {"branding": {"display_name": "Acme 2"}, "rp_id": "login.acme.example"}});
+    let doc = json!({"environment": "acme", "settings": {"branding": {"display_name": "Acme 2"}, "rp_id": "login.acme.example"}});
     let o = Box::pin(reconcile(&c, "acme", &doc, false, None))
         .await
         .unwrap();
@@ -542,7 +538,7 @@ async fn a_plan_with_a_conflict_applies_nothing() {
     let k = key();
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
-    let doc = json!({"realm": "acme", "clients": [{"client_id": "gone"}], "settings": {"branding": {"display_name": "Acme 2"}}});
+    let doc = json!({"environment": "acme", "clients": [{"client_id": "gone"}], "settings": {"branding": {"display_name": "Acme 2"}}});
     let o = Box::pin(reconcile(&c, "acme", &doc, false, None))
         .await
         .unwrap();
@@ -554,15 +550,15 @@ async fn a_plan_with_a_conflict_applies_nothing() {
 #[test]
 fn the_next_link_is_read() {
     assert_eq!(
-        next_link("</admin/v1/realms/acme/clients?page%5Bafter%5D=x>; rel=\"next\""),
-        Some("/admin/v1/realms/acme/clients?page%5Bafter%5D=x".into())
+        next_link("</admin/v1/envs/acme/clients?page%5Bafter%5D=x>; rel=\"next\""),
+        Some("/admin/v1/envs/acme/clients?page%5Bafter%5D=x".into())
     );
     assert_eq!(next_link("<x>; rel=\"prev\""), None);
 }
 
 // OP-159 m.3 (ii)
 #[tokio::test(flavor = "current_thread")]
-async fn a_realm_check_only_reads_and_reports_each_requirement() {
+async fn a_environment_check_only_reads_and_reports_each_requirement() {
     use access_identity_admin::domain::profile_check::{Outcome, Profile};
     let fake = Fake::new();
     *fake.settings.borrow_mut() = json!({
@@ -574,7 +570,7 @@ async fn a_realm_check_only_reads_and_reports_each_requirement() {
     let k = key();
     let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
-    let r = crate::commands::realm::report(&c, "acme", Profile::PciDss4)
+    let r = crate::commands::environment::report(&c, "acme", Profile::PciDss4)
         .await
         .unwrap();
     assert!(!r.passed);

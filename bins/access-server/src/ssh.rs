@@ -1,7 +1,7 @@
-//! The realm's SSH certificate authority in access-server (OP-156 m.3 (o), IDP-32).
+//! The environment's SSH certificate authority in access-server (OP-156 m.3 (o), IDP-32).
 //!
-//! The identity signer holds each realm's `ssh-ca` keys. Before every read or issuance the
-//! realm's newest `idp.ssh.*` CA change is carried out on the signer, under the realm's lock,
+//! The identity signer holds each environment's `ssh-ca` keys. Before every read or issuance the
+//! environment's newest `idp.ssh.*` CA change is carried out on the signer, under the environment's lock,
 //! and every key's phase recorded: `ca.pub` names the keys servers trust, the KRL every key
 //! that no longer signs and every certificate whose projection's basis ended. A certificate is
 //! a `projection.issue` of the holder's `ssh.login` Grant: the draft is drawn from the Grant,
@@ -12,14 +12,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use access_http::problem::codes::realm as r;
+use access_http::problem::codes::environment as r;
 use access_http::ssh::{SshFront, SshReply};
 use access_identity_admin::ports::{Decider, Instances};
 use access_identity_events::domain::catalog::{CertificateHolder, IdentityEvent};
-use access_identity_oauth::app::oauth::RealmHolder;
+use access_identity_oauth::app::oauth::EnvironmentHolder;
 use access_identity_oauth::domain::authority::{ais_kid, parse_exercise};
-use access_identity_oauth::ports::RealmEntry;
-use access_identity_signer::protocol::{Realm, Request, Response};
+use access_identity_oauth::ports::EnvironmentEntry;
+use access_identity_signer::protocol::{Environment, Request, Response};
 use access_identity_signer::ssh::{KeyInfo, Phase, SshRequest, SshResponse, Step};
 use access_identity_ssh::SshError;
 use access_identity_ssh::app::{IssueError, certify};
@@ -56,7 +56,7 @@ const DRAFT_MS: u64 = 10 * 60_000;
 /// Most live certificates one KRL considers.
 const KRL_SCAN: u32 = 10_000;
 
-/// The identity signer's `ssh-ca` keys of one realm.
+/// The identity signer's `ssh-ca` keys of one environment.
 pub(crate) struct SignerCa<'a>(pub(crate) &'a Path);
 
 async fn signer_call(socket: &Path, r: SshRequest) -> Result<SshResponse, String> {
@@ -67,16 +67,16 @@ async fn signer_call(socket: &Path, r: SshRequest) -> Result<SshResponse, String
     }
 }
 
-async fn signer_keys(socket: &Path, realm: Realm) -> Result<Vec<KeyInfo>, ()> {
-    match signer_call(socket, SshRequest::Keys(realm)).await {
+async fn signer_keys(socket: &Path, environment: Environment) -> Result<Vec<KeyInfo>, ()> {
+    match signer_call(socket, SshRequest::Keys(environment)).await {
         Ok(SshResponse::Keys(k)) => Ok(k),
         _ => Err(()),
     }
 }
 
 impl CaKey for SignerCa<'_> {
-    async fn active(&self, realm: [u8; 16]) -> Result<Option<Ed25519Public>, Unavailable> {
-        let keys = signer_keys(self.0, Realm(realm))
+    async fn active(&self, environment: [u8; 16]) -> Result<Option<Ed25519Public>, Unavailable> {
+        let keys = signer_keys(self.0, Environment(environment))
             .await
             .map_err(|()| Unavailable)?;
         Ok(keys
@@ -87,14 +87,14 @@ impl CaKey for SignerCa<'_> {
 
     async fn sign(
         &self,
-        realm: [u8; 16],
+        environment: [u8; 16],
         key: Ed25519Public,
         data: Vec<u8>,
     ) -> Result<[u8; 64], CaRefusal> {
         match signer_call(
             self.0,
             SshRequest::Sign {
-                realm: Realm(realm),
+                environment: Environment(environment),
                 key: key.0,
                 data,
             },
@@ -126,7 +126,7 @@ impl Random for OsRandom {
     }
 }
 
-/// The realm's CA as it stands after reconciliation.
+/// The environment's CA as it stands after reconciliation.
 struct Standings {
     /// Whether the newest change leaves the CA on.
     on: bool,
@@ -202,9 +202,14 @@ where
         Self { app, signer, plane }
     }
 
-    /// Carries out the realm's newest CA change and any rotation step now due, and records
+    /// Carries out the environment's newest CA change and any rotation step now due, and records
     /// every key's phase.
-    async fn reconcile(&self, t: &mut TenantTx, realm: Realm, now: u64) -> Result<Standings, ()> {
+    async fn reconcile(
+        &self,
+        t: &mut TenantTx,
+        environment: Environment,
+        now: u64,
+    ) -> Result<Standings, ()> {
         t.lock_ssh_ca().await.map_err(|_| ())?;
         let change = t.ssh_ca_change().await.map_err(|_| ())?;
         let applied = t.ssh_ca_applied().await.map_err(|_| ())?;
@@ -216,7 +221,7 @@ where
             });
         };
         let on = change.change != "disable";
-        let mut keys = signer_keys(&self.signer, realm).await?;
+        let mut keys = signer_keys(&self.signer, environment).await?;
         let mut step = None;
         if change.version > applied {
             step = Some(match change.change.as_str() {
@@ -238,13 +243,15 @@ where
         }
         if let Some(step) = step {
             let answer = match step {
-                None => signer_call(&self.signer, SshRequest::Open(realm)).await,
-                Some(step) => signer_call(&self.signer, SshRequest::Rotate { realm, step }).await,
+                None => signer_call(&self.signer, SshRequest::Open(environment)).await,
+                Some(step) => {
+                    signer_call(&self.signer, SshRequest::Rotate { environment, step }).await
+                }
             };
             keys = match answer {
                 Ok(SshResponse::Keys(k)) => k,
                 Err(code) if code == access_identity_signer::ssh::SshKeyError::Order.code() => {
-                    signer_keys(&self.signer, realm).await?
+                    signer_keys(&self.signer, environment).await?
                 }
                 _ => return Err(()),
             };
@@ -297,11 +304,11 @@ where
         Ok(())
     }
 
-    async fn begin(&self, realm: &RealmEntry) -> Result<(TenantTx, u64), ()> {
+    async fn begin(&self, environment: &EnvironmentEntry) -> Result<(TenantTx, u64), ()> {
         let now = access_store::authority::server_time(&self.app)
             .await
             .map_err(|_| ())?;
-        let t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(|_| ())?;
         Ok((t, now))
@@ -341,8 +348,8 @@ where
     )]
     async fn draft(
         &self,
-        realm: &RealmEntry,
-        holder: &RealmHolder,
+        environment: &EnvironmentEntry,
+        holder: &EnvironmentHolder,
         body: &Value,
     ) -> Result<SshReply, String> {
         let Some(m) = body.as_object() else {
@@ -388,7 +395,7 @@ where
         else {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         };
-        let (mut t, now) = self.begin(realm).await.map_err(|()| "begin")?;
+        let (mut t, now) = self.begin(environment).await.map_err(|()| "begin")?;
         let Some(g) = access_store::idp::governance(&mut t)
             .await
             .map_err(|e| e.to_string())?
@@ -414,7 +421,11 @@ where
             return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
         }
         let on = self
-            .reconcile(&mut t, Realm(*realm.realm.as_bytes()), now)
+            .reconcile(
+                &mut t,
+                Environment(*environment.environment.as_bytes()),
+                now,
+            )
             .await
             .map_err(|()| "reconcile")?
             .on;
@@ -447,7 +458,7 @@ where
             };
             let payload = Payload::ProjectionIssue {
                 bounds,
-                audience: BTreeSet::from([realm.issuer.endpoint(&format!("/ssh/{group}"))]),
+                audience: BTreeSet::from([environment.issuer.endpoint(&format!("/ssh/{group}"))]),
                 class: ProfileClass::Online,
                 variant: ProfileVariant::OnlineStrict,
                 max_staleness_ms: None,
@@ -487,8 +498,8 @@ where
     )]
     async fn issue(
         &self,
-        realm: &RealmEntry,
-        holder: &RealmHolder,
+        environment: &EnvironmentEntry,
+        holder: &EnvironmentHolder,
         exercise: &str,
     ) -> Result<SshReply, String> {
         let Ok(e) = parse_exercise(exercise) else {
@@ -503,7 +514,7 @@ where
         let Payload::ProjectionIssue { bounds, .. } = &e.payload else {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         };
-        let (mut t, now) = self.begin(realm).await.map_err(|()| "begin")?;
+        let (mut t, now) = self.begin(environment).await.map_err(|()| "begin")?;
         let Some(g) = access_store::idp::governance(&mut t)
             .await
             .map_err(|err| err.to_string())?
@@ -542,7 +553,11 @@ where
             return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
         }
         let on = self
-            .reconcile(&mut t, Realm(*realm.realm.as_bytes()), now)
+            .reconcile(
+                &mut t,
+                Environment(*environment.environment.as_bytes()),
+                now,
+            )
             .await
             .map_err(|()| "reconcile")?
             .on;
@@ -617,7 +632,7 @@ where
         let issued = match Box::pin(certify(
             &SignerCa(&self.signer),
             &OsRandom,
-            *realm.realm.as_bytes(),
+            *environment.environment.as_bytes(),
             &p,
         ))
         .await
@@ -630,7 +645,7 @@ where
         let f = &issued.fields;
         let principals: Vec<String> = f.principals.iter().cloned().collect();
         let intent = e.intent.to_bytes().map_err(|_| "intent")?;
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(|err| err.to_string())?;
         t.insert_ssh_certificate(&NewCertificate {
@@ -664,7 +679,7 @@ where
         let id = access_crypto::random::bytes::<32>().map_err(|_| "random")?;
         let event = IdentityEvent::ssh_certificate_issued(
             id,
-            realm.realm.as_bytes(),
+            environment.environment.as_bytes(),
             (
                 &basis.holder.0,
                 match kind {
@@ -698,17 +713,21 @@ where
         })))
     }
 
-    async fn ca_lines(&self, realm: &RealmEntry) -> Result<Option<String>, String> {
-        let (mut t, now) = self.begin(realm).await.map_err(|()| "begin")?;
+    async fn ca_lines(&self, environment: &EnvironmentEntry) -> Result<Option<String>, String> {
+        let (mut t, now) = self.begin(environment).await.map_err(|()| "begin")?;
         let s = self
-            .reconcile(&mut t, Realm(*realm.realm.as_bytes()), now)
+            .reconcile(
+                &mut t,
+                Environment(*environment.environment.as_bytes()),
+                now,
+            )
             .await
             .map_err(|()| "reconcile")?;
         t.commit().await.map_err(|e| e.to_string())?;
         if !s.on || s.keys.is_empty() {
             return Ok(None);
         }
-        let comment = format!("access-ca@{}", realm.slug);
+        let comment = format!("access-ca@{}", environment.slug);
         Ok(Some(s.keys.iter().fold(String::new(), |mut out, k| {
             out.push_str(&Ed25519Public(k.key).line(&comment));
             out.push('\n');
@@ -716,15 +735,19 @@ where
         })))
     }
 
-    async fn krl_bytes(&self, realm: &RealmEntry) -> Result<Vec<u8>, String> {
-        let (mut t, now) = self.begin(realm).await.map_err(|()| "begin")?;
+    async fn krl_bytes(&self, environment: &EnvironmentEntry) -> Result<Vec<u8>, String> {
+        let (mut t, now) = self.begin(environment).await.map_err(|()| "begin")?;
         let s = self
-            .reconcile(&mut t, Realm(*realm.realm.as_bytes()), now)
+            .reconcile(
+                &mut t,
+                Environment(*environment.environment.as_bytes()),
+                now,
+            )
             .await
             .map_err(|()| "reconcile")?;
         t.commit().await.map_err(|e| e.to_string())?;
         let now_s = now / 1000;
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(|e| e.to_string())?;
         let certificates = t
@@ -754,7 +777,7 @@ where
                 serials.entry(ca).or_default().insert(c.serial);
             }
         }
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(|e| e.to_string())?;
         let changed = !ended.is_empty();
@@ -768,7 +791,7 @@ where
             t.audit(&AuditEvent {
                 event_type: "ssh.krl_published",
                 actor: "ssh-ca",
-                target: &realm.slug,
+                target: &environment.slug,
                 correlation: "-",
             })
             .await
@@ -791,25 +814,30 @@ impl<P> SshFront for SshCa<P>
 where
     P: SshGrants + Decider + Instances + Send + Sync + 'static,
 {
-    async fn ca_pub(&self, realm: &RealmEntry) -> Result<Option<String>, ()> {
-        Box::pin(self.ca_lines(realm)).await.map_err(|e| {
+    async fn ca_pub(&self, environment: &EnvironmentEntry) -> Result<Option<String>, ()> {
+        Box::pin(self.ca_lines(environment)).await.map_err(|e| {
             tracing::warn!(error = %e, "ssh ca.pub unavailable");
         })
     }
 
-    async fn krl(&self, realm: &RealmEntry) -> Result<Vec<u8>, ()> {
-        Box::pin(self.krl_bytes(realm)).await.map_err(|e| {
+    async fn krl(&self, environment: &EnvironmentEntry) -> Result<Vec<u8>, ()> {
+        Box::pin(self.krl_bytes(environment)).await.map_err(|e| {
             tracing::warn!(error = %e, "ssh krl unavailable");
         })
     }
 
-    async fn certificate(&self, realm: &RealmEntry, holder: RealmHolder, body: Value) -> SshReply {
+    async fn certificate(
+        &self,
+        environment: &EnvironmentEntry,
+        holder: EnvironmentHolder,
+        body: Value,
+    ) -> SshReply {
         let done = match body.get("exercise").and_then(Value::as_str) {
             Some(x) if body.as_object().is_some_and(|m| m.len() == 1) => {
-                Box::pin(self.issue(realm, &holder, x)).await
+                Box::pin(self.issue(environment, &holder, x)).await
             }
             Some(_) => Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST)),
-            None => Box::pin(self.draft(realm, &holder, &body)).await,
+            None => Box::pin(self.draft(environment, &holder, &body)).await,
         };
         done.unwrap_or_else(unavailable)
     }

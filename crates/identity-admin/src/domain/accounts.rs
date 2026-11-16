@@ -1,4 +1,4 @@
-//! The account changes and realm settings the catalog gained with OP-153 m.25 (b): an
+//! The account changes and environment settings the catalog gained with OP-153 m.25 (b): an
 //! administrator's binding of two accounts of one tenant (m.18 (e)), an account import and a
 //! migration export with its bundle (m.19 (d)), a guardianship record (m.20 (g)) and the hosted
 //! page's CSP mode (m.22 (g)). Each is a deterministic CBOR body the change digest binds.
@@ -17,23 +17,23 @@ pub const BUNDLE_VERSION: u64 = 1;
 /// The HKDF info and AEAD label of a migration bundle (TN-86).
 pub const BUNDLE_CONTEXT: &str = "access/migration-bundle/v1";
 
-/// A realm and one of its accounts.
+/// An environment and one of its accounts.
 pub type Side = ([u8; 16], [u8; 16]);
 
-/// `idp.account.bind` (OP-153 m.18 (e)): an administrator binds `subject` of this realm and
-/// `peer_subject` of the tenant's realm `peer_realm` as one person, by `admin_exercise`. The
-/// realm that binds first offers: its answer is a realm-signed binding offer; the peer realm's
+/// `idp.account.bind` (OP-153 m.18 (e)): an administrator binds `subject` of this environment and
+/// `peer_subject` of the tenant's environment `peer_environment` as one person, by `admin_exercise`. The
+/// environment that binds first offers: its answer is an environment-signed binding offer; the peer environment's
 /// administrator then binds the same pair naming the offer by its SHA-256 `offer`, and the peer
-/// realm verifies it against the offering realm's keys.
+/// environment verifies it against the offering environment's keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AccountBind {
-    /// The account in this realm.
+    /// The account in this environment.
     pub subject: [u8; 16],
-    /// Another realm of the same tenant.
-    pub peer_realm: [u8; 16],
+    /// Another environment of the same tenant.
+    pub peer_environment: [u8; 16],
     /// The account there.
     pub peer_subject: [u8; 16],
-    /// SHA-256 of the peer realm's binding offer, when this half accepts it.
+    /// SHA-256 of the peer environment's binding offer, when this half accepts it.
     pub offer: Option<[u8; 32]>,
 }
 
@@ -42,8 +42,8 @@ impl AccountBind {
         let mut m = vec![
             (Value::text("subject"), Value::Bytes(self.subject.to_vec())),
             (
-                Value::text("peer_realm"),
-                Value::Bytes(self.peer_realm.to_vec()),
+                Value::text("peer_environment"),
+                Value::Bytes(self.peer_environment.to_vec()),
             ),
             (
                 Value::text("peer_subject"),
@@ -56,12 +56,12 @@ impl AccountBind {
         Value::Map(m)
     }
 
-    /// The offering and the accepting realm and account (OP-153 m.18 (e)): this half's when it
+    /// The offering and the accepting environment and account (OP-153 m.18 (e)): this half's when it
     /// offers, the peer's when it accepts.
     #[must_use]
-    pub fn sides(self, realm: [u8; 16]) -> (Side, Side) {
-        let own = (realm, self.subject);
-        let peer = (self.peer_realm, self.peer_subject);
+    pub fn sides(self, environment: [u8; 16]) -> (Side, Side) {
+        let own = (environment, self.subject);
+        let peer = (self.peer_environment, self.peer_subject);
         if self.offer.is_some() {
             (peer, own)
         } else {
@@ -101,7 +101,7 @@ impl AccountImport {
     }
 }
 
-/// `idp.account.migration_export` (TN-86, OP-153 m.19 (d)): the realm's accounts, encrypted to
+/// `idp.account.migration_export` (TN-86, OP-153 m.19 (d)): the environment's accounts, encrypted to
 /// the P-256 key the receiving deployment bound to this export.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MigrationExport {
@@ -132,8 +132,8 @@ impl MigrationExport {
 /// without `ciphertext`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bundle {
-    /// The exporting realm's issuer.
-    pub realm: String,
+    /// The exporting environment's issuer.
+    pub environment: String,
     /// When it was written, Unix ms.
     pub exported_at: u64,
     /// How many lines the plaintext holds.
@@ -152,7 +152,7 @@ impl Bundle {
     fn fields(&self) -> Vec<(Value, Value)> {
         vec![
             (Value::text("version"), Value::Unsigned(BUNDLE_VERSION)),
-            (Value::text("realm"), Value::text(&self.realm)),
+            (Value::text("environment"), Value::text(&self.environment)),
             (
                 Value::text("exported_at"),
                 Value::Unsigned(self.exported_at),
@@ -209,12 +209,12 @@ impl Bundle {
         if uint("version")? != BUNDLE_VERSION {
             return None;
         }
-        let Some(Value::Text(realm)) = get("realm") else {
+        let Some(Value::Text(environment)) = get("environment") else {
             return None;
         };
         let epk = bytes("epk").filter(|e| e.len() == 65 && e.first() == Some(&0x04))?;
         Some(Self {
-            realm: realm.clone(),
+            environment: environment.clone(),
             exported_at: uint("exported_at")?,
             accounts: uint("accounts")?,
             recipient: <[u8; 32]>::try_from(bytes("recipient")?.as_slice()).ok()?,
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn a_bundle_reads_back_and_nothing_else_reads_as_one() {
         let b = Bundle {
-            realm: String::from("https://id.acme.example"),
+            environment: String::from("https://id.acme.example"),
             exported_at: 1_000,
             accounts: 2,
             recipient: [3; 32],

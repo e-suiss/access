@@ -89,20 +89,22 @@ async function tx<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequ
   });
 }
 
-/** The record id: one key per account, realm and console session's Instance kid. */
-function recordId(realm: string, account: string, kid: string): string {
-  return `${realm}/${account}/${kid}`;
+/** The record id: one key per account, environment and console session's Instance kid. */
+function recordId(environment: string, account: string, kid: string): string {
+  return `${environment}/${account}/${kid}`;
 }
 
 /** This browser's key for the session's registered Instance `kid`, if it has it. */
 export async function find(
-  realm: string,
+  environment: string,
   account: string,
   kid: string | null,
 ): Promise<Instance | undefined> {
   if (kid === null) return undefined;
   try {
-    return await tx<Instance | undefined>("readonly", (s) => s.get(recordId(realm, account, kid)));
+    return await tx<Instance | undefined>("readonly", (s) =>
+      s.get(recordId(environment, account, kid)),
+    );
   } catch {
     return undefined;
   }
@@ -160,7 +162,7 @@ interface Challenge {
  * screen showed the Kernel's decoding of the intents, the key kept in IndexedDB.
  */
 export async function register(
-  realm: string,
+  environment: string,
   account: string,
   confirm: Confirm,
 ): Promise<Instance> {
@@ -213,7 +215,7 @@ export async function register(
   if (signed[1] !== undefined) body["register_ais"] = signed[1];
   await json("/instances", { method: "POST", body });
   const instance: Instance = {
-    id: recordId(realm, account, b64url(kid)),
+    id: recordId(environment, account, b64url(kid)),
     key: pair.privateKey,
     kid,
     domain,

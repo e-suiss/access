@@ -24,20 +24,20 @@ use access_identity_webauthn::domain::credential::AttestationKind;
 use access_identity_webauthn::domain::ids::{Aaguid, UserHandle};
 use access_identity_webauthn::domain::mds::{MdsBlob, verify_blob};
 use access_identity_webauthn::domain::options::{UserEntity, creation_options};
-use access_identity_webauthn::domain::policy::{AttestationPolicy, RealmPolicy};
+use access_identity_webauthn::domain::policy::{AttestationPolicy, EnvironmentPolicy};
 use access_identity_webauthn::ports::{AttestationSources, Pending};
 use support::attest::{Credential, Flaw, Pki, android, apple, entry, packed, tpm, u2f, u2f_entry};
 use support::*;
 
 const MODEL: [u8; 16] = [0x5a; 16];
 
-fn direct() -> RealmPolicy {
-    RealmPolicy {
+fn direct() -> EnvironmentPolicy {
+    EnvironmentPolicy {
         attestation: AttestationPolicy::Direct {
             aaguids: vec![],
             enterprise: false,
         },
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     }
 }
 
@@ -60,7 +60,7 @@ fn sources(pki: &Pki, entries: Vec<serde_json::Value>) -> MemoryAttestationSourc
 
 async fn register(
     a: &mut Authenticator,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     sources: &(dyn AttestationSources + Sync),
 ) -> Result<AttestationKind, Rejection> {
     let s = service();
@@ -388,7 +388,7 @@ async fn unknown_revocation_fails_closed_under_direct_only() {
         asked: AtomicUsize::new(0),
     };
     assert_eq!(
-        register(&mut a, &RealmPolicy::default(), &counting).await,
+        register(&mut a, &EnvironmentPolicy::default(), &counting).await,
         Ok(AttestationKind::Unverified("packed".into()))
     );
     assert_eq!(counting.asked.load(Ordering::SeqCst), 0);
@@ -399,12 +399,12 @@ async fn unknown_revocation_fails_closed_under_direct_only() {
 async fn the_allowlist_and_the_zero_aaguid() {
     let pki = Arc::new(Pki::new());
     let src = sources(&pki, vec![entry(MODEL, &pki.root_der)]);
-    let only_other = RealmPolicy {
+    let only_other = EnvironmentPolicy {
         attestation: AttestationPolicy::Direct {
             aaguids: vec![Aaguid([0x77; 16])],
             enterprise: true,
         },
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     let mut a = authenticator(Key::es256(), packed(&pki, MODEL, Flaw::None));
     assert_eq!(
@@ -424,7 +424,7 @@ async fn the_allowlist_and_the_zero_aaguid() {
 #[tokio::test]
 async fn hl_19_passkeys_have_no_post_quantum_algorithm() {
     for alg in ML_DSA {
-        for policy in [RealmPolicy::default(), direct()] {
+        for policy in [EnvironmentPolicy::default(), direct()] {
             let mut a = Authenticator::new(Key::p256(alg));
             assert_eq!(
                 register(&mut a, &policy, &MemoryAttestationSources::default()).await,
@@ -436,7 +436,7 @@ async fn hl_19_passkeys_have_no_post_quantum_algorithm() {
     let user = UserHandle::from_bytes([3; 64]);
     let options = creation_options(
         &rp(),
-        &RealmPolicy::default(),
+        &EnvironmentPolicy::default(),
         &UserEntity {
             handle: &user,
             name: "ann",

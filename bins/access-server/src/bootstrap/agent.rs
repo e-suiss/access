@@ -1,5 +1,5 @@
 //! The local deployment's opt-in sample agent (OP-154 m.15 (i), OP-69): an agent Party the
-//! realm root operates, registered by its own `party_register` and an `idp.agent.register` the
+//! environment root operates, registered by its own `party_register` and an `idp.agent.register` the
 //! root signs with the test user as its sponsor; one Instance its runtime key opens under the
 //! test user's account; a Grant the test user's device issues to it for the test user; and one
 //! allowed Exercise of the sample action by that Instance. Nothing here is an executor and no
@@ -11,7 +11,7 @@ use access_identity_admin::app::Admin;
 use access_identity_admin::domain::Change;
 use access_identity_admin::domain::agent::{AgentChange, AgentKind, AgentRegister};
 use access_identity_admin::ports::{
-    AgentRegistration, Decider, Governance, Instances, OrgRegistered, RealmKeys,
+    AgentRegistration, Decider, EnvironmentKeys, Governance, Instances, OrgRegistered,
 };
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_internal_api::idp::Verdict;
@@ -29,7 +29,7 @@ use access_kernel::meta::{
 };
 use access_kernel::model::{DelegationTerms, Id, ResourceRef, SubjectSelector};
 use access_store::authority::{find_nonce, server_time};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp;
 use access_store::scope::DomainId;
 use serde::{Deserialize, Serialize};
@@ -67,32 +67,32 @@ const MAX_NAME: usize = 200;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SampleAgentFile {
-    pub(super) realm: String,
+    pub(super) environment: String,
     display_name: Option<String>,
 }
 
-/// The sample agent of a realm that also has the sample catalog and the test user.
+/// The sample agent of an environment that also has the sample catalog and the test user.
 #[derive(Clone, Debug)]
 pub(crate) struct SampleAgentPlan {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The name people see.
     pub(crate) display_name: String,
 }
 
 impl SampleAgentPlan {
-    /// The plan's `[sample_agent]`, checked: the sample and the test user are in its realm.
+    /// The plan's `[sample_agent]`, checked: the sample and the test user are in its environment.
     pub(super) fn from_file(
         f: SampleAgentFile,
         sample: Option<&str>,
         test_user: Option<&str>,
     ) -> Result<Self, BootstrapError> {
         let plan = |what: &str| BootstrapError::Plan(format!("sample_agent: {what}"));
-        if sample != Some(f.realm.as_str()) {
-            return Err(plan("the realm needs the [sample] catalog"));
+        if sample != Some(f.environment.as_str()) {
+            return Err(plan("the environment needs the [sample] catalog"));
         }
-        if test_user != Some(f.realm.as_str()) {
-            return Err(plan("the realm needs the [test_user] as its sponsor"));
+        if test_user != Some(f.environment.as_str()) {
+            return Err(plan("the environment needs the [test_user] as its sponsor"));
         }
         let display_name = f
             .display_name
@@ -101,7 +101,7 @@ impl SampleAgentPlan {
             return Err(plan("display_name is 1 to 200 characters"));
         }
         Ok(Self {
-            realm: f.realm,
+            environment: f.environment,
             display_name,
         })
     }
@@ -110,11 +110,11 @@ impl SampleAgentPlan {
 /// The sample agent in the summary.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SampleAgentOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The agent's Party, base64url.
     pub(crate) party: String,
-    /// Its operator, the realm root's Party, base64url.
+    /// Its operator, the environment root's Party, base64url.
     pub(crate) operator: String,
     /// Its Instance, base64url.
     pub(crate) instance: String,
@@ -129,13 +129,13 @@ pub(crate) struct SampleAgentOut {
 impl<P, K> Bootstrap<'_, P, K>
 where
     P: Decider + Governance + Instances + MetaExercises,
-    K: RealmKeys,
+    K: EnvironmentKeys,
 {
     /// The sample agent of `a` (OP-154 m.15 (i)); every step looks for its result first.
     pub(super) async fn sample_agent(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         (s, a): (&SamplePlan, &SampleAgentPlan),
@@ -144,7 +144,7 @@ where
         let key = token_key(self.hsm, SAMPLE_AGENT_LABEL)?;
         let party = root_party(&key.public_key());
         let operator = root_party(&root.public_key());
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let sponsor = idp::party_subject(&mut t, &person.0)
             .await?
             .ok_or_else(|| BootstrapError::Plan(String::from("sample_agent: no test user")))?;
@@ -156,7 +156,7 @@ where
             // OP-154 m.3 (c), AG-41
             self.change(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 root,
                 Change::Agent(AgentChange::Register(AgentRegister {
@@ -171,12 +171,12 @@ where
             .await?;
         }
         let instance = self
-            .agent_instance((tenant, realm), domain, party, sponsor)
+            .agent_instance((tenant, environment), domain, party, sponsor)
             .await?;
         let held = self.agent_grant(domain, root, s, (person, party)).await?;
         let exercise = self.agent_exercise(domain, s, held, person).await?;
         Ok(SampleAgentOut {
-            realm: a.realm.clone(),
+            environment: a.environment.clone(),
             party: b64url_encode(&party.0),
             operator: b64url_encode(&operator.0),
             instance: b64url_encode(&instance.0),
@@ -236,7 +236,7 @@ where
     /// has none (OP-154 m.3 (c)).
     async fn agent_instance(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         party: Id,
         sponsor: [u8; 16],
@@ -254,7 +254,7 @@ where
             tenant: *tenant.as_bytes(),
             domain,
             registrant: Registrant::Device {
-                realm: *realm.as_bytes(),
+                environment: *environment.as_bytes(),
                 subject: sponsor,
             },
             party,

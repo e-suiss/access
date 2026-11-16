@@ -1,5 +1,5 @@
 //! Stage 6 contract entries (OP-150 m.2): Claim Ingest (CMP-8), the Token Status List endpoint
-//! (OP-150 m.3 (a), (s)) and the members the realm's introspection answer adds for authority
+//! (OP-150 m.3 (a), (s)) and the members the environment's introspection answer adds for authority
 //! tokens. Both paths are served (`x-suiss-served: true`).
 
 use serde_json::{Map, Value, json};

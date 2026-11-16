@@ -1,4 +1,4 @@
-//! TN-135, OP-151 m.3 (j), MD-8, MUST-NEVER-18: the `token_issuance` hook at the realm's token
+//! TN-135, OP-151 m.3 (j), MD-8, MUST-NEVER-18: the `token_issuance` hook at the environment's token
 //! endpoint. Real PostgreSQL, real identity signer; the hook is scripted.
 
 #![allow(

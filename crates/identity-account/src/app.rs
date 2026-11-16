@@ -25,36 +25,36 @@ pub mod support;
 pub mod vault;
 
 use access_crypto::opaque_id::IdKey;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use suiss_crypto::envelope::Kek;
 
 use crate::AccountError;
 
-/// The realm an operation runs in, with its keys.
-pub struct Realm<'a> {
+/// The environment an operation runs in, with its keys.
+pub struct Environment<'a> {
     /// Tenant.
     pub tenant: TenantId,
-    /// Realm.
-    pub realm: RealmId,
-    /// The realm KEK that wraps subject DEKs (OP-42, OP-135).
+    /// Environment.
+    pub environment: EnvironmentId,
+    /// The environment KEK that wraps subject DEKs (OP-42, OP-135).
     pub kek: &'a (dyn Kek + Sync),
     /// The cell's id key for external subject ids (OP-137).
     pub ids: &'a IdKey,
 }
 
-/// A realm as events and audit rows name it: its id and the cell's id key (OP-137).
+/// An environment as events and audit rows name it: its id and the cell's id key (OP-137).
 #[derive(Clone, Copy)]
 pub struct Named<'a> {
-    /// Realm.
-    pub realm: RealmId,
+    /// Environment.
+    pub environment: EnvironmentId,
     /// The cell's id key for external subject ids (OP-137).
     pub ids: &'a IdKey,
 }
 
-/// What names a realm and its subjects in events and audit rows (OP-137).
+/// What names an environment and its subjects in events and audit rows (OP-137).
 pub trait Naming: Sync {
-    /// The realm.
-    fn realm_id(&self) -> RealmId;
+    /// The environment.
+    fn environment_id(&self) -> EnvironmentId;
 
     /// The subject's external id, as audit rows and APIs name it.
     ///
@@ -64,8 +64,8 @@ pub trait Naming: Sync {
 }
 
 impl Naming for Named<'_> {
-    fn realm_id(&self) -> RealmId {
-        self.realm
+    fn environment_id(&self) -> EnvironmentId {
+        self.environment
     }
 
     fn external(&self, subject: [u8; 16]) -> Result<String, AccountError> {
@@ -73,13 +73,13 @@ impl Naming for Named<'_> {
     }
 }
 
-impl Naming for Realm<'_> {
-    fn realm_id(&self) -> RealmId {
-        self.realm
+impl Naming for Environment<'_> {
+    fn environment_id(&self) -> EnvironmentId {
+        self.environment
     }
 
     fn external(&self, subject: [u8; 16]) -> Result<String, AccountError> {
-        Realm::external(self, subject)
+        Environment::external(self, subject)
     }
 }
 
@@ -94,7 +94,7 @@ pub struct Actor<'a> {
 /// External id prefix of identity subjects (OP-137 m.2).
 pub const SUBJECT_PREFIX: &str = "usr";
 
-impl Realm<'_> {
+impl Environment<'_> {
     /// The subject's external id, as audit rows and APIs name it.
     ///
     /// # Errors

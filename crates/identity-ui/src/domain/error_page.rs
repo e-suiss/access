@@ -58,7 +58,7 @@ pub fn reference(request_id: &str) -> String {
     out
 }
 
-/// The hosted error page for an authorization request: `base` is the realm issuer URL.
+/// The hosted error page for an authorization request: `base` is the environment issuer URL.
 #[must_use]
 pub fn location(base: &str, error: &str, owner: Owner, request_id: &str) -> String {
     format!(

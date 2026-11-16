@@ -1,4 +1,4 @@
-//! A realm's SSH user CA keys (OP-156 m.3 (o), IDP-32): Ed25519, made in this process under
+//! An environment's SSH user CA keys (OP-156 m.3 (o), IDP-32): Ed25519, made in this process under
 //! the `ssh-ca` purpose, sealed by the key factory and never leaving it; they sign the bytes of
 //! an OpenSSH certificate or KRL only (artefact `SshCertificate`). Rotation has two phases: a
 //! new key is published next to the signing one (servers add it to `TrustedUserCAKeys`), then
@@ -11,12 +11,12 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::signer::{SignError, Signer};
 
 use crate::ports::KeyFactory;
-use crate::protocol::{FrameError, Realm};
+use crate::protocol::{Environment, FrameError};
 
 /// The purpose label of these keys in the vault and in the protocol.
 pub const LABEL: &str = "ssh-ca";
 
-/// Most keys a realm's SSH ring holds at once (one signing, one published, one retiring).
+/// Most keys an environment's SSH ring holds at once (one signing, one published, one retiring).
 pub const MAX_KEYS: usize = 3;
 
 /// Largest certificate or KRL body the key signs.
@@ -110,15 +110,15 @@ pub struct KeyInfo {
 /// A request about SSH CA keys.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshRequest {
-    /// Opens the realm's CA (`idp.ssh.ca_enable`): makes a signing key when there is none;
+    /// Opens the environment's CA (`idp.ssh.ca_enable`): makes a signing key when there is none;
     /// repeating changes nothing.
-    Open(Realm),
-    /// The realm's keys.
-    Keys(Realm),
+    Open(Environment),
+    /// The environment's keys.
+    Keys(Environment),
     /// Signs `data` with `key`, only while `key` is the signing key.
     Sign {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The key the caller built `data` for (a certificate names its CA key).
         key: [u8; 32],
         /// The certificate's signed bytes.
@@ -126,8 +126,8 @@ pub enum SshRequest {
     },
     /// One rotation step.
     Rotate {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// Step.
         step: Step,
     },
@@ -136,7 +136,7 @@ pub enum SshRequest {
 /// An answer about SSH CA keys.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshResponse {
-    /// The realm's keys.
+    /// The environment's keys.
     Keys(Vec<KeyInfo>),
     /// The Ed25519 signature.
     Signed([u8; 64]),
@@ -169,8 +169,8 @@ fn fixed<const N: usize>(v: Option<&Value>) -> Result<[u8; N], FrameError> {
     bytes(v)?.try_into().map_err(|_| FrameError::Malformed)
 }
 
-fn realm(v: Option<&Value>) -> Result<Realm, FrameError> {
-    fixed(v).map(Realm)
+fn environment(v: Option<&Value>) -> Result<Environment, FrameError> {
+    fixed(v).map(Environment)
 }
 
 fn uint(v: Option<&Value>) -> Result<u64, FrameError> {
@@ -201,23 +201,27 @@ impl SshRequest {
     #[must_use]
     pub fn to_value(&self) -> Value {
         match self {
-            Self::Open(realm) => map(vec![
+            Self::Open(environment) => map(vec![
                 ("op", Value::text("open")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
             ]),
-            Self::Keys(realm) => map(vec![
+            Self::Keys(environment) => map(vec![
                 ("op", Value::text("keys")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
             ]),
-            Self::Sign { realm, key, data } => map(vec![
+            Self::Sign {
+                environment,
+                key,
+                data,
+            } => map(vec![
                 ("op", Value::text("sign")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
                 ("key", Value::Bytes(key.to_vec())),
                 ("data", Value::Bytes(data.clone())),
             ]),
-            Self::Rotate { realm, step } => map(vec![
+            Self::Rotate { environment, step } => map(vec![
                 ("op", Value::text("rotate")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
                 ("step", Value::text(step.name())),
             ]),
         }
@@ -229,29 +233,29 @@ impl SshRequest {
     /// [`FrameError::Malformed`].
     pub fn from_value(v: &Value) -> Result<Self, FrameError> {
         match text(v.get("op"))?.as_str() {
-            "open" => Ok(Self::Open(realm(v.get("realm"))?)),
-            "keys" => Ok(Self::Keys(realm(v.get("realm"))?)),
+            "open" => Ok(Self::Open(environment(v.get("environment"))?)),
+            "keys" => Ok(Self::Keys(environment(v.get("environment"))?)),
             "sign" => Ok(Self::Sign {
-                realm: realm(v.get("realm"))?,
+                environment: environment(v.get("environment"))?,
                 key: fixed(v.get("key"))?,
                 data: bytes(v.get("data"))?,
             }),
             "rotate" => Ok(Self::Rotate {
-                realm: realm(v.get("realm"))?,
+                environment: environment(v.get("environment"))?,
                 step: Step::of(&text(v.get("step"))?).ok_or(FrameError::Malformed)?,
             }),
             _ => Err(FrameError::Malformed),
         }
     }
 
-    /// The realm it is about.
+    /// The environment it is about.
     #[must_use]
-    pub const fn realm(&self) -> Realm {
+    pub const fn environment(&self) -> Environment {
         match self {
-            Self::Open(realm)
-            | Self::Keys(realm)
-            | Self::Sign { realm, .. }
-            | Self::Rotate { realm, .. } => *realm,
+            Self::Open(environment)
+            | Self::Keys(environment)
+            | Self::Sign { environment, .. }
+            | Self::Rotate { environment, .. } => *environment,
         }
     }
 }
@@ -358,18 +362,18 @@ fn new_key<F: KeyFactory + ?Sized>(
 /// `ssh-ed25519-cert-v01@openssh.com` (artefact `SshCertificate` only).
 const CERT_PREFIX: &[u8] = b"\0\0\0\x20ssh-ed25519-cert-v01@openssh.com";
 
-/// A realm's SSH CA keys.
+/// An environment's SSH CA keys.
 pub struct Ring {
-    realm: Realm,
+    environment: Environment,
     keys: Vec<Key>,
 }
 
 impl Ring {
     /// An empty ring.
     #[must_use]
-    pub const fn new(realm: Realm) -> Self {
+    pub const fn new(environment: Environment) -> Self {
         Self {
-            realm,
+            environment,
             keys: Vec::new(),
         }
     }
@@ -485,7 +489,7 @@ impl Ring {
         dcbor::encode(
             &map(vec![
                 ("label", Value::text(LABEL)),
-                ("realm", Value::Bytes(self.realm.0.to_vec())),
+                ("environment", Value::Bytes(self.environment.0.to_vec())),
                 ("keys", Value::Array(keys)),
             ]),
             Limits::CEILING,
@@ -498,13 +502,13 @@ impl Ring {
     /// # Errors
     /// [`SshKeyError`].
     pub fn restore<F: KeyFactory + ?Sized>(
-        owner: Realm,
+        owner: Environment,
         stored: &[u8],
         factory: &mut F,
     ) -> Result<Self, SshKeyError> {
         let v = dcbor::decode(stored, Limits::CEILING).map_err(|_| SshKeyError::Stored)?;
         if text(v.get("label")).ok().as_deref() != Some(LABEL)
-            || realm(v.get("realm")).ok() != Some(owner)
+            || environment(v.get("environment")).ok() != Some(owner)
         {
             return Err(SshKeyError::Stored);
         }
@@ -527,7 +531,10 @@ impl Ring {
                 signer,
             });
         }
-        Ok(Self { realm: owner, keys })
+        Ok(Self {
+            environment: owner,
+            keys,
+        })
     }
 }
 

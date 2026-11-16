@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, version, upstream, origin, definition, decision_pos\n               FROM access.vault_resources\n              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3\n              ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "upstream",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "upstream"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "origin",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "origin"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "definition",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "definition"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "384f5ca6e9df57c1f4f758bef38607199143e40ca2562bed93119c4c9497e838"
+}

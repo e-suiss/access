@@ -116,7 +116,7 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
         &self,
         r: &Resolved,
         assertions: &dyn ClientAssertion,
-        realm: [u8; 16],
+        environment: [u8; 16],
         redirect_uri: &str,
         code: &str,
         s: &Secrets,
@@ -138,7 +138,7 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
                     &access_kernel::json::b64url_encode(&jti),
                     now_ms / 1000,
                 );
-                let assertion = assertions.sign(realm, alg, claims, now_ms).await?;
+                let assertion = assertions.sign(environment, alg, claims, now_ms).await?;
                 let form =
                     assertion_form(&c.client_id, &assertion, redirect_uri, code, &s.verifier);
                 self.http.post_form(endpoint, &form).await?

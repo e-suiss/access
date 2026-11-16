@@ -65,7 +65,7 @@ pub enum Shredded {
     Yes,
     /// A key of the subject is still readable.
     No,
-    /// The realm holds no such subject.
+    /// The environment holds no such subject.
     Unknown,
 }
 
@@ -75,19 +75,19 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn subject_shredded(&mut self, subject: [u8; 16]) -> Result<Shredded, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let (t, r, s) = (
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(subject),
         );
         let row = sqlx::query!(
             r#"SELECT s.wrapped_dek IS NULL AS "own!",
                       NOT EXISTS (SELECT FROM access.identity_subject_keys k
-                                   WHERE k.tenant_id = s.tenant_id AND k.realm_id = s.realm_id
+                                   WHERE k.tenant_id = s.tenant_id AND k.environment_id = s.environment_id
                                      AND k.subject_id = s.subject_id AND k.wrapped_dek IS NOT NULL) AS "classes!"
                  FROM access.identity_subjects s
-                WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.subject_id = $3"#,
+                WHERE s.tenant_id = $1 AND s.environment_id = $2 AND s.subject_id = $3"#,
             t,
             r,
             s,
@@ -108,15 +108,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn reshred_subject(&mut self, subject: [u8; 16]) -> Result<u64, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let (t, r, s) = (
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(subject),
         );
         let classes = sqlx::query!(
             "UPDATE access.identity_subject_keys SET wrapped_dek = NULL, shredded_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL",
             t,
             r,
             s,
@@ -135,7 +135,7 @@ impl TenantTx {
         ] {
             sqlx::query!(
                 "UPDATE access.identity_subjects SET status = $5
-                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = $4",
+                  WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = $4",
                 t,
                 r,
                 s,
@@ -147,7 +147,7 @@ impl TenantTx {
         }
         let own = sqlx::query!(
             "UPDATE access.identity_subjects SET wrapped_dek = NULL, shredded_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'purging'
                 AND wrapped_dek IS NOT NULL",
             t,
             r,

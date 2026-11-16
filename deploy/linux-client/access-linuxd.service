@@ -1,4 +1,4 @@
-# OP-156 m.3 (p), IDP-32: the Access Linux client daemon. It reaches Access only over the realm's
+# OP-156 m.3 (p), IDP-32: the Access Linux client daemon. It reaches Access only over the environment's
 # public listener with the host's client certificate and answers the NSS and PAM modules on
 # /run/access-linuxd/socket.
 [Unit]

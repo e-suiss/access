@@ -1,5 +1,5 @@
 //! Delegated administration through the real router and the sequencer (§2.2.1, §12.5.2, TN-114,
-//! INV-10, C28, X20, OP-157 m.3 (t)): meta-action role Grants open with the realm's staged flag,
+//! INV-10, C28, X20, OP-157 m.3 (t)): meta-action role Grants open with the environment's staged flag,
 //! an admin never gives more than it holds, closing the flag does not reach back, and a role
 //! version moves only by an explicit `grant.amend`.
 
@@ -90,7 +90,7 @@ fn refused_as_off(w: &Written) {
 
 // TN-114, §12.5.2, §2.2.1, X20, OP-157 m.3 (t), Ek B 5492, 5592, 5453
 #[tokio::test]
-async fn a_new_admin_grant_waits_for_the_realm_flag_and_closing_does_not_reach_back() {
+async fn a_new_admin_grant_waits_for_the_environment_flag_and_closing_does_not_reach_back() {
     let c = console("v8-flag", true).await;
     let revoke = admin_on("access.grant", &["grant_revoke"]);
     let anchor = c.meta_anchor_json();

@@ -1,6 +1,6 @@
-//! The realm's cross-app connections for ID-JAG (OP-154 m.3 (n), AG-28, §11.11.2): one version
+//! The environment's cross-app connections for ID-JAG (OP-154 m.3 (n), AG-28, §11.11.2): one version
 //! per `idp.client.cross_app_connection` or `cross_app_connection_retire`, the newest rules.
-//! Scoped to the transaction's realm by row-level security; nothing is deleted (OP-73).
+//! Scoped to the transaction's environment by row-level security; nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
 
@@ -9,17 +9,17 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
 /// One cross-app connection as its newest version says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrossAppRow {
-    /// Its name in the realm.
+    /// Its name in the environment.
     pub name: String,
     /// Its version.
     pub version: u64,
@@ -46,14 +46,14 @@ impl TenantTx {
         &mut self,
         name: &str,
     ) -> Result<Option<CrossAppRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT name, version, state, client_id, audience, resource, scopes, subject_policy
                FROM access.idp_cross_app_connections
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             name,
         )
         .fetch_optional(&mut *self.tx)
@@ -84,18 +84,18 @@ impl TenantTx {
         audience: &str,
         resource: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let found = sqlx::query_scalar!(
             r#"SELECT EXISTS (
                  SELECT 1 FROM access.idp_cross_app_connections c
-                  WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.client_id = $3
+                  WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.client_id = $3
                     AND c.audience = $4 AND c.resource = $5 AND c.state = 'live'
                     AND c.version = (SELECT max(n.version) FROM access.idp_cross_app_connections n
-                                      WHERE n.tenant_id = c.tenant_id AND n.realm_id = c.realm_id
+                                      WHERE n.tenant_id = c.tenant_id AND n.environment_id = c.environment_id
                                         AND n.name = c.name)
                ) AS "found!""#,
             tenant,
-            realm,
+            environment,
             client_id,
             audience,
             resource,
@@ -114,14 +114,14 @@ impl TenantTx {
         bound: &Bound,
         row: &CrossAppRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_cross_app_connections
-               (tenant_id, realm_id, name, version, state, client_id, audience, resource, scopes,
+               (tenant_id, environment_id, name, version, state, client_id, audience, resource, scopes,
                 subject_policy, domain_id, decision_pos)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             tenant,
-            realm,
+            environment,
             row.name,
             i64::try_from(row.version).map_err(|_| StoreError::Range)?,
             row.state,

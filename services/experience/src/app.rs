@@ -126,25 +126,32 @@ impl<U: Upstream, C: Clock, N: Random> Experience<U, C, N> {
             show_delivery(&mut hub, d);
         }
         // OP-156 m.3 (t)
-        if let Some(realm) = req.realm.as_deref() {
-            hub.attention = self.attention(realm, &req.viewer).await;
+        if let Some(environment) = req.environment.as_deref() {
+            hub.attention = self.attention(environment, &req.viewer).await;
         }
         Ok(hub)
     }
 
-    /// The Needs Attention link of `realm`'s coordinator for `viewer`: none when the realm names
+    /// The Needs Attention link of `environment`'s coordinator for `viewer`: none when the environment names
     /// no coordinator, or Access or the coordinator does not answer (OP-156 m.3 (t)).
-    async fn attention(&self, realm: &str, viewer: &str) -> Option<crate::contract::Attention> {
-        let slug_ok = (2..=63).contains(&realm.len())
-            && realm.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
-            && realm
+    async fn attention(
+        &self,
+        environment: &str,
+        viewer: &str,
+    ) -> Option<crate::contract::Attention> {
+        let slug_ok = (2..=63).contains(&environment.len())
+            && environment
+                .bytes()
+                .next()
+                .is_some_and(|b| b.is_ascii_lowercase())
+            && environment
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
         if !slug_ok {
             return None;
         }
         let endpoint = crate::domain::hub::attention::coordinator_of(&ok_json(
-            self.upstream.discovery(realm).await,
+            self.upstream.discovery(environment).await,
         )?)?;
         let answer = ok_json(self.upstream.attention(&endpoint, viewer).await)?;
         crate::domain::hub::attention::answered(&endpoint, &answer)

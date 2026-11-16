@@ -22,7 +22,7 @@ use access_identity_oauth::domain::jwt::parse_jwks;
 use access_identity_oauth::ports::Directory;
 use access_identity_oauth::ports::oauth::ClientKeys;
 use access_kernel::model::EqValue;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::ssf::TransmitterRow;
 use access_store::{Pool, tenancy};
 use serde_json::{Map, Value, json};
@@ -75,7 +75,7 @@ pub struct TransmitterHealth {
     pub delayed_since_ms: Option<u64>,
 }
 
-/// The receiver of every realm.
+/// The receiver of every environment.
 pub struct Receiver<D, K, S, C> {
     directory: D,
     db: Db,
@@ -161,10 +161,10 @@ where
     async fn row(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
     ) -> Result<Option<TransmitterRow>, Unavailable> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let row = t.transmitter(id).await.map_err(down)?;
@@ -172,7 +172,7 @@ where
         Ok(row.filter(|r| !r.disabled))
     }
 
-    /// An RFC 8935 push to `/ssf/inbound/{stream}` of the realm the request reached.
+    /// An RFC 8935 push to `/ssf/inbound/{stream}` of the environment the request reached.
     pub async fn push(
         &self,
         authority: &str,
@@ -184,7 +184,7 @@ where
         if body.len() > MAX_SET {
             return InboundReply::TooLarge;
         }
-        let realm = match resolve(&self.directory, authority, slug).await {
+        let environment = match resolve(&self.directory, authority, slug).await {
             Ok(Some(r)) => r,
             Ok(None) => return InboundReply::NotFound,
             Err(_) => return InboundReply::Unavailable,
@@ -192,7 +192,10 @@ where
         let Some(id) = parse_id(stream) else {
             return InboundReply::NotFound;
         };
-        let row = match self.row(realm.tenant, realm.realm, id).await {
+        let row = match self
+            .row(environment.tenant, environment.environment, id)
+            .await
+        {
             Ok(Some(r)) if r.delivery == "push" => r,
             Ok(_) => return InboundReply::NotFound,
             Err(_) => return InboundReply::Unavailable,
@@ -203,7 +206,10 @@ where
         if !media.is_some_and(|m| m.eq_ignore_ascii_case(CONTENT_TYPE)) {
             return InboundReply::Refused(Reject::Request);
         }
-        match self.take(realm.tenant, realm.realm, &row, body).await {
+        match self
+            .take(environment.tenant, environment.environment, &row, body)
+            .await
+        {
             Ok(Ok(())) => InboundReply::Accepted,
             Ok(Err(r)) => InboundReply::Refused(r),
             Err(_) => InboundReply::Unavailable,
@@ -211,14 +217,14 @@ where
     }
 
     /// Verifies one SET of `row` and takes it once (TN-42): a replayed `jti` is accepted and
-    /// does nothing; an event about a subject the realm cannot link does nothing either.
+    /// does nothing; an event about a subject the environment cannot link does nothing either.
     ///
     /// # Errors
     /// [`Unavailable`]: the keys, the clock or storage failed; nothing was taken.
     pub async fn take(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         row: &TransmitterRow,
         token: &[u8],
     ) -> Result<Result<(), Reject>, Unavailable> {
@@ -237,7 +243,7 @@ where
             Ok(s) => s,
             Err(r) => return Ok(Err(r)),
         };
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let subject = match &set.subject {
@@ -275,13 +281,13 @@ where
         &self,
         client: &P,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         row: &TransmitterRow,
     ) -> Result<u32, Unavailable> {
         let (Some(url), Some(sealed)) = (&row.poll_endpoint, &row.secret) else {
             return Ok(0);
         };
-        let credential = self.sealer.open(tenant, realm, &row.id, sealed)?;
+        let credential = self.sealer.open(tenant, environment, &row.id, sealed)?;
         let bearer = core::str::from_utf8(&credential).map_err(down)?;
         let (mut acks, mut errs) = (Vec::<String>::new(), Map::new());
         let mut taken = 0_u32;
@@ -307,7 +313,10 @@ where
                 .unwrap_or_default();
             for (jti, token) in &sets {
                 let compact = token.as_str().unwrap_or_default();
-                match self.take(tenant, realm, row, compact.as_bytes()).await? {
+                match self
+                    .take(tenant, environment, row, compact.as_bytes())
+                    .await?
+                {
                     Ok(()) => {
                         acks.push(jti.clone());
                         taken = taken.saturating_add(1);
@@ -323,7 +332,7 @@ where
             }
         }
         let now = self.clock.now().map_err(down)?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         t.transmitter_seen(row.id, now).await.map_err(down)?;
@@ -331,10 +340,10 @@ where
         Ok(taken)
     }
 
-    /// Polls every live poll transmitter of every live realm once.
+    /// Polls every live poll transmitter of every live environment once.
     ///
     /// # Errors
-    /// [`Unavailable`] when the realms cannot be read; one transmitter's failure is logged and
+    /// [`Unavailable`] when the environments cannot be read; one transmitter's failure is logged and
     /// does not stop the others.
     pub async fn poll_all<P: PollClient>(
         &self,
@@ -343,13 +352,13 @@ where
     ) -> Result<u32, Unavailable> {
         let mut taken = 0_u32;
         for r in tenancy::routes(router).await.map_err(down)? {
-            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.environment)
                 .await
                 .map_err(down)?;
             let rows = t.transmitters().await.map_err(down)?;
             t.commit().await.map_err(down)?;
             for row in rows.iter().filter(|x| !x.disabled && x.delivery == "poll") {
-                if let Ok(n) = self.poll_once(client, r.tenant, r.realm, row).await {
+                if let Ok(n) = self.poll_once(client, r.tenant, r.environment, row).await {
                     taken = taken.saturating_add(n);
                 } else {
                     tracing::warn!("ssf transmitter poll failed");
@@ -375,17 +384,17 @@ where
         }
     }
 
-    /// The realm's transmitters with their delay state, for the management surface (§8.13).
+    /// The environment's transmitters with their delay state, for the management surface (§8.13).
     ///
     /// # Errors
     /// [`Unavailable`].
     pub async fn health(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> Result<Vec<TransmitterHealth>, Unavailable> {
         let now = self.clock.now().map_err(down)?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let rows = t.transmitters().await.map_err(down)?;
@@ -410,7 +419,7 @@ where
 
 /// Declares an inbound transmitter in `t`, as the `idp.upstream.register` Exercise `exercise`
 /// carries its SSF fields, under that decision bound in `t` (EI-25); a poll transmitter's
-/// credential is sealed under the realm KEK.
+/// credential is sealed under the environment KEK.
 ///
 /// # Errors
 /// [`Unavailable`].
@@ -423,9 +432,9 @@ pub async fn declare<S: Sealer>(
     poll_credential: Option<&[u8]>,
     exercise: Option<[u8; 32]>,
 ) -> Result<(), Unavailable> {
-    let realm = t.realm().ok_or(Unavailable)?;
+    let environment = t.environment().ok_or(Unavailable)?;
     let secret = match (&cfg.poll_endpoint, poll_credential) {
-        (Some(_), Some(c)) => Some(sealer.seal(t.tenant(), realm, &id, c)?),
+        (Some(_), Some(c)) => Some(sealer.seal(t.tenant(), environment, &id, c)?),
         (None, None) => None,
         _ => return Err(Unavailable),
     };

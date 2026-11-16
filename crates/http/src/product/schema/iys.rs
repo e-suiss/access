@@ -12,13 +12,13 @@ pub(super) fn components() -> Value {
         "IysStatusReport": object(
             &json!({
                 "tenant": text("The tenant's external id (tnt_), as the Relay message's accesstenant names it."),
-                "realm": { "type": "string", "format": "uuid", "description": "The realm, as the Relay message's accessrealm names it." },
+                "environment": { "type": "string", "format": "uuid", "description": "The environment, as the Relay message's accessenvironment names it." },
                 "record": { "type": "string", "format": "uuid", "description": "The CloudEvents id of the relay.message.iys_consent.v1 the record came in." },
                 "status": { "enum": ["recorded", "failed"] },
                 "reason": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$", "description": "Why it failed; never with recorded." },
                 "at": { "type": "integer", "minimum": 0, "description": "When it happened at İYS, Unix ms." },
             }),
-            &["tenant", "realm", "record", "status", "at"],
+            &["tenant", "environment", "record", "status", "at"],
         ),
     })
 }
@@ -35,7 +35,7 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
             "client-unauthenticated: no valid platform client assertion.",
         ),
         ("403", "not-relay: the client is not Relay's."),
-        ("404", "not-found: the realm has no such record."),
+        ("404", "not-found: the environment has no such record."),
         ("413", "body-too-large"),
         ("503", "Temporarily unavailable; retry."),
     ]);

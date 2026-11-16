@@ -37,8 +37,8 @@ test("a signal source is registered and retired only by signed changes", async (
   await expect(panel.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", "realms/acme/signal-sources"],
-    ["POST", "realms/acme/signal-sources/acme-mdm/retire"],
+    ["POST", "envs/acme/signal-sources"],
+    ["POST", "envs/acme/signal-sources/acme-mdm/retire"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({
     name: "fraud",

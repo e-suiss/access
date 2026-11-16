@@ -58,12 +58,14 @@ impl IpPseudonyms for NoPseudonyms {
 pub struct KeyedPseudonyms(pub IpPseudonymKey);
 
 impl IpPseudonyms for KeyedPseudonyms {
-    fn pseudonym(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
-        self.0.pseudonym(tenant, realm, &octets(ip)).ok()
+    fn pseudonym(&self, tenant: &[u8; 16], environment: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
+        self.0.pseudonym(tenant, environment, &octets(ip)).ok()
     }
 
-    fn prefix(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
-        self.0.prefix_pseudonym(tenant, realm, &octets(ip)).ok()
+    fn prefix(&self, tenant: &[u8; 16], environment: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
+        self.0
+            .prefix_pseudonym(tenant, environment, &octets(ip))
+            .ok()
     }
 }
 

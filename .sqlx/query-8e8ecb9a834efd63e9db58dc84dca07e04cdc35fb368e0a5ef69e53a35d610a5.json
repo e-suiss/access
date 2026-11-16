@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.idp_clients WHERE tenant_id = $1 AND environment_id = $2)\n               OR EXISTS (SELECT 1 FROM access.saml_sps WHERE tenant_id = $1 AND environment_id = $2)\n               AS \"activated!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "activated!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8e8ecb9a834efd63e9db58dc84dca07e04cdc35fb368e0a5ef69e53a35d610a5"
+}

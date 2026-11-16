@@ -6,18 +6,18 @@ use crate::protocol::{decode_request, encode_request};
 // OP-159 m.3 (o)
 #[test]
 fn every_request_reads_back_and_only_ml_dsa_is_named() {
-    let realm = Realm([3; 16]);
+    let environment = Environment([3; 16]);
     for r in [
         PqRequest::Ready {
             alg: JwsAlg::MlDsa65,
         },
         PqRequest::Open {
-            realm,
+            environment,
             alg: JwsAlg::MlDsa44,
         },
-        PqRequest::Close { realm },
+        PqRequest::Close { environment },
         PqRequest::Sign {
-            realm,
+            environment,
             typ: String::from("JWT"),
             payload: br#"{"sub":"a"}"#.to_vec(),
             at: 9,
@@ -50,5 +50,5 @@ fn the_post_quantum_keys_follow_the_classical_ones_in_the_jwks() {
         merged(r#"{"keys":[{"a":1}]}"#, r#"{"keys":[]}"#),
         r#"{"keys":[{"a":1}]}"#
     );
-    assert_ne!(slot(Realm([1; 16])), Realm([1; 16]));
+    assert_ne!(slot(Environment([1; 16])), Environment([1; 16]));
 }

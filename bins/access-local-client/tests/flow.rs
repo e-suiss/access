@@ -1,4 +1,4 @@
-//! The headless login against an in-process Access (OP-149 m.26 (b), (e), m.32): the realm
+//! The headless login against an in-process Access (OP-149 m.26 (b), (e), m.32): the environment
 //! authorization server, the hosted login's JSON surface and the Frontend API over TLS from a
 //! test CA, a real PostgreSQL and a real identity signer; the client runs the whole flow as it
 //! does against a local deployment, with the password, with the software passkey and with the
@@ -34,7 +34,7 @@ use access_identity_account::app::claims::Issued;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
@@ -47,7 +47,7 @@ use access_identity_account::notify::ports::Notifier;
 use access_identity_account::ports::{BreachRanges, RangeUnavailable};
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::app::oauth::OAuth;
-use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Keys, Unavailable};
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
 use access_identity_session::app::{Auth, Passkeys};
@@ -57,13 +57,14 @@ use access_identity_ui::adapters::LogSignals;
 use access_identity_ui::app::devices::{DeviceKey, bind_party, record_device_key};
 use access_identity_ui::app::{Devices, Hosted};
 use access_identity_ui::ports::{
-    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit,
+    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, EnvironmentKit, Kits,
+    Messages,
 };
-use access_identity_webauthn::adapters::RealmDecoyKeys;
+use access_identity_webauthn::adapters::EnvironmentDecoyKeys;
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{ClientExtensionResults, RegistrationResponse};
-use access_identity_webauthn::domain::ids::RealmId as WaRealm;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_webauthn::domain::ids::EnvironmentId as WaEnvironment;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_internal_api::approvals::{Contribution, Opening};
 use access_internal_api::idp::{Unavailable as PlaneUnavailable, Verdict};
@@ -75,7 +76,7 @@ use access_kernel::json::{b64url_decode, b64url_encode};
 use access_local_client::http::Http;
 use access_local_client::login::{Credential, Login, login};
 use access_local_client::passkey::Passkey;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use serde_json::Value;
 use suiss_crypto::signer::{Signer as _, SoftSigner};
 use support::{Cluster, NATIVE};
@@ -117,23 +118,23 @@ impl Notifier for Dropping {
 impl Messages for Silent {
     type For<'a> = Dropping;
 
-    fn notifier<'a>(&'a self, _: &'a Realm<'a>) -> Dropping {
+    fn notifier<'a>(&'a self, _: &'a Environment<'a>) -> Dropping {
         Dropping
     }
 }
 
-struct Dir(RealmEntry);
+struct Dir(EnvironmentEntry);
 
 impl Directory for Dir {
-    async fn by_host(&self, host: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_host(&self, host: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok((host == self.0.issuer.authority()).then(|| self.0.clone()))
     }
 
-    async fn by_slug(&self, _: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_slug(&self, _: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok(None)
     }
 
-    async fn all(&self) -> Result<Vec<RealmEntry>, Unavailable> {
+    async fn all(&self) -> Result<Vec<EnvironmentEntry>, Unavailable> {
         Ok(vec![self.0.clone()])
     }
 }
@@ -145,7 +146,7 @@ impl Keys for NoKeys {
         Ok(())
     }
 
-    async fn jwks(&self, _: RealmId) -> Result<String, Unavailable> {
+    async fn jwks(&self, _: EnvironmentId) -> Result<String, Unavailable> {
         Err(Unavailable)
     }
 }
@@ -161,7 +162,7 @@ fn offline() -> PlaneUnavailable {
 impl ArtifactSigner for Offline {
     async fn sign_cose(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         _: &str,
         _: &[u8],
         _: u64,
@@ -211,18 +212,18 @@ impl ApprovalClaims for Offline {
     async fn issue(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &ClaimOrder,
     ) -> Result<Issued, PlaneUnavailable> {
         Err(offline())
     }
 }
 
-struct Kit(Arc<RealmKit>);
+struct Kit(Arc<EnvironmentKit>);
 
 impl Kits for Kit {
-    async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Unavailable> {
-        if entry.realm == self.0.realm {
+    async fn kit(&self, entry: &EnvironmentEntry) -> Result<Arc<EnvironmentKit>, Unavailable> {
+        if entry.environment == self.0.environment {
             Ok(self.0.clone())
         } else {
             Err(Unavailable)
@@ -230,31 +231,31 @@ impl Kits for Kit {
     }
 }
 
-fn kit(entry: &RealmEntry) -> RealmKit {
-    let wa = WaRealm::from_bytes(*entry.realm.as_bytes());
-    RealmKit {
+fn kit(entry: &EnvironmentEntry) -> EnvironmentKit {
+    let wa = WaEnvironment::from_bytes(*entry.environment.as_bytes());
+    EnvironmentKit {
         tenant: entry.tenant,
-        realm: entry.realm,
+        environment: entry.environment,
         issuer: String::from(entry.issuer.as_str()),
         name: String::from("Acme"),
-        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [3; 32])),
-        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
-            [3; 32],
-        ))),
+        kek: std::sync::Arc::new(SoftKek::new("environment-kek:1", [3; 32])),
+        index: std::sync::Arc::new(access_crypto::environment_index::EnvironmentIndexKey::new(
+            Secret::new([3; 32]),
+        )),
         ids: IdKey::new(Secret::new([4; 32])),
-        decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
+        decoys: EnvironmentDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
         rp: RelyingParty {
-            realm: wa,
+            environment: wa,
             rp_id: RpId::parse(entry.issuer.authority()).unwrap(),
             name: String::from("Acme"),
             pinned: true,
             related: Vec::new(),
         },
-        webauthn: RealmPolicy::default(),
+        webauthn: EnvironmentPolicy::default(),
         attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
-        signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
+        signin: access_identity_session::domain::environment_policy::EnvironmentSignin::default(),
         hash: access_identity_account::domain::password::HashPolicy::Argon2(
             access_identity_account::domain::password::Argon2Params::CANONICAL,
         ),
@@ -280,10 +281,10 @@ fn tls(host: &str) -> (String, String, String) {
 }
 
 /// Registers the software passkey of `key` for `subject` the way the bootstrap does (OP-149
-/// m.26 (e)): the realm's own registration ceremony, finished through the hosted path's step.
+/// m.26 (e)): the environment's own registration ceremony, finished through the hosted path's step.
 async fn register_passkey(
     pool: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     key: &SoftSigner,
     issuer: &str,
@@ -306,7 +307,7 @@ async fn register_passkey(
     let risk = access_identity_session::app::RiskServices::without_sources();
     let auth = Auth {
         db: &db,
-        realm: kit.realm(),
+        environment: kit.environment(),
         policy: kit.auth,
         lifetimes: kit.lifetimes,
         clock: &Live,
@@ -359,12 +360,12 @@ fn claims(jwt: &str) -> Value {
 #[tokio::test]
 async fn the_headless_client_runs_the_code_flow() {
     let c = Cluster::new(&["acme"]).await;
-    let f = &c.realms[0];
-    let entry = RealmEntry {
-        tenant: f.realm.tenant,
-        realm: f.realm.realm,
+    let f = &c.environments[0];
+    let entry = EnvironmentEntry {
+        tenant: f.environment.tenant,
+        environment: f.environment.environment,
         slug: f.slug.clone(),
-        issuer: f.realm.issuer.clone(),
+        issuer: f.environment.issuer.clone(),
     };
     let kit = Arc::new(kit(&entry));
     let hasher = HasherConfig::sized(Argon2Params::CANONICAL, 4, None);
@@ -388,11 +389,13 @@ async fn the_headless_client_runs_the_code_flow() {
         correlation: "test",
     };
     let id = Identifier::new(IdentifierKind::Email, WHO).unwrap();
-    let subject = create(&accounts, &kit.realm(), &[id], &who).await.unwrap();
+    let subject = create(&accounts, &kit.environment(), &[id], &who)
+        .await
+        .unwrap();
     let hasher = Hasher::new(hasher);
     set_password(
         &accounts,
-        &kit.realm(),
+        &kit.environment(),
         &PasswordServices {
             hasher: &hasher,
             ranges: &Corpus,
@@ -405,7 +408,7 @@ async fn the_headless_client_runs_the_code_flow() {
     .await
     .unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&accounts, &kit.realm(), subject, to, &who)
+        change_status(&accounts, &kit.environment(), subject, to, &who)
             .await
             .unwrap();
     }
@@ -578,7 +581,7 @@ async fn the_headless_client_runs_the_code_flow() {
     // OP-149 m.32, m.28 (b), INV-13, §5.1
     let (device, _) = SoftSigner::generate_ed25519().unwrap();
     let mut tx = PgTx::new(
-        TenantTx::begin(&c.db.app, kit.tenant, kit.realm)
+        TenantTx::begin(&c.db.app, kit.tenant, kit.environment)
             .await
             .unwrap(),
     );

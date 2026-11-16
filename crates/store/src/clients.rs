@@ -1,5 +1,5 @@
-//! The realm's protected resources, its CIMD clients and the server-side consent records
-//! (OP-154 m.3 (i), (k), AG-3…AG-8, P58). Scoped to the transaction's realm by row-level
+//! The environment's protected resources, its CIMD clients and the server-side consent records
+//! (OP-154 m.3 (i), (k), AG-3…AG-8, P58). Scoped to the transaction's environment by row-level
 //! security; a CIMD client retires and a consent record ends, once (OP-73).
 
 use sqlx::types::Uuid;
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -28,14 +28,14 @@ fn bytes16(v: &[u8]) -> Result<[u8; 16], StoreError> {
     <[u8; 16]>::try_from(v).map_err(|_| StoreError::Corrupt)
 }
 
-/// A protected resource or MCP server of the realm (AG-8).
+/// A protected resource or MCP server of the environment (AG-8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceRow {
     /// Its canonical URI.
     pub resource: String,
     /// Its display name.
     pub display_name: String,
-    /// The algorithm its access tokens are signed with; `None` is the realm's (OP-159 m.21
+    /// The algorithm its access tokens are signed with; `None` is the environment's (OP-159 m.21
     /// (g)).
     pub access_token_alg: Option<String>,
 }
@@ -57,7 +57,7 @@ pub struct CimdRow {
     pub visual_hash: [u8; 32],
     /// The prefetched logo and its media type.
     pub logo: Option<(Vec<u8>, String)>,
-    /// When the realm first saw it.
+    /// When the environment first saw it.
     pub first_seen_ms: i64,
     /// When it was last fetched.
     pub fetched_ms: i64,
@@ -139,13 +139,13 @@ pub async fn insert_protected_resource(
     display_name: &str,
     access_token_alg: Option<&str>,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_protected_resources (tenant_id, realm_id, resource, display_name,
+        "INSERT INTO access.idp_protected_resources (tenant_id, environment_id, resource, display_name,
                 domain_id, decision_pos, access_token_alg)
          VALUES ($1, $2, $3, $4, $5, $6, $7)",
         tenant,
-        realm,
+        environment,
         resource,
         display_name,
         bound.domain().as_bytes().as_slice(),
@@ -166,12 +166,12 @@ impl TenantTx {
         &mut self,
         resource: &str,
     ) -> Result<Option<ResourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND resource = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND resource = $3",
             tenant,
-            realm,
+            environment,
             resource,
         )
         .fetch_optional(&mut *self.tx)
@@ -183,17 +183,17 @@ impl TenantTx {
         }))
     }
 
-    /// The realm's protected resources, by URI.
+    /// The environment's protected resources, by URI.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn protected_resources(&mut self) -> Result<Vec<ResourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY resource",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY resource",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -212,15 +212,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn cimd_client(&mut self, client_id: &str) -> Result<Option<CimdRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT client_uuid, client_id, document, document_hash, authority_hash, visual_hash,
                     logo, logo_type, first_seen_ms, fetched_ms, fresh_until_ms, visual_changed_ms
                FROM access.oauth_cimd_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND retired_ms IS NULL
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             client_id,
         )
         .fetch_optional(&mut *self.tx)
@@ -251,29 +251,29 @@ impl TenantTx {
         &mut self,
         uuid: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT client_id FROM access.oauth_cimd_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(uuid),
         )
         .fetch_optional(&mut *self.tx)
         .await?)
     }
 
-    /// The live CIMD clients of the realm: internal id and URL.
+    /// The live CIMD clients of the environment: internal id and URL.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn cimd_clients(&mut self) -> Result<Vec<([u8; 16], String)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT client_uuid, client_id FROM access.oauth_cimd_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND retired_ms IS NULL ORDER BY client_id",
+              WHERE tenant_id = $1 AND environment_id = $2 AND retired_ms IS NULL ORDER BY client_id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -292,15 +292,15 @@ impl TenantTx {
         client_id: &str,
         s: &CimdSnapshot<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.oauth_cimd_clients (tenant_id, realm_id, client_id, document,
+            "INSERT INTO access.oauth_cimd_clients (tenant_id, environment_id, client_id, document,
                     document_hash, authority_hash, visual_hash, logo, logo_type, first_seen_ms,
                     fetched_ms, fresh_until_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
              RETURNING client_uuid",
             tenant,
-            realm,
+            environment,
             client_id,
             s.document,
             s.document_hash.as_slice(),
@@ -327,15 +327,15 @@ impl TenantTx {
         s: &CimdSnapshot<'_>,
         visual_changed: bool,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_cimd_clients
                 SET document = $4, document_hash = $5, authority_hash = $6, visual_hash = $7,
                     logo = $8, logo_type = $9, fetched_ms = $10, fresh_until_ms = $11,
                     visual_changed_ms = CASE WHEN $12 THEN $10 ELSE visual_changed_ms END
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(uuid),
             s.document,
             s.document_hash.as_slice(),
@@ -365,13 +365,13 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(now_ms)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_cimd_clients SET retired_ms = $4, retire_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(uuid),
             now,
             reason,
@@ -386,9 +386,9 @@ impl TenantTx {
             .await?;
         sqlx::query!(
             "UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = 'revoked'
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND revoked_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND revoked_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(uuid),
             now,
         )
@@ -421,14 +421,14 @@ impl TenantTx {
         client: [u8; 16],
         resource: &str,
     ) -> Result<Option<ConsentRecordRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT consent_id, scopes, metadata_hash, grant_domain, grant_ref, created_ms
                FROM access.oauth_consent_records
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND client_uuid = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4
                 AND resource = $5 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             Uuid::from_bytes(client),
             resource,
@@ -453,14 +453,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn put_consent_record(&mut self, c: &NewConsentRecord<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(c.now_ms)?;
         sqlx::query!(
             "UPDATE access.oauth_consent_records SET ended_ms = $6, end_reason = 'replaced'
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND client_uuid = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4
                 AND resource = $5 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(c.subject),
             Uuid::from_bytes(c.client),
             c.resource,
@@ -472,12 +472,12 @@ impl TenantTx {
         scopes.sort();
         scopes.dedup();
         sqlx::query!(
-            "INSERT INTO access.oauth_consent_records (tenant_id, realm_id, subject_id,
+            "INSERT INTO access.oauth_consent_records (tenant_id, environment_id, subject_id,
                     client_uuid, source, resource, scopes, metadata_hash, grant_domain,
                     grant_ref, exercise, created_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(c.subject),
             Uuid::from_bytes(c.client),
             c.source,
@@ -504,12 +504,12 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_consent_records SET ended_ms = $4, end_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND consent_id = $3 AND ended_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND consent_id = $3 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(consent),
             i64_of(now_ms)?,
             reason,
@@ -530,12 +530,12 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query!(
             "UPDATE access.oauth_consent_records SET ended_ms = $4, end_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND ended_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             i64_of(now_ms)?,
             reason,

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_memberships\n                 (tenant_id, environment_id, org_id, subject_id, source, owner, role_name, role_version,\n                  grant_state)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8,\n                       CASE WHEN $7::text IS NULL THEN NULL ELSE 'pending' END)\n               RETURNING membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "membership_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f4c6008185b2bd47ff09c0d981ca0f6318472c353a132b796358c406014fc9f9"
+}

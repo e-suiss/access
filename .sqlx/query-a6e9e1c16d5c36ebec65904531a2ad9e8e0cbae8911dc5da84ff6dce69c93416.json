@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.session_instances SET status = 'released', released_at = now()\n          WHERE tenant_id = $1 AND environment_id = $2 AND instance_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a6e9e1c16d5c36ebec65904531a2ad9e8e0cbae8911dc5da84ff6dce69c93416"
+}

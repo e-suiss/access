@@ -70,7 +70,7 @@ async fn run_drill(
         router: &db.router,
         sequencer: &db.sequencer,
         migrator: Some(&migrator),
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         event_key: &event_key,
         cold: None,
         breakglass: None,
@@ -102,7 +102,7 @@ async fn pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_re
     );
     assert!(baseline.kids.values().all(|k| !k.is_empty()));
     let target = clock_text(&w.db).await.unwrap();
-    w.admin_realm("later").await;
+    w.admin_environment("later").await;
     w.domains.release().await;
     let wal = switch_wal(&w.db).await.unwrap();
     let deadline = Instant::now() + Duration::from_secs(60);

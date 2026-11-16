@@ -1,13 +1,13 @@
 //! The hosted Approval Surface (OP-150 m.3 (r), OP-149 m.9, §9.14.1 A, §9.14.5 WYSIWYS): a
 //! coordinator's pushed request is shown as the decision point rendered it, the signed-in
 //! approver's one passkey assertion commits to H(AAS), the `authentication` Claim bound to the
-//! statement is issued at once through the realm's Claim courier (SI-5) and the contribution is
+//! statement is issued at once through the environment's Claim courier (SI-5) and the contribution is
 //! committed as PEP. Everything the surface refuses is a decision, not an error (OP-64).
 
 use access_identity_account::app::claims::Issued;
 use access_identity_account::domain::claims::{self, AuthFacts, Bind, assertion_evidence};
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::claims::levels;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::domain::assurance::{Factor, vector};
@@ -55,7 +55,7 @@ use crate::domain::frontend::{
 };
 use crate::domain::message::TextId;
 use crate::domain::spc;
-use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
+use crate::ports::{ApprovalClaims, Approvals, EnvironmentKit, Kits, Messages};
 
 pub(super) fn problem(status: u16, code: &'static str, title: &'static str) -> Reply {
     Reply::problem(Problem {
@@ -135,8 +135,8 @@ pub(super) async fn find(
 }
 
 /// Whether `redirect_uri` is exactly a return address a client registered (RFC 6749 §3.1.2): a
-/// client of this realm, or a platform product's client in the platform realm, which needs no
-/// registration in the tenant realm (OP-149 m.33 (d)).
+/// client of this environment, or a platform product's client in the platform environment, which needs no
+/// registration in the tenant environment (OP-149 m.33 (d)).
 async fn registered_redirect(
     t: &mut TenantTx,
     products: &access_store::Pool,
@@ -158,13 +158,13 @@ async fn registered_redirect(
 pub(super) async fn call(
     db: &access_store::Pool,
     products: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     query: &ApproveQuery,
     now: u64,
 ) -> Result<ApprovalRow, Reply> {
     let named = approval_request(query)
         .map_err(|e| problem(400, e.code(), "The approval call is not valid"))?;
-    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+    let mut t = TenantTx::begin(db, kit.tenant, kit.environment)
         .await
         .map_err(|_| unavailable())?;
     if !registered_redirect(&mut t, products, &query.redirect_uri)
@@ -191,7 +191,7 @@ fn render_view(
     env: &Envelope,
     opening: &access_internal_api::approvals::Opening,
     (tier, expires_at): (Tier, u64),
-    (realm, viewer): (&str, &Id),
+    (environment, viewer): (&str, &Id),
 ) -> RenderView {
     let q = quorum(
         &opening.unmet,
@@ -222,7 +222,7 @@ fn render_view(
             Tier::Ct3 => 3,
         },
         expires_at: rfc3339(expires_at),
-        capacity: capacity_text(&env.basis, &env.class, realm),
+        capacity: capacity_text(&env.basis, &env.class, environment),
         still_needed: q.lines,
         counts_as_one: q
             .counts_as_one
@@ -267,7 +267,7 @@ where
     pub async fn push_approval<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         body: &ApprovalPush,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -331,7 +331,7 @@ where
         };
         let facts = invitation.as_ref().map(|i| facts(i, &env.class));
         let stored = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             // A-3, C30, OP-157 m.3 (m)
             if let Some(i) = &invitation
                 && !self.window_open(&mut t, i, now).await?
@@ -376,9 +376,9 @@ where
     }
 
     /// `GET /v1/approve` (OP-149 m.9): the call contract's checks, then the page. Nothing
-    /// redirects before `redirect_uri` is one a client of the realm registered; an unknown or
+    /// redirects before `redirect_uri` is one a client of the environment registered; an unknown or
     /// expired request is `approval-request-unknown`.
-    pub async fn approve(&self, entry: &RealmEntry, query: &ApproveQuery) -> Reply {
+    pub async fn approve(&self, entry: &EnvironmentEntry, query: &ApproveQuery) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -404,7 +404,7 @@ where
     pub async fn start_approval<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &ApprovalStart,
     ) -> Reply {
@@ -443,7 +443,7 @@ where
             tier: _,
         } = opened;
         let started = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let ok =
                 store::start_approval(&mut t, &row.id, &session.id, &statement.0, &aas_bytes, now)
                     .await?;
@@ -480,7 +480,7 @@ where
     pub(super) async fn opening_of<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         row: &ApprovalRow,
         now: u64,
@@ -589,10 +589,10 @@ where
     /// The Party of the session's subject, if it has one.
     pub(super) async fn viewer_party(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
     ) -> Result<Option<Id>, Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let party = idp::subject_party(&mut t, subject)
@@ -605,7 +605,7 @@ where
     /// The live session of the approver's browser.
     pub(super) async fn approver_session(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
     ) -> Result<access_identity_session::app::sessions::SessionView, Reply> {
         signin!(self, kit, auth);
@@ -620,10 +620,10 @@ where
     }
 
     /// The pushed request, what was kept beside it and the contribution of `row`, in this
-    /// realm's domain.
+    /// environment's domain.
     pub(super) async fn opened(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         row: &ApprovalRow,
     ) -> Result<(Pushed, Kept, Envelope, Value), Reply> {
         let (Ok(request), Ok(kept)) = (
@@ -640,7 +640,7 @@ where
             return Err(problem(
                 400,
                 "approval-domain",
-                "The request is not in this realm's domain",
+                "The request is not in this environment's domain",
             ));
         }
         Ok((p, kept, env, request))
@@ -649,14 +649,14 @@ where
     /// The approver: the session subject's active device Instance whose key signed `ais`.
     pub(super) async fn approver(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         ais: &[u8],
     ) -> Result<Option<Approver>, Reply> {
         let Some(kid) = kid_of(ais) else {
             return Ok(None);
         };
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let keys = subject_device_keys(&mut t, subject)
@@ -683,12 +683,12 @@ where
     /// required from CT2 (§13.7.3).
     async fn options(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         challenge: &[u8; 32],
         tier: Tier,
     ) -> Result<Value, Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let handle = t.user_handle(*subject).await.map_err(|_| unavailable())?;
@@ -707,7 +707,7 @@ where
             ids: &kit.ids,
         };
         let records = registry
-            .list(kit.rp.realm, &UserHandle::from_bytes(handle))
+            .list(kit.rp.environment, &UserHandle::from_bytes(handle))
             .await
             .map_err(|_| unavailable())?;
         if records.is_empty() {
@@ -739,7 +739,7 @@ where
     pub async fn finish_approval<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         flow: &str,
         body: &ApprovalFinish,
@@ -775,7 +775,7 @@ where
     pub(super) async fn finish_flow<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         session: &[u8; 16],
         flow: &str,
@@ -857,7 +857,7 @@ where
             .await;
         let exercise = committed(verdict)?;
         let finished = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let ok = store::finish_approval(&mut t, &row.id, &exercise.0, now).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(ok)
@@ -875,7 +875,7 @@ where
     /// The started, unfinished flow `flow` of `session`: its row, H(AAS) and the statement.
     pub(super) async fn started(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         flow: &str,
         session: &[u8; 16],
         now: u64,
@@ -886,7 +886,7 @@ where
         else {
             return Err(Reply::problem(UNKNOWN));
         };
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let row = store::approval(&mut t, &id)
@@ -922,7 +922,7 @@ where
     /// its use; `uv` asks for user verification.
     pub(super) async fn assert(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         challenge: &[u8; 32],
         uv: bool,
@@ -937,7 +937,7 @@ where
                 "The passkey was not accepted",
             ));
         };
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let handle = t.user_handle(*subject).await.map_err(|_| unavailable())?;
@@ -961,7 +961,7 @@ where
             ids: &kit.ids,
         };
         let Some(stored) = registry
-            .find(kit.rp.realm, &id)
+            .find(kit.rp.environment, &id)
             .await
             .map_err(|_| unavailable())?
         else {
@@ -973,7 +973,7 @@ where
         };
         let now_s = now / 1_000;
         let state = AuthenticationState {
-            realm: kit.rp.realm,
+            environment: kit.rp.environment,
             challenge: *challenge,
             user: Some(UserHandle::from_bytes(handle)),
             allowed: Vec::new(),
@@ -993,7 +993,7 @@ where
             })?;
         registry
             .record_use(
-                kit.rp.realm,
+                kit.rp.environment,
                 &id,
                 verified.sign_count,
                 verified.backup_state,
@@ -1112,11 +1112,11 @@ pub(super) fn finished_reply(
 }
 
 /// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
-/// approver's Instance, issued now through the realm's courier; only an admitted Claim is a
+/// approver's Instance, issued now through the environment's courier; only an admitted Claim is a
 /// proof.
 pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
     devices: &Devices<A, I, P, Q>,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     statement: [u8; 32],
     instance: Id,
@@ -1135,7 +1135,11 @@ pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
             instance: instance.0,
         },
     });
-    match devices.claims.issue(kit.tenant, kit.realm, &order).await {
+    match devices
+        .claims
+        .issue(kit.tenant, kit.environment, &order)
+        .await
+    {
         Ok(Issued::Answered {
             claim,
             verdict: ClaimVerdict::Admitted { .. },
@@ -1262,11 +1266,11 @@ where
     M: Messages,
 {
     /// OP-156 m.3 (g), §9.4.1: whether the assertion is a Secure Payment Confirmation, refusing
-    /// one the realm did not open, one over a request that is no payment, and one whose shown
+    /// one the environment did not open, one over a request that is no payment, and one whose shown
     /// payee, total or instrument is not byte for byte the canonical render's.
     async fn payment(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         assertion: &credential::Assertion,
         shown: Option<&render::Render>,
@@ -1293,13 +1297,13 @@ where
 
     pub(super) async fn spc_audit(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         event_type: &'static str,
     ) {
         let actor = kit.ids.encode("usr", *subject).unwrap_or_default();
         let wrote = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.audit(&access_store::audit::AuditEvent {
                 event_type,
                 actor: &actor,
@@ -1316,12 +1320,12 @@ where
 
     /// MD-11, SA-54, OP-156 m.3 (e): under the TR payment profile a CT2 or CT3 approval needs
     /// the app-controlled factor over the same statement, from an activated approver of the
-    /// approver's account; an offered one counts in any realm. It joins the passkey's step in
+    /// approver's account; an offered one counts in any environment. It joins the passkey's step in
     /// the `authentication` Claim's levels.
     #[expect(clippy::too_many_arguments, reason = "one approval's facts")]
     async fn app_factor(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: &[u8; 16],
         statement: &[u8; 32],
         tier: Tier,
@@ -1358,7 +1362,7 @@ where
             return Err(refused());
         };
         let found = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let key = t.device_key_by_thumbprint(&thumbprint).await?;
             let factor = match &key {
                 Some(k) => t.app_factor_key(k.id).await?,

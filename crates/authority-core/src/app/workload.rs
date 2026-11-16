@@ -1,5 +1,5 @@
 //! A workload's first presentation on the authority side (OP-154 m.3 (d), §11.21.1 carleton
-//! note, AG-30, L25, U20): the realm issuer's `identity_binding_workload` Claim is the actor
+//! note, AG-30, L25, U20): the environment issuer's `identity_binding_workload` Claim is the actor
 //! binding of a self-signed `instance_create`. The key's own `instance_create` stands only
 //! while a live Claim, admitted by its issuer's actor-binding Acceptance, binds the key's
 //! thumbprint to the Party; the Instance it opens still acts only through a Grant.

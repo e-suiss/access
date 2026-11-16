@@ -46,7 +46,7 @@ These suites run side by side, and none stands in for another: the Access vector
 | Suite | Runs against | Where |
 |---|---|---|
 | Access vectors | every Kernel binding and F0 | every pull request |
-| [OpenID Foundation conformance suite](oidf) | a seeded realm: Basic OP, Config OP, FAPI 2.0 Security Profile and Message Signing, FAPI-CIBA (poll and ping), Dynamic OP, RP-initiated, back-channel and front-channel logout, and OpenID Federation | every night and every release tag (`oidf-conformance`) |
+| [OpenID Foundation conformance suite](oidf) | a seeded environment: Basic OP, Config OP, FAPI 2.0 Security Profile and Message Signing, FAPI-CIBA (poll and ping), Dynamic OP, RP-initiated, back-channel and front-channel logout, and OpenID Federation | every night and every release tag (`oidf-conformance`) |
 | [Differential tests](interop) | Access next to oidc-provider, openid-client, xmlsec1, SimpleSAMLphp, Shibboleth SP and scim2-tester | every night and every release tag (`differential`) |
 | [Interop lab](interop) | recorded vendor requests through the real parsers and servers | every night and every release tag (`interop-lab`) |
 | [SAML IdP test suite](../tools/saml-idp-suite) | the SAML identity provider: standards checks, signature wrapping and comment injection, service provider profiles | every build |

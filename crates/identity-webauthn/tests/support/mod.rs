@@ -18,9 +18,9 @@
 pub mod attest;
 
 use access_identity_webauthn::WebAuthnError;
-use access_identity_webauthn::adapters::{MemoryRegistry, MemorySignals, RealmDecoyKeys};
+use access_identity_webauthn::adapters::{EnvironmentDecoyKeys, MemoryRegistry, MemorySignals};
 use access_identity_webauthn::app::WebAuthn;
-use access_identity_webauthn::domain::ids::RealmId;
+use access_identity_webauthn::domain::ids::EnvironmentId;
 use access_identity_webauthn::domain::rp::{Origin, RelyingParty, RpId};
 use access_identity_webauthn::ports::{Clock, Random};
 use access_kernel::json::b64url_encode;
@@ -38,12 +38,12 @@ use suiss_crypto::dcbor::{Limits, Value, encode};
 
 pub const RP_ID: &str = "acme.example";
 pub const ORIGIN: &str = "https://acme.example";
-pub const REALM: RealmId = RealmId::from_bytes([7; 16]);
+pub const ENVIRONMENT: EnvironmentId = EnvironmentId::from_bytes([7; 16]);
 pub const NOW: u64 = 1_793_750_400;
 
 pub fn rp() -> RelyingParty {
     RelyingParty {
-        realm: REALM,
+        environment: ENVIRONMENT,
         rp_id: RpId::parse(RP_ID).unwrap(),
         name: "Acme".into(),
         pinned: true,
@@ -81,7 +81,7 @@ impl Random for CountingRandom {
 }
 
 pub type Service =
-    WebAuthn<MemoryRegistry, FixedClock, CountingRandom, RealmDecoyKeys, MemorySignals>;
+    WebAuthn<MemoryRegistry, FixedClock, CountingRandom, EnvironmentDecoyKeys, MemorySignals>;
 
 pub fn service() -> Service {
     use access_crypto::Secret;
@@ -90,7 +90,8 @@ pub fn service() -> Service {
         registry: MemoryRegistry::default(),
         clock: FixedClock::at(NOW),
         random: CountingRandom(AtomicU64::new(1)),
-        decoys: RealmDecoyKeys::default().with(REALM, DecoyKey::new(Secret::new([9; 32]))),
+        decoys: EnvironmentDecoyKeys::default()
+            .with(ENVIRONMENT, DecoyKey::new(Secret::new([9; 32]))),
         signals: MemorySignals::default(),
     }
 }

@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 test.describe("@live console delegated administration", () => {
   test("@live the setting changes nothing without a session", async ({ page }) => {
     const put = await page.request.put(
-      "/console/api/proxy/admin/realms/acme/settings/delegated-admin",
+      "/console/api/proxy/admin/envs/acme/settings/delegated-admin",
       { data: { enabled: true } },
     );
     expect([401, 403]).toContain(put.status());

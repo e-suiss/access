@@ -1,21 +1,21 @@
 //! One checkpoint step (OP-38): integrate what has ended since the last checkpoint and have the
-//! cell's `audit-checkpoint` key sign it (OP-150 m.3 (h)). On the identity audit log, each realm
-//! the step touched then gets its own tree checkpoint under the realm's origin (OP-152 m.7 (d)).
+//! cell's `audit-checkpoint` key sign it (OP-150 m.3 (h)). On the identity audit log, each environment
+//! the step touched then gets its own tree checkpoint under the environment's origin (OP-152 m.7 (d)).
 
 pub mod publish;
 pub mod tier;
 pub mod tiles;
 
 use access_crypto::AwsLcBackend;
-use access_identity_signer::cell::{OPERATIONAL_CHAIN, operational_origin, realm_origin};
+use access_identity_signer::cell::{OPERATIONAL_CHAIN, environment_origin, operational_origin};
 use access_store::audit::{AuditRow, CheckpointRow};
-use access_store::audit_realm::RealmCheckpointRow;
+use access_store::audit_environment::EnvironmentCheckpointRow;
 use suiss_crypto::note::NoteError;
 use suiss_ledger::merkle::Frontier;
 
 use crate::AuditError;
-use crate::domain::{Leaf, body, leaf, next, realm, verify};
-use crate::ports::{AuditLog, NoteSigner, RealmTrees};
+use crate::domain::{Leaf, body, environment, leaf, next, verify};
+use crate::ports::{AuditLog, EnvironmentTrees, NoteSigner};
 
 /// Most rows one step integrates.
 pub const STEP_ROWS: u32 = 10_000;
@@ -82,14 +82,14 @@ pub async fn step<L: AuditLog, S: NoteSigner>(
 pub struct IdentityStep {
     /// The cell checkpoint.
     pub checkpoint: CheckpointRow,
-    /// Realm tree checkpoints appended.
-    pub realms: u32,
-    /// Realms whose tree checkpoint failed; each catches up later.
-    pub realms_failed: u32,
+    /// Environment tree checkpoints appended.
+    pub environments: u32,
+    /// Environments whose tree checkpoint failed; each catches up later.
+    pub environments_failed: u32,
 }
 
-/// [`step`] on the identity audit log, then a tree checkpoint of every realm the step touched
-/// (OP-152 m.7 (d)). A realm whose tree checkpoint fails catches up the next time one of its
+/// [`step`] on the identity audit log, then a tree checkpoint of every environment the step touched
+/// (OP-152 m.7 (d)). An environment whose tree checkpoint fails catches up the next time one of its
 /// rows is integrated; the cell checkpoint stands either way.
 ///
 /// # Errors
@@ -100,42 +100,45 @@ pub async fn identity_step<L, S>(
     now: u64,
 ) -> Result<Option<IdentityStep>, AuditError>
 where
-    L: AuditLog<Row = AuditRow> + RealmTrees,
+    L: AuditLog<Row = AuditRow> + EnvironmentTrees,
     S: NoteSigner,
 {
     let Some(done) = integrate(log, signer, now).await? else {
         return Ok(None);
     };
-    let mut scopes: Vec<([u8; 16], [u8; 16])> =
-        done.rows.iter().map(|r| (r.tenant, r.realm)).collect();
+    let mut scopes: Vec<([u8; 16], [u8; 16])> = done
+        .rows
+        .iter()
+        .map(|r| (r.tenant, r.environment))
+        .collect();
     scopes.sort_unstable();
     scopes.dedup();
-    let (mut realms, mut realms_failed) = (0_u32, 0_u32);
+    let (mut environments, mut environments_failed) = (0_u32, 0_u32);
     for scope in scopes {
-        match realm_tree(log, signer, (&done, scope), now).await {
-            Ok(Some(_)) => realms = realms.saturating_add(1),
+        match environment_tree(log, signer, (&done, scope), now).await {
+            Ok(Some(_)) => environments = environments.saturating_add(1),
             Ok(None) => {}
-            Err(_) => realms_failed = realms_failed.saturating_add(1),
+            Err(_) => environments_failed = environments_failed.saturating_add(1),
         }
     }
     Ok(Some(IdentityStep {
         checkpoint: done.checkpoint,
-        realms,
-        realms_failed,
+        environments,
+        environments_failed,
     }))
 }
 
-/// The next checkpoint of one realm's tree, after the cell checkpoint `done`.
-async fn realm_tree<L: RealmTrees, S: NoteSigner>(
+/// The next checkpoint of one environment's tree, after the cell checkpoint `done`.
+async fn environment_tree<L: EnvironmentTrees, S: NoteSigner>(
     log: &L,
     signer: &S,
     (done, scope): (&Integrated<AuditRow>, ([u8; 16], [u8; 16])),
     now: u64,
-) -> Result<Option<RealmCheckpointRow>, AuditError> {
-    let last = log.realm_last(scope).await?;
+) -> Result<Option<EnvironmentCheckpointRow>, AuditError> {
+    let last = log.environment_last(scope).await?;
     let after = last.as_ref().map(|c| c.cursor).unwrap_or_default();
     let rows = log
-        .realm_pending(scope, after, done.checkpoint.cursor, STEP_ROWS)
+        .environment_pending(scope, after, done.checkpoint.cursor, STEP_ROWS)
         .await?;
     let Some(final_row) = rows.last() else {
         return Ok(None);
@@ -147,12 +150,12 @@ async fn realm_tree<L: RealmTrees, S: NoteSigner>(
     for row in &rows {
         frontier.push(leaf(row)?)?;
     }
-    let origin = realm_origin(&done.origin, &scope.1);
-    let text = realm::body(&origin, (frontier.size(), frontier.root()), &done.body, now)?;
+    let origin = environment_origin(&done.origin, &scope.1);
+    let text = environment::body(&origin, (frontier.size(), frontier.root()), &done.body, now)?;
     let line = signer.sign(text.clone()).await?;
-    let checkpoint = RealmCheckpointRow {
+    let checkpoint = EnvironmentCheckpointRow {
         tenant: scope.0,
-        realm: scope.1,
+        environment: scope.1,
         size: frontier.size(),
         root: frontier.root(),
         frontier: frontier.nodes().to_vec(),
@@ -160,6 +163,6 @@ async fn realm_tree<L: RealmTrees, S: NoteSigner>(
         cell_size: done.checkpoint.size,
         note: format!("{text}\n{line}"),
     };
-    log.realm_append(&checkpoint).await?;
+    log.environment_append(&checkpoint).await?;
     Ok(Some(checkpoint))
 }

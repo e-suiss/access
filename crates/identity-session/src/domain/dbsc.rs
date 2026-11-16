@@ -21,10 +21,10 @@ pub const COOKIE_TTL_MS: u64 = 600_000;
 /// How long a registration or refresh challenge stays usable.
 pub const CHALLENGE_TTL_MS: u64 = 300_000;
 
-/// The registration endpoint below the realm issuer.
+/// The registration endpoint below the environment issuer.
 pub const REGISTER_PATH: &str = "/v1/dbsc/register";
 
-/// The refresh endpoint below the realm issuer.
+/// The refresh endpoint below the environment issuer.
 pub const REFRESH_PATH: &str = "/v1/dbsc/refresh";
 
 /// The header a sign-in answer offers registration with.
@@ -179,7 +179,7 @@ impl Proof {
     }
 }
 
-/// The `Secure-Session-Registration` value: ES256 only, the realm's endpoint and the challenge.
+/// The `Secure-Session-Registration` value: ES256 only, the environment's endpoint and the challenge.
 #[must_use]
 pub fn registration(base: &str, challenge: &str) -> String {
     format!("(ES256);path=\"{base}{REGISTER_PATH}\";challenge=\"{challenge}\"")
@@ -191,7 +191,7 @@ pub fn challenge(challenge: &str, id: &str) -> String {
     format!("\"{challenge}\";id=\"{id}\"")
 }
 
-/// The session instructions the browser keeps: the refresh endpoint, the scope (the realm's
+/// The session instructions the browser keeps: the refresh endpoint, the scope (the environment's
 /// origin) and the one bound cookie.
 #[must_use]
 pub fn session_config(id: &str, origin: &str, base: &str) -> Value {

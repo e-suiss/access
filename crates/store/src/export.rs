@@ -1,4 +1,4 @@
-//! A realm's export sinks and their cursors (OP-156 m.3 (s), OP-41, X22). A sink is a versioned
+//! An environment's export sinks and their cursors (OP-156 m.3 (s), OP-41, X22). A sink is a versioned
 //! row written under a committed `idp.export.*` ALLOW; its sealed secret is shredded when a newer
 //! version supersedes it. The cursor names the last audit row the sink accepted and moves only
 //! forward, only after the sink accepted a batch.
@@ -12,10 +12,10 @@ use crate::identity::{Cursor, TenantTx};
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -31,7 +31,7 @@ fn unsigned(v: i64) -> Result<u64, StoreError> {
 pub struct NewSink<'a> {
     /// Its stable id, the same for every version.
     pub id: [u8; 16],
-    /// Its name in the realm.
+    /// Its name in the environment.
     pub name: &'a str,
     /// `live` or `retired`.
     pub state: &'a str,
@@ -113,23 +113,23 @@ macro_rules! sink_row {
 /// # Errors
 /// [`StoreError`]; a version that is not bound to its committed ALLOW fails its trigger.
 pub async fn write(t: &mut TenantTx, bound: &Bound, s: &NewSink<'_>) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version: i64 = sqlx::query_scalar!(
         r#"SELECT COALESCE(max(version), 0) + 1 AS "v!" FROM access.export_sinks
-            WHERE tenant_id = $1 AND realm_id = $2 AND name = $3"#,
+            WHERE tenant_id = $1 AND environment_id = $2 AND name = $3"#,
         tenant,
-        realm,
+        environment,
         s.name,
     )
     .fetch_one(&mut *t.tx)
     .await?;
     sqlx::query!(
-        "INSERT INTO access.export_sinks (tenant_id, realm_id, name, version, sink_uuid, state,
+        "INSERT INTO access.export_sinks (tenant_id, environment_id, name, version, sink_uuid, state,
                 adapter, preset, format, endpoint, settings, kek_id, wrapped_dek, secret_nonce,
                 secret_sealed, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::jsonb, $12, $13, $14, $15, $16, $17)",
         tenant,
-        realm,
+        environment,
         s.name,
         version,
         Uuid::from_bytes(s.id),
@@ -151,20 +151,20 @@ pub async fn write(t: &mut TenantTx, bound: &Bound, s: &NewSink<'_>) -> Result<u
     sqlx::query!(
         "UPDATE access.export_sinks
             SET kek_id = NULL, wrapped_dek = NULL, secret_nonce = NULL, secret_sealed = NULL
-          WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND version < $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND name = $3 AND version < $4
             AND secret_sealed IS NOT NULL",
         tenant,
-        realm,
+        environment,
         s.name,
         version,
     )
     .execute(&mut *t.tx)
     .await?;
     sqlx::query!(
-        "INSERT INTO access.export_cursors (tenant_id, realm_id, sink_uuid)
+        "INSERT INTO access.export_cursors (tenant_id, environment_id, sink_uuid)
          VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(s.id),
     )
     .execute(&mut *t.tx)
@@ -172,20 +172,20 @@ pub async fn write(t: &mut TenantTx, bound: &Bound, s: &NewSink<'_>) -> Result<u
     unsigned(version)
 }
 
-/// The newest version of every sink of the realm, by name.
+/// The newest version of every sink of the environment, by name.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn sinks(t: &mut TenantTx) -> Result<Vec<SinkRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT DISTINCT ON (name) name, version, sink_uuid, state, adapter, preset, format,
                 endpoint, settings::text AS "settings!", kek_id, wrapped_dek, secret_nonce, secret_sealed, decision_pos,
                 extract(epoch FROM created_at)::bigint AS "changed_s!"
-           FROM access.export_sinks WHERE tenant_id = $1 AND realm_id = $2
+           FROM access.export_sinks WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY name, version DESC"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -224,14 +224,14 @@ pub struct CursorRow {
 /// # Errors
 /// [`StoreError`].
 pub async fn cursor(t: &mut TenantTx, id: [u8; 16]) -> Result<Option<CursorRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query!(
         r#"SELECT after_xid, after_id, sent, failures, last_error, notified_at IS NOT NULL AS "notified!",
                 (extract(epoch FROM failed_since) * 1000)::bigint AS failed_ms,
                 (extract(epoch FROM sent_at) * 1000)::bigint AS sent_ms
-           FROM access.export_cursors WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3"#,
+           FROM access.export_cursors WHERE tenant_id = $1 AND environment_id = $2 AND sink_uuid = $3"#,
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
     )
     .fetch_optional(&mut *t.tx)
@@ -264,16 +264,16 @@ pub async fn advance(
     (from, to): (Cursor, Cursor),
     n: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.export_cursors
             SET after_xid = $4, after_id = $5, sent = sent + $6, failures = 0, failed_since = NULL,
                 last_error = NULL, notified_at = NULL, attempted_at = clock_timestamp(),
                 sent_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND sink_uuid = $3
             AND after_xid = $7 AND after_id = $8",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         signed(to.xid)?,
         to.id,
@@ -291,15 +291,15 @@ pub async fn advance(
 /// # Errors
 /// [`StoreError`].
 pub async fn failed(t: &mut TenantTx, id: [u8; 16], error: &str) -> Result<u32, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n: i32 = sqlx::query_scalar!(
         "UPDATE access.export_cursors
             SET failures = failures + 1, failed_since = COALESCE(failed_since, clock_timestamp()),
                 last_error = $4, attempted_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND sink_uuid = $3
          RETURNING failures",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         error,
     )
@@ -314,13 +314,13 @@ pub async fn failed(t: &mut TenantTx, id: [u8; 16], error: &str) -> Result<u32, 
 /// # Errors
 /// [`StoreError`].
 pub async fn notified(t: &mut TenantTx, id: [u8; 16]) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.export_cursors SET notified_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND sink_uuid = $3
             AND failed_since IS NOT NULL AND notified_at IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
     )
     .execute(&mut *t.tx)
@@ -328,7 +328,7 @@ pub async fn notified(t: &mut TenantTx, id: [u8; 16]) -> Result<bool, StoreError
     Ok(done.rows_affected() == 1)
 }
 
-/// The realm's audit rows after `after` whose transactions have ended, in integration order,
+/// The environment's audit rows after `after` whose transactions have ended, in integration order,
 /// at most `limit` (OP-41, OP-44: every row, none sampled). A row is returned only below every
 /// transaction still open at the snapshot that could write one: an open transaction counts
 /// unless it is a session of another database, which cannot write this table, so another
@@ -341,7 +341,7 @@ pub async fn audit_after(
     after: Cursor,
     limit: u32,
 ) -> Result<Vec<AuditRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"WITH elsewhere AS (
                   SELECT backend_xid::text::bigint AS x FROM pg_stat_activity
@@ -352,16 +352,16 @@ pub async fn audit_after(
                   SELECT COALESCE(min(p.x), pg_snapshot_xmax(pg_current_snapshot())) AS h
                     FROM pg_snapshot_xip(pg_current_snapshot()) AS p(x)
                    WHERE (p.x::text::bigint % 4294967296) NOT IN (SELECT x FROM elsewhere))
-           SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+           SELECT tenant_id, environment_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
                   xid::text::bigint AS "xid!", event_type, actor, target, correlation
              FROM access.identity_audit
-            WHERE tenant_id = $1 AND realm_id = $2
+            WHERE tenant_id = $1 AND environment_id = $2
               AND xid < (SELECT h FROM horizon)
               AND (xid, id) > ($3::bigint::text::xid8, $4)
             ORDER BY xid, id
             LIMIT $5"#,
         tenant,
-        realm,
+        environment,
         signed(after.xid)?,
         after.id,
         i64::from(limit),
@@ -372,7 +372,7 @@ pub async fn audit_after(
         .map(|r| {
             Ok(AuditRow {
                 tenant: *r.tenant_id.as_bytes(),
-                realm: *r.realm_id.as_bytes(),
+                environment: *r.environment_id.as_bytes(),
                 at_ms: r.at_ms,
                 id: r.id,
                 xid: unsigned(r.xid)?,

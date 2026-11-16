@@ -195,7 +195,7 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
-    /// Who the realm's break-glass alarms go to (OP-157 m.3 (h)).
+    /// Who the environment's break-glass alarms go to (OP-157 m.3 (h)).
     fn breakglass_on_call(
         &mut self,
     ) -> impl Future<Output = Result<Vec<[u8; 16]>, SessionError>> + Send;
@@ -362,7 +362,7 @@ pub trait PaymentTx {
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
 }
 
-/// Opens session transactions in one realm.
+/// Opens session transactions in one environment.
 pub trait SessionDb: AccountDb<Tx: SessionTx> {}
 
 impl<T: AccountDb<Tx: SessionTx>> SessionDb for T {}
@@ -452,8 +452,8 @@ pub trait RecoveryTx: SessionTx {
         subject: [u8; 16],
         policy: &AccountPolicyRow,
     ) -> impl Future<Output = Result<(), SessionError>> + Send;
-    /// The realm's recovery policy, encoded.
-    fn recovery_realm_policy(
+    /// The environment's recovery policy, encoded.
+    fn recovery_environment_policy(
         &mut self,
     ) -> impl Future<Output = Result<Option<Vec<u8>>, SessionError>> + Send;
     /// Opens an attempt.
@@ -544,13 +544,13 @@ pub trait RecoveryTx: SessionTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<u64, SessionError>> + Send;
-    /// The Party the subject is bound to in the realm's governing domain, if any (OP-153 m.3
+    /// The Party the subject is bound to in the environment's governing domain, if any (OP-153 m.3
     /// (c)).
     fn subject_party(
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
-    /// When the realm's RP ID last changed, Unix ms (RR-45).
+    /// When the environment's RP ID last changed, Unix ms (RR-45).
     fn last_rp_id_change(
         &mut self,
     ) -> impl Future<Output = Result<Option<u64>, SessionError>> + Send;
@@ -559,7 +559,7 @@ pub trait RecoveryTx: SessionTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
-    /// The newest Claim the realm issuer issued in `line` about the subject in `domain` and
+    /// The newest Claim the environment issuer issued in `line` about the subject in `domain` and
     /// that Claim Ingest did not reject.
     fn issued_in_line(
         &mut self,

@@ -255,11 +255,11 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
     ),
     (
         "crates/crypto/src/ip_pseudonym.rs",
-        "CR-3 (a): keyed client address pseudonyms per realm (OP-151 m.1 (b), PII pairwise)",
+        "CR-3 (a): keyed client address pseudonyms per environment (OP-151 m.1 (b), PII pairwise)",
     ),
     (
-        "crates/crypto/src/realm_index.rs",
-        "CR-3 (a): the realm's keyed blind index of sealed identifiers (OP-153 m.3 (aa), PII pairwise)",
+        "crates/crypto/src/environment_index.rs",
+        "CR-3 (a): the environment's keyed blind index of sealed identifiers (OP-153 m.3 (aa), PII pairwise)",
     ),
     (
         "crates/crypto/src/dpop.rs",
@@ -283,7 +283,7 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
     ),
     (
         "crates/crypto/src/client_secret_jwt.rs",
-        "CR-3, OP-148 m.16 (l): client_secret_jwt, two-party: one secret between the realm and one legacy client that registered the method",
+        "CR-3, OP-148 m.16 (l): client_secret_jwt, two-party: one secret between the environment and one legacy client that registered the method",
     ),
     (
         "crates/crypto/src/webhook.rs",
@@ -291,7 +291,7 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
     ),
     (
         "crates/crypto/src/sigv4.rs",
-        "OP-156 m.3 (s), (z): AWS Signature Version 4 of an export sink's S3 uploads; two-party like client_secret_jwt (CR-3): one secret access key between the realm and its own bucket",
+        "OP-156 m.3 (s), (z): AWS Signature Version 4 of an export sink's S3 uploads; two-party like client_secret_jwt (CR-3): one secret access key between the environment and its own bucket",
     ),
 ];
 

@@ -136,7 +136,7 @@ mod tests {
             Vec::<String>::new()
         );
         assert!(scope("crates/store/migrations/20260101000000_x.sql"));
-        assert!(scope("crates/http/src/api/realm.rs"));
+        assert!(scope("crates/http/src/api/environment.rs"));
         assert!(!scope("web/apps/console/src/screens/Admin.tsx"));
     }
 }

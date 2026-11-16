@@ -15,7 +15,7 @@ use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 use serde_json::{Value, json};
 
 use super::authority::{Asked, Projected, looks_authority, projected_body};
-use super::{Env, OAuth, Realm, Reply};
+use super::{Env, Environment, OAuth, Reply};
 use crate::domain::authority::{
     DETAILS_PARAM, Detail, EXERCISE_PARAM, parse_details, parse_exercise, within,
 };
@@ -25,7 +25,7 @@ use crate::domain::exchange::{
     self, ACCESS_TOKEN, AssertionRules, ID_JAG, ID_JAG_TYP, IdJagFacts, JWT_TYP, Requested,
     SubjectKind, TXN_TOKEN, TXN_TYP, TxnFacts, act_depth, jti_slot, peek, verify_assertion,
 };
-use crate::domain::jwt::realm_key_set;
+use crate::domain::jwt::environment_key_set;
 use crate::domain::request::Params;
 use crate::domain::tokens::ID_TYP;
 use crate::ports::Unavailable;
@@ -42,14 +42,14 @@ fn invalid_grant(why: &str) -> Reply {
 
 /// A subject token once verified: Claim input, never authority.
 enum Subject {
-    /// An active Access projection of this realm's domain.
+    /// An active Access projection of this environment's domain.
     Projection {
         /// Its claims.
         claims: Value,
         /// Its `exp`, Unix milliseconds.
         exp_ms: u64,
     },
-    /// An identity assertion: an ID token of this realm or an accepted issuer's JWT.
+    /// An identity assertion: an ID token of this environment or an accepted issuer's JWT.
     Identity,
 }
 
@@ -80,9 +80,9 @@ fn own_claims(token: &str) -> Option<Value> {
 }
 
 impl<E: Env> OAuth<E> {
-    /// The governing domain of `realm`.
-    async fn domain_of(&self, realm: &Realm) -> Result<Option<Digest>, Unavailable> {
-        let mut tx = self.begin(realm).await?;
+    /// The governing domain of `environment`.
+    async fn domain_of(&self, environment: &Environment) -> Result<Option<Digest>, Unavailable> {
+        let mut tx = self.begin(environment).await?;
         let d = tx.governing().await?.map(Digest);
         tx.commit().await?;
         Ok(d)
@@ -92,7 +92,7 @@ impl<E: Env> OAuth<E> {
     /// set the governing domain accepted for `iss`; `None` when none verifies it.
     async fn accepted_assertion(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         token: &str,
         typ: &str,
         client: Option<&str>,
@@ -101,17 +101,17 @@ impl<E: Env> OAuth<E> {
         let Some((t, iss)) = peek(token) else {
             return Ok(None);
         };
-        if t != typ || (iss == realm.issuer.as_str() && typ == JWT_TYP) {
+        if t != typ || (iss == environment.issuer.as_str() && typ == JWT_TYP) {
             return Ok(None);
         }
-        let Some(domain) = self.domain_of(realm).await? else {
+        let Some(domain) = self.domain_of(environment).await? else {
             return Ok(None);
         };
         let issuers = self.env.issuers().accepted(domain.0, iss.clone()).await?;
         let rules = AssertionRules {
             iss: &iss,
             typ,
-            audience: realm.issuer.as_str(),
+            audience: environment.issuer.as_str(),
             client_id: client,
             now_ms: now,
         };
@@ -129,13 +129,13 @@ impl<E: Env> OAuth<E> {
         Ok(None)
     }
 
-    /// Verifies the subject token (RFC 8693 §2.1): an active Access projection of this realm's
-    /// domain, an ID token this realm issued to `client`, or a JWT of an issuer the domain
-    /// accepted for `actor-binding`. A token of another realm or tenant verifies under none of
+    /// Verifies the subject token (RFC 8693 §2.1): an active Access projection of this environment's
+    /// domain, an ID token this environment issued to `client`, or a JWT of an issuer the domain
+    /// accepted for `actor-binding`. A token of another environment or tenant verifies under none of
     /// these (§12.1.3 rule 11). Its `act` is bounded and never read further (AG-25, L22).
     async fn subject(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         kind: SubjectKind,
         token: &str,
@@ -148,7 +148,7 @@ impl<E: Env> OAuth<E> {
             SubjectKind::Saml if !saml2 => Ok(Err(invalid_request("SAML 1.1 is not read"))),
             SubjectKind::Saml => {
                 use super::client_auth::saml_bearer::SamlRefusal;
-                match self.saml_subject(realm, client, token, now).await? {
+                match self.saml_subject(environment, client, token, now).await? {
                     Ok(_) => Ok(Ok(Subject::Identity)),
                     Err(SamlRefusal::NotAllowed) => Ok(Err(Reply::oauth_error(
                         400,
@@ -159,7 +159,7 @@ impl<E: Env> OAuth<E> {
                 }
             }
             SubjectKind::Access if looks_authority(token) => {
-                let Some(domain) = self.domain_of(realm).await? else {
+                let Some(domain) = self.domain_of(environment).await? else {
                     return refused();
                 };
                 let answer = self
@@ -173,7 +173,7 @@ impl<E: Env> OAuth<E> {
                     .filter(|_| answer.active)
                     .and_then(|c| serde_json::from_str::<Value>(&c).ok())
                     .filter(|c| {
-                        c.get("iss").and_then(Value::as_str) == Some(realm.issuer.as_str())
+                        c.get("iss").and_then(Value::as_str) == Some(environment.issuer.as_str())
                     });
                 let Some(claims) = claims else {
                     return refused();
@@ -184,10 +184,10 @@ impl<E: Env> OAuth<E> {
                 Ok(Ok(Subject::Projection { claims, exp_ms }))
             }
             SubjectKind::IdToken
-                if peek(token).is_some_and(|(_, iss)| iss == realm.issuer.as_str()) =>
+                if peek(token).is_some_and(|(_, iss)| iss == environment.issuer.as_str()) =>
             {
-                let jwks = self.env.signer().jwks(realm.realm).await?;
-                let keys = realm_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
+                let jwks = self.env.signer().jwks(environment.environment).await?;
+                let keys = environment_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
                 let Ok(v) = verify_compact(&AwsLcBackend, token, &keys, ID_TYP, Origin::Native)
                 else {
                     return refused();
@@ -202,7 +202,7 @@ impl<E: Env> OAuth<E> {
                     .and_then(|e| e.checked_mul(1000))
                     .is_some_and(|e| e > now);
                 if !live
-                    || c.get("iss").and_then(Json::as_str) != Some(realm.issuer.as_str())
+                    || c.get("iss").and_then(Json::as_str) != Some(environment.issuer.as_str())
                     || c.get("aud").and_then(Json::as_str) != Some(client.id.as_str())
                 {
                     return refused();
@@ -211,7 +211,7 @@ impl<E: Env> OAuth<E> {
             }
             SubjectKind::Access | SubjectKind::IdToken => {
                 match self
-                    .accepted_assertion(realm, token, JWT_TYP, None, now)
+                    .accepted_assertion(environment, token, JWT_TYP, None, now)
                     .await?
                 {
                     Some(_) => Ok(Ok(Subject::Identity)),
@@ -224,18 +224,20 @@ impl<E: Env> OAuth<E> {
     /// The agent grant of `params`: token exchange or JWT bearer.
     pub(crate) async fn agent_grant(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
         now: u64,
     ) -> Result<Reply, Unavailable> {
         if params.get("grant_type") == Some(crate::domain::metadata::TOKEN_EXCHANGE_GRANT) {
-            self.agent_exchange(realm, client, params, jkt, now).await
+            self.agent_exchange(environment, client, params, jkt, now)
+                .await
         } else if params.get("grant_type") == Some(crate::domain::metadata::SAML2_BEARER_GRANT) {
-            self.saml_bearer(realm, client, params, jkt, now).await
+            self.saml_bearer(environment, client, params, jkt, now)
+                .await
         } else {
-            self.jwt_bearer(realm, client, params, jkt, now).await
+            self.jwt_bearer(environment, client, params, jkt, now).await
         }
     }
 
@@ -243,7 +245,7 @@ impl<E: Env> OAuth<E> {
     /// (m)): `client` authenticated, its DPoP key `jkt` the actor Instance's.
     pub(crate) async fn agent_exchange(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -262,13 +264,19 @@ impl<E: Env> OAuth<E> {
             return Ok(invalid_request("requested_token_type is not supported"));
         };
         let saml2 = params.get("subject_token_type") == Some(exchange::SAML2);
-        let subject = match self.subject(realm, client, kind, token, saml2, now).await? {
+        let subject = match self
+            .subject(environment, client, kind, token, saml2, now)
+            .await?
+        {
             Ok(s) => s,
             Err(r) => return Ok(r),
         };
         Ok(match asked {
             Requested::Projection { issued } => {
-                match self.exchanged(realm, client, params, &subject, jkt).await? {
+                match self
+                    .exchanged(environment, client, params, &subject, jkt)
+                    .await?
+                {
                     Ok(p) => {
                         let mut body = projected_body(&p, now);
                         if let Value::Object(m) = &mut body {
@@ -279,8 +287,8 @@ impl<E: Env> OAuth<E> {
                     Err(r) => r,
                 }
             }
-            Requested::IdJag => self.id_jag(realm, client, params, jkt, now).await?,
-            Requested::Txn => self.txn(realm, &subject, now).await?,
+            Requested::IdJag => self.id_jag(environment, client, params, jkt, now).await?,
+            Requested::Txn => self.txn(environment, &subject, now).await?,
             Requested::IdToken | Requested::Refresh => {
                 invalid_request("this token type is not issued by an exchange")
             }
@@ -292,7 +300,7 @@ impl<E: Env> OAuth<E> {
     /// how long it lives (AG-26 rules 1 and 2).
     async fn exchanged(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         subject: &Subject,
@@ -322,16 +330,16 @@ impl<E: Env> OAuth<E> {
             authorized: None,
             family: None,
         };
-        self.project(realm, client, &asked, jkt).await
+        self.project(environment, client, &asked, jkt).await
     }
 
     /// An ID-JAG (§11.11.2, MD-18, OP-154 m.3 (n)): the holder's `projection.issue` for the
     /// resource is decided first and its token is not released; what is issued is an identity
-    /// assertion for the Resource AS, signed by the realm, five minutes at most, naming the
+    /// assertion for the Resource AS, signed by the environment, five minutes at most, naming the
     /// decided projection's pairwise subject and no authority. A public client is refused.
     async fn id_jag(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -353,7 +361,7 @@ impl<E: Env> OAuth<E> {
             return Ok(invalid_request("audience and resource are required"));
         };
         // AG-28, OP-154 m.3 (n)
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let connected = tx
             .cross_app_connected(client.id.as_str(), audience, resource)
             .await?;
@@ -370,7 +378,7 @@ impl<E: Env> OAuth<E> {
             authorized: None,
             family: None,
         };
-        let p = match self.project(realm, client, &asked, jkt).await? {
+        let p = match self.project(environment, client, &asked, jkt).await? {
             Ok(p) => p,
             Err(r) => return Ok(r),
         };
@@ -381,7 +389,7 @@ impl<E: Env> OAuth<E> {
             .ok_or(Unavailable)?;
         let jti = b64url_encode(&self.random::<16>()?);
         let claims = exchange::id_jag_claims(&IdJagFacts {
-            issuer: realm.issuer.as_str(),
+            issuer: environment.issuer.as_str(),
             sub,
             audience,
             client_id: client.id.as_str(),
@@ -391,13 +399,13 @@ impl<E: Env> OAuth<E> {
             now_ms: now,
             until_ms: p.token.expires_at,
         });
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let alg = tx.jose_alg().await?;
         tx.commit().await?;
         let jag = self
             .env
             .signer()
-            .sign(realm.realm, alg, ID_JAG_TYP, &claims, now)
+            .sign(environment.environment, alg, ID_JAG_TYP, &claims, now)
             .await?;
         let expires = p
             .token
@@ -415,9 +423,14 @@ impl<E: Env> OAuth<E> {
     }
 
     /// A Transaction Token (§11.12.3, OP-154 m.3 (o)): audit context of an active projection
-    /// subject token for this realm's trust domain, sixty seconds, never a basis or a subject
+    /// subject token for this environment's trust domain, sixty seconds, never a basis or a subject
     /// token itself.
-    async fn txn(&self, realm: &Realm, subject: &Subject, now: u64) -> Result<Reply, Unavailable> {
+    async fn txn(
+        &self,
+        environment: &Environment,
+        subject: &Subject,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
         let Subject::Projection { claims, .. } = subject else {
             return Ok(invalid_request(
                 "a transaction token names an Access projection",
@@ -437,21 +450,21 @@ impl<E: Env> OAuth<E> {
             .and_then(Value::as_str);
         let txn = b64url_encode(&self.random::<16>()?);
         let body = exchange::txn_claims(&TxnFacts {
-            issuer: realm.issuer.as_str(),
-            audience: realm.issuer.as_str(),
+            issuer: environment.issuer.as_str(),
+            audience: environment.issuer.as_str(),
             sub,
             txn: &txn,
             exercise,
             intent,
             now_ms: now,
         });
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let alg = tx.jose_alg().await?;
         tx.commit().await?;
         let token = self
             .env
             .signer()
-            .sign(realm.realm, alg, TXN_TYP, &body, now)
+            .sign(environment.environment, alg, TXN_TYP, &body, now)
             .await?;
         Ok(Reply::json(
             200,
@@ -466,12 +479,12 @@ impl<E: Env> OAuth<E> {
 
     /// `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` (RFC 7523 §2.1; AG-29, OP-154
     /// m.3 (n), (q)): an ID-JAG or a cloud workload JWT of an accepted issuer, checked in five
-    /// steps, its `jti` used once in the realm's replay store; without that store nothing is
+    /// steps, its `jti` used once in the environment's replay store; without that store nothing is
     /// accepted. The assertion is Claim input only: the token is the holder's own decision, and
     /// without one there is no token (EI-6).
     pub(crate) async fn jwt_bearer(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -485,7 +498,7 @@ impl<E: Env> OAuth<E> {
             _ => return Ok(invalid_grant("the assertion is not valid")),
         };
         let Some(a) = self
-            .accepted_assertion(realm, assertion, &typ, Some(client.id.as_str()), now)
+            .accepted_assertion(environment, assertion, &typ, Some(client.id.as_str()), now)
             .await?
         else {
             return Ok(invalid_grant("the assertion is not valid"));
@@ -504,7 +517,7 @@ impl<E: Env> OAuth<E> {
         let (day, key) = jti_slot(&a).ok_or(Unavailable)?;
         match self
             .env
-            .replay(realm.tenant, realm.realm)
+            .replay(environment.tenant, environment.environment)
             .first_use(day, key)
             .await
         {
@@ -521,15 +534,17 @@ impl<E: Env> OAuth<E> {
             authorized: None,
             family: None,
         };
-        Ok(match self.project(realm, client, &asked, jkt).await? {
-            Ok(p) => {
-                let mut body = projected_body(&p, now);
-                if let Value::Object(m) = &mut body {
-                    m.insert("issued_token_type".into(), ACCESS_TOKEN.into());
+        Ok(
+            match self.project(environment, client, &asked, jkt).await? {
+                Ok(p) => {
+                    let mut body = projected_body(&p, now);
+                    if let Value::Object(m) = &mut body {
+                        m.insert("issued_token_type".into(), ACCESS_TOKEN.into());
+                    }
+                    Reply::json(200, &body)
                 }
-                Reply::json(200, &body)
-            }
-            Err(r) => r,
-        })
+                Err(r) => r,
+            },
+        )
     }
 }

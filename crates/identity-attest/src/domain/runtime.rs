@@ -27,7 +27,7 @@ pub const CHALLENGE_CONTEXT: &str = "access/attestation-challenge/v1";
 /// How far an attestation challenge's time may be from the trusted time (OP-154 m.3 (s)).
 pub const CHALLENGE_SKEW_MS: u64 = 300_000;
 
-/// The challenge an attestation of `instance` at `at_ms` under the realm `issuer` binds
+/// The challenge an attestation of `instance` at `at_ms` under the environment `issuer` binds
 /// (Android `attestationChallenge`, TPM `extraData`): `SHA-256(context ‖ 0x00 ‖ issuer ‖ 0x00 ‖
 /// instance ‖ at_ms)`. It is fresh while `at_ms` is within [`CHALLENGE_SKEW_MS`] of the trusted
 /// time, so no challenge is stored.

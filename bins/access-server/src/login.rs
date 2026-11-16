@@ -1,30 +1,30 @@
-//! The hosted login's realm kits from the HSM (OP-94, OP-146 m.12): a realm's KEK and decoy key
-//! live in the token under labels named by the realm; the cell's opaque-id key is derived in the
-//! token from its root (OP-137). Kits are loaded on a realm's first sign-in and kept. The same
-//! realm KEKs seal event subscriptions' webhook secrets (OP-149 m.17 (b)).
+//! The hosted login's environment kits from the HSM (OP-94, OP-146 m.12): an environment's KEK and decoy key
+//! live in the token under labels named by the environment; the cell's opaque-id key is derived in the
+//! token from its root (OP-137). Kits are loaded on an environment's first sign-in and kept. The same
+//! environment KEKs seal event subscriptions' webhook secrets (OP-149 m.17 (b)).
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
 use access_crypto::Secret;
+use access_crypto::environment_index::{EnvironmentIndexKey, label as index_label};
 use access_crypto::opaque_id::IdKey;
-use access_crypto::realm_index::{RealmIndexKey, label as index_label};
 use access_crypto::webauthn::{DecoyKey, decoy_label};
 use access_identity_account::app::vault::Vault;
-use access_identity_events::adapters::RealmKek;
-use access_identity_oauth::ports::{RealmEntry, Unavailable};
-use access_identity_session::domain::realm_policy::RealmSignin;
+use access_identity_events::adapters::EnvironmentKek;
+use access_identity_oauth::ports::{EnvironmentEntry, Unavailable};
+use access_identity_session::domain::environment_policy::EnvironmentSignin;
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
-use access_identity_ui::ports::{Kits, RealmKit};
-use access_identity_webauthn::adapters::RealmDecoyKeys;
-use access_identity_webauthn::domain::ids::RealmId as WaRealm;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_ui::ports::{EnvironmentKit, Kits};
+use access_identity_webauthn::adapters::EnvironmentDecoyKeys;
+use access_identity_webauthn::domain::ids::EnvironmentId as WaEnvironment;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
-use access_store::tenancy::realm_tenant;
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
+use access_store::tenancy::environment_tenant;
 use suiss_crypto::envelope::{Dek, DekCache, EnvelopeError, Kek};
 use suiss_crypto::pkcs11::{HsmAead, HsmKek, KeyStore};
 use zeroize::Zeroizing;
@@ -41,38 +41,38 @@ pub(crate) fn id_key_bytes(keys: &KeyStore) -> Result<[u8; 32], String> {
         .map_err(|e| e.to_string())
 }
 
-/// The token label of a realm's KEK: `access/realm-kek/<RealmID hex>` (OP-146 m.15 (e)).
-pub(crate) fn kek_label(realm: &[u8; 16]) -> String {
-    let mut out = String::from("access/realm-kek/");
-    for b in realm {
+/// The token label of an environment's KEK: `access/environment-kek/<EnvironmentID hex>` (OP-146 m.15 (e)).
+pub(crate) fn kek_label(environment: &[u8; 16]) -> String {
+    let mut out = String::from("access/environment-kek/");
+    for b in environment {
         let _ = write!(out, "{b:02x}");
     }
     out
 }
 
-/// The token label of a realm's password pepper: `access/realm-pepper/<RealmID hex>` (CR-37,
+/// The token label of an environment's password pepper: `access/environment-pepper/<EnvironmentID hex>` (CR-37,
 /// OP-150 m.3 (f)).
-pub(crate) fn pepper_label(realm: &[u8; 16]) -> String {
-    kek_label(realm).replacen("realm-kek", "realm-pepper", 1)
+pub(crate) fn pepper_label(environment: &[u8; 16]) -> String {
+    kek_label(environment).replacen("environment-kek", "environment-pepper", 1)
 }
 
 /// The pepper version the token's pepper key applies; rotation adds the next.
 const PEPPER_VERSION: u16 = 1;
 
-/// The token label of generation `generation` of a realm's KEK (OP-138, OP-158 m.3 (y)): the
+/// The token label of generation `generation` of an environment's KEK (OP-138, OP-158 m.3 (y)): the
 /// first is [`kek_label`], a rotation adds `/<generation>`.
-pub(crate) fn kek_label_at(realm: &[u8; 16], generation: u32) -> String {
+pub(crate) fn kek_label_at(environment: &[u8; 16], generation: u32) -> String {
     if generation <= 1 {
-        kek_label(realm)
+        kek_label(environment)
     } else {
-        format!("{}/{generation}", kek_label(realm))
+        format!("{}/{generation}", kek_label(environment))
     }
 }
 
-/// The `kek_id` of generation `generation` as sealed rows record it: `access:realm-kek:<RealmID
+/// The `kek_id` of generation `generation` as sealed rows record it: `access:environment-kek:<EnvironmentID
 /// hex>[:<generation>]`, the label in the alphabet the tables' checks allow.
-pub(crate) fn kek_id_at(realm: &[u8; 16], generation: u32) -> String {
-    kek_label_at(realm, generation).replace('/', ":")
+pub(crate) fn kek_id_at(environment: &[u8; 16], generation: u32) -> String {
+    kek_label_at(environment, generation).replace('/', ":")
 }
 
 /// Most KEK generations probed in the token.
@@ -82,11 +82,14 @@ const MAX_GENERATIONS: u32 = 64;
 /// another process made (OP-158 m.3 (y); PD).
 const REPROBE_MS: u64 = 5 * 60 * 1000;
 
-/// The KEKs of a realm in the token, newest first: generation and key.
-pub(crate) fn realm_keks(keys: &KeyStore, realm: &[u8; 16]) -> Result<Vec<(u32, HsmKek)>, String> {
+/// The KEKs of an environment in the token, newest first: generation and key.
+pub(crate) fn environment_keks(
+    keys: &KeyStore,
+    environment: &[u8; 16],
+) -> Result<Vec<(u32, HsmKek)>, String> {
     let mut out = Vec::new();
     for generation in 1..=MAX_GENERATIONS {
-        match keys.kek(&kek_label_at(realm, generation)) {
+        match keys.kek(&kek_label_at(environment, generation)) {
             Ok(k) => out.push((generation, k)),
             Err(_) if generation > 1 => break,
             Err(e) => return Err(e.to_string()),
@@ -110,7 +113,7 @@ struct LockedKek {
     loaded_ms: u64,
 }
 
-/// A realm's current KEK with the generations before it: wraps with the current one, opens
+/// An environment's current KEK with the generations before it: wraps with the current one, opens
 /// with whichever wrapped the key (AES Key Wrap checks its own integrity), so rows a rotation
 /// has not reached yet still open (OP-138).
 struct Generations<'a> {
@@ -141,7 +144,7 @@ impl Kek for Generations<'_> {
 /// cached copy is gone at most this long after its row was shredded.
 pub(crate) const DEK_CACHE_TTL_MS: u64 = suiss_crypto::envelope::CACHE_TTL_MS;
 
-/// How many unwrapped DEKs one realm keeps at once (CR-32 m.2; PD).
+/// How many unwrapped DEKs one environment keeps at once (CR-32 m.2; PD).
 pub(crate) const DEK_CACHE_MAX: usize = 4096;
 
 fn now_ms() -> u64 {
@@ -262,16 +265,16 @@ impl Kek for SharedKek {
     }
 }
 
-/// The realms' KEKs from the token, opened once per realm and shared by the hosted login and
-/// event delivery, with each realm's PII vault index key (OP-153 m.3 (aa)).
+/// The environments' KEKs from the token, opened once per environment and shared by the hosted login and
+/// event delivery, with each environment's PII vault index key (OP-153 m.3 (aa)).
 #[derive(Clone)]
-pub(crate) struct RealmKeks {
+pub(crate) struct EnvironmentKeks {
     keys: Arc<KeyStore>,
     loaded: Arc<Mutex<HashMap<[u8; 16], Arc<LockedKek>>>>,
-    indexes: Arc<Mutex<HashMap<[u8; 16], Arc<RealmIndexKey>>>>,
+    indexes: Arc<Mutex<HashMap<[u8; 16], Arc<EnvironmentIndexKey>>>>,
 }
 
-impl RealmKeks {
+impl EnvironmentKeks {
     pub(crate) fn new(keys: Arc<KeyStore>) -> Self {
         Self {
             keys,
@@ -280,13 +283,13 @@ impl RealmKeks {
         }
     }
 
-    /// The realm's blind index key, made in the token on first use (OP-153 m.3 (aa)).
-    fn index(&self, realm: &[u8; 16]) -> Result<Arc<RealmIndexKey>, String> {
+    /// The environment's blind index key, made in the token on first use (OP-153 m.3 (aa)).
+    fn index(&self, environment: &[u8; 16]) -> Result<Arc<EnvironmentIndexKey>, String> {
         let mut loaded = self.indexes.lock().map_err(|_| "index cache")?;
-        if let Some(k) = loaded.get(realm) {
+        if let Some(k) = loaded.get(environment) {
             return Ok(k.clone());
         }
-        let label = index_label(realm);
+        let label = index_label(environment);
         let mac = self
             .keys
             .mac(&label)
@@ -295,16 +298,16 @@ impl RealmKeks {
                 self.keys.mac(&label)
             })
             .map_err(|e| e.to_string())?;
-        let key = Arc::new(RealmIndexKey::token(mac));
-        loaded.insert(*realm, key.clone());
+        let key = Arc::new(EnvironmentIndexKey::token(mac));
+        loaded.insert(*environment, key.clone());
         Ok(key)
     }
 
-    /// The realm's PII vault keys: its KEK and its index key (OP-153 m.3 (aa)). `None` when the
+    /// The environment's PII vault keys: its KEK and its index key (OP-153 m.3 (aa)). `None` when the
     /// token refuses either; nothing personal is read or written then (TI-9).
-    pub(crate) fn vault(&self, realm: RealmId) -> Option<Vault> {
-        let kek = self.get(realm.as_bytes());
-        let index = self.index(realm.as_bytes());
+    pub(crate) fn vault(&self, environment: EnvironmentId) -> Option<Vault> {
+        let kek = self.get(environment.as_bytes());
+        let index = self.index(environment.as_bytes());
         match (kek, index) {
             (Ok(k), Ok(i)) => Some(Vault {
                 kek: Arc::new(SharedKek(k)),
@@ -317,11 +320,11 @@ impl RealmKeks {
         }
     }
 
-    /// Drops the loaded KEKs of `realm`, so the next use probes the token again: after a
+    /// Drops the loaded KEKs of `environment`, so the next use probes the token again: after a
     /// rotation made a new generation (OP-138).
-    pub(crate) fn reload(&self, realm: &[u8; 16]) {
+    pub(crate) fn reload(&self, environment: &[u8; 16]) {
         if let Ok(mut loaded) = self.loaded.lock() {
-            loaded.remove(realm);
+            loaded.remove(environment);
         }
     }
 
@@ -330,46 +333,48 @@ impl RealmKeks {
         &self.keys
     }
 
-    fn get(&self, realm: &[u8; 16]) -> Result<Arc<LockedKek>, String> {
+    fn get(&self, environment: &[u8; 16]) -> Result<Arc<LockedKek>, String> {
         let mut loaded = self.loaded.lock().map_err(|_| "kek cache")?;
-        if let Some(k) = loaded.get(realm)
+        if let Some(k) = loaded.get(environment)
             && now_ms().saturating_sub(k.loaded_ms) < REPROBE_MS
         {
             return Ok(k.clone());
         }
-        let pepper = pepper_label(realm);
+        let pepper = pepper_label(environment);
         let pepper = self
             .keys
             .aead(&pepper)
             .or_else(|_| self.keys.generate_aead(&pepper))
             .map_err(|e| e.to_string())?;
-        let mut generations = realm_keks(&self.keys, realm)?.into_iter();
-        let (generation, current) = generations.next().ok_or("realm KEK missing")?;
+        let mut generations = environment_keks(&self.keys, environment)?.into_iter();
+        let (generation, current) = generations.next().ok_or("environment KEK missing")?;
         let kek = Arc::new(LockedKek::with_older(
-            kek_id_at(realm, generation),
+            kek_id_at(environment, generation),
             current,
-            generations.map(|(g, k)| (kek_id_at(realm, g), k)).collect(),
+            generations
+                .map(|(g, k)| (kek_id_at(environment, g), k))
+                .collect(),
             pepper,
             now_ms,
         ));
-        loaded.insert(*realm, kek.clone());
+        loaded.insert(*environment, kek.clone());
         Ok(kek)
     }
 }
 
-impl RealmKek for RealmKeks {
-    fn kek(&self, _: TenantId, realm: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
-        match self.get(realm.as_bytes()) {
+impl EnvironmentKek for EnvironmentKeks {
+    fn kek(&self, _: TenantId, environment: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
+        match self.get(environment.as_bytes()) {
             Ok(k) => Some(Arc::new(SharedKek(k))),
             Err(error) => {
-                tracing::error!(%error, "realm KEK unavailable");
+                tracing::error!(%error, "environment KEK unavailable");
                 None
             }
         }
     }
 }
 
-/// What a realm's settings say about its sign-in (TN-132, Ek B carry-over 3379): the stored
+/// What an environment's settings say about its sign-in (TN-132, Ek B carry-over 3379): the stored
 /// sign-in policy and the pinned RP ID. A kit is rebuilt when either changes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Settings {
@@ -380,16 +385,16 @@ struct Settings {
     push: bool,
     sms: bool,
     spc: bool,
-    crypto: access_store::realm_crypto::RealmCrypto,
+    crypto: access_store::environment_crypto::EnvironmentCrypto,
 }
 
 /// A kit and the settings it was built from.
-type Loaded = (Settings, Arc<RealmKit>);
+type Loaded = (Settings, Arc<EnvironmentKit>);
 
-/// The realm kits of this process.
+/// The environment kits of this process.
 pub(crate) struct HsmKits {
     keys: Arc<KeyStore>,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     router: Pool,
     app: Pool,
     lifetimes: SessionPolicy,
@@ -399,7 +404,12 @@ pub(crate) struct HsmKits {
 }
 
 impl HsmKits {
-    pub(crate) fn new(keks: RealmKeks, router: Pool, app: Pool, lifetimes: SessionPolicy) -> Self {
+    pub(crate) fn new(
+        keks: EnvironmentKeks,
+        router: Pool,
+        app: Pool,
+        lifetimes: SessionPolicy,
+    ) -> Self {
         Self {
             keys: keks.keys.clone(),
             keks,
@@ -412,7 +422,7 @@ impl HsmKits {
         }
     }
 
-    /// These kits with the sources a realm's `direct` attestation policy verifies against
+    /// These kits with the sources an environment's `direct` attestation policy verifies against
     /// (OP-159 m.3 (ll)).
     #[must_use]
     pub(crate) fn with_attestation(
@@ -423,7 +433,7 @@ impl HsmKits {
         self
     }
 
-    /// These kits under the deployment's realm base host, which decides what a Suiss domain is
+    /// These kits under the deployment's environment base host, which decides what a Suiss domain is
     /// for the RP ID rule (OP-156 m.3 (i)).
     #[must_use]
     pub(crate) fn with_base(mut self, base_host: &str) -> Self {
@@ -431,12 +441,16 @@ impl HsmKits {
         self
     }
 
-    /// The realm's sign-in settings as they are now, read in its own scope (TN-113).
-    async fn settings(&self, tenant: TenantId, realm: RealmId) -> Result<Settings, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+    /// The environment's sign-in settings as they are now, read in its own scope (TN-113).
+    async fn settings(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<Settings, Unavailable> {
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(|_| Unavailable)?;
-        let signin = access_store::idp::realm::policies(&mut t)
+        let signin = access_store::idp::environment::policies(&mut t)
             .await
             .map_err(|_| Unavailable)?
             .signin;
@@ -458,7 +472,7 @@ impl HsmKits {
         let sms = t.sms_otp_enabled().await.map_err(|_| Unavailable)?;
         let spc = t.spc_enabled().await.map_err(|_| Unavailable)?;
         // OP-158 m.3 (y), m.6 (b)
-        let crypto = t.realm_crypto().await.map_err(|_| Unavailable)?;
+        let crypto = t.environment_crypto().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
             signin,
@@ -474,15 +488,15 @@ impl HsmKits {
 
     fn load(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         tenant: TenantId,
         settings: &Settings,
-    ) -> Result<RealmKit, String> {
-        let kek = self.keks.get(entry.realm.as_bytes())?;
-        let index = self.keks.index(entry.realm.as_bytes())?;
+    ) -> Result<EnvironmentKit, String> {
+        let kek = self.keks.get(entry.environment.as_bytes())?;
+        let index = self.keks.index(entry.environment.as_bytes())?;
         let decoy = self
             .keys
-            .mac(&decoy_label(entry.realm.as_bytes()))
+            .mac(&decoy_label(entry.environment.as_bytes()))
             .map_err(|e| e.to_string())?;
         let ids = id_key_bytes(&self.keys)?;
         let issuer = entry.issuer.as_str().to_owned();
@@ -492,11 +506,11 @@ impl HsmKits {
             .split(':')
             .next()
             .unwrap_or_default();
-        let wa = WaRealm::from_bytes(*entry.realm.as_bytes());
+        let wa = WaEnvironment::from_bytes(*entry.environment.as_bytes());
         // TN-132, MD-8
         let signin = match &settings.signin {
-            Some(bytes) => RealmSignin::decode(bytes).ok_or("sign-in policy")?,
-            None => RealmSignin::default(),
+            Some(bytes) => EnvironmentSignin::decode(bytes).ok_or("sign-in policy")?,
+            None => EnvironmentSignin::default(),
         };
         // IDP-5, IDI-4, OP-156 m.3 (i)
         let base = self.base.clone().unwrap_or_else(|| base_of(host));
@@ -512,17 +526,17 @@ impl HsmKits {
             .and_then(|r| RpId::parse(&r))
             .or_else(|| RpId::parse(host))
             .ok_or("rp id")?;
-        Ok(RealmKit {
+        Ok(EnvironmentKit {
             tenant,
-            realm: entry.realm,
+            environment: entry.environment,
             issuer: issuer.clone(),
             name: entry.slug.clone(),
             kek: Arc::new(SharedKek(kek)),
             index,
             ids: IdKey::new(Secret::new(ids)),
-            decoys: RealmDecoyKeys::default().with(wa, DecoyKey::token(decoy)),
+            decoys: EnvironmentDecoyKeys::default().with(wa, DecoyKey::token(decoy)),
             rp: RelyingParty {
-                realm: wa,
+                environment: wa,
                 rp_id,
                 name: entry.slug.clone(),
                 pinned,
@@ -536,11 +550,11 @@ impl HsmKits {
                     .collect::<Result<_, _>>()?,
             },
             // MD-11, OP-156 m.3 (e)
-            webauthn: RealmPolicy {
+            webauthn: EnvironmentPolicy {
                 platform_uv_is_factor: signin.profile.platform_uv_is_factor(),
                 // OP-159 m.3 (ll)
                 attestation: signin.attestation.clone(),
-                ..RealmPolicy::default()
+                ..EnvironmentPolicy::default()
             },
             attestation: self.attestation.clone(),
             auth: AuthPolicy {
@@ -556,17 +570,17 @@ impl HsmKits {
     }
 }
 
-/// CR-15, CR-36, OP-158 m.3 (y), m.6 (b): the realm's password hash policy; an unknown stored
+/// CR-15, CR-36, OP-158 m.3 (y), m.6 (b): the environment's password hash policy; an unknown stored
 /// profile refuses the kit rather than hashing weaker.
 fn hash_policy(
-    c: &access_store::realm_crypto::RealmCrypto,
+    c: &access_store::environment_crypto::EnvironmentCrypto,
 ) -> Result<access_identity_account::domain::password::HashPolicy, String> {
     use access_identity_account::domain::password::{HashPolicy, HashProfile};
     let profile = HashProfile::parse(&c.hash_profile).ok_or("hash profile")?;
     Ok(HashPolicy::of(profile, c.fips))
 }
 
-/// The base a realm issuer host sits under when the deployment's is not given: its parent for
+/// The base an environment issuer host sits under when the deployment's is not given: its parent for
 /// a subdomain issuer, the host itself otherwise.
 fn base_of(issuer_host: &str) -> access_identity_domain::domain::host::Base {
     let parent = issuer_host
@@ -578,22 +592,22 @@ fn base_of(issuer_host: &str) -> access_identity_domain::domain::host::Base {
 }
 
 impl Kits for HsmKits {
-    /// The realm's kit with its sign-in settings as they are now: each request reads them, and
+    /// The environment's kit with its sign-in settings as they are now: each request reads them, and
     /// a kit built from older ones is rebuilt (TN-132).
-    async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Unavailable> {
-        let key = *entry.realm.as_bytes();
-        let tenant = realm_tenant(&self.router, entry.realm)
+    async fn kit(&self, entry: &EnvironmentEntry) -> Result<Arc<EnvironmentKit>, Unavailable> {
+        let key = *entry.environment.as_bytes();
+        let tenant = environment_tenant(&self.router, entry.environment)
             .await
             .map_err(|_| Unavailable)?
             .ok_or(Unavailable)?;
-        let settings = self.settings(tenant, entry.realm).await?;
+        let settings = self.settings(tenant, entry.environment).await?;
         if let Some((seen, kit)) = self.loaded.lock().map_err(|_| Unavailable)?.get(&key)
             && *seen == settings
         {
             return Ok(kit.clone());
         }
         let kit = Arc::new(self.load(entry, tenant, &settings).map_err(|error| {
-            tracing::error!(%error, realm = %entry.slug, "realm keys unavailable");
+            tracing::error!(%error, environment = %entry.slug, "environment keys unavailable");
             Unavailable
         })?);
         self.loaded
@@ -628,9 +642,11 @@ mod tests {
             &Secret::new(String::from("1234-test-only")),
         )
         .unwrap();
-        let kek = keys.generate_kek("access/realm-kek/test").unwrap();
-        let pepper = keys.generate_aead("access/realm-pepper/test").unwrap();
-        let locked = LockedKek::new("access:realm-kek:test".into(), kek, pepper, clock);
+        let kek = keys.generate_kek("access/environment-kek/test").unwrap();
+        let pepper = keys
+            .generate_aead("access/environment-pepper/test")
+            .unwrap();
+        let locked = LockedKek::new("access:environment-kek:test".into(), kek, pepper, clock);
         let dek = Dek::generate().unwrap();
         let wrapped = locked.wrap(&dek).unwrap();
         assert!(
@@ -640,7 +656,7 @@ mod tests {
                 .secret()
                 .ct_eq(dek.secret())
         );
-        keys.destroy_kek("access/realm-kek/test").unwrap();
+        keys.destroy_kek("access/environment-kek/test").unwrap();
         assert!(
             locked
                 .unwrap(&wrapped)

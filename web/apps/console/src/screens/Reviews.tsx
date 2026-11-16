@@ -42,8 +42,8 @@ function holderText(h: Item["holder"]): string {
 
 /** OP-157 m.6 (a): the keep, signed with this Instance over the drafted keep digest. */
 async function keep(ctx: Ctx, review: string, grant: string): Promise<boolean> {
-  const slug = ctx.session.realm;
-  const path = `realms/${encodeURIComponent(slug)}/reviews/${encodeURIComponent(review)}/items/${encodeURIComponent(grant)}/keep`;
+  const slug = ctx.session.environment;
+  const path = `envs/${encodeURIComponent(slug)}/reviews/${encodeURIComponent(review)}/items/${encodeURIComponent(grant)}/keep`;
   const d = await draftChange(ctx.instance, slug, {
     operation: "keepReviewItem",
     key: `${review}:${grant}`,
@@ -80,11 +80,11 @@ async function keep(ctx: Ctx, review: string, grant: string): Promise<boolean> {
 }
 
 function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const items = useLoad(() =>
     adminGet<Page<Item>>(
       ctx.instance,
-      `realms/${realm}/reviews/${encodeURIComponent(review)}/items`,
+      `envs/${environment}/reviews/${encodeURIComponent(review)}/items`,
     ),
   );
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
@@ -167,15 +167,17 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
 
 /** The access review screen. */
 export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const reviews = useLoad(() => adminGet<Page<Review>>(ctx.instance, `realms/${realm}/reviews`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const reviews = useLoad(() =>
+    adminGet<Page<Review>>(ctx.instance, `envs/${environment}/reviews`),
+  );
   const [name, setName] = useState("");
   const [period, setPeriod] = useState("90");
   const [open, setOpen] = useState<string | undefined>(undefined);
   const [w, write] = useRun<WriteResult>();
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method: "POST",
         path,

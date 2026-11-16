@@ -1,0 +1,770 @@
+//! The environment resources the management API adds to the `idp.*` catalogue (OP-151 m.2 M1): groups
+//! with one membership issuer (TN-117), account suspension (§12.3.1), upstream identity provider
+//! registrations (OP-150 m.11 (j)), the sign-in requirements (TN-132) and the console session
+//! policy (TN-129, OP-151 m.3 (f)). Data only; each is written by its own Exercise.
+
+use std::collections::BTreeSet;
+
+pub use access_identity_events::domain::inbound::TransmitterConfig;
+use suiss_crypto::dcbor::Value;
+
+use super::Invalid;
+
+/// Most members one change adds or removes.
+pub const MAX_MEMBERS_PER_CHANGE: usize = 100;
+
+/// Most entries of a registration domain list (TN-132).
+pub const MAX_DOMAIN_LIST: usize = 256;
+
+/// Longest console session, absolute (OP-151 m.3 (f)): 12 hours.
+pub const CONSOLE_ABSOLUTE_MAX_MS: u64 = 12 * 3_600_000;
+
+/// Longest console idle time (OP-151 m.3 (f)): 15 minutes.
+pub const CONSOLE_IDLE_MAX_MS: u64 = 15 * 60_000;
+
+/// Shortest console session or idle time an environment may set.
+pub const CONSOLE_MIN_MS: u64 = 60_000;
+
+/// The profile fields an environment may require at registration (TN-132).
+pub const REQUIRED_FIELDS: [&str; 7] = [
+    "email",
+    "phone_number",
+    "username",
+    "given_name",
+    "family_name",
+    "birthdate",
+    "locale",
+];
+
+fn ident(s: &str) -> bool {
+    let b = s.as_bytes();
+    (1..=64).contains(&b.len())
+        && b.first().is_some_and(u8::is_ascii_lowercase)
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'_' | b'-'))
+}
+
+fn display(s: &str) -> bool {
+    let n = s.chars().count();
+    (1..=128).contains(&n) && !s.chars().any(char::is_control)
+}
+
+fn text_array<'a>(items: impl Iterator<Item = &'a str>) -> Value {
+    Value::Array(items.map(Value::text).collect())
+}
+
+/// A natural key of a group or an upstream provider: `^[a-z][a-z0-9_-]{0,63}$`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Name(String);
+
+impl Name {
+    /// Checks a name.
+    ///
+    /// # Errors
+    /// [`Invalid::Name`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        if ident(s) {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::Name)
+        }
+    }
+
+    /// The text form.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Who issues a group's memberships (TN-117): exactly one. The environment's administration through
+/// `idp.group.members_*`, or one upstream provider's mapping; never both.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MembershipIssuer {
+    /// The environment's administration.
+    Admin,
+    /// The named upstream identity provider.
+    Upstream(Name),
+}
+
+impl MembershipIssuer {
+    /// The text form: `admin` or `upstream:<name>`.
+    #[must_use]
+    pub fn text(&self) -> String {
+        match self {
+            Self::Admin => String::from("admin"),
+            Self::Upstream(n) => format!("upstream:{}", n.as_str()),
+        }
+    }
+
+    /// From the text form.
+    ///
+    /// # Errors
+    /// [`Invalid::MembershipIssuer`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        match s.split_once(':') {
+            None if s == "admin" => Ok(Self::Admin),
+            Some(("upstream", n)) => Name::parse(n)
+                .map(Self::Upstream)
+                .map_err(|_| Invalid::MembershipIssuer),
+            _ => Err(Invalid::MembershipIssuer),
+        }
+    }
+}
+
+/// A group (TN-117). Membership is an identity Claim, never authority (§9.9.6, P55).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Group {
+    /// The natural key.
+    pub name: Name,
+    /// The display name.
+    pub display_name: String,
+    /// Its one membership issuer.
+    pub issuer: MembershipIssuer,
+}
+
+impl Group {
+    /// Checks the display name.
+    ///
+    /// # Errors
+    /// [`Invalid::DisplayName`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        if display(&self.display_name) {
+            Ok(())
+        } else {
+            Err(Invalid::DisplayName)
+        }
+    }
+
+    /// The deterministic CBOR the change and its stored form carry.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("name"), Value::text(self.name.as_str())),
+            (Value::text("display_name"), Value::text(&self.display_name)),
+            (
+                Value::text("membership_issuer"),
+                Value::text(&self.issuer.text()),
+            ),
+        ])
+    }
+}
+
+/// A change of a group's members: the environment subjects, by their internal ids.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Members {
+    /// The group.
+    pub group: Name,
+    /// The subjects; at least one, at most [`MAX_MEMBERS_PER_CHANGE`].
+    pub subjects: BTreeSet<[u8; 16]>,
+}
+
+impl Members {
+    /// Checks the count.
+    ///
+    /// # Errors
+    /// [`Invalid::Members`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        if (1..=MAX_MEMBERS_PER_CHANGE).contains(&self.subjects.len()) {
+            Ok(())
+        } else {
+            Err(Invalid::Members)
+        }
+    }
+
+    /// The deterministic CBOR the change and its stored form carry.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("group"), Value::text(self.group.as_str())),
+            (
+                Value::text("subjects"),
+                Value::Array(
+                    self.subjects
+                        .iter()
+                        .map(|s| Value::Bytes(s.to_vec()))
+                        .collect(),
+                ),
+            ),
+        ])
+    }
+}
+
+/// An upstream identity provider's registration (OP-150 m.11 (j)): the storage contract only.
+/// Its client secret is a reference to a secret store entry, never the secret; the live
+/// federation adapter comes with its own stage.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Upstream {
+    /// The natural key.
+    pub name: Name,
+    /// The provider's issuer, `https`.
+    pub issuer: String,
+    /// The client id Access holds at the provider.
+    pub client_id: String,
+    /// A reference to the client secret, `secret://…`; `None` for `private_key_jwt`.
+    pub client_secret_ref: Option<String>,
+    /// The provider's JWKS, `https`.
+    pub jwks_uri: String,
+    /// The provider as an SSF transmitter the environment receives from (OP-151 m.3 (l), m.7 (g)):
+    /// push only here, since a poll credential is a secret this surface never carries.
+    pub ssf: Option<TransmitterConfig>,
+    /// The connection's own profile (OP-155 m.3 (h)): protocol, subject key, client
+    /// authentication (`private_key_jwt` unless a secret method is chosen), preset,
+    /// organization and SAML identity provider.
+    pub profile: Box<access_identity_federation::domain::connection::Profile>,
+}
+
+/// The SSF fields as JSON: the form the request carries and the store keeps.
+#[must_use]
+pub fn ssf_json(c: &TransmitterConfig) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "issuer": c.issuer,
+        "jwks_uri": c.jwks_uri,
+        "aud": c.audience,
+        "events": c.events,
+        "expected_interval_s": c.expected_interval_s,
+    });
+    if let (Some(p), Some(o)) = (&c.poll_endpoint, v.as_object_mut()) {
+        o.insert(String::from("poll_endpoint"), serde_json::json!(p));
+    }
+    v
+}
+
+/// An upstream subject linked to an account (§9.16.2 k.4, TN-42, OP-152 m.7 (d) E6): the
+/// upstream's inbound signals naming `sub` then reach the account, and only narrow it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpstreamLink {
+    /// The upstream provider.
+    pub upstream: Name,
+    /// The subject the provider names, as its signals carry it.
+    pub sub: String,
+    /// The account's internal id.
+    pub account: [u8; 16],
+}
+
+impl UpstreamLink {
+    /// Checks `sub`: 1 to 255 bytes without control characters.
+    ///
+    /// # Errors
+    /// [`Invalid::UpstreamSubject`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        if (1..=255).contains(&self.sub.len()) && !self.sub.chars().any(char::is_control) {
+            Ok(())
+        } else {
+            Err(Invalid::UpstreamSubject)
+        }
+    }
+
+    /// The deterministic CBOR the change carries.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("upstream"), Value::text(self.upstream.as_str())),
+            (Value::text("sub"), Value::text(&self.sub)),
+            (Value::text("account"), Value::Bytes(self.account.to_vec())),
+        ])
+    }
+}
+
+impl Upstream {
+    /// Checks the URLs, the client id and the secret reference.
+    ///
+    /// # Errors
+    /// [`Invalid::Upstream`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let id_ok = (1..=255).contains(&self.client_id.len())
+            && self.client_id.bytes().all(|c| c.is_ascii_graphic());
+        let ref_ok = self.client_secret_ref.as_deref().is_none_or(|r| {
+            r.len() <= 255
+                && r.strip_prefix("secret://").is_some_and(|rest| {
+                    !rest.is_empty()
+                        && rest.bytes().all(|c| {
+                            c.is_ascii_alphanumeric() || matches!(c, b'/' | b'-' | b'_' | b'.')
+                        })
+                })
+        });
+        let urls_ok = super::https(&self.issuer)
+            && super::https(&self.jwks_uri)
+            && self.ssf.as_ref().is_none_or(|s| s.poll_endpoint.is_none());
+        // OP-155 m.3 (h)
+        let profile_ok = self.profile.check(self.client_secret_ref.is_some()).is_ok();
+        if id_ok && ref_ok && urls_ok && profile_ok {
+            Ok(())
+        } else {
+            Err(Invalid::Upstream)
+        }
+    }
+
+    /// The deterministic CBOR the change and its stored form carry.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let mut m = vec![
+            (Value::text("name"), Value::text(self.name.as_str())),
+            (Value::text("issuer"), Value::text(&self.issuer)),
+            (Value::text("client_id"), Value::text(&self.client_id)),
+            (Value::text("jwks_uri"), Value::text(&self.jwks_uri)),
+        ];
+        if let Some(r) = &self.client_secret_ref {
+            m.push((Value::text("client_secret_ref"), Value::text(r)));
+        }
+        if *self.profile
+            != access_identity_federation::domain::connection::Profile::legacy(
+                self.client_secret_ref.is_some(),
+            )
+        {
+            m.push((Value::text("profile"), Value::text(&self.profile.to_json())));
+        }
+        if let Some(s) = &self.ssf {
+            m.push((
+                Value::text("ssf"),
+                Value::Map(vec![
+                    (Value::text("issuer"), Value::text(&s.issuer)),
+                    (Value::text("jwks_uri"), Value::text(&s.jwks_uri)),
+                    (Value::text("aud"), Value::text(&s.audience)),
+                    (
+                        Value::text("events"),
+                        Value::Array(s.events.iter().map(|e| Value::text(e)).collect()),
+                    ),
+                    (
+                        Value::text("expected_interval_s"),
+                        Value::Unsigned(u64::from(s.expected_interval_s)),
+                    ),
+                ]),
+            ));
+        }
+        Value::Map(m)
+    }
+}
+
+/// A social preset as an environment enables or changes it (IDP-31, OP-153 m.3 (l)): its own client,
+/// or `None` for the operator's shared development client, which only a sandbox environment may use.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Social {
+    /// The preset id.
+    pub preset: Name,
+    /// The environment's client.
+    pub client: Option<SocialClient>,
+}
+
+/// An environment's own client at a social provider; its secret only by reference.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SocialClient {
+    /// The client id.
+    pub client_id: String,
+    /// The secret's reference, `secret://…`.
+    pub secret_ref: String,
+}
+
+fn secret_ref_ok(r: &str) -> bool {
+    r.len() <= 255
+        && r.strip_prefix("secret://").is_some_and(|rest| {
+            !rest.is_empty()
+                && rest
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'/' | b'-' | b'_' | b'.'))
+        })
+}
+
+impl Social {
+    /// Checks the preset against the shipped presets and the client's shape.
+    ///
+    /// # Errors
+    /// [`Invalid::Social`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let known = access_identity_federation::domain::preset::Presets::installed()
+            .is_some_and(|p| p.get(self.preset.as_str()).is_some());
+        let client_ok = self.client.as_ref().is_none_or(|c| {
+            (1..=255).contains(&c.client_id.len())
+                && c.client_id.bytes().all(|b| b.is_ascii_graphic())
+                && secret_ref_ok(&c.secret_ref)
+        });
+        if known && client_ok {
+            Ok(())
+        } else {
+            Err(Invalid::Social)
+        }
+    }
+
+    /// The deterministic CBOR the change carries.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let mut m = vec![(Value::text("preset"), Value::text(self.preset.as_str()))];
+        if let Some(c) = &self.client {
+            m.push((Value::text("client_id"), Value::text(&c.client_id)));
+            m.push((Value::text("client_secret_ref"), Value::text(&c.secret_ref)));
+        }
+        Value::Map(m)
+    }
+}
+
+/// A sign-in method an environment may enable (TN-132).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SigninMethod {
+    /// Email and a one-time code or password.
+    Email,
+    /// Phone number and a one-time code.
+    Phone,
+    /// Username and password.
+    Username,
+    /// A passkey.
+    Passkey,
+    /// A registered upstream provider.
+    Social(Name),
+}
+
+impl SigninMethod {
+    /// The text form: `email`, `phone`, `username`, `passkey` or `social:<provider>`.
+    #[must_use]
+    pub fn text(&self) -> String {
+        match self {
+            Self::Email => String::from("email"),
+            Self::Phone => String::from("phone"),
+            Self::Username => String::from("username"),
+            Self::Passkey => String::from("passkey"),
+            Self::Social(n) => format!("social:{}", n.as_str()),
+        }
+    }
+
+    /// From the text form.
+    ///
+    /// # Errors
+    /// [`Invalid::SigninPolicy`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        match s {
+            "email" => Ok(Self::Email),
+            "phone" => Ok(Self::Phone),
+            "username" => Ok(Self::Username),
+            "passkey" => Ok(Self::Passkey),
+            _ => s
+                .strip_prefix("social:")
+                .and_then(|n| Name::parse(n).ok())
+                .map(Self::Social)
+                .ok_or(Invalid::SigninPolicy),
+        }
+    }
+}
+
+/// How the sign-in screens answer about accounts (TN-96, OP-153 m.3 (j)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EnumerationMode {
+    /// Identifier first, identical answers whether or not an account exists (the default).
+    #[default]
+    Uniform,
+    /// Identifier and password on one screen, no branching at all.
+    Strict,
+}
+
+impl EnumerationMode {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Uniform => "uniform",
+            Self::Strict => "strict",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "uniform" => Some(Self::Uniform),
+            "strict" => Some(Self::Strict),
+            _ => None,
+        }
+    }
+}
+
+/// An environment's assurance profile (MD-11, SA-54, OP-156 m.3 (e)): environment settings and requirement
+/// narrowing only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AssuranceProfile {
+    /// No profile (the default).
+    #[default]
+    Standard,
+    /// Turkish payment and e-money institutions: CT2 and CT3 need a phishing-resistant step and
+    /// an app-controlled factor, platform biometrics are no factor, SMS only at activation and
+    /// only on a line with a fresh SIM signal.
+    TrPayment,
+}
+
+impl AssuranceProfile {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::TrPayment => "tr-payment",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "standard" => Some(Self::Standard),
+            "tr-payment" => Some(Self::TrPayment),
+            _ => None,
+        }
+    }
+}
+
+/// Most authenticator models an attestation allowlist names (PD).
+pub const MAX_AAGUIDS: usize = 64;
+
+/// The environment's WebAuthn attestation policy (§10.2.4, OP-159 m.3 (ll)): `none` for consumers,
+/// where attestation is never a trust input, or the enterprise flag `direct` (or `enterprise`)
+/// with FIDO metadata, revocation and an optional AAGUID allowlist.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Attestation {
+    /// Nothing is requested (the default).
+    #[default]
+    None,
+    /// Attestation is verified before a passkey is registered.
+    Direct {
+        /// Request enterprise attestation instead of `direct`.
+        enterprise: bool,
+        /// Allowed models as lower-case AAGUID text; empty allows every model the metadata
+        /// vouches for.
+        aaguids: BTreeSet<String>,
+    },
+}
+
+impl Attestation {
+    fn check(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Direct { aaguids, .. } => {
+                aaguids.len() <= MAX_AAGUIDS && aaguids.iter().all(|a| aaguid_text(a))
+            }
+        }
+    }
+
+    fn to_value(&self) -> Option<Value> {
+        match self {
+            Self::None => None,
+            Self::Direct {
+                enterprise,
+                aaguids,
+            } => Some(Value::Map(vec![
+                (
+                    Value::text("mode"),
+                    Value::text(if *enterprise { "enterprise" } else { "direct" }),
+                ),
+                (
+                    Value::text("aaguids"),
+                    text_array(aaguids.iter().map(String::as_str)),
+                ),
+            ])),
+        }
+    }
+}
+
+/// Whether `text` is an AAGUID in canonical lower-case UUID form.
+fn aaguid_text(text: &str) -> bool {
+    text.len() == 36
+        && text.char_indices().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                matches!(c, '0'..='9' | 'a'..='f')
+            }
+        })
+}
+
+/// The shortest "keep N days" an e-mail reuse policy may name (OP-153 m.3 (i), TN-76 m.5).
+pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
+
+/// The environment's sign-in requirements (TN-132): what must be complete, never the order. The
+/// server keeps the rules no order breaks: unverified data activates nothing, required MFA is
+/// never skipped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SigninPolicy {
+    /// Enabled methods; at least one.
+    pub methods: BTreeSet<SigninMethod>,
+    /// Profile fields required at registration, from [`REQUIRED_FIELDS`].
+    pub required_fields: BTreeSet<String>,
+    /// Whether a second factor is required.
+    pub mfa_required: bool,
+    /// Email domains registration is limited to; empty allows every domain not denied.
+    pub domain_allow: BTreeSet<String>,
+    /// Email domains registration is refused for.
+    pub domain_deny: BTreeSet<String>,
+    /// The enumeration mode (OP-153 m.3 (j)).
+    pub enumeration: EnumerationMode,
+    /// Days a given-up e-mail address stays taken before it can be registered again; `None`
+    /// never frees it, the default (OP-153 m.3 (i)).
+    pub email_keep_days: Option<u32>,
+    /// Whether a hosted sign-in offers to bind the new sign-in to a device key (DBSC, TN-33,
+    /// OP-153 m.22 (c), m.25 (b)); on by default.
+    pub dbsc: bool,
+    /// The assurance profile (OP-156 m.3 (e)); standard by default.
+    pub profile: AssuranceProfile,
+    /// The WebAuthn attestation policy (OP-159 m.3 (ll)); `none` by default.
+    pub attestation: Attestation,
+}
+
+impl SigninPolicy {
+    /// Checks the policy.
+    ///
+    /// # Errors
+    /// [`Invalid::SigninPolicy`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let fields_ok = self
+            .required_fields
+            .iter()
+            .all(|f| REQUIRED_FIELDS.contains(&f.as_str()));
+        let lists_ok = [&self.domain_allow, &self.domain_deny]
+            .iter()
+            .all(|l| l.len() <= MAX_DOMAIN_LIST && l.iter().all(|d| super::host(d)))
+            && self.domain_allow.is_disjoint(&self.domain_deny);
+        let methods_ok = !self.methods.is_empty();
+        let keep_ok = self
+            .email_keep_days
+            .is_none_or(|d| d >= MIN_EMAIL_KEEP_DAYS);
+        if fields_ok && lists_ok && methods_ok && keep_ok && self.attestation.check() {
+            Ok(())
+        } else {
+            Err(Invalid::SigninPolicy)
+        }
+    }
+
+    /// The deterministic CBOR the change and its stored form carry; the N1 fields only when
+    /// they differ from their defaults, so earlier policies keep their bytes.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let mut m = vec![
+            (
+                Value::text("methods"),
+                Value::Array(
+                    self.methods
+                        .iter()
+                        .map(|m| Value::text(&m.text()))
+                        .collect(),
+                ),
+            ),
+            (
+                Value::text("required_fields"),
+                text_array(self.required_fields.iter().map(String::as_str)),
+            ),
+            (Value::text("mfa_required"), Value::Bool(self.mfa_required)),
+            (
+                Value::text("domain_allow"),
+                text_array(self.domain_allow.iter().map(String::as_str)),
+            ),
+            (
+                Value::text("domain_deny"),
+                text_array(self.domain_deny.iter().map(String::as_str)),
+            ),
+        ];
+        if self.enumeration != EnumerationMode::Uniform {
+            m.push((
+                Value::text("enumeration"),
+                Value::text(self.enumeration.name()),
+            ));
+        }
+        if let Some(d) = self.email_keep_days {
+            m.push((
+                Value::text("email_keep_days"),
+                Value::Unsigned(u64::from(d)),
+            ));
+        }
+        // OP-153 m.25 (b)
+        if !self.dbsc {
+            m.push((Value::text("dbsc"), Value::Bool(false)));
+        }
+        // OP-156 m.3 (e)
+        if self.profile != AssuranceProfile::Standard {
+            m.push((Value::text("profile"), Value::text(self.profile.name())));
+        }
+        // OP-159 m.3 (ll)
+        if let Some(a) = self.attestation.to_value() {
+            m.push((Value::text("attestation"), a));
+        }
+        Value::Map(m)
+    }
+}
+
+/// What a console session is bound to (TN-129, OP-151 m.1 (b)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Binding {
+    /// The client's ASN when a `GeoIP` source is configured, else its IP prefix (/24, /48).
+    Asn,
+    /// The client's full IP address.
+    Ip,
+    /// Nothing; never allowed for the management surface.
+    None,
+}
+
+impl Binding {
+    /// The text form.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Asn => "asn",
+            Self::Ip => "ip",
+            Self::None => "none",
+        }
+    }
+
+    /// From the text form.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "asn" => Some(Self::Asn),
+            "ip" => Some(Self::Ip),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
+/// The environment's console session policy (TN-129, OP-151 m.3 (f)): at most 12 hours absolute and
+/// 15 minutes idle, bound to the ASN or the IP; an environment may only tighten it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionPolicy {
+    /// Absolute lifetime.
+    pub absolute_ms: u64,
+    /// Idle lifetime.
+    pub idle_ms: u64,
+    /// The binding; [`Binding::None`] is refused.
+    pub binding: Binding,
+}
+
+impl SessionPolicy {
+    /// The default (OP-151 m.3 (f)).
+    pub const DEFAULT: Self = Self {
+        absolute_ms: CONSOLE_ABSOLUTE_MAX_MS,
+        idle_ms: CONSOLE_IDLE_MAX_MS,
+        binding: Binding::Asn,
+    };
+
+    /// Checks the bounds and the binding.
+    ///
+    /// # Errors
+    /// [`Invalid::SessionPolicy`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let ok = (CONSOLE_MIN_MS..=CONSOLE_ABSOLUTE_MAX_MS).contains(&self.absolute_ms)
+            && (CONSOLE_MIN_MS..=CONSOLE_IDLE_MAX_MS).contains(&self.idle_ms)
+            && self.idle_ms <= self.absolute_ms
+            && self.binding != Binding::None;
+        if ok {
+            Ok(())
+        } else {
+            Err(Invalid::SessionPolicy)
+        }
+    }
+
+    /// The deterministic CBOR the change and its stored form carry.
+    #[must_use]
+    pub fn to_value(self) -> Value {
+        Value::Map(vec![
+            (
+                Value::text("absolute_ms"),
+                Value::Unsigned(self.absolute_ms),
+            ),
+            (Value::text("idle_ms"), Value::Unsigned(self.idle_ms)),
+            (Value::text("binding"), Value::text(self.binding.name())),
+        ])
+    }
+}

@@ -126,7 +126,7 @@ impl PublicKey {
 pub struct KeySet {
     /// Keys by `kid`.
     pub keys: BTreeMap<[u8; 32], PublicKey>,
-    /// Allowed algorithms, from client / Domain / Realm metadata only.
+    /// Allowed algorithms, from client / Domain / Environment metadata only.
     pub allowed: BTreeSet<Algorithm>,
 }
 

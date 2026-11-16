@@ -1,7 +1,7 @@
 //! Trust chains (OpenID Federation 1.0 §10, §10.7.1 item 3, OP-155 m.3 (j)): validation of a
 //! chain given whole, online or offline, and a resolver that fetches one bottom-up. A chain is
 //! at most [`MAX_LENGTH`] statements, is valid until the smallest `exp` in it, has no entity
-//! twice, and ends at a trust anchor whose keys the realm pinned.
+//! twice, and ends at a trust anchor whose keys the environment pinned.
 
 use access_kernel::json::{self, Json};
 
@@ -83,7 +83,7 @@ impl From<PolicyError> for ChainError {
     }
 }
 
-/// A trust anchor the realm trusts, with the keys it pinned (`idp.federation.trust_anchor_add`).
+/// A trust anchor the environment trusts, with the keys it pinned (`idp.federation.trust_anchor_add`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrustAnchor {
     /// The anchor's entity identifier.

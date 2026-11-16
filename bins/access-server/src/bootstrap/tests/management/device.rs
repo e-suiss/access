@@ -1,5 +1,5 @@
 //! The device authorization grant on the real server path (RFC 8628, OP-154 m.3 (p), (dd), TN-35,
-//! CR-38, CR-39, OP-153 m.3 (gg)): off until `putDeviceCode` commits `idp.realm.device_code`; a
+//! CR-38, CR-39, OP-153 m.3 (gg)): off until `putDeviceCode` commits `idp.environment.device_code`; a
 //! registered client asks, the signed-in person reads and approves the user code on the
 //! verification routes, and the device's poll turns into a DPoP-bound token once.
 
@@ -7,7 +7,7 @@ use access_store::identity::TenantTx;
 
 use super::*;
 
-const TOKEN_URI: &str = "https://access.test/realms/acme/token";
+const TOKEN_URI: &str = "https://access.test/env/acme/token";
 const GRANT: &str = "urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code";
 
 fn xy(key: &access_kernel::verify::cose::PublicKey) -> (String, String) {
@@ -51,7 +51,7 @@ async fn form(
     body: &str,
     proof: Option<String>,
 ) -> (StatusCode, serde_json::Value, Option<String>) {
-    let mut b = Request::post(format!("/realms/acme{path}"))
+    let mut b = Request::post(format!("/env/acme{path}"))
         .header(header::HOST, HOST)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
     if let Some(p) = proof {
@@ -84,7 +84,7 @@ async fn poll(c: &Console, client: &str, code: &str, key: &SoftSigner) -> serde_
 async fn session(c: &Console) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_session(&NewSession {
@@ -111,7 +111,7 @@ async fn page(
     csrf: Option<&str>,
     body: &serde_json::Value,
 ) -> (StatusCode, serde_json::Value) {
-    let mut b = Request::post(format!("/realms/acme{path}"))
+    let mut b = Request::post(format!("/env/acme{path}"))
         .header(header::HOST, HOST)
         .header(header::ORIGIN, format!("https://{HOST}"))
         .header("sec-fetch-site", "same-origin")
@@ -135,7 +135,7 @@ async fn device_code_from(
     client: &str,
     peer: std::net::IpAddr,
 ) -> (StatusCode, serde_json::Value) {
-    let r = Request::post("/realms/acme/device_authorization")
+    let r = Request::post("/env/acme/device_authorization")
         .header(header::HOST, HOST)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .extension(access_http::login::Peer(peer))
@@ -166,7 +166,7 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/clients",
+            "/admin/v1/envs/acme/clients",
             ("createClient", None),
             serde_json::json!({
                 "display_name": "Living room TV",
@@ -188,7 +188,7 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/device-code",
+            "/admin/v1/envs/acme/settings/device-code",
             ("putDeviceCode", None),
             serde_json::json!({ "enabled": true }),
             None,
@@ -210,11 +210,11 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     assert_eq!(issued["interval"], 5);
     assert_eq!(
         issued["verification_uri"],
-        "https://access.test/realms/acme/device"
+        "https://access.test/env/acme/device"
     );
     // CR-38
     let raw = b64url_decode(&code).unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let digest = access_identity_oauth::domain::device::device_hash(&raw);

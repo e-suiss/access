@@ -1,7 +1,7 @@
 // TI-17, HL-40, OP-158 m.3 (o), (p), OP-153 m.3 (gg): the placement and durability reads against
 // the running local deployment, through its real BFF on the management listener. Like every
 // management read they answer nothing without a session, and the screens are not offered to a
-// viewer who cannot exercise idp.realm.residency or idp.realm.dr_profile.
+// viewer who cannot exercise idp.environment.residency or idp.environment.dr_profile.
 import { expect, test } from "@playwright/test";
 
 test.describe("@live console placement and durability", () => {
@@ -9,10 +9,10 @@ test.describe("@live console placement and durability", () => {
     page,
   }) => {
     for (const path of ["placement", "durability"]) {
-      const read = await page.request.get(`/console/api/proxy/admin/realms/acme/${path}`);
+      const read = await page.request.get(`/console/api/proxy/admin/envs/acme/${path}`);
       expect([401, 403]).toContain(read.status());
     }
-    const rehome = await page.request.post("/console/api/proxy/admin/realms/acme/rehome", {
+    const rehome = await page.request.post("/console/api/proxy/admin/envs/acme/rehome", {
       data: { domain: "AAAA" },
     });
     expect([401, 403]).toContain(rehome.status());

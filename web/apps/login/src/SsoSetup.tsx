@@ -1,5 +1,5 @@
 // TN-133, TN-134, OP-155 m.3 (i): the organization SSO setup portal behind a one-use, 72-hour
-// link. The page is `<OrganizationSSO />` over the realm's setup API, the same component a
+// link. The page is `<OrganizationSSO />` over the environment's setup API, the same component a
 // tenant embeds. Reading the link spends nothing; the first step binds it to this browser; what
 // the page saves is a connection draft that an owner of the organization still has to turn on.
 import { useEffect, useState } from "react";
@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { sso as client } from "@esuiss/access";
 import { sso } from "@access/ui";
 
-import { REALM } from "./base.js";
+import { ENVIRONMENT } from "./base.js";
 import { maybe, t } from "./i18n.js";
 import { note, outcome, Panel, problem } from "./Layout.js";
 
@@ -35,7 +35,7 @@ export function SsoSetup() {
   useEffect(() => {
     if (link === null) return;
     let live = true;
-    void client.readSetup(REALM, link).then((r) => {
+    void client.readSetup(ENVIRONMENT, link).then((r) => {
       if (live) setState(stateOf(r, null));
     });
     return () => {
@@ -45,12 +45,12 @@ export function SsoSetup() {
 
   async function load(note: string | null) {
     if (link === null) return;
-    setState(stateOf(await client.readSetup(REALM, link), note));
+    setState(stateOf(await client.readSetup(ENVIRONMENT, link), note));
   }
 
   async function submit(step: sso.OrganizationSetupStep) {
     if (link === null || state.phase !== "ready") return;
-    const r = await client.submitSetup(REALM, link, step as client.SetupStep);
+    const r = await client.submitSetup(ENVIRONMENT, link, step as client.SetupStep);
     if (!r.ok) {
       if (r.status === 410) setState({ phase: "spent" });
       else setState({ ...state, note: t("login.unavailable") });

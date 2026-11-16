@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tenant_id, environment_id, slug, issuer FROM access.environments\n            WHERE status = 'active'\n              AND ($1::text IS NULL OR slug = $1)\n              AND ($2::uuid IS NULL OR tenant_id = $2)\n              AND slug > coalesce($3, '')\n              AND ($4::uuid[] IS NULL OR environment_id = ANY($4))\n            ORDER BY slug LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "issuer"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text",
+        "UuidArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "0f3a5cc19d67aab2079b5707a8c2a40bdb92c04bae4a5d2a139259733bf49b3d"
+}

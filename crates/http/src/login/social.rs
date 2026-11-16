@@ -1,5 +1,5 @@
 //! Social sign-in, linked sign-ins and combined accounts on axum (IDP-31, OP-153 m.3 (l), (m)):
-//! the `frontend-v1` routes of lane N4. Realm selection, cookies and replies are the login
+//! the `frontend-v1` routes of lane N4. Environment selection, cookies and replies are the login
 //! surface's.
 //!
 //! The provider's redirect back is a top-level navigation from another site, so it is not held
@@ -30,7 +30,7 @@ use axum::routing::{delete, get, post};
 use axum::{Extension, Router};
 use serde::Deserialize;
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 struct Svc<D, K, KI, C, M, H, S> {
@@ -47,7 +47,7 @@ const MAX_PROVIDER: usize = 64;
 /// Longest `code` or `state`.
 const MAX_CODE: usize = 2048;
 
-/// The routes of lane N4, at the realm's host and under `/realms/{slug}`.
+/// The routes of lane N4, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M, H, S>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -72,7 +72,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/account/linked"),
@@ -197,7 +197,7 @@ macro_rules! handler {
             H: ProviderHttp,
             S: SocialSecrets,
         {
-            let $entry = match realm(&$s.login, &$p, &$uri, &$headers).await {
+            let $entry = match environment(&$s.login, &$p, &$uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };

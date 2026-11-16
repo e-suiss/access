@@ -9,11 +9,11 @@ use access_identity_session::domain::session::cookie_digest;
 use access_kernel::json::{self, Json, b64url_decode};
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 
-use super::{Env, OAuth, Realm, Reply, decode32, session_live, signed};
+use super::{Env, Environment, OAuth, Reply, decode32, session_live, signed};
 use crate::domain::client::Client;
 use crate::domain::fapi::{frontchannel_page, frontchannel_uri, origin};
 use crate::domain::issuer::form_encode;
-use crate::domain::jwt::realm_key_set;
+use crate::domain::jwt::environment_key_set;
 use crate::domain::request::Params;
 use crate::domain::tokens::ID_TYP;
 use crate::ports::Unavailable;
@@ -26,18 +26,22 @@ struct Hint {
 }
 
 impl<E: Env> OAuth<E> {
-    /// Reads an ID token of this realm; an expired one is still a hint (RP-Initiated Logout
+    /// Reads an ID token of this environment; an expired one is still a hint (RP-Initiated Logout
     /// §2).
-    async fn id_token_hint(&self, realm: &Realm, token: &str) -> Result<Option<Hint>, Unavailable> {
-        let jwks = self.env.signer().jwks(realm.realm).await?;
-        let keys = realm_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
+    async fn id_token_hint(
+        &self,
+        environment: &Environment,
+        token: &str,
+    ) -> Result<Option<Hint>, Unavailable> {
+        let jwks = self.env.signer().jwks(environment.environment).await?;
+        let keys = environment_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
         let Ok(v) = verify_compact(&AwsLcBackend, token, &keys, ID_TYP, Origin::Native) else {
             return Ok(None);
         };
         let Ok(c) = json::parse(&v.payload, MAX_PAYLOAD) else {
             return Ok(None);
         };
-        if c.get("iss").and_then(Json::as_str) != Some(realm.issuer.as_str()) {
+        if c.get("iss").and_then(Json::as_str) != Some(environment.issuer.as_str()) {
             return Ok(None);
         }
         let sid = c
@@ -53,8 +57,13 @@ impl<E: Env> OAuth<E> {
 
     /// `GET`/`POST /end-session` (OIDC RP-Initiated Logout 1.0): `post_logout_redirect_uri`
     /// must match the client's registration exactly, else nothing is redirected.
-    pub async fn end_session(&self, realm: &Realm, params: &Params, cookie: Option<&str>) -> Reply {
-        match self.end_session_inner(realm, params, cookie).await {
+    pub async fn end_session(
+        &self,
+        environment: &Environment,
+        params: &Params,
+        cookie: Option<&str>,
+    ) -> Reply {
+        match self.end_session_inner(environment, params, cookie).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -62,13 +71,13 @@ impl<E: Env> OAuth<E> {
 
     async fn end_session_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         cookie: Option<&str>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
         let hint = match params.get("id_token_hint") {
-            Some(t) => self.id_token_hint(realm, t).await?,
+            Some(t) => self.id_token_hint(environment, t).await?,
             None => None,
         };
         let client_id = match (params.get("client_id"), &hint) {
@@ -82,7 +91,7 @@ impl<E: Env> OAuth<E> {
             (None, Some(h)) => Some(h.client_id.clone()),
             (None, None) => None,
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let client = match &client_id {
             Some(id) => tx.client(id).await?.and_then(Client::from_row),
             None => None,
@@ -105,7 +114,7 @@ impl<E: Env> OAuth<E> {
                     });
                 }
             },
-            None => self.env.pages().signed_out(&realm.issuer),
+            None => self.env.pages().signed_out(&environment.issuer),
         };
         let session = match cookie
             .map(|c| access_identity_session::domain::dbsc::split_cookie(c).0)
@@ -131,12 +140,13 @@ impl<E: Env> OAuth<E> {
         if !tied {
             tx.commit().await?;
             return Ok(Reply::Redirect(
-                self.env.pages().confirm_sign_out(&realm.issuer),
+                self.env.pages().confirm_sign_out(&environment.issuer),
             ));
         }
         // IDP-24, OP-155 m.3 (k)
         let frames = if tx.frontchannel_enabled().await? {
-            self.frontchannel_frames(&mut tx, realm, session.id).await?
+            self.frontchannel_frames(&mut tx, environment, session.id)
+                .await?
         } else {
             Vec::new()
         };
@@ -158,7 +168,7 @@ impl<E: Env> OAuth<E> {
     async fn frontchannel_frames(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         session: [u8; 16],
     ) -> Result<Vec<String>, Unavailable> {
         let mut out = Vec::new();
@@ -175,7 +185,7 @@ impl<E: Env> OAuth<E> {
             if let Some(uri) = &client.profile.frontchannel {
                 out.push(frontchannel_uri(
                     uri,
-                    realm.issuer.as_str(),
+                    environment.issuer.as_str(),
                     &access_kernel::json::b64url_encode(&g.sid),
                 ));
             }

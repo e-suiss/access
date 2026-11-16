@@ -33,7 +33,7 @@ pub trait StatusSource {
 }
 
 /// What the resource server verifies lists with: the domain's verified Domain Metadata, whose
-/// `status-list` keys sign both forms (CR-58 m.2, TI-RT6); a realm key signs no list.
+/// `status-list` keys sign both forms (CR-58 m.2, TI-RT6); an environment key signs no list.
 #[derive(Clone, Copy, Debug)]
 pub struct ListKeys<'a> {
     /// Verified Domain Metadata.

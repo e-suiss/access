@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT method_id, class, assurance::text AS \"assurance!\", address_id\n                 FROM access.recovery_methods\n                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND retired_at IS NULL\n                ORDER BY method_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "method_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_methods",
+            "name": "method_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_methods",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "assurance!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "address_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_methods",
+            "name": "address_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "0463db043bcd9f66d5099639bb23da8737cd534f81a1c5339f9ff097fde5cb9c"
+}

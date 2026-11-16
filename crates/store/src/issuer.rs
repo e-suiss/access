@@ -1,4 +1,4 @@
-//! The identity plane as Claim issuer (§10.1.3, §10.1.7, OP-150 L2): the realm's issuer Party,
+//! The identity plane as Claim issuer (§10.1.3, §10.1.7, OP-150 L2): the environment's issuer Party,
 //! the Instances its issuer key holds in domains, its users' device keys and the Claims it has
 //! issued, each by line. Ids and digests only; nothing is deleted (OP-73).
 
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::scope::DomainId;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -20,18 +20,21 @@ fn id16(b: &[u8]) -> Result<[u8; 16], StoreError> {
     <[u8; 16]>::try_from(b).map_err(|_| StoreError::Corrupt)
 }
 
-/// Records the transaction realm's issuer Party; `false` when the realm has one already. Never
+/// Records the transaction environment's issuer Party; `false` when the environment has one already. Never
 /// changed afterwards.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn set_realm_issuer(t: &mut TenantTx, party: &[u8; 16]) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+pub async fn set_environment_issuer(
+    t: &mut TenantTx,
+    party: &[u8; 16],
+) -> Result<bool, StoreError> {
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "INSERT INTO access.realm_claim_issuer (tenant_id, realm_id, party_id) VALUES ($1, $2, $3)
-         ON CONFLICT (tenant_id, realm_id) DO NOTHING",
+        "INSERT INTO access.environment_claim_issuer (tenant_id, environment_id, party_id) VALUES ($1, $2, $3)
+         ON CONFLICT (tenant_id, environment_id) DO NOTHING",
         tenant,
-        realm,
+        environment,
         party.as_slice(),
     )
     .execute(&mut *t.tx)
@@ -39,23 +42,23 @@ pub async fn set_realm_issuer(t: &mut TenantTx, party: &[u8; 16]) -> Result<bool
     Ok(done.rows_affected() == 1)
 }
 
-/// The transaction realm's issuer Party.
+/// The transaction environment's issuer Party.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_issuer(t: &mut TenantTx) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+pub async fn environment_issuer(t: &mut TenantTx) -> Result<Option<[u8; 16]>, StoreError> {
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
-        "SELECT party_id FROM access.realm_claim_issuer WHERE tenant_id = $1 AND realm_id = $2",
+        "SELECT party_id FROM access.environment_claim_issuer WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?;
     row.as_deref().map(id16).transpose()
 }
 
-/// The Instance the realm issuer's key `kid` holds in `domain`.
+/// The Instance the environment issuer's key `kid` holds in `domain`.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -64,12 +67,12 @@ pub async fn issuer_instance(
     domain: &DomainId,
     kid: &[u8; 32],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT instance_id FROM access.claim_issuer_instance
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3 AND kid = $4",
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3 AND kid = $4",
         tenant,
-        realm,
+        environment,
         domain.as_bytes().as_slice(),
         kid.as_slice(),
     )
@@ -78,17 +81,17 @@ pub async fn issuer_instance(
     row.as_deref().map(id16).transpose()
 }
 
-/// Whether the realm issuer holds any Instance in `domain`, so its Party is registered there.
+/// Whether the environment issuer holds any Instance in `domain`, so its Party is registered there.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn has_issuer_instance(t: &mut TenantTx, domain: &DomainId) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let found = sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM access.claim_issuer_instance
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3) AS "found!""#,
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3) AS "found!""#,
         tenant,
-        realm,
+        environment,
         domain.as_bytes().as_slice(),
     )
     .fetch_one(&mut *t.tx)
@@ -96,7 +99,7 @@ pub async fn has_issuer_instance(t: &mut TenantTx, domain: &DomainId) -> Result<
     Ok(found)
 }
 
-/// Records the Instance the realm issuer's key `kid` opened in `domain`; `false` when it was
+/// Records the Instance the environment issuer's key `kid` opened in `domain`; `false` when it was
 /// recorded already.
 ///
 /// # Errors
@@ -107,12 +110,12 @@ pub async fn record_issuer_instance(
     kid: &[u8; 32],
     instance: &[u8; 16],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "INSERT INTO access.claim_issuer_instance (tenant_id, realm_id, domain_id, kid, instance_id)
+        "INSERT INTO access.claim_issuer_instance (tenant_id, environment_id, domain_id, kid, instance_id)
          VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
         tenant,
-        realm,
+        environment,
         domain.as_bytes().as_slice(),
         kid.as_slice(),
         instance.as_slice(),
@@ -147,15 +150,15 @@ pub async fn insert_device_key(
     t: &mut TenantTx,
     k: &NewDeviceKey<'_>,
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "INSERT INTO access.device_keys
-           (tenant_id, realm_id, subject_id, public_key, key_type, algorithm, instance_id, session_id)
+           (tenant_id, environment_id, subject_id, public_key, key_type, algorithm, instance_id, session_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (tenant_id, realm_id, instance_id) DO NOTHING
+         ON CONFLICT (tenant_id, environment_id, instance_id) DO NOTHING
          RETURNING device_id",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(k.subject),
         k.public_key,
         k.key_type,
@@ -177,13 +180,13 @@ pub async fn subject_instance(
     t: &mut TenantTx,
     subject: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT instance_id FROM access.device_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
           ORDER BY created_at, device_id LIMIT 1",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
     )
     .fetch_optional(&mut *t.tx)
@@ -202,13 +205,13 @@ pub async fn retire_device_key(
     subject: &[u8; 16],
     instance: &[u8; 16],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.device_keys SET status = 'retired'
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND instance_id = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND instance_id = $4
             AND status = 'active'",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
         instance.as_slice(),
     )
@@ -220,9 +223,9 @@ pub async fn retire_device_key(
     // OP-149 m.32, OP-150 m.14 (f)
     sqlx::query!(
         "UPDATE access.session_instances SET status = 'released', released_at = now()
-          WHERE tenant_id = $1 AND realm_id = $2 AND instance_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND instance_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         instance.as_slice(),
     )
     .execute(&mut *t.tx)
@@ -250,14 +253,14 @@ pub async fn known_device(
     subject: &[u8; 16],
     public_key: &[u8],
 ) -> Result<Option<KnownDevice>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT device_id, instance_id FROM access.device_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND public_key = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND public_key = $4
             AND status = 'active'
           ORDER BY created_at, device_id LIMIT 1",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
         public_key,
     )
@@ -286,7 +289,7 @@ pub struct NewSessionInstance {
 }
 
 /// Binds the session to the Instance; `false` when the session already binds an active Instance
-/// this way (INV-13, OP-150 m.14 (f): one per session and realm). Nothing else changes (OP-73).
+/// this way (INV-13, OP-150 m.14 (f): one per session and environment). Nothing else changes (OP-73).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -294,14 +297,14 @@ pub async fn bind_session_instance(
     t: &mut TenantTx,
     b: &NewSessionInstance,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "INSERT INTO access.session_instances
-           (tenant_id, realm_id, session_id, subject_id, device_id, instance_id)
+           (tenant_id, environment_id, session_id, subject_id, device_id, instance_id)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (tenant_id, realm_id, session_id) WHERE status = 'active' DO NOTHING",
+         ON CONFLICT (tenant_id, environment_id, session_id) WHERE status = 'active' DO NOTHING",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(b.session),
         Uuid::from_bytes(b.subject),
         Uuid::from_bytes(b.device),
@@ -313,7 +316,7 @@ pub async fn bind_session_instance(
 }
 
 /// The active device Instance a session is bound to, the latest first (INV-13: at most one per
-/// session and realm): the one it registered, or the known device's Instance it proved later
+/// session and environment): the one it registered, or the known device's Instance it proved later
 /// (OP-149 m.32).
 ///
 /// # Errors
@@ -322,22 +325,22 @@ pub async fn session_instance(
     t: &mut TenantTx,
     session: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         r#"SELECT instance_id AS "instance_id!" FROM (
              SELECT instance_id, created_at FROM access.device_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND status = 'active'
              UNION ALL
              SELECT b.instance_id, b.created_at FROM access.session_instances b
                JOIN access.device_keys k
-                 ON k.tenant_id = b.tenant_id AND k.realm_id = b.realm_id
+                 ON k.tenant_id = b.tenant_id AND k.environment_id = b.environment_id
                 AND k.device_id = b.device_id
-              WHERE b.tenant_id = $1 AND b.realm_id = $2 AND b.session_id = $3
+              WHERE b.tenant_id = $1 AND b.environment_id = $2 AND b.session_id = $3
                 AND b.status = 'active' AND k.status = 'active'
            ) bound
            ORDER BY created_at DESC LIMIT 1"#,
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*session),
     )
     .fetch_optional(&mut *t.tx)
@@ -365,13 +368,13 @@ pub async fn subject_device_keys(
     t: &mut TenantTx,
     subject: &[u8; 16],
 ) -> Result<Vec<DeviceKeyRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT instance_id, public_key, key_type FROM access.device_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
           ORDER BY created_at, device_id",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
     )
     .fetch_all(&mut *t.tx)
@@ -395,13 +398,13 @@ pub async fn subject_instances(
     t: &mut TenantTx,
     subject: &[u8; 16],
 ) -> Result<Vec<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query_scalar!(
         "SELECT instance_id FROM access.device_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
           ORDER BY created_at, device_id",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
     )
     .fetch_all(&mut *t.tx)
@@ -409,7 +412,7 @@ pub async fn subject_instances(
     rows.iter().map(|r| id16(r)).collect()
 }
 
-/// A Claim the realm issuer issued and Claim Ingest answered.
+/// A Claim the environment issuer issued and Claim Ingest answered.
 #[derive(Clone)]
 pub struct IssuedClaim<'a> {
     /// The subject it is about.
@@ -431,13 +434,13 @@ pub struct IssuedClaim<'a> {
 /// # Errors
 /// [`StoreError`].
 pub async fn record_issued(t: &mut TenantTx, c: &IssuedClaim<'_>) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.issued_claims
-           (tenant_id, realm_id, subject_id, class, line, domain_id, claim_id, disposition)
+           (tenant_id, environment_id, subject_id, class, line, domain_id, claim_id, disposition)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(c.subject),
         c.class,
         c.line.as_slice(),
@@ -461,14 +464,14 @@ pub async fn last_in_line(
     domain: &DomainId,
     line: &[u8; 32],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT claim_id FROM access.issued_claims
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND domain_id = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND domain_id = $4
             AND line = $5 AND disposition NOT LIKE 'rejected%'
           ORDER BY id DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
         domain.as_bytes().as_slice(),
         line.as_slice(),

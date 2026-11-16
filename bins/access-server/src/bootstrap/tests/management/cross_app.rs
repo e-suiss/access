@@ -10,7 +10,7 @@ use super::*;
 #[tokio::test]
 async fn a_cross_app_connection_is_recorded_and_retired_by_rest() {
     let c = console("mgmt-cross-app", true).await;
-    let clients = c.admin_get("/admin/v1/realms/acme/clients").await;
+    let clients = c.admin_get("/admin/v1/envs/acme/clients").await;
     assert_eq!(clients.status, StatusCode::OK, "{}", clients.body);
     let client = clients.body["items"][0]["client_id"]
         .as_str()
@@ -21,7 +21,7 @@ async fn a_cross_app_connection_is_recorded_and_retired_by_rest() {
         async move {
             c.rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/cross-app-connections",
+                "/admin/v1/envs/acme/cross-app-connections",
                 ("createCrossAppConnection", None),
                 body,
                 None,
@@ -69,7 +69,7 @@ async fn a_cross_app_connection_is_recorded_and_retired_by_rest() {
         async move {
             c.rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/cross-app-connections/crm/retire",
+                "/admin/v1/envs/acme/cross-app-connections/crm/retire",
                 ("retireCrossAppConnection", Some("crm")),
                 serde_json::json!({}),
                 None,
@@ -83,7 +83,7 @@ async fn a_cross_app_connection_is_recorded_and_retired_by_rest() {
     assert_eq!(w.status, StatusCode::NOT_FOUND, "{}", w.body);
 
     // OP-73
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let row = t.cross_app_connection("crm").await.unwrap().unwrap();
@@ -100,7 +100,7 @@ async fn a_cross_app_connection_is_recorded_and_retired_by_rest() {
     t.commit().await.unwrap();
     let w = create(body).await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert!(

@@ -23,9 +23,9 @@ fn writing_is_deterministic_and_reads_back() {
 
 #[test]
 fn hand_edited_yaml_of_the_subset_is_read() {
-    let text = "realm: acme   # the realm\nclients:\n- display_name: App\n  redirect_uris:\n    - https://app.example/cb\n  require_pushed_authorization_requests: false\ngroups: []\nsettings:\n  branding: {\"display_name\": \"Acme\"}\n  rp_id: 'acme.example'\n";
+    let text = "environment: acme   # the environment\nclients:\n- display_name: App\n  redirect_uris:\n    - https://app.example/cb\n  require_pushed_authorization_requests: false\ngroups: []\nsettings:\n  branding: {\"display_name\": \"Acme\"}\n  rp_id: 'acme.example'\n";
     let v = from_str(text).unwrap();
-    assert_eq!(v["realm"], "acme");
+    assert_eq!(v["environment"], "acme");
     assert_eq!(
         v["clients"][0]["redirect_uris"][0],
         "https://app.example/cb"

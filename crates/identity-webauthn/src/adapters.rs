@@ -11,7 +11,7 @@ use access_crypto::webauthn::DecoyKey;
 use crate::WebAuthnError;
 use crate::domain::ceremony::Signal;
 use crate::domain::credential::CredentialRecord;
-use crate::domain::ids::{CredentialId, RealmId, UserHandle};
+use crate::domain::ids::{CredentialId, EnvironmentId, UserHandle};
 use crate::domain::mds::{MAX_BLOB, MdsBlob, MdsError};
 use crate::ports::{
     AttestationSources, Clock, CredentialRegistry, DecoySource, Inserted, MdsCache, MdsSource,
@@ -47,27 +47,27 @@ impl Random for OsRandom {
     }
 }
 
-/// Decoy keys per realm, each in the PKCS#11 token as `access/webauthn-decoy/<RealmID hex>`.
+/// Decoy keys per environment, each in the PKCS#11 token as `access/webauthn-decoy/<EnvironmentID hex>`.
 #[derive(Default)]
-pub struct RealmDecoyKeys {
-    keys: Vec<(RealmId, DecoyKey)>,
+pub struct EnvironmentDecoyKeys {
+    keys: Vec<(EnvironmentId, DecoyKey)>,
 }
 
-impl RealmDecoyKeys {
-    /// Adds a realm's key.
+impl EnvironmentDecoyKeys {
+    /// Adds an environment's key.
     #[must_use]
-    pub fn with(mut self, realm: RealmId, key: DecoyKey) -> Self {
-        self.keys.push((realm, key));
+    pub fn with(mut self, environment: EnvironmentId, key: DecoyKey) -> Self {
+        self.keys.push((environment, key));
         self
     }
 }
 
-impl DecoySource for RealmDecoyKeys {
-    fn derive(&self, realm: RealmId, input: &[u8]) -> Result<[u8; 32], WebAuthnError> {
+impl DecoySource for EnvironmentDecoyKeys {
+    fn derive(&self, environment: EnvironmentId, input: &[u8]) -> Result<[u8; 32], WebAuthnError> {
         let (_, key) = self
             .keys
             .iter()
-            .find(|(r, _)| *r == realm)
+            .find(|(r, _)| *r == environment)
             .ok_or(WebAuthnError::Decoy)?;
         key.derive(input).map_err(|_| WebAuthnError::Decoy)
     }
@@ -130,7 +130,7 @@ impl MdsCache for MemoryMdsCache {
     }
 }
 
-/// No metadata and no CRLs: a `direct` realm served by it refuses every registration.
+/// No metadata and no CRLs: a `direct` environment served by it refuses every registration.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoAttestationSources;
 
@@ -183,7 +183,7 @@ fn registry_poisoned<T>(_: PoisonError<T>) -> WebAuthnError {
     WebAuthnError::Registry("lock poisoned".into())
 }
 
-/// An in-process registry: realm-scoped, IDs unique per realm including deleted rows, soft
+/// An in-process registry: environment-scoped, IDs unique per environment including deleted rows, soft
 /// delete only (OP-73).
 #[derive(Debug, Default)]
 pub struct MemoryRegistry {
@@ -208,7 +208,7 @@ impl CredentialRegistry for MemoryRegistry {
         ready(self.with_rows(|rows| {
             if rows
                 .iter()
-                .any(|r| r.realm == record.realm && r.id == record.id)
+                .any(|r| r.environment == record.environment && r.id == record.id)
             {
                 Inserted::Duplicate
             } else {
@@ -220,24 +220,26 @@ impl CredentialRegistry for MemoryRegistry {
 
     fn find(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
     ) -> impl Future<Output = Result<Option<CredentialRecord>, WebAuthnError>> + Send {
         ready(self.with_rows(|rows| {
             rows.iter()
-                .find(|r| r.realm == realm && r.id == *id)
+                .find(|r| r.environment == environment && r.id == *id)
                 .cloned()
         }))
     }
 
     fn list(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         user: &UserHandle,
     ) -> impl Future<Output = Result<Vec<CredentialRecord>, WebAuthnError>> + Send {
         ready(self.with_rows(|rows| {
             rows.iter()
-                .filter(|r| r.realm == realm && r.user == *user && r.deleted_at.is_none())
+                .filter(|r| {
+                    r.environment == environment && r.user == *user && r.deleted_at.is_none()
+                })
                 .cloned()
                 .collect()
         }))
@@ -245,14 +247,17 @@ impl CredentialRegistry for MemoryRegistry {
 
     fn record_use(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         sign_count: u32,
         backup_state: bool,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
         ready(self.with_rows(|rows| {
-            if let Some(r) = rows.iter_mut().find(|r| r.realm == realm && r.id == *id) {
+            if let Some(r) = rows
+                .iter_mut()
+                .find(|r| r.environment == environment && r.id == *id)
+            {
                 r.sign_count = sign_count;
                 r.backup_state = backup_state;
                 r.last_used_at = Some(at);
@@ -262,12 +267,15 @@ impl CredentialRegistry for MemoryRegistry {
 
     fn soft_delete(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
         ready(self.with_rows(|rows| {
-            if let Some(r) = rows.iter_mut().find(|r| r.realm == realm && r.id == *id) {
+            if let Some(r) = rows
+                .iter_mut()
+                .find(|r| r.environment == environment && r.id == *id)
+            {
                 r.deleted_at.get_or_insert(at);
             }
         }))
@@ -297,7 +305,7 @@ impl MemorySignals {
 impl SignalSink for MemorySignals {
     fn emit(
         &self,
-        _realm: RealmId,
+        _environment: EnvironmentId,
         credential: &CredentialId,
         signal: Signal,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {

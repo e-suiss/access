@@ -1,6 +1,6 @@
 {
   "alias": "access-federation",
-  "description": "Access realm acme as an OpenID Federation leaf that is its own trust anchor (OP-155 m.3 (j), (q))",
+  "description": "Access environment acme as an OpenID Federation leaf that is its own trust anchor (OP-155 m.3 (j), (q))",
   "federation": {
     "entity_identifier": "https://acme.id.test:9443",
     "de_trust_anchor": "https://acme.id.test:9443",

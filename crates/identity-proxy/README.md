@@ -13,7 +13,7 @@ names:
 - the engine (`nginx`, `traefik`, `caddy` or `envoy`);
 - the proxy's transport identity: the base64url SHA-256 of the client certificate it presents on
   the mTLS listener;
-- the realm client the browser signs in with, which lists
+- the environment client the browser signs in with, which lists
   `https://{host}/access-proxy/v1/callback` as a redirect URI;
 - the action every request asks, the resource namespace, and up to 64 path patterns.
 
@@ -40,7 +40,7 @@ the application.
 
 ## Signing in
 
-Without a `__Host-access-proxy` cookie the browser goes to the realm's hosted sign-in with OIDC
+Without a `__Host-access-proxy` cookie the browser goes to the environment's hosted sign-in with OIDC
 authorization code and PKCE; Access keeps the PKCE verifier and binds the `state` to a
 `__Host-access-proxy-state` cookie on the application host. The callback comes back through the
 proxy like any other request: Access redeems the code once, opens the proxy session on the OAuth
@@ -58,10 +58,10 @@ the request is refused, never allowed from a stale decision.
 
 ## The application token
 
-`Access-Identity` is a compact JWS: `typ: access-app+jwt`, ES256 under the realm JOSE key, `aud`
+`Access-Identity` is a compact JWS: `typ: access-app+jwt`, ES256 under the environment JOSE key, `aud`
 the application's origin, `sub` pairwise for the registration's client, `decision` the id of the
 decision that let the request through, 60 seconds. Applications verify it with
-`esuiss-access-sdk`'s `resource::app_token::verify_app_token` against the realm JWKS.
+`esuiss-access-sdk`'s `resource::app_token::verify_app_token` against the environment JWKS.
 
 ## Plain headers
 
@@ -79,7 +79,7 @@ calls a tool it asks Access:
   `description`, `inputSchema` and `annotations`.
 - `POST /proxy/v1/mcp/calls` carries one `tools/call`: the tool, its pin, and the AuthZEN
   evaluation of the agent's own `commit` statement with the gateway as PEP. The intent must be
-  the registration's action on `namespace:[proxy, tool]` in the realm's governing domain.
+  the registration's action on `namespace:[proxy, tool]` in the environment's governing domain.
 
 `idp.proxy.mcp_pin` (CT2) pins a proxy's whole tool list. Pinning is strict: a tool whose
 definition changed, or that was never pinned, is blocked before any decision (`409

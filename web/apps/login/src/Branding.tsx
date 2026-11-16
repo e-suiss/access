@@ -1,5 +1,5 @@
 // TN-106, OP-153 m.3 (t), §14.3: branding is data; the logo is an image from an origin the
-// realm's CSP allows, drawn with <img> only, so an SVG cannot run anything; no upload exists.
+// environment's CSP allows, drawn with <img> only, so an SVG cannot run anything; no upload exists.
 import { useEffect, useState } from "react";
 
 import { under } from "./base.js";
@@ -13,7 +13,7 @@ export interface BrandingData {
 
 export const brandingPath = "/v1/login/branding";
 
-/** The realm's theme sheet: CSS custom properties the server writes from validated colours. */
+/** The environment's theme sheet: CSS custom properties the server writes from validated colours. */
 export function linkTheme(): void {
   const link = document.createElement("link");
   link.rel = "stylesheet";

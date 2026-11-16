@@ -1,5 +1,5 @@
-//! The realm's `rate_limit_rps` on the real server path (OP-35, OP-158 m.3 (v), TN-24, B3, B19,
-//! MD-8): `putRateLimit` commits `idp.realm.rate_limit`, and the realm's identity routes draw
+//! The environment's `rate_limit_rps` on the real server path (OP-35, OP-158 m.3 (v), TN-24, B3, B19,
+//! MD-8): `putRateLimit` commits `idp.environment.rate_limit`, and the environment's identity routes draw
 //! from that rate in layer B; sign-out and revocation never draw, and a counter that cannot
 //! answer refuses.
 
@@ -41,7 +41,7 @@ async fn status_of(router: &axum::Router, method: Method, path: &str) -> (Status
 
 // OP-35, OP-158 m.3 (v), TN-24, B3, B19
 #[tokio::test]
-async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
+async fn a_environment_rate_limit_is_committed_and_bounds_its_identity_routes() {
     let c = console("rate-limit", false).await;
     let set = c
         .put_setting(
@@ -51,7 +51,7 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
         )
         .await;
     assert_eq!(set.status, StatusCode::OK, "{}", set.body);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -68,7 +68,7 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
             fixed,
         )),
     );
-    let authorize = "/realms/acme/authorize?client_id=x";
+    let authorize = "/env/acme/authorize?client_id=x";
     for _ in 0..access_http::quota::BURST_S {
         let (s, _) = status_of(&routes, Method::GET, authorize).await;
         assert_ne!(s, StatusCode::TOO_MANY_REQUESTS);
@@ -77,26 +77,26 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
     assert_eq!(s, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(why, "urn:suiss:access:problem:quota-exceeded 1");
     for _ in 0..3 {
-        let (s, _) = status_of(&routes, Method::POST, "/realms/acme/revoke").await;
+        let (s, _) = status_of(&routes, Method::POST, "/env/acme/revoke").await;
         assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "revocation never draws");
-        let (s, _) = status_of(&routes, Method::GET, "/realms/acme/end-session").await;
+        let (s, _) = status_of(&routes, Method::GET, "/env/acme/end-session").await;
         assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "logout never draws");
     }
 
     // §12.5.4, TN-127
-    let (status, view, _) = c.rest_read("/admin/v1/realms/acme/rate-limits").await;
+    let (status, view, _) = c.rest_read("/admin/v1/envs/acme/rate-limits").await;
     assert_eq!(status, StatusCode::OK, "{view}");
     assert_eq!(
         (view["rate_limit_rps"].as_u64(), view["default"].as_bool()),
         (Some(1), Some(false))
     );
     let buckets = view["usage"]["buckets"].as_array().unwrap();
-    let realm = buckets
+    let environment = buckets
         .iter()
         .find(|b| b["name"] == access_http::quota::BUCKET)
         .unwrap();
-    assert_eq!(realm["now_percent"], 100);
-    assert_eq!(realm["above_threshold"], true);
+    assert_eq!(environment["now_percent"], 100);
+    assert_eq!(environment["above_threshold"], true);
     assert!(
         view["usage"]["events"]
             .as_array()
@@ -135,9 +135,9 @@ impl RequestQuotas for Down {
 async fn a_request_counter_that_cannot_answer_refuses() {
     let c = console("rate-limit-down", false).await;
     let routes = meter(c.oauth.clone(), Arc::new(Down));
-    let (s, _) = status_of(&routes, Method::GET, "/realms/acme/authorize?client_id=x").await;
+    let (s, _) = status_of(&routes, Method::GET, "/env/acme/authorize?client_id=x").await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
-    let (s, _) = status_of(&routes, Method::POST, "/realms/acme/revoke").await;
+    let (s, _) = status_of(&routes, Method::POST, "/env/acme/revoke").await;
     assert_ne!(
         s,
         StatusCode::SERVICE_UNAVAILABLE,
@@ -152,7 +152,7 @@ async fn an_unauthenticated_request_is_refused_before_its_body_is_parsed() {
     let garbage = "{\"rps\": [[[[[[[[[[[[[[[[";
     let (r, body) = send(
         &c.management,
-        Request::put("/admin/v1/realms/acme/settings/rate-limit")
+        Request::put("/admin/v1/envs/acme/settings/rate-limit")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(garbage))
             .unwrap(),

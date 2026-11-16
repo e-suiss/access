@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 
 import { securityHeaders } from "./security-headers.js";
 
-// OP-153 m.3 (w): served by the account BFF under /account on the realm's public listener; the
+// OP-153 m.3 (w): served by the account BFF under /account on the environment's public listener; the
 // Fluent catalogs come from the repository's locales/
 export default defineConfig({
   base: "/account/",

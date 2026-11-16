@@ -1,4 +1,4 @@
-//! What the workload checks need from outside (OP-63): a realm's kept SPIFFE bundles and the
+//! What the workload checks need from outside (OP-63): an environment's kept SPIFFE bundles and the
 //! guarded fetch of a Bundle Endpoint (OP-154 m.1 (d)).
 
 use core::future::Future;
@@ -12,16 +12,16 @@ pub struct Unavailable;
 /// A boxed future of the ports.
 pub type Pending<'a, T> = Pin<Box<dyn Future<Output = Result<T, Unavailable>> + Send + 'a>>;
 
-/// The realm a bundle is kept for.
+/// The environment a bundle is kept for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Scope {
     /// The tenant.
     pub tenant: [u8; 16],
-    /// The realm.
-    pub realm: [u8; 16],
+    /// The environment.
+    pub environment: [u8; 16],
 }
 
-/// A bundle as the realm keeps it.
+/// A bundle as the environment keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kept {
     /// The Bundle Endpoint it was fetched from.
@@ -32,17 +32,18 @@ pub struct Kept {
     pub fetched_ms: u64,
 }
 
-/// A realm's SPIFFE bundles, keyed by trust domain alone
+/// An environment's SPIFFE bundles, keyed by trust domain alone
 /// (`draft-ietf-oauth-spiffe-client-auth` §6).
 pub trait Bundles: Send + Sync {
-    /// The bundle `realm` keeps for `trust_domain`, if any.
-    fn kept<'a>(&'a self, realm: Scope, trust_domain: &'a str) -> Pending<'a, Option<Kept>>;
+    /// The bundle `environment` keeps for `trust_domain`, if any.
+    fn kept<'a>(&'a self, environment: Scope, trust_domain: &'a str) -> Pending<'a, Option<Kept>>;
 
-    /// Keeps `kept` as `realm`'s bundle of `trust_domain`.
-    fn keep<'a>(&'a self, realm: Scope, trust_domain: &'a str, kept: Kept) -> Pending<'a, ()>;
+    /// Keeps `kept` as `environment`'s bundle of `trust_domain`.
+    fn keep<'a>(&'a self, environment: Scope, trust_domain: &'a str, kept: Kept)
+    -> Pending<'a, ()>;
 
     /// Fetches `endpoint` over the SSRF-guarded outbound client; `None` when the fetch is
-    /// refused or fails, which keeps the bundle the realm has.
+    /// refused or fails, which keeps the bundle the environment has.
     fn fetch<'a>(&'a self, endpoint: &'a str) -> Pending<'a, Option<Vec<u8>>>;
 }
 

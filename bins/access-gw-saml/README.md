@@ -20,7 +20,7 @@ access-gw-saml
 ```
 
 access-server finds the gateway through `identity.saml_gateway` (`host:port`). The gateway is
-registered in its realm with `registerGateway` (`idp.gateway.register`).
+registered in its environment with `registerGateway` (`idp.gateway.register`).
 
 ## One forward
 

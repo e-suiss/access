@@ -94,7 +94,7 @@ mod tests {
     // §5.12
     #[test]
     fn authority_store_modules_are_accepted() {
-        let src = "use access_store::authority::Draw;\nuse access_store::claims;\n// access_store::idp\n#[cfg(test)]\nmod tests { use access_store::identity::RealmId; }\n";
+        let src = "use access_store::authority::Draw;\nuse access_store::claims;\n// access_store::idp\n#[cfg(test)]\nmod tests { use access_store::identity::EnvironmentId; }\n";
         assert!(rust_violations("crates/authority-core/src/a.rs", src).is_empty());
         assert!(rust_violations("a.rs", "use access_store::identityless::X;\n").is_empty());
     }

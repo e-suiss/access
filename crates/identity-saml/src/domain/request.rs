@@ -13,7 +13,7 @@ use crate::uri;
 /// A refusal shown to the user; nothing is sent to the service provider.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// The requester is not a live registration of the realm.
+    /// The requester is not a live registration of the environment.
     UnknownSp,
     /// The message is not an `AuthnRequest`.
     Message,

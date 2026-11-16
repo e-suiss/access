@@ -1,4 +1,4 @@
-//! The catalog upgrade of a realm's governing domain (OP-151 m.18 (g), OP-152 m.7 (d)): a
+//! The catalog upgrade of an environment's governing domain (OP-151 m.18 (g), OP-152 m.7 (d)): a
 //! domain opened before an `idp.*` catalog gained actions accepts none of them, so their
 //! writes are refused there. For each namespace whose current catalog the domain does not fully
 //! accept, the founding root signs an `acceptance_establish` of that catalog on the
@@ -20,8 +20,8 @@ use access_store::authority::{nonces_with_prefix, state_of};
 use suiss_crypto::dcbor::{self, Limits};
 
 use super::{
-    Bootstrap, BootstrapError, Decider, Digest, DomainId, Governance, HsmSigner, Id, Instances,
-    MetaExercises, Moment, Payload, RealmKeys, SKEW_MS, Serialize, Spp, Tier, Verdict, Window,
+    Bootstrap, BootstrapError, Decider, Digest, DomainId, EnvironmentKeys, Governance, HsmSigner,
+    Id, Instances, MetaExercises, Moment, Payload, SKEW_MS, Serialize, Spp, Tier, Verdict, Window,
     server_time,
 };
 use suiss_crypto::signer::Signer as _;
@@ -62,7 +62,7 @@ fn validity_start(nonce: &[u8], prefix: &[u8]) -> Option<u64> {
 impl<P, K> Bootstrap<'_, P, K>
 where
     P: Decider + Governance + Instances + MetaExercises,
-    K: RealmKeys,
+    K: EnvironmentKeys,
 {
     /// Makes `domain`, founded by `party` whose key is `root`, accept every current `idp.*`
     /// catalog (OP-151 m.18 (g)); reports the namespaces it had to upgrade.
@@ -123,7 +123,7 @@ where
     }
 
     /// Makes a domain opened before `instance_recover` joined the bootstrap Grant and
-    /// `recovery_result` the realm issuer's Acceptance take both (OP-153 m.3 (c), m.13 (e)):
+    /// `recovery_result` the environment issuer's Acceptance take both (OP-153 m.3 (c), m.13 (e)):
     /// the founding root amends the bootstrap Grant and establishes the issuer's Acceptance of
     /// the class, each a CT3 widening behind the time-lock. A domain whose bootstrap Grant
     /// already covers `instance_recover` was born with both.
@@ -132,17 +132,18 @@ where
     /// [`BootstrapError`]; a refusal stops the run.
     pub(crate) async fn upgrade_recovery(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         domain: Digest,
         root: &HsmSigner,
         party: Id,
     ) -> Result<Vec<CatalogOut>, BootstrapError> {
         let issuer = {
-            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
-            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            let mut t =
+                access_store::identity::TenantTx::begin(self.app, tenant, environment).await?;
+            let i = access_store::issuer::environment_issuer(&mut t).await?;
             t.commit().await?;
             i.map(Id)
         };
@@ -211,7 +212,7 @@ where
         Ok(out)
     }
 
-    /// Makes a domain opened before the realm issuer's `org_member` subject selection take it
+    /// Makes a domain opened before the environment issuer's `org_member` subject selection take it
     /// (OP-153 m.17 (c), m.25 (i) (3)): the founding root establishes
     /// [`access_internal_api::idp::org_member_selection`], a CT3 widening behind the time-lock.
     /// A domain with a
@@ -221,17 +222,18 @@ where
     /// [`BootstrapError`]; a refusal stops the run.
     pub(crate) async fn upgrade_org_members(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         domain: Digest,
         root: &HsmSigner,
         party: Id,
     ) -> Result<Vec<CatalogOut>, BootstrapError> {
         let issuer = {
-            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
-            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            let mut t =
+                access_store::identity::TenantTx::begin(self.app, tenant, environment).await?;
+            let i = access_store::issuer::environment_issuer(&mut t).await?;
             t.commit().await?;
             i.map(Id)
         };
@@ -269,7 +271,7 @@ where
     }
 
     /// Makes a domain opened before the agent and workload Acceptances take them (OP-154 m.9
-    /// (f), m.11 (d)): the realm issuer's `operated_by`, `sponsored_by` and `agent_kind` as
+    /// (f), m.11 (d)): the environment issuer's `operated_by`, `sponsored_by` and `agent_kind` as
     /// predicate input, its `operated_by` for subject selection, its
     /// `identity_binding_workload` for actor binding and its `attestation_runtime` as predicate
     /// input. The founding root establishes each one the domain lacks, a CT3 widening behind the
@@ -279,9 +281,9 @@ where
     /// [`BootstrapError`]; a refusal stops the run.
     pub(crate) async fn upgrade_agents(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         domain: Digest,
         root: &HsmSigner,
@@ -289,8 +291,9 @@ where
     ) -> Result<Vec<CatalogOut>, BootstrapError> {
         use access_identity_admin::app::{agents, workloads};
         let issuer = {
-            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
-            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            let mut t =
+                access_store::identity::TenantTx::begin(self.app, tenant, environment).await?;
+            let i = access_store::issuer::environment_issuer(&mut t).await?;
             t.commit().await?;
             i.map(Id)
         };

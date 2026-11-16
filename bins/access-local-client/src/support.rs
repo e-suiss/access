@@ -40,7 +40,7 @@ const SKEW_MS: u64 = 60 * 1_000;
 
 /// What an episode needs.
 pub struct Episode<'a> {
-    /// The realm issuer both sign in at.
+    /// The environment issuer both sign in at.
     pub issuer: &'a str,
     /// The deployment's API base.
     pub api_base: &'a str,

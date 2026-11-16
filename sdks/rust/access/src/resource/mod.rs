@@ -2,7 +2,7 @@
 //! §12.2.1, §13.4 U55, §13.7.9, L2-JOS-1 to L2-JOS-4, OP-150 m.3 (d), m.9): an RFC 9068 token
 //! whose authority is in RAR `authorization_details`, signed by an operational key the domain's
 //! binding-signed Domain Metadata declares for `token` at the token's `iat` (§10.4.5, TI-RT6;
-//! never a realm JWKS key), for this one resource server, bound to the key the request
+//! never an environment JWKS key), for this one resource server, bound to the key the request
 //! was made with, within its `ValidityContract`, its status list entry clear, and, under the
 //! strict profile, confirmed by introspection on every request.
 //!
@@ -109,7 +109,7 @@ pub struct ResourceServer {
 /// How a resource server is set up.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// The expected `iss`: the realm's authorization server.
+    /// The expected `iss`: the environment's authorization server.
     pub issuer: String,
     /// This resource server, the token's only audience (RFC 8707).
     pub audience: String,

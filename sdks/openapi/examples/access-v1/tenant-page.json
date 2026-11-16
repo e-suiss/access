@@ -3,7 +3,7 @@
     {
       "tenant": "tnt_01",
       "organizations": [],
-      "realms": [
+      "environments": [
         {
           "id": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
           "issuer": "https://shop1.id.example",
@@ -13,12 +13,12 @@
       "region": "eu-central",
       "status": "active",
       "retention": {},
-      "version": "v1.TW_NkF3wQL5e0gu68aNpun7QDV3pW6TFX1xYzGXG3xc"
+      "version": "v1.hyHLfkntGdQJ7c2hgT0BgHnNqHkuiUvreB1oLbE7MXs"
     },
     {
       "tenant": "tnt_02",
       "organizations": [],
-      "realms": [
+      "environments": [
         {
           "id": "a2a2a2a2-a2a2-a2a2-a2a2-a2a2a2a2a2a2",
           "issuer": "https://shop2.id.example",
@@ -28,7 +28,7 @@
       "region": "eu-central",
       "status": "suspended",
       "retention": {},
-      "version": "v1.weFLTbZqqdklpKObP2bCh45BITkrtUJf9N53DUDexxw"
+      "version": "v1.cHMhQkB88BnJEmepe74JICOXbIx87hkCgKuIbMcGORY"
     }
   ]
 }

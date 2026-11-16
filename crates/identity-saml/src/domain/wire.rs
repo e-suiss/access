@@ -5,7 +5,7 @@
 //! values with a fresh one-use attestation handle ([`Forward`]). The gateway has the message read
 //! and verified by the parser worker, then makes the edge call `session_attest` ([`Attest`]):
 //! `sp` for the pinned certificates, then `issue` with the handle and the verified facts.
-//! access-server checks the handle against its own flow (unused, fresh, same realm), decides, and
+//! access-server checks the handle against its own flow (unused, fresh, same environment), decides, and
 //! keeps the outcome in the flow; the gateway's answer to the forward only says the flow is done
 //! or names a refusal code, so nothing the gateway returns reaches the browser. A forged handle
 //! is refused by the channel, so no signed output exists without an authentication (IDI-7).
@@ -67,8 +67,8 @@ impl Binding {
 /// What access-server forwards to the gateway: the raw values as received.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Forward {
-    /// The realm slug.
-    pub realm: String,
+    /// The environment slug.
+    pub environment: String,
     /// The one-use attestation handle of this forward.
     pub handle: [u8; 32],
     /// The binding.
@@ -98,15 +98,15 @@ pub enum Done {
 pub enum Attest {
     /// The pinned certificates of the registration `entity`.
     Sp {
-        /// The realm slug.
-        realm: String,
+        /// The environment slug.
+        environment: String,
         /// The entity ID the message names.
         entity: String,
     },
     /// Decide the flow of `handle` with the verified facts.
     Issue {
-        /// The realm slug.
-        realm: String,
+        /// The environment slug.
+        environment: String,
         /// The attestation handle.
         handle: [u8; 32],
         /// The worker's facts (`access_internal_api::saml::Facts`), when a message was read.
@@ -202,7 +202,7 @@ impl Forward {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut e = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("handle", Value::Bytes(self.handle.to_vec())),
             ("binding", Value::text(self.binding.name())),
         ];
@@ -222,7 +222,7 @@ impl Forward {
         only(
             &v,
             &[
-                "realm",
+                "environment",
                 "handle",
                 "binding",
                 "message",
@@ -232,7 +232,7 @@ impl Forward {
             ],
         )?;
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             handle: handle(&v)?,
             binding: Binding::parse(&text(&v, "binding", 16)?).ok_or(Malformed)?,
             message: opt_text(&v, "message", MAX_VALUE)?,
@@ -285,20 +285,23 @@ impl Attest {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         match self {
-            Self::Sp { realm, entity } => enc(&map(vec![
+            Self::Sp {
+                environment,
+                entity,
+            } => enc(&map(vec![
                 ("op", Value::text("sp")),
-                ("realm", Value::text(realm)),
+                ("environment", Value::text(environment)),
                 ("entity", Value::text(entity)),
             ])),
             Self::Issue {
-                realm,
+                environment,
                 handle,
                 facts,
                 redirect_signed,
             } => {
                 let mut e = vec![
                     ("op", Value::text("issue")),
-                    ("realm", Value::text(realm)),
+                    ("environment", Value::text(environment)),
                     ("handle", Value::Bytes(handle.to_vec())),
                     ("redirect_signed", Value::Bool(*redirect_signed)),
                 ];
@@ -318,16 +321,19 @@ impl Attest {
         let v = dec(b)?;
         match text(&v, "op", 8)?.as_str() {
             "sp" => {
-                only(&v, &["op", "realm", "entity"])?;
+                only(&v, &["op", "environment", "entity"])?;
                 Ok(Self::Sp {
-                    realm: text(&v, "realm", 64)?,
+                    environment: text(&v, "environment", 64)?,
                     entity: text(&v, "entity", 1024)?,
                 })
             }
             "issue" => {
-                only(&v, &["op", "realm", "handle", "facts", "redirect_signed"])?;
+                only(
+                    &v,
+                    &["op", "environment", "handle", "facts", "redirect_signed"],
+                )?;
                 Ok(Self::Issue {
-                    realm: text(&v, "realm", 64)?,
+                    environment: text(&v, "environment", 64)?,
                     handle: handle(&v)?,
                     facts: match v.get("facts") {
                         None => None,
@@ -414,7 +420,7 @@ mod tests {
     #[test]
     fn bodies_round_trip() {
         let f = Forward {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             handle: [7; 32],
             binding: Binding::Redirect,
             message: Some(String::from("fZ%2B")),
@@ -429,11 +435,11 @@ mod tests {
         assert!(Done::decode(&Done::Refused(String::from("<script>")).encode()).is_err());
         for a in [
             Attest::Sp {
-                realm: String::from("acme"),
+                environment: String::from("acme"),
                 entity: String::from("https://sp"),
             },
             Attest::Issue {
-                realm: String::from("acme"),
+                environment: String::from("acme"),
                 handle: [1; 32],
                 facts: Some(vec![0xa0]),
                 redirect_signed: true,

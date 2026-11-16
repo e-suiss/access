@@ -1,6 +1,6 @@
 //! The `idp.*` write path between the planes (MD-14, E34, EI-25, OP-146 I10): the actions the
 //! identity plane publishes, the Exercise it sends as PEP, the committed decision it binds its
-//! configuration to, and the Genesis a new realm's governing domain is opened with (TN-111).
+//! configuration to, and the Genesis a new environment's governing domain is opened with (TN-111).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -35,7 +35,7 @@ pub const NAMESPACES: [&str; 27] = [
     "idp.mapper",
     "idp.org",
     "idp.proxy",
-    "idp.realm",
+    "idp.environment",
     "idp.relay",
     "idp.review",
     "idp.saml",
@@ -50,13 +50,13 @@ pub const NAMESPACES: [&str; 27] = [
     "idp.webhook",
 ];
 
-/// Stable code of an `idp.*` write the realm's governing domain refuses because it does not yet
-/// accept the catalog that declares the action (OP-153 m.3 (a)): the realm's catalog upgrade
+/// Stable code of an `idp.*` write the environment's governing domain refuses because it does not yet
+/// accept the catalog that declares the action (OP-153 m.3 (a)): the environment's catalog upgrade
 /// must commit first.
 pub const CATALOG_UPGRADE_REQUIRED: &str = "catalog-upgrade-required";
 
 /// Whether `decision` is a DENY of an action no live `schema-definition` Acceptance of the
-/// domain declares: for an [`IdpAction`] this means only that the realm's catalog upgrade has
+/// domain declares: for an [`IdpAction`] this means only that the environment's catalog upgrade has
 /// not committed yet (OP-153 m.3 (a), OP-141 m.35 (e)).
 #[must_use]
 pub fn catalog_upgrade_required(decision: &Decision) -> bool {
@@ -77,31 +77,31 @@ pub enum IdpAction {
     ClientUpdate,
     /// Retires a client; narrowing, CT1.
     ClientRetire,
-    /// Changes the realm's client and CIMD acceptance policy (§11.3, AG-4): CT2.
+    /// Changes the environment's client and CIMD acceptance policy (§11.3, AG-4): CT2.
     CimdPolicy,
     /// Sets a token claim from a profile attribute (TN-117): CT2.
     MapperSet,
-    /// Sets the realm's JOSE signing algorithm (OP-146 m.8 (e)): CT2.
-    RealmJoseAlg,
-    /// Raises the realm's Argon2id parameters (OP-33, §17.5.2); narrowing, CT1.
-    RealmArgon2,
-    /// Pins or changes the realm's RP ID (IDP-5, IDI-4): reserved, irreversible, CT3.
-    RealmRpId,
-    /// Moves the realm to another governing domain (§12.1.1 2a): reserved, CT3.
-    RealmRehome,
+    /// Sets the environment's JOSE signing algorithm (OP-146 m.8 (e)): CT2.
+    EnvironmentJoseAlg,
+    /// Raises the environment's Argon2id parameters (OP-33, §17.5.2); narrowing, CT1.
+    EnvironmentArgon2,
+    /// Pins or changes the environment's RP ID (IDP-5, IDI-4): reserved, irreversible, CT3.
+    EnvironmentRpId,
+    /// Moves the environment to another governing domain (§12.1.1 2a): reserved, CT3.
+    EnvironmentRehome,
     /// Registers an upstream identity provider (TN-95): reserved, CT3.
     UpstreamRegister,
-    /// Maps upstream groups or claims onto realm membership (TN-117, L6): reserved, CT3.
+    /// Maps upstream groups or claims onto environment membership (TN-117, L6): reserved, CT3.
     UpstreamMapping,
-    /// Changes the realm's login branding: name, logo, colours and the hosted page's CSP
+    /// Changes the environment's login branding: name, logo, colours and the hosted page's CSP
     /// origins (TN-106, §12.4.2): CT2.
-    RealmBranding,
-    /// Changes the realm's JOSE key rotation policy (TN-118, §12.1.2): reserved, CT3.
-    RealmKeyPolicy,
-    /// Rotates the realm's active JOSE key now, outside the schedule (TN-118): reserved, CT3.
-    RealmKeyRotate,
-    /// Drops a realm JOSE key at once, as on compromise (§13.2): narrowing, CT1 (§13.7.1).
-    RealmKeyDrop,
+    EnvironmentBranding,
+    /// Changes the environment's JOSE key rotation policy (TN-118, §12.1.2): reserved, CT3.
+    EnvironmentKeyPolicy,
+    /// Rotates the environment's active JOSE key now, outside the schedule (TN-118): reserved, CT3.
+    EnvironmentKeyRotate,
+    /// Drops an environment JOSE key at once, as on compromise (§13.2): narrowing, CT1 (§13.7.1).
+    EnvironmentKeyDrop,
     /// Erases an account for good by crypto-shredding (OP-73, TN-118): reserved, CT3.
     AccountDelete,
     /// Suspends an account: it cannot sign in until reactivated (§12.3.1); narrowing, CT1.
@@ -117,7 +117,7 @@ pub enum IdpAction {
     GroupUpdate,
     /// Retires a group and ends its memberships; narrowing, CT1.
     GroupRetire,
-    /// Adds members to a group whose membership issuer is the realm's administration (TN-117):
+    /// Adds members to a group whose membership issuer is the environment's administration (TN-117):
     /// CT2.
     GroupMembersAdd,
     /// Removes members from such a group; narrowing, CT1.
@@ -126,21 +126,21 @@ pub enum IdpAction {
     UpstreamUpdate,
     /// Retires an upstream identity provider; narrowing, CT1.
     UpstreamRetire,
-    /// Sets the realm's sign-in requirements: methods, required fields, MFA, registration
+    /// Sets the environment's sign-in requirements: methods, required fields, MFA, registration
     /// domain lists (TN-132): CT2.
-    RealmSigninPolicy,
-    /// Sets the realm's console session policy (TN-129, OP-151 m.3 (f)): CT2.
-    RealmSessionPolicy,
-    /// Tightens the realm's protection mode: monitor to enforce, a later SL2 stage, more denied
+    EnvironmentSigninPolicy,
+    /// Sets the environment's console session policy (TN-129, OP-151 m.3 (f)): CT2.
+    EnvironmentSessionPolicy,
+    /// Tightens the environment's protection mode: monitor to enforce, a later SL2 stage, more denied
     /// ASNs (OP-151 m.3 (o), m.14 (f)); narrowing, CT1.
-    RealmProtectionMode,
-    /// Changes the realm's protection mode so that anything loosens (OP-151 m.14 (f)): CT2.
-    RealmProtectionModeLoosen,
-    /// Makes an account a canary: a credential the realm plants (§4.4, OP-151 m.14 (f)): CT2.
+    EnvironmentProtectionMode,
+    /// Changes the environment's protection mode so that anything loosens (OP-151 m.14 (f)): CT2.
+    EnvironmentProtectionModeLoosen,
+    /// Makes an account a canary: a credential the environment plants (§4.4, OP-151 m.14 (f)): CT2.
     AccountCanary,
-    /// Sets what the realm's extension points may reach and receive: private targets and hook
+    /// Sets what the environment's extension points may reach and receive: private targets and hook
     /// disclosures (OP-151 m.10 (e)): CT2 either way.
-    RealmExtensionPolicy,
+    EnvironmentExtensionPolicy,
     /// Registers an inline hook at one call point (TN-135, OP-151 m.10 (d)): CT2.
     HookRegister,
     /// Retires an inline hook; narrowing, CT1.
@@ -166,7 +166,7 @@ pub enum IdpAction {
     AccountRecoveryPolicyLoosen,
     /// Exports the person's own data under their self-anchor (TN-79, OP-153 m.3 (cc)): CT1.
     AccountExport,
-    /// Exports the realm's accounts for migration, encrypted to a realm-bound key (TN-86,
+    /// Exports the environment's accounts for migration, encrypted to an environment-bound key (TN-86,
     /// OP-153 m.3 (n)): reserved, CT3.
     AccountMigrationExport,
     /// Creates an organization bound to its registered Party (TN-5, OP-153 m.3 (b)): CT2.
@@ -194,21 +194,21 @@ pub enum IdpAction {
     SocialUpdate,
     /// Disables a social preset: CT1.
     SocialDisable,
-    /// Sets the realm's WebAuthn related origins, verified domains only (OP-153 m.3 (u)): CT2.
-    RealmRelatedOrigins,
-    /// Overrides the realm's unprotected message keys (TN-108, X35, OP-153 m.3 (s)): CT2.
-    RealmLocaleOverrides,
-    /// Publishes the realm's consent documents (IDP-37, OP-153 m.3 (ee)): CT2.
-    RealmConsentDocuments,
-    /// Sets the realm's preference topics (IDP-37, OP-153 m.3 (ee)): CT2.
-    RealmPreferenceTopics,
-    /// Sets the realm's inactivity policy (TN-51, OP-153 m.3 (dd)): CT2.
-    RealmInactivityPolicy,
+    /// Sets the environment's WebAuthn related origins, verified domains only (OP-153 m.3 (u)): CT2.
+    EnvironmentRelatedOrigins,
+    /// Overrides the environment's unprotected message keys (TN-108, X35, OP-153 m.3 (s)): CT2.
+    EnvironmentLocaleOverrides,
+    /// Publishes the environment's consent documents (IDP-37, OP-153 m.3 (ee)): CT2.
+    EnvironmentConsentDocuments,
+    /// Sets the environment's preference topics (IDP-37, OP-153 m.3 (ee)): CT2.
+    EnvironmentPreferenceTopics,
+    /// Sets the environment's inactivity policy (TN-51, OP-153 m.3 (dd)): CT2.
+    EnvironmentInactivityPolicy,
     /// Extends a retention period (T39, OP-153 m.3 (ff)): CT2.
-    RealmRetentionExtend,
-    /// Moves the realm's hosted surfaces, issuer and RP ID to a verified customer domain
+    EnvironmentRetentionExtend,
+    /// Moves the environment's hosted surfaces, issuer and RP ID to a verified customer domain
     /// (OP-153 m.3 (u)): reserved, irreversible, CT3.
-    RealmCustomDomain,
+    EnvironmentCustomDomain,
     /// Reads the account's own resources under its self-anchor (E34): CT1.
     AccountRead,
     /// Changes the account's own profile fields under its self-anchor (E34): CT1.
@@ -218,24 +218,24 @@ pub enum IdpAction {
     AccountEmailChange,
     /// Places a legal hold that stops destruction of the held records (T39, OP-153 m.3 (ff)):
     /// CT1.
-    RealmRetentionHoldPlace,
+    EnvironmentRetentionHoldPlace,
     /// Lifts a legal hold, letting destruction run on its schedule again (T39): CT2.
-    RealmRetentionHoldLift,
-    /// Binds two accounts of two realms of the same tenant as one person, by an administrator
+    EnvironmentRetentionHoldLift,
+    /// Binds two accounts of two environments of the same tenant as one person, by an administrator
     /// (OP-153 m.18 (e), m.25 (b)): CT2.
     AccountBind,
     /// Imports accounts from another identity provider (§12.3.7, TN-85, OP-153 m.19 (d),
     /// m.25 (b)): CT2.
     AccountImport,
-    /// Records a guardianship between two accounts of the realm (E53, OP-153 m.20 (g),
+    /// Records a guardianship between two accounts of the environment (E53, OP-153 m.20 (g),
     /// m.25 (b)): CT2.
     AccountGuardianshipRecord,
-    /// Tightens the realm's hosted-page CSP mode: report-only to enforce (OP-153 m.22 (g),
+    /// Tightens the environment's hosted-page CSP mode: report-only to enforce (OP-153 m.22 (g),
     /// m.25 (b)); narrowing, CT1.
-    RealmCspMode,
-    /// Changes the realm's hosted-page CSP mode so that it loosens: enforce to report-only
+    EnvironmentCspMode,
+    /// Changes the environment's hosted-page CSP mode so that it loosens: enforce to report-only
     /// (OP-153 m.22 (g), m.25 (b)): CT2.
-    RealmCspModeLoosen,
+    EnvironmentCspModeLoosen,
     /// Registers an agent: its record, operator and kind, bound to one self-registered agent
     /// Party (OP-154 m.3 (c)): CT2.
     AgentRegister,
@@ -271,9 +271,9 @@ pub enum IdpAction {
     /// Retires a cross-app connection; narrowing, CT1.
     ClientCrossAppConnectionRetire,
     /// Turns on the device authorization grant (RFC 8628, OP-154 m.3 (p)): CT2.
-    RealmDeviceCode,
+    EnvironmentDeviceCode,
     /// Turns off the device authorization grant; narrowing, CT1.
-    RealmDeviceCodeClose,
+    EnvironmentDeviceCodeClose,
     /// Registers a SAML service provider from its metadata or catalog template (OP-155 m.3 (a), (e)): CT2.
     SamlSpRegister,
     /// Registers or changes an SP whose template maps a Claim that selects authority (L6): reserved, CT3.
@@ -306,7 +306,7 @@ pub enum IdpAction {
     GatewayKeytabEmergency,
     /// Registers a `RadSec` client of a RADIUS gateway (OP-155 m.3 (f)): CT2.
     GatewayRadiusClientRegister,
-    /// Turns on OpenID Federation for the realm's issuer as a leaf (OP-155 m.3 (j)): CT2.
+    /// Turns on OpenID Federation for the environment's issuer as a leaf (OP-155 m.3 (j)): CT2.
     FederationEnable,
     /// Turns OpenID Federation off; narrowing, CT1.
     FederationDisable,
@@ -320,7 +320,7 @@ pub enum IdpAction {
     FederationRegistrationOpen,
     /// Closes OIDF client registration; narrowing, CT1.
     FederationRegistrationClose,
-    /// Turns on the OID4VP verifier for the realm (OP-155 m.3 (p)): CT2.
+    /// Turns on the OID4VP verifier for the environment (OP-155 m.3 (p)): CT2.
     VcVerifierEnable,
     /// Turns the OID4VP verifier off; narrowing, CT1.
     VcVerifierDisable,
@@ -337,7 +337,7 @@ pub enum IdpAction {
     ClientProfileLoosen,
     /// Allows a client `client_secret_post` or `client_secret_jwt` (OP-155 m.3 (k)): CT2.
     ClientAuthMethodLegacy,
-    /// Lets a client take RS256 identity assertions; the realm's `rsa-id` key is made on first use (MD-6): CT2.
+    /// Lets a client take RS256 identity assertions; the environment's `rsa-id` key is made on first use (MD-6): CT2.
     ClientAlgRs256,
     /// Turns on JWE for a client's ID tokens, userinfo or JARM (OP-155 m.3 (k)); tightening, CT1.
     ClientEncryption,
@@ -346,19 +346,19 @@ pub enum IdpAction {
     /// Grants a client the legacy bearer exception: identity plane protocol tokens only, never advertised (OP-155 m.3 (k)): CT2.
     ClientLegacyBearer,
     /// Turns on CIBA poll and ping (OP-155 m.3 (l)): CT2.
-    RealmCiba,
+    EnvironmentCiba,
     /// Turns CIBA off; narrowing, CT1.
-    RealmCibaClose,
+    EnvironmentCibaClose,
     /// Turns on certificate, PIV and CAC sign-in (OP-155 m.3 (m)): CT2.
-    RealmCertificateLogin,
+    EnvironmentCertificateLogin,
     /// Publishes `mtls_endpoint_aliases` on the mTLS listener (OP-155 m.3 (m)): CT2.
-    RealmMtlsAliases,
-    /// Turns on home realm discovery, confirmed on an interstitial (OP-155 m.3 (h)): CT2.
-    RealmHrd,
-    /// Turns home realm discovery off; narrowing, CT1.
-    RealmHrdClose,
-    /// Lets the realm's clients opt in to front-channel logout (OP-155 m.3 (k)): CT2.
-    RealmFrontchannelLogout,
+    EnvironmentMtlsAliases,
+    /// Turns on home environment discovery, confirmed on an interstitial (OP-155 m.3 (h)): CT2.
+    EnvironmentHrd,
+    /// Turns home environment discovery off; narrowing, CT1.
+    EnvironmentHrdClose,
+    /// Lets the environment's clients opt in to front-channel logout (OP-155 m.3 (k)): CT2.
+    EnvironmentFrontchannelLogout,
     /// Enforces SSO on an organization: its members' passwords, API tokens, sign-ins and refresh families end, and pending invitations follow the chosen fate (OP-155 m.3 (i)); narrowing, CT1.
     OrgSsoEnforce,
     /// Lifts an organization's SSO enforcement; a loosening, CT2.
@@ -383,7 +383,7 @@ pub enum IdpAction {
     ProxyPlainHeadersClose,
     /// Pins an MCP server's tool list by the SHA-256 of each tool definition (OP-156 m.3 (n)): CT2.
     ProxyMcpPin,
-    /// Turns on the realm's SSH user certificate authority (OP-156 m.3 (o), IDP-32): CT2.
+    /// Turns on the environment's SSH user certificate authority (OP-156 m.3 (o), IDP-32): CT2.
     SshCaEnable,
     /// Turns the SSH certificate authority off; narrowing, CT1.
     SshCaDisable,
@@ -424,25 +424,25 @@ pub enum IdpAction {
     /// Retires a signal source; narrowing, CT1.
     SignalSourceRetire,
     /// Turns on push verification with number matching (OP-156 m.3 (d)): CT2.
-    RealmPush,
+    EnvironmentPush,
     /// Turns push verification off; narrowing, CT1.
-    RealmPushClose,
+    EnvironmentPushClose,
     /// Turns on the restricted SMS one-time code (OP-156 m.3 (f)): CT2.
-    RealmSmsOtp,
+    EnvironmentSmsOtp,
     /// Turns the SMS one-time code off; narrowing, CT1.
-    RealmSmsOtpClose,
+    EnvironmentSmsOtpClose,
     /// Opens `Permissions-Policy: payment` on the approval surface for Secure Payment Confirmation (OP-156 m.3 (g)): CT2.
-    RealmSpc,
+    EnvironmentSpc,
     /// Names the coordinator URL the hub links pending approvals to (OP-156 m.3 (t)): CT2.
-    RealmCoordinator,
+    EnvironmentCoordinator,
     /// Turns on the IYS consent registry events (OP-156 m.3 (c)): CT2.
-    RealmIys,
+    EnvironmentIys,
     /// Turns the IYS consent registry events off; narrowing, CT1.
-    RealmIysClose,
+    EnvironmentIysClose,
     /// Turns the immediate security authority notices back on (OP-156 m.3 (c)): CT2.
-    RealmSecurityNotices,
+    EnvironmentSecurityNotices,
     /// Turns the immediate security authority notices off; it lessens notice, CT1.
-    RealmSecurityNoticesClose,
+    EnvironmentSecurityNoticesClose,
     /// Resends an undelivered Relay message as a new outbox row citing the original; a message
     /// whose sealed content was crypto-shredded cannot be resent (OP-156 m.3 (c)): CT1.
     RelayResend,
@@ -488,44 +488,44 @@ pub enum IdpAction {
     /// Clears the break-glass mark; narrowing, CT1.
     OrgMemberBreakglassClear,
     /// Opens delegated administration through meta-action role Grants (TN-114, OP-157 m.3 (t)): CT2.
-    RealmDelegatedAdmin,
+    EnvironmentDelegatedAdmin,
     /// Closes delegated administration for new admin Grants; narrowing, CT1.
-    RealmDelegatedAdminClose,
+    EnvironmentDelegatedAdminClose,
     /// Opens CT1 approval inside the approver notification (OP-157 m.3 (m)): CT2.
-    RealmApprovalInline,
+    EnvironmentApprovalInline,
     /// Closes in-notification approval; narrowing, CT1.
-    RealmApprovalInlineClose,
+    EnvironmentApprovalInlineClose,
     /// Opens CT1 batch approval of at most ten requests (OP-157 m.3 (m)): CT2.
-    RealmApprovalBatch,
+    EnvironmentApprovalBatch,
     /// Closes batch approval; narrowing, CT1.
-    RealmApprovalBatchClose,
+    EnvironmentApprovalBatchClose,
     /// Another Party's review of one break-glass use as a drill, an emergency or a misuse; it
     /// grants nothing (OP-157 m.3 (h), m.4 (b)): CT1.
     OrgBreakglassReview,
-    /// Declares the realm's residency; changing it is a cell move (CMP-26, OP-158 m.3 (a), (o)): reserved, CT3.
-    RealmResidency,
+    /// Declares the environment's residency; changing it is a cell move (CMP-26, OP-158 m.3 (a), (o)): reserved, CT3.
+    EnvironmentResidency,
     /// Declares the async DR profile (RPO > 0), which lowers the guarantee (OP-58, OP-158 m.3 (a), (r)): reserved, CT3.
-    RealmDrProfile,
-    /// Returns the realm to the synchronous DR class; narrowing, CT1.
-    RealmDrProfileClose,
-    /// Sets the realm's `rate_limit_rps` (OP-35, OP-158 m.3 (a), (v)): CT2.
-    RealmRateLimit,
-    /// Sets the realm's crypto profile; the FIPS profile narrows the algorithm set (CR-15, CR-36, OP-158 m.3 (a), (y)): CT2.
-    RealmCryptoProfile,
-    /// Raises the realm's hash profile; it is never lowered (OP-33, OP-158 m.3 (a)): narrowing, CT1.
-    RealmHashProfile,
-    /// Sets the realm's cold audit tier target and hot window, at least 30 days (OP-37, OP-158 m.3 (a), (w)): CT2.
-    RealmAuditTier,
-    /// Closes the realm's cold audit tier target; narrowing, CT1.
-    RealmAuditTierClose,
-    /// Adds an ML-DSA algorithm (`ml-dsa-65`, `ml-dsa-44` or `ml-dsa-87`) to the realm's accept
+    EnvironmentDrProfile,
+    /// Returns the environment to the synchronous DR class; narrowing, CT1.
+    EnvironmentDrProfileClose,
+    /// Sets the environment's `rate_limit_rps` (OP-35, OP-158 m.3 (a), (v)): CT2.
+    EnvironmentRateLimit,
+    /// Sets the environment's crypto profile; the FIPS profile narrows the algorithm set (CR-15, CR-36, OP-158 m.3 (a), (y)): CT2.
+    EnvironmentCryptoProfile,
+    /// Raises the environment's hash profile; it is never lowered (OP-33, OP-158 m.3 (a)): narrowing, CT1.
+    EnvironmentHashProfile,
+    /// Sets the environment's cold audit tier target and hot window, at least 30 days (OP-37, OP-158 m.3 (a), (w)): CT2.
+    EnvironmentAuditTier,
+    /// Closes the environment's cold audit tier target; narrowing, CT1.
+    EnvironmentAuditTierClose,
+    /// Adds an ML-DSA algorithm (`ml-dsa-65`, `ml-dsa-44` or `ml-dsa-87`) to the environment's accept
     /// and signing set; the classical algorithms stay (CR-41, CR-8, OP-159 m.3 (a)): reserved, CT3.
-    RealmSigningProfile,
-    /// Takes ML-DSA out of the realm's set (§15.16 m.2); narrowing, CT1.
-    RealmSigningProfileClose,
-    /// Sets the realm's hybrid key exchange share policy, `optimistic` or `advertise-only`; both
+    EnvironmentSigningProfile,
+    /// Takes ML-DSA out of the environment's set (§15.16 m.2); narrowing, CT1.
+    EnvironmentSigningProfileClose,
+    /// Sets the environment's hybrid key exchange share policy, `optimistic` or `advertise-only`; both
     /// offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a)): CT2.
-    RealmKexShare,
+    EnvironmentKexShare,
 }
 
 impl IdpAction {
@@ -536,16 +536,16 @@ impl IdpAction {
         Self::ClientRetire,
         Self::CimdPolicy,
         Self::MapperSet,
-        Self::RealmJoseAlg,
-        Self::RealmArgon2,
-        Self::RealmRpId,
-        Self::RealmRehome,
+        Self::EnvironmentJoseAlg,
+        Self::EnvironmentArgon2,
+        Self::EnvironmentRpId,
+        Self::EnvironmentRehome,
         Self::UpstreamRegister,
         Self::UpstreamMapping,
-        Self::RealmBranding,
-        Self::RealmKeyPolicy,
-        Self::RealmKeyRotate,
-        Self::RealmKeyDrop,
+        Self::EnvironmentBranding,
+        Self::EnvironmentKeyPolicy,
+        Self::EnvironmentKeyRotate,
+        Self::EnvironmentKeyDrop,
         Self::AccountDelete,
         Self::AccountSuspend,
         Self::AccountReactivate,
@@ -557,12 +557,12 @@ impl IdpAction {
         Self::GroupMembersRemove,
         Self::UpstreamUpdate,
         Self::UpstreamRetire,
-        Self::RealmSigninPolicy,
-        Self::RealmSessionPolicy,
-        Self::RealmProtectionMode,
-        Self::RealmProtectionModeLoosen,
+        Self::EnvironmentSigninPolicy,
+        Self::EnvironmentSessionPolicy,
+        Self::EnvironmentProtectionMode,
+        Self::EnvironmentProtectionModeLoosen,
         Self::AccountCanary,
-        Self::RealmExtensionPolicy,
+        Self::EnvironmentExtensionPolicy,
         Self::HookRegister,
         Self::HookRetire,
         Self::WebhookRegister,
@@ -587,23 +587,23 @@ impl IdpAction {
         Self::SocialEnable,
         Self::SocialUpdate,
         Self::SocialDisable,
-        Self::RealmRelatedOrigins,
-        Self::RealmLocaleOverrides,
-        Self::RealmConsentDocuments,
-        Self::RealmPreferenceTopics,
-        Self::RealmInactivityPolicy,
-        Self::RealmRetentionExtend,
-        Self::RealmCustomDomain,
+        Self::EnvironmentRelatedOrigins,
+        Self::EnvironmentLocaleOverrides,
+        Self::EnvironmentConsentDocuments,
+        Self::EnvironmentPreferenceTopics,
+        Self::EnvironmentInactivityPolicy,
+        Self::EnvironmentRetentionExtend,
+        Self::EnvironmentCustomDomain,
         Self::AccountRead,
         Self::AccountProfileUpdate,
         Self::AccountEmailChange,
-        Self::RealmRetentionHoldPlace,
-        Self::RealmRetentionHoldLift,
+        Self::EnvironmentRetentionHoldPlace,
+        Self::EnvironmentRetentionHoldLift,
         Self::AccountBind,
         Self::AccountImport,
         Self::AccountGuardianshipRecord,
-        Self::RealmCspMode,
-        Self::RealmCspModeLoosen,
+        Self::EnvironmentCspMode,
+        Self::EnvironmentCspModeLoosen,
         Self::AgentRegister,
         Self::AgentUpdate,
         Self::AgentSponsorAssign,
@@ -620,8 +620,8 @@ impl IdpAction {
         Self::ClientDcrPolicyTighten,
         Self::ClientCrossAppConnection,
         Self::ClientCrossAppConnectionRetire,
-        Self::RealmDeviceCode,
-        Self::RealmDeviceCodeClose,
+        Self::EnvironmentDeviceCode,
+        Self::EnvironmentDeviceCodeClose,
         Self::SamlSpRegister,
         Self::SamlSpMapping,
         Self::SamlSpUpdate,
@@ -657,13 +657,13 @@ impl IdpAction {
         Self::ClientEncryption,
         Self::ClientSamlBearer,
         Self::ClientLegacyBearer,
-        Self::RealmCiba,
-        Self::RealmCibaClose,
-        Self::RealmCertificateLogin,
-        Self::RealmMtlsAliases,
-        Self::RealmHrd,
-        Self::RealmHrdClose,
-        Self::RealmFrontchannelLogout,
+        Self::EnvironmentCiba,
+        Self::EnvironmentCibaClose,
+        Self::EnvironmentCertificateLogin,
+        Self::EnvironmentMtlsAliases,
+        Self::EnvironmentHrd,
+        Self::EnvironmentHrdClose,
+        Self::EnvironmentFrontchannelLogout,
         Self::OrgSsoEnforce,
         Self::OrgSsoEnforceLift,
         Self::UpstreamAssuranceMap,
@@ -696,16 +696,16 @@ impl IdpAction {
         Self::ExportSinkRetire,
         Self::SignalSourceRegister,
         Self::SignalSourceRetire,
-        Self::RealmPush,
-        Self::RealmPushClose,
-        Self::RealmSmsOtp,
-        Self::RealmSmsOtpClose,
-        Self::RealmSpc,
-        Self::RealmCoordinator,
-        Self::RealmIys,
-        Self::RealmIysClose,
-        Self::RealmSecurityNotices,
-        Self::RealmSecurityNoticesClose,
+        Self::EnvironmentPush,
+        Self::EnvironmentPushClose,
+        Self::EnvironmentSmsOtp,
+        Self::EnvironmentSmsOtpClose,
+        Self::EnvironmentSpc,
+        Self::EnvironmentCoordinator,
+        Self::EnvironmentIys,
+        Self::EnvironmentIysClose,
+        Self::EnvironmentSecurityNotices,
+        Self::EnvironmentSecurityNoticesClose,
         Self::RelayResend,
         Self::AccountSigninMethodChange,
         Self::AccountMfaChange,
@@ -725,24 +725,24 @@ impl IdpAction {
         Self::ReviewScheduleClose,
         Self::OrgMemberBreakglass,
         Self::OrgMemberBreakglassClear,
-        Self::RealmDelegatedAdmin,
-        Self::RealmDelegatedAdminClose,
-        Self::RealmApprovalInline,
-        Self::RealmApprovalInlineClose,
-        Self::RealmApprovalBatch,
-        Self::RealmApprovalBatchClose,
+        Self::EnvironmentDelegatedAdmin,
+        Self::EnvironmentDelegatedAdminClose,
+        Self::EnvironmentApprovalInline,
+        Self::EnvironmentApprovalInlineClose,
+        Self::EnvironmentApprovalBatch,
+        Self::EnvironmentApprovalBatchClose,
         Self::OrgBreakglassReview,
-        Self::RealmResidency,
-        Self::RealmDrProfile,
-        Self::RealmDrProfileClose,
-        Self::RealmRateLimit,
-        Self::RealmCryptoProfile,
-        Self::RealmHashProfile,
-        Self::RealmAuditTier,
-        Self::RealmAuditTierClose,
-        Self::RealmSigningProfile,
-        Self::RealmSigningProfileClose,
-        Self::RealmKexShare,
+        Self::EnvironmentResidency,
+        Self::EnvironmentDrProfile,
+        Self::EnvironmentDrProfileClose,
+        Self::EnvironmentRateLimit,
+        Self::EnvironmentCryptoProfile,
+        Self::EnvironmentHashProfile,
+        Self::EnvironmentAuditTier,
+        Self::EnvironmentAuditTierClose,
+        Self::EnvironmentSigningProfile,
+        Self::EnvironmentSigningProfileClose,
+        Self::EnvironmentKexShare,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
@@ -754,15 +754,17 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
-            Self::RealmSigningProfile | Self::RealmSigningProfileClose | Self::RealmKexShare => 9,
-            Self::RealmResidency
-            | Self::RealmDrProfile
-            | Self::RealmDrProfileClose
-            | Self::RealmRateLimit
-            | Self::RealmCryptoProfile
-            | Self::RealmHashProfile
-            | Self::RealmAuditTier
-            | Self::RealmAuditTierClose => 8,
+            Self::EnvironmentSigningProfile
+            | Self::EnvironmentSigningProfileClose
+            | Self::EnvironmentKexShare => 9,
+            Self::EnvironmentResidency
+            | Self::EnvironmentDrProfile
+            | Self::EnvironmentDrProfileClose
+            | Self::EnvironmentRateLimit
+            | Self::EnvironmentCryptoProfile
+            | Self::EnvironmentHashProfile
+            | Self::EnvironmentAuditTier
+            | Self::EnvironmentAuditTierClose => 8,
             Self::AccountSigninMethodChange
             | Self::AccountMfaChange
             | Self::AccountPhoneChange
@@ -781,12 +783,12 @@ impl IdpAction {
             | Self::ReviewScheduleClose
             | Self::OrgMemberBreakglass
             | Self::OrgMemberBreakglassClear
-            | Self::RealmDelegatedAdmin
-            | Self::RealmDelegatedAdminClose
-            | Self::RealmApprovalInline
-            | Self::RealmApprovalInlineClose
-            | Self::RealmApprovalBatch
-            | Self::RealmApprovalBatchClose
+            | Self::EnvironmentDelegatedAdmin
+            | Self::EnvironmentDelegatedAdminClose
+            | Self::EnvironmentApprovalInline
+            | Self::EnvironmentApprovalInlineClose
+            | Self::EnvironmentApprovalBatch
+            | Self::EnvironmentApprovalBatchClose
             | Self::OrgBreakglassReview => 7,
             Self::DomainRegister
             | Self::DomainRetire
@@ -817,16 +819,16 @@ impl IdpAction {
             | Self::ExportSinkRetire
             | Self::SignalSourceRegister
             | Self::SignalSourceRetire
-            | Self::RealmPush
-            | Self::RealmPushClose
-            | Self::RealmSmsOtp
-            | Self::RealmSmsOtpClose
-            | Self::RealmSpc
-            | Self::RealmCoordinator
-            | Self::RealmIys
-            | Self::RealmIysClose
-            | Self::RealmSecurityNotices
-            | Self::RealmSecurityNoticesClose
+            | Self::EnvironmentPush
+            | Self::EnvironmentPushClose
+            | Self::EnvironmentSmsOtp
+            | Self::EnvironmentSmsOtpClose
+            | Self::EnvironmentSpc
+            | Self::EnvironmentCoordinator
+            | Self::EnvironmentIys
+            | Self::EnvironmentIysClose
+            | Self::EnvironmentSecurityNotices
+            | Self::EnvironmentSecurityNoticesClose
             | Self::RelayResend => 6,
             Self::SamlSpRegister
             | Self::SamlSpMapping
@@ -863,13 +865,13 @@ impl IdpAction {
             | Self::ClientEncryption
             | Self::ClientSamlBearer
             | Self::ClientLegacyBearer
-            | Self::RealmCiba
-            | Self::RealmCibaClose
-            | Self::RealmCertificateLogin
-            | Self::RealmMtlsAliases
-            | Self::RealmHrd
-            | Self::RealmHrdClose
-            | Self::RealmFrontchannelLogout
+            | Self::EnvironmentCiba
+            | Self::EnvironmentCibaClose
+            | Self::EnvironmentCertificateLogin
+            | Self::EnvironmentMtlsAliases
+            | Self::EnvironmentHrd
+            | Self::EnvironmentHrdClose
+            | Self::EnvironmentFrontchannelLogout
             | Self::OrgSsoEnforce
             | Self::OrgSsoEnforceLift
             | Self::UpstreamAssuranceMap => 5,
@@ -889,13 +891,13 @@ impl IdpAction {
             | Self::ClientDcrPolicyTighten
             | Self::ClientCrossAppConnection
             | Self::ClientCrossAppConnectionRetire
-            | Self::RealmDeviceCode
-            | Self::RealmDeviceCodeClose => 4,
+            | Self::EnvironmentDeviceCode
+            | Self::EnvironmentDeviceCodeClose => 4,
             Self::AccountBind
             | Self::AccountImport
             | Self::AccountGuardianshipRecord
-            | Self::RealmCspMode
-            | Self::RealmCspModeLoosen => 3,
+            | Self::EnvironmentCspMode
+            | Self::EnvironmentCspModeLoosen => 3,
             Self::AccountResetIntent
             | Self::AccountTapIssue
             | Self::AccountRecoveryPolicy
@@ -914,18 +916,18 @@ impl IdpAction {
             | Self::SocialEnable
             | Self::SocialUpdate
             | Self::SocialDisable
-            | Self::RealmRelatedOrigins
-            | Self::RealmLocaleOverrides
-            | Self::RealmConsentDocuments
-            | Self::RealmPreferenceTopics
-            | Self::RealmInactivityPolicy
-            | Self::RealmRetentionExtend
-            | Self::RealmCustomDomain
+            | Self::EnvironmentRelatedOrigins
+            | Self::EnvironmentLocaleOverrides
+            | Self::EnvironmentConsentDocuments
+            | Self::EnvironmentPreferenceTopics
+            | Self::EnvironmentInactivityPolicy
+            | Self::EnvironmentRetentionExtend
+            | Self::EnvironmentCustomDomain
             | Self::AccountRead
             | Self::AccountProfileUpdate
             | Self::AccountEmailChange
-            | Self::RealmRetentionHoldPlace
-            | Self::RealmRetentionHoldLift => 2,
+            | Self::EnvironmentRetentionHoldPlace
+            | Self::EnvironmentRetentionHoldLift => 2,
             _ => 1,
         }
     }
@@ -972,66 +974,66 @@ impl IdpAction {
             | Self::GroupMembersAdd
             | Self::GroupMembersRemove => "idp.group",
             Self::MapperSet => "idp.mapper",
-            Self::RealmJoseAlg
-            | Self::RealmArgon2
-            | Self::RealmRpId
-            | Self::RealmRehome
-            | Self::RealmResidency
-            | Self::RealmDrProfile
-            | Self::RealmDrProfileClose
-            | Self::RealmRateLimit
-            | Self::RealmCryptoProfile
-            | Self::RealmHashProfile
-            | Self::RealmAuditTier
-            | Self::RealmAuditTierClose
-            | Self::RealmSigningProfile
-            | Self::RealmSigningProfileClose
-            | Self::RealmKexShare
-            | Self::RealmBranding
-            | Self::RealmKeyPolicy
-            | Self::RealmKeyRotate
-            | Self::RealmKeyDrop
-            | Self::RealmSigninPolicy
-            | Self::RealmSessionPolicy
-            | Self::RealmProtectionMode
-            | Self::RealmProtectionModeLoosen
-            | Self::RealmExtensionPolicy
-            | Self::RealmRelatedOrigins
-            | Self::RealmLocaleOverrides
-            | Self::RealmConsentDocuments
-            | Self::RealmPreferenceTopics
-            | Self::RealmInactivityPolicy
-            | Self::RealmRetentionExtend
-            | Self::RealmCustomDomain
-            | Self::RealmRetentionHoldPlace
-            | Self::RealmRetentionHoldLift
-            | Self::RealmCspMode
-            | Self::RealmCspModeLoosen
-            | Self::RealmDeviceCode
-            | Self::RealmDeviceCodeClose
-            | Self::RealmCiba
-            | Self::RealmCibaClose
-            | Self::RealmCertificateLogin
-            | Self::RealmMtlsAliases
-            | Self::RealmHrd
-            | Self::RealmHrdClose
-            | Self::RealmFrontchannelLogout
-            | Self::RealmPush
-            | Self::RealmPushClose
-            | Self::RealmSmsOtp
-            | Self::RealmSmsOtpClose
-            | Self::RealmSpc
-            | Self::RealmCoordinator
-            | Self::RealmIys
-            | Self::RealmIysClose
-            | Self::RealmSecurityNotices
-            | Self::RealmSecurityNoticesClose
-            | Self::RealmDelegatedAdmin
-            | Self::RealmDelegatedAdminClose
-            | Self::RealmApprovalInline
-            | Self::RealmApprovalInlineClose
-            | Self::RealmApprovalBatch
-            | Self::RealmApprovalBatchClose => "idp.realm",
+            Self::EnvironmentJoseAlg
+            | Self::EnvironmentArgon2
+            | Self::EnvironmentRpId
+            | Self::EnvironmentRehome
+            | Self::EnvironmentResidency
+            | Self::EnvironmentDrProfile
+            | Self::EnvironmentDrProfileClose
+            | Self::EnvironmentRateLimit
+            | Self::EnvironmentCryptoProfile
+            | Self::EnvironmentHashProfile
+            | Self::EnvironmentAuditTier
+            | Self::EnvironmentAuditTierClose
+            | Self::EnvironmentSigningProfile
+            | Self::EnvironmentSigningProfileClose
+            | Self::EnvironmentKexShare
+            | Self::EnvironmentBranding
+            | Self::EnvironmentKeyPolicy
+            | Self::EnvironmentKeyRotate
+            | Self::EnvironmentKeyDrop
+            | Self::EnvironmentSigninPolicy
+            | Self::EnvironmentSessionPolicy
+            | Self::EnvironmentProtectionMode
+            | Self::EnvironmentProtectionModeLoosen
+            | Self::EnvironmentExtensionPolicy
+            | Self::EnvironmentRelatedOrigins
+            | Self::EnvironmentLocaleOverrides
+            | Self::EnvironmentConsentDocuments
+            | Self::EnvironmentPreferenceTopics
+            | Self::EnvironmentInactivityPolicy
+            | Self::EnvironmentRetentionExtend
+            | Self::EnvironmentCustomDomain
+            | Self::EnvironmentRetentionHoldPlace
+            | Self::EnvironmentRetentionHoldLift
+            | Self::EnvironmentCspMode
+            | Self::EnvironmentCspModeLoosen
+            | Self::EnvironmentDeviceCode
+            | Self::EnvironmentDeviceCodeClose
+            | Self::EnvironmentCiba
+            | Self::EnvironmentCibaClose
+            | Self::EnvironmentCertificateLogin
+            | Self::EnvironmentMtlsAliases
+            | Self::EnvironmentHrd
+            | Self::EnvironmentHrdClose
+            | Self::EnvironmentFrontchannelLogout
+            | Self::EnvironmentPush
+            | Self::EnvironmentPushClose
+            | Self::EnvironmentSmsOtp
+            | Self::EnvironmentSmsOtpClose
+            | Self::EnvironmentSpc
+            | Self::EnvironmentCoordinator
+            | Self::EnvironmentIys
+            | Self::EnvironmentIysClose
+            | Self::EnvironmentSecurityNotices
+            | Self::EnvironmentSecurityNoticesClose
+            | Self::EnvironmentDelegatedAdmin
+            | Self::EnvironmentDelegatedAdminClose
+            | Self::EnvironmentApprovalInline
+            | Self::EnvironmentApprovalInlineClose
+            | Self::EnvironmentApprovalBatch
+            | Self::EnvironmentApprovalBatchClose => "idp.environment",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -1186,31 +1188,31 @@ impl IdpAction {
             Self::ClientDcrPolicyTighten => "dcr_policy_tighten",
             Self::ClientCrossAppConnection => "cross_app_connection",
             Self::ClientCrossAppConnectionRetire => "cross_app_connection_retire",
-            Self::RealmDeviceCode => "device_code",
-            Self::RealmDeviceCodeClose => "device_code_close",
-            Self::RealmExtensionPolicy => "extension_policy",
+            Self::EnvironmentDeviceCode => "device_code",
+            Self::EnvironmentDeviceCodeClose => "device_code_close",
+            Self::EnvironmentExtensionPolicy => "extension_policy",
             Self::ClientSecretRotate => "secret_rotate",
             Self::GroupCreate | Self::OrgCreate => "create",
             Self::GroupMembersAdd => "members_add",
             Self::GroupMembersRemove => "members_remove",
             Self::AccountSuspend => "suspend",
             Self::AccountReactivate => "reactivate",
-            Self::RealmSigninPolicy => "signin_policy",
-            Self::RealmSessionPolicy => "session_policy",
+            Self::EnvironmentSigninPolicy => "signin_policy",
+            Self::EnvironmentSessionPolicy => "session_policy",
             Self::CimdPolicy => "cimd_policy",
             Self::MapperSet => "set",
-            Self::RealmJoseAlg => "jose_alg",
-            Self::RealmArgon2 => "argon2",
-            Self::RealmRpId => "rp_id",
-            Self::RealmRehome => "rehome",
+            Self::EnvironmentJoseAlg => "jose_alg",
+            Self::EnvironmentArgon2 => "argon2",
+            Self::EnvironmentRpId => "rp_id",
+            Self::EnvironmentRehome => "rehome",
             Self::UpstreamMapping => "mapping",
-            Self::RealmBranding => "branding",
-            Self::RealmKeyPolicy => "key_policy",
-            Self::RealmKeyRotate => "key_rotate",
-            Self::RealmKeyDrop => "key_drop",
+            Self::EnvironmentBranding => "branding",
+            Self::EnvironmentKeyPolicy => "key_policy",
+            Self::EnvironmentKeyRotate => "key_rotate",
+            Self::EnvironmentKeyDrop => "key_drop",
             Self::AccountDelete => "delete",
-            Self::RealmProtectionMode => "protection_mode",
-            Self::RealmProtectionModeLoosen => "protection_mode_loosen",
+            Self::EnvironmentProtectionMode => "protection_mode",
+            Self::EnvironmentProtectionModeLoosen => "protection_mode_loosen",
             Self::AccountCanary => "canary",
             Self::UpstreamLink => "link",
             Self::AccountResetIntent => "reset_intent",
@@ -1228,23 +1230,23 @@ impl IdpAction {
             Self::OrgSsoDraft => "sso_draft",
             Self::SocialEnable | Self::FederationEnable => "enable",
             Self::SocialDisable | Self::FederationDisable => "disable",
-            Self::RealmRelatedOrigins => "related_origins",
-            Self::RealmLocaleOverrides => "locale_overrides",
-            Self::RealmConsentDocuments => "consent_documents",
-            Self::RealmPreferenceTopics => "preference_topics",
-            Self::RealmInactivityPolicy => "inactivity_policy",
-            Self::RealmRetentionExtend => "retention_extend",
-            Self::RealmCustomDomain => "custom_domain",
+            Self::EnvironmentRelatedOrigins => "related_origins",
+            Self::EnvironmentLocaleOverrides => "locale_overrides",
+            Self::EnvironmentConsentDocuments => "consent_documents",
+            Self::EnvironmentPreferenceTopics => "preference_topics",
+            Self::EnvironmentInactivityPolicy => "inactivity_policy",
+            Self::EnvironmentRetentionExtend => "retention_extend",
+            Self::EnvironmentCustomDomain => "custom_domain",
             Self::AccountRead => "read",
             Self::AccountProfileUpdate => "profile_update",
             Self::AccountEmailChange => "email_change",
-            Self::RealmRetentionHoldPlace => "retention_hold_place",
-            Self::RealmRetentionHoldLift => "retention_hold_lift",
+            Self::EnvironmentRetentionHoldPlace => "retention_hold_place",
+            Self::EnvironmentRetentionHoldLift => "retention_hold_lift",
             Self::AccountBind => "bind",
             Self::AccountImport | Self::HrImport => "import",
             Self::AccountGuardianshipRecord => "guardianship_record",
-            Self::RealmCspMode => "csp_mode",
-            Self::RealmCspModeLoosen => "csp_mode_loosen",
+            Self::EnvironmentCspMode => "csp_mode",
+            Self::EnvironmentCspModeLoosen => "csp_mode_loosen",
             Self::SamlSpRegister => "sp_register",
             Self::SamlSpMapping => "sp_mapping",
             Self::SamlSpUpdate => "sp_update",
@@ -1276,13 +1278,13 @@ impl IdpAction {
             Self::ClientEncryption => "encryption",
             Self::ClientSamlBearer => "saml_bearer",
             Self::ClientLegacyBearer => "legacy_bearer",
-            Self::RealmCiba => "ciba",
-            Self::RealmCibaClose => "ciba_close",
-            Self::RealmCertificateLogin => "certificate_login",
-            Self::RealmMtlsAliases => "mtls_aliases",
-            Self::RealmHrd => "hrd",
-            Self::RealmHrdClose => "hrd_close",
-            Self::RealmFrontchannelLogout => "frontchannel_logout",
+            Self::EnvironmentCiba => "ciba",
+            Self::EnvironmentCibaClose => "ciba_close",
+            Self::EnvironmentCertificateLogin => "certificate_login",
+            Self::EnvironmentMtlsAliases => "mtls_aliases",
+            Self::EnvironmentHrd => "hrd",
+            Self::EnvironmentHrdClose => "hrd_close",
+            Self::EnvironmentFrontchannelLogout => "frontchannel_logout",
             Self::OrgSsoEnforce => "sso_enforce",
             Self::OrgSsoEnforceLift => "sso_enforce_lift",
             Self::UpstreamAssuranceMap => "assurance_map",
@@ -1307,16 +1309,16 @@ impl IdpAction {
             Self::ExportSinkRegister => "sink_register",
             Self::ExportSinkUpdate => "sink_update",
             Self::ExportSinkRetire => "sink_retire",
-            Self::RealmPush => "push",
-            Self::RealmPushClose => "push_close",
-            Self::RealmSmsOtp => "sms_otp",
-            Self::RealmSmsOtpClose => "sms_otp_close",
-            Self::RealmSpc => "spc",
-            Self::RealmCoordinator => "coordinator",
-            Self::RealmIys => "iys",
-            Self::RealmIysClose => "iys_close",
-            Self::RealmSecurityNotices => "security_notices",
-            Self::RealmSecurityNoticesClose => "security_notices_close",
+            Self::EnvironmentPush => "push",
+            Self::EnvironmentPushClose => "push_close",
+            Self::EnvironmentSmsOtp => "sms_otp",
+            Self::EnvironmentSmsOtpClose => "sms_otp_close",
+            Self::EnvironmentSpc => "spc",
+            Self::EnvironmentCoordinator => "coordinator",
+            Self::EnvironmentIys => "iys",
+            Self::EnvironmentIysClose => "iys_close",
+            Self::EnvironmentSecurityNotices => "security_notices",
+            Self::EnvironmentSecurityNoticesClose => "security_notices_close",
             Self::RelayResend => "resend",
             Self::AccountSigninMethodChange => "signin_method_change",
             Self::AccountMfaChange => "mfa_change",
@@ -1335,24 +1337,24 @@ impl IdpAction {
             Self::ReviewScheduleClose => "schedule_close",
             Self::OrgMemberBreakglass => "member_breakglass",
             Self::OrgMemberBreakglassClear => "member_breakglass_clear",
-            Self::RealmDelegatedAdmin => "delegated_admin",
-            Self::RealmDelegatedAdminClose => "delegated_admin_close",
-            Self::RealmApprovalInline => "approval_inline",
-            Self::RealmApprovalInlineClose => "approval_inline_close",
-            Self::RealmApprovalBatch => "approval_batch",
-            Self::RealmApprovalBatchClose => "approval_batch_close",
+            Self::EnvironmentDelegatedAdmin => "delegated_admin",
+            Self::EnvironmentDelegatedAdminClose => "delegated_admin_close",
+            Self::EnvironmentApprovalInline => "approval_inline",
+            Self::EnvironmentApprovalInlineClose => "approval_inline_close",
+            Self::EnvironmentApprovalBatch => "approval_batch",
+            Self::EnvironmentApprovalBatchClose => "approval_batch_close",
             Self::OrgBreakglassReview => "breakglass_review",
-            Self::RealmResidency => "residency",
-            Self::RealmDrProfile => "dr_profile",
-            Self::RealmDrProfileClose => "dr_profile_close",
-            Self::RealmRateLimit => "rate_limit",
-            Self::RealmCryptoProfile => "crypto_profile",
-            Self::RealmHashProfile => "hash_profile",
-            Self::RealmAuditTier => "audit_tier",
-            Self::RealmAuditTierClose => "audit_tier_close",
-            Self::RealmSigningProfile => "signing_profile",
-            Self::RealmSigningProfileClose => "signing_profile_close",
-            Self::RealmKexShare => "kex_share",
+            Self::EnvironmentResidency => "residency",
+            Self::EnvironmentDrProfile => "dr_profile",
+            Self::EnvironmentDrProfileClose => "dr_profile_close",
+            Self::EnvironmentRateLimit => "rate_limit",
+            Self::EnvironmentCryptoProfile => "crypto_profile",
+            Self::EnvironmentHashProfile => "hash_profile",
+            Self::EnvironmentAuditTier => "audit_tier",
+            Self::EnvironmentAuditTierClose => "audit_tier_close",
+            Self::EnvironmentSigningProfile => "signing_profile",
+            Self::EnvironmentSigningProfileClose => "signing_profile_close",
+            Self::EnvironmentKexShare => "kex_share",
         }
     }
 
@@ -1373,13 +1375,13 @@ impl IdpAction {
     pub const fn effect(self) -> EffectClass {
         match self {
             Self::ClientRetire
-            | Self::RealmArgon2
-            | Self::RealmKeyDrop
+            | Self::EnvironmentArgon2
+            | Self::EnvironmentKeyDrop
             | Self::GroupRetire
             | Self::GroupMembersRemove
             | Self::AccountSuspend
             | Self::UpstreamRetire
-            | Self::RealmProtectionMode
+            | Self::EnvironmentProtectionMode
             | Self::HookRetire
             | Self::WebhookRetire
             | Self::AccountRecoveryPolicy
@@ -1391,8 +1393,8 @@ impl IdpAction {
             | Self::SocialDisable
             | Self::AccountRead
             | Self::AccountProfileUpdate
-            | Self::RealmRetentionHoldPlace
-            | Self::RealmCspMode
+            | Self::EnvironmentRetentionHoldPlace
+            | Self::EnvironmentCspMode
             | Self::AgentUpdate
             | Self::AgentSponsorRemove
             | Self::AgentRetire
@@ -1400,7 +1402,7 @@ impl IdpAction {
             | Self::VaultReleaseModeClose
             | Self::ClientDcrPolicyTighten
             | Self::ClientCrossAppConnectionRetire
-            | Self::RealmDeviceCodeClose
+            | Self::EnvironmentDeviceCodeClose
             | Self::SamlSpRetire
             | Self::ScimClientRetire
             | Self::ScimOutboundRetire
@@ -1412,8 +1414,8 @@ impl IdpAction {
             | Self::VcIssuerDisable
             | Self::ClientProfile
             | Self::ClientEncryption
-            | Self::RealmCibaClose
-            | Self::RealmHrdClose
+            | Self::EnvironmentCibaClose
+            | Self::EnvironmentHrdClose
             | Self::OrgSsoEnforce
             | Self::DomainRetire
             | Self::ProxyRetire
@@ -1425,24 +1427,24 @@ impl IdpAction {
             | Self::HrConnectorRetire
             | Self::ExportSinkRetire
             | Self::SignalSourceRetire
-            | Self::RealmPushClose
-            | Self::RealmSmsOtpClose
-            | Self::RealmIysClose
-            | Self::RealmSecurityNoticesClose
+            | Self::EnvironmentPushClose
+            | Self::EnvironmentSmsOtpClose
+            | Self::EnvironmentIysClose
+            | Self::EnvironmentSecurityNoticesClose
             | Self::RelayResend
             | Self::AccountArtifactUpload
             | Self::SupportCaseSystemRetire
             | Self::SupportArtifactPolicyClose
             | Self::ReviewScheduleClose
             | Self::OrgMemberBreakglassClear
-            | Self::RealmDelegatedAdminClose
-            | Self::RealmApprovalInlineClose
-            | Self::RealmApprovalBatchClose
+            | Self::EnvironmentDelegatedAdminClose
+            | Self::EnvironmentApprovalInlineClose
+            | Self::EnvironmentApprovalBatchClose
             | Self::OrgBreakglassReview
-            | Self::RealmDrProfileClose
-            | Self::RealmHashProfile
-            | Self::RealmAuditTierClose
-            | Self::RealmSigningProfileClose => EffectClass::Reversible,
+            | Self::EnvironmentDrProfileClose
+            | Self::EnvironmentHashProfile
+            | Self::EnvironmentAuditTierClose
+            | Self::EnvironmentSigningProfileClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -1452,18 +1454,18 @@ impl IdpAction {
     pub const fn reserved(self) -> bool {
         matches!(
             self,
-            Self::RealmRpId
-                | Self::RealmRehome
+            Self::EnvironmentRpId
+                | Self::EnvironmentRehome
                 | Self::UpstreamRegister
                 | Self::UpstreamMapping
                 | Self::UpstreamUpdate
                 | Self::MapperSet
-                | Self::RealmKeyPolicy
-                | Self::RealmKeyRotate
+                | Self::EnvironmentKeyPolicy
+                | Self::EnvironmentKeyRotate
                 | Self::AccountDelete
                 | Self::AccountRecoveryPolicyLoosen
                 | Self::AccountMigrationExport
-                | Self::RealmCustomDomain
+                | Self::EnvironmentCustomDomain
                 | Self::VaultResourceRegister
                 | Self::SamlSpMapping
                 | Self::SamlCertEmergency
@@ -1482,9 +1484,9 @@ impl IdpAction {
                 | Self::AccountInvite
                 | Self::AccountApiKeyCreate
                 | Self::AccountTokenLongLived
-                | Self::RealmResidency
-                | Self::RealmDrProfile
-                | Self::RealmSigningProfile
+                | Self::EnvironmentResidency
+                | Self::EnvironmentDrProfile
+                | Self::EnvironmentSigningProfile
         )
     }
 
@@ -1536,7 +1538,7 @@ pub fn spp(namespace: &str, publisher: Id) -> Spp {
     spp_at(namespace, publisher, CATALOG_VERSION)
 }
 
-/// The SPP of one `idp.*` namespace as catalog `version` declared it: what a realm opened with
+/// The SPP of one `idp.*` namespace as catalog `version` declared it: what an environment opened with
 /// that catalog accepts (OP-153 m.3 (a)).
 #[must_use]
 pub fn spp_at(namespace: &str, publisher: Id, version: u64) -> Spp {
@@ -1558,7 +1560,7 @@ pub fn spp_at(namespace: &str, publisher: Id, version: u64) -> Spp {
 /// change and the actor's statement over it.
 #[derive(Clone, Debug)]
 pub struct Submission {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The Exercise nonce.
     pub nonce: Vec<u8>,
@@ -1628,10 +1630,10 @@ pub enum Verdict {
     },
 }
 
-/// The realm issuer's Acceptance of `org_member` for subject selection (C13, E18, OP-153
+/// The environment issuer's Acceptance of `org_member` for subject selection (C13, E18, OP-153
 /// m.17 (c), m.25 (i) (3)): an organization's rule-shaped Grants, such as its autojoin role,
 /// select the Parties whose live `org_member` Claim names it. The identity plane names it
-/// explicitly in each realm's Genesis order; a domain opened before it establishes it once its
+/// explicitly in each environment's Genesis order; a domain opened before it establishes it once its
 /// root signs it.
 #[must_use]
 pub fn org_member_selection(issuer: access_kernel::model::Id) -> suiss_crypto::dcbor::Value {
@@ -1660,13 +1662,13 @@ pub fn org_member_selection(issuer: access_kernel::model::Id) -> suiss_crypto::d
     ])
 }
 
-/// What a new realm's governing domain is opened with (TN-111, §12.5.1).
+/// What a new environment's governing domain is opened with (TN-111, §12.5.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GenesisOrder {
     /// The tenant.
     pub tenant: [u8; 16],
-    /// The realm's immutable slug: the domain's `idp` Anchor covers `idp:[slug, …]` only, so
-    /// no other domain governs the realm (MD-5a, TN-1).
+    /// The environment's immutable slug: the domain's `idp` Anchor covers `idp:[slug, …]` only, so
+    /// no other domain governs the environment (MD-5a, TN-1).
     pub slug: String,
     /// The founding root of the domain and of its `idp` Anchor.
     pub root: Root,
@@ -1678,14 +1680,14 @@ pub struct GenesisOrder {
     /// Further catalogs the founder publishes in the Genesis besides the `idp.*` ones (OP-141
     /// m.35 (c)); each one's publisher is the founder.
     pub schemas: Vec<Spp>,
-    /// The realm's identity Claim issuer Party, when it has one: the domain is born accepting
+    /// The environment's identity Claim issuer Party, when it has one: the domain is born accepting
     /// it for `actor-binding` only (§10.1.4 rule 3, OP-142).
     pub issuer: Option<access_kernel::model::Id>,
     /// Further Acceptances the founder establishes at Genesis, each an `acceptance-content`
     /// (L0-META-5, L2-CLM-3); a local deployment's declarant is accepted this way (OP-149
     /// m.26 (c)).
     pub acceptances: Vec<suiss_crypto::dcbor::Value>,
-    /// Classes of the realm issuer's Claims the domain is born accepting as predicate input
+    /// Classes of the environment issuer's Claims the domain is born accepting as predicate input
     /// too (§10.1.4 rule 3, L2-CLM-3): what a hosted approval's `authentication` Claim proves
     /// with (SI-5, OP-149 m.29 (b)). Empty keeps `actor-binding` alone.
     pub issuer_predicate_input: Vec<String>,

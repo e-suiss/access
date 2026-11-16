@@ -4,7 +4,7 @@
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::notify::envelope::EventId;
 use access_identity_account::notify::resend::{ResendError, resend as queue_again};
 use access_store::identity::TenantTx;
@@ -62,15 +62,15 @@ pub async fn resend(
     original: [u8; 16],
     who: &Actor<'_>,
 ) -> Result<[u8; 16], AdminError> {
-    let realm = Realm {
+    let environment = Environment {
         tenant: t.tenant(),
-        realm: t.realm().ok_or(AdminError::NoRealm)?,
+        environment: t.environment().ok_or(AdminError::NoEnvironment)?,
         kek,
         ids,
     };
     match queue_again(
         t,
-        &realm,
+        &environment,
         &SystemEntropy,
         &SystemClock,
         EventId(original),
@@ -86,7 +86,7 @@ pub async fn resend(
     }
 }
 
-/// The realm's undelivered messages, oldest first, without their content: id, kind, reason,
+/// The environment's undelivered messages, oldest first, without their content: id, kind, reason,
 /// Relay's status and the ids of their resends.
 ///
 /// # Errors

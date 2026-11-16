@@ -10,7 +10,7 @@ pub enum AutojoinRefused {
     /// A consumer, free mail, ISP or university domain (OP-153 m.1 (d)).
     #[error("consumer domain")]
     ConsumerDomain,
-    /// Another organization of the realm claims it too.
+    /// Another organization of the environment claims it too.
     #[error("domain contested")]
     Contested,
     /// This organization's claim is not verified now.
@@ -31,7 +31,7 @@ impl AutojoinRefused {
 }
 
 /// Whether organization `org` may turn autojoin on for `domain`, given every open claim of the
-/// domain in the realm (TN-90, OP-153 m.3 (o)): never on a consumer domain, never while another
+/// domain in the environment (TN-90, OP-153 m.3 (o)): never on a consumer domain, never while another
 /// organization claims it, only on this organization's live verification.
 ///
 /// # Errors
@@ -278,7 +278,7 @@ pub const SSO_MANAGER_DAYS: u64 = 7;
 /// identifier, so the Grant that pins it reads back (OP-153 m.17 (h)).
 pub const SSO_MANAGER_ROLE: &str = "enterprise_connection_manager";
 
-/// The enterprise connection manager's Named `AuthoritySet` in realm `slug` for organization
+/// The enterprise connection manager's Named `AuthoritySet` in environment `slug` for organization
 /// Party `org` (TN-120): `idp.org.sso_draft` on that organization only.
 #[must_use]
 pub fn sso_manager_set(slug: &str, org: [u8; 16]) -> access_kernel::model::AuthoritySet {

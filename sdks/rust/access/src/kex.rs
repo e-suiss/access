@@ -1,5 +1,5 @@
 //! The hybrid key exchange of the caller's TLS (CR-12 m.3, OP-159 m.3 (t)). The SDK does no
-//! I/O, so it gives the caller's TLS stack the order of its key exchange groups for the realm's
+//! I/O, so it gives the caller's TLS stack the order of its key exchange groups for the environment's
 //! `kex_share` policy and counts the handshakes the caller reports.
 //!
 //! - `optimistic` (the default) sends the `X25519MLKEM768` key share first.
@@ -21,10 +21,10 @@ pub const X25519: u16 = 0x001d;
 /// P-256.
 pub const SECP256R1: u16 = 0x0017;
 
-/// Largest realm metadata document read for the policy (§14.6).
+/// Largest environment metadata document read for the policy (§14.6).
 pub const MAX_METADATA: usize = 64 * 1024;
 
-/// The realm's `kex_share` policy.
+/// The environment's `kex_share` policy.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum KexShare {
     /// The hybrid key share is sent in the first `ClientHello`.
@@ -46,13 +46,13 @@ impl KexShare {
         }
     }
 
-    /// The policy a realm metadata document declares in `kex_share`. A document without it
+    /// The policy an environment metadata document declares in `kex_share`. A document without it
     /// declares the default; an unknown value or a malformed document is refused, so the caller
     /// keeps the policy it has.
     ///
     /// # Errors
     /// [`KexError`].
-    pub fn from_realm_metadata(body: &[u8]) -> Result<Self, KexError> {
+    pub fn from_environment_metadata(body: &[u8]) -> Result<Self, KexError> {
         let doc = json::parse(body, MAX_METADATA).map_err(|_| KexError::Malformed)?;
         match doc.get("kex_share") {
             None => Ok(Self::default()),
@@ -80,12 +80,12 @@ impl KexShare {
     }
 }
 
-/// Why a realm metadata document gave no policy.
+/// Why an environment metadata document gave no policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum KexError {
     /// Not a JSON document within [`MAX_METADATA`].
-    #[error("malformed realm metadata")]
+    #[error("malformed environment metadata")]
     Malformed,
     /// `kex_share` names no known policy.
     #[error("unknown kex_share")]
@@ -178,25 +178,25 @@ mod tests {
 
     // CR-12 m.3, OP-159 m.3 (t)
     #[test]
-    fn the_policy_is_read_from_realm_metadata() {
+    fn the_policy_is_read_from_environment_metadata() {
         assert_eq!(
-            KexShare::from_realm_metadata(br#"{"slug":"acme","kex_share":"advertise-only"}"#),
+            KexShare::from_environment_metadata(br#"{"slug":"acme","kex_share":"advertise-only"}"#),
             Ok(KexShare::AdvertiseOnly)
         );
         assert_eq!(
-            KexShare::from_realm_metadata(br#"{"slug":"acme"}"#),
+            KexShare::from_environment_metadata(br#"{"slug":"acme"}"#),
             Ok(KexShare::Optimistic)
         );
         assert_eq!(
-            KexShare::from_realm_metadata(br#"{"kex_share":"none"}"#),
+            KexShare::from_environment_metadata(br#"{"kex_share":"none"}"#),
             Err(KexError::Unknown)
         );
         assert_eq!(
-            KexShare::from_realm_metadata(br#"{"kex_share":1}"#),
+            KexShare::from_environment_metadata(br#"{"kex_share":1}"#),
             Err(KexError::Unknown)
         );
         assert_eq!(
-            KexShare::from_realm_metadata(b"not json"),
+            KexShare::from_environment_metadata(b"not json"),
             Err(KexError::Malformed)
         );
     }

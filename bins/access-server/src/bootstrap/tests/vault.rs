@@ -1,5 +1,5 @@
 //! The token vault against the real server path (OP-154 m.3 (t), OP-153 m.3 (gg)): a
-//! bootstrapped realm whose Resource is enabled by a committed `idp.vault.resource_enable`; a
+//! bootstrapped environment whose Resource is enabled by a committed `idp.vault.resource_enable`; a
 //! person connects an account through the real frontend router with their session, after a
 //! consent record for the agent client; the upstream's token endpoint is a scripted stand-in
 //! behind the provider port. Exercises are committed through the real ADP router with the
@@ -116,7 +116,7 @@ pub(super) struct Lab {
     pub(super) adp: axum::Router,
     pub(super) upstream: Arc<Upstream>,
     pub(super) domain: Digest,
-    pub(super) route: access_store::tenancy::RealmRoute,
+    pub(super) route: access_store::tenancy::EnvironmentRoute,
     pub(super) action: ActionRef,
     pub(super) person: HsmSigner,
     pub(super) party: Id,
@@ -224,21 +224,21 @@ impl Lab {
         )
         .await;
         let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
-        let client = register_client(&w, (route.tenant, route.realm), domain).await;
-        let keks = crate::login::RealmKeks::new(Arc::clone(&w.keys));
-        let kek = keks.vault(route.realm).unwrap().kek;
+        let client = register_client(&w, (route.tenant, route.environment), domain).await;
+        let keks = crate::login::EnvironmentKeks::new(Arc::clone(&w.keys));
+        let kek = keks.vault(route.environment).unwrap().kek;
         let ids = crate::ids::CellIds::new(w.keys.clone()).key().unwrap();
-        let realm = access_identity_account::app::Realm {
+        let environment = access_identity_account::app::Environment {
             tenant: route.tenant,
-            realm: route.realm,
+            environment: route.environment,
             kek: &*kek,
             ids: &ids,
         };
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let subject = t
-            .insert_subject("active", kek.id(), &new_subject_key(&realm).unwrap())
+            .insert_subject("active", kek.id(), &new_subject_key(&environment).unwrap())
             .await
             .unwrap();
         let bound = access_store::idp::bind_subject_party(&mut t, &subject, &party.0)
@@ -290,7 +290,7 @@ impl Lab {
         )
     }
 
-    /// The realm's hosted pages, as the server builds them.
+    /// The environment's hosted pages, as the server builds them.
     pub(super) fn hosted(
         w: &World,
     ) -> Arc<
@@ -310,7 +310,7 @@ impl Lab {
         risk.breach = Arc::new(Clean);
         Arc::new(Hosted {
             kits: crate::login::HsmKits::new(
-                crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+                crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
                 w.db.router.clone(),
                 w.db.app.clone(),
                 SessionPolicy::DEFAULT,
@@ -332,7 +332,7 @@ impl Lab {
     async fn sign_in(&mut self) {
         let value: [u8; 32] = access_crypto::random::bytes().unwrap();
         let at = now_ms();
-        let mut t = TenantTx::begin(&self.w.db.app, self.route.tenant, self.route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, self.route.tenant, self.route.environment)
             .await
             .unwrap();
         let epoch = t
@@ -364,7 +364,7 @@ impl Lab {
 
     /// The person's live consent record for the test client: their AAS for it (AS-M15).
     pub(super) async fn consent(&self) {
-        let mut t = TenantTx::begin(&self.w.db.app, self.route.tenant, self.route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, self.route.tenant, self.route.environment)
             .await
             .unwrap();
         let c = access_store::idp::client(&mut t, &self.client)
@@ -388,7 +388,7 @@ impl Lab {
         t.commit().await.unwrap();
     }
 
-    /// One request of the person's browser to the realm's pages.
+    /// One request of the person's browser to the environment's pages.
     pub(super) async fn page(
         &mut self,
         method: &Method,
@@ -397,7 +397,7 @@ impl Lab {
     ) -> (StatusCode, serde_json::Value, axum::http::HeaderMap) {
         let mut b = HttpRequest::builder()
             .method(method.clone())
-            .uri(format!("/realms/acme{path}"))
+            .uri(format!("/env/acme{path}"))
             .header(header::HOST, "access.test");
         let cookie = self
             .cookies
@@ -433,7 +433,7 @@ impl Lab {
         pep: Option<&str>,
         body: &serde_json::Value,
     ) -> (StatusCode, serde_json::Value) {
-        let mut req = HttpRequest::post("/realms/acme/v1/vault/releases")
+        let mut req = HttpRequest::post("/env/acme/v1/vault/releases")
             .header(header::HOST, "access.test")
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
@@ -544,14 +544,14 @@ impl Lab {
         })
     }
 
-    /// Commits an `idp.vault.*` change as the realm's root.
+    /// Commits an `idp.vault.*` change as the environment's root.
     pub(super) async fn change(&self, change: VaultChange) {
         let declared = DeclaredTargets::default();
         let b = Bootstrap {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -560,7 +560,7 @@ impl Lab {
         let ids = cell_ids(&self.w.db.app, &self.w.keys).await.unwrap();
         b.change(
             &b.admin(&ids, None),
-            (self.route.tenant, self.route.realm),
+            (self.route.tenant, self.route.environment),
             self.domain,
             &root_key(&self.w.keys).unwrap(),
             Change::Vault(change),
@@ -801,7 +801,7 @@ async fn a_token_leaves_the_vault_only_for_an_allowed_exercise_of_its_executor()
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{r}");
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     let id = <[u8; 16]>::try_from(b64url_decode(&connection).unwrap()).unwrap();
@@ -817,7 +817,7 @@ async fn a_token_leaves_the_vault_only_for_an_allowed_exercise_of_its_executor()
 /// Registers the agent client the person consents to.
 async fn register_client(
     w: &World,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     domain: Digest,
 ) -> String {
     let declared = DeclaredTargets::default();
@@ -825,7 +825,7 @@ async fn register_client(
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -837,7 +837,7 @@ async fn register_client(
     let key = suiss_crypto::signer::SoftSigner::generate_p256().unwrap().0;
     b.change(
         &admin,
-        (tenant, realm),
+        (tenant, environment),
         domain,
         &root_key(&w.keys).unwrap(),
         Change::ClientRegister(access_identity_admin::domain::Client {
@@ -860,12 +860,12 @@ async fn register_client(
     String::from(id.as_str())
 }
 
-/// Revokes the person's Grant as the realm's root.
+/// Revokes the person's Grant as the environment's root.
 pub(super) async fn revoke(l: &Lab) {
     revoke_grant(l, l.holding.grant).await;
 }
 
-/// Revokes `grant` as the realm's root.
+/// Revokes `grant` as the environment's root.
 pub(super) async fn revoke_grant(l: &Lab, grant: Id) {
     let root = root_key(&l.w.keys).unwrap();
     let payload = Payload::GrantRevoke { grant };
@@ -944,7 +944,7 @@ async fn a_refused_refresh_needs_the_person_again() {
         .page(&Method::GET, "/v1/account/vault/connections", None)
         .await;
     assert_eq!(listed["connections"][0]["status"], "needs_reconnect");
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     let id = <[u8; 16]>::try_from(b64url_decode(&connection).unwrap()).unwrap();
@@ -971,7 +971,7 @@ async fn the_person_sees_which_agent_used_which_of_their_accounts() {
 
     let (runtime, _) = super::agent::enrol(&l.w, l.domain).await;
     // OP-154 m.3 (c)
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     t.insert_agent(&access_store::agents::NewAgent {
@@ -1065,7 +1065,7 @@ async fn the_person_sees_which_agent_used_which_of_their_accounts() {
     );
 
     // AG-41
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     t.open_sponsorship(super::agent::AGENT.0, l.subject, &[7; 32])
@@ -1101,7 +1101,7 @@ async fn a_did_web_document_names_the_live_keys_of_a_bound_party_only() {
     let get = |party: String| {
         let did = did.clone();
         async move {
-            let req = HttpRequest::get(format!("/realms/acme/u/{party}/did.json"))
+            let req = HttpRequest::get(format!("/env/acme/u/{party}/did.json"))
                 .header(header::HOST, "access.test")
                 .body(Body::empty())
                 .unwrap();
@@ -1119,7 +1119,7 @@ async fn a_did_web_document_names_the_live_keys_of_a_bound_party_only() {
     let (runtime, _) = super::agent::enrol(&l.w, l.domain).await;
     let (status, _) = get(agent.clone()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     t.insert_agent(&access_store::agents::NewAgent {
@@ -1137,7 +1137,7 @@ async fn a_did_web_document_names_the_live_keys_of_a_bound_party_only() {
     assert_eq!(status, StatusCode::OK, "{doc}");
     let id = doc["id"].as_str().unwrap();
     assert!(id.starts_with("did:web:"), "{doc}");
-    assert!(id.ends_with(&format!(":realms:acme:u:{agent}")), "{doc}");
+    assert!(id.ends_with(&format!(":env:acme:u:{agent}")), "{doc}");
     let kid = b64url_encode(&access_kernel::verify::key_scope::thumbprint(
         &runtime.0.public_key(),
     ));
@@ -1165,7 +1165,7 @@ async fn a_did_web_document_names_the_live_keys_of_a_bound_party_only() {
     );
 
     // OP-73
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     assert!(

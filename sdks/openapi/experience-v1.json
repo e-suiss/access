@@ -316,7 +316,7 @@
                 "type": "integer"
               },
               "href": {
-                "description": "The coordinator's Needs Attention URL (`idp.realm.coordinator`), https.",
+                "description": "The coordinator's Needs Attention URL (`idp.environment.coordinator`), https.",
                 "type": "string"
               },
               "text": {
@@ -442,6 +442,11 @@
             ],
             "type": "string"
           },
+          "environment": {
+            "description": "The reader's environment slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)).",
+            "pattern": "^[a-z][a-z0-9-]{1,62}$",
+            "type": "string"
+          },
           "financial": {
             "description": "Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14).",
             "items": {
@@ -455,11 +460,6 @@
               "$ref": "#/components/schemas/SignedRead"
             },
             "type": "array"
-          },
-          "realm": {
-            "description": "The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)).",
-            "pattern": "^[a-z][a-z0-9-]{1,62}$",
-            "type": "string"
           },
           "viewer": {
             "description": "The reader's Party.",

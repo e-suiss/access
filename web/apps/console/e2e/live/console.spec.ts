@@ -1,6 +1,6 @@
 // OP-153 m.3 (gg), TN-128, TN-131, IA-5, §8.5 S7: the console against the running local
 // deployment (deploy/compose/access.yaml), through its real BFF on the management listener. The
-// realm's bootstrap test user signs in at the realm's own hosted login, with its password and a
+// environment's bootstrap test user signs in at the environment's own hosted login, with its password and a
 // code of its authenticator app (OP-149 m.26 (b)); the cookie alone then shows no section and
 // reads no organization: every authority read needs this browser's device key, which this
 // sign-in has not registered.
@@ -12,11 +12,11 @@ const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
 const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
-/** The console's sign-in at its realm's address (OP-159 m.42 (a)): the realm's authorize (`prompt=login` sends it to the hosted login),
+/** The console's sign-in at its environment's address (OP-159 m.42 (a)): the environment's authorize (`prompt=login` sends it to the hosted login),
  * then the hosted login's own page: identifier, password and the authenticator app's code. */
 async function signIn(page: Page): Promise<void> {
   await page.goto("/console/acme");
-  await page.waitForURL(/\/realms\/acme\/login\?/);
+  await page.waitForURL(/\/env\/acme\/login\?/);
   await page.getByLabel("Email or username").fill(IDENTIFIER);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Password").fill(PASSWORD);
@@ -41,7 +41,7 @@ test.describe("@live console", () => {
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("'wasm-unsafe-eval'");
     expect((await page.request.get("/console/api/session")).status()).toBe(401);
-    const orgs = await page.request.get("/console/api/proxy/admin/realms/acme/organizations");
+    const orgs = await page.request.get("/console/api/proxy/admin/envs/acme/organizations");
     expect([401, 403]).toContain(orgs.status());
   });
 
@@ -59,7 +59,7 @@ test.describe("@live console", () => {
     const nav = page.getByRole("navigation", { name: "Console sections" });
     await expect(nav.getByRole("link", { name: "Admin" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Audit" })).toHaveCount(0);
-    const orgs = await page.request.get("/console/api/proxy/admin/realms/acme/organizations");
+    const orgs = await page.request.get("/console/api/proxy/admin/envs/acme/organizations");
     expect([401, 403]).toContain(orgs.status());
   });
 });

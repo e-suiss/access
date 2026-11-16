@@ -64,9 +64,9 @@ witnessed checkpoint covered; otherwise it stays closed and the path is `domain.
    `domain.recover`. A restore never reuses a position or changes a lineage.
 4. Only then switch traffic.
 
-There is no row-level restore of a tenant or a realm. `pg_restore -t` does not bring dependent
+There is no row-level restore of a tenant or an environment. `pg_restore -t` does not bring dependent
 rows and objects. The documented path is a side restore and a logical copy: restore the cluster
-to a point in time on another instance, copy the realm's rows in dependency order, and apply the
+to a point in time on another instance, copy the environment's rows in dependency order, and apply the
 deletion facts again with `access-server reshred`. An authority domain is rebuilt from its log,
 body store and replica by a fold from Genesis and accepted by a seal and acceptance; that is
 rebuilding a domain, not restoring a tenant.
@@ -88,8 +88,8 @@ audit checkpoint.
 | # | Item | How it is checked |
 |---|---|---|
 | 1 | point-in-time recovery to a chosen moment | no authority record after the target |
-| 2 | signing keys back together | every realm's key set and every domain's event key load |
-| 3 | JWKS serves the same `kid`s | every realm's `kid`s equal the baseline's |
+| 2 | signing keys back together | every environment's key set and every domain's event key load |
+| 3 | JWKS serves the same `kid`s | every environment's `kid`s equal the baseline's |
 | 4 | schema version fits the binary | the newest applied migration is this binary's |
 | 5 | RTO with and without tuned parallelism | `rto_ms` in the baseline file, from the restore |
 | 6 | repository integrity | `repo_verified` in the baseline file, from `pgbackrest verify` |
@@ -101,9 +101,9 @@ Items 5 and 6 take the backup tool's own evidence as input and are `not-run` wit
 
 ## Async DR profile
 
-A realm may declare the async DR profile (`idp.realm.dr_profile {rpo_s}`, CT3): a single region
+An environment may declare the async DR profile (`idp.environment.dr_profile {rpo_s}`, CT3): a single region
 plus an async copy, with a declared RPO above zero. After the orchestrator promotes the copy, run
-`access-server dr-promote` before anything serves. It refuses unless every live realm of the cell
+`access-server dr-promote` before anything serves. It refuses unless every live environment of the cell
 declared the profile; otherwise it ends every session and refresh family (everyone signs in
 again; password and MFA changes in the loss window may be lost), records the promote and a restore
 generation, and keeps every authority domain unled until it continues under a fence proof. Then

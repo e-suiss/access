@@ -1,5 +1,5 @@
 //! Enterprise upstream sign-in on axum (OP-155 m.3 (h)): `GET /v1/login/upstream/{connection}`
-//! and its callback, at the realm's host and under `/realms/{slug}`. Realm selection, cookies
+//! and its callback, at the environment's host and under `/env/{slug}`. Environment selection, cookies
 //! and replies are the login surface's.
 //!
 //! The connection's redirect back is a top-level navigation from another site, so it is not
@@ -29,7 +29,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
-use super::web::{Jar, problem, realm, send};
+use super::web::{Jar, environment, problem, send};
 use super::{Peer, Shared};
 
 struct Svc<D, K, KI, C, M, H, S> {
@@ -47,7 +47,7 @@ const MAX_NAME: usize = 64;
 /// Longest `code`, `state` or `iss`.
 const MAX_CODE: usize = 2048;
 
-/// The upstream routes, at the realm's host and under `/realms/{slug}`.
+/// The upstream routes, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M, H, S>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -73,7 +73,7 @@ where
         upstreams,
     });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r
             .route(
                 &format!("{prefix}/v1/login/upstream/{{connection}}"),
@@ -134,7 +134,7 @@ where
     H: ProviderHttp,
     S: SocialSecrets,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -179,7 +179,7 @@ where
     H: ProviderHttp,
     S: SocialSecrets,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -253,7 +253,7 @@ where
     H: ProviderHttp,
     S: SocialSecrets,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -330,7 +330,7 @@ where
     H: ProviderHttp,
     S: SocialSecrets,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

@@ -1,5 +1,5 @@
-//! The token-confusion fuzzer (§12.1.3 test 4, TN-23, OP-138): tokens signed with the realm's
-//! real keys but with the wrong type, issuer, audience, binding, lifetime, session or realm,
+//! The token-confusion fuzzer (§12.1.3 test 4, TN-23, OP-138): tokens signed with the environment's
+//! real keys but with the wrong type, issuer, audience, binding, lifetime, session or environment,
 //! and tokens with swapped algorithms or keys, are refused everywhere a token is read.
 
 use access_crypto::jose::JwsAlg;
@@ -103,9 +103,9 @@ impl Basis<'_> {
     }
 
     async fn token(&self, p: Point) -> String {
-        let realm = match p.signer {
-            Signer::Own => self.a.realm().realm,
-            Signer::Other => self.b.realm().realm,
+        let environment = match p.signer {
+            Signer::Own => self.a.environment().environment,
+            Signer::Other => self.b.environment().environment,
         };
         let payload = self.claims(p).to_string();
         self.a
@@ -113,7 +113,13 @@ impl Basis<'_> {
             .oauth
             .env()
             .signer
-            .sign(realm, JwsAlg::Es256, TYPS[p.typ], payload.as_bytes(), now())
+            .sign(
+                environment,
+                JwsAlg::Es256,
+                TYPS[p.typ],
+                payload.as_bytes(),
+                now(),
+            )
             .await
             .unwrap()
     }
@@ -244,7 +250,13 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     let access = real["access_token"].as_str().unwrap();
     let kid = header(access)["kid"].as_str().unwrap().to_owned();
     let payload = claims(access).to_string();
-    let jwks = c.oauth.env().signer.jwks(a.realm().realm).await.unwrap();
+    let jwks = c
+        .oauth
+        .env()
+        .signer
+        .jwks(a.environment().environment)
+        .await
+        .unwrap();
     let attacker = new_key();
     let jwk = crate::support::ec_jwk(&attacker);
     let mut forged = vec![
@@ -279,7 +291,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
             ),
         ),
         (
-            "attacker key under the realm kid",
+            "attacker key under the environment kid",
             sign(
                 &attacker,
                 &format!(r#"{{"alg":"ES256","typ":"at+jwt","kid":"{kid}"}}"#),
@@ -340,11 +352,11 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     ));
     let other = b.tokens().await;
     forged.push((
-        "other realm access token",
+        "other environment access token",
         other["access_token"].as_str().unwrap().to_owned(),
     ));
     forged.push((
-        "other realm ID token",
+        "other environment ID token",
         other["id_token"].as_str().unwrap().to_owned(),
     ));
     for (class, token) in &forged {
@@ -355,7 +367,12 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     // RFC 9449 §7.1
     let bearer = c
         .oauth
-        .userinfo(a.realm(), "GET", Some(&format!("Bearer {access}")), &[])
+        .userinfo(
+            a.environment(),
+            "GET",
+            Some(&format!("Bearer {access}")),
+            &[],
+        )
         .await;
     assert!(!accepted(&bearer));
     let uri = format!("{}/userinfo", a.issuer());
@@ -363,7 +380,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     let r = c
         .oauth
         .userinfo(
-            a.realm(),
+            a.environment(),
             "GET",
             Some(&format!("DPoP {access}")),
             &[&unbound],
@@ -374,7 +391,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     let r = c
         .oauth
         .userinfo(
-            a.realm(),
+            a.environment(),
             "GET",
             Some(&format!("DPoP {access}")),
             &[&wrong_ath],
@@ -393,7 +410,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
         ("access token", access),
         ("ID token", real["id_token"].as_str().unwrap()),
         (
-            "other realm refresh token",
+            "other environment refresh token",
             other["refresh_token"].as_str().unwrap(),
         ),
     ] {
@@ -406,7 +423,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
         .env()
         .signer
         .sign(
-            a.realm().realm,
+            a.environment().environment,
             JwsAlg::Es256,
             "logout+jwt",
             claims(real["id_token"].as_str().unwrap())
@@ -420,7 +437,10 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     for (class, hint) in [
         ("access token", access),
         ("logout token", logout_token.as_str()),
-        ("other realm ID token", other["id_token"].as_str().unwrap()),
+        (
+            "other environment ID token",
+            other["id_token"].as_str().unwrap(),
+        ),
     ] {
         let r = a
             .end_session(&[("id_token_hint", hint)], Some(&cookie))

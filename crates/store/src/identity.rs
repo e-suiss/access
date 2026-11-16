@@ -13,9 +13,9 @@ use crate::StoreError;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TenantId(Uuid);
 
-/// An identity realm identifier. Deliberately without `Debug`.
+/// An identity environment identifier. Deliberately without `Debug`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RealmId(Uuid);
+pub struct EnvironmentId(Uuid);
 
 impl TenantId {
     /// From UUID bytes.
@@ -31,7 +31,7 @@ impl TenantId {
     }
 }
 
-impl RealmId {
+impl EnvironmentId {
     /// From UUID bytes.
     #[must_use]
     pub const fn from_bytes(b: [u8; 16]) -> Self {
@@ -45,39 +45,39 @@ impl RealmId {
     }
 }
 
-/// A transaction scoped to one tenant and realm (OP-18).
+/// A transaction scoped to one tenant and environment (OP-18).
 pub struct TenantTx {
     pub(crate) tx: Transaction<'static, Postgres>,
     pub(crate) tenant: TenantId,
-    realm: Option<RealmId>,
+    environment: Option<EnvironmentId>,
 }
 
 impl TenantTx {
-    /// Opens a transaction and sets `app.tenant_id` and `app.realm_id` for it only.
+    /// Opens a transaction and sets `app.tenant_id` and `app.environment_id` for it only.
     ///
     /// # Errors
     /// [`StoreError::Db`].
     pub async fn begin(
         pool: &PgPool,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> Result<Self, StoreError> {
         let mut tx = pool.begin().await?;
         sqlx::query!(
-            "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.realm_id', $2, true) AS realm",
+            "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.environment_id', $2, true) AS environment",
             tenant.0.to_string(),
-            realm.0.to_string(),
+            environment.0.to_string(),
         )
         .fetch_one(&mut *tx)
         .await?;
         Ok(Self {
             tx,
             tenant,
-            realm: Some(realm),
+            environment: Some(environment),
         })
     }
 
-    /// A transaction scoped to a tenant only: realm-scoped rows stay invisible.
+    /// A transaction scoped to a tenant only: environment-scoped rows stay invisible.
     ///
     /// # Errors
     /// [`StoreError::Db`].
@@ -92,20 +92,20 @@ impl TenantTx {
         Ok(Self {
             tx,
             tenant,
-            realm: None,
+            environment: None,
         })
     }
 
     /// A transaction scoped to a tenant that reads the live stream subscriptions and webhooks of
-    /// all its realms, as the fan-outs do (OP-132 m.5): every other realm-level row stays
-    /// invisible, and no realm-level row can be written in it.
+    /// all its environments, as the fan-outs do (OP-132 m.5): every other environment-level row stays
+    /// invisible, and no environment-level row can be written in it.
     ///
     /// # Errors
     /// [`StoreError::Db`].
     pub async fn begin_tenant_wide(pool: &PgPool, tenant: TenantId) -> Result<Self, StoreError> {
         let mut tx = pool.begin().await?;
         sqlx::query!(
-            "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.realm_wide', 'on', true) AS wide",
+            "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.environment_wide', 'on', true) AS wide",
             tenant.0.to_string()
         )
         .fetch_one(&mut *tx)
@@ -113,26 +113,29 @@ impl TenantTx {
         Ok(Self {
             tx,
             tenant,
-            realm: None,
+            environment: None,
         })
     }
 
-    /// Narrows a tenant-only transaction to `realm`, for the rows a realm's creation writes
+    /// Narrows a tenant-only transaction to `environment`, for the rows an environment's creation writes
     /// after its own (TN-111).
     ///
     /// # Errors
-    /// [`StoreError::Range`] when the transaction already has a realm; [`StoreError::Db`].
-    pub async fn enter_realm(&mut self, realm: RealmId) -> Result<(), StoreError> {
-        if self.realm.is_some() {
+    /// [`StoreError::Range`] when the transaction already has an environment; [`StoreError::Db`].
+    pub async fn enter_environment(
+        &mut self,
+        environment: EnvironmentId,
+    ) -> Result<(), StoreError> {
+        if self.environment.is_some() {
             return Err(StoreError::Range);
         }
         sqlx::query!(
-            "SELECT set_config('app.realm_id', $1, true) AS realm",
-            realm.0.to_string(),
+            "SELECT set_config('app.environment_id', $1, true) AS environment",
+            environment.0.to_string(),
         )
         .fetch_one(&mut *self.tx)
         .await?;
-        self.realm = Some(realm);
+        self.environment = Some(environment);
         Ok(())
     }
 
@@ -142,10 +145,10 @@ impl TenantTx {
         self.tenant
     }
 
-    /// The realm, when the scope has one.
+    /// The environment, when the scope has one.
     #[must_use]
-    pub const fn realm(&self) -> Option<RealmId> {
-        self.realm
+    pub const fn environment(&self) -> Option<EnvironmentId> {
+        self.environment
     }
 
     /// The database server's clock, Unix milliseconds (OP-129 m.1).
@@ -180,12 +183,12 @@ impl TenantTx {
         payload: &[u8],
         trace_parent: Option<&str>,
     ) -> Result<(), StoreError> {
-        let realm = self.realm.ok_or(StoreError::Range)?;
+        let environment = self.environment.ok_or(StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload, trace_parent)
+            "INSERT INTO access.identity_outbox (tenant_id, environment_id, kind, payload, trace_parent)
              VALUES ($1, $2, $3, $4, $5)",
             self.tenant.0,
-            realm.0,
+            environment.0,
             kind,
             payload,
             trace_parent,
@@ -232,8 +235,8 @@ impl TenantTx {
 pub struct OutboxEvent {
     /// The tenant that wrote it.
     pub tenant: TenantId,
-    /// The realm that wrote it.
-    pub realm: RealmId,
+    /// The environment that wrote it.
+    pub environment: EnvironmentId,
     /// Writing transaction id (xid8).
     pub xid: u64,
     /// Row id, the order within one transaction.
@@ -311,7 +314,7 @@ pub async fn poll(
 ) -> Result<Vec<OutboxEvent>, StoreError> {
     let after_xid = i64::try_from(after.xid).map_err(|_| StoreError::Range)?;
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, xid::text::bigint AS "xid!", id, kind, payload, trace_parent,
+        r#"SELECT tenant_id, environment_id, xid::text::bigint AS "xid!", id, kind, payload, trace_parent,
                   (extract(epoch FROM clock_timestamp() - created_at) * 1000)::bigint AS "age_ms!"
              FROM access.identity_outbox
             WHERE xid < pg_snapshot_xmin(pg_current_snapshot())
@@ -328,7 +331,7 @@ pub async fn poll(
         .map(|r| {
             Ok(OutboxEvent {
                 tenant: TenantId(r.tenant_id),
-                realm: RealmId(r.realm_id),
+                environment: EnvironmentId(r.environment_id),
                 xid: xid(Some(r.xid))?,
                 id: r.id,
                 kind: r.kind,

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_id FROM access.idp_clients\n          WHERE tenant_id = $1 AND environment_id = $2 AND client_id > $3\n          ORDER BY client_id LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "client_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "36c2bd409d578503c86212139053f65d30dd0a9e3780997654ec3c6f32a240f8"
+}

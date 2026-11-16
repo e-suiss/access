@@ -1,4 +1,4 @@
-// OP-153 m.3 (gg), OP-149 m.26 (b), TN-128: the console's sign-in at the realm's own hosted login
+// OP-153 m.3 (gg), OP-149 m.26 (b), TN-128: the console's sign-in at the environment's own hosted login
 // as the bootstrap test user (identifier, password and a code of its authenticator app), and the
 // registration of this browser's device key, which every authority read and write needs.
 import { expect, type Page } from "@playwright/test";
@@ -9,10 +9,10 @@ export const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.ex
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
-/** The console's sign-in at its realm's address (OP-159 m.42 (a)): the realm's authorize, then the hosted login. */
+/** The console's sign-in at its environment's address (OP-159 m.42 (a)): the environment's authorize, then the hosted login. */
 export async function signIn(page: Page): Promise<void> {
   await page.goto("/console/acme");
-  await page.waitForURL(/\/realms\/acme\/login\?/);
+  await page.waitForURL(/\/env\/acme\/login\?/);
   await page.getByLabel("Email or username").fill(IDENTIFIER);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Password").fill(PASSWORD);

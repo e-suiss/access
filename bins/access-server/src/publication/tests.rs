@@ -20,7 +20,7 @@ use access_identity_export::adapters::publish::note_key;
 use access_identity_signer::protocol::{Request, Response};
 use access_store::audit::{AuditEvent, CheckpointRow};
 use access_store::audit_publication::published_through;
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx};
 use access_store::testing::{TestDb, fresh, server_version};
 use suiss_crypto::envelope::SoftKek;
 
@@ -28,7 +28,7 @@ use super::*;
 use crate::checkpoints::{AUDIT_INTERVAL, audit_tick};
 
 const T: TenantId = TenantId::from_bytes([0x41; 16]);
-const R: RealmId = RealmId::from_bytes([0x42; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([0x42; 16]);
 
 fn random_name() -> String {
     format!(
@@ -46,7 +46,7 @@ fn identity_signer() -> PathBuf {
     let mut service = access_identity_signer::service::Service::start(
         SealedFactory::new(SoftKek::new("identity-kek", kek)),
         DirVault::new(&dir),
-        suiss_crypto::rotation::Policy::REALM,
+        suiss_crypto::rotation::Policy::ENVIRONMENT,
     )
     .unwrap();
     service.open_cell("cell-p1").unwrap();

@@ -1,9 +1,9 @@
 //! The HR batch API and the HR connector on the real server path (OP-156 m.3 (q), OP-153 m.3
 //! (gg), IDP-35): an administrator registers an HR source and a connector through the
-//! realm-admin surface; a CSV file with an unknown column is refused whole and writes nothing;
+//! environment-admin surface; a CSV file with an unknown column is refused whole and writes nothing;
 //! the connector service reads its Personio sample and pushes it through the same
 //! `importHrBatch` route, each batch drafted, signed by the operator's Instance key and committed
-//! on the real sequencer. The connector reaches Access only through the realm-admin contract
+//! on the real sequencer. The connector reaches Access only through the environment-admin contract
 //! (`admin-v1.json`) and the public crates.
 
 use std::sync::Arc;
@@ -40,7 +40,7 @@ impl Pull for Recorded {
     }
 }
 
-/// The realm-admin surface as the operator's tool reaches it: through the console's signed-in
+/// The environment-admin surface as the operator's tool reaches it: through the console's signed-in
 /// session, which the operator's Instance key stands behind.
 #[derive(Clone)]
 struct Admin(Arc<Console>);
@@ -48,7 +48,7 @@ struct Admin(Arc<Console>);
 impl Access for Admin {
     async fn draft(&self, slug: &str, ask: serde_json::Value) -> Result<serde_json::Value, Fault> {
         let c = &self.0;
-        let drafts = format!("/admin/v1/realms/{slug}/intents");
+        let drafts = format!("/admin/v1/envs/{slug}/intents");
         let proof = c.browser.ais(
             c.domain,
             &access_crypto::random::bytes::<16>().unwrap(),
@@ -142,7 +142,7 @@ impl Clock for Os {
 }
 
 async fn people(c: &Console, source: &str) -> u64 {
-    let (st, list, _) = c.rest_read("/admin/v1/realms/acme/hr-sources").await;
+    let (st, list, _) = c.rest_read("/admin/v1/envs/acme/hr-sources").await;
     assert_eq!(st, StatusCode::OK, "{list}");
     list["items"]
         .as_array()
@@ -161,7 +161,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/hr-sources",
+            "/admin/v1/envs/acme/hr-sources",
             ("registerHrSource", None),
             serde_json::json!({ "name": "personio-hr" }),
             None,
@@ -173,7 +173,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/hr-connectors",
+            "/admin/v1/envs/acme/hr-connectors",
             ("registerHrConnector", None),
             serde_json::json!({ "name": "personio-1", "source": "personio-hr", "vendor": "personio" }),
             None,
@@ -183,7 +183,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/hr-connectors",
+            "/admin/v1/envs/acme/hr-connectors",
             ("registerHrConnector", None),
             serde_json::json!({ "name": "sheet", "source": "personio-hr", "vendor": "spreadsheet" }),
             None,
@@ -197,7 +197,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/hr-sources/personio-hr/records:csv",
+            "/admin/v1/envs/acme/hr-sources/personio-hr/records:csv",
             ("importHrCsv", Some("personio-hr")),
             import_body(bad, 2),
             None,
@@ -211,7 +211,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/hr-sources/personio-hr/records:csv",
+            "/admin/v1/envs/acme/hr-sources/personio-hr/records:csv",
             ("importHrCsv", Some("personio-hr")),
             import_body(csv, 1),
             None,
@@ -227,7 +227,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
         connector: Connector {
             name: String::from("personio-1"),
             vendor: Vendor::Personio,
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             source: String::from("personio-hr"),
         },
         pull: Recorded,
@@ -291,7 +291,7 @@ async fn hr_records_arrive_by_batch_csv_and_the_connector_service_and_a_bad_file
     assert_eq!(again.report.pushed, 2);
     assert_eq!(people(&c, "personio-hr").await, 3);
 
-    let (st, list, _) = c.rest_read("/admin/v1/realms/acme/hr-connectors").await;
+    let (st, list, _) = c.rest_read("/admin/v1/envs/acme/hr-connectors").await;
     assert_eq!(st, StatusCode::OK, "{list}");
     assert_eq!(list["items"][0]["vendor"], "personio");
 }

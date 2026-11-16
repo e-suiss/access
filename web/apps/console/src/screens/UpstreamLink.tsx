@@ -22,7 +22,7 @@ export function UpstreamLink({ ctx }: { readonly ctx: Ctx }): ReactElement {
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
-            change(ctx.instance, ctx.confirm, ctx.session.realm, {
+            change(ctx.instance, ctx.confirm, ctx.session.environment, {
               operation: "linkUpstreamSubject",
               key: upstream,
               method: "POST",

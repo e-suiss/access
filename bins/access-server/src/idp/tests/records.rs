@@ -11,7 +11,7 @@ use crate::product::PgSubjects;
 async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
     // OP-141 m.22 (f), OP-149 m.16 (a)
     let w = World::new().await;
-    let (t, r, d) = w.realm("acme").await;
+    let (t, r, d) = w.environment("acme").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let c = new_client(&w).await;
     let p = proposal(
@@ -24,7 +24,7 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
     written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
     let subject = tx
-        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .insert_subject("staged", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(
@@ -42,7 +42,7 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
         s.resolve(
             *t.as_bytes(),
             *r.as_bytes(),
-            Sector::RealmClient(c.id.as_str()),
+            Sector::EnvironmentClient(c.id.as_str()),
             q,
         )
     };
@@ -76,7 +76,7 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
         s.resolve(
             *t.as_bytes(),
             *r.as_bytes(),
-            Sector::RealmClient("cli_nobody"),
+            Sector::EnvironmentClient("cli_nobody"),
             SubjectQuery::Parties(vec![ALICE.0])
         )
         .await
@@ -85,7 +85,7 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
     );
 }
 
-async fn c_uuid(w: &World, t: TenantId, r: RealmId, c: &Client) -> [u8; 16] {
+async fn c_uuid(w: &World, t: TenantId, r: EnvironmentId, c: &Client) -> [u8; 16] {
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
     let row = client(&mut tx, c.id.as_str()).await.unwrap().unwrap();
     tx.commit().await.unwrap();
@@ -101,7 +101,7 @@ fn b64url(b: &[u8]) -> String {
 async fn an_allowed_exercise_is_read_back_with_its_receipt() {
     // OP-141 m.6
     let w = World::new().await;
-    let (_, _, d) = w.realm("acme").await;
+    let (_, _, d) = w.environment("acme").await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let challenge = challenge_of(ALICE_KEY);
     let id = meta::exercise_id(&d, &challenge).unwrap();

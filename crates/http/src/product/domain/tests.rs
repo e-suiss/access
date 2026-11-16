@@ -52,7 +52,7 @@ fn the_snapshot_version_follows_its_content() {
         id: [1; 16],
         status: "active".into(),
         organizations: Vec::new(),
-        realms: Vec::new(),
+        environments: Vec::new(),
     };
     let a = snapshot("tnt_a", &t, "eu-central");
     assert_eq!(a, snapshot("tnt_a", &t, "eu-central"));
@@ -65,7 +65,7 @@ fn the_snapshot_version_follows_its_content() {
     assert_eq!(a["retention"], json!({}));
     // OP-149 m.4
     let grown = Tenant {
-        realms: vec![super::super::ports::Realm {
+        environments: vec![super::super::ports::Environment {
             id: [2; 16],
             issuer: "https://shop.id.example".into(),
             slug: "shop".into(),
@@ -75,7 +75,7 @@ fn the_snapshot_version_follows_its_content() {
     let c = snapshot("tnt_a", &grown, "eu-central");
     assert_ne!(a["version"], c["version"]);
     assert_eq!(
-        c["realms"],
+        c["environments"],
         json!([{ "id": "02020202-0202-0202-0202-020202020202", "issuer": "https://shop.id.example", "slug": "shop" }])
     );
 }

@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT signing_profile, kex_share FROM access.environments\n              WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "signing_profile",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "signing_profile"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kex_share",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "kex_share"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "ba5ee0f5324e174b6b0a2790937f8296e9afa611ac3c157d730f7e7e0982158e"
+}

@@ -1,4 +1,4 @@
-//! Tenant analytics (IDP-36, OP-151 m.3 (n)): daily counters per realm, derived from the
+//! Tenant analytics (IDP-36, OP-151 m.3 (n)): daily counters per environment, derived from the
 //! sign-in flows, the credentials, the audit log and the risk review queue. Counters only: no
 //! identifier, no pseudonym. Never a decision input (TI-18).
 

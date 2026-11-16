@@ -1,5 +1,5 @@
 //! Identity subjects, login identifiers and the credential store (§10.1.7, IDP-2, TN-49, TN-68,
-//! OP-145): realm-local rows under the transaction's scope. Nothing is deleted (OP-73); the
+//! OP-145): environment-local rows under the transaction's scope. Nothing is deleted (OP-73); the
 //! database enforces the TN-49 chain and keeps the last authentication method (TN-68).
 
 use sqlx::types::Uuid;
@@ -51,7 +51,7 @@ pub struct SealedSecret {
 
 /// A sealed identifier as the vault writes it (OP-153 m.3 (aa)).
 pub struct SealedIdentifier {
-    /// The realm's blind index of the folded value.
+    /// The environment's blind index of the folded value.
     pub index: [u8; 32],
     /// The vault class whose subject DEK sealed it: `contact` or `profile`.
     pub class: &'static str,
@@ -170,8 +170,8 @@ fn nonce(v: Vec<u8>) -> Result<[u8; 12], StoreError> {
 
 impl TenantTx {
     fn scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Inserts a subject in `status` with its wrapped DEK; returns the new id.
@@ -184,12 +184,12 @@ impl TenantTx {
         kek_id: &str,
         wrapped_dek: &[u8],
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.identity_subjects (tenant_id, realm_id, status, kek_id, wrapped_dek)
+            r#"INSERT INTO access.identity_subjects (tenant_id, environment_id, status, kek_id, wrapped_dek)
                VALUES ($1, $2, $3, $4, $5) RETURNING subject_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             status,
             kek_id,
             wrapped_dek,
@@ -208,15 +208,15 @@ impl TenantTx {
         id: [u8; 16],
         lock: bool,
     ) -> Result<Option<SubjectRow>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let row = if lock {
             sqlx::query_as!(
                 SubjectRecord,
                 "SELECT subject_id, status, session_epoch, kek_id, wrapped_dek
                    FROM access.identity_subjects
-                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 FOR UPDATE",
+                  WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 FOR UPDATE",
                 tenant,
-                realm,
+                environment,
                 uuid(id),
             )
             .fetch_optional(&mut *self.tx)
@@ -226,9 +226,9 @@ impl TenantTx {
                 SubjectRecord,
                 "SELECT subject_id, status, session_epoch, kek_id, wrapped_dek
                    FROM access.identity_subjects
-                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+                  WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
                 tenant,
-                realm,
+                environment,
                 uuid(id),
             )
             .fetch_optional(&mut *self.tx)
@@ -248,12 +248,12 @@ impl TenantTx {
         from: &str,
         to: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_subjects SET status = $4, status_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = $5",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = $5",
             tenant,
-            realm,
+            environment,
             uuid(id),
             to,
             from,
@@ -269,12 +269,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn bump_session_epoch(&mut self, id: [u8; 16]) -> Result<Option<i64>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         Ok(sqlx::query_scalar!(
             "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1, session_epoch_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 RETURNING session_epoch",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 RETURNING session_epoch",
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -282,22 +282,22 @@ impl TenantTx {
     }
 
     /// The wholesale `session_epoch` floor of an operator directive (OP-46, OP-157 m.3 (j)): every
-    /// subject of the realm whose epoch last moved before `floor_ms` moves one step, so every
+    /// subject of the environment whose epoch last moved before `floor_ms` moves one step, so every
     /// session and refresh family issued before it ends. Repeating it moves nothing. Returns how
     /// many moved.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn raise_epoch_floor(&mut self, floor_ms: i64) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         Ok(sqlx::query!(
             "UPDATE access.identity_subjects
                 SET session_epoch = session_epoch + 1,
                     session_epoch_at = greatest(clock_timestamp(), to_timestamp($3::bigint / 1000.0))
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
                 AND session_epoch_at < to_timestamp($3::bigint / 1000.0)",
             tenant,
-            realm,
+            environment,
             floor_ms,
         )
         .execute(&mut *self.tx)
@@ -330,14 +330,14 @@ impl TenantTx {
         let Some(epoch) = self.bump_session_epoch(id).await? else {
             return Ok(None);
         };
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         sqlx::query!(
             "UPDATE access.login_sessions
                 SET ended_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, end_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_ms IS NULL
                 AND session_epoch < $4",
             tenant,
-            realm,
+            environment,
             uuid(id),
             epoch,
             reason,
@@ -348,16 +348,16 @@ impl TenantTx {
             "WITH revoked AS (
                UPDATE access.oauth_grants
                   SET revoked_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, revoke_reason = 'epoch'
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND revoked_ms IS NULL
                   AND session_epoch < $4
                RETURNING grant_id, client_uuid)
              SELECT r.grant_id FROM revoked r
                JOIN access.idp_clients c
-                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid
+                 ON c.tenant_id = $1 AND c.environment_id = $2 AND c.client_uuid = r.client_uuid
               WHERE c.backchannel_logout_uri IS NOT NULL
               ORDER BY r.grant_id",
             tenant,
-            realm,
+            environment,
             uuid(id),
             epoch,
         )
@@ -367,7 +367,7 @@ impl TenantTx {
         Ok(Some(epoch))
     }
 
-    /// Adds a sealed login identifier (OP-153 m.3 (aa)); false when the realm already holds its
+    /// Adds a sealed login identifier (OP-153 m.3 (aa)); false when the environment already holds its
     /// blind index, live or tombstoned (TN-76 m.3). A plaintext row written before the vault is
     /// found by [`Self::subject_by_identifier`] before this is called.
     ///
@@ -379,15 +379,15 @@ impl TenantTx {
         kind: &str,
         sealed: &SealedIdentifier,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
             "INSERT INTO access.identity_identifiers
-               (tenant_id, realm_id, subject_id, kind, value_index, pii_class, nonce, ciphertext)
+               (tenant_id, environment_id, subject_id, kind, value_index, pii_class, nonce, ciphertext)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (tenant_id, realm_id, value_index) WHERE status = 'active' AND value_index IS NOT NULL
+             ON CONFLICT (tenant_id, environment_id, value_index) WHERE status = 'active' AND value_index IS NOT NULL
              DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             kind,
             sealed.index.as_slice(),
@@ -401,7 +401,7 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// The subject holding the identifier with blind index `index` in this realm; a row written
+    /// The subject holding the identifier with blind index `index` in this environment; a row written
     /// before the vault is matched on `legacy`, its folded plaintext, until it is sealed.
     ///
     /// # Errors
@@ -411,14 +411,14 @@ impl TenantTx {
         index: &[u8; 32],
         legacy: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let id = sqlx::query_scalar!(
             "SELECT subject_id FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'
                 AND (value_index = $3 OR (value IS NOT NULL AND lower(value) = lower($4)))
               ORDER BY identifier_id LIMIT 1",
             tenant,
-            realm,
+            environment,
             index.as_slice(),
             legacy,
         )
@@ -438,13 +438,13 @@ impl TenantTx {
         index: &[u8; 32],
         legacy: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_identifiers SET status = 'released', released_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 AND (value_index = $4 OR (value IS NOT NULL AND lower(value) = lower($5)))",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             index.as_slice(),
             legacy,
@@ -463,15 +463,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<IdentifierRow>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query!(
             r#"SELECT identifier_id, kind, value, value_index, pii_class, nonce, ciphertext, status,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!"
                  FROM access.identity_identifiers
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY identifier_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -494,17 +494,17 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn proven_emails(&mut self, subject: [u8; 16]) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query_scalar!(
             "SELECT i.identifier_id FROM access.identity_identifiers i
                JOIN access.identity_mailboxes m
-                 ON m.tenant_id = i.tenant_id AND m.realm_id = i.realm_id
+                 ON m.tenant_id = i.tenant_id AND m.environment_id = i.environment_id
                 AND m.identifier_id = i.identifier_id AND m.subject_id = i.subject_id
-              WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.subject_id = $3
+              WHERE i.tenant_id = $1 AND i.environment_id = $2 AND i.subject_id = $3
                 AND i.status = 'active' AND i.kind = 'email'
               ORDER BY i.identifier_id",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -512,7 +512,7 @@ impl TenantTx {
         Ok(rows.into_iter().map(|u| *u.as_bytes()).collect())
     }
 
-    /// Up to `limit` identifiers of this realm still written in plaintext, for the retention
+    /// Up to `limit` identifiers of this environment still written in plaintext, for the retention
     /// job to seal (OP-153 m.3 (aa)): `(identifier, subject, kind, value)`.
     ///
     /// # Errors
@@ -521,14 +521,14 @@ impl TenantTx {
         &mut self,
         limit: i64,
     ) -> Result<Vec<([u8; 16], [u8; 16], String, String)>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query!(
             r#"SELECT identifier_id, subject_id, kind, value AS "value!"
                  FROM access.identity_identifiers
-                WHERE tenant_id = $1 AND realm_id = $2 AND value IS NOT NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND value IS NOT NULL
                 ORDER BY identifier_id LIMIT $3"#,
             tenant,
-            realm,
+            environment,
             limit,
         )
         .fetch_all(&mut *self.tx)
@@ -556,13 +556,13 @@ impl TenantTx {
         id: [u8; 16],
         sealed: &SealedIdentifier,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_identifiers
                 SET value = NULL, value_index = $4, pii_class = $5, nonce = $6, ciphertext = $7
-              WHERE tenant_id = $1 AND realm_id = $2 AND identifier_id = $3 AND value IS NOT NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND identifier_id = $3 AND value IS NOT NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             sealed.index.as_slice(),
             sealed.class,
@@ -584,12 +584,12 @@ impl TenantTx {
         subject: [u8; 16],
         class: &str,
     ) -> Result<Option<SubjectKeyRow>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let row = sqlx::query!(
             "SELECT kek_id, wrapped_dek FROM access.identity_subject_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND class = $4",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             class,
         )
@@ -612,12 +612,12 @@ impl TenantTx {
         kek_id: &str,
         wrapped_dek: &[u8],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
-            "INSERT INTO access.identity_subject_keys (tenant_id, realm_id, subject_id, class, kek_id, wrapped_dek)
+            "INSERT INTO access.identity_subject_keys (tenant_id, environment_id, subject_id, class, kek_id, wrapped_dek)
              VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             class,
             kek_id,
@@ -640,22 +640,22 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<(String, Vec<u8>)>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let live = sqlx::query!(
             r#"SELECT class, wrapped_dek AS "wrapped!" FROM access.identity_subject_keys
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL
                 ORDER BY class FOR UPDATE"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
         .await?;
         sqlx::query!(
             "UPDATE access.identity_subject_keys SET wrapped_dek = NULL, shredded_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)
@@ -664,10 +664,10 @@ impl TenantTx {
             live.into_iter().map(|r| (r.class, r.wrapped)).collect();
         let own = sqlx::query_scalar!(
             r#"SELECT wrapped_dek AS "wrapped!" FROM access.identity_subjects
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'purging'
                   AND wrapped_dek IS NOT NULL FOR UPDATE"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -675,9 +675,9 @@ impl TenantTx {
         if let Some(w) = own {
             sqlx::query!(
                 "UPDATE access.identity_subjects SET wrapped_dek = NULL, shredded_at = clock_timestamp()
-                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'",
+                  WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'purging'",
                 tenant,
-                realm,
+                environment,
                 uuid(subject),
             )
             .execute(&mut *self.tx)
@@ -699,22 +699,22 @@ impl TenantTx {
         nonce_bytes: &[u8; 12],
         ciphertext: &[u8],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         sqlx::query!(
             "UPDATE access.identity_profile_fields SET superseded_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND field = $4 AND superseded_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND field = $4 AND superseded_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             field,
         )
         .execute(&mut *self.tx)
         .await?;
         sqlx::query!(
-            "INSERT INTO access.identity_profile_fields (tenant_id, realm_id, subject_id, field, nonce, ciphertext)
+            "INSERT INTO access.identity_profile_fields (tenant_id, environment_id, subject_id, field, nonce, ciphertext)
              VALUES ($1, $2, $3, $4, $5, $6)",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             field,
             nonce_bytes.as_slice(),
@@ -733,13 +733,13 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<(String, [u8; 12], Vec<u8>)>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query!(
             "SELECT field, nonce, ciphertext FROM access.identity_profile_fields
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND superseded_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND superseded_at IS NULL
               ORDER BY field",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -757,13 +757,13 @@ impl TenantTx {
         &mut self,
         c: &NewCredential<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.identity_credentials
-                 (tenant_id, realm_id, subject_id, kind, algorithm, kek_id, wrapped_dek, nonce, ciphertext, pepper_version)
+                 (tenant_id, environment_id, subject_id, kind, algorithm, kek_id, wrapped_dek, nonce, ciphertext, pepper_version)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING credential_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             uuid(c.subject),
             c.kind,
             c.algorithm,
@@ -787,20 +787,20 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<MethodRow>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query!(
             r#"SELECT c.credential_id, c.kind,
                       (extract(epoch FROM c.created_at) * 1000)::bigint AS "created_ms!",
                       w.backup_eligible AS "backup_eligible?"
                  FROM access.identity_credentials c
                  LEFT JOIN access.webauthn_credentials w
-                   ON w.tenant_id = c.tenant_id AND w.realm_id = c.realm_id
+                   ON w.tenant_id = c.tenant_id AND w.environment_id = c.environment_id
                   AND w.credential_id = c.credential_id
-                WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.subject_id = $3
+                WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.subject_id = $3
                   AND c.status = 'active'
                 ORDER BY c.credential_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -825,14 +825,14 @@ impl TenantTx {
         subject: [u8; 16],
         kind: &str,
     ) -> Result<Vec<CredentialRow>, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let rows = sqlx::query!(
             "SELECT credential_id, subject_id, kind, algorithm, kek_id, wrapped_dek, nonce, ciphertext, pepper_version
                FROM access.identity_credentials
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND kind = $4 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kind = $4 AND status = 'active'
               ORDER BY credential_id",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             kind,
         )
@@ -867,13 +867,13 @@ impl TenantTx {
         algorithm: &str,
         sealed: &SealedSecret,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_credentials
                 SET algorithm = $4, kek_id = $5, wrapped_dek = $6, nonce = $7, ciphertext = $8, pepper_version = $9
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             uuid(id),
             algorithm,
             sealed.kek_id,
@@ -900,19 +900,19 @@ impl TenantTx {
         subject: [u8; 16],
         id: [u8; 16],
     ) -> Result<Revoke, StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         let Some(live) = self.subject(subject, true).await? else {
             return Ok(Revoke::Missing);
         };
         let others = sqlx::query_scalar!(
             r#"SELECT (SELECT count(*) FROM access.identity_credentials
-                        WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                        WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                           AND status = 'active' AND credential_id <> $4)
                     + (SELECT count(*) FROM access.identity_federated
-                        WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                        WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                           AND ended_ms IS NULL) AS "n!""#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(id),
         )
@@ -922,10 +922,10 @@ impl TenantTx {
         if others == 0 && !terminal {
             let exists = sqlx::query_scalar!(
                 r#"SELECT EXISTS (SELECT 1 FROM access.identity_credentials
-                    WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                    WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                       AND credential_id = $4 AND status = 'active') AS "e!""#,
                 tenant,
-                realm,
+                environment,
                 uuid(subject),
                 uuid(id),
             )
@@ -939,10 +939,10 @@ impl TenantTx {
         }
         let n = sqlx::query!(
             "UPDATE access.identity_credentials SET status = 'revoked', revoked_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND credential_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND credential_id = $4
                 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(id),
         )
@@ -961,12 +961,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn credential_used(&mut self, id: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = self.scope()?;
+        let (tenant, environment) = self.scope()?;
         sqlx::query!(
             "UPDATE access.identity_credentials SET last_used_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3",
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .execute(&mut *self.tx)

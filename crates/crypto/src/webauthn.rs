@@ -1,5 +1,5 @@
 //! WebAuthn relying-party primitives on aws-lc-rs (OP-146 m.3): assertion signature checks under
-//! the CR-9 acceptance profile for external signatures, and the realm key that derives
+//! the CR-9 acceptance profile for external signatures, and the environment key that derives
 //! deterministic decoy credential IDs (TN-97, CR-3 (a)).
 
 use std::fmt::Write as _;
@@ -187,11 +187,11 @@ pub fn verify_rs256(
 
 const DECOY_CONTEXT: &[u8] = b"access/webauthn-decoy/v1\0";
 
-/// The token label of a realm's decoy key: `access/webauthn-decoy/<RealmID hex>`.
+/// The token label of an environment's decoy key: `access/webauthn-decoy/<EnvironmentID hex>`.
 #[must_use]
-pub fn decoy_label(realm: &[u8; 16]) -> String {
+pub fn decoy_label(environment: &[u8; 16]) -> String {
     let mut out = String::from("access/webauthn-decoy/");
-    for b in realm {
+    for b in environment {
         let _ = write!(out, "{b:02x}");
     }
     out
@@ -203,7 +203,7 @@ enum Key {
     Memory(Secret<[u8; 32]>),
 }
 
-/// A realm's key for decoy credential IDs: unknown identifiers get stable, plausible
+/// An environment's key for decoy credential IDs: unknown identifiers get stable, plausible
 /// `allowCredentials` lists so the answer does not reveal whether an account exists (TN-97).
 pub struct DecoyKey(Key);
 

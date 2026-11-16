@@ -1,4 +1,4 @@
-//! The realm's post-quantum keys inside the HSM (CR-18, OP-159 m.3 (d)): a key factory that
+//! The environment's post-quantum keys inside the HSM (CR-18, OP-159 m.3 (d)): a key factory that
 //! makes each ML-DSA key in the token with `CKM_ML_DSA_KEY_PAIR_GEN` and signs with `CKM_ML_DSA`,
 //! and passes every classical key to the factory it wraps. Without the mechanisms the profile is
 //! refused (`pq-key-unavailable`); there is no software key in its place.
@@ -13,7 +13,7 @@ use suiss_crypto::signer::{SignError, Signer};
 
 use crate::ports::{Generated, KeyFactory};
 
-/// The label prefix of the realm ML-DSA keys in the token.
+/// The label prefix of the environment ML-DSA keys in the token.
 pub const LABEL_PREFIX: &str = "access/identity/pq/";
 
 /// ML-DSA keys in the token, every other key through `inner`.

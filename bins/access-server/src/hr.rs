@@ -10,14 +10,14 @@ use access_identity_account::app::vault::Vault;
 use access_identity_admin::app::hr::{HrJob, INTERVAL};
 use access_internal_api::claims::ClaimIngest;
 use access_store::Pool;
-use access_store::identity::RealmId;
+use access_store::identity::EnvironmentId;
 
-/// The realm vaults of this process.
-pub(crate) struct Vaults(pub(crate) crate::login::RealmKeks);
+/// The environment vaults of this process.
+pub(crate) struct Vaults(pub(crate) crate::login::EnvironmentKeks);
 
 impl access_identity_admin::app::hr::Vaults for Vaults {
-    fn vault(&self, realm: RealmId) -> Option<Vault> {
-        self.0.vault(realm)
+    fn vault(&self, environment: EnvironmentId) -> Option<Vault> {
+        self.0.vault(environment)
     }
 }
 

@@ -1,6 +1,6 @@
 //! The dynamic client registration profile (RFC 7591, OP-154 m.3 (j), §11.4.5 #31-35, AS-A1):
 //! kept only for backward compatibility, off by default. `/register` opens only with an initial
-//! access token the realm's decided policy names (a gate, never authority); a registration is
+//! access token the environment's decided policy names (a gate, never authority); a registration is
 //! checked as a CIMD document is, with no secret, no fetched URL, no wildcard redirect and an
 //! explicit error for an `application_type` its redirects do not fit.
 
@@ -11,9 +11,9 @@ use crate::domain::cimd::{self, ApplicationType, CimdError, Document, is_loopbac
 
 /// Registrations one IP prefix may make in an hour (OP-154 m.3 (j)).
 pub const PER_PREFIX_PER_HOUR: u64 = 10;
-/// Registrations a realm takes in a day.
-pub const PER_REALM_PER_DAY: u64 = 100;
-/// Live DCR clients a realm keeps.
+/// Registrations an environment takes in a day.
+pub const PER_ENVIRONMENT_PER_DAY: u64 = 100;
+/// Live DCR clients an environment keeps.
 pub const MAX_LIVE: u64 = 1000;
 /// A DCR client unused this long retires (soft).
 pub const UNUSED_MS: u64 = 30 * 86_400_000;
@@ -24,7 +24,7 @@ pub const MAX_DOMAINS: usize = 64;
 /// The prefix of every DCR `client_id`.
 pub const CLIENT_PREFIX: &str = "dcr_";
 
-/// The realm's DCR policy as decided (`idp.client.dcr_policy`).
+/// The environment's DCR policy as decided (`idp.client.dcr_policy`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DcrPolicy {
     /// Whether `/register` is open.

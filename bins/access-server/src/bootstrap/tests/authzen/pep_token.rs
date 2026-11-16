@@ -1,5 +1,5 @@
 //! PEP transport identity by a DPoP-bound `client_credentials` token next to mTLS (OP-155
-//! m.3 (q), §9.5.1 m.10, Ek B 5074): a confidential client of the realm asks the realm's real
+//! m.3 (q), §9.5.1 m.10, Ek B 5074): a confidential client of the environment asks the environment's real
 //! token endpoint for a PEP token for the ADP, and the real ADP router hears the PEP its DPoP
 //! key names; a PEP with neither a certificate nor a token is refused.
 
@@ -19,7 +19,7 @@ use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPai
 
 use super::*;
 
-const REALM_ISSUER: &str = "https://access.test/realms/authzen";
+const ENVIRONMENT_ISSUER: &str = "https://access.test/env/authzen";
 
 struct Csprng;
 
@@ -70,20 +70,20 @@ fn now_ms() -> u64 {
     .unwrap()
 }
 
-/// The realm's confidential client: its id and assertion key.
+/// The environment's confidential client: its id and assertion key.
 struct PepClient {
     id: String,
     key: EcdsaKeyPair,
 }
 
 impl PepClient {
-    /// A fresh `private_key_jwt` assertion for the realm's token endpoint.
+    /// A fresh `private_key_jwt` assertion for the environment's token endpoint.
     fn assertion(&self) -> String {
         let now_s = now_ms() / 1000;
         let jti = access_crypto::random::bytes::<16>().unwrap();
         let header = json!({ "alg": "ES256", "typ": "JWT" });
         let claims = json!({
-            "iss": self.id, "sub": self.id, "aud": REALM_ISSUER, "iat": now_s, "exp": now_s + 60,
+            "iss": self.id, "sub": self.id, "aud": ENVIRONMENT_ISSUER, "iat": now_s, "exp": now_s + 60,
             "jti": b64url_encode(&jti),
         });
         let input = format!(
@@ -99,7 +99,7 @@ impl PepClient {
     }
 }
 
-/// The realm with a confidential client, its token endpoint and the public ADP router that
+/// The environment with a confidential client, its token endpoint and the public ADP router that
 /// hears PEP tokens, both over one OAuth service as the server wires them.
 struct Tokens {
     p: Pdp,
@@ -116,7 +116,7 @@ async fn tokens(label: &str) -> Tokens {
         app: &p.w.db.app,
         router: &p.w.db.router,
         plane: &p.w.plane,
-        realm_keys: &p.w.keyring,
+        environment_keys: &p.w.keyring,
         hsm: &p.w.keys,
         base: &p.w.base,
         declared: &declared,
@@ -132,7 +132,7 @@ async fn tokens(label: &str) -> Tokens {
     };
     b.change(
         &admin,
-        (route.tenant, route.realm),
+        (route.tenant, route.environment),
         p.domain,
         &p.root,
         Change::ClientRegister(Client {
@@ -289,7 +289,7 @@ impl Tokens {
         with_proof(
             &self.oauth,
             key,
-            &format!("{REALM_ISSUER}/token"),
+            &format!("{ENVIRONMENT_ISSUER}/token"),
             None,
             |p| {
                 let assertion = self.client.assertion();
@@ -303,7 +303,7 @@ impl Tokens {
                     ("client_id", &self.client.id),
                     ("resource", resource),
                 ]);
-                HttpRequest::post("/realms/authzen/token")
+                HttpRequest::post("/env/authzen/token")
                     .header(header::HOST, "access.test")
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .header("dpop", p)

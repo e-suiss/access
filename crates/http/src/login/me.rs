@@ -1,5 +1,5 @@
 //! The Frontend API for products on axum (OP-149 m.6, m.8, m.9): `sdks/openapi/frontend.json`.
-//! Realm selection, cookies and replies are the login surface's.
+//! Environment selection, cookies and replies are the login surface's.
 
 #![allow(
     clippy::result_large_err,
@@ -34,7 +34,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use serde::de::DeserializeOwned;
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 struct Me<D, K, KI, C, M, A, I, P, Q> {
@@ -50,7 +50,7 @@ fn body<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Response> {
         .map_err(|_| problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request"))
 }
 
-/// The product-facing routes, at the realm's host and under `/realms/{slug}`.
+/// The product-facing routes, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M, A, I, P, Q>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -77,7 +77,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}{CHALLENGES_PATH}"),
@@ -180,7 +180,7 @@ macro_rules! handler {
             P: Approvals,
             Q: ApprovalClaims,
         {
-            let $entry = match realm(&$s.login, &$p, &$uri, &$headers).await {
+            let $entry = match environment(&$s.login, &$p, &$uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };

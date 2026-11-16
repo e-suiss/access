@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hostname FROM access.environment_domains\n          WHERE tenant_id = $1 AND environment_id = $2 AND status = 'verified'\n            AND reverify_by > clock_timestamp()\n          ORDER BY hostname",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environment_domains",
+            "name": "hostname"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f3f33524dd614b7dd0c034570314e80f5ffba354b8949e740528a2308a1627cc"
+}

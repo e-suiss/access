@@ -1,6 +1,6 @@
 //! The Kerberos gateway's edge call (§10.6.4, IDP-17, OP-155 m.3 (o)): `authenticate` reports the
 //! facts of one SPNEGO acceptance (who, for which SPN, under which key version and enctype) and
-//! access-server holds them to the realm's keytab policy and names the subject. The ticket
+//! access-server holds them to the environment's keytab policy and names the subject. The ticket
 //! itself never leaves the gateway.
 
 use suiss_crypto::dcbor::Value;
@@ -22,8 +22,8 @@ pub const ENCTYPES: [i32; 2] = [AES256_SHA1, AES256_SHA384];
 /// [`super::Call::Authenticate`] of a Kerberos gateway.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Authenticate {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// The authenticated client principal, `user@REALM`.
     pub principal: String,
     /// The service principal the ticket was issued for, `service/host@REALM`.
@@ -48,7 +48,7 @@ impl Authenticate {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         encode(vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("mechanism", Value::text("kerberos")),
             ("principal", Value::text(&self.principal)),
             ("spn", Value::text(&self.spn)),
@@ -65,7 +65,14 @@ impl Authenticate {
         let v = decode_map(body)?;
         only(
             &v,
-            &["realm", "mechanism", "principal", "spn", "kvno", "etype"],
+            &[
+                "environment",
+                "mechanism",
+                "principal",
+                "spn",
+                "kvno",
+                "etype",
+            ],
         )?;
         if text(&v, "mechanism", 16)? != "kerberos" {
             return Err(WireError::Malformed);
@@ -83,7 +90,7 @@ impl Authenticate {
             _ => return Err(WireError::Malformed),
         };
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             principal: text(&v, "principal", MAX_PRINCIPAL)?,
             spn: text(&v, "spn", MAX_PRINCIPAL)?,
             kvno,
@@ -124,7 +131,7 @@ mod tests {
     #[test]
     fn acceptance_facts_round_trip() {
         let q = Authenticate {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             principal: String::from("ada@CORP.EXAMPLE"),
             spn: String::from("HTTP/access.corp.example@CORP.EXAMPLE"),
             kvno: 3,

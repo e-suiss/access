@@ -1,6 +1,6 @@
-//! Push verification (OP-156 m.3 (d), §10.1.3, §10.2.3): the realm's decided setting, the approver
+//! Push verification (OP-156 m.3 (d), §10.1.3, §10.2.3): the environment's decided setting, the approver
 //! device keys and the push challenges by the SHA-256 of their ids (CR-38). Scoped to the
-//! transaction's realm by row-level security; a key is retired and a challenge ends, nothing is
+//! transaction's environment by row-level security; a key is retired and a challenge ends, nothing is
 //! deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -123,38 +123,38 @@ pub struct PushHistoryRow {
 }
 
 impl TenantTx {
-    /// Whether the realm decided to offer push verification (`idp.realm.push`); off by default.
+    /// Whether the environment decided to offer push verification (`idp.environment.push`); off by default.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn push_enabled(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT enabled FROM access.idp_push_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next push setting under `bound` (`idp.realm.push`, `push_close`).
+    /// Writes the next push setting under `bound` (`idp.environment.push`, `push_close`).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn put_push(&mut self, bound: &Bound, enabled: bool) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_push_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_push_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             enabled,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -169,14 +169,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_device_key(&mut self, k: &NewDeviceKey<'_>) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.identity_device_keys (tenant_id, realm_id, device_id,
+            "INSERT INTO access.identity_device_keys (tenant_id, environment_id, device_id,
                     identity_subject_id, thumbprint, public_key, key_type, algorithm, name)
              VALUES ($1, $2, $3, $4, $5, $6, 'EC-P256', 'ES256', $7)
-             ON CONFLICT (tenant_id, realm_id, thumbprint) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, thumbprint) DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(k.id),
             Uuid::from_bytes(k.subject),
             k.thumbprint.as_slice(),
@@ -197,17 +197,17 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<DeviceKeyRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT device_id, identity_subject_id, thumbprint, public_key, name,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM last_seen) * 1000)::bigint AS last_seen_ms
                  FROM access.identity_device_keys
-                WHERE tenant_id = $1 AND realm_id = $2 AND identity_subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND identity_subject_id = $3
                   AND status = 'active'
                 ORDER BY created_at, device_id"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -235,16 +235,16 @@ impl TenantTx {
         &mut self,
         thumbprint: &[u8; 32],
     ) -> Result<Option<DeviceKeyRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             r#"SELECT device_id, identity_subject_id, thumbprint, public_key, name,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM last_seen) * 1000)::bigint AS last_seen_ms
                  FROM access.identity_device_keys
-                WHERE tenant_id = $1 AND realm_id = $2 AND thumbprint = $3 AND status = 'active'
+                WHERE tenant_id = $1 AND environment_id = $2 AND thumbprint = $3 AND status = 'active'
                 FOR UPDATE"#,
             tenant,
-            realm,
+            environment,
             thumbprint.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -272,17 +272,17 @@ impl TenantTx {
         subject: [u8; 16],
         id: [u8; 16],
     ) -> Result<Option<DeviceKeyRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             r#"UPDATE access.identity_device_keys
                   SET status = 'retired', retired_at = clock_timestamp()
-                WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3
                   AND identity_subject_id = $4 AND status = 'active'
             RETURNING device_id, identity_subject_id, thumbprint, public_key, name,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM last_seen) * 1000)::bigint AS last_seen_ms"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             Uuid::from_bytes(subject),
         )
@@ -307,12 +307,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn device_key_seen(&mut self, id: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.identity_device_keys SET last_seen = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .execute(&mut *self.tx)
@@ -328,13 +328,13 @@ impl TenantTx {
         &mut self,
         c: &NewPushChallenge<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.push_challenges (tenant_id, realm_id, challenge_hash, subject_id,
+            "INSERT INTO access.push_challenges (tenant_id, environment_id, challenge_hash, subject_id,
                     flow_hash, number, origin_device, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             c.hash.as_slice(),
             Uuid::from_bytes(c.subject),
             c.flow_hash.as_slice(),
@@ -356,15 +356,15 @@ impl TenantTx {
         &mut self,
         hash: &[u8; 32],
     ) -> Result<Option<PushChallengeRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT challenge_id, subject_id, flow_hash, number, origin_device, created_ms,
                     expires_ms, decision, decided_ms, device_id, used_ms
                FROM access.push_challenges
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_hash = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_hash = $3
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -398,12 +398,12 @@ impl TenantTx {
         at_ms: u64,
         device: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.push_challenges SET decision = $4, decided_ms = $5, device_id = $6
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3 AND decision IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3 AND decision IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             decision,
             i64_of(at_ms)?,
@@ -425,13 +425,13 @@ impl TenantTx {
         id: [u8; 16],
         at_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.push_challenges SET used_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3
                 AND decision = 'approve' AND used_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             i64_of(at_ms)?,
         )
@@ -450,13 +450,13 @@ impl TenantTx {
         subject: [u8; 16],
         since_ms: u64,
     ) -> Result<Vec<PushHistoryRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT created_ms, expires_ms, decision, decided_ms FROM access.push_challenges
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND created_ms >= $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND created_ms >= $4
               ORDER BY created_ms DESC, challenge_id DESC LIMIT 64",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             i64_of(since_ms)?,
         )

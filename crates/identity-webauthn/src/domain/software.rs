@@ -1,7 +1,7 @@
 //! A software authenticator for local deployments (OP-149 m.26 (e), m.29 (b)): the registration
 //! and assertion responses of a passkey whose Ed25519 key lives elsewhere, so a bootstrap can
 //! register the test user's passkey through the hosted registration path and a headless client
-//! can answer the same realm's assertion ceremonies. It is deterministic: user present and
+//! can answer the same environment's assertion ceremonies. It is deterministic: user present and
 //! user verified, device-bound (BE = 0), a fixed AAGUID, no counter, `none` attestation, and a
 //! credential id that is the key's thumbprint. Nothing here weakens a verifier (TI-9): the
 //! responses are checked by the same ceremony code as any authenticator's.

@@ -7,7 +7,7 @@
 //!   ever sent, so the connector cannot perform `DCSync`. Passwords stay with delegation or
 //!   SPNEGO.
 //! - Memberships follow the same rules as SCIM: a group has exactly one membership issuer, and a
-//!   connector's memberships count only where the realm accepted it as that group's issuer
+//!   connector's memberships count only where the environment accepted it as that group's issuer
 //!   (`subject-selection` Acceptance). Without one, nothing is selected.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -89,7 +89,7 @@ impl SourceEntry {
     }
 }
 
-/// What a pulled entry means for the realm.
+/// What a pulled entry means for the environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
     /// A person: create or update the account linked to `guid`.
@@ -178,10 +178,10 @@ pub fn watermark(before: u64, changes: &[Change]) -> u64 {
     changes.iter().map(Change::usn).fold(before, u64::max)
 }
 
-/// How the realm decided a group's memberships (TN-117, OP-155 m.3 (g), (n)).
+/// How the environment decided a group's memberships (TN-117, OP-155 m.3 (g), (n)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupIssuer {
-    /// The realm group's single membership issuer, e.g. `upstream:corp-ad`.
+    /// The environment group's single membership issuer, e.g. `upstream:corp-ad`.
     pub issuer: String,
     /// Whether a `subject-selection` Acceptance names that issuer for the group.
     pub accepted: bool,
@@ -194,7 +194,7 @@ pub struct GroupIssuer {
 pub fn memberships(
     connector: &str,
     changes: &[Change],
-    realm: &BTreeMap<String, GroupIssuer>,
+    environment: &BTreeMap<String, GroupIssuer>,
 ) -> Vec<(String, String)> {
     let mine = format!("upstream:{connector}");
     changes
@@ -204,7 +204,7 @@ pub fn memberships(
             Change::Person { .. } => None,
         })
         .filter(|(name, _)| {
-            realm
+            environment
                 .get(name.as_str())
                 .is_some_and(|g| g.issuer == mine && g.accepted)
         })
@@ -278,24 +278,24 @@ mod tests {
     #[test]
     fn ad_sync_membership_without_an_acceptance_selects_nothing() {
         let changes = sample();
-        let mut realm = BTreeMap::new();
-        realm.insert(
+        let mut environment = BTreeMap::new();
+        environment.insert(
             String::from("staff"),
             GroupIssuer {
                 issuer: String::from("upstream:corp-ad"),
                 accepted: false,
             },
         );
-        assert_eq!(memberships("corp-ad", &changes, &realm), Vec::new());
-        realm.insert(
+        assert_eq!(memberships("corp-ad", &changes, &environment), Vec::new());
+        environment.insert(
             String::from("staff"),
             GroupIssuer {
                 issuer: String::from("admin"),
                 accepted: true,
             },
         );
-        assert_eq!(memberships("corp-ad", &changes, &realm), Vec::new());
-        realm.insert(
+        assert_eq!(memberships("corp-ad", &changes, &environment), Vec::new());
+        environment.insert(
             String::from("staff"),
             GroupIssuer {
                 issuer: String::from("upstream:corp-ad"),
@@ -303,12 +303,12 @@ mod tests {
             },
         );
         assert_eq!(
-            memberships("corp-ad", &changes, &realm),
+            memberships("corp-ad", &changes, &environment),
             vec![(
                 String::from("staff"),
                 String::from("cn=Ada,ou=people,dc=corp")
             )]
         );
-        assert_eq!(memberships("other-ad", &changes, &realm), Vec::new());
+        assert_eq!(memberships("other-ad", &changes, &environment), Vec::new());
     }
 }

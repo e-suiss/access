@@ -1,5 +1,5 @@
 //! Another organization (§11.19, §9.15A.3, §11.11.6): the other organization's Party acts
-//! through its own Instance; its own `IdP`'s identity assertion, pinned by the realm's
+//! through its own Instance; its own `IdP`'s identity assertion, pinned by the environment's
 //! `actor-binding` Acceptance, carries identity only; authority in this domain comes only from
 //! this domain's root, as a local extensional Grant to that Party (cross-domain delegation);
 //! and when that Grant is revoked the same assertion gets nothing.
@@ -7,13 +7,13 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use super::super::exchange::{IDP, ISSUER, Realm, UPSTREAM, act_chain, claims_of, idp_jwt};
+use super::super::exchange::{Environment, IDP, ISSUER, UPSTREAM, act_chain, claims_of, idp_jwt};
 use super::*;
 
 // §11.19, §9.15A.3, §11.11.6, EI-6, E26, AG-29, MD-18, PI-13, OP-154 m.3 (ff), Ek B 4455, 4457
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn another_organizations_identity_is_only_identity_and_authority_is_this_domains_grant() {
-    let r = Realm::open("walk-cross-org").await;
+    let r = Environment::open("walk-cross-org").await;
     let now_s = now_ms() / 1000;
     let jag = |jti: &str| {
         idp_jwt(

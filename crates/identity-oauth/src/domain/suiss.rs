@@ -1,4 +1,4 @@
-//! The Suiss discovery document of a realm (OP-149 m.3): beside the standard OIDC documents
+//! The Suiss discovery document of an environment (OP-149 m.3): beside the standard OIDC documents
 //! (§9.15.1), it tells a Suiss product everything but the issuer it already holds. Only what is
 //! served is declared, as for the AS metadata (§10.4.6).
 
@@ -35,9 +35,9 @@ pub enum Endpoint {
     Eligibility,
     /// `GET /access/v1/tenants/{tenant}/snapshot`.
     TenantSnapshot,
-    /// `POST /v1/me/auth-context` on the realm (OP-149 m.8).
+    /// `POST /v1/me/auth-context` on the environment (OP-149 m.8).
     AuthContext,
-    /// `POST /v1/me/instances` on the realm (OP-149 m.6).
+    /// `POST /v1/me/instances` on the environment (OP-149 m.6).
     Instances,
     /// `POST /access/v1/tenants/{tenant}/pairing/challenges` (OP-149 m.4, m.16 (a)).
     PairingChallenges,
@@ -55,11 +55,11 @@ pub enum Endpoint {
     ClaimIngest,
     /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)).
     StatusList,
-    /// `GET /v1/approve` on the realm: the Approval Surface (OP-150 m.14 (d), OP-149 m.29 (a)).
+    /// `GET /v1/approve` on the environment: the Approval Surface (OP-150 m.14 (d), OP-149 m.29 (a)).
     Approval,
-    /// `POST /v1/approve/requests` on the realm (OP-150 m.14 (d), OP-149 m.29 (a)).
+    /// `POST /v1/approve/requests` on the environment (OP-150 m.14 (d), OP-149 m.29 (a)).
     ApprovalRequests,
-    /// `POST /par` on the realm (RFC 9126, OP-149 m.21 (c), m.29 (a)).
+    /// `POST /par` on the environment (RFC 9126, OP-149 m.21 (c), m.29 (a)).
     PushedAuthorizationRequest,
     /// `GET /access/v1/relay-status`: the courier's delivery lag (OP-156 m.3 (c)).
     RelayStatus,
@@ -94,7 +94,7 @@ impl Endpoint {
         }
     }
 
-    /// The path, under the API base or, for a realm endpoint, under the realm issuer.
+    /// The path, under the API base or, for an environment endpoint, under the environment issuer.
     #[must_use]
     pub const fn path(self) -> &'static str {
         match self {
@@ -122,9 +122,9 @@ impl Endpoint {
         }
     }
 
-    /// Whether the endpoint is the realm's own (Frontend API), not the deployment's.
+    /// Whether the endpoint is the environment's own (Frontend API), not the deployment's.
     #[must_use]
-    pub const fn on_realm(self) -> bool {
+    pub const fn on_environment(self) -> bool {
         matches!(
             self,
             Self::AuthContext
@@ -162,14 +162,14 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::RelayStatus,
 ];
 
-/// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).
+/// Well-known suffix of the environment's SSF transmitter metadata (SSF 1.0 §7.1).
 pub const SSF_SUFFIX: &str = "ssf-configuration";
 
 /// The delivery method of the Suiss webhook profile (OP-149 m.4, m.7): `CloudEvents` 1.0
 /// structured JSON signed per Standard Webhooks.
 pub const WEBHOOK_PROFILE: &str = "urn:suiss:access:delivery:webhook";
 
-/// `suiss_event_subscriptions` of `issuer` (OP-149 m.3, m.7): the realm's SSF transmitter
+/// `suiss_event_subscriptions` of `issuer` (OP-149 m.3, m.7): the environment's SSF transmitter
 /// metadata URL, the well-known path inserted before the issuer's path, and the webhook
 /// profile a stream names as its delivery method.
 #[must_use]
@@ -206,7 +206,7 @@ pub fn endpoints(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> BTreeMap
     served
         .iter()
         .map(|e| {
-            let url = if e.on_realm() {
+            let url = if e.on_environment() {
                 issuer.endpoint(e.path())
             } else {
                 format!("{}{}", s.api_base, e.path())
@@ -216,14 +216,14 @@ pub fn endpoints(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> BTreeMap
         .collect()
 }
 
-/// The document of the realm `issuer`.
+/// The document of the environment `issuer`.
 #[must_use]
 pub fn document(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> String {
     document_with(issuer, s, served, None)
 }
 
-/// The document of the realm `issuer`, naming the coordinator's Needs Attention endpoint when
-/// the realm named one (`suiss_coordinator`, OP-156 m.3 (t)).
+/// The document of the environment `issuer`, naming the coordinator's Needs Attention endpoint when
+/// the environment named one (`suiss_coordinator`, OP-156 m.3 (t)).
 #[must_use]
 pub fn document_with(
     issuer: &Issuer,

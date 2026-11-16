@@ -30,7 +30,7 @@ use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::{
     Attempt, LoginGate, LoginServices, clear_account, password_login,
 };
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::login::{PasswordLogin, REJECTED};
 use access_identity_account::domain::password::{Argon2Params, PasswordRejected};
@@ -38,9 +38,9 @@ use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::domain::throttle::ThrottlePolicy;
 use access_identity_account::ports::{AccountDb, AccountTx, BreachRanges, Clock, RangeUnavailable};
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 struct TestClock(AtomicU64);
@@ -78,7 +78,7 @@ impl BreachRanges for Corpus {
 struct Env {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     kek: SoftKek,
     vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
@@ -89,10 +89,10 @@ struct Env {
 }
 
 impl Env {
-    fn realm(&self) -> Realm<'_> {
-        Realm {
+    fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.realm,
+            environment: self.environment,
             kek: &self.kek,
             ids: &self.ids,
         }
@@ -103,7 +103,7 @@ impl Env {
     }
 
     async fn audit_types(&self) -> Vec<String> {
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let rows = tx.list_audit(10_000).await.unwrap();
@@ -112,7 +112,7 @@ impl Env {
     }
 
     async fn status(&self, subject: [u8; 16]) -> (String, i64) {
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let row = tx.subject(subject, false).await.unwrap().unwrap();
@@ -129,7 +129,7 @@ impl Env {
         };
         password_login(
             &self.pg(),
-            &self.realm(),
+            &self.environment(),
             &services,
             &Attempt {
                 identifier: who,
@@ -153,18 +153,26 @@ impl Env {
             ranges: &self.ranges,
             entropy: &SystemEntropy,
         };
-        set_password(&self.pg(), &self.realm(), &services, subject, pw, &ADMIN).await
+        set_password(
+            &self.pg(),
+            &self.environment(),
+            &services,
+            subject,
+            pw,
+            &ADMIN,
+        )
+        .await
     }
 
     /// An active account named `who` with password `pw`.
     async fn active(&self, who: &str, pw: &str) -> [u8; 16] {
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
-        let s = create(&self.pg(), &self.realm(), &[id], &ADMIN)
+        let s = create(&self.pg(), &self.environment(), &[id], &ADMIN)
             .await
             .unwrap();
         self.set_pw(&self.hasher, s, pw).await.unwrap();
         for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-            change_status(&self.pg(), &self.realm(), s, to, &ADMIN)
+            change_status(&self.pg(), &self.environment(), s, to, &ADMIN)
                 .await
                 .unwrap();
         }
@@ -201,17 +209,17 @@ async fn env(seed: u8, slug: &str) -> Env {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut tx, &d, slug, "pool-default")
+    let environment = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
     Env {
         db,
         tenant,
-        realm,
-        kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        environment,
+        kek: SoftKek::new("environment-kek:1", [seed; 32]),
         vault: access_identity_account::app::vault::Vault::in_memory(
-            std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+            std::sync::Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
             [seed; 32],
         ),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
@@ -261,10 +269,14 @@ async fn an_account_signs_in_with_its_password() {
 async fn deactivation_is_one_transaction_and_idempotent() {
     let e = env(2, "ia-b").await;
     let s = e.active("bob@example.com", "correct horse battery").await;
-    let first = deactivate(&e.pg(), &e.realm(), s, &ADMIN).await.unwrap();
+    let first = deactivate(&e.pg(), &e.environment(), s, &ADMIN)
+        .await
+        .unwrap();
     assert_eq!(first, Deactivated::Done { session_epoch: 1 });
     assert_eq!(e.status(s).await, ("deactivated".to_owned(), 1));
-    let again = deactivate(&e.pg(), &e.realm(), s, &ADMIN).await.unwrap();
+    let again = deactivate(&e.pg(), &e.environment(), s, &ADMIN)
+        .await
+        .unwrap();
     assert_eq!(again, Deactivated::AlreadyDone);
     assert_eq!(e.status(s).await, ("deactivated".to_owned(), 1));
     let n = e
@@ -286,11 +298,19 @@ async fn missing_wrong_suspended_and_deactivated_answer_alike() {
     let e = env(3, "ia-c").await;
     e.active("carol@example.com", "correct horse battery").await;
     let sus = e.active("sus@example.com", "correct horse battery").await;
-    change_status(&e.pg(), &e.realm(), sus, AccountStatus::Suspended, &ADMIN)
+    change_status(
+        &e.pg(),
+        &e.environment(),
+        sus,
+        AccountStatus::Suspended,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    let off = e.active("off@example.com", "correct horse battery").await;
+    deactivate(&e.pg(), &e.environment(), off, &ADMIN)
         .await
         .unwrap();
-    let off = e.active("off@example.com", "correct horse battery").await;
-    deactivate(&e.pg(), &e.realm(), off, &ADMIN).await.unwrap();
 
     let cases = [
         ("nobody@example.com", "correct horse battery"),
@@ -342,10 +362,10 @@ async fn a_hundred_failures_lock_the_account() {
         .await;
     assert_eq!(r.problem(), Some(REJECTED));
 
-    clear_account(&e.pg(), &e.clock, &e.realm(), "dave@example.com", 30)
+    clear_account(&e.pg(), &e.clock, &e.environment(), "dave@example.com", 30)
         .await
         .unwrap();
-    change_status(&e.pg(), &e.realm(), s, AccountStatus::Active, &ADMIN)
+    change_status(&e.pg(), &e.environment(), s, AccountStatus::Active, &ADMIN)
         .await
         .unwrap();
     e.clock.advance(31_000);
@@ -369,10 +389,12 @@ async fn weaker_hashes_are_upgraded_on_sign_in() {
         None,
     ));
     let id = Identifier::new(IdentifierKind::Username, "erin").unwrap();
-    let s = create(&e.pg(), &e.realm(), &[id], &ADMIN).await.unwrap();
+    let s = create(&e.pg(), &e.environment(), &[id], &ADMIN)
+        .await
+        .unwrap();
     e.set_pw(&weak, s, "correct horse battery").await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&e.pg(), &e.realm(), s, to, &ADMIN)
+        change_status(&e.pg(), &e.environment(), s, to, &ADMIN)
             .await
             .unwrap();
     }
@@ -402,7 +424,9 @@ async fn password_hashes_are_always_peppered() {
     let e = env(9, "ia-p").await;
     let s = e.active("pia@example.com", "correct horse battery").await;
     let stored = async || {
-        let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+        let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+            .await
+            .unwrap();
         let row = tx.subject(s, false).await.unwrap().unwrap();
         let creds = tx.credentials(s, PASSWORD).await.unwrap();
         tx.commit().await.unwrap();
@@ -410,10 +434,10 @@ async fn password_hashes_are_always_peppered() {
     };
     let (row, cred) = stored().await;
     assert_eq!(cred.sealed.pepper_version, Some(1));
-    let realm = e.realm();
-    let dek = subject_key(&realm, &row).unwrap();
+    let environment = e.environment();
+    let dek = subject_key(&environment, &row).unwrap();
     assert!(
-        open(&realm, &dek, &s, PASSWORD, &cred.sealed)
+        open(&environment, &dek, &s, PASSWORD, &cred.sealed)
             .map_or(true, |p| !p.expose().starts_with("$argon2"))
     );
     let phc = e
@@ -425,9 +449,11 @@ async fn password_hashes_are_always_peppered() {
         )
         .await
         .unwrap();
-    let legacy = seal(&realm, &dek, &s, PASSWORD, phc.expose().as_bytes()).unwrap();
+    let legacy = seal(&environment, &dek, &s, PASSWORD, phc.expose().as_bytes()).unwrap();
     assert_eq!(legacy.pepper_version, None);
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(
         tx.reseal_credential(cred.id, &cred.algorithm, &legacy)
             .await
@@ -463,7 +489,9 @@ async fn password_hashes_are_always_peppered() {
 async fn breached_or_unchecked_passwords_are_refused() {
     let e = env(6, "ia-f").await;
     let id = Identifier::new(IdentifierKind::Username, "frank").unwrap();
-    let s = create(&e.pg(), &e.realm(), &[id], &ADMIN).await.unwrap();
+    let s = create(&e.pg(), &e.environment(), &[id], &ADMIN)
+        .await
+        .unwrap();
     let err = e.set_pw(&e.hasher, s, "P@ssw0rd").await.unwrap_err();
     assert!(
         matches!(err, AccountError::Password(PasswordRejected::Breached)),
@@ -481,7 +509,7 @@ async fn breached_or_unchecked_passwords_are_refused() {
             ranges: &mirror,
             entropy: &SystemEntropy,
         };
-        let err = set_password(&e.pg(), &e.realm(), &services, s, pw, &ADMIN)
+        let err = set_password(&e.pg(), &e.environment(), &services, s, pw, &ADMIN)
             .await
             .unwrap_err();
         if breached {
@@ -502,7 +530,7 @@ async fn breached_or_unchecked_passwords_are_refused() {
     };
     let err = set_password(
         &e.pg(),
-        &e.realm(),
+        &e.environment(),
         &services,
         s,
         "correct horse battery",
@@ -518,11 +546,13 @@ async fn breached_or_unchecked_passwords_are_refused() {
 async fn the_last_method_stays() {
     let e = env(7, "ia-g").await;
     let s = e.active("gina@example.com", "correct horse battery").await;
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let creds = tx.credentials(s, PASSWORD).await.unwrap();
     tx.commit().await.unwrap();
     assert_eq!(creds.len(), 1);
-    let err = remove_credential(&e.pg(), &e.realm(), s, creds[0].id, &ADMIN)
+    let err = remove_credential(&e.pg(), &e.environment(), s, creds[0].id, &ADMIN)
         .await
         .unwrap_err();
     assert!(matches!(err, AccountError::LastMethod));
@@ -530,7 +560,9 @@ async fn the_last_method_stays() {
         .set_pw(&e.hasher, s, "another horse battery")
         .await
         .unwrap();
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let creds = tx.credentials(s, PASSWORD).await.unwrap();
     tx.commit().await.unwrap();
     assert_eq!(creds.iter().map(|c| c.id).collect::<Vec<_>>(), [replaced]);
@@ -541,14 +573,16 @@ async fn the_last_method_stays() {
 async fn a_taken_identifier_creates_nothing() {
     let e = env(8, "ia-h").await;
     let a = Identifier::new(IdentifierKind::Email, "Hank@Example.com").unwrap();
-    create(&e.pg(), &e.realm(), &[a], &ADMIN).await.unwrap();
+    create(&e.pg(), &e.environment(), &[a], &ADMIN)
+        .await
+        .unwrap();
     let b = Identifier::new(IdentifierKind::Username, "hank2").unwrap();
     let c = Identifier::new(IdentifierKind::Email, "hank@example.COM").unwrap();
-    let err = create(&e.pg(), &e.realm(), &[b, c], &ADMIN)
+    let err = create(&e.pg(), &e.environment(), &[b, c], &ADMIN)
         .await
         .unwrap_err();
     assert!(matches!(err, AccountError::IdentifierTaken));
-    let mut tx = e.pg().begin(e.tenant, e.realm).await.unwrap();
+    let mut tx = e.pg().begin(e.tenant, e.environment).await.unwrap();
     assert!(tx.subject_by_identifier("hank2").await.unwrap().is_none());
     tx.commit().await.unwrap();
 }
@@ -585,11 +619,19 @@ async fn no_dummy_argon2_for_absent_or_inactive_accounts() {
     let e = env(4, "ia-d").await;
     e.active("dora@example.com", "correct horse battery").await;
     let sus = e.active("sus4@example.com", "correct horse battery").await;
-    change_status(&e.pg(), &e.realm(), sus, AccountStatus::Suspended, &ADMIN)
+    change_status(
+        &e.pg(),
+        &e.environment(),
+        sus,
+        AccountStatus::Suspended,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    let off = e.active("off4@example.com", "correct horse battery").await;
+    deactivate(&e.pg(), &e.environment(), off, &ADMIN)
         .await
         .unwrap();
-    let off = e.active("off4@example.com", "correct horse battery").await;
-    deactivate(&e.pg(), &e.realm(), off, &ADMIN).await.unwrap();
     let hasher = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 4, None));
     for (i, who) in ["nobody@example.com", "sus4@example.com", "off4@example.com"]
         .iter()
@@ -613,8 +655,10 @@ async fn shredded_keys_leave_the_rows_and_the_blind_index() {
     use access_identity_account::app::vault;
     let e = env(30, "ia-vault").await;
     let id = Identifier::new(IdentifierKind::Email, "Vera@Example.com").unwrap();
-    let s = create(&e.pg(), &e.realm(), &[id], &ADMIN).await.unwrap();
-    let mut tx = e.pg().begin(e.tenant, e.realm).await.unwrap();
+    let s = create(&e.pg(), &e.environment(), &[id], &ADMIN)
+        .await
+        .unwrap();
+    let mut tx = e.pg().begin(e.tenant, e.environment).await.unwrap();
     vault::set_profile(&mut tx.0, &e.vault, s, "name", "Vera Doe")
         .await
         .unwrap();
@@ -663,7 +707,7 @@ async fn shredded_keys_leave_the_rows_and_the_blind_index() {
     tx.commit().await.unwrap();
     let again = Identifier::new(IdentifierKind::Email, "vera@example.com").unwrap();
     assert!(matches!(
-        create(&e.pg(), &e.realm(), &[again], &ADMIN).await,
+        create(&e.pg(), &e.environment(), &[again], &ADMIN).await,
         Err(AccountError::IdentifierTaken)
     ));
 }
@@ -675,10 +719,10 @@ async fn no_identifier_is_touched_without_the_vault() {
     let id = Identifier::new(IdentifierKind::Email, "nv@example.com").unwrap();
     let bare = PgAccounts::new(e.db.app.clone());
     assert!(matches!(
-        create(&bare, &e.realm(), &[id], &ADMIN).await,
+        create(&bare, &e.environment(), &[id], &ADMIN).await,
         Err(AccountError::Vault)
     ));
-    let mut tx = bare.begin(e.tenant, e.realm).await.unwrap();
+    let mut tx = bare.begin(e.tenant, e.environment).await.unwrap();
     assert!(matches!(
         tx.subject_by_identifier("nv@example.com").await,
         Err(AccountError::Vault)

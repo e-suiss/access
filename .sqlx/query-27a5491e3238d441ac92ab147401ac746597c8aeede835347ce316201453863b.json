@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.scim_clients (tenant_id, environment_id, name, version, state, secret_sha256,\n                profile, issuer, domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9\n           FROM access.scim_clients WHERE tenant_id = $1 AND environment_id = $2 AND name = $3\n         RETURNING version AS \"version!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "27a5491e3238d441ac92ab147401ac746597c8aeede835347ce316201453863b"
+}

@@ -204,7 +204,7 @@ pub struct Session<'a> {
 }
 
 impl Session<'_> {
-    /// Writes the audit event `name` as the realm's log names it (`edge.<event>.<outcome>`).
+    /// Writes the audit event `name` as the environment's log names it (`edge.<event>.<outcome>`).
     async fn audit(&self, name: &str) {
         let Some((event, outcome)) = name
             .strip_prefix("edge.")
@@ -224,7 +224,7 @@ impl Session<'_> {
     ) -> Result<Authenticated, EdgeError> {
         let (name, secret) = pap.map_or((None, None), |(n, s)| (Some(n), Some(s)));
         let q = Authenticate {
-            realm: String::from(self.core.realm(None)?),
+            environment: String::from(self.core.environment(None)?),
             mechanism,
             client: self.client,
             name,

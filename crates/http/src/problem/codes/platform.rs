@@ -2,7 +2,7 @@
 
 use super::{Code, code};
 
-/// A slug outside the realm slug grammar (TN-16).
+/// A slug outside the environment slug grammar (TN-16).
 pub const INVALID_SLUG: Code = code(
     "invalid-slug",
     400,
@@ -37,10 +37,10 @@ pub const INVALID_TIME_LOCK: Code = code(
     "Bad Request",
     "The CT3 time-lock is outside one hour to thirty days (OP-141 m.34 (d)).",
 );
-/// The slug is taken, now or by a deleted realm.
+/// The slug is taken, now or by a deleted environment.
 pub const SLUG_TAKEN: Code = code(
     "slug-taken",
     409,
     "Conflict",
-    "The slug is taken, now or by a deleted realm; slugs are never reused (TN-16, INV-32).",
+    "The slug is taken, now or by a deleted environment; slugs are never reused (TN-16, INV-32).",
 );

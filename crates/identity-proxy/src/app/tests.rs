@@ -64,7 +64,7 @@ impl Fake {
 }
 
 impl Ports for Fake {
-    type Realm = ();
+    type Environment = ();
 
     async fn registered(
         &self,
@@ -74,7 +74,7 @@ impl Ports for Fake {
         self.up()?;
         Ok(
             (pep == PEP && host == "wiki.example.com").then(|| Registered {
-                realm: (),
+                environment: (),
                 registration: registration(),
                 plain_headers: self.plain.load(Ordering::SeqCst),
             }),

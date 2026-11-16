@@ -15,8 +15,8 @@ use crate::AuditError;
 /// What the event is scoped to below its tenant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Scope {
-    /// A realm of the identity plane.
-    Realm([u8; 16]),
+    /// An environment of the identity plane.
+    Environment([u8; 16]),
     /// An authority domain.
     Domain([u8; 32]),
     /// Nothing known: a rejection before any domain was named.
@@ -24,11 +24,11 @@ pub enum Scope {
 }
 
 impl Scope {
-    /// `realm:<uuid>`, `domain:<base64url>` or `none`.
+    /// `environment:<uuid>`, `domain:<base64url>` or `none`.
     #[must_use]
     pub fn text(&self) -> String {
         match self {
-            Self::Realm(r) => format!("realm:{}", uuid_text(r)),
+            Self::Environment(r) => format!("environment:{}", uuid_text(r)),
             Self::Domain(d) => format!("domain:{}", b64url_encode(d)),
             Self::None => String::from("none"),
         }
@@ -52,7 +52,7 @@ pub struct AuditRecord {
     pub checkpoint_at_ms: Option<u64>,
     /// The tenant, when known.
     pub tenant: Option<[u8; 16]>,
-    /// The realm or domain.
+    /// The environment or domain.
     pub scope: Scope,
     /// Who acted.
     pub actor: String,
@@ -82,7 +82,7 @@ impl AuditRecord {
             recorded_at_ms: at,
             checkpoint_at_ms,
             tenant: Some(row.tenant),
-            scope: Scope::Realm(row.realm),
+            scope: Scope::Environment(row.environment),
             actor: row.actor.clone(),
             target: row.target.clone(),
             reason: None,

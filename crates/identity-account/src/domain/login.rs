@@ -26,14 +26,14 @@ pub fn network(ip: IpAddr) -> Vec<u8> {
 pub fn counter_key(
     kind: KeyKind,
     tenant: &[u8; 16],
-    realm: &[u8; 16],
+    environment: &[u8; 16],
     identifier: Option<&str>,
     network: Option<&[u8]>,
 ) -> [u8; 32] {
     let mut m = KEY_CONTEXT.to_vec();
     m.push(kind.tag());
     m.extend_from_slice(tenant);
-    m.extend_from_slice(realm);
+    m.extend_from_slice(environment);
     for part in [identifier.map(str::as_bytes), network] {
         let part = part.unwrap_or_default();
         m.extend_from_slice(&u32::try_from(part.len()).unwrap_or(u32::MAX).to_be_bytes());

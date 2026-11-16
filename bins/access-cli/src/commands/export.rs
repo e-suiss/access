@@ -1,4 +1,4 @@
-//! `access-cli export`: the realm's configuration as deterministic YAML (TN-123 item 1):
+//! `access-cli export`: the environment's configuration as deterministic YAML (TN-123 item 1):
 //! resources sorted by natural key, keys sorted, server-generated members and retired
 //! resources left out unless `--with-generated`, secrets only as `secret://` references.
 
@@ -28,7 +28,7 @@ pub(crate) struct ExportArgs {
 }
 
 /// The header comment of an exported document.
-pub(crate) const HEADER: &str = "Access realm configuration (access-cli export).\n\
+pub(crate) const HEADER: &str = "Access environment configuration (access-cli export).\n\
 Only the members you keep are managed; removing a member leaves it as it is (TN-123).\n\
 Secrets appear only as secret:// references.";
 
@@ -53,13 +53,13 @@ pub(crate) async fn run(args: ExportArgs) -> Code {
         }
     };
     let client = Client::new(&https, &instance, &target, &System);
-    let live = match runtime(&client, &target.realm).await {
+    let live = match runtime(&client, &target.environment).await {
         Ok(r) => r,
         Err(e) => return failed(&e),
     };
     let doc = match gitops::export(
         api::contract(),
-        &target.realm,
+        &target.environment,
         &live,
         ExportOptions {
             generated: args.with_generated,

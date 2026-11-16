@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_credentials SET last_used_at = now()\n              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cbb9d5e2efa9567f58f6ea7335f49bb914e47dbeda6321353575c263eaeadbce"
+}

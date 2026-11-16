@@ -1,5 +1,5 @@
 //! Agent use cases of the identity plane (OP-154 m.3 (c), (e), (f), (g), AG-19, AG-20, AG-41):
-//! what a committed `idp.agent.*` Exercise writes besides its decision, the realm issuer's
+//! what a committed `idp.agent.*` Exercise writes besides its decision, the environment issuer's
 //! agent Claims, the sponsor rule and the registry read.
 
 use access_crypto::opaque_id::IdKey;
@@ -16,7 +16,7 @@ use access_kernel::json::b64url_encode;
 use access_kernel::meta::ActorKind;
 use access_kernel::model::{EqValue, Id};
 use access_store::agents::{AgentRow, NewAgent, SponsorRow, TemplateRow};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp;
 use serde_json::{Value as Json, json};
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -26,7 +26,7 @@ use super::rest::rfc3339;
 use crate::AdminError;
 use crate::domain::Invalid;
 use crate::domain::agent::{AgentChange, AgentRegister, Sponsor};
-use crate::ports::{AgentRegistration, Decider, Governance, Instances, RealmKeys};
+use crate::ports::{AgentRegistration, Decider, EnvironmentKeys, Governance, Instances};
 
 /// Statuses of an agent.
 pub const ACTIVE: &str = "active";
@@ -35,8 +35,8 @@ pub const SUSPENDED: &str = "suspended";
 /// A retired agent; nothing is deleted (OP-73).
 pub const RETIRED: &str = "retired";
 
-/// The realm issuer's Acceptance of the agent classes for predicate input (OP-154 m.3 (c),
-/// (e)): an agent Grant's `sponsored_by` requirement is met only by the realm issuer's Claim.
+/// The environment issuer's Acceptance of the agent classes for predicate input (OP-154 m.3 (c),
+/// (e)): an agent Grant's `sponsored_by` requirement is met only by the environment issuer's Claim.
 #[must_use]
 pub fn agent_claims(issuer: Id) -> Value {
     acceptance(
@@ -46,7 +46,7 @@ pub fn agent_claims(issuer: Id) -> Value {
     )
 }
 
-/// The realm issuer's Acceptance of `operated_by` for subject selection (OP-154 m.3 (g), C15):
+/// The environment issuer's Acceptance of `operated_by` for subject selection (OP-154 m.3 (g), C15):
 /// an agent Grant's downstream holder class selects the agents of the same operator.
 #[must_use]
 pub fn agent_selection(issuer: Id) -> Value {
@@ -130,9 +130,9 @@ async fn live(t: &mut TenantTx, agent: [u8; 16]) -> Result<AgentRow, AdminError>
         .ok_or_else(|| Invalid::NoAgent.into())
 }
 
-/// A sponsor is a person: a subject of the realm bound to a Party (AG-41).
+/// A sponsor is a person: a subject of the environment bound to a Party (AG-41).
 async fn sponsor_party(t: &mut TenantTx, subject: [u8; 16]) -> Result<[u8; 16], AdminError> {
-    let account = access_store::idp::realm::account(t, subject)
+    let account = access_store::idp::environment::account(t, subject)
         .await?
         .ok_or(Invalid::NoAccount)?;
     if !access_identity_account::domain::status::AccountStatus::parse(&account.status)
@@ -158,7 +158,7 @@ fn event_id() -> Result<[u8; 32], AdminError> {
     access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)
 }
 
-/// Queues the realm issuer's `sponsored_by` Claim of `agent` naming `sponsor_party`, or its
+/// Queues the environment issuer's `sponsored_by` Claim of `agent` naming `sponsor_party`, or its
 /// retraction (OP-154 m.3 (e)): one line per sponsor.
 async fn sponsored_by(
     t: &mut PgTx,
@@ -185,20 +185,20 @@ fn claim_error(e: access_identity_account::AccountError) -> AdminError {
 }
 
 /// What a committed `idp.agent.*` Exercise writes (OP-154 m.3 (c), (e), (g)): the record, the
-/// realm issuer's Claims about the agent, the sponsorship episodes, and the webhooks
+/// environment issuer's Claims about the agent, the sponsorship episodes, and the webhooks
 /// `agent.sponsor_assigned` and `agent.suspended` (SI-21). Nothing is deleted (OP-73).
 ///
 /// # Errors
 /// [`AdminError`].
 pub(crate) async fn committed(
     t: &mut PgTx,
-    realm: RealmId,
+    environment: EnvironmentId,
     a: &AgentChange,
     exercise: &Digest,
     at: u64,
 ) -> Result<(), AdminError> {
     match a {
-        AgentChange::Register(r) => register(t, realm, r, exercise, at).await,
+        AgentChange::Register(r) => register(t, environment, r, exercise, at).await,
         AgentChange::Update(u) => {
             if t.0
                 .update_agent(u.agent, &u.display_name, u.description.as_deref())
@@ -209,11 +209,11 @@ pub(crate) async fn committed(
                 Err(AdminError::Conflict)
             }
         }
-        AgentChange::SponsorAssign(s) => assign(t, realm, *s, exercise, at).await,
+        AgentChange::SponsorAssign(s) => assign(t, environment, *s, exercise, at).await,
         AgentChange::SponsorRemove(s) => {
             leave(
                 t,
-                realm,
+                environment,
                 (s.agent, s.subject),
                 ("remove", Some(exercise)),
                 at,
@@ -242,7 +242,7 @@ pub(crate) async fn committed(
 
 async fn register(
     t: &mut PgTx,
-    realm: RealmId,
+    environment: EnvironmentId,
     r: &AgentRegister,
     exercise: &Digest,
     at: u64,
@@ -276,7 +276,7 @@ async fn register(
     for s in &r.sponsors {
         assign(
             t,
-            realm,
+            environment,
             Sponsor {
                 agent: r.party,
                 subject: *s,
@@ -291,7 +291,7 @@ async fn register(
 
 async fn assign(
     t: &mut PgTx,
-    realm: RealmId,
+    environment: EnvironmentId,
     s: Sponsor,
     exercise: &Digest,
     at: u64,
@@ -303,18 +303,23 @@ async fn assign(
     // AG-41, OP-154 m.3 (e)
     t.0.set_agent_status(s.agent, ACTIVE).await?;
     // SI-21
-    let event =
-        IdentityEvent::agent_sponsor_assigned(event_id()?, realm.as_bytes(), &s.agent, &party, at);
+    let event = IdentityEvent::agent_sponsor_assigned(
+        event_id()?,
+        environment.as_bytes(),
+        &s.agent,
+        &party,
+        at,
+    );
     emit(&mut t.0, &event).await?;
     Ok(())
 }
 
-/// Ends the sponsorship of `agent` by `subject`; when it was the last one, the realm issuer
+/// Ends the sponsorship of `agent` by `subject`; when it was the last one, the environment issuer
 /// withdraws `sponsored_by` and the agent is suspended (OP-154 m.3 (e), AG-41). Suspension needs
 /// no signer and no system key.
 async fn leave(
     t: &mut PgTx,
-    realm: RealmId,
+    environment: EnvironmentId,
     (agent, subject): ([u8; 16], [u8; 16]),
     (by, exercise): (&str, Option<&Digest>),
     at: u64,
@@ -334,7 +339,7 @@ async fn leave(
         && t.0.set_agent_status(agent, SUSPENDED).await?
     {
         // SI-21
-        let event = IdentityEvent::agent_suspended(event_id()?, realm.as_bytes(), &agent, at);
+        let event = IdentityEvent::agent_suspended(event_id()?, environment.as_bytes(), &agent, at);
         emit(&mut t.0, &event).await?;
     }
     Ok(())
@@ -376,12 +381,12 @@ async fn retire(
 /// [`AdminError`].
 pub(crate) async fn sponsor_left(
     t: &mut PgTx,
-    realm: RealmId,
+    environment: EnvironmentId,
     subject: [u8; 16],
     at: u64,
 ) -> Result<(), AdminError> {
     for agent in t.0.sponsored_by(subject).await? {
-        leave(t, realm, (agent, subject), ("account", None), at).await?;
+        leave(t, environment, (agent, subject), ("account", None), at).await?;
     }
     Ok(())
 }
@@ -459,23 +464,25 @@ pub(crate) async fn view(
     Ok(out)
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     /// Records an agent's Party from the `party_register` its operator's client signed with a
     /// one-time key (OP-154 m.3 (c), L0-META-7): `actor_kind = agent`, rooted solely in the
-    /// operator Party, an organization or a person of the realm's domain. The key is dropped
+    /// operator Party, an organization or a person of the environment's domain. The key is dropped
     /// and never an Instance; the agent's Instances are its runtime keys'.
     ///
     /// # Errors
     /// [`AdminError`]; a refusal by the domain is [`AdminError::Refused`].
     pub async fn register_agent(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (party, operator): (Id, Id),
         key: access_kernel::verify::cose::PublicKey,
         register: access_internal_api::instances::SelfSigned,
     ) -> Result<bool, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
-        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+        let g = idp::governance(&mut t)
+            .await?
+            .ok_or(AdminError::NoEnvironment)?;
         t.commit().await?;
         let domain = Digest(*g.domain.as_bytes());
         let kind = self
@@ -508,7 +515,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
     }
 
-    /// An agent is registered only for a live agent Party of the realm's domain whose root the
+    /// An agent is registered only for a live agent Party of the environment's domain whose root the
     /// operator is (OP-154 m.3 (c)).
     pub(crate) async fn agent_registrable(
         &self,
@@ -533,11 +540,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn agent_instances(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         agent: [u8; 16],
     ) -> Result<Option<Vec<Id>>, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
-        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+        let g = idp::governance(&mut t)
+            .await?
+            .ok_or(AdminError::NoEnvironment)?;
         let row = t.agent(agent).await?;
         t.commit().await?;
         if row.is_none() {

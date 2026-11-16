@@ -118,7 +118,7 @@ pub struct MlDsaMechanisms {
 }
 
 impl MlDsaMechanisms {
-    /// Whether the token can hold an ML-DSA binding or realm key: it generates and signs.
+    /// Whether the token can hold an ML-DSA binding or environment key: it generates and signs.
     #[must_use]
     pub const fn available(self) -> bool {
         self.key_pair_gen && self.sign

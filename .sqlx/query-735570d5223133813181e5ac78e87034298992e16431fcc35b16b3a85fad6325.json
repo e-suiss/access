@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_webhooks\n            (tenant_id, environment_id, webhook_id, url, events, signing, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "735570d5223133813181e5ac78e87034298992e16431fcc35b16b3a85fad6325"
+}

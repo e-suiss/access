@@ -258,15 +258,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn relay_undelivered(&mut self, u: &Undelivered<'_>) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let xid = i64::try_from(u.at.xid).map_err(|_| StoreError::Range)?;
         sqlx::query!(
             "INSERT INTO access.relay_undelivered
-                (tenant_id, realm_id, event_id, outbox_xid, outbox_id, kind, reason, relay_status)
+                (tenant_id, environment_id, event_id, outbox_xid, outbox_id, kind, reason, relay_status)
              VALUES ($1, $2, $3, $4::bigint::text::xid8, $5, $6, $7, $8)
-             ON CONFLICT (tenant_id, realm_id, event_id) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, event_id) DO NOTHING",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(u.event_id),
             xid,
             u.at.id,
@@ -279,7 +279,7 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The undeliverable message `event_id` of this realm and its sealed payload.
+    /// The undeliverable message `event_id` of this environment and its sealed payload.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -287,16 +287,16 @@ impl TenantTx {
         &mut self,
         event_id: [u8; 16],
     ) -> Result<Option<Recorded>, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let row = sqlx::query!(
             "SELECT u.kind, u.reason, o.payload AS \"payload?\"
                FROM access.relay_undelivered u
                LEFT JOIN access.identity_outbox o
-                 ON o.tenant_id = u.tenant_id AND o.realm_id = u.realm_id
+                 ON o.tenant_id = u.tenant_id AND o.environment_id = u.environment_id
                 AND o.id = u.outbox_id AND o.xid = u.outbox_xid
-              WHERE u.tenant_id = $1 AND u.realm_id = $2 AND u.event_id = $3",
+              WHERE u.tenant_id = $1 AND u.environment_id = $2 AND u.event_id = $3",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(event_id),
         )
         .fetch_optional(&mut *self.tx)
@@ -313,13 +313,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn relay_resend(&mut self, r: &Resend<'_>) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         sqlx::query!(
             "INSERT INTO access.relay_resends
-                (tenant_id, realm_id, event_id, original_event_id, actor, correlation)
+                (tenant_id, environment_id, event_id, original_event_id, actor, correlation)
              VALUES ($1, $2, $3, $4, $5, $6)",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(r.event_id),
             Uuid::from_bytes(r.original_event_id),
             r.actor,
@@ -330,25 +330,25 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Whether the realm sends immediate security authority notices: on unless the latest
+    /// Whether the environment sends immediate security authority notices: on unless the latest
     /// decided setting closed them (OP-156 m.3 (c)).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn security_notices_enabled(&mut self) -> Result<bool, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         Ok(sqlx::query_scalar!(
             "SELECT enabled FROM access.relay_notice_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(true))
     }
 
-    /// Writes the next security notice setting under `bound` (`idp.realm.security_notices`,
+    /// Writes the next security notice setting under `bound` (`idp.environment.security_notices`,
     /// `security_notices_close`).
     ///
     /// # Errors
@@ -358,16 +358,16 @@ impl TenantTx {
         bound: &crate::idp::Bound,
         enabled: bool,
     ) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         sqlx::query!(
             "INSERT INTO access.relay_notice_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.relay_notice_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             enabled,
             bound.domain().as_bytes().as_slice(),
             i64::try_from(bound.position()).map_err(|_| StoreError::Range)?,
@@ -385,13 +385,13 @@ impl TenantTx {
         &mut self,
         original: [u8; 16],
     ) -> Result<Vec<[u8; 16]>, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let rows = sqlx::query_scalar!(
             "SELECT event_id FROM access.relay_resends
-              WHERE tenant_id = $1 AND realm_id = $2 AND original_event_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND original_event_id = $3
               ORDER BY recorded_at, event_id",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(original),
         )
         .fetch_all(&mut *self.tx)
@@ -399,7 +399,7 @@ impl TenantTx {
         Ok(rows.into_iter().map(Uuid::into_bytes).collect())
     }
 
-    /// The realm's undeliverable messages, oldest first.
+    /// The environment's undeliverable messages, oldest first.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -407,13 +407,13 @@ impl TenantTx {
         &mut self,
         limit: u32,
     ) -> Result<Vec<UndeliveredRow>, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let rows = sqlx::query!(
             "SELECT event_id, kind, reason, relay_status FROM access.relay_undelivered
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY outbox_xid, outbox_id LIMIT $3",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             i64::from(limit),
         )
         .fetch_all(&mut *self.tx)
@@ -441,13 +441,13 @@ impl TenantTx {
     /// [`StoreError`].
     #[cfg(feature = "testing")]
     pub async fn shred_subject_for_test(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let n = sqlx::query!(
             "UPDATE access.identity_subjects SET wrapped_dek = NULL, shredded_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 AND status = 'purging' AND shredded_at IS NULL",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(subject),
         )
         .execute(&mut *self.tx)

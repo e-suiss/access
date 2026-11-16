@@ -1,5 +1,5 @@
 //! The identity plane's own Claims (§10.1.2, §10.1.5, CMP-8, OP-150 L2): what an identity event
-//! asks the realm issuer to claim, as a [`ClaimOrder`] queued in the business transaction, and
+//! asks the environment issuer to claim, as a [`ClaimOrder`] queued in the business transaction, and
 //! the `claim-statement` and body it becomes. Only the fields of the §10.1.2 mapping enter a
 //! Claim; public material, credential ids and identifiers enter as digests, never in clear
 //! (K16, E26, §7.9.15.1).
@@ -142,7 +142,7 @@ pub enum Content {
     },
 }
 
-/// A Claim the realm issuer is asked to issue, queued with the event that caused it.
+/// A Claim the environment issuer is asked to issue, queued with the event that caused it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClaimOrder {
     /// The identity subject it is about; its Party is resolved when it is issued.
@@ -276,7 +276,7 @@ pub fn authentication(f: AuthFacts) -> ClaimOrder {
 }
 
 /// The `authentication` Claim of an enterprise upstream sign-in (§10.1.2 OIDC and SAML rows,
-/// OP-155 m.3 (h)): the realm issuer's, with the upstream's verified `iss` and its declared
+/// OP-155 m.3 (h)): the environment issuer's, with the upstream's verified `iss` and its declared
 /// `acr` and `amr` as attribution; its evidence is the raw assertion's digest.
 #[must_use]
 pub fn authentication_upstream(
@@ -534,7 +534,7 @@ pub fn status_line() -> [u8; 32] {
     line(&[b"account_status"])
 }
 
-/// The `account_status` Claim of a status change (TN-49, §12.3.1): the realm issuer's statement
+/// The `account_status` Claim of a status change (TN-49, §12.3.1): the environment issuer's statement
 /// the domain overlays; it holds until the next status supersedes it.
 #[must_use]
 pub fn account_status(subject: [u8; 16], status: &str, at: u64) -> ClaimOrder {
@@ -580,7 +580,7 @@ pub fn org_member(
 }
 
 /// How long an agent's `operated_by`, `agent_kind` and `sponsored_by` Claims hold before the
-/// realm issuer renews them (PD, OP-154 m.3 (c)): a year; a retraction ends one at once.
+/// environment issuer renews them (PD, OP-154 m.3 (c)): a year; a retraction ends one at once.
 pub const AGENT_CLAIM_TTL_MS: u64 = 365 * 24 * 3_600_000;
 
 /// The line of an agent's Claim of `class` about `about`: the agent's `operated_by` and
@@ -590,7 +590,7 @@ pub fn agent_line(agent: &[u8; 16], class: Class, about: &[u8]) -> [u8; 32] {
     line(&[class.name().as_bytes(), agent, about])
 }
 
-/// A realm issuer Claim of `class` about the agent Party `agent` (OP-154 m.3 (c), AG-20):
+/// An environment issuer Claim of `class` about the agent Party `agent` (OP-154 m.3 (c), AG-20):
 /// `operated_by` and `sponsored_by` carry a Party, `agent_kind` its kind. With `retract` it only
 /// ends the line, as when the last sponsor leaves (OP-154 m.3 (e)).
 #[must_use]
@@ -636,7 +636,7 @@ pub fn workload_line(agent: &[u8; 16], thumbprint: &[u8; 32]) -> [u8; 32] {
     ])
 }
 
-/// OP-154 m.3 (d), U20, AG-30: the realm issuer's `identity_binding_workload` Claim about the
+/// OP-154 m.3 (d), U20, AG-30: the environment issuer's `identity_binding_workload` Claim about the
 /// agent Party `agent`: the verified workload URI and the key it presented. The credential
 /// enters as a digest only (E26); the body always travels, so the authority plane can match the
 /// key of a self-signed `instance_create`.
@@ -671,7 +671,7 @@ pub fn workload_binding(
 /// attested again after that.
 pub const RUNTIME_TTL_MS: u64 = 24 * 3_600_000;
 
-/// §5.9, L21, Ek B 4262: the realm issuer's `attestation_runtime` Claim about `party` for the
+/// §5.9, L21, Ek B 4262: the environment issuer's `attestation_runtime` Claim about `party` for the
 /// attested runtime class `runtime`, bound to the Instance `instance` whose key was attested.
 #[must_use]
 pub fn runtime_attestation(
@@ -795,9 +795,9 @@ pub fn risk(subject: [u8; 16], signal: RiskSignal, bind: Bind, at: u64) -> Claim
 /// binding resolved to, the Claim it supersedes and the signing time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Placement {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
-    /// The realm's issuer Party.
+    /// The environment's issuer Party.
     pub issuer: Id,
     /// The subject's Party.
     pub subject: Id,

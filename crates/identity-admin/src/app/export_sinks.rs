@@ -1,6 +1,6 @@
-//! `idp.export.*` changes against the realm and under their committed ALLOW (OP-156 m.3 (a),
+//! `idp.export.*` changes against the environment and under their committed ALLOW (OP-156 m.3 (a),
 //! (s)), and the export sinks as administrators read them. A sink's secret is sealed under the
-//! realm KEK in the same transaction and never read back here; a retired sink keeps its name and
+//! environment KEK in the same transaction and never read back here; a retired sink keeps its name and
 //! its cursor (OP-73). The list shows each sink's delivery state; what it holds is a copy, not
 //! the record (X22).
 
@@ -98,10 +98,10 @@ pub(crate) async fn current(
     Ok(())
 }
 
-/// Writes `change` under `bound`, sealing a new secret with `vault`'s realm KEK.
+/// Writes `change` under `bound`, sealing a new secret with `vault`'s environment KEK.
 ///
 /// # Errors
-/// [`AdminError`]; without the realm KEK no secret is stored.
+/// [`AdminError`]; without the environment KEK no secret is stored.
 pub(crate) async fn write(
     t: &mut TenantTx,
     bound: &Bound,
@@ -109,7 +109,7 @@ pub(crate) async fn write(
     vault: Option<&dyn KeyVault>,
 ) -> Result<bool, AdminError> {
     let tenant = t.tenant();
-    let realm = t.realm().ok_or(AdminError::NoRealm)?;
+    let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
     let stored = store::sink(t, change.name()).await?;
     let (id, spec, secret, state) = match change {
         ExportChange::Register { name, spec, secret } => (
@@ -132,10 +132,10 @@ pub(crate) async fn write(
     let sealed = match secret {
         Some(secret) => {
             let kek = vault
-                .and_then(|v| v.realm_kek(tenant, realm))
+                .and_then(|v| v.environment_kek(tenant, environment))
                 .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
             Some(
-                seal(&*kek, (tenant, realm), &id, secret)
+                seal(&*kek, (tenant, environment), &id, secret)
                     .map_err(|_| AdminError::Unavailable(String::from("kek")))?,
             )
         }
@@ -193,7 +193,7 @@ fn item(s: &SinkRow, c: Option<&store::CursorRow>) -> Json {
     })
 }
 
-/// The realm's export sinks, by name, with their delivery state; with `key`, only that one.
+/// The environment's export sinks, by name, with their delivery state; with `key`, only that one.
 ///
 /// # Errors
 /// [`AdminError`].

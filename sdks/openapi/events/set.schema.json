@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:event-set:1",
   "title": "Access Security Event Token claims (RFC 8417, SSF 1.0)",
-  "description": "The claims of every SET Access sends, signed as a JWS of typ secevent+jwt with the realm key for SSF push and poll, and carried unsigned as CloudEvent data in the webhook profile. `events` has exactly one member; its key is the event type (an Access URN, or a CAEP 1.0 / RISC 1.0 type URI) and its value matches that event's schema. There is no top-level `sub` and no `exp` (TN-39).",
+  "description": "The claims of every SET Access sends, signed as a JWS of typ secevent+jwt with the environment key for SSF push and poll, and carried unsigned as CloudEvent data in the webhook profile. `events` has exactly one member; its key is the event type (an Access URN, or a CAEP 1.0 / RISC 1.0 type URI) and its value matches that event's schema. There is no top-level `sub` and no `exp` (TN-39).",
   "type": "object",
   "required": [
     "iss",
@@ -40,7 +40,7 @@
       "description": "The transaction the event comes from (TN-39): the Access event id, shared by an Access event and its CAEP counterpart; per receiver for an identity plane signal."
     },
     "sub_id": {
-      "description": "Subject identifier (RFC 9493): `opaque` for Access events, `iss_sub` with the receiver's own pairwise `sub` for identity plane signals, `uri` naming the realm issuer for a realm-wide signal (CR-27).",
+      "description": "Subject identifier (RFC 9493): `opaque` for Access events, `iss_sub` with the receiver's own pairwise `sub` for identity plane signals, `uri` naming the environment issuer for an environment-wide signal (CR-27).",
       "oneOf": [
         {
           "type": "object",
@@ -124,7 +124,7 @@
     "access_tenant": {
       "type": "string",
       "pattern": "^tnt_[0-9a-hjkmnp-tv-z]{26}$",
-      "description": "The tenant the event happened in, by its opaque tnt_ id (OP-149 m.15 (i)). Present only on a platform product's subscription, which receives the events of every tenant (OP-149 m.17 (e)); iss and aud are then the platform realm's and its subscriber's."
+      "description": "The tenant the event happened in, by its opaque tnt_ id (OP-149 m.15 (i)). Present only on a platform product's subscription, which receives the events of every tenant (OP-149 m.17 (e)); iss and aud are then the platform environment's and its subscriber's."
     },
     "access_position": {
       "$ref": "#/$defs/access_position",

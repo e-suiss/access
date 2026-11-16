@@ -160,10 +160,10 @@ pub struct HubRequest {
     pub depth: Depth,
     /// The signed reads.
     pub reads: Vec<SignedRead>,
-    /// The slug of the realm the reader signed in at: its coordinator, if it names one, gives
+    /// The slug of the environment the reader signed in at: its coordinator, if it names one, gives
     /// the Needs Attention link (OP-156 m.3 (t)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realm: Option<String>,
+    pub environment: Option<String>,
     /// Pay's own financial limits as the reader's device read them from Pay, each about one
     /// Grant (XI-14): shown as Pay's rows beside Access's, never merged with or derived from them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -480,7 +480,7 @@ pub struct Hub {
     /// Notices, always including `hub.not_shown_unconnected` (§8.17.7.2).
     pub notices: Vec<String>,
     /// The one link to the coordinator's Needs Attention (§8.17.6.5, OP-156 m.3 (t)); absent
-    /// when the realm names no coordinator or nothing waits.
+    /// when the environment names no coordinator or nothing waits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention: Option<Attention>,
     /// Relay's delivery as Access reported it (§8.13 "Relay delayed"): a delay never changes a
@@ -652,7 +652,7 @@ fn requests() -> Map<String, Value> {
                 "viewer": text("The reader's Party."),
                 "depth": { "type": "string", "enum": ["default", "expert", "audit"], "default": "default", "description": "§8.12: each depth explains the one before; capacity and status show at every depth." },
                 "reads": list(&r("SignedRead"), "The signed reads."),
-                "realm": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t))." },
+                "environment": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "The reader's environment slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t))." },
                 "financial": list(&r("Financial"), "Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14)."),
             }),
             &["viewer", "reads"],
@@ -848,7 +848,7 @@ fn rows() -> Map<String, Value> {
                 "notices": list(&json!({ "type": "string" }), "Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13)."),
                 "attention": object(
                     &json!({
-                        "href": text("The coordinator's Needs Attention URL (`idp.realm.coordinator`), https."),
+                        "href": text("The coordinator's Needs Attention URL (`idp.environment.coordinator`), https."),
                         "count": uint("How many approvals the coordinator says wait; Access keeps no queue (IA-1, X6)."),
                         "text": { "const": "attention.approvals_waiting" },
                     }),

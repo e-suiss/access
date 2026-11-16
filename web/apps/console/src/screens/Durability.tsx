@@ -1,5 +1,5 @@
 // HL-40, SEC23, OP-29, OP-158 m.3 (n), (p): Settings ▸ Durability. Whether the cell is
-// replicated or a single node, the realm's DR class and what a disaster can lose, and the
+// replicated or a single node, the environment's DR class and what a disaster can lose, and the
 // witnesses and replicas its governing domain declares. Without an independent witness and a
 // replica, revocations are never shown as confirmed. OP-159 m.3 (g), (j), RR-35: the last
 // post-quantum anchor, or that there is none yet; a witness or replica only the provider
@@ -78,8 +78,10 @@ function Parties({
 
 /** The durability screen. */
 export function Durability({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const view = useLoad(() => adminGet<DurabilityView>(ctx.instance, `realms/${realm}/durability`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const view = useLoad(() =>
+    adminGet<DurabilityView>(ctx.instance, `envs/${environment}/durability`),
+  );
   return (
     <div data-testid="durability" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("durabilityIntro")}</p>

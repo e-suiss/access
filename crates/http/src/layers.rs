@@ -227,12 +227,12 @@ pub async fn lane(State(lane): State<Lane>, request: Request, next: Next) -> Res
 }
 
 /// The largest body a streamed route takes before its own limit (OP-159 m.3 (mm)): a support
-/// artifact upload, whose handler authenticates and reads the realm's limit before it reads a
+/// artifact upload, whose handler authenticates and reads the environment's limit before it reads a
 /// byte and then streams the body under that limit.
 #[must_use]
 pub fn streamed(method: &axum::http::Method, path: &str) -> Option<usize> {
     let tail = path
-        .strip_prefix("/realms/")
+        .strip_prefix("/env/")
         .and_then(|rest| rest.find('/').and_then(|at| rest.get(at..)))
         .unwrap_or(path);
     (method == axum::http::Method::POST && tail == "/v1/support/artifacts")
@@ -241,7 +241,7 @@ pub fn streamed(method: &axum::http::Method, path: &str) -> Option<usize> {
 
 /// The listener's body limit (§13.7.4, GHSA-84jc-3hj2-hwc7): a declared length over it is
 /// `413` before anything is read, and the body cannot grow past it. A streamed route has its
-/// own, larger cap; its handler enforces the realm's limit (OP-159 m.3 (mm)).
+/// own, larger cap; its handler enforces the environment's limit (OP-159 m.3 (mm)).
 pub async fn body_limit(State(max): State<usize>, request: Request, next: Next) -> Response {
     let max = streamed(request.method(), request.uri().path()).unwrap_or(max);
     let declared = request

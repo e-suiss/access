@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.notification_addresses SET retired_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND address_id = $4\n                AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b1288fa9d78eeb2fce80c61abc794dc1918c8e4db1d1d783fd5d131ad0769cd"
+}

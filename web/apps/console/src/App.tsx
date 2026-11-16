@@ -23,9 +23,9 @@ import { find, type Instance } from "./lib/instance.js";
 import {
   clearSignInStarted,
   consoleHref,
-  knownRealms,
-  lastRealm,
-  rememberRealm,
+  knownEnvironments,
+  lastEnvironment,
+  rememberEnvironment,
   signInJustStarted,
   splitPath,
   startSignIn,
@@ -37,12 +37,12 @@ import {
   visibleScreens,
   visibleSections,
 } from "./lib/sections.js";
-import { platformRealms } from "./lib/realms.js";
-import { RealmSwitcher } from "./RealmSwitcher.js";
+import { platformEnvironments } from "./lib/environments.js";
+import { EnvironmentSwitcher } from "./EnvironmentSwitcher.js";
 import { Authority } from "./screens/Authority.js";
 import { About, Profile, Sessions } from "./screens/Own.js";
 import { SectionPage } from "./screens/Section.js";
-import { NoRealm, OtherRealm, SignIn, SigningIn } from "./screens/SignIn.js";
+import { NoEnvironment, OtherEnvironment, SignIn, SigningIn } from "./screens/SignIn.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
 import { Busy, Failure } from "./ui.js";
 
@@ -62,20 +62,21 @@ const ROUTES: readonly Route[] = [
 ];
 
 interface Where {
-  readonly realm: string | undefined;
+  readonly environment: string | undefined;
   readonly route: Route;
   readonly screen: Screen | undefined;
 }
 
 // OP-159 m.42 (a), TN-113
 function routeOf(path: string): Where {
-  const { realm, rest } = splitPath(path);
+  const { environment, rest } = splitPath(path);
   const [head = "", sub] = rest.split("/", 2);
-  if (!(ROUTES as readonly string[]).includes(head)) return { realm, route: "", screen: undefined };
+  if (!(ROUTES as readonly string[]).includes(head))
+    return { environment, route: "", screen: undefined };
   const route = head as Route;
   const screens: readonly string[] = SECTIONS.has(route) ? SCREENS[route as Section] : [];
   const screen = sub !== undefined && screens.includes(sub) ? (sub as Screen) : undefined;
-  return { realm, route, screen };
+  return { environment, route, screen };
 }
 
 type State =
@@ -126,13 +127,13 @@ function NavToggle(): ReactElement {
 }
 
 function NavGroup({
-  realm,
+  environment,
   items,
   current,
   go,
   onNavigate,
 }: {
-  readonly realm: string;
+  readonly environment: string;
   readonly items: readonly NavItem[];
   readonly current: Route;
   readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
@@ -149,7 +150,7 @@ function NavGroup({
                 render={(p) => (
                   <a
                     {...p}
-                    href={consoleHref(realm, n.route)}
+                    href={consoleHref(environment, n.route)}
                     aria-current={current === n.route ? "page" : undefined}
                     onClick={(e) => {
                       go(n.route)(e);
@@ -169,12 +170,12 @@ function NavGroup({
 }
 
 function Nav({
-  realm,
+  environment,
   items,
   current,
   go,
 }: {
-  readonly realm: string;
+  readonly environment: string;
   readonly items: readonly NavItem[];
   readonly current: Route;
   readonly go: (r: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
@@ -185,8 +186,20 @@ function Nav({
   };
   return (
     <nav aria-label={t("navLabel")} className="flex flex-col">
-      <NavGroup realm={realm} items={items} current={current} go={go} onNavigate={close} />
-      <NavGroup realm={realm} items={OWN} current={current} go={go} onNavigate={close} />
+      <NavGroup
+        environment={environment}
+        items={items}
+        current={current}
+        go={go}
+        onNavigate={close}
+      />
+      <NavGroup
+        environment={environment}
+        items={OWN}
+        current={current}
+        go={go}
+        onNavigate={close}
+      />
     </nav>
   );
 }
@@ -218,17 +231,17 @@ export function App(): ReactElement {
   const loadSession = useCallback(() => {
     json<SessionInfo>("/session").then(
       (session) => {
-        rememberRealm(session.realm);
+        rememberEnvironment(session.environment);
         clearSignInStarted();
-        if (routeOf(location.pathname).realm === undefined) {
-          navigate(consoleHref(session.realm), true);
+        if (routeOf(location.pathname).environment === undefined) {
+          navigate(consoleHref(session.environment), true);
         }
         setState({ status: "signed-in", session });
       },
       (e: unknown) => {
         if (e instanceof Problem && e.status === 401) {
-          const last = lastRealm();
-          if (routeOf(location.pathname).realm === undefined && last !== undefined) {
+          const last = lastEnvironment();
+          if (routeOf(location.pathname).environment === undefined && last !== undefined) {
             navigate(consoleHref(last), true);
           }
           setState({ status: "signed-out", reason: e.reason, signedOut: false });
@@ -252,23 +265,24 @@ export function App(): ReactElement {
   }, []);
 
   const session = state.status === "signed-in" ? state.session : undefined;
-  const realm = where.realm ?? (session === undefined ? lastRealm() : session.realm);
+  const environment =
+    where.environment ?? (session === undefined ? lastEnvironment() : session.environment);
   const autoSignIn =
     state.status === "signed-out" &&
-    realm !== undefined &&
+    environment !== undefined &&
     state.reason === undefined &&
     !state.signedOut &&
     !justStarted;
 
   // OP-159 m.42 (a)
   useEffect(() => {
-    if (autoSignIn) startSignIn(realm);
-  }, [autoSignIn, realm]);
+    if (autoSignIn) startSignIn(environment);
+  }, [autoSignIn, environment]);
 
   useEffect(() => {
     if (session === undefined) return;
     let active = true;
-    void find(session.realm, session.account, session.instance).then((i) => {
+    void find(session.environment, session.account, session.instance).then((i) => {
       if (active) setInstance(i);
     });
     return () => {
@@ -279,7 +293,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (session === undefined || instance === undefined) return;
     let active = true;
-    void visibleScreens(instance, session.realm).then((s) => {
+    void visibleScreens(instance, session.environment).then((s) => {
       if (active) setScreens(s);
     });
     return () => {
@@ -292,7 +306,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (!platformViewer) return;
     let active = true;
-    void platformRealms(instance).then((r) => {
+    void platformEnvironments(instance).then((r) => {
       if (active) setPlatform(r);
     });
     return () => {
@@ -302,7 +316,7 @@ export function App(): ReactElement {
 
   const go = (r: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    navigate(consoleHref(session?.realm ?? "", r));
+    navigate(consoleHref(session?.environment ?? "", r));
   };
 
   const signOut = () => {
@@ -326,20 +340,20 @@ export function App(): ReactElement {
     );
   }
   if (state.status === "signed-out") {
-    if (realm === undefined) return <NoRealm />;
-    if (autoSignIn) return <SigningIn realm={realm} />;
-    return <SignIn realm={realm} reason={state.reason} signedOut={state.signedOut} />;
+    if (environment === undefined) return <NoEnvironment />;
+    if (autoSignIn) return <SigningIn environment={environment} />;
+    return <SignIn environment={environment} reason={state.reason} signedOut={state.signedOut} />;
   }
 
   const s = state.session;
-  if (realm !== undefined && realm !== s.realm) {
-    const wanted = realm;
+  if (environment !== undefined && environment !== s.environment) {
+    const wanted = environment;
     return (
-      <OtherRealm
-        current={s.realm}
+      <OtherEnvironment
+        current={s.environment}
         wanted={wanted}
         onGo={() => {
-          navigate(consoleHref(s.realm));
+          navigate(consoleHref(s.environment));
         }}
         onSwitch={() => {
           json("/sign-out", { method: "POST" }).then(
@@ -399,7 +413,7 @@ export function App(): ReactElement {
           <p className="px-3 py-2 text-base font-semibold">{t("brand")}</p>
         </SidebarHeader>
         <SidebarContent>
-          <Nav realm={s.realm} items={shown} current={current} go={go} />
+          <Nav environment={s.environment} items={shown} current={current} go={go} />
         </SidebarContent>
       </Sidebar>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -409,10 +423,10 @@ export function App(): ReactElement {
           <p className="ms-auto min-w-0 truncate text-sm">
             <span data-testid="who">{s.display_name}</span>
           </p>
-          <RealmSwitcher
-            current={s.realm}
+          <EnvironmentSwitcher
+            current={s.environment}
             platform={platformViewer ? platform : []}
-            known={knownRealms()}
+            known={knownEnvironments()}
             onGo={(r) => {
               navigate(consoleHref(r));
             }}

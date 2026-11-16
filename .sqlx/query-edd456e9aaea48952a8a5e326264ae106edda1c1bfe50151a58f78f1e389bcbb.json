@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_credentials SET status = 'revoked', revoked_at = now()\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "edd456e9aaea48952a8a5e326264ae106edda1c1bfe50151a58f78f1e389bcbb"
+}

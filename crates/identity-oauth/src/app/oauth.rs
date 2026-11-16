@@ -1,4 +1,4 @@
-//! The realm's OAuth 2.1 authorization server and OpenID Provider (OP-146 I7, §10.4): client
+//! The environment's OAuth 2.1 authorization server and OpenID Provider (OP-146 I7, §10.4): client
 //! authentication, `/authorize`, `/par`, `/token`, `/userinfo`, `/revoke`, `/introspect` and
 //! RP-initiated logout with back-channel logout. Everything is decided against the primary
 //! (Δ = 0, MD-7); when the database, the signer or trusted time cannot answer, the answer is
@@ -35,7 +35,7 @@ use access_identity_session::domain::assurance::{Aal, AssuranceVector};
 use access_identity_session::domain::session::{SessionCheck, SessionFacts, check};
 use access_internal_api::projections::Projections;
 use access_kernel::json::{b64url_decode, b64url_encode};
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::oauth::GrantRow;
 use access_store::sessions::SessionRow;
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ use crate::ports::oauth::{
     ClaimSource, ClientKeys, LoginPages, ManagementHolders, NoClaims, NoManagement, OAuthDb,
     OAuthTx, Random, TenantIds, TokenSigner,
 };
-use crate::ports::{Directory, RealmEntry, Unavailable};
+use crate::ports::{Directory, EnvironmentEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
 use access_identity_hooks::ports::{HookCaller, NoHooks};
 
@@ -65,7 +65,7 @@ pub use crate::app::oauth::approval::{
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
 pub use crate::app::oauth::ciba::{CibaRefused, CibaView, ciba_csrf};
 pub use crate::app::oauth::device::{DeviceRefused, DeviceView, device_csrf};
-pub use crate::app::oauth::resource::RealmHolder;
+pub use crate::app::oauth::resource::EnvironmentHolder;
 pub use crate::app::oauth::token::TokenHttp;
 
 /// `Retry-After` of a shed request, seconds (PD).
@@ -79,7 +79,7 @@ const REFRESH_CONTEXT: &str = "access/oauth-refresh/v1";
 
 /// What the authorization server needs, as one bundle so the HTTP layer carries one type.
 pub trait Env: Send + Sync + 'static {
-    /// The realm rows.
+    /// The environment rows.
     type Db: OAuthDb;
     /// The identity signer.
     type Signer: TokenSigner;
@@ -91,16 +91,16 @@ pub trait Env: Send + Sync + 'static {
     type Clock: Clock + Send + Sync;
     /// Randomness.
     type Random: Random;
-    /// The realm directory.
+    /// The environment directory.
     type Directory: Directory;
-    /// A realm's DPoP replay cache.
+    /// An environment's DPoP replay cache.
     type Replay: ReplayCache + Send + Sync;
     /// The authority plane's token projections (OP-150 m.2).
     type Projections: Projections;
     /// The cell's opaque tenant ids (OP-149 m.15 (i), m.19 (a)).
     type Tenants: TenantIds;
 
-    /// The realm rows.
+    /// The environment rows.
     fn db(&self) -> &Self::Db;
     /// The identity signer.
     fn signer(&self) -> &Self::Signer;
@@ -112,19 +112,19 @@ pub trait Env: Send + Sync + 'static {
     fn clock(&self) -> &Self::Clock;
     /// Randomness.
     fn random(&self) -> &Self::Random;
-    /// The realm directory.
+    /// The environment directory.
     fn directory(&self) -> &Self::Directory;
-    /// The replay cache of a realm (TN-30).
-    fn replay(&self, tenant: TenantId, realm: RealmId) -> Self::Replay;
-    /// The nonce keys of a realm for one role (TN-29); `None` when they cannot be loaded.
-    fn nonces(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>>;
+    /// The replay cache of an environment (TN-30).
+    fn replay(&self, tenant: TenantId, environment: EnvironmentId) -> Self::Replay;
+    /// The nonce keys of an environment for one role (TN-29); `None` when they cannot be loaded.
+    fn nonces(&self, environment: EnvironmentId, role: Role) -> Option<Arc<NonceRing>>;
     /// The DPoP profile.
     fn dpop(&self) -> &DpopProfile;
     /// The authority plane's token projections.
     fn projections(&self) -> &Self::Projections;
     /// The cell's opaque tenant ids.
     fn tenant_ids(&self) -> &Self::Tenants;
-    /// The realm's inline hooks (TN-135); none unless the server wires them.
+    /// The environment's inline hooks (TN-135); none unless the server wires them.
     fn hooks(&self) -> &(dyn HookCaller + Sync) {
         &NoHooks
     }
@@ -134,7 +134,7 @@ pub trait Env: Send + Sync + 'static {
         &NoManagement
     }
     /// What accounts hold to release as identity claims (§10.4.6); nothing unless the server
-    /// wires the realms' PII vaults.
+    /// wires the environments' PII vaults.
     fn claims(&self) -> &(dyn ClaimSource + Sync) {
         &NoClaims
     }
@@ -148,7 +148,7 @@ pub trait Env: Send + Sync + 'static {
     fn standing(&self) -> &(dyn crate::ports::oauth::GrantStanding + Sync) {
         &crate::ports::oauth::NoStanding
     }
-    /// What CIBA needs beyond the realm's rows (OP-155 m.3 (l)); none unless the server wires
+    /// What CIBA needs beyond the environment's rows (OP-155 m.3 (l)); none unless the server wires
     /// the authority plane, Relay and the guarded outbound client, so nothing can be invited.
     fn ciba(&self) -> &(dyn crate::ports::oauth::CibaServices + Sync) {
         &crate::ports::oauth::NoCiba
@@ -163,7 +163,7 @@ pub trait Env: Send + Sync + 'static {
     fn issuers(&self) -> &(dyn crate::ports::oauth::AssertionIssuers + Sync) {
         &crate::ports::oauth::NoIssuers
     }
-    /// The realm's SPIFFE bundles (OP-154 m.3 (r)); none unless the server wires the store and
+    /// The environment's SPIFFE bundles (OP-154 m.3 (r)); none unless the server wires the store and
     /// the guarded outbound client, so every SVID is refused.
     fn bundles(&self) -> &(dyn access_identity_attest::ports::Bundles + Sync) {
         &access_identity_attest::ports::NoBundles
@@ -173,12 +173,12 @@ pub trait Env: Send + Sync + 'static {
     fn workload_trust(&self) -> &(dyn crate::ports::oauth::WorkloadTrust + Sync) {
         &crate::ports::oauth::NoWorkloadTrust
     }
-    /// The realm's client certificate trust and revocation checks (OP-155 m.3 (m)); none
+    /// The environment's client certificate trust and revocation checks (OP-155 m.3 (m)); none
     /// unless the server wires them, so every `tls_client_auth` client is refused.
     fn client_certificates(&self) -> &(dyn crate::ports::profile::ClientCertificates + Sync) {
         &crate::ports::profile::NoClientCertificates
     }
-    /// The realm KEK that opens `client_secret_jwt` secrets (OP-148 m.16 (l)); none unless the
+    /// The environment KEK that opens `client_secret_jwt` secrets (OP-148 m.16 (l)); none unless the
     /// server wires it, so every such assertion is refused.
     fn jwt_secrets(&self) -> &(dyn crate::ports::profile::JwtSecrets + Sync) {
         &crate::ports::profile::NoJwtSecrets
@@ -188,7 +188,7 @@ pub trait Env: Send + Sync + 'static {
     fn saml_assertions(&self) -> &(dyn crate::ports::profile::SamlAssertions + Sync) {
         &crate::ports::profile::NoSamlAssertions
     }
-    /// The realm's `jwe-enc` key (OP-155 m.3 (k)); none unless the server wires it, so every
+    /// The environment's `jwe-enc` key (OP-155 m.3 (k)); none unless the server wires it, so every
     /// encrypted request object is refused.
     fn request_keys(&self) -> &(dyn crate::ports::profile::RequestKeys + Sync) {
         &crate::ports::profile::NoRequestKeys
@@ -245,7 +245,7 @@ pub enum Reply {
     },
     /// `503 + Retry-After` (G50).
     Unavailable,
-    /// No realm here.
+    /// No environment here.
     NotFound,
 }
 
@@ -293,7 +293,7 @@ impl Reply {
     }
 }
 
-/// The authorization server of every realm.
+/// The authorization server of every environment.
 pub struct OAuth<E> {
     env: E,
     refetched: std::sync::Mutex<std::collections::BTreeMap<[u8; 16], u64>>,
@@ -305,8 +305,8 @@ pub const JWKS_REFETCH_MS: u64 = 60_000;
 
 const REFETCH_ENTRIES: usize = 4096;
 
-/// A realm as a request reached it.
-pub type Realm = RealmEntry;
+/// An environment as a request reached it.
+pub type Environment = EnvironmentEntry;
 
 pub(crate) fn day(ms: u64) -> i32 {
     i32::try_from(ms / DAY_MS).unwrap_or(i32::MAX)
@@ -447,15 +447,15 @@ impl<E: Env> OAuth<E> {
         &self.env
     }
 
-    /// The realm a request reached (§17.9.6): see [`crate::app::resolve`].
+    /// The environment a request reached (§17.9.6): see [`crate::app::resolve`].
     ///
     /// # Errors
     /// [`Unavailable`].
-    pub async fn realm(
+    pub async fn environment(
         &self,
         authority: &str,
         slug: Option<&str>,
-    ) -> Result<Option<Realm>, Unavailable> {
+    ) -> Result<Option<Environment>, Unavailable> {
         crate::app::resolve(self.env.directory(), authority, slug).await
     }
 
@@ -469,30 +469,36 @@ impl<E: Env> OAuth<E> {
         Ok(out)
     }
 
-    pub(crate) async fn begin(&self, realm: &Realm) -> Result<<E::Db as OAuthDb>::Tx, Unavailable> {
-        self.env.db().begin(realm.tenant, realm.realm).await
+    pub(crate) async fn begin(
+        &self,
+        environment: &Environment,
+    ) -> Result<<E::Db as OAuthDb>::Tx, Unavailable> {
+        self.env
+            .db()
+            .begin(environment.tenant, environment.environment)
+            .await
     }
 
-    /// The realm's tenant by its opaque `tnt_` id, as every product-facing surface names it
+    /// The environment's tenant by its opaque `tnt_` id, as every product-facing surface names it
     /// (OP-149 m.19 (a)); nothing when the cell's id key cannot be used (G50).
-    pub(crate) fn tenant_name(&self, realm: &Realm) -> Result<String, Unavailable> {
+    pub(crate) fn tenant_name(&self, environment: &Environment) -> Result<String, Unavailable> {
         self.env
             .tenant_ids()
-            .external(realm.tenant.as_bytes())
+            .external(environment.tenant.as_bytes())
             .ok_or(Unavailable)
     }
 
     /// The resource a request's `resource` names, in its canonical form, when it is a
-    /// registered platform product client (RFC 8707, OP-149 m.26 (a)) or one of the realm's
-    /// registered protected resources (AG-8, §11.4.3); the realm issuer names none.
+    /// registered platform product client (RFC 8707, OP-149 m.26 (a)) or one of the environment's
+    /// registered protected resources (AG-8, §11.4.3); the environment issuer names none.
     pub(crate) async fn product_resource(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
     ) -> Result<Option<String>, Unavailable> {
         let Some(resource) = params
             .get("resource")
-            .filter(|r| *r != realm.issuer.as_str())
+            .filter(|r| *r != environment.issuer.as_str())
         else {
             return Ok(None);
         };
@@ -502,7 +508,7 @@ impl<E: Env> OAuth<E> {
         let Some(canonical) = crate::domain::client::canonical_resource(resource) else {
             return Ok(None);
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let known = tx.protected_resource(&canonical).await?;
         tx.commit().await?;
         Ok(known.then_some(canonical))
@@ -514,12 +520,12 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn authenticate(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         req: &ClientRequest<'_>,
         now: u64,
     ) -> Result<Result<Client, ClientAuthError>, Unavailable> {
         // OP-154 m.3 (r), AG-30
-        if let Some(answer) = self.workload_client(tx, realm, req, now).await? {
+        if let Some(answer) = self.workload_client(tx, environment, req, now).await? {
             return Ok(answer);
         }
         let p = req.params;
@@ -551,7 +557,7 @@ impl<E: Env> OAuth<E> {
         // RFC 8705 §2, OP-155 m.3 (k)
         if let Some(tls) = client.profile.tls.clone() {
             return self
-                .mtls_client(realm, client, &tls, &presented, req.chain, now)
+                .mtls_client(environment, client, &tls, &presented, req.chain, now)
                 .await;
         }
         if let Err(e) = check_method(&client, &presented) {
@@ -570,7 +576,7 @@ impl<E: Env> OAuth<E> {
                 client.profile.legacy.clone()
             {
                 return self
-                    .secret_jwt_client(tx, realm, client, &sealed, assertion, req, now)
+                    .secret_jwt_client(tx, environment, client, &sealed, assertion, req, now)
                     .await;
             }
             let mut doc = match &client.auth {
@@ -598,13 +604,13 @@ impl<E: Env> OAuth<E> {
             }
             // OP-155 m.3 (k)
             let endpoint = if client.profile.fapi2 {
-                String::from(realm.issuer.as_str())
+                String::from(environment.issuer.as_str())
             } else {
-                realm.issuer.endpoint(req.endpoint)
+                environment.issuer.endpoint(req.endpoint)
             };
             let rules = AssertionRules {
                 client_id: &client.id,
-                issuer: realm.issuer.as_str(),
+                issuer: environment.issuer.as_str(),
                 endpoint: &endpoint,
                 now_ms: now,
                 rs256: client.rs256,
@@ -622,29 +628,29 @@ impl<E: Env> OAuth<E> {
     /// The DPoP check of a request (IDP-11) for `role` at `uri`.
     pub(crate) async fn dpop(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         role: Role,
         request: &DpopRequest<'_>,
     ) -> Result<Accepted, Failure> {
         let ring = self
             .env
-            .nonces(realm.realm, role)
+            .nonces(environment.environment, role)
             .ok_or(Failure::Unavailable)?;
-        let replay = self.env.replay(realm.tenant, realm.realm);
+        let replay = self.env.replay(environment.tenant, environment.environment);
         DpopChecker::new(self.env.dpop(), &ring, &replay, self.env.clock())
             .check(request)
             .await
     }
 
     /// A fresh nonce for a response that carried no proof (TN-29).
-    pub(crate) fn nonce(&self, realm: &Realm, role: Role) -> Option<String> {
-        let ring = self.env.nonces(realm.realm, role)?;
+    pub(crate) fn nonce(&self, environment: &Environment, role: Role) -> Option<String> {
+        let ring = self.env.nonces(environment.environment, role)?;
         let now = self.now().ok()?;
         ring.issue(now).ok()
     }
 
     /// The `sub` of a subject in `sector` (MD-10, OP-146 m.5 (b)): a client's pairwise sector
-    /// or the realm's public one ([`Client::sector`]).
+    /// or the environment's public one ([`Client::sector`]).
     pub(crate) async fn pairwise(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
@@ -661,7 +667,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn issue(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         grant: &GrantRow,
         details: &GrantDetails,
@@ -669,8 +675,18 @@ impl<E: Env> OAuth<E> {
         nonce: Option<&str>,
         now: u64,
     ) -> Result<Value, Unavailable> {
-        self.issue_with(tx, realm, client, grant, details, binding, nonce, true, now)
-            .await
+        self.issue_with(
+            tx,
+            environment,
+            client,
+            grant,
+            details,
+            binding,
+            nonce,
+            true,
+            now,
+        )
+        .await
     }
 
     /// [`Self::issue`]; without `refresh` the client keeps the refresh token it holds (FAPI 2.0
@@ -680,7 +696,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn issue_with(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         grant: &GrantRow,
         details: &GrantDetails,
@@ -700,13 +716,13 @@ impl<E: Env> OAuth<E> {
         let sub = self.pairwise(tx, grant.subject, client.sector()).await?;
         let sid = b64url_encode(&grant.sid);
         let tenant = if details.resource.is_some() {
-            Some(self.tenant_name(realm)?)
+            Some(self.tenant_name(environment)?)
         } else {
             None
         };
         let facts = TokenFacts {
-            issuer: &realm.issuer,
-            audience: details.audience(&realm.issuer),
+            issuer: &environment.issuer,
+            audience: details.audience(&environment.issuer),
             tenant: tenant.as_deref(),
             client_id: &client.id,
             sub: &sub,
@@ -725,7 +741,7 @@ impl<E: Env> OAuth<E> {
         let access = self
             .sign_as(
                 tx,
-                realm,
+                environment,
                 alg,
                 ACCESS_TYP,
                 &crate::domain::tokens::bound_access_token_claims(
@@ -748,7 +764,7 @@ impl<E: Env> OAuth<E> {
         }
         if details.openid {
             let claims = self
-                .id_claims(realm, client, &facts, details, grant.subject, nonce)
+                .id_claims(environment, client, &facts, details, grant.subject, nonce)
                 .await?;
             let encrypt = client
                 .profile
@@ -756,7 +772,7 @@ impl<E: Env> OAuth<E> {
                 .as_ref()
                 .is_some_and(|e| e.id_token);
             let id = self
-                .client_jwt(tx, realm, client, ID_TYP, &claims, encrypt, now)
+                .client_jwt(tx, environment, client, ID_TYP, &claims, encrypt, now)
                 .await?;
             if let Value::Object(m) = &mut body {
                 m.insert("id_token".into(), id.into());
@@ -771,7 +787,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn id_token(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         grant: &GrantRow,
         details: &GrantDetails,
@@ -781,8 +797,8 @@ impl<E: Env> OAuth<E> {
         let sub = self.pairwise(tx, grant.subject, client.sector()).await?;
         let sid = b64url_encode(&grant.sid);
         let facts = TokenFacts {
-            issuer: &realm.issuer,
-            audience: details.audience(&realm.issuer),
+            issuer: &environment.issuer,
+            audience: details.audience(&environment.issuer),
             tenant: None,
             client_id: &client.id,
             sub: &sub,
@@ -793,14 +809,14 @@ impl<E: Env> OAuth<E> {
             rev: grant.session_epoch,
         };
         let claims = self
-            .id_claims(realm, client, &facts, details, grant.subject, nonce)
+            .id_claims(environment, client, &facts, details, grant.subject, nonce)
             .await?;
         let encrypt = client
             .profile
             .encryption
             .as_ref()
             .is_some_and(|e| e.id_token);
-        self.client_jwt(tx, realm, client, ID_TYP, &claims, encrypt, now)
+        self.client_jwt(tx, environment, client, ID_TYP, &claims, encrypt, now)
             .await
     }
 
@@ -808,7 +824,7 @@ impl<E: Env> OAuth<E> {
     /// scopes and the `claims` request it was given with, over what the account holds.
     pub(crate) async fn released(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         details: &GrantDetails,
         subject: [u8; 16],
@@ -829,7 +845,7 @@ impl<E: Env> OAuth<E> {
         }
         // OP-153 m.3 (z)
         let consented = if client.third_party {
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             let given = tx.consent(subject, client.uuid).await?;
             tx.commit().await?;
             match given {
@@ -842,7 +858,7 @@ impl<E: Env> OAuth<E> {
         let held = self
             .env
             .claims()
-            .held(realm.tenant, realm.realm, subject)
+            .held(environment.tenant, environment.environment, subject)
             .await?;
         let mut out = crate::domain::claims_request::release(&scopes, &requested, target, &held);
         if let Some(given) = consented {
@@ -851,12 +867,12 @@ impl<E: Env> OAuth<E> {
         Ok(out)
     }
 
-    /// The ID token claims with what the realm's `token_issuance` hook adds (TN-135, OP-151
+    /// The ID token claims with what the environment's `token_issuance` hook adds (TN-135, OP-151
     /// m.3 (j)): identity claims only, never a reserved or authority claim (must-never #18). A
     /// hook that fails refuses the token (MD-8), unless it continues without claims.
     async fn id_claims(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         facts: &TokenFacts<'_>,
         details: &GrantDetails,
@@ -866,7 +882,7 @@ impl<E: Env> OAuth<E> {
         let scope = details.scope.as_str();
         let released = self
             .released(
-                realm,
+                environment,
                 client,
                 details,
                 subject,
@@ -880,7 +896,12 @@ impl<E: Env> OAuth<E> {
             scope: String::from(scope),
             acr: String::from(crate::domain::tokens::acr(facts.aal)),
         });
-        match self.env.hooks().call(realm.tenant, realm.realm, call).await {
+        match self
+            .env
+            .hooks()
+            .call(environment.tenant, environment.environment, call)
+            .await
+        {
             Outcome::Proceed { claims } => with_claims(&base, &claims).map_err(|_| Unavailable),
             Outcome::Refused(r) => {
                 tracing::info!(reason = r.code(), "token not issued: token_issuance hook");

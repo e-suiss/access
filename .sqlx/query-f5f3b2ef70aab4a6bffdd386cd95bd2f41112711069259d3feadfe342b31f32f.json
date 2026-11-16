@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_clients SET previous_secret_hash = secret_hash,\n                previous_secret_until = now() + make_interval(secs => $4::bigint / 1000.0),\n                secret_hash = $5, domain_id = $6, decision_pos = $7\n          WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND status = 'active'\n            AND auth_method = 'client_secret_basic'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5f3b2ef70aab4a6bffdd386cd95bd2f41112711069259d3feadfe342b31f32f"
+}

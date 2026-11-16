@@ -2,7 +2,7 @@
 //! CR-38, TN-27): FAPI 2.0, the legacy token endpoint methods, mutual TLS client authentication,
 //! RS256 and the algorithm of its ID tokens, JWE, the SAML 2.0 bearer grant, the legacy bearer
 //! exception and front-channel logout. Every loosening is one client's CT2 decision; there is no
-//! realm-wide switch (TI-9).
+//! environment-wide switch (TI-9).
 
 use access_crypto::jwe::KeyAlg;
 use access_kernel::verify::dpop::jkt_text;
@@ -16,7 +16,7 @@ use crate::domain::dpop::Jkt;
 pub enum LegacyAuth {
     /// `client_secret_post`: the registered secret in the form body (CR-38).
     SecretPost,
-    /// `client_secret_jwt`: an HS256 assertion under the secret sealed by the realm KEK
+    /// `client_secret_jwt`: an HS256 assertion under the secret sealed by the environment KEK
     /// (OP-148 m.16 (l)).
     SecretJwt(SealedJwtSecret),
 }
@@ -84,7 +84,7 @@ impl TlsName {
 /// How a mutual TLS client authenticates (RFC 8705 §2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TlsAuth {
-    /// `tls_client_auth`: a certificate the realm's trusted CAs issued, not revoked, naming
+    /// `tls_client_auth`: a certificate the environment's trusted CAs issued, not revoked, naming
     /// the registered subject.
     Pki(TlsName),
     /// `self_signed_tls_client_auth`: one of the certificates in the registered JWKS `x5c`.
@@ -112,9 +112,9 @@ pub enum IdAlg {
     Es256,
     /// Ed25519.
     Ed25519,
-    /// RS256 with the realm's `rsa-id` key; identity plane only, after the opt-in (CR-2).
+    /// RS256 with the environment's `rsa-id` key; identity plane only, after the opt-in (CR-2).
     Rs256,
-    /// ML-DSA-44 with the realm's post-quantum key set, while its signing profile holds it
+    /// ML-DSA-44 with the environment's post-quantum key set, while its signing profile holds it
     /// (CR-41, OP-159 m.3 (o)).
     MlDsa44,
     /// ML-DSA-65, likewise.
@@ -179,8 +179,8 @@ pub struct Encryption {
     pub jarm: bool,
 }
 
-/// A client's profile; the default is the realm's baseline: DPoP, no legacy method, the
-/// realm's algorithm, nothing encrypted.
+/// A client's profile; the default is the environment's baseline: DPoP, no legacy method, the
+/// environment's algorithm, nothing encrypted.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -195,11 +195,11 @@ pub struct ClientProfile {
     pub tls: Option<TlsAuth>,
     /// RS256 identity assertions opted in.
     pub rs256: bool,
-    /// The algorithm of its ID tokens; the realm's when absent.
+    /// The algorithm of its ID tokens; the environment's when absent.
     pub id_alg: Option<IdAlg>,
     /// JWE towards the client.
     pub encryption: Option<Encryption>,
-    /// Userinfo as a JWT signed by the realm key.
+    /// Userinfo as a JWT signed by the environment key.
     pub userinfo_signed: bool,
     /// The accepted SAML upstream the SAML 2.0 bearer grant takes assertions from.
     pub saml_bearer: Option<String>,
@@ -521,7 +521,7 @@ pub fn frontchannel_page(frames: &[String], then: &str) -> String {
     body
 }
 
-/// The names a client certificate shows, once its chain verified to a CA the realm trusts and
+/// The names a client certificate shows, once its chain verified to a CA the environment trusts and
 /// its revocation status is known good (RFC 8705 §2.1, MD-8).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CertificateNames {

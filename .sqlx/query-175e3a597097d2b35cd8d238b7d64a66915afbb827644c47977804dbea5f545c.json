@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_claim_consents SET ended_ms = $5, end_reason = 'replaced'\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4\n                AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "175e3a597097d2b35cd8d238b7d64a66915afbb827644c47977804dbea5f545c"
+}

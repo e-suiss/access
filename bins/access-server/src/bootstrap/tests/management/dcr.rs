@@ -16,7 +16,7 @@ fn digest(tx: &str) -> String {
 async fn policy(c: &Console, enabled: bool, tokens: &[&str]) -> super::writes::Written {
     c.rest_write(
         &Method::PUT,
-        "/admin/v1/realms/acme/settings/dcr-policy",
+        "/admin/v1/envs/acme/settings/dcr-policy",
         ("putDcrPolicy", None),
         serde_json::json!({
             "enabled": enabled,
@@ -33,7 +33,7 @@ async fn register(
     token: Option<&str>,
     body: &serde_json::Value,
 ) -> (StatusCode, serde_json::Value) {
-    let mut req = Request::post("/realms/acme/register")
+    let mut req = Request::post("/env/acme/register")
         .header(header::HOST, HOST)
         .header(header::CONTENT_TYPE, "application/json");
     if let Some(iat) = token {
@@ -58,7 +58,7 @@ async fn authorize(c: &Console, client_id: &str) -> Response<Body> {
     q.push_str("&state=status&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256");
     send(
         &c.oauth,
-        Request::get(format!("/realms/acme/authorize?{q}"))
+        Request::get(format!("/env/acme/authorize?{q}"))
             .header(header::HOST, HOST)
             .body(Body::empty())
             .unwrap(),
@@ -116,7 +116,7 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
     let client = first["client_id"].as_str().unwrap().to_owned();
     assert!(client.starts_with("dcr_"));
     // §11.4.5
-    assert_eq!(first["issuer"], "https://access.test/realms/acme");
+    assert_eq!(first["issuer"], "https://access.test/env/acme");
     assert!(first.get("client_secret").is_none());
     let (status, second) = register(&c, Some(OTHER), &app("https://app.example/cb")).await;
     assert_eq!(status, StatusCode::CREATED, "{second}");
@@ -155,7 +155,7 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
         "the client of a kept token stays"
     );
     let mut tx =
-        access_store::identity::TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        access_store::identity::TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
             .await
             .unwrap();
     assert!(tx.dcr_client(&client).await.unwrap().is_none());

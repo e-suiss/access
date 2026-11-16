@@ -1,4 +1,4 @@
-//! The pass over a realm's custom domains (OP-156 m.3 (i)): it reads the records of each
+//! The pass over an environment's custom domains (OP-156 m.3 (i)): it reads the records of each
 //! registration that is due, moves it between pending, verified, lapsed and expired, and orders
 //! a certificate for each verified one that has none or whose renewal is due. A domain whose
 //! verification lapsed renews nothing and is not served. A DNS or ACME outage changes nothing.
@@ -8,9 +8,9 @@ use access_store::StoreError;
 use access_store::custom_domains::{
     self as store, Checked, DomainRow, NewCertificate, active_certificates,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
-use crate::adapters::seal::{KeySeal, RealmKek};
+use crate::adapters::seal::{EnvironmentKek, KeySeal};
 use crate::app::acme::Client;
 use crate::domain::host::CustomHost;
 use crate::domain::schedule::{renew_after, retry_after};
@@ -33,7 +33,7 @@ async fn audit(t: &mut TenantTx, event: &str, host: &str) -> Result<(), StoreErr
     .await
 }
 
-/// What one pass over a realm did.
+/// What one pass over an environment did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
     /// Registrations found verified (first time or again).
@@ -66,7 +66,7 @@ pub struct Pass<'a, D, H, K, P, C, R> {
     pub acme: Option<Acme<'a, H, K, P>>,
     /// This node's TLS-ALPN-01 answers.
     pub challenges: &'a C,
-    /// The realm KEKs.
+    /// The environment KEKs.
     pub keys: &'a KeySeal<R>,
 }
 
@@ -80,11 +80,11 @@ fn registration(d: &DomainRow) -> Option<Registration> {
     })
 }
 
-/// Publishes a challenge as an open order of the realm, so every node serves it, then on
+/// Publishes a challenge as an open order of the environment, so every node serves it, then on
 /// this node at once.
 struct Board<'a, C> {
     app: &'a Pool,
-    scope: (TenantId, RealmId),
+    scope: (TenantId, EnvironmentId),
     domain: [u8; 16],
     local: &'a C,
 }
@@ -121,11 +121,11 @@ where
     K: AccountKey,
     P: Pause,
     C: Challenges,
-    R: RealmKek,
+    R: EnvironmentKek,
 {
     async fn check(
         &self,
-        scope: (TenantId, RealmId),
+        scope: (TenantId, EnvironmentId),
         d: &DomainRow,
         now_s: i64,
         out: &mut Outcome,
@@ -183,7 +183,7 @@ where
                     } else {
                         Status::Lapsed.name()
                     },
-                    finding: "held-by-another-realm",
+                    finding: "held-by-another-environment",
                     reverify_by: r.reverify_by,
                     ..checked
                 };
@@ -206,7 +206,7 @@ where
     async fn certify(
         &self,
         acme: &Acme<'_, H, K, P>,
-        scope: (TenantId, RealmId),
+        scope: (TenantId, EnvironmentId),
         d: &DomainRow,
         now_s: i64,
         out: &mut Outcome,
@@ -276,13 +276,13 @@ where
         Ok(())
     }
 
-    /// Runs the pass over realm `scope` at `now_s`.
+    /// Runs the pass over environment `scope` at `now_s`.
     ///
     /// # Errors
-    /// [`StoreError`] when the realm's rows cannot be read or written.
-    pub async fn realm(
+    /// [`StoreError`] when the environment's rows cannot be read or written.
+    pub async fn environment(
         &self,
-        scope: (TenantId, RealmId),
+        scope: (TenantId, EnvironmentId),
         now_s: i64,
     ) -> Result<Outcome, StoreError> {
         let mut out = Outcome::default();
@@ -333,16 +333,16 @@ impl core::fmt::Debug for Served {
     }
 }
 
-/// The certificates of realm `scope`'s domains among `served` (the verified hosts whose
-/// verification holds) that are still valid at `now_s`, their keys opened under the realm KEK.
+/// The certificates of environment `scope`'s domains among `served` (the verified hosts whose
+/// verification holds) that are still valid at `now_s`, their keys opened under the environment KEK.
 /// A key that does not open is left out.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn served<R: RealmKek>(
+pub async fn served<R: EnvironmentKek>(
     app: &Pool,
     keys: &KeySeal<R>,
-    scope: (TenantId, RealmId),
+    scope: (TenantId, EnvironmentId),
     served: &[String],
     now_s: i64,
 ) -> Result<Vec<Served>, StoreError> {

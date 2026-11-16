@@ -1,11 +1,11 @@
-//! What the identity signer needs from outside: a place to create realm keys and to load them
+//! What the identity signer needs from outside: a place to create environment keys and to load them
 //! back after a restart.
 
 use access_crypto::jose::JwsAlg;
 use access_crypto::rsa_id::RsaIdKey;
 use suiss_crypto::signer::{SignError, Signer};
 
-/// A new realm key: its signer and the sealed form the factory can load it back from.
+/// A new environment key: its signer and the sealed form the factory can load it back from.
 pub struct Generated {
     /// The key.
     pub signer: Box<dyn Signer + Send>,
@@ -13,7 +13,7 @@ pub struct Generated {
     pub sealed: Vec<u8>,
 }
 
-/// Creates realm keys under the realm's own KMS key, apart from the domain keys (T31, CR-21).
+/// Creates environment keys under the environment's own KMS key, apart from the domain keys (T31, CR-21).
 /// Failing is an outage, not an error of the caller (CR-23).
 pub trait KeyFactory {
     /// A new key for `alg`.
@@ -29,7 +29,7 @@ pub trait KeyFactory {
     fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError>;
 
     /// Whether this factory can hold an ML-DSA key of `alg` (OP-159 m.3 (d)); a factory that
-    /// cannot refuses the realm's post-quantum profile, with no classical key in its place.
+    /// cannot refuses the environment's post-quantum profile, with no classical key in its place.
     fn pq_ready(&mut self, alg: JwsAlg) -> bool {
         let _ = alg;
         false
@@ -120,20 +120,24 @@ impl<F: KeyFactory + ?Sized> KeyFactory for Box<F> {
 #[error("vault")]
 pub struct VaultError;
 
-/// Keeps each realm's key set across restarts, keyed by the realm; never shared with the
+/// Keeps each environment's key set across restarts, keyed by the environment; never shared with the
 /// authority signer's store (CMP-22b, OP-143 m.9 (e)).
 pub trait Vault {
-    /// Every realm the vault holds, as stored bytes.
+    /// Every environment the vault holds, as stored bytes.
     ///
     /// # Errors
     /// [`VaultError`].
     fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError>;
 
-    /// Replaces a realm's stored bytes.
+    /// Replaces an environment's stored bytes.
     ///
     /// # Errors
     /// [`VaultError`].
-    fn put(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError>;
+    fn put(
+        &mut self,
+        environment: &crate::protocol::Environment,
+        bytes: &[u8],
+    ) -> Result<(), VaultError>;
 
     /// The stored cell `audit-checkpoint` key, if one was made (OP-150 m.3 (h)).
     ///
@@ -147,77 +151,97 @@ pub trait Vault {
     /// [`VaultError`].
     fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError>;
 
-    /// The stored Claim issuer key of `realm`, if one was made (§10.1.7).
+    /// The stored Claim issuer key of `environment`, if one was made (§10.1.7).
     ///
     /// # Errors
     /// [`VaultError`].
-    fn issuer(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError>;
+    fn issuer(
+        &mut self,
+        environment: &crate::protocol::Environment,
+    ) -> Result<Option<Vec<u8>>, VaultError>;
 
-    /// Stores the Claim issuer key of `realm`; it is written once.
+    /// Stores the Claim issuer key of `environment`; it is written once.
     ///
     /// # Errors
     /// [`VaultError`].
     fn put_issuer(
         &mut self,
-        realm: &crate::protocol::Realm,
+        environment: &crate::protocol::Environment,
         bytes: &[u8],
     ) -> Result<(), VaultError>;
 
-    /// The stored `rsa-id` key of `realm`, if one was made (MD-6, OP-155 m.3 (k)).
+    /// The stored `rsa-id` key of `environment`, if one was made (MD-6, OP-155 m.3 (k)).
     ///
     /// # Errors
     /// [`VaultError`].
-    fn rsa_id(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        let _ = realm;
+    fn rsa_id(
+        &mut self,
+        environment: &crate::protocol::Environment,
+    ) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = environment;
         Ok(None)
     }
 
-    /// Stores the `rsa-id` key of `realm`; it is written once. A vault without the slot refuses.
+    /// Stores the `rsa-id` key of `environment`; it is written once. A vault without the slot refuses.
     ///
     /// # Errors
     /// [`VaultError`].
     fn put_rsa_id(
         &mut self,
-        realm: &crate::protocol::Realm,
+        environment: &crate::protocol::Environment,
         bytes: &[u8],
     ) -> Result<(), VaultError> {
-        let _ = (realm, bytes);
+        let _ = (environment, bytes);
         Err(VaultError)
     }
 
-    /// The stored SAML keys of `realm`, if any were made (OP-155 m.3 (d)).
+    /// The stored SAML keys of `environment`, if any were made (OP-155 m.3 (d)).
     ///
     /// # Errors
     /// [`VaultError`].
-    fn saml(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        let _ = realm;
+    fn saml(
+        &mut self,
+        environment: &crate::protocol::Environment,
+    ) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = environment;
         Ok(None)
     }
 
-    /// Replaces the stored SAML keys of `realm`.
+    /// Replaces the stored SAML keys of `environment`.
     ///
     /// # Errors
     /// [`VaultError`] when this vault keeps none.
-    fn put_saml(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let _ = (realm, bytes);
+    fn put_saml(
+        &mut self,
+        environment: &crate::protocol::Environment,
+        bytes: &[u8],
+    ) -> Result<(), VaultError> {
+        let _ = (environment, bytes);
         Err(VaultError)
     }
 
-    /// The stored SSH CA keys of `realm`, if any were made (OP-156 m.3 (o)).
+    /// The stored SSH CA keys of `environment`, if any were made (OP-156 m.3 (o)).
     ///
     /// # Errors
     /// [`VaultError`].
-    fn ssh(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        let _ = realm;
+    fn ssh(
+        &mut self,
+        environment: &crate::protocol::Environment,
+    ) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = environment;
         Ok(None)
     }
 
-    /// Replaces the stored SSH CA keys of `realm`.
+    /// Replaces the stored SSH CA keys of `environment`.
     ///
     /// # Errors
     /// [`VaultError`] when this vault keeps none.
-    fn put_ssh(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        let _ = (realm, bytes);
+    fn put_ssh(
+        &mut self,
+        environment: &crate::protocol::Environment,
+        bytes: &[u8],
+    ) -> Result<(), VaultError> {
+        let _ = (environment, bytes);
         Err(VaultError)
     }
 }

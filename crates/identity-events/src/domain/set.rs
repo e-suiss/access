@@ -16,10 +16,10 @@ pub const SET_CONTENT_TYPE: &str = "application/secevent+jwt";
 /// Media type of a structured `CloudEvent`.
 pub const CLOUDEVENT_CONTENT_TYPE: &str = "application/cloudevents+json; charset=utf-8";
 
-/// `CloudEvents` `source` prefix; the realm's UUID follows (as for Relay, E42 m.4).
-pub const SOURCE_PREFIX: &str = "urn:suiss:access:realm:";
+/// `CloudEvents` `source` prefix; the environment's UUID follows (as for Relay, E42 m.4).
+pub const SOURCE_PREFIX: &str = "urn:suiss:access:environment:";
 
-/// The SET claims of `event` for one subscription: `iss` the realm issuer, `aud` the
+/// The SET claims of `event` for one subscription: `iss` the environment issuer, `aud` the
 /// subscriber, `iat` when it was queued (stamped again at every send, [`stamp_issued`]), `jti`
 /// the event id, `txn` the event id too, `sub_id` an opaque subject identifier (SSF 1.0 §3) and
 /// one member of `events`; no top-level `sub` and no `exp` (TN-39).
@@ -42,7 +42,7 @@ pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
 /// Who a SET is from and to, and its ids.
 #[derive(Clone, Copy, Debug)]
 pub struct Envelope<'a> {
-    /// The realm issuer.
+    /// The environment issuer.
     pub iss: &'a str,
     /// The receiver.
     pub aud: &'a str,
@@ -147,7 +147,7 @@ pub fn head(claims: &Value) -> Result<SetHead, Invalid> {
 pub fn cloud_event(
     claims: &Value,
     tenant: &str,
-    realm: &[u8; 16],
+    environment: &[u8; 16],
     occurred_ms: u64,
 ) -> Result<Vec<u8>, Invalid> {
     let h = head(claims)?;
@@ -158,7 +158,7 @@ pub fn cloud_event(
     e.insert("id".into(), h.jti.into());
     e.insert(
         "source".into(),
-        format!("{SOURCE_PREFIX}{}", uuid(realm)).into(),
+        format!("{SOURCE_PREFIX}{}", uuid(environment)).into(),
     );
     e.insert("type".into(), h.event_type.into());
     if !h.subject.is_empty() {
@@ -167,7 +167,7 @@ pub fn cloud_event(
     e.insert("time".into(), time.into());
     e.insert("datacontenttype".into(), "application/json".into());
     e.insert("accesstenant".into(), tenant.into());
-    e.insert("accessrealm".into(), uuid(realm).into());
+    e.insert("accessenvironment".into(), uuid(environment).into());
     e.insert("data".into(), claims.clone());
     serde_json::to_vec(&Value::Object(e)).map_err(|_| Invalid("encoding"))
 }

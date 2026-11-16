@@ -1,11 +1,11 @@
 //! The PII vault (OP-153 m.3 (aa), OP-42, OP-74, T31): identifiers and profile fields are sealed
-//! under a DEK of their subject and vault class, wrapped by the realm KEK, and found by the realm's
+//! under a DEK of their subject and vault class, wrapped by the environment KEK, and found by the environment's
 //! keyed blind index. Shredding a class DEK makes its fields unreadable; the rows and the index stay
 //! (U58, TN-76 m.5).
 
 use std::sync::Arc;
 
-use access_crypto::realm_index::RealmIndexKey;
+use access_crypto::environment_index::EnvironmentIndexKey;
 use access_store::accounts::{SealedIdentifier, StoredValue};
 use access_store::identity::TenantTx;
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
@@ -65,13 +65,13 @@ impl PiiClass {
     }
 }
 
-/// One realm's vault keys: the realm KEK and the realm's index key.
+/// One environment's vault keys: the environment KEK and the environment's index key.
 #[derive(Clone)]
 pub struct Vault {
-    /// The realm KEK that wraps class DEKs (OP-42, OP-135).
+    /// The environment KEK that wraps class DEKs (OP-42, OP-135).
     pub kek: Arc<dyn Kek + Send + Sync>,
-    /// The realm's blind index key (OP-153 m.3 (aa)).
-    pub index: Arc<RealmIndexKey>,
+    /// The environment's blind index key (OP-153 m.3 (aa)).
+    pub index: Arc<EnvironmentIndexKey>,
 }
 
 impl Vault {
@@ -81,7 +81,7 @@ impl Vault {
     pub fn in_memory(kek: Arc<dyn Kek + Send + Sync>, index: [u8; 32]) -> Self {
         Self {
             kek,
-            index: Arc::new(RealmIndexKey::new(access_crypto::Secret::new(index))),
+            index: Arc::new(EnvironmentIndexKey::new(access_crypto::Secret::new(index))),
         }
     }
 }
@@ -93,18 +93,18 @@ pub fn folded(value: &str) -> String {
 }
 
 impl Vault {
-    /// The realm's blind index of `value`.
+    /// The environment's blind index of `value`.
     ///
     /// # Errors
     /// [`AccountError::Vault`] when the token refuses.
     pub fn index_of(
         &self,
         tenant: &[u8; 16],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         value: &str,
     ) -> Result<[u8; 32], AccountError> {
         self.index
-            .index(tenant, realm, &folded(value))
+            .index(tenant, environment, &folded(value))
             .map_err(|_| AccountError::Vault)
     }
 }
@@ -112,7 +112,7 @@ impl Vault {
 fn context(t: &TenantTx, subject: &[u8; 16], class: PiiClass, field: &str) -> Vec<u8> {
     let mut c = CONTEXT.to_vec();
     c.extend_from_slice(t.tenant().as_bytes());
-    if let Some(r) = t.realm() {
+    if let Some(r) = t.environment() {
         c.extend_from_slice(r.as_bytes());
     }
     c.extend_from_slice(subject);
@@ -210,8 +210,8 @@ pub async fn seal_identifier(
     kind: IdentifierKind,
     value: &str,
 ) -> Result<SealedIdentifier, AccountError> {
-    let realm = t.realm().ok_or(AccountError::Corrupt)?;
-    let index = vault.index_of(t.tenant().as_bytes(), realm.as_bytes(), value)?;
+    let environment = t.environment().ok_or(AccountError::Corrupt)?;
+    let index = vault.index_of(t.tenant().as_bytes(), environment.as_bytes(), value)?;
     let class = PiiClass::of_identifier(kind);
     let dek = class_key(t, vault, subject, class, true)
         .await?
@@ -255,7 +255,7 @@ pub async fn reveal(
     }
 }
 
-/// The readable value of a stored identifier with the realm KEK alone, as [`reveal`] does: a
+/// The readable value of a stored identifier with the environment KEK alone, as [`reveal`] does: a
 /// management write reads the account's own address with it (TN-61). `None` once its class key
 /// is shredded (U58).
 ///
@@ -294,7 +294,7 @@ pub async fn reveal_with_kek(
     }
 }
 
-/// Seals up to `limit` identifiers of the realm still written in plaintext, each under its
+/// Seals up to `limit` identifiers of the environment still written in plaintext, each under its
 /// subject's class key (OP-153 m.3 (aa)); returns how many were sealed.
 ///
 /// # Errors

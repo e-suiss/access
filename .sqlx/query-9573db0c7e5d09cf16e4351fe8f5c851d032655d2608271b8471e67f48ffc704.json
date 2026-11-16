@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_cross_app_connections\n               (tenant_id, environment_id, name, version, state, client_id, audience, resource, scopes,\n                subject_policy, domain_id, decision_pos)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9573db0c7e5d09cf16e4351fe8f5c851d032655d2608271b8471e67f48ffc704"
+}

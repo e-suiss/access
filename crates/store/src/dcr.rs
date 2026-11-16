@@ -1,5 +1,5 @@
-//! The dynamic client registration profile (OP-154 m.3 (j), §11.4.5 #31-35): the realm's decided
-//! policy versions and the clients registered under them. Scoped to the transaction's realm by
+//! The dynamic client registration profile (OP-154 m.3 (j), §11.4.5 #31-35): the environment's decided
+//! policy versions and the clients registered under them. Scoped to the transaction's environment by
 //! row-level security; a client retires once and is never removed (OP-73).
 
 use sqlx::types::Uuid;
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -24,7 +24,7 @@ fn u64_of(v: i64) -> u64 {
     u64::try_from(v).unwrap_or(0)
 }
 
-/// The realm's DCR policy as decided.
+/// The environment's DCR policy as decided.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DcrPolicyRow {
     /// Whether `/register` is open.
@@ -77,12 +77,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn dcr_policy(&mut self) -> Result<DcrPolicyRow, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT enabled, domains, tokens FROM access.idp_dcr_policies
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -111,17 +111,17 @@ impl TenantTx {
         bound: &Bound,
         p: &DcrPolicyRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let tokens: Vec<Vec<u8>> = p.tokens.iter().map(|t| t.to_vec()).collect();
         sqlx::query!(
             "INSERT INTO access.idp_dcr_policies
-               (tenant_id, realm_id, version, enabled, domains, tokens, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domains, tokens, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_dcr_policies
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5, $6, $7",
             tenant,
-            realm,
+            environment,
             p.enabled,
             &p.domains,
             &tokens,
@@ -141,15 +141,15 @@ impl TenantTx {
         &mut self,
         c: &NewDcrClient<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(c.now_ms)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.oauth_dcr_clients (tenant_id, realm_id, client_id, metadata, issuer,
+            "INSERT INTO access.oauth_dcr_clients (tenant_id, environment_id, client_id, metadata, issuer,
                     token, ip_prefix, registered_ms, last_used_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
              RETURNING client_uuid",
             tenant,
-            realm,
+            environment,
             c.client_id,
             c.metadata,
             c.issuer,
@@ -170,13 +170,13 @@ impl TenantTx {
         &mut self,
         client_id: &str,
     ) -> Result<Option<DcrClientRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT client_uuid, client_id, metadata, issuer, token, registered_ms, last_used_ms
                FROM access.oauth_dcr_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             client_id,
         )
         .fetch_optional(&mut *self.tx)
@@ -203,31 +203,31 @@ impl TenantTx {
         &mut self,
         client: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT client_id FROM access.oauth_dcr_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
         )
         .fetch_optional(&mut *self.tx)
         .await?)
     }
 
-    /// Every live DCR client of the realm, for retroactive invalidation.
+    /// Every live DCR client of the environment, for retroactive invalidation.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn dcr_clients(&mut self) -> Result<Vec<DcrClientRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT client_uuid, client_id, metadata, issuer, token, registered_ms, last_used_ms
                FROM access.oauth_dcr_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND retired_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND retired_ms IS NULL
               ORDER BY client_uuid",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -247,7 +247,7 @@ impl TenantTx {
             .collect()
     }
 
-    /// How many registrations came from `ip_prefix` since `since_ms`, how many the realm took
+    /// How many registrations came from `ip_prefix` since `since_ms`, how many the environment took
     /// since `day_ms`, and how many of its DCR clients are live.
     ///
     /// # Errors
@@ -258,15 +258,15 @@ impl TenantTx {
         since_ms: u64,
         day_ms: u64,
     ) -> Result<(u64, u64, u64), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             r#"SELECT
                  count(*) FILTER (WHERE ip_prefix = $3 AND registered_ms >= $4) AS "ip!",
                  count(*) FILTER (WHERE registered_ms >= $5) AS "day!",
                  count(*) FILTER (WHERE retired_ms IS NULL) AS "live!"
-               FROM access.oauth_dcr_clients WHERE tenant_id = $1 AND realm_id = $2"#,
+               FROM access.oauth_dcr_clients WHERE tenant_id = $1 AND environment_id = $2"#,
             tenant,
-            realm,
+            environment,
             ip_prefix,
             i64_of(since_ms)?,
             i64_of(day_ms)?,
@@ -285,12 +285,12 @@ impl TenantTx {
         client: [u8; 16],
         now_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_dcr_clients SET last_used_ms = GREATEST(last_used_ms, $4)
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             i64_of(now_ms)?,
         )
@@ -311,14 +311,14 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(now_ms)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_dcr_clients
                 SET retired_ms = GREATEST($4, registered_ms), retire_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             now,
             reason,
@@ -333,9 +333,9 @@ impl TenantTx {
             .await?;
         sqlx::query!(
             "UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = 'revoked'
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND revoked_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND revoked_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             now,
         )

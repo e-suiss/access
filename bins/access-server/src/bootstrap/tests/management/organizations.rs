@@ -11,7 +11,7 @@ use super::*;
 async fn s7_reads_an_organizations_roots_members_and_membership_sources() {
     let c = console("mgmt-orgs", false).await;
     let party = [0x0a; 16];
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let org = t.insert_org(party, "Acme", &[7; 32]).await.unwrap();
@@ -19,7 +19,7 @@ async fn s7_reads_an_organizations_roots_members_and_membership_sources() {
         .await
         .unwrap();
     let joiner = t
-        .insert_subject("active", "realm-kek:1", &[8; 40])
+        .insert_subject("active", "environment-kek:1", &[8; 40])
         .await
         .unwrap();
     t.open_member(
@@ -33,14 +33,14 @@ async fn s7_reads_an_organizations_roots_members_and_membership_sources() {
     .unwrap();
     t.commit().await.unwrap();
 
-    let list = c.admin_get("/admin/v1/realms/acme/organizations").await;
+    let list = c.admin_get("/admin/v1/envs/acme/organizations").await;
     assert_eq!(list.status, StatusCode::OK, "{}", list.body);
     assert_eq!(list.body["items"][0]["organization"], b64url_encode(&party));
     assert_eq!(list.body["items"][0]["display_name"], "Acme");
 
     let one = c
         .admin_get(&format!(
-            "/admin/v1/realms/acme/organizations/{}",
+            "/admin/v1/envs/acme/organizations/{}",
             b64url_encode(&party)
         ))
         .await;
@@ -60,7 +60,7 @@ async fn s7_reads_an_organizations_roots_members_and_membership_sources() {
 
     let none = c
         .admin_get(&format!(
-            "/admin/v1/realms/acme/organizations/{}",
+            "/admin/v1/envs/acme/organizations/{}",
             b64url_encode(&[0x0b; 16])
         ))
         .await;

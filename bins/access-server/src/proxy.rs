@@ -1,5 +1,5 @@
 //! Forward-auth in this process (IDP-30, B22, OP-156 m.3 (l)): the registry and proxy sessions
-//! in the store, the realm authorization server for code + PKCE and the application token, the
+//! in the store, the environment authorization server for code + PKCE and the application token, the
 //! authority core's eligibility check, and the watcher that empties the decision cache once a
 //! domain's head moves or the doorbell rings.
 
@@ -13,7 +13,7 @@ use access_authority_core::app::Incoming;
 use access_authority_core::domain::Request;
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::ports::Clock;
-use access_identity_oauth::app::oauth::{Env, OAuth, Realm};
+use access_identity_oauth::app::oauth::{Env, Environment, OAuth};
 use access_identity_oauth::ports::dpop::Clock as _;
 use access_identity_proxy::app::Proxy;
 use access_identity_proxy::domain::registration::from_json;
@@ -62,8 +62,8 @@ where
     S: Salts + Clone,
     C: Clock + Clone,
 {
-    async fn tx(&self, realm: &Realm) -> Result<TenantTx, Unavailable> {
-        TenantTx::begin(&self.app, realm.tenant, realm.realm)
+    async fn tx(&self, environment: &Environment) -> Result<TenantTx, Unavailable> {
+        TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)
     }
@@ -77,28 +77,33 @@ where
     S: Salts + Clone + Send + Sync + 'static,
     C: Clock + Clone + Send + Sync + 'static,
 {
-    type Realm = Realm;
+    type Environment = Environment;
 
     async fn registered(
         &self,
         pep: &str,
         host: &str,
-    ) -> Result<Option<Registered<Realm>>, Unavailable> {
+    ) -> Result<Option<Registered<Environment>>, Unavailable> {
         let routes = access_store::proxy::proxy_routes(&self.router, pep, host)
             .await
             .map_err(down)?;
         let [route] = routes.as_slice() else {
             return Ok(None);
         };
-        let Some(realm) = self.oauth.realm_by_slug(&route.slug).await.map_err(down)? else {
+        let Some(environment) = self
+            .oauth
+            .environment_by_slug(&route.slug)
+            .await
+            .map_err(down)?
+        else {
             return Ok(None);
         };
-        if realm.tenant.as_bytes() != route.tenant.as_bytes()
-            || realm.realm.as_bytes() != route.realm.as_bytes()
+        if environment.tenant.as_bytes() != route.tenant.as_bytes()
+            || environment.environment.as_bytes() != route.environment.as_bytes()
         {
             return Ok(None);
         }
-        let mut t = self.tx(&realm).await?;
+        let mut t = self.tx(&environment).await?;
         let row = access_store::proxy::proxy(&mut t, &route.name)
             .await
             .map_err(down)?;
@@ -112,7 +117,7 @@ where
             return Ok(None);
         }
         Ok(Some(Registered {
-            realm,
+            environment,
             registration,
             plain_headers: row.plain_headers,
         }))
@@ -120,14 +125,14 @@ where
 
     async fn begin(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         proxy: &str,
         state: &[u8; 32],
         pending: &Pending,
         expires_ms: u64,
     ) -> Result<(), Unavailable> {
         let now = self.now_ms()?;
-        let mut t = self.tx(realm).await?;
+        let mut t = self.tx(environment).await?;
         access_store::proxy::begin_sign_in(
             &mut t,
             proxy,
@@ -142,12 +147,12 @@ where
 
     async fn take(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         proxy: &str,
         state: &[u8; 32],
     ) -> Result<Option<Pending>, Unavailable> {
         let now = self.now_ms()?;
-        let mut t = self.tx(realm).await?;
+        let mut t = self.tx(environment).await?;
         let taken = access_store::proxy::take_sign_in(&mut t, proxy, state, now)
             .await
             .map_err(down)?;
@@ -160,13 +165,13 @@ where
 
     async fn open(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         proxy: &str,
         cookie: &[u8; 32],
         redeemed: &Redeemed,
     ) -> Result<(), Unavailable> {
         let now = self.now_ms()?;
-        let mut t = self.tx(realm).await?;
+        let mut t = self.tx(environment).await?;
         access_store::proxy::open_session(
             &mut t,
             proxy,
@@ -181,12 +186,12 @@ where
 
     async fn session(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         proxy: &str,
         cookie: &[u8; 32],
     ) -> Result<Option<[u8; 16]>, Unavailable> {
         let now = self.now_ms()?;
-        let mut t = self.tx(realm).await?;
+        let mut t = self.tx(environment).await?;
         let sid = access_store::proxy::session(&mut t, proxy, cookie, now)
             .await
             .map_err(down)?;
@@ -196,14 +201,14 @@ where
 
     fn authorize_url(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         redirect_uri: &str,
         (state, nonce, challenge): (&str, &str, &str),
     ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
         std::future::ready(Ok(format!(
             "{}?response_type=code&client_id={}&redirect_uri={}&scope=openid&state={}&nonce={}&code_challenge={}&code_challenge_method=S256",
-            OAuth::<E>::authorize_endpoint(realm),
+            OAuth::<E>::authorize_endpoint(environment),
             encode(client_id),
             encode(redirect_uri),
             encode(state),
@@ -214,14 +219,14 @@ where
 
     async fn redeem(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         redirect_uri: &str,
         code: (&str, &str),
     ) -> Result<Option<Redeemed>, Unavailable> {
         Ok(self
             .oauth
-            .proxy_redeem(realm, client_id, redirect_uri, code)
+            .proxy_redeem(environment, client_id, redirect_uri, code)
             .await
             .map_err(down)?
             .map(|g| Redeemed {
@@ -232,13 +237,13 @@ where
 
     async fn holder(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         sid: &[u8; 16],
     ) -> Result<Option<Holder>, Unavailable> {
         Ok(self
             .oauth
-            .proxy_holder(realm, client_id, sid)
+            .proxy_holder(environment, client_id, sid)
             .await
             .map_err(down)?
             .map(|h| Holder {
@@ -253,13 +258,13 @@ where
 
     async fn app_token(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         holder: &Holder,
         token: (&str, &str),
     ) -> Result<String, Unavailable> {
         self.oauth
-            .app_token(realm, client_id, &holder.user, token)
+            .app_token(environment, client_id, &holder.user, token)
             .await
             .map_err(down)
     }

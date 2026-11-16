@@ -38,7 +38,7 @@ mod one;
 /// The PEP name the twin's client certificate authenticates as (L1-ADP-2).
 const TWIN_PEP: &str = "cHJvZHVjdC10d2luLWNlcnRpZmljYXRlLXRodW1icHJpbnQ";
 
-/// The realm the twins pair with; its CT3 time-lock is zero so the root's Acceptances apply
+/// The environment the twins pair with; its CT3 time-lock is zero so the root's Acceptances apply
 /// at once.
 const SLUG: &str = "seams";
 
@@ -123,7 +123,7 @@ struct Actor {
     anchor: Id,
 }
 
-/// A bootstrapped deployment with one platform product client, the realm `seams` and the
+/// A bootstrapped deployment with one platform product client, the environment `seams` and the
 /// twin of that product paired with it.
 struct Seam {
     w: World,
@@ -143,16 +143,16 @@ fn schema(name: &str) -> Schema {
     Schema::parse(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
-/// The realm `slug` in a new tenant with the bootstrap root as founder and a zero CT3
+/// The environment `slug` in a new tenant with the bootstrap root as founder and a zero CT3
 /// time-lock, through the admin path alone.
-async fn realm(w: &World, slug: &str) -> (TenantId, RealmId, Digest) {
+async fn environment(w: &World, slug: &str) -> (TenantId, EnvironmentId, Digest) {
     let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
     let declared = DeclaredTargets::default();
     let bootstrap = Bootstrap {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -162,7 +162,7 @@ async fn realm(w: &World, slug: &str) -> (TenantId, RealmId, Digest) {
     let tenant = create_tenant(&w.db.app, PLACEMENT).await.unwrap();
     let root = root_party(&root_key(&w.keys).unwrap().public_key());
     let created = admin
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant,
             slug,
             style: IssuerStyle::Path,
@@ -177,7 +177,7 @@ async fn realm(w: &World, slug: &str) -> (TenantId, RealmId, Digest) {
         })
         .await
         .unwrap();
-    (tenant, created.realm, created.domain)
+    (tenant, created.environment, created.domain)
 }
 
 impl Seam {
@@ -236,7 +236,7 @@ impl Seam {
         };
         let summary = serde_json::to_value(Box::pin(w.run(&plan)).await).unwrap();
         schedule(&signer);
-        let (tenant, created_realm, domain) = Box::pin(realm(&w, SLUG)).await;
+        let (tenant, created_environment, domain) = Box::pin(environment(&w, SLUG)).await;
         let root = root_key(&w.keys).unwrap();
         let root_party = root_party(&root.public_key());
         let declared = DeclaredTargets::default();
@@ -245,13 +245,13 @@ impl Seam {
                 app: &w.db.app,
                 router: &w.db.router,
                 plane: &w.plane,
-                realm_keys: &w.keyring,
+                environment_keys: &w.keyring,
                 hsm: &w.keys,
                 base: &w.base,
                 declared: &declared,
                 console: None,
             }
-            .onboard(tenant, created_realm, domain, &root, root_party),
+            .onboard(tenant, created_environment, domain, &root, root_party),
         )
         .await
         .unwrap();
@@ -275,7 +275,7 @@ impl Seam {
         let (platform, _) = crate::platform::routes(
             &pools,
             Outbound::disabled(Duration::from_secs(5)),
-            crate::login::RealmKeks::new(w.keys.clone()),
+            crate::login::EnvironmentKeks::new(w.keys.clone()),
             w.plane.clone(),
             String::from("https://access.test"),
         );
@@ -338,12 +338,12 @@ impl Seam {
     fn bootstrap<'a>(
         &'a self,
         declared: &'a DeclaredTargets,
-    ) -> Bootstrap<'a, TestPlane, RealmKeyring> {
+    ) -> Bootstrap<'a, TestPlane, EnvironmentKeyring> {
         Bootstrap {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared,
@@ -437,7 +437,7 @@ impl Seam {
             tenant: [0; 16],
             domain: self.domain,
             registrant: Registrant::Device {
-                realm: [0; 16],
+                environment: [0; 16],
                 subject: [0; 16],
             },
             party,

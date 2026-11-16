@@ -147,7 +147,7 @@ pub struct ApprovalPush {
     /// OP-157 m.3 (l)): each must match the intent's opaque digest or nothing can be approved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<BTreeMap<String, String>>,
-    /// Where the approver goes after the Approval Surface; a realm client's registered
+    /// Where the approver goes after the Approval Surface; an environment client's registered
     /// `redirect_uri`, without which the push sends no e-mail invitation (OP-157 m.3 (m)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub redirect_uri: Option<String>,
@@ -281,8 +281,8 @@ pub struct ApprovalStarted {
     /// `PublicKeyCredentialRequestOptionsJSON`; its challenge is H(AAS). Absent with `flow`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub options: Option<Value>,
-    /// Secure Payment Confirmation's request data, from the canonical render, when the realm
-    /// decided `idp.realm.spc` and the request is a payment (OP-156 m.3 (g)).
+    /// Secure Payment Confirmation's request data, from the canonical render, when the environment
+    /// decided `idp.environment.spc` and the request is a payment (OP-156 m.3 (g)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spc: Option<Value>,
 }
@@ -399,7 +399,7 @@ pub struct InlineAnswer {
 }
 
 /// A WebAuthn assertion field by field, base64url (`approval-inline-assertion`): its challenge
-/// is H(AAS) and its RP ID the realm's (verifier name binding, §10.3.1).
+/// is H(AAS) and its RP ID the environment's (verifier name binding, §10.3.1).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InlineAssertion {
@@ -822,12 +822,12 @@ pub fn faithful(shown: &Render, request: &Value) -> bool {
 
 /// The capacity line (OP-157 m.3 (l), §8.17.6.1): what the approver's basis makes it.
 #[must_use]
-pub fn capacity_text(basis: &ExerciseBasis, class: &str, realm: &str) -> String {
+pub fn capacity_text(basis: &ExerciseBasis, class: &str, environment: &str) -> String {
     let role = match (basis, class) {
         (ExerciseBasis::Anchor(_), _) => String::from("yourself, on your own account"),
-        (ExerciseBasis::Public(_), _) => format!("anyone {realm} lets approve"),
-        (ExerciseBasis::Holding(_), DEFAULT_CLASS) => format!("an approver for {realm}"),
-        (ExerciseBasis::Holding(_), c) => format!("a {c} contributor for {realm}"),
+        (ExerciseBasis::Public(_), _) => format!("anyone {environment} lets approve"),
+        (ExerciseBasis::Holding(_), DEFAULT_CLASS) => format!("an approver for {environment}"),
+        (ExerciseBasis::Holding(_), c) => format!("a {c} contributor for {environment}"),
     };
     say(TextId::ApprovalCapacity, &[("capacity", &role)])
 }
@@ -1070,8 +1070,8 @@ pub fn wysiwys(
 
 /// The page (OP-150 m.3 (r)): one element the script fills. Its script is [`PAGE_JS`] at
 /// [`APP_PATH`], so the hosted login's CSP (`script-src 'self'`) holds. The page names the
-/// script and the flows relative to itself, so a realm under `/realms/{slug}` (a path issuer)
-/// reaches its own routes as a subdomain realm does (OP-157 m.6 (i)).
+/// script and the flows relative to itself, so an environment under `/env/{slug}` (a path issuer)
+/// reaches its own routes as a subdomain environment does (OP-157 m.6 (i)).
 pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Approve</title>\n</head>\n<body>\n<main id=\"approve\"><p>Loading the request…</p></main>\n<script src=\"approve/app.js\"></script>\n</body>\n</html>\n";
 
 /// The page's script: starts the flow with the call's parameters, shows the render the decision
@@ -1256,8 +1256,8 @@ pub fn components() -> Value {
         ),
         "InlineAssertion": object(
             &json!({
-                "credential_id": b64_schema("rawId of the approver's registered passkey in the realm."),
-                "authenticator_data": b64_schema("response.authenticatorData; its RP ID hash is the realm's RP ID and UP is set."),
+                "credential_id": b64_schema("rawId of the approver's registered passkey in the environment."),
+                "authenticator_data": b64_schema("response.authenticatorData; its RP ID hash is the environment's RP ID and UP is set."),
                 "client_data_json": b64_schema("response.clientDataJSON; type webauthn.get, challenge H(AAS)."),
                 "signature": b64_schema("response.signature."),
                 "user_handle": b64_schema("response.userHandle, when the platform returned one."),
@@ -1318,14 +1318,14 @@ pub fn components() -> Value {
                 "flow": { "type": "string", "description": "Absent when the viewer can't approve here; render.blocked says why." },
                 "render": r("RenderView"),
                 "options": { "type": "object", "description": "PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2." },
-                "spc": { "type": "object", "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))." },
+                "spc": { "type": "object", "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the environment decided idp.environment.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))." },
             }),
             &["render"],
         ),
         "ApprovalFinish": object(
             &json!({
                 "credential": { "description": "The PublicKeyCredential JSON of the assertion (toJSON()), as a string or an object." },
-                "redirect_uri": { "type": "string", "description": "As GET /v1/approve; checked against the realm's clients again." },
+                "redirect_uri": { "type": "string", "description": "As GET /v1/approve; checked against the environment's clients again." },
                 "state": { "type": "string", "description": "As GET /v1/approve." },
                 "app_factor": r("AppFactorProof"),
             }),
@@ -1384,12 +1384,12 @@ pub fn paths(paths: &mut Map<String, Value>) {
         BATCH_PATH.to_owned(),
         json!({ "post": {
             "operationId": "startBatchApproval",
-            "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3).",
+            "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m), §13.7.3).",
             "parameters": [idempotency()],
             "requestBody": body("BatchStart"),
             "responses": {
                 "201": json_response("Every item opened, each with its own statement and options.", "BatchStarted"),
-                "422": problem("approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused."),
+                "422": problem("approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the environment did not open; the whole batch is refused."),
                 "401": problem("The approver has no live session."),
                 "503": problem("Temporarily unavailable."),
             },
@@ -1413,7 +1413,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
         INLINE_PATH.to_owned(),
         json!({ "post": {
             "operationId": "answerInlineApproval",
-            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the realm's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26).",
+            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the environment's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26).",
             "parameters": [idempotency()],
             "requestBody": body("InlineAnswer"),
             "responses": {
@@ -1429,7 +1429,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
         REQUESTS_PATH.to_owned(),
         json!({ "post": {
             "operationId": "pushApprovalRequest",
-            "summary": "A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the realm's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing.",
+            "summary": "A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the environment's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing.",
             "parameters": [idempotency()],
             "requestBody": body("ApprovalPush"),
             "responses": {
@@ -1451,7 +1451,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
             "responses": {
                 "200": json_response("Shown, but this viewer can't approve here: no flow is opened (render.approvable false, render.blocked says why).", "ApprovalStarted"),
                 "201": json_response("The render and the options.", "ApprovalStarted"),
-                "400": problem("invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the realm's)."),
+                "400": problem("invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the environment's)."),
                 "401": problem("No live session (session-required)."),
                 "403": problem("approver-instance: no device Instance of this user signed the contribution."),
                 "404": problem("approval-request-unknown: no such or an expired push."),

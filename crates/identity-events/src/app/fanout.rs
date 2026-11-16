@@ -2,7 +2,7 @@
 //! authority outbox becomes one unsigned SET per live subscription of its tenant that asked for
 //! its type. The cursor moves only after the deliveries are stored, and a repeated step stores
 //! nothing twice (the event id is the key), so no event is lost or doubled. [`Fanout::run`]
-//! steps the identity outbox and the outbox of every live realm's governing domain.
+//! steps the identity outbox and the outbox of every live environment's governing domain.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
@@ -10,12 +10,12 @@ use std::time::{Duration, Instant};
 use access_internal_api::events::{Event, Kind, POSITION_FIELD, Position, Subject};
 use access_store::authority;
 use access_store::events::{self as store, DeliveryRow, SubscriptionRow};
-use access_store::identity::{self, RealmId, TenantId, TenantTx};
+use access_store::identity::{self, EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::{Pool, idp, tenancy};
 
 use crate::app::courier::POLL_INTERVAL;
-use crate::app::{Db, down, realm_signing};
+use crate::app::{Db, down, environment_signing};
 use access_identity_account::domain::signal::{Initiator, OUTBOX_PREFIX as SIGNAL_PREFIX, Signal};
 use access_kernel::json::b64url_decode;
 use serde_json::{Value, json};
@@ -95,7 +95,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 match Signal::from_outbox(&ev.kind, &ev.payload) {
                     Ok(s) => {
                         let n = self
-                            .queue_signal(ev.tenant, ev.realm, &s, identity_position(ev))
+                            .queue_signal(ev.tenant, ev.environment, &s, identity_position(ev))
                             .await?;
                         queued = queued.saturating_add(n);
                     }
@@ -118,7 +118,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
     }
 
     /// [`Fanout::domain_step`]; with the router role, an admitted `party.compromised` first
-    /// raises the `session_epoch` of the Party's subject in each realm the domain governs, so
+    /// raises the `session_epoch` of the Party's subject in each environment the domain governs, so
     /// its sessions and identity tokens end (OP-21, §7.9.2.4, OP-150 m.2).
     ///
     /// # Errors
@@ -186,7 +186,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         Ok(queued)
     }
 
-    /// Raises the `session_epoch` of the subject bound to `party` in every live realm of
+    /// Raises the `session_epoch` of the subject bound to `party` in every live environment of
     /// `tenant` that `domain` governs (OP-21): its login sessions and grants end. Repeating it
     /// only raises the epoch again.
     async fn end_party_sessions(
@@ -200,7 +200,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             .await
             .map_err(down)?
         {
-            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.environment)
                 .await
                 .map_err(down)?;
             let governed = idp::governance(&mut t)
@@ -235,7 +235,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
     }
 
     /// TN-41: the CAEP `device-compliance-change` of a device Instance that ended, in every
-    /// live realm of `tenant` that `domain` governs and that knows the Instance as a device key.
+    /// live environment of `tenant` that `domain` governs and that knows the Instance as a device key.
     async fn device_ended(
         &self,
         router: &Pool,
@@ -248,7 +248,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             .await
             .map_err(down)?
         {
-            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.environment)
                 .await
                 .map_err(down)?;
             let governed = idp::governance(&mut t)
@@ -267,15 +267,15 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         Ok(())
     }
 
-    /// The governing domains of the live realms, read through the router role (`router`) and
-    /// each realm's own scope.
+    /// The governing domains of the live environments, read through the router role (`router`) and
+    /// each environment's own scope.
     ///
     /// # Errors
     /// [`Unavailable`].
     pub async fn domains(&self, router: &Pool) -> Result<Vec<DomainId>, Unavailable> {
         let mut out = BTreeSet::new();
         for r in tenancy::routes(router).await.map_err(down)? {
-            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.environment)
                 .await
                 .map_err(down)?;
             let g = idp::governance(&mut t).await.map_err(down)?;
@@ -353,10 +353,11 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             .map_err(down)?;
         let subs = t.live_subscriptions().await.map_err(down)?;
         t.commit().await.map_err(down)?;
-        let mut by_realm: BTreeMap<([u8; 16], [u8; 16]), Vec<SubscriptionRow>> = BTreeMap::new();
+        let mut by_environment: BTreeMap<([u8; 16], [u8; 16]), Vec<SubscriptionRow>> =
+            BTreeMap::new();
         for s in subs.into_iter().filter(|s| wants(&s.events)) {
-            by_realm
-                .entry((*tenant.as_bytes(), s.realm))
+            by_environment
+                .entry((*tenant.as_bytes(), s.environment))
                 .or_default()
                 .push(s);
         }
@@ -367,29 +368,33 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             if p.tenant == tenant || !wants(&p.events) {
                 continue;
             }
-            let mut t = TenantTx::begin(&self.db.app, p.tenant, p.realm)
+            let mut t = TenantTx::begin(&self.db.app, p.tenant, p.environment)
                 .await
                 .map_err(down)?;
-            let s = t.subscription(p.realm, p.id).await.map_err(down)?;
+            let s = t.subscription(p.environment, p.id).await.map_err(down)?;
             t.commit().await.map_err(down)?;
             if let Some(s) = s.filter(|s| !s.disabled) {
-                by_realm
-                    .entry((*p.tenant.as_bytes(), *p.realm.as_bytes()))
+                by_environment
+                    .entry((*p.tenant.as_bytes(), *p.environment.as_bytes()))
                     .or_default()
                     .push(s);
             }
         }
         let raw_id = b64url_decode(&ready.id).map_err(down)?;
         let mut queued = 0_u32;
-        for ((owner, realm), subs) in by_realm {
-            let (owner, realm) = (TenantId::from_bytes(owner), RealmId::from_bytes(realm));
-            let Some((issuer, _)) = realm_signing(&self.db.app, owner, realm).await? else {
+        for ((owner, environment), subs) in by_environment {
+            let (owner, environment) = (
+                TenantId::from_bytes(owner),
+                EnvironmentId::from_bytes(environment),
+            );
+            let Some((issuer, _)) = environment_signing(&self.db.app, owner, environment).await?
+            else {
                 continue;
             };
-            let mut t = TenantTx::begin(&self.db.app, owner, realm)
+            let mut t = TenantTx::begin(&self.db.app, owner, environment)
                 .await
                 .map_err(down)?;
-            let profiles = profiles(&mut t, realm).await?;
+            let profiles = profiles(&mut t, environment).await?;
             for s in subs {
                 let profile = profiles.get(&s.id).copied().unwrap_or_default();
                 for form in forms(ready.name, profile, &s.events) {
@@ -435,31 +440,32 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         Ok(queued)
     }
 
-    /// One CAEP or RISC SET per live stream of the signal's realm that asked for its type
+    /// One CAEP or RISC SET per live stream of the signal's environment that asked for its type
     /// (TN-41, TN-43). The subject is named by the stream's receiver's own pairwise `sub`
     /// (RFC 9493 `iss_sub`), and only when the subject already has one there: a receiver never
-    /// learns of a subject it was not given (MD-10). A realm-wide signal names the realm issuer
+    /// learns of a subject it was not given (MD-10). An environment-wide signal names the environment issuer
     /// (CR-27). Each copy has its own `jti` and `txn`, so receivers cannot link them (TI-RT10).
     async fn queue_signal(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         signal: &Signal,
         at: Position,
     ) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let uri = signal_uri(signal.kind);
-        let Some((issuer, _)) = realm_signing(&self.db.app, tenant, realm).await? else {
+        let Some((issuer, _)) = environment_signing(&self.db.app, tenant, environment).await?
+        else {
             return Ok(0);
         };
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let subs = t.live_subscriptions().await.map_err(down)?;
         let mut queued = 0_u32;
         for s in subs
             .iter()
-            .filter(|s| s.realm == *realm.as_bytes() && s.events.contains(&uri))
+            .filter(|s| s.environment == *environment.as_bytes() && s.events.contains(&uri))
         {
             let sub_id = match signal.subject {
                 None => json!({"format": "uri", "uri": issuer.as_str()}),
@@ -528,12 +534,12 @@ pub fn identity_position(ev: &identity::OutboxEvent) -> Position {
     }
 }
 
-/// The profiles of `realm`'s streams; a stream without one is [`Profile::Both`].
+/// The profiles of `environment`'s streams; a stream without one is [`Profile::Both`].
 async fn profiles(
     t: &mut TenantTx,
-    realm: RealmId,
+    environment: EnvironmentId,
 ) -> Result<BTreeMap<[u8; 16], Profile>, Unavailable> {
-    Ok(t.stream_profiles(realm)
+    Ok(t.stream_profiles(environment)
         .await
         .map_err(down)?
         .into_iter()
@@ -556,7 +562,7 @@ fn delivery_row(
 ) -> Result<DeliveryRow, Unavailable> {
     Ok(DeliveryRow {
         tenant: *owner.as_bytes(),
-        realm: s.realm,
+        environment: s.environment,
         subscription: s.id,
         channel: s.channel.clone(),
         event_id,

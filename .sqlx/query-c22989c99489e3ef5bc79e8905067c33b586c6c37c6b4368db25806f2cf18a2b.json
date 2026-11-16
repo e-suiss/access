@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.tenant_id, p.environment_id, r.slug, p.name\n           FROM access.proxy_registrations p\n           JOIN access.environments r ON r.tenant_id = p.tenant_id AND r.environment_id = p.environment_id\n          WHERE p.pep = $1 AND p.host = $2 AND p.state = 'live' AND r.status = 'active'\n            AND p.version = (SELECT MAX(n.version) FROM access.proxy_registrations n\n                              WHERE n.tenant_id = p.tenant_id AND n.environment_id = p.environment_id\n                                AND n.name = p.name)\n          LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_registrations",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_registrations",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_registrations",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c22989c99489e3ef5bc79e8905067c33b586c6c37c6b4368db25806f2cf18a2b"
+}

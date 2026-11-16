@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use access_http::tls::{DomainCert, Sni};
 use access_identity_admin::domain::dns::Rtype;
-use access_identity_domain::adapters::seal::{KeySeal, RealmKek};
+use access_identity_domain::adapters::seal::{EnvironmentKek, KeySeal};
 use access_identity_domain::app::acme::Client;
 use access_identity_domain::app::pass::{self, Acme, Outcome, Pass};
 use access_identity_domain::ports::{
@@ -20,7 +20,7 @@ use access_identity_domain::ports::{
 use access_store::Pool;
 use access_store::StoreError;
 use access_store::custom_domains::{open_challenges, served_hosts};
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::jobs::{claim_kind, complete, schedule};
 use access_store::tenancy::routes;
 use suiss_crypto::envelope::Kek;
@@ -125,13 +125,17 @@ impl AccountKey for SignerAccount {
     }
 }
 
-/// The realm KEKs of this process.
+/// The environment KEKs of this process.
 #[derive(Clone)]
-pub(crate) struct Keks(pub(crate) crate::login::RealmKeks);
+pub(crate) struct Keks(pub(crate) crate::login::EnvironmentKeks);
 
-impl RealmKek for Keks {
-    fn kek(&self, tenant: TenantId, realm: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
-        access_identity_events::adapters::RealmKek::kek(&self.0, tenant, realm)
+impl EnvironmentKek for Keks {
+    fn kek(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Option<Arc<dyn Kek + Send + Sync>> {
+        access_identity_events::adapters::EnvironmentKek::kek(&self.0, tenant, environment)
     }
 }
 
@@ -146,8 +150,8 @@ fn now_s() -> Option<i64> {
 /// with every open challenge; returns how many certificates it serves.
 ///
 /// # Errors
-/// [`StoreError`] when the realm list or the served hosts cannot be read.
-pub(crate) async fn refresh<R: RealmKek>(
+/// [`StoreError`] when the environment list or the served hosts cannot be read.
+pub(crate) async fn refresh<R: EnvironmentKek>(
     (app, router): (&Pool, &Pool),
     sni: &Sni,
     keys: &KeySeal<R>,
@@ -157,7 +161,7 @@ pub(crate) async fn refresh<R: RealmKek>(
     let mut certs = Vec::new();
     if !hosts.is_empty() {
         for route in routes(router).await? {
-            match pass::served(app, keys, (route.tenant, route.realm), &hosts, now_s).await {
+            match pass::served(app, keys, (route.tenant, route.environment), &hosts, now_s).await {
                 Ok(served) => certs.extend(served.into_iter().map(|s| DomainCert {
                     host: s.host,
                     chain: s.chain,
@@ -195,14 +199,14 @@ pub(crate) struct Deps<'a, D, H, K, P, C, R> {
     pub(crate) acme: Option<&'a AcmeSetup<H, K, P>>,
     /// This node's TLS-ALPN-01 answers.
     pub(crate) challenges: &'a C,
-    /// The realm KEKs.
+    /// The environment KEKs.
     pub(crate) keys: &'a KeySeal<R>,
 }
 
-/// Schedules this slot's pass and runs it over every live realm when this node claims it.
+/// Schedules this slot's pass and runs it over every live environment when this node claims it.
 ///
 /// # Errors
-/// [`StoreError`] when the jobs table or the realm list cannot be read.
+/// [`StoreError`] when the jobs table or the environment list cannot be read.
 pub(crate) async fn tick<D, H, K, P, C, R>(
     (app, router): (&Pool, &Pool),
     deps: Deps<'_, D, H, K, P, C, R>,
@@ -215,7 +219,7 @@ where
     K: AccountKey,
     P: Pause,
     C: Challenges,
-    R: RealmKek,
+    R: EnvironmentKek,
 {
     let every = i64::try_from(INTERVAL.as_secs()).unwrap_or(60);
     let slot = now_s.checked_div(every).unwrap_or(0);
@@ -246,7 +250,10 @@ where
     for job in claim_kind(app, worker, KIND, 2, LEASE).await? {
         let mut done = true;
         for route in routes(router).await? {
-            match p.realm((route.tenant, route.realm), now_s).await {
+            match p
+                .environment((route.tenant, route.environment), now_s)
+                .await
+            {
                 Ok(o) => {
                     out.verified = out.verified.saturating_add(o.verified);
                     out.lapsed = out.lapsed.saturating_add(o.lapsed);
@@ -272,14 +279,14 @@ where
 pub(crate) async fn run<H, K, P>(
     (app, router): (Pool, Pool),
     (dns, acme): (Dns, Option<AcmeSetup<H, K, P>>),
-    (sni, realm_keks): (Arc<Sni>, Keks),
+    (sni, environment_keks): (Arc<Sni>, Keks),
     worker: String,
 ) where
     H: AcmeHttp,
     K: AccountKey,
     P: Pause,
 {
-    let keys = KeySeal(realm_keks);
+    let keys = KeySeal(environment_keks);
     let listener = Listener(sni.clone());
     let mut refreshing = tokio::time::interval(REFRESH);
     let mut passing = tokio::time::interval(INTERVAL);
@@ -317,7 +324,7 @@ pub(crate) fn spawn(
         Arc<Sni>,
         Option<access_identity_domain::adapters::https::AcmeHttps>,
     ),
-    realm_keks: Keks,
+    environment_keks: Keks,
     worker: String,
 ) -> tokio::task::JoinHandle<()> {
     let dns = Dns(WebProbe {
@@ -333,5 +340,5 @@ pub(crate) fn spawn(
         directory: setup.map(|c| c.directory.clone()).unwrap_or_default(),
         contact: setup.and_then(|c| c.contact.clone()),
     });
-    tokio::spawn(run(pools, (dns, acme), (sni, realm_keks), worker))
+    tokio::spawn(run(pools, (dns, acme), (sni, environment_keks), worker))
 }

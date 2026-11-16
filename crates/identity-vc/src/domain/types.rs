@@ -62,7 +62,7 @@ impl PersonAttribute {
             .ok_or(TypeRefused)
     }
 
-    /// The `vct`: `<issuer>/vc/<name>`, under the realm issuer.
+    /// The `vct`: `<issuer>/vc/<name>`, under the environment issuer.
     #[must_use]
     pub fn vct(self, issuer: &str) -> String {
         format!("{}/vc/{}", issuer.trim_end_matches('/'), self.name())

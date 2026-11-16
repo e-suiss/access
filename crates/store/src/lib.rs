@@ -8,9 +8,9 @@ pub mod analytics;
 pub mod api_idempotency;
 pub mod approvals;
 pub mod audit;
+pub mod audit_environment;
 pub mod audit_lease;
 pub mod audit_publication;
-pub mod audit_realm;
 pub mod audit_tier;
 pub mod audit_tiles;
 pub mod authority;
@@ -51,6 +51,7 @@ pub mod hr;
 pub use sqlx::PgPool as Pool;
 
 pub mod algorithm_admission;
+pub mod environment_binding;
 pub mod identity;
 pub mod idp;
 pub mod issuer;
@@ -79,7 +80,6 @@ pub mod projections;
 pub mod proxy;
 pub mod publications;
 pub mod push;
-pub mod realm_binding;
 pub mod recovery;
 pub mod relay;
 pub mod resources;
@@ -112,8 +112,8 @@ pub mod kek;
 // OP-158 m.3 (y)
 pub mod mds;
 // OP-158 m.3 (y)
-pub mod realm_crypto;
-pub mod realm_signing;
+pub mod environment_crypto;
+pub mod environment_signing;
 // OP-158 m.3 (v)
 pub mod quota;
 // OP-158 m.3 (h), (i)

@@ -3,7 +3,7 @@
 use std::future::Future;
 
 use access_store::audit::{AuditRow, CheckpointRow};
-use access_store::audit_realm::RealmCheckpointRow;
+use access_store::audit_environment::EnvironmentCheckpointRow;
 use access_store::audit_tier::{Due, Moved};
 use access_store::audit_tiles::{ShardRow, TileRow};
 use access_store::identity::Cursor;
@@ -36,25 +36,25 @@ pub trait AuditLog {
     ) -> impl Future<Output = Result<(), AuditError>> + Send;
 }
 
-/// The realms' own audit trees of the identity audit log (OP-152 m.7 (d)).
-pub trait RealmTrees {
-    /// The latest checkpoint of a realm's tree.
-    fn realm_last(
+/// The environments' own audit trees of the identity audit log (OP-152 m.7 (d)).
+pub trait EnvironmentTrees {
+    /// The latest checkpoint of an environment's tree.
+    fn environment_last(
         &self,
         scope: ([u8; 16], [u8; 16]),
-    ) -> impl Future<Output = Result<Option<RealmCheckpointRow>, AuditError>> + Send;
-    /// The realm's rows after `after` up to and including `upto`, in integration order.
-    fn realm_pending(
+    ) -> impl Future<Output = Result<Option<EnvironmentCheckpointRow>, AuditError>> + Send;
+    /// The environment's rows after `after` up to and including `upto`, in integration order.
+    fn environment_pending(
         &self,
         scope: ([u8; 16], [u8; 16]),
         after: Cursor,
         upto: Cursor,
         limit: u32,
     ) -> impl Future<Output = Result<Vec<AuditRow>, AuditError>> + Send;
-    /// Appends a realm checkpoint; fails if one of that size exists.
-    fn realm_append(
+    /// Appends an environment checkpoint; fails if one of that size exists.
+    fn environment_append(
         &self,
-        checkpoint: &RealmCheckpointRow,
+        checkpoint: &EnvironmentCheckpointRow,
     ) -> impl Future<Output = Result<(), AuditError>> + Send;
 }
 

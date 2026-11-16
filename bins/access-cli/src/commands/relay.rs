@@ -1,4 +1,4 @@
-//! `access-cli relay`: the realm's Relay messages the courier gave up on, and their resend
+//! `access-cli relay`: the environment's Relay messages the courier gave up on, and their resend
 //! (OP-156 m.3 (c), Ek B 5401). A resend is one `idp.relay.resend` Exercise signed with the
 //! Instance key: the message goes out again as a new outbox row citing the original. A message
 //! whose content was crypto-shredded answers `content-shredded`, an expired one
@@ -82,7 +82,7 @@ pub(crate) async fn run(args: RelayArgs) -> Code {
         }
     };
     let client = Client::new(&https, &instance, &target, &System);
-    let path = op.url_path(&target.realm, key.as_deref());
+    let path = op.url_path(&target.environment, key.as_deref());
     match args.verb {
         RelayVerb::Undelivered => match client.list(&path).await {
             Ok(items) => out(&format!("{:#}\n", Value::Array(items))),

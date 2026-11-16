@@ -105,7 +105,7 @@ groups:
           summary: More than 0.5 % of SL2 step-up requests were marked false positive
           description: >-
             Reviewers marked more than 0.5 % of risk step-up requests of the last 30 days as
-            false positives. Keep or move realms back to shadow mode and review the signal
+            false positives. Keep or move environments back to shadow mode and review the signal
             weights before asking users for more step-ups.
 
   - name: access-degraded-and-integrity
@@ -181,6 +181,6 @@ groups:
           summary: More than 0.5% of post-quantum key exchange handshakes failed in the last hour
           description: >-
             Clients that offered the X25519MLKEM768 key share failed their TLS handshake ten
-            times more often than the measured middlebox breakage. A realm with affected clients
+            times more often than the measured middlebox breakage. An environment with affected clients
             can move them to the advertise-only key share policy; the post-quantum group is
             never dropped.

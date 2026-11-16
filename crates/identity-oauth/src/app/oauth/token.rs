@@ -15,7 +15,7 @@ use access_store::oauth::{GrantRow, NewGrant};
 
 use super::authority::Asked;
 use super::{
-    Env, OAuth, Realm, Reply, code_digest, decode32, from_day, grant_live, refresh_digest,
+    Env, Environment, OAuth, Reply, code_digest, decode32, from_day, grant_live, refresh_digest,
     session_live, signed, unsigned,
 };
 use crate::app::dpop::DpopRequest;
@@ -62,13 +62,13 @@ fn binding_refused(e: BindingError) -> Reply {
 }
 
 /// RFC 8707 §2.2, OP-149 m.26 (a): a `resource` sent to the token endpoint for a protocol-scope
-/// grant must be the one the authorization request named, the realm itself when it named
+/// grant must be the one the authorization request named, the environment itself when it named
 /// none; an authority grant's resource is read with its details instead.
-fn resource_matches(params: &Params, details: &GrantDetails, realm: &Realm) -> bool {
+fn resource_matches(params: &Params, details: &GrantDetails, environment: &Environment) -> bool {
     details.authority.is_some()
         || params
             .get("resource")
-            .is_none_or(|r| r == details.audience(&realm.issuer))
+            .is_none_or(|r| r == details.audience(&environment.issuer))
 }
 
 fn invalid_target() -> Reply {
@@ -152,14 +152,22 @@ fn verifier_ok(v: &str) -> bool {
 
 impl<E: Env> OAuth<E> {
     /// `POST /token`, form-encoded (§11.4.5 #19).
-    pub async fn token(&self, realm: &Realm, params: &Params, http: TokenHttp<'_>) -> Reply {
-        let reply = match self.token_inner(realm, params, http).await {
+    pub async fn token(
+        &self,
+        environment: &Environment,
+        params: &Params,
+        http: TokenHttp<'_>,
+    ) -> Reply {
+        let reply = match self.token_inner(environment, params, http).await {
             Ok(r) => r,
             Err(Unavailable) => return Reply::Unavailable,
         };
         // OP-39
         if let Some(error) = super::authority::error_of(&reply)
-            && self.audit_refusal(realm, params, &error).await.is_err()
+            && self
+                .audit_refusal(environment, params, &error)
+                .await
+                .is_err()
         {
             return Reply::Unavailable;
         }
@@ -168,11 +176,11 @@ impl<E: Env> OAuth<E> {
 
     async fn audit_refusal(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         error: &str,
     ) -> Result<(), Unavailable> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         tx.audit(
             "oauth.token.refused",
             audit_text(params.get("client_id"), 200),
@@ -189,7 +197,7 @@ impl<E: Env> OAuth<E> {
     )]
     async fn token_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         http: TokenHttp<'_>,
     ) -> Result<Reply, Unavailable> {
@@ -198,7 +206,7 @@ impl<E: Env> OAuth<E> {
         if grant_type == Some(crate::domain::management::TOKEN_EXCHANGE)
             && params.get("subject_token_type") == Some(crate::domain::management::AIS_TOKEN_TYPE)
         {
-            return self.exchange_read(realm, params, http).await;
+            return self.exchange_read(environment, params, http).await;
         }
         let agent = match admitted(grant_type) {
             Ok(a) => a,
@@ -206,7 +214,7 @@ impl<E: Env> OAuth<E> {
         };
         // TN-35, OP-154 m.3 (dd)
         if grant_type == Some(DEVICE_CODE_GRANT) {
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             let on = tx.device_code_enabled().await?;
             tx.commit().await?;
             if !on {
@@ -219,7 +227,7 @@ impl<E: Env> OAuth<E> {
         }
         // OP-155 m.3 (l)
         if grant_type == Some(crate::domain::metadata::CIBA_GRANT) {
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             let on = tx.ciba_settings().await?.enabled;
             tx.commit().await?;
             if !on {
@@ -231,7 +239,7 @@ impl<E: Env> OAuth<E> {
             }
         }
         // IDP-1, AG-4
-        if self.prepare_client(realm, params).await?.is_err() {
+        if self.prepare_client(environment, params).await?.is_err() {
             return Ok(Reply::oauth_error(
                 401,
                 "invalid_client",
@@ -239,9 +247,9 @@ impl<E: Env> OAuth<E> {
             ));
         }
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let req = http.client_request(params);
-        let client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c) => c,
             Err(e) => {
                 let status = if e.error() == "invalid_client" {
@@ -257,11 +265,11 @@ impl<E: Env> OAuth<E> {
             }
         };
         tx.commit().await?;
-        let token_uri = realm.issuer.endpoint(Endpoint::Token.path());
+        let token_uri = environment.issuer.endpoint(Endpoint::Token.path());
         // IDP-11, TN-27
         let proof = match self
             .dpop(
-                realm,
+                environment,
                 Role::AuthorizationServer,
                 &DpopRequest {
                     proofs: http.dpop,
@@ -278,12 +286,12 @@ impl<E: Env> OAuth<E> {
             Err(f) => {
                 // OP-155 m.3 (k), RFC 8705 §3, Ek B 5090
                 if let Some(binding) = unproven_binding(&client, grant_type, http.dpop) {
-                    let mut tx = self.begin(realm).await?;
+                    let mut tx = self.begin(environment).await?;
                     let reply = if grant_type == Some("authorization_code") {
-                        self.exchange(&mut tx, realm, &client, params, binding, now)
+                        self.exchange(&mut tx, environment, &client, params, binding, now)
                             .await?
                     } else {
-                        self.rotate(&mut tx, realm, &client, params, binding, now)
+                        self.rotate(&mut tx, environment, &client, params, binding, now)
                             .await?
                     };
                     tx.commit().await?;
@@ -299,40 +307,40 @@ impl<E: Env> OAuth<E> {
             }
         };
         if agent {
-            let reply = self.agent_grant(realm, &client, params, proof.jkt, now);
+            let reply = self.agent_grant(environment, &client, params, proof.jkt, now);
             return Ok(reply.await?.with_nonce(Some(proof.nonce)));
         }
         if grant_type == Some("client_credentials") && self.asks_pep_token(params) {
             // OP-155 m.3 (q)
-            let reply = self.pep_token(realm, &client, proof.jkt, now).await?;
+            let reply = self.pep_token(environment, &client, proof.jkt, now).await?;
             return Ok(reply.with_nonce(Some(proof.nonce)));
         }
         if grant_type == Some("client_credentials") {
             // OP-149 m.31 (a), m.34 (b)
-            let reply = match self.service_target(realm, &client, params).await? {
+            let reply = match self.service_target(environment, &client, params).await? {
                 Some(Ok(target)) => {
-                    self.service_token(realm, &client, &target, proof.jkt, now)
+                    self.service_token(environment, &client, &target, proof.jkt, now)
                         .await?
                 }
                 Some(Err(refusal)) => refusal,
                 None => {
-                    self.client_credentials(realm, &client, params, proof.jkt, now)
+                    self.client_credentials(environment, &client, params, proof.jkt, now)
                         .await?
                 }
             };
             return Ok(reply.with_nonce(Some(proof.nonce)));
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let reply = if grant_type == Some(DEVICE_CODE_GRANT) {
-            self.device_token(&mut tx, realm, &client, params, proof.jkt, now)
+            self.device_token(&mut tx, environment, &client, params, proof.jkt, now)
                 .await?
         } else if grant_type == Some(crate::domain::metadata::CIBA_GRANT) {
-            self.ciba_token(&mut tx, realm, &client, params, proof.jkt, now)
+            self.ciba_token(&mut tx, environment, &client, params, proof.jkt, now)
                 .await?
         } else if grant_type == Some("authorization_code") {
             self.exchange(
                 &mut tx,
-                realm,
+                environment,
                 &client,
                 params,
                 Binding::Dpop(proof.jkt),
@@ -342,7 +350,7 @@ impl<E: Env> OAuth<E> {
         } else {
             self.rotate(
                 &mut tx,
-                realm,
+                environment,
                 &client,
                 params,
                 Binding::Dpop(proof.jkt),
@@ -363,7 +371,7 @@ impl<E: Env> OAuth<E> {
     async fn exchange(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         binding: Binding,
@@ -404,7 +412,7 @@ impl<E: Env> OAuth<E> {
         if let Err(e) = check_code_exchange(details.dpop_jkt.map(Jkt), jkt) {
             return Ok(binding_refused(e));
         }
-        if !resource_matches(params, &details.grant, realm) {
+        if !resource_matches(params, &details.grant, environment) {
             return Ok(invalid_target());
         }
         // G57
@@ -424,7 +432,7 @@ impl<E: Env> OAuth<E> {
         // OP-155 m.3 (k)
         let projected = match jkt {
             Some(jkt) => match self
-                .code_projection(realm, client, params, &mut grant_details, jkt)
+                .code_projection(environment, client, params, &mut grant_details, jkt)
                 .await?
             {
                 Ok(p) => p,
@@ -468,14 +476,23 @@ impl<E: Env> OAuth<E> {
         let nonce = details.nonce.as_deref();
         if let Some(p) = &projected {
             let body = self
-                .authority_tokens(tx, realm, client, &grant, &grant_details, p, nonce, now)
+                .authority_tokens(
+                    tx,
+                    environment,
+                    client,
+                    &grant,
+                    &grant_details,
+                    p,
+                    nonce,
+                    now,
+                )
                 .await?;
             return Ok(Reply::json(200, &body));
         }
         let body = self
             .issue(
                 tx,
-                realm,
+                environment,
                 client,
                 &grant,
                 &details.grant,
@@ -494,7 +511,7 @@ impl<E: Env> OAuth<E> {
     async fn rotate(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         binding: Binding,
@@ -547,7 +564,7 @@ impl<E: Env> OAuth<E> {
         if let Err(e) = check_refresh(grant.dpop_jkt.map(Jkt), jkt) {
             return Ok(binding_refused(e));
         }
-        if !resource_matches(params, &details, realm) {
+        if !resource_matches(params, &details, environment) {
             return Ok(invalid_target());
         }
         if let (Some(a), Some(family)) = (&details.authority, details.family) {
@@ -560,7 +577,7 @@ impl<E: Env> OAuth<E> {
                 authorized: Some(a),
                 family: Some(family),
             };
-            let p = match self.project(realm, client, &asked, jkt).await? {
+            let p = match self.project(environment, client, &asked, jkt).await? {
                 Ok(p) => p,
                 Err(r) => return Ok(r),
             };
@@ -570,7 +587,7 @@ impl<E: Env> OAuth<E> {
                 return Ok(invalid_grant());
             }
             let body = self
-                .authority_tokens(tx, realm, client, &grant, &details, &p, None, now)
+                .authority_tokens(tx, environment, client, &grant, &details, &p, None, now)
                 .await?;
             return Ok(Reply::json(200, &body));
         }
@@ -605,7 +622,15 @@ impl<E: Env> OAuth<E> {
         };
         let body = self
             .issue_with(
-                tx, realm, client, &grant, &details, &binding, None, refresh, now,
+                tx,
+                environment,
+                client,
+                &grant,
+                &details,
+                &binding,
+                None,
+                refresh,
+                now,
             )
             .await?;
         Ok(Reply::json(200, &body))
@@ -632,7 +657,7 @@ impl<E: Env> OAuth<E> {
     async fn device_token(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -726,7 +751,7 @@ impl<E: Env> OAuth<E> {
         let body = self
             .issue(
                 tx,
-                realm,
+                environment,
                 client,
                 &grant,
                 &details,

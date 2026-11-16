@@ -1,11 +1,11 @@
 //! PostgreSQL adapter of [`CourierStore`]: the outbox and cursor as `access_outbox_reader`
-//! (OP-131 m.3), subject keys and undeliverable records as `access_app` under the realm's
+//! (OP-131 m.3), subject keys and undeliverable records as `access_app` under the environment's
 //! scope (OP-12).
 
 use std::time::Duration;
 
 use access_store::audit::AuditEvent;
-use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
+use access_store::identity::{self, Cursor, EnvironmentId, OutboxEvent, TenantId, TenantTx};
 use access_store::relay::{self, CourierLease, Undelivered};
 use access_store::{Pool, StoreError};
 
@@ -62,10 +62,10 @@ impl CourierStore for PgCourierStore {
     async fn subject_key(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> Result<SubjectKey, NotifyError> {
-        let mut tx = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut tx = TenantTx::begin(&self.app, tenant, environment).await?;
         let row = tx.subject(subject, false).await?;
         // OP-153 m.3 (g)
         let challenge = if row.is_none() {
@@ -98,10 +98,10 @@ impl CourierStore for PgCourierStore {
     async fn undelivered(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         record: &Undelivered<'_>,
     ) -> Result<(), NotifyError> {
-        let mut tx = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut tx = TenantTx::begin(&self.app, tenant, environment).await?;
         tx.relay_undelivered(record).await?;
         // OP-156 m.3 (c), OP-41
         let target = EventId(record.event_id).to_string();

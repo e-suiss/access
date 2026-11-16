@@ -1,5 +1,5 @@
 # SA-53, OP-159 m.3 (ii), OP-30, HL-17
-# Data residency: where a realm's data is stored and processed.
+# Data residency: where an environment's data is stored and processed.
 
 version = 1
 framework = "Data residency"
@@ -9,8 +9,8 @@ edition = "Access placement and residency settings"
 control = "Declared region"
 status = "met"
 rules = ["TNI-3"]
-tests = ["bins/access-server/src/bootstrap/tests/management/residency.rs::op_30_a_realm_declares_residency_only_in_its_cells_region_and_reads_it_back"]
-note = "A realm declares residency only in its cell's region and reads it back."
+tests = ["bins/access-server/src/bootstrap/tests/management/residency.rs::op_30_an_environment_declares_residency_only_in_its_cells_region_and_reads_it_back"]
+note = "An environment declares residency only in its cell's region and reads it back."
 
 [[control]]
 control = "Dedicated placement"
@@ -35,4 +35,4 @@ control = "Restore scope"
 status = "not-claimed"
 rules = ["N-58"]
 tests = []
-note = "Restores are whole-database; restoring one tenant or realm alone is not offered (N-58, HL-32)."
+note = "Restores are whole-database; restoring one tenant or environment alone is not offered (N-58, HL-32)."

@@ -2,7 +2,7 @@
 //! (TN-106, TN-132).
 //!
 //! The server decides what is required; the client decides order and screens. Before the first
-//! factor succeeds a step is built only from realm policy and from what the client sent, never
+//! factor succeeds a step is built only from environment policy and from what the client sent, never
 //! from the account, so it reads the same whether or not the account exists (CR-40, X34).
 
 use core::fmt;
@@ -139,7 +139,7 @@ pub enum Requirement {
     Identifier,
     /// A password or a passkey.
     FirstFactor,
-    /// A second factor, when realm policy requires MFA.
+    /// A second factor, when environment policy requires MFA.
     SecondFactor,
 }
 
@@ -200,7 +200,7 @@ pub struct SecondFactors {
     pub sms: bool,
 }
 
-/// Which e-mail first steps the realm offers (TN-102). Realm policy, never the account.
+/// Which e-mail first steps the environment offers (TN-102). Environment policy, never the account.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EmailMethods {
     /// A code by e-mail.
@@ -290,7 +290,7 @@ impl Ui {
     }
 
     /// The first step: the identifier field with passkey autofill, and the explicit passkey
-    /// button with an empty `allowCredentials` (TN-96, TN-97, TN-99). `policy` is the realm's
+    /// button with an empty `allowCredentials` (TN-96, TN-97, TN-99). `policy` is the environment's
     /// requirement list.
     #[must_use]
     pub fn identifier(flow: FlowId, passkey: PasskeyOptions, policy: &[Requirement]) -> Self {
@@ -365,7 +365,7 @@ impl Ui {
         Self::new(flow, Step::Authenticate, policy, nodes)
     }
 
-    /// Keeps only the first steps the realm enabled (TN-132): without password sign-in the
+    /// Keeps only the first steps the environment enabled (TN-132): without password sign-in the
     /// password field and button go, without passkey sign-in the passkey button and autofill
     /// go. Only the identifier and first-factor steps change; later steps keep a passkey as a
     /// second factor.
@@ -382,8 +382,8 @@ impl Ui {
         self
     }
 
-    /// Adds the realm's e-mail first steps to the first-factor step (TN-102). They come from
-    /// realm policy, so the step reads the same for every account (OP-146 m.12 (c)); other
+    /// Adds the environment's e-mail first steps to the first-factor step (TN-102). They come from
+    /// environment policy, so the step reads the same for every account (OP-146 m.12 (c)); other
     /// steps are returned unchanged.
     #[must_use]
     pub fn with_email(mut self, offered: EmailMethods) -> Self {
@@ -818,7 +818,7 @@ mod tests {
 
     // TN-102, OP-146 m.12 (c)
     #[test]
-    fn email_steps_come_from_realm_policy_and_read_the_same() {
+    fn email_steps_come_from_environment_policy_and_read_the_same() {
         let both = EmailMethods {
             code: true,
             link: true,

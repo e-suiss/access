@@ -8,7 +8,7 @@ use super::*;
 
 const NOW: u64 = 1_800_000_000_000;
 const ISS: &str = "https://idp.example";
-const AS: &str = "https://as.example/realms/acme";
+const AS: &str = "https://as.example/env/acme";
 
 fn key() -> EcdsaKeyPair {
     EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap()

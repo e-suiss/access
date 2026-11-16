@@ -1,11 +1,11 @@
-//! PostgreSQL adapter of [`AccountDb`], as `access_app` under the realm's scope (OP-12, OP-66).
-//! Identifiers go through the realm's PII vault (OP-153 m.3 (aa)): a transaction without the
+//! PostgreSQL adapter of [`AccountDb`], as `access_app` under the environment's scope (OP-12, OP-66).
+//! Identifiers go through the environment's PII vault (OP-153 m.3 (aa)): a transaction without the
 //! vault's keys reads and writes no identifier (TI-9).
 
 use access_store::Pool;
 use access_store::accounts::{CredentialRow, NewCredential, Revoke, SealedSecret, SubjectRow};
 use access_store::audit::AuditEvent;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::throttle::ThrottleRow;
 
 use crate::AccountError;
@@ -14,7 +14,7 @@ use crate::domain::identifier::Identifier;
 use crate::domain::status::AccountStatus;
 use crate::ports::{AccountDb, AccountTx};
 
-/// The account tables in PostgreSQL, with the realm's vault keys when identifiers are touched.
+/// The account tables in PostgreSQL, with the environment's vault keys when identifiers are touched.
 pub struct PgAccounts(pub Pool, pub Option<Vault>);
 
 impl PgAccounts {
@@ -24,14 +24,14 @@ impl PgAccounts {
         Self(pool, None)
     }
 
-    /// The account tables with the realm's vault keys.
+    /// The account tables with the environment's vault keys.
     #[must_use]
     pub const fn sealed(pool: Pool, vault: Vault) -> Self {
         Self(pool, Some(vault))
     }
 }
 
-/// One scoped transaction, with the realm's vault keys when it has them; the inner
+/// One scoped transaction, with the environment's vault keys when it has them; the inner
 /// transaction is open to other identity adapters that add tables to the same unit of work
 /// (OP-63).
 pub struct PgTx(pub TenantTx, pub Option<Vault>);
@@ -68,9 +68,13 @@ impl PgTx {
 impl AccountDb for PgAccounts {
     type Tx = PgTx;
 
-    async fn begin(&self, tenant: TenantId, realm: RealmId) -> Result<PgTx, AccountError> {
+    async fn begin(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<PgTx, AccountError> {
         Ok(PgTx(
-            TenantTx::begin(&self.0, tenant, realm).await?,
+            TenantTx::begin(&self.0, tenant, environment).await?,
             self.1.clone(),
         ))
     }
@@ -152,10 +156,10 @@ impl AccountTx for PgTx {
         &mut self,
         value: &str,
     ) -> Result<Option<[u8; 16]>, AccountError> {
-        let realm = self.0.realm().ok_or(AccountError::Corrupt)?;
-        let index = self
-            .vault()?
-            .index_of(self.0.tenant().as_bytes(), realm.as_bytes(), value)?;
+        let environment = self.0.environment().ok_or(AccountError::Corrupt)?;
+        let index =
+            self.vault()?
+                .index_of(self.0.tenant().as_bytes(), environment.as_bytes(), value)?;
         Ok(self.0.subject_by_identifier(&index, &folded(value)).await?)
     }
 

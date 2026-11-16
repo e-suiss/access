@@ -116,7 +116,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
     }
 
     async fn row_party(&self, row: &ConsoleSessionRow) -> Result<Option<[u8; 16]>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, row.tenant, row.realm)
+        let mut t = TenantTx::begin(&self.app, row.tenant, row.environment)
             .await
             .map_err(down)?;
         let p = access_store::idp::subject_party(&mut t, &row.subject)
@@ -137,7 +137,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
             tenant: *row.tenant.as_bytes(),
             domain: Digest(row.domain),
             registrant: Registrant::Device {
-                realm: *row.realm.as_bytes(),
+                environment: *row.environment.as_bytes(),
                 subject: row.subject,
             },
             party: Id(party),
@@ -165,7 +165,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
             Binding::Address(ip) => ip,
         };
         self.ips
-            .prefix(row.tenant.as_bytes(), row.realm.as_bytes(), ip)
+            .prefix(row.tenant.as_bytes(), row.environment.as_bytes(), ip)
             .map(|p| RateContext::address(&p))
     }
 
@@ -177,7 +177,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
         instance: [u8; 16],
     ) -> Result<(), Unavailable> {
         let mut tx = PgTx::new(
-            TenantTx::begin(&self.app, row.tenant, row.realm)
+            TenantTx::begin(&self.app, row.tenant, row.environment)
                 .await
                 .map_err(down)?,
         );

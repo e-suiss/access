@@ -62,11 +62,11 @@ pub const SPIFFE_X509: &str = "spiffe_x509";
 /// Where a client's registration comes from (IDP-1): a policy input only, never authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrustLevel {
-    /// Registered by the realm through `idp.client.register`.
+    /// Registered by the environment through `idp.client.register`.
     Registered,
     /// Named by a Client ID Metadata Document URL (AG-3).
     Cimd,
-    /// Registered dynamically under the realm's DCR profile (RFC 7591, OP-154 m.3 (j)).
+    /// Registered dynamically under the environment's DCR profile (RFC 7591, OP-154 m.3 (j)).
     Dcr,
     /// Resolved through an OpenID Federation trust chain (IDP-19, OP-155 m.3 (j)); with or
     /// without a trust mark it still asks the person (IDP-20).
@@ -89,7 +89,7 @@ impl TrustLevel {
 /// How a `client_id` is resolved (IDP-1, IDI-10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClientIdKind {
-    /// An opaque id of the realm's own registry.
+    /// An opaque id of the environment's own registry.
     Local,
     /// A URL: resolved by federation, then CIMD; never by the local or DCR registry.
     Url,
@@ -112,7 +112,7 @@ impl ClientIdKind {
 pub struct CimdFacts {
     /// SHA-256 of the document it was resolved with.
     pub metadata_hash: [u8; 32],
-    /// When the realm first saw it.
+    /// When the environment first saw it.
     pub first_seen_ms: u64,
     /// When its name or logo last changed.
     pub visual_changed_ms: Option<u64>,
@@ -122,7 +122,7 @@ pub struct CimdFacts {
     pub native: bool,
 }
 
-/// An active client of the realm.
+/// An active client of the environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -147,9 +147,9 @@ pub struct Client {
     pub require_par: bool,
     /// The platform product the client pairs, when it is one (OP-149 m.4, OP-150 m.3 (m)).
     pub platform_product: Option<String>,
-    /// Whether it opted in to the realm's public `sub` (MD-10).
+    /// Whether it opted in to the environment's public `sub` (MD-10).
     pub public_sub: bool,
-    /// Whether the realm registered it as a third party (OP-153 m.3 (z)).
+    /// Whether the environment registered it as a third party (OP-153 m.3 (z)).
     pub third_party: bool,
     /// Where its registration comes from (IDP-1).
     pub trust: TrustLevel,
@@ -163,8 +163,8 @@ pub struct Client {
     pub certificate: Option<[u8; 32]>,
 }
 
-/// The sector of the realm's public `sub` (MD-10): no client has the nil id, so its values are
-/// shared by every opted-in client of the realm and by no pairwise one.
+/// The sector of the environment's public `sub` (MD-10): no client has the nil id, so its values are
+/// shared by every opted-in client of the environment and by no pairwise one.
 pub const PUBLIC_SECTOR: [u8; 16] = [0; 16];
 
 impl Client {
@@ -250,14 +250,14 @@ impl Client {
     }
 
     /// Whether every authorization asks the person on the Approval Surface and waits on a live
-    /// Grant (§11.6, OP-154 m.3 (k)): a client the realm did not register itself.
+    /// Grant (§11.6, OP-154 m.3 (k)): a client the environment did not register itself.
     #[must_use]
     pub const fn approval_required(&self) -> bool {
         !matches!(self.trust, TrustLevel::Registered)
     }
 
     /// The sector its `sub` values are kept under (MD-10, OP-146 m.5 (b)): the client itself,
-    /// or the realm's [`PUBLIC_SECTOR`] when it opted in.
+    /// or the environment's [`PUBLIC_SECTOR`] when it opted in.
     #[must_use]
     pub const fn sector(&self) -> [u8; 16] {
         if self.public_sub {

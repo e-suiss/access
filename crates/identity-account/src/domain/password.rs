@@ -104,7 +104,7 @@ pub struct Argon2Params {
     pub p: u32,
 }
 
-/// A realm asked for parameters below the canonical ones (OP-33: raise only).
+/// An environment asked for parameters below the canonical ones (OP-33: raise only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("Argon2 parameters may only be raised")]
 pub struct WeakerParams;
@@ -131,11 +131,11 @@ impl Argon2Params {
         p: 1,
     };
 
-    /// A realm's parameters: each at least the canonical value (OP-33, §17.5.2).
+    /// An environment's parameters: each at least the canonical value (OP-33, §17.5.2).
     ///
     /// # Errors
     /// [`WeakerParams`].
-    pub const fn for_realm(m_kib: u32, t: u32, p: u32) -> Result<Self, WeakerParams> {
+    pub const fn for_environment(m_kib: u32, t: u32, p: u32) -> Result<Self, WeakerParams> {
         let c = Self::CANONICAL;
         if m_kib < c.m_kib || t < c.t || p < c.p {
             return Err(WeakerParams);
@@ -223,7 +223,7 @@ pub fn verify(
     })
 }
 
-/// A realm's password hash profile (§10.2.1, CR-15, CR-36, OP-33, OP-158 m.3 (y)).
+/// An environment's password hash profile (§10.2.1, CR-15, CR-36, OP-33, OP-158 m.3 (y)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HashProfile {
     /// Argon2id at the canonical parameters (m = 7 MiB, t = 5, p = 1).
@@ -263,7 +263,7 @@ impl HashProfile {
         }
     }
 
-    /// The profile a realm moves to from `self` (OP-33).
+    /// The profile an environment moves to from `self` (OP-33).
     ///
     /// # Errors
     /// [`ProfileDowngrade`] for a lower one.
@@ -274,7 +274,7 @@ impl HashProfile {
         Ok(next)
     }
 
-    /// The stable name `idp.realm.hash_profile` stores (`canonical`, `high-memory`).
+    /// The stable name `idp.environment.hash_profile` stores (`canonical`, `high-memory`).
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -294,7 +294,7 @@ impl HashProfile {
     }
 }
 
-/// What a realm's passwords are hashed with: Argon2id at its profile, or under the FIPS crypto
+/// What an environment's passwords are hashed with: Argon2id at its profile, or under the FIPS crypto
 /// profile PBKDF2-HMAC-SHA-256 with 600 000 iterations (CR-15, CR-36 m.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HashPolicy {
@@ -308,7 +308,7 @@ pub enum HashPolicy {
 }
 
 impl HashPolicy {
-    /// The policy of a realm with `profile`, under FIPS when `fips`.
+    /// The policy of an environment with `profile`, under FIPS when `fips`.
     #[must_use]
     pub const fn of(profile: HashProfile, fips: bool) -> Self {
         if fips {

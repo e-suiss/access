@@ -1,6 +1,6 @@
-//! `idp.scim.*` against the realm's current state and its write in the decision's transaction
+//! `idp.scim.*` against the environment's current state and its write in the decision's transaction
 //! (OP-155 m.3 (a), (g), IDP-23, IDP-29): a client name is registered once; a rotation or a
-//! retirement needs a live client; a target's secret is sealed under the realm KEK, and without
+//! retirement needs a live client; a target's secret is sealed under the environment KEK, and without
 //! the vault no target is registered (MD-8).
 
 use access_identity_hooks::ports::KeyVault;
@@ -23,7 +23,7 @@ fn refused(e: ClientError) -> AdminError {
     }
 }
 
-/// Whether `s` fits the realm's current SCIM clients and targets.
+/// Whether `s` fits the environment's current SCIM clients and targets.
 ///
 /// # Errors
 /// [`AdminError`].
@@ -97,11 +97,11 @@ pub(crate) async fn write(
         } => {
             // MD-8
             let vault = vault.ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
-            let realm = t.realm().ok_or(AdminError::NoRealm)?;
+            let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
             let sealed = vault
                 .seal(
                     t.tenant(),
-                    realm,
+                    environment,
                     &clients::target_id(name),
                     secret.expose().as_bytes(),
                 )

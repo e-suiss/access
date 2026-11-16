@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_subjects SET kek_id = $5, wrapped_dek = $6\n                  WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kek_id = $4\n                    AND wrapped_dek = $7 AND shredded_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df5377d5a46559a590ac2d17094cde27e49031a80452005dafa882187bb5e87a"
+}

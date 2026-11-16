@@ -9,7 +9,7 @@ use access_identity_attest::domain::workload::{Selector, WorkloadId, trust_domai
 use access_identity_attest::ports::Scope;
 use access_store::workloads::WorkloadClient as Registration;
 
-use crate::app::oauth::{ClientRequest, Env, OAuth, Realm, day};
+use crate::app::oauth::{ClientRequest, Env, Environment, OAuth, day};
 use crate::domain::client::{
     Client, ClientAuth, ClientAuthError, SPIFFE_JWT, SPIFFE_X509, VerifiedWorkload, WorkloadClient,
 };
@@ -40,7 +40,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn workload_client(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         req: &ClientRequest<'_>,
         now: u64,
     ) -> Result<Option<Result<Client, ClientAuthError>>, Unavailable> {
@@ -53,7 +53,7 @@ impl<E: Env> OAuth<E> {
                 return Ok(Some(Err(ClientAuthError::Malformed)));
             };
             return Ok(Some(
-                self.svid_client(tx, realm, req, Credential::Jwt(token), now)
+                self.svid_client(tx, environment, req, Credential::Jwt(token), now)
                     .await?,
             ));
         }
@@ -68,7 +68,7 @@ impl<E: Env> OAuth<E> {
             return Ok(None);
         }
         Ok(Some(
-            self.svid_client(tx, realm, req, Credential::X509(req.chain), now)
+            self.svid_client(tx, environment, req, Credential::X509(req.chain), now)
                 .await?,
         ))
     }
@@ -76,7 +76,7 @@ impl<E: Env> OAuth<E> {
     async fn svid_client(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         req: &ClientRequest<'_>,
         credential: Credential<'_>,
         now: u64,
@@ -115,14 +115,14 @@ impl<E: Env> OAuth<E> {
             return Ok(Err(ClientAuthError::Rejected));
         }
         let scope = Scope {
-            tenant: *realm.tenant.as_bytes(),
-            realm: *realm.realm.as_bytes(),
+            tenant: *environment.tenant.as_bytes(),
+            environment: *environment.environment.as_bytes(),
         };
         let verified = verify(
             self.env.bundles(),
             scope,
             &reg.workload.bundle_endpoint,
-            (credential, realm.issuer.as_str()),
+            (credential, environment.issuer.as_str()),
             now,
         )
         .await

@@ -1,20 +1,20 @@
-//! The realm's forward-auth proxies and their browser sessions (OP-156 m.3 (l), IDP-30, B22).
+//! The environment's forward-auth proxies and their browser sessions (OP-156 m.3 (l), IDP-30, B22).
 //! A proxy is registered, changed and retired by `idp.proxy.*` decisions only; the newest
-//! version is the proxy. The router role names the realm of a proxy by its transport identity
+//! version is the proxy. The router role names the environment of a proxy by its transport identity
 //! and application host. A sign-in is taken once; a session ends. Nothing is deleted (OP-73).
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -59,9 +59,9 @@ pub struct NewProxy<'a> {
 pub struct ProxyRoute {
     /// The tenant that owns it.
     pub tenant: TenantId,
-    /// Its realm.
-    pub realm: RealmId,
-    /// The realm's slug.
+    /// Its environment.
+    pub environment: EnvironmentId,
+    /// The environment's slug.
     pub slug: String,
     /// Its name.
     pub name: String,
@@ -76,16 +76,16 @@ pub async fn put_proxy(
     bound: &Bound,
     p: &NewProxy<'_>,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.proxy_registrations (tenant_id, realm_id, name, version, state,
+        r#"INSERT INTO access.proxy_registrations (tenant_id, environment_id, name, version, state,
                 engine, host, pep, body, plain_headers, domain_id, decision_pos)
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11
            FROM access.proxy_registrations
-          WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         p.name,
         if p.live { "live" } else { "retired" },
         p.engine,
@@ -101,19 +101,19 @@ pub async fn put_proxy(
     u64::try_from(version).map_err(|_| StoreError::Corrupt)
 }
 
-/// The newest version of every proxy of the realm, by name.
+/// The newest version of every proxy of the environment, by name.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn proxies(t: &mut TenantTx) -> Result<Vec<ProxyRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT DISTINCT ON (name) name, version, state, body, plain_headers, decision_pos
            FROM access.proxy_registrations
-          WHERE tenant_id = $1 AND realm_id = $2
+          WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY name, version DESC",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -143,7 +143,7 @@ pub async fn proxy(t: &mut TenantTx, name: &str) -> Result<Option<ProxyRow>, Sto
 const MAX_MATCHES: i64 = 2;
 
 /// The live proxies whose newest version holds transport identity `pep` for application host
-/// `host`, in a live realm, read by the router role. The caller accepts exactly one.
+/// `host`, in a live environment, read by the router role. The caller accepts exactly one.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -153,12 +153,12 @@ pub async fn proxy_routes(
     host: &str,
 ) -> Result<Vec<ProxyRoute>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT p.tenant_id, p.realm_id, r.slug, p.name
+        "SELECT p.tenant_id, p.environment_id, r.slug, p.name
            FROM access.proxy_registrations p
-           JOIN access.realms r ON r.tenant_id = p.tenant_id AND r.realm_id = p.realm_id
+           JOIN access.environments r ON r.tenant_id = p.tenant_id AND r.environment_id = p.environment_id
           WHERE p.pep = $1 AND p.host = $2 AND p.state = 'live' AND r.status = 'active'
             AND p.version = (SELECT MAX(n.version) FROM access.proxy_registrations n
-                              WHERE n.tenant_id = p.tenant_id AND n.realm_id = p.realm_id
+                              WHERE n.tenant_id = p.tenant_id AND n.environment_id = p.environment_id
                                 AND n.name = p.name)
           LIMIT $3",
         pep,
@@ -171,7 +171,7 @@ pub async fn proxy_routes(
         .into_iter()
         .map(|r| ProxyRoute {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             name: r.name,
         })
@@ -189,13 +189,13 @@ pub async fn begin_sign_in(
     (verifier, return_to): (&str, &str),
     (created_ms, expires_ms): (u64, u64),
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.proxy_sessions (tenant_id, realm_id, proxy, kind, digest, verifier,
+        "INSERT INTO access.proxy_sessions (tenant_id, environment_id, proxy, kind, digest, verifier,
                 return_to, created_ms, expires_ms)
          VALUES ($1, $2, $3, 'sign_in', $4, $5, $6, $7, $8)",
         tenant,
-        realm,
+        environment,
         proxy,
         digest.as_slice(),
         verifier,
@@ -219,15 +219,15 @@ pub async fn take_sign_in(
     digest: &[u8; 32],
     now_ms: u64,
 ) -> Result<Option<(String, String)>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let now = i64::try_from(now_ms).map_err(|_| StoreError::Range)?;
     let row = sqlx::query!(
         r#"UPDATE access.proxy_sessions SET used_ms = $5
-          WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'sign_in' AND digest = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND kind = 'sign_in' AND digest = $3
             AND proxy = $4 AND used_ms IS NULL AND ended_ms IS NULL AND expires_ms > $5
          RETURNING verifier AS "verifier!", return_to AS "return_to!""#,
         tenant,
-        realm,
+        environment,
         digest.as_slice(),
         proxy,
         now,
@@ -248,13 +248,13 @@ pub async fn open_session(
     sid: &[u8; 16],
     (created_ms, expires_ms): (u64, u64),
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.proxy_sessions (tenant_id, realm_id, proxy, kind, digest, sid,
+        "INSERT INTO access.proxy_sessions (tenant_id, environment_id, proxy, kind, digest, sid,
                 created_ms, expires_ms)
          VALUES ($1, $2, $3, 'session', $4, $5, $6, $7)",
         tenant,
-        realm,
+        environment,
         proxy,
         digest.as_slice(),
         sid.as_slice(),
@@ -276,14 +276,14 @@ pub async fn session(
     digest: &[u8; 32],
     now_ms: u64,
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let now = i64::try_from(now_ms).map_err(|_| StoreError::Range)?;
     let sid = sqlx::query_scalar!(
         r#"SELECT sid AS "sid!" FROM access.proxy_sessions
-          WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'session' AND digest = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND kind = 'session' AND digest = $3
             AND proxy = $4 AND ended_ms IS NULL AND expires_ms > $5"#,
         tenant,
-        realm,
+        environment,
         digest.as_slice(),
         proxy,
         now,
@@ -299,13 +299,13 @@ pub async fn session(
 /// # Errors
 /// [`StoreError`].
 pub async fn end_sessions(t: &mut TenantTx, proxy: &str, now_ms: u64) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let now = i64::try_from(now_ms).map_err(|_| StoreError::Range)?;
     let done = sqlx::query!(
         "UPDATE access.proxy_sessions SET ended_ms = $4
-          WHERE tenant_id = $1 AND realm_id = $2 AND proxy = $3 AND ended_ms IS NULL",
+          WHERE tenant_id = $1 AND environment_id = $2 AND proxy = $3 AND ended_ms IS NULL",
         tenant,
-        realm,
+        environment,
         proxy,
         now,
     )

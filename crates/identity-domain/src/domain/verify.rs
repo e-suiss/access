@@ -1,5 +1,5 @@
 //! Verification of a custom domain (OP-156 m.3 (i)): both records must hold at once, the TXT
-//! challenge at `_access-challenge.<host>` and the host's CNAME to the realm's `<slug>.<base>`.
+//! challenge at `_access-challenge.<host>` and the host's CNAME to the environment's `<slug>.<base>`.
 //! A verification lasts 90 days; a check that finds either record gone lapses it, and a lapsed
 //! domain is not served and renews no certificate.
 
@@ -67,7 +67,7 @@ pub enum Finding {
     Both,
     /// No TXT record carries the challenge.
     NoChallenge,
-    /// The host has no CNAME to the realm hostname.
+    /// The host has no CNAME to the environment hostname.
     NoCname,
 }
 
@@ -89,7 +89,7 @@ fn same_name(a: &str, b: &str) -> bool {
 }
 
 /// What the records found mean: `txt` are the TXT strings at the challenge name, `cnames` the
-/// CNAME targets of the host, `target` the realm hostname.
+/// CNAME targets of the host, `target` the environment hostname.
 #[must_use]
 pub fn finding(challenge: &str, txt: &[String], cnames: &[String], target: &str) -> Finding {
     if !txt.iter().any(|t| t.trim() == challenge) {

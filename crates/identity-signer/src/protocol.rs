@@ -9,13 +9,13 @@ use suiss_crypto::rotation::Policy;
 /// Largest frame body.
 pub const MAX_FRAME: usize = 1 << 20;
 
-/// A realm, by its identifier's 16 bytes; the signer's key sets are keyed by it.
+/// An environment, by its identifier's 16 bytes; the signer's key sets are keyed by it.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Realm(pub [u8; 16]);
+pub struct Environment(pub [u8; 16]);
 
-impl core::fmt::Debug for Realm {
+impl core::fmt::Debug for Environment {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("Realm(")?;
+        f.write_str("Environment(")?;
         for b in self.0 {
             write!(f, "{b:02x}")?;
         }
@@ -28,20 +28,20 @@ impl core::fmt::Debug for Realm {
 pub enum Request {
     /// Whether the signer answers.
     Ping,
-    /// Opens the key set of a realm whose new keys use `alg`; repeating it changes nothing,
+    /// Opens the key set of an environment whose new keys use `alg`; repeating it changes nothing,
     /// and on an open set another `alg` applies to its next keys (OP-146 m.8 (e)).
     Open {
-        /// Realm.
-        realm: Realm,
-        /// ES256 by default, Ed25519 when the realm selects it (CR-2, MD-3).
+        /// Environment.
+        environment: Environment,
+        /// ES256 by default, Ed25519 when the environment selects it (CR-2, MD-3).
         alg: JwsAlg,
     },
-    /// The realm's JWKS.
-    Jwks(Realm),
+    /// The environment's JWKS.
+    Jwks(Environment),
     /// Signs a JSON object as a compact JWS of type `typ` at `at`.
     Sign {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// JWS `typ`.
         typ: String,
         /// JSON payload.
@@ -50,10 +50,10 @@ pub enum Request {
         at: u64,
     },
     /// Signs deterministic CBOR as a tagged `COSE_Sign1` of `content_type` at `at` with the key
-    /// that signs the realm's tokens (OP-149 m.8).
+    /// that signs the environment's tokens (OP-149 m.8).
     SignCose {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The protected header's content type.
         content_type: String,
         /// CBOR payload.
@@ -69,41 +69,41 @@ pub enum Request {
         /// The `tlog-checkpoint` body.
         body: String,
     },
-    /// Rotates the realm's active key `retire` out now (TN-118, `idp.realm.key_rotate`).
+    /// Rotates the environment's active key `retire` out now (TN-118, `idp.environment.key_rotate`).
     Rotate {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The active key's `kid`.
         retire: [u8; 32],
     },
-    /// Drops one key of the realm at once (§13.2, `idp.realm.key_drop`).
+    /// Drops one key of the environment at once (§13.2, `idp.environment.key_drop`).
     DropKey {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The key's `kid`.
         kid: [u8; 32],
     },
-    /// Replaces the realm's rotation policy (TN-118, `idp.realm.key_policy`).
+    /// Replaces the environment's rotation policy (TN-118, `idp.environment.key_policy`).
     SetPolicy {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The policy.
         policy: Policy,
     },
-    /// Opens the realm's Claim issuer key, bound to its issuer Party `party` when it is made
+    /// Opens the environment's Claim issuer key, bound to its issuer Party `party` when it is made
     /// (§10.1.7); repeating it changes nothing, another Party is refused.
     OpenIssuer {
-        /// Realm.
-        realm: Realm,
-        /// The realm's issuer Party.
+        /// Environment.
+        environment: Environment,
+        /// The environment's issuer Party.
         party: [u8; 16],
     },
-    /// Signs a JSON object as an RS256 compact JWS of type `typ` at `at` with the realm's
+    /// Signs a JSON object as an RS256 compact JWS of type `typ` at `at` with the environment's
     /// `rsa-id` key, made on first use (MD-6, OP-155 m.3 (k)): identity assertions of clients
     /// that opted in, never an authority artefact.
     SignRs256 {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// JWS `typ`.
         typ: String,
         /// JSON payload.
@@ -111,32 +111,32 @@ pub enum Request {
         /// Signing time; within the signer's clock skew of its own clock.
         at: u64,
     },
-    /// Signs a canonical `claim-statement` of the realm's issuer as a `COSE_Sign1` Claim at `at`
-    /// with the realm's Claim issuer key (L2-CLM-1).
+    /// Signs a canonical `claim-statement` of the environment's issuer as a `COSE_Sign1` Claim at `at`
+    /// with the environment's Claim issuer key (L2-CLM-1).
     SignClaim {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The statement.
         payload: Vec<u8>,
         /// Signing time; the statement's `issued_at`, within the signer's clock skew.
         at: u64,
     },
     /// Signs the AIS of one self-signed registration Exercise of the issuer Party with the
-    /// realm's Claim issuer key (OP-149 m.16 (a)).
+    /// environment's Claim issuer key (OP-149 m.16 (a)).
     SignIssuerRegistration {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// What to sign.
         registration: crate::issuer::Registration,
     },
-    /// The realm's OpenID Federation JWKS; the `federation` key set is made on this first
+    /// The environment's OpenID Federation JWKS; the `federation` key set is made on this first
     /// request (OP-155 m.3 (j), MD-6).
-    FederationJwks(Realm),
-    /// Signs a JSON object as a compact JWS of a federation `typ` at `at` with the realm's
+    FederationJwks(Environment),
+    /// Signs a JSON object as a compact JWS of a federation `typ` at `at` with the environment's
     /// `federation` key: an entity statement, a trust mark, a resolve or trust mark status answer.
     SignFederation {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// JWS `typ`, one of [`crate::service::FEDERATION_TYPES`].
         typ: String,
         /// JSON payload.
@@ -144,13 +144,13 @@ pub enum Request {
         /// Signing time; within the signer's clock skew of its own clock.
         at: u64,
     },
-    /// A request about the realm's SAML keys (OP-155 m.3 (d)).
+    /// A request about the environment's SAML keys (OP-155 m.3 (d)).
     Saml(crate::saml::SamlRequest),
     /// A request about the cell's ACME account key (OP-156 m.3 (i)).
     Acme(crate::acme::AcmeRequest),
-    /// A request about the realm's SSH CA keys (OP-156 m.3 (o)).
+    /// A request about the environment's SSH CA keys (OP-156 m.3 (o)).
     Ssh(crate::ssh::SshRequest),
-    /// A request about the realm's post-quantum key set (OP-159 m.3 (o)).
+    /// A request about the environment's post-quantum key set (OP-159 m.3 (o)).
     Pq(crate::pq::PqRequest),
 }
 
@@ -161,7 +161,7 @@ pub enum Response {
     Pong,
     /// The key set is open.
     Opened,
-    /// The realm's JWKS document.
+    /// The environment's JWKS document.
     Jwks(String),
     /// A compact JWS.
     Signed {
@@ -191,7 +191,7 @@ pub enum Response {
     },
     /// The key set changed outside the schedule; its JWKS document now.
     Rekeyed(String),
-    /// The realm's Claim issuer key.
+    /// The environment's Claim issuer key.
     Issuer {
         /// Its Party.
         party: [u8; 16],
@@ -200,11 +200,11 @@ pub enum Response {
         /// Its RFC 7638 `kid`.
         kid: [u8; 32],
     },
-    /// An answer about the realm's SAML keys.
+    /// An answer about the environment's SAML keys.
     Saml(crate::saml::SamlResponse),
     /// An answer about the cell's ACME account key.
     Acme(crate::acme::AcmeResponse),
-    /// An answer about the realm's SSH CA keys.
+    /// An answer about the environment's SSH CA keys.
     Ssh(crate::ssh::SshResponse),
     /// A refusal, by stable code.
     Error(String),
@@ -255,10 +255,10 @@ fn fixed<const N: usize>(v: Option<&Value>) -> Result<[u8; N], FrameError> {
     bytes(v)?.try_into().map_err(|_| FrameError::Malformed)
 }
 
-fn realm(v: Option<&Value>) -> Result<Realm, FrameError> {
+fn environment(v: Option<&Value>) -> Result<Environment, FrameError> {
     bytes(v)?
         .try_into()
-        .map(Realm)
+        .map(Environment)
         .map_err(|_| FrameError::Malformed)
 }
 
@@ -311,37 +311,37 @@ impl Request {
     fn to_value(&self) -> Value {
         match self {
             Self::Ping => map(vec![("ping", Value::Bool(true))]),
-            Self::Open { realm, alg } => map(vec![(
+            Self::Open { environment, alg } => map(vec![(
                 "open",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("alg", Value::text(alg.name())),
                 ]),
             )]),
             Self::Jwks(r) => map(vec![("jwks", Value::Bytes(r.0.to_vec()))]),
             Self::Sign {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
             } => map(vec![(
                 "sign",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("typ", Value::text(typ)),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
             Self::SignCose {
-                realm,
+                environment,
                 content_type,
                 payload,
                 at,
             } => map(vec![(
                 "sign_cose",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("content_type", Value::text(content_type)),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
@@ -352,78 +352,88 @@ impl Request {
                 "sign_checkpoint",
                 map(vec![("body", Value::text(body))]),
             )]),
-            Self::Rotate { realm, retire } => map(vec![(
+            Self::Rotate {
+                environment,
+                retire,
+            } => map(vec![(
                 "rotate",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("retire", Value::Bytes(retire.to_vec())),
                 ]),
             )]),
-            Self::DropKey { realm, kid } => map(vec![(
+            Self::DropKey { environment, kid } => map(vec![(
                 "drop_key",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("kid", Value::Bytes(kid.to_vec())),
                 ]),
             )]),
-            Self::SetPolicy { realm, policy } => map(vec![(
+            Self::SetPolicy {
+                environment,
+                policy,
+            } => map(vec![(
                 "set_policy",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("policy", policy_value(policy)),
                 ]),
             )]),
             Self::FederationJwks(r) => map(vec![("federation_jwks", Value::Bytes(r.0.to_vec()))]),
             Self::SignFederation {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
             } => map(vec![(
                 "sign_federation",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("typ", Value::text(typ)),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
-            Self::OpenIssuer { realm, party } => map(vec![(
+            Self::OpenIssuer { environment, party } => map(vec![(
                 "open_issuer",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("party", Value::Bytes(party.to_vec())),
                 ]),
             )]),
-            Self::SignClaim { realm, payload, at } => map(vec![(
+            Self::SignClaim {
+                environment,
+                payload,
+                at,
+            } => map(vec![(
                 "sign_claim",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
             Self::SignRs256 {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
             } => map(vec![(
                 "sign_rs256",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("typ", Value::text(typ)),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
             Self::SignIssuerRegistration {
-                realm,
+                environment,
                 registration: r,
             } => map(vec![(
                 "sign_issuer_registration",
                 map(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("domain", Value::Bytes(r.domain.to_vec())),
                     ("nonce", Value::Bytes(r.nonce.clone())),
                     ("from", Value::Unsigned(r.validity.0)),
@@ -454,11 +464,11 @@ impl Request {
             });
         }
         if let Some(r) = v.get("federation_jwks") {
-            return Ok(Self::FederationJwks(realm(Some(r))?));
+            return Ok(Self::FederationJwks(environment(Some(r))?));
         }
         if let Some(s) = v.get("sign_federation") {
             return Ok(Self::SignFederation {
-                realm: realm(s.get("realm"))?,
+                environment: environment(s.get("environment"))?,
                 typ: text(s.get("typ"))?,
                 payload: bytes(s.get("payload"))?,
                 at: uint(s.get("at"))?,
@@ -466,20 +476,20 @@ impl Request {
         }
         if let Some(o) = v.get("open_issuer") {
             return Ok(Self::OpenIssuer {
-                realm: realm(o.get("realm"))?,
+                environment: environment(o.get("environment"))?,
                 party: fixed(o.get("party"))?,
             });
         }
         if let Some(s) = v.get("sign_claim") {
             return Ok(Self::SignClaim {
-                realm: realm(s.get("realm"))?,
+                environment: environment(s.get("environment"))?,
                 payload: bytes(s.get("payload"))?,
                 at: uint(s.get("at"))?,
             });
         }
         if let Some(s) = v.get("sign_issuer_registration") {
             return Ok(Self::SignIssuerRegistration {
-                realm: realm(s.get("realm"))?,
+                environment: environment(s.get("environment"))?,
                 registration: crate::issuer::Registration {
                     domain: fixed(s.get("domain"))?,
                     nonce: bytes(s.get("nonce"))?,
@@ -493,7 +503,7 @@ impl Request {
         }
         if let Some(s) = v.get("sign_rs256") {
             return Ok(Self::SignRs256 {
-                realm: realm(s.get("realm"))?,
+                environment: environment(s.get("environment"))?,
                 typ: text(s.get("typ"))?,
                 payload: bytes(s.get("payload"))?,
                 at: uint(s.get("at"))?,
@@ -501,34 +511,34 @@ impl Request {
         }
         if let Some(o) = v.get("open") {
             return Ok(Self::Open {
-                realm: realm(o.get("realm"))?,
+                environment: environment(o.get("environment"))?,
                 alg: alg_of(&text(o.get("alg"))?).ok_or(FrameError::Malformed)?,
             });
         }
         if let Some(r) = v.get("jwks") {
-            return Ok(Self::Jwks(realm(Some(r))?));
+            return Ok(Self::Jwks(environment(Some(r))?));
         }
         if let Some(r) = v.get("rotate") {
             return Ok(Self::Rotate {
-                realm: realm(r.get("realm"))?,
+                environment: environment(r.get("environment"))?,
                 retire: kid(r.get("retire"))?,
             });
         }
         if let Some(d) = v.get("drop_key") {
             return Ok(Self::DropKey {
-                realm: realm(d.get("realm"))?,
+                environment: environment(d.get("environment"))?,
                 kid: kid(d.get("kid"))?,
             });
         }
         if let Some(p) = v.get("set_policy") {
             return Ok(Self::SetPolicy {
-                realm: realm(p.get("realm"))?,
+                environment: environment(p.get("environment"))?,
                 policy: policy_of(p.get("policy").ok_or(FrameError::Malformed)?)?,
             });
         }
         if let Some(s) = v.get("sign_cose") {
             return Ok(Self::SignCose {
-                realm: realm(s.get("realm"))?,
+                environment: environment(s.get("environment"))?,
                 content_type: text(s.get("content_type"))?,
                 payload: bytes(s.get("payload"))?,
                 at: uint(s.get("at"))?,
@@ -548,7 +558,7 @@ impl Request {
         }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {
-            realm: realm(s.get("realm"))?,
+            environment: environment(s.get("environment"))?,
             typ: text(s.get("typ"))?,
             payload: bytes(s.get("payload"))?,
             at: uint(s.get("at"))?,

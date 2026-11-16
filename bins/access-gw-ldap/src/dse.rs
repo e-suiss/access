@@ -22,7 +22,7 @@ fn attr(name: &str, values: &[&str]) -> LdapPartialAttribute {
     }
 }
 
-/// The root DSE of the gateway serving realm `slug`.
+/// The root DSE of the gateway serving environment `slug`.
 #[must_use]
 pub fn root(slug: &str, starttls: bool) -> LdapSearchResultEntry {
     let context = format!("o={slug}");

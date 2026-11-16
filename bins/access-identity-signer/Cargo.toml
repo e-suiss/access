@@ -1,6 +1,6 @@
 [package]
 name = "access-identity-signer-bin"
-description = "Access identity signer process (CMP-22b): realm JOSE key sets, their JWKS and identity token signatures over a Unix socket."
+description = "Access identity signer process (CMP-22b): environment JOSE key sets, their JWKS and identity token signatures over a Unix socket."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

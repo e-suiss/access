@@ -49,7 +49,7 @@ fn read_proof_binds_instance_mode_domain_request_and_time() {
     let kid = thumbprint(&key.public_key());
     let pk = key.public_key();
     let domain = Digest([3; 32]);
-    let target = "/admin/v1/realms/acme/clients?limit=10";
+    let target = "/admin/v1/envs/acme/clients?limit=10";
     let intent = read_intent(&Method::GET, target);
     let instance = Some((&kid, &pk));
     let ok = signed(&key, &statement(domain, intent, Mode::Check, NOW));
@@ -66,7 +66,7 @@ fn read_proof_binds_instance_mode_domain_request_and_time() {
             &key,
             &statement(
                 domain,
-                read_intent(&Method::GET, "/admin/v1/realms/acme/clients"),
+                read_intent(&Method::GET, "/admin/v1/envs/acme/clients"),
                 Mode::Check,
                 NOW,
             ),
@@ -131,14 +131,14 @@ fn adp_proxy_reaches_reads_only() {
 // TN-131
 #[test]
 fn admin_proxy_paths_are_plain() {
-    assert!(admin_path("realms/acme/clients"));
+    assert!(admin_path("envs/acme/clients"));
     assert!(admin_path("platform"));
     for bad in [
         "",
-        "realms//x",
+        "envs//x",
         "../x",
-        "realms/./x",
-        "realms/%2e%2e",
+        "envs/./x",
+        "envs/%2e%2e",
         "a\\b",
         "a b",
     ] {

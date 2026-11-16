@@ -1,5 +1,5 @@
-//! The console's sign-in through the realm's own authorization server (OP-151 m.12 (b), RFC
-//! 10017 BFF pattern, TN-128): the BFF is the realm's first-party confidential client whose
+//! The console's sign-in through the environment's own authorization server (OP-151 m.12 (b), RFC
+//! 10017 BFF pattern, TN-128): the BFF is the environment's first-party confidential client whose
 //! redirect URI is the management origin's callback and whose `private_key_jwt` key the server
 //! holds in its HSM; there is no shared secret. A sign-in is the authorization code flow with
 //! PKCE S256 and `prompt=login`; the code is exchanged in process with a client assertion and a
@@ -16,12 +16,12 @@ use access_http::console::ports::{SignIn, SignedIn, Unavailable};
 use access_identity_account::app::SUBJECT_PREFIX;
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::domain::client::ASSERTION_TYPE;
-use access_identity_oauth::domain::jwt::{parse_jwks, realm_key_set};
+use access_identity_oauth::domain::jwt::{environment_key_set, parse_jwks};
 use access_identity_oauth::domain::metadata::Endpoint;
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::domain::tokens::ID_TYP;
 use access_identity_oauth::ports::oauth::TokenSigner as _;
-use access_identity_oauth::ports::{Directory as _, RealmEntry};
+use access_identity_oauth::ports::{Directory as _, EnvironmentEntry};
 use access_kernel::json::{self, Json, b64url_decode, b64url_encode};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
@@ -41,7 +41,7 @@ use crate::login::ID_KEY_ROOT;
 /// The HSM label of the console client's `private_key_jwt` key (P-256, MD-3).
 pub(crate) const CLIENT_KEY_LABEL: &str = "access/console/client-key";
 
-/// The display name of the console client in each realm.
+/// The display name of the console client in each environment.
 pub(crate) const CLIENT_NAME: &str = "Access console";
 
 const PKCE_CONTEXT: &[u8] = b"access/console-pkce/v1";
@@ -88,8 +88,8 @@ fn form(pairs: &[(&str, &str)]) -> String {
         .join("&")
 }
 
-/// The realm sign-in of the console BFF.
-pub(crate) struct RealmSignIn {
+/// The environment sign-in of the console BFF.
+pub(crate) struct EnvironmentSignIn {
     /// The public listener's routes, called in process.
     pub(crate) public: Router,
     pub(crate) directory: PgDirectory,
@@ -101,18 +101,23 @@ pub(crate) struct RealmSignIn {
     pub(crate) origin: String,
 }
 
-/// What the realm's token endpoint answered with.
+/// What the environment's token endpoint answered with.
 struct Answer {
     status: u16,
     nonce: Option<String>,
     body: serde_json::Value,
 }
 
-impl RealmSignIn {
-    fn derive(&self, context: &[u8], realm: &str, state: &str) -> Result<String, Unavailable> {
+impl EnvironmentSignIn {
+    fn derive(
+        &self,
+        context: &[u8],
+        environment: &str,
+        state: &str,
+    ) -> Result<String, Unavailable> {
         let mut input = context.to_vec();
         input.push(0);
-        input.extend_from_slice(realm.as_bytes());
+        input.extend_from_slice(environment.as_bytes());
         input.push(0);
         input.extend_from_slice(state.as_bytes());
         let mac = self
@@ -127,15 +132,15 @@ impl RealmSignIn {
         client_key(&self.keys).map_err(down)
     }
 
-    /// The realm's active console client: the one whose redirect URI is `callback` and whose
+    /// The environment's active console client: the one whose redirect URI is `callback` and whose
     /// one registered key is this server's console key.
     async fn client(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         callback: &str,
     ) -> Result<Option<String>, Unavailable> {
         let public = self.key()?.public_key();
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let found = registered(&mut t, callback, &public).await.map_err(down)?;
@@ -170,17 +175,17 @@ impl RealmSignIn {
 
     async fn post_token(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         body: String,
         proof: String,
     ) -> Result<Answer, Unavailable> {
-        let url = realm.issuer.endpoint(Endpoint::Token.path());
+        let url = environment.issuer.endpoint(Endpoint::Token.path());
         let path = url
             .strip_prefix("https://")
             .and_then(|rest| rest.find('/').and_then(|i| rest.get(i..)))
             .unwrap_or(Endpoint::Token.path());
         let request = Request::post(path)
-            .header(header::HOST, realm.issuer.authority())
+            .header(header::HOST, environment.issuer.authority())
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .header("dpop", proof)
             .body(Body::from(body))
@@ -203,7 +208,7 @@ impl RealmSignIn {
     /// used for this exchange only; a `use_dpop_nonce` answer is retried once with the nonce.
     async fn exchange(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         client_id: &str,
         code: &str,
         verifier: &str,
@@ -211,10 +216,10 @@ impl RealmSignIn {
         now_ms: u64,
     ) -> Result<Option<serde_json::Value>, Unavailable> {
         let (dpop, _) = SoftSigner::generate_p256().map_err(down)?;
-        let url = realm.issuer.endpoint(Endpoint::Token.path());
+        let url = environment.issuer.endpoint(Endpoint::Token.path());
         let mut nonce: Option<String> = None;
         for _ in 0..2 {
-            let assertion = self.assertion(client_id, realm.issuer.as_str(), now_ms)?;
+            let assertion = self.assertion(client_id, environment.issuer.as_str(), now_ms)?;
             let body = form(&[
                 ("grant_type", "authorization_code"),
                 ("code", code),
@@ -225,7 +230,7 @@ impl RealmSignIn {
                 ("client_assertion", &assertion),
             ]);
             let proof = proof(&dpop, &url, nonce.as_deref(), now_ms)?;
-            let answer = self.post_token(realm, body, proof).await?;
+            let answer = self.post_token(environment, body, proof).await?;
             match answer.status {
                 200 => return Ok(Some(answer.body)),
                 400 if answer.body.get("error").and_then(|e| e.as_str())
@@ -244,14 +249,18 @@ impl RealmSignIn {
         Ok(None)
     }
 
-    /// The ID token's claims, verified with the realm's keys.
+    /// The ID token's claims, verified with the environment's keys.
     async fn id_claims(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         token: &str,
     ) -> Result<Option<Json>, Unavailable> {
-        let jwks = self.signer.jwks(realm.realm).await.map_err(down)?;
-        let keys = realm_key_set(jwks.as_bytes()).map_err(down)?;
+        let jwks = self
+            .signer
+            .jwks(environment.environment)
+            .await
+            .map_err(down)?;
+        let keys = environment_key_set(jwks.as_bytes()).map_err(down)?;
         let Ok(v) = verify_compact(&AwsLcBackend, token, &keys, ID_TYP, Origin::Native) else {
             return Ok(None);
         };
@@ -261,10 +270,10 @@ impl RealmSignIn {
     /// The signed-in subject behind the grant `sid`, with its login session.
     async fn who(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         sid: [u8; 16],
     ) -> Result<Option<SignedIn>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let Some(grant) = t.grant_by_sid(&sid).await.map_err(down)? else {
@@ -280,7 +289,7 @@ impl RealmSignIn {
             return Ok(None);
         };
         Ok(Some(SignedIn {
-            realm: realm.slug.clone(),
+            environment: environment.slug.clone(),
             domain: access_kernel::digest::Digest(*g.domain.as_bytes()),
             display_name: account.clone(),
             account,
@@ -291,7 +300,7 @@ impl RealmSignIn {
     }
 }
 
-/// The realm's active client with the redirect URI `callback` whose one registered key is
+/// The environment's active client with the redirect URI `callback` whose one registered key is
 /// `key`: the console's client (OP-151 m.12 (b)).
 ///
 /// # Errors
@@ -362,22 +371,22 @@ fn text(c: &Json, name: &str) -> Option<String> {
     c.get(name).and_then(Json::as_str).map(String::from)
 }
 
-impl SignIn for RealmSignIn {
+impl SignIn for EnvironmentSignIn {
     async fn start(
         &self,
-        realm: &str,
+        environment: &str,
         state: &str,
         callback: &str,
     ) -> Result<Option<String>, Unavailable> {
-        let Some(entry) = self.directory.by_slug(realm).await.map_err(down)? else {
+        let Some(entry) = self.directory.by_slug(environment).await.map_err(down)? else {
             return Ok(None);
         };
         let Some(client_id) = self.client(&entry, callback).await? else {
             return Ok(None);
         };
-        let verifier = self.derive(PKCE_CONTEXT, realm, state)?;
+        let verifier = self.derive(PKCE_CONTEXT, environment, state)?;
         let challenge = b64url_encode(&sha256(verifier.as_bytes()));
-        let nonce = self.derive(NONCE_CONTEXT, realm, state)?;
+        let nonce = self.derive(NONCE_CONTEXT, environment, state)?;
         let query = form(&[
             ("response_type", "code"),
             ("client_id", &client_id),
@@ -398,14 +407,14 @@ impl SignIn for RealmSignIn {
 
     async fn finish(
         &self,
-        realm: &str,
+        environment: &str,
         state: &str,
         query: &str,
     ) -> Result<Option<SignedIn>, Unavailable> {
         let Ok(params) = Params::parse(query) else {
             return Ok(None);
         };
-        let Some(entry) = self.directory.by_slug(realm).await.map_err(down)? else {
+        let Some(entry) = self.directory.by_slug(environment).await.map_err(down)? else {
             return Ok(None);
         };
         // RFC 6749 §10.12, RFC 9207
@@ -428,7 +437,7 @@ impl SignIn for RealmSignIn {
         let Some(client_id) = self.client(&entry, &callback).await? else {
             return Ok(None);
         };
-        let verifier = self.derive(PKCE_CONTEXT, realm, state)?;
+        let verifier = self.derive(PKCE_CONTEXT, environment, state)?;
         let now = crate::admin::WallClock.now_ms()?;
         let Some(tokens) = self
             .exchange(&entry, &client_id, code, &verifier, &callback, now)
@@ -442,7 +451,7 @@ impl SignIn for RealmSignIn {
         let Some(claims) = self.id_claims(&entry, id_token).await? else {
             return Ok(None);
         };
-        let nonce = self.derive(NONCE_CONTEXT, realm, state)?;
+        let nonce = self.derive(NONCE_CONTEXT, environment, state)?;
         if text(&claims, "aud").as_deref() != Some(client_id.as_str())
             || text(&claims, "nonce").as_deref() != Some(nonce.as_str())
         {

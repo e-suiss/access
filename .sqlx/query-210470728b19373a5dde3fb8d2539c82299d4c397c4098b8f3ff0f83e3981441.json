@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT resource, display_name, access_token_alg FROM access.idp_protected_resources\n              WHERE tenant_id = $1 AND environment_id = $2 AND resource = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_protected_resources",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_protected_resources",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "access_token_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_protected_resources",
+            "name": "access_token_alg"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "210470728b19373a5dde3fb8d2539c82299d4c397c4098b8f3ff0f83e3981441"
+}

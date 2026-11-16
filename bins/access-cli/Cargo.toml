@@ -17,7 +17,7 @@ path = "src/main.rs"
 access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
-# OP-159 m.3 (ii): `realm check` reports with the profile check of the admin domain
+# OP-159 m.3 (ii): `environment check` reports with the profile check of the admin domain
 access-identity-admin = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }

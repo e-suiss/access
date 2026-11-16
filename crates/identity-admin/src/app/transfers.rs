@@ -15,14 +15,14 @@ use access_identity_account::notify::ports::Notifier as _;
 use access_internal_api::idp::Submission;
 use access_kernel::meta::{ExerciseBasis, Payload, Root};
 use access_kernel::model::Id;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::org_authority::{NewTransfer, Transfer, TransferState};
 
 use super::orgs::live_org;
 use super::{Admin, Applied};
 use crate::AdminError;
 use crate::domain::Invalid;
-use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 
 /// Least time between a proposal and its submission: 24 hours (TN-91, OP-153 m.3 (p)).
 pub const TRANSFER_DELAY_MS: u64 = 86_400_000;
@@ -54,7 +54,7 @@ fn payload_digest(w: &Submission) -> Result<[u8; 32], AdminError> {
         .map_err(|_| AdminError::Encode)
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     async fn signer_is(&self, w: &Submission, party: [u8; 16]) -> Result<bool, AdminError> {
         Ok(self
             .decider
@@ -73,12 +73,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn propose_transfer(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         org: [u8; 16],
         (from, to): ([u8; 16], [u8; 16]),
         w: &Submission,
     ) -> Result<Proposed, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let found = live_org(&mut t, org).await?;
         let anchor = t.party_anchor(found.party).await?.ok_or(Invalid::NoOrg)?;
         let members = t.members(found.id).await?;
@@ -112,13 +112,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .0;
         // L0-META-20, OP-153 m.25 (a)
         if let Applied::Written { .. } | Applied::AlreadyWritten { .. } =
-            Box::pin(self.meta((tenant, realm), w.clone())).await?
+            Box::pin(self.meta((tenant, environment), w.clone())).await?
         {
             return Err(AdminError::Refused(String::from(NOT_THE_TRANSFER)));
         }
         let now = access_store::authority::server_time(self.app).await?;
         let effective_ms = now.saturating_add(TRANSFER_DELAY_MS);
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let transfer = t
             .insert_transfer(&NewTransfer {
                 org: found.id,
@@ -139,7 +139,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .map(|m| m.subject)
             .collect();
         told.push(to);
-        self.tell(&mut t, realm, &told, now, effective_ms).await?;
+        self.tell(&mut t, environment, &told, now, effective_ms)
+            .await?;
         let at = now;
         super::orgs::organization_event(
             &mut t,
@@ -161,18 +162,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     async fn tell(
         &self,
         t: &mut TenantTx,
-        realm: RealmId,
+        environment: EnvironmentId,
         subjects: &[[u8; 16]],
         now: u64,
         until: u64,
     ) -> Result<(), AdminError> {
         let vault = self
             .keys
-            .vault(realm)
+            .vault(environment)
             .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
-        let named = access_identity_account::app::Realm {
+        let named = access_identity_account::app::Environment {
             tenant: t.tenant(),
-            realm,
+            environment,
             kek: &*vault.kek,
             ids: self.ids,
         };
@@ -249,12 +250,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn contribute_transfer(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         org: [u8; 16],
         id: [u8; 16],
         (by, acceptance): ([u8; 16], [u8; 32]),
     ) -> Result<(), AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let (_, tr) = self.open_transfer(&mut t, org, id).await?;
         if tr.to != by {
             return Err(AdminError::Refused(String::from(NOT_THE_TRANSFER)));
@@ -272,12 +273,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn cancel_transfer(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         org: [u8; 16],
         id: [u8; 16],
         by: [u8; 16],
     ) -> Result<(), AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let (found, tr) = self.open_transfer(&mut t, org, id).await?;
         let owner = t
             .members(found.id)
@@ -303,12 +304,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn complete_transfer(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         org: [u8; 16],
         id: [u8; 16],
         mut w: Submission,
     ) -> Result<Applied, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let (found, tr) = self.open_transfer(&mut t, org, id).await?;
         let from_party = access_store::idp::subject_party(&mut t, &tr.from)
             .await?
@@ -332,11 +333,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
         // L1-ADP-12, L0-META-20
         w.contributions = vec![access_kernel::digest::Digest(acceptance)];
-        let applied = Box::pin(self.meta((tenant, realm), w)).await?;
+        let applied = Box::pin(self.meta((tenant, environment), w)).await?;
         if let Applied::Written { exercise, .. } | Applied::AlreadyWritten { exercise, .. } =
             &applied
         {
-            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            let mut t = TenantTx::begin(self.app, tenant, environment).await?;
             if t.complete_transfer(id, &exercise.0).await? {
                 t.promote_owner(found.id, tr.to).await?;
                 t.drop_ownership(found.id, tr.from).await?;

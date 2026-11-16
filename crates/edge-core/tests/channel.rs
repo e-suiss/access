@@ -21,7 +21,7 @@ use access_edge_core::{EdgeCore, EdgeError};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::create;
 use access_identity_account::app::vault::Vault;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
@@ -35,10 +35,10 @@ use access_internal_api::edge::{Call, GatewayKind, IssueClaim};
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use rustls_pki_types::pem::PemObject as _;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -157,7 +157,7 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8) -> DomainId {
 struct TestVaults(Vault);
 
 impl Vaults for TestVaults {
-    fn vault(&self, _: TenantId, _: RealmId) -> Option<Vault> {
+    fn vault(&self, _: TenantId, _: EnvironmentId) -> Option<Vault> {
         Some(self.0.clone())
     }
 }
@@ -165,7 +165,7 @@ impl Vaults for TestVaults {
 struct World {
     db: TestDb,
     tenant: TenantId,
-    corp: RealmId,
+    corp: EnvironmentId,
     domain: DomainId,
     vault: Vault,
     kek: SoftKek,
@@ -214,10 +214,10 @@ impl World {
         tx.commit().await.unwrap();
     }
 
-    fn realm(&self) -> Realm<'_> {
-        Realm {
+    fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.corp,
+            environment: self.corp,
             kek: &self.kek,
             ids: &self.ids,
         }
@@ -227,7 +227,9 @@ impl World {
     async fn active(&self, who: &str) -> [u8; 16] {
         let pg = PgAccounts::sealed(self.db.app.clone(), self.vault.clone());
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
-        let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
+        let s = create(&pg, &self.environment(), &[id], &ADMIN)
+            .await
+            .unwrap();
         let mut tx = pg.begin(self.tenant, self.corp).await.unwrap();
         assert!(
             tx.set_status(s, AccountStatus::Staged, AccountStatus::PendingUserAction)
@@ -247,7 +249,9 @@ impl World {
     async fn person(&self, user: &str) -> [u8; 16] {
         let pg = PgAccounts::sealed(self.db.app.clone(), self.vault.clone());
         let id = Identifier::new(IdentifierKind::Username, user).unwrap();
-        let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
+        let s = create(&pg, &self.environment(), &[id], &ADMIN)
+            .await
+            .unwrap();
         let mut tx = pg.begin(self.tenant, self.corp).await.unwrap();
         tx.set_status(s, AccountStatus::Staged, AccountStatus::PendingUserAction)
             .await
@@ -307,15 +311,15 @@ async fn world(seed: u8) -> World {
     let d = domain(&db, tenant, seed).await;
     let other = domain(&db, tenant, seed.wrapping_add(1)).await;
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let corp = create_realm(&mut tx, &d, "corp", "pool-default")
+    let corp = create_environment(&mut tx, &d, "corp", "pool-default")
         .await
         .unwrap();
-    create_realm(&mut tx, &other, "other", "pool-default")
+    create_environment(&mut tx, &other, "other", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
     let vault = Vault::in_memory(
-        Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
         [seed; 32],
     );
     let ca = ca();
@@ -356,7 +360,7 @@ async fn world(seed: u8) -> World {
         corp,
         domain: d,
         vault,
-        kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        kek: SoftKek::new("environment-kek:1", [seed; 32]),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         next: std::sync::atomic::AtomicU64::new(1),
         ca,
@@ -374,14 +378,14 @@ fn refused(e: &EdgeError) -> (u16, &str) {
 
 // IDP-26, OP-155 m.3 (c), §10.6
 #[tokio::test]
-async fn a_registered_gateway_reaches_its_realm_through_the_edge_channel() {
+async fn a_registered_gateway_reaches_its_environment_through_the_edge_channel() {
     let w = world(61).await;
     let (chain, key, cert) = leaf(&w.ca, "urn:suiss:access:gw:ldap:corp-ldap");
     w.register(GatewayKind::Ldap, "corp-ldap", cert).await;
     let alice = w.active("alice@corp.example").await;
     let core = EdgeCore::connect(w.channel(&chain, &key)).await.unwrap();
     assert_eq!(core.gateway().uri(), "urn:suiss:access:gw:ldap:corp-ldap");
-    assert_eq!(core.realm(None).unwrap(), "corp");
+    assert_eq!(core.environment(None).unwrap(), "corp");
     assert_eq!(
         core.subject("ALICE@corp.example").await.unwrap(),
         Some(alice)
@@ -416,7 +420,7 @@ async fn a_registered_gateway_reaches_its_realm_through_the_edge_channel() {
 
 // §13.2, IDP-26
 #[tokio::test]
-async fn a_gateway_is_held_to_its_realm_and_method_class() {
+async fn a_gateway_is_held_to_its_environment_and_method_class() {
     let w = world(63).await;
     let (chain, key, cert) = leaf(&w.ca, "urn:suiss:access:gw:ldap:corp-ldap");
     w.register(GatewayKind::Ldap, "corp-ldap", cert).await;
@@ -425,11 +429,11 @@ async fn a_gateway_is_held_to_its_realm_and_method_class() {
     assert_eq!(
         core.issue(Some("other"), alice, "ldap-bind", now_ms(), None)
             .await,
-        Err(EdgeError::Realm)
+        Err(EdgeError::Environment)
     );
-    let ask = |realm: &str, method: &str, subject: [u8; 16], at: u64| {
+    let ask = |environment: &str, method: &str, subject: [u8; 16], at: u64| {
         IssueClaim {
-            realm: String::from(realm),
+            environment: String::from(environment),
             subject,
             method: String::from(method),
             auth_time: at,
@@ -444,7 +448,7 @@ async fn a_gateway_is_held_to_its_realm_and_method_class() {
         )
         .await
         .unwrap_err();
-    assert_eq!(refused(&other), (403, "edge-realm"));
+    assert_eq!(refused(&other), (403, "edge-environment"));
     for method in ["kerberos", "webauthn", "saml", "password"] {
         let e = core
             .raw(Call::IssueClaim, &ask("corp", method, alice, now_ms()))
@@ -532,7 +536,7 @@ async fn a_gateway_certificate_reaches_no_route_but_the_edge_calls() {
     for (method, path) in [
         ("POST", "/access/v1/claims:ingest"),
         ("POST", "/access/v1/exercises"),
-        ("GET", "/realms/corp/.well-known/openid-configuration"),
+        ("GET", "/env/corp/.well-known/openid-configuration"),
         ("POST", "/edge/v2/issue_claim"),
     ] {
         let tcp = tokio::net::TcpStream::connect(w.addr).await.unwrap();
@@ -572,7 +576,7 @@ async fn accept(
     etype: i32,
 ) -> Result<Authenticated, EdgeError> {
     let q = krb::Authenticate {
-        realm: String::from("corp"),
+        environment: String::from("corp"),
         principal: String::from(principal),
         spn: String::from(spn),
         kvno,
@@ -669,7 +673,7 @@ mod kerberos_gateway {
     use super::{SPN, leaf, world};
     use access_internal_api::edge::GatewayKind;
 
-    const LOGIN: &str = "https://corp.example/realms/corp/login";
+    const LOGIN: &str = "https://corp.example/env/corp/login";
 
     struct Running(Vec<Child>);
 

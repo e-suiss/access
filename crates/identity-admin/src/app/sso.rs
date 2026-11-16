@@ -80,7 +80,7 @@ pub(crate) struct Swept {
 /// [`AdminError`].
 pub(crate) async fn sweep(
     t: &mut PgTx,
-    realm: &access_identity_account::app::Realm<'_>,
+    environment: &access_identity_account::app::Environment<'_>,
     e: &SsoEnforcement,
     (correlation, at): (&str, u64),
 ) -> Result<Swept, AdminError> {
@@ -95,10 +95,10 @@ pub(crate) async fn sweep(
         actor: SWEEP_ACTOR,
         correlation,
     };
-    let notifier = OutboxNotifier::new(realm, &SystemEntropy, &SystemClock);
+    let notifier = OutboxNotifier::new(environment, &SystemEntropy, &SystemClock);
     let mut swept = Swept::default();
     for m in t.0.memberships(org.id).await? {
-        if access_identity_account::app::accounts::end_for_sso(t, realm, m.subject, &who)
+        if access_identity_account::app::accounts::end_for_sso(t, environment, m.subject, &who)
             .await
             .map_err(account)?
             .is_some()
@@ -136,9 +136,9 @@ pub(crate) async fn sweep(
 
 /// What a setup link needs to be issued.
 pub(crate) struct Issue<'a> {
-    /// The realm's account context, for the Relay message.
-    pub(crate) realm: &'a access_identity_account::app::Realm<'a>,
-    /// The realm's issuer, which the link lives under.
+    /// The environment's account context, for the Relay message.
+    pub(crate) environment: &'a access_identity_account::app::Environment<'a>,
+    /// The environment's issuer, which the link lives under.
     pub(crate) issuer: &'a str,
     /// The Exercise that allowed it.
     pub(crate) exercise: &'a [u8; 32],
@@ -195,7 +195,7 @@ pub(crate) async fn setup_link(
                 ),
             },
         };
-        OutboxNotifier::new(w.realm, &SystemEntropy, &SystemClock)
+        OutboxNotifier::new(w.environment, &SystemEntropy, &SystemClock)
             .notify(t, &message)
             .await
             .map_err(|e| AdminError::Unavailable(e.to_string()))?;

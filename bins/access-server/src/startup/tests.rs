@@ -17,7 +17,7 @@ fn config(issuer: &str, management: &str) -> Config {
             relay: "https://relay.example".to_owned(),
             management_api: management.to_owned(),
             products: BTreeMap::new(),
-            platform_realm: None,
+            platform_environment: None,
             relay_platform: crate::config::RelayPlatform {
                 tenant: "rtn_access".to_owned(),
                 credential_file: "/run/secrets/relay-credential".into(),
@@ -89,7 +89,7 @@ fn any_failed_check_refuses_to_serve() {
     assert_eq!(ok.clone().into_result(), Ok(()));
     let mut bad = ok;
     bad.record("authority-signer", Err("down".to_owned()));
-    bad.record("realm-jwks", Ok(()));
+    bad.record("environment-jwks", Ok(()));
     assert!(!bad.passed());
     assert_eq!(bad.failed(), ["authority-signer"]);
     let e = bad.into_result().unwrap_err();
@@ -112,13 +112,16 @@ fn identity_failures_name_their_check() {
         (Ok(2), &[]),
         (
             Err(StartupError::Signer),
-            &["identity-signer", "realm-issuers", "realm-jwks"],
+            &["identity-signer", "environment-issuers", "environment-jwks"],
         ),
         (
             Err(StartupError::Issuer("acme".to_owned())),
-            &["realm-issuers", "realm-jwks"],
+            &["environment-issuers", "environment-jwks"],
         ),
-        (Err(StartupError::Jwks("acme".to_owned())), &["realm-jwks"]),
+        (
+            Err(StartupError::Jwks("acme".to_owned())),
+            &["environment-jwks"],
+        ),
     ];
     for (outcome, failed) in cases {
         let mut r = Report::default();

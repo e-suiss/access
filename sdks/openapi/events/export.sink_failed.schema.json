@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:export.sink_failed`. The copy is behind; the record is unchanged and answers every audit question. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "sink",
     "adapter",
     "since",
@@ -14,14 +14,14 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "sink": {
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
-      "description": "The export sink's name in the realm."
+      "description": "The export sink's name in the environment."
     },
     "adapter": {
       "type": "string",

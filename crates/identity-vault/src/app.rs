@@ -5,14 +5,14 @@
 
 use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::app::sealing;
 use access_identity_federation::domain::token::pkce_challenge;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::json::b64url_encode;
 use access_kernel::tier::Tier;
 use access_store::accounts::SealedSecret;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::vault::{
     ConnectionRow, NewConnection, NewRelease, NewTokenSet, ReleaseRow, TokenSetRow,
 };
@@ -47,7 +47,7 @@ pub struct Vault<H, S, X, R> {
     pub catalog: Catalog,
     /// HTTPS to upstreams, SSRF-guarded.
     pub http: H,
-    /// The realms' client secrets.
+    /// The environments' client secrets.
     pub secrets: S,
     /// The authority plane's allowed Exercises.
     pub exercises: X,
@@ -55,33 +55,33 @@ pub struct Vault<H, S, X, R> {
     pub random: R,
 }
 
-/// One realm's keys, as the vault needs them.
+/// One environment's keys, as the vault needs them.
 #[derive(Clone, Copy)]
 pub struct Keys<'a> {
     /// Tenant.
     pub tenant: TenantId,
-    /// Realm.
-    pub realm: RealmId,
-    /// The realm KEK that wraps subject DEKs.
+    /// Environment.
+    pub environment: EnvironmentId,
+    /// The environment KEK that wraps subject DEKs.
     pub kek: &'a (dyn Kek + Send + Sync),
     /// The cell's id key.
     pub ids: &'a IdKey,
-    /// The realm's issuer, for the links it sends.
+    /// The environment's issuer, for the links it sends.
     pub issuer: &'a str,
 }
 
 impl Keys<'_> {
-    fn realm(&self) -> Realm<'_> {
-        Realm {
+    fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.realm,
+            environment: self.environment,
             kek: self.kek,
             ids: self.ids,
         }
     }
 
     async fn begin(&self, db: &Pool) -> Result<TenantTx, VaultError> {
-        Ok(TenantTx::begin(db, self.tenant, self.realm).await?)
+        Ok(TenantTx::begin(db, self.tenant, self.environment).await?)
     }
 }
 
@@ -266,14 +266,14 @@ async fn seal_in(
     set: &TokenSet,
     now: u64,
 ) -> Result<u64, VaultError> {
-    let realm = keys.realm();
+    let environment = keys.environment();
     let subject = t
         .subject(c.subject, false)
         .await?
         .ok_or(VaultError::NoConnection)?;
-    let dek = sealing::subject_key(&realm, &subject)?;
+    let dek = sealing::subject_key(&environment, &subject)?;
     let s = sealing::seal(
-        &realm,
+        &environment,
         &dek,
         &c.subject,
         &kind_of(&c.id),
@@ -303,13 +303,13 @@ async fn open(
     let Some(sealed) = sealed_of(row) else {
         return Ok(None);
     };
-    let realm = keys.realm();
+    let environment = keys.environment();
     let subject = t
         .subject(c.subject, false)
         .await?
         .ok_or(VaultError::NoConnection)?;
-    let dek = sealing::subject_key(&realm, &subject)?;
-    let text = sealing::open(&realm, &dek, &c.subject, &kind_of(&c.id), &sealed)?;
+    let dek = sealing::subject_key(&environment, &subject)?;
+    let text = sealing::open(&environment, &dek, &c.subject, &kind_of(&c.id), &sealed)?;
     Ok(TokenSet::from_sealed_text(text.expose()).ok())
 }
 
@@ -597,7 +597,7 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
         Ok(())
     }
 
-    /// Refreshes every active connection of the realm whose token expires within the refresh
+    /// Refreshes every active connection of the environment whose token expires within the refresh
     /// window, at most `limit`; returns how many it tried.
     ///
     /// # Errors
@@ -983,9 +983,9 @@ async fn prompt(
         ),
         Address::Phone(_) | Address::Device(_) => None,
     };
-    let realm = keys.realm();
+    let environment = keys.environment();
     let name: String = name.chars().take(200).collect();
-    OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+    OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock)
         .notify(
             t,
             &Message {

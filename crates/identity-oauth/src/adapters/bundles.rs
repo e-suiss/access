@@ -1,14 +1,14 @@
-//! SPIFFE bundles over the realm's rows and the guarded outbound client (OP-154 m.1 (d),
+//! SPIFFE bundles over the environment's rows and the guarded outbound client (OP-154 m.1 (d),
 //! m.3 (r)): a Bundle Endpoint is fetched with the SSRF guard of [`Outbound`], no redirect, only
 //! `200`, the read cut at [`MAX_BUNDLE`], one deadline for the fetch and a shorter one for the
-//! connection. The bundle is kept per realm and trust domain.
+//! connection. The bundle is kept per environment and trust domain.
 
 use std::time::Duration;
 
 use access_identity_attest::domain::bundle::MAX_BUNDLE;
 use access_identity_attest::ports::{Bundles, Kept, Pending, Scope, Unavailable};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::workloads::{KeptBundle, keep_bundle, kept_bundle};
 
 use crate::adapters::outbound::Outbound;
@@ -22,7 +22,7 @@ pub const FETCH_TIMEOUT_MS: u64 = 5_000;
 /// Longest the connection of a fetch may take, milliseconds (PD).
 pub const CONNECT_TIMEOUT_MS: u64 = 2_000;
 
-/// The realm's bundles in PostgreSQL, fetched over HTTPS.
+/// The environment's bundles in PostgreSQL, fetched over HTTPS.
 pub struct PgBundles {
     app: Pool,
     outbound: Outbound,
@@ -45,7 +45,7 @@ impl PgBundles {
         TenantTx::begin(
             &self.app,
             TenantId::from_bytes(scope.tenant),
-            RealmId::from_bytes(scope.realm),
+            EnvironmentId::from_bytes(scope.environment),
         )
         .await
         .map_err(|_| Unavailable)
@@ -53,9 +53,9 @@ impl PgBundles {
 }
 
 impl Bundles for PgBundles {
-    fn kept<'a>(&'a self, realm: Scope, trust_domain: &'a str) -> Pending<'a, Option<Kept>> {
+    fn kept<'a>(&'a self, environment: Scope, trust_domain: &'a str) -> Pending<'a, Option<Kept>> {
         Box::pin(async move {
-            let mut t = self.begin(realm).await?;
+            let mut t = self.begin(environment).await?;
             let k = kept_bundle(&mut t, trust_domain)
                 .await
                 .map_err(|_| Unavailable)?;
@@ -68,9 +68,14 @@ impl Bundles for PgBundles {
         })
     }
 
-    fn keep<'a>(&'a self, realm: Scope, trust_domain: &'a str, kept: Kept) -> Pending<'a, ()> {
+    fn keep<'a>(
+        &'a self,
+        environment: Scope,
+        trust_domain: &'a str,
+        kept: Kept,
+    ) -> Pending<'a, ()> {
         Box::pin(async move {
-            let mut t = self.begin(realm).await?;
+            let mut t = self.begin(environment).await?;
             keep_bundle(
                 &mut t,
                 trust_domain,

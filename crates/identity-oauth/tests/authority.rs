@@ -1,4 +1,4 @@
-//! Authority tokens at the realm's token endpoint (§9.9, §10.4 (i), OP-150 m.2): the identity
+//! Authority tokens at the environment's token endpoint (§9.9, §10.4 (i), OP-150 m.2): the identity
 //! plane checks the request against the holder's `projection.issue` Exercise and forwards it;
 //! the authority plane (scripted here) decides. Real PostgreSQL, real identity signer.
 
@@ -94,9 +94,13 @@ fn holder_kid(at: &At<'_>) -> [u8; 32] {
 }
 
 async fn governing(at: &At<'_>) -> Digest {
-    let mut tx = TenantTx::begin(&at.c.db.app, at.f.realm.tenant, at.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &at.c.db.app,
+        at.f.environment.tenant,
+        at.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let g = access_store::idp::governance(&mut tx)
         .await
         .unwrap()
@@ -378,9 +382,13 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
     assert_eq!(error(&r), "unauthorized_client");
     assert_eq!(asked(&at).len(), 0);
     // OP-39
-    let mut tx = TenantTx::begin(&c.db.app, at.f.realm.tenant, at.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &c.db.app,
+        at.f.environment.tenant,
+        at.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let rows = tx.list_audit(100).await.unwrap();
     tx.commit().await.unwrap();
     let refused = rows
@@ -688,7 +696,10 @@ async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() 
         token.clone(),
     )])
     .unwrap();
-    let r = at.c.oauth.revoke(&at.f.realm, &p, Some(&at.basic())).await;
+    let r =
+        at.c.oauth
+            .revoke(&at.f.environment, &p, Some(&at.basic()))
+            .await;
     assert_eq!(body(&r, 200), serde_json::json!({}));
     assert_eq!(
         *at.c.oauth.env().plane.revoked.lock().unwrap(),

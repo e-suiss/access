@@ -1,6 +1,6 @@
 //! The test user's software passkey on the client side (OP-149 m.26 (e)): the same virtual
 //! authenticator the bootstrap registered, signing with the key the operator names, never a
-//! default. It answers a realm's assertion ceremonies: the identifier-first sign-in and the
+//! default. It answers an environment's assertion ceremonies: the identifier-first sign-in and the
 //! Approval Surface's challenge over H(AAS) (§9.14.1 step 3).
 
 use access_identity_webauthn::domain::software::SoftwareAuthenticator;
@@ -14,7 +14,7 @@ use crate::ClientError;
 pub struct Passkey<'a> {
     /// The Ed25519 key.
     pub key: &'a dyn Signer,
-    /// The realm's RP ID: the issuer's host.
+    /// The environment's RP ID: the issuer's host.
     pub rp_id: &'a str,
     /// The origin the ceremony runs at: `https://<issuer authority>`.
     pub origin: &'a str,

@@ -38,7 +38,7 @@ use access_sdk::transport::{Answer, FixedClock, Response};
 use ed25519_dalek::Signer as _;
 use support::{HOLDER_SEED, NOW, REQUEST_URI, TokenSpec, ed, ed_pub, intent, jwks_of, server};
 
-const ISSUER: &str = "https://login.example/realms/acme";
+const ISSUER: &str = "https://login.example/env/acme";
 const CLIENT: &str = "client-1";
 const REDIRECT: &str = "https://app.example/cb";
 const ID_SEED: u8 = 9;
@@ -109,7 +109,7 @@ fn discovery_refuses_another_issuer_a_server_without_s256_and_non_https_endpoint
     );
     let http = metadata_doc("").replace(
         &format!("{ISSUER}/token"),
-        "http://login.example/realms/acme/token",
+        "http://login.example/env/acme/token",
     );
     assert_eq!(
         discovery::parse_document(http.as_bytes(), ISSUER),
@@ -162,7 +162,7 @@ fn query_param(url: &str, name: &str) -> String {
 fn the_callback_needs_this_state_this_issuer_and_a_code() {
     let req = request::authorize(&metadata(), &client(), None, &rng()).unwrap();
     let state = query_param(&req.url, "state");
-    let iss = "https%3A%2F%2Flogin.example%2Frealms%2Facme";
+    let iss = "https%3A%2F%2Flogin.example%2Fenv%2Facme";
     let p = &req.pending;
     assert!(
         p.callback(&format!("code=c1&state={state}&iss={iss}"))

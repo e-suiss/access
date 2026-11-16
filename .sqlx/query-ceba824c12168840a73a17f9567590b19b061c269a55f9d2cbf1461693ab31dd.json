@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tenant_id AS \"tenant_id!\", environment_id AS \"environment_id!\" FROM (\n             SELECT d.tenant_id, d.environment_id FROM access.hr_due d\n              WHERE d.state = 'pending' AND d.due_ms <= $1\n                AND NOT EXISTS (SELECT 1 FROM access.hr_due n\n                                 WHERE n.tenant_id = d.tenant_id AND n.environment_id = d.environment_id\n                                   AND n.source = d.source AND n.person = d.person\n                                   AND n.change = d.change AND n.version > d.version)\n             UNION\n             SELECT r.tenant_id, r.environment_id FROM access.hr_records r\n              WHERE NOT EXISTS (SELECT 1 FROM access.hr_record_claims c\n                                 WHERE c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id\n                                   AND c.source = r.source AND c.person = r.person\n                                   AND c.version = r.version)\n           ) w LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "ceba824c12168840a73a17f9567590b19b061c269a55f9d2cbf1461693ab31dd"
+}

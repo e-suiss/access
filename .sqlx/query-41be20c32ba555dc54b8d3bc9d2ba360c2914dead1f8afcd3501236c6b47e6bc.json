@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT governing_domain_id, slug, issuer FROM access.environments\n          WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "governing_domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "governing_domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "issuer"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "41be20c32ba555dc54b8d3bc9d2ba360c2914dead1f8afcd3501236c6b47e6bc"
+}

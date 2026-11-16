@@ -9,7 +9,7 @@ use access_identity_account::app::approver::{self, Context, Refused, Registratio
 use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::ports::Notifier;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::FlowRef;
 use access_identity_session::app::push::{Answered, PushContext, PushStart, SameDevice};
 use access_identity_session::ports::Clock;
@@ -24,7 +24,7 @@ use super::{
 use crate::domain::flow::{FlowId, Ui};
 use crate::domain::frontend::rfc3339;
 use crate::domain::message::{Message, TextId};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// Prefix of an approver's external id.
 pub const APPROVER_PREFIX: &str = "apv";
@@ -121,7 +121,7 @@ where
     pub(super) async fn push<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         flow: &FlowId,
         fref: &FlowRef<'_>,
@@ -174,7 +174,7 @@ where
     pub(super) async fn push_step<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         flow: &FlowId,
         fref: &FlowRef<'_>,
@@ -193,7 +193,7 @@ where
     /// or, with `same`, from an approver that started the sign-in itself.
     pub async fn push_challenge(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         handle: &str,
         same: Option<SameDeviceWire<'_>>,
@@ -243,7 +243,7 @@ where
     /// `POST /v1/push/answer`: an approver's signed answer to a push (`push-challenge.cddl`).
     pub async fn push_answer(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         answer: &str,
         signature: &str,
@@ -274,7 +274,7 @@ where
     }
 
     /// `GET /v1/approvers`: the person's approvers; never a key.
-    pub async fn approvers(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn approvers(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -285,7 +285,7 @@ where
         };
         let read = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let rows = approver::list(&mut tx, subject).await?;
             tx.commit().await?;
@@ -312,7 +312,7 @@ where
     /// `POST /v1/approvers`: registers an approver's key after a sign-in in the last 5 minutes.
     pub async fn register_approver(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         name: &str,
         public_key: &str,
@@ -329,12 +329,12 @@ where
         let (Ok(key), Ok(proof)) = (b64url_decode(public_key), b64url_decode(proof)) else {
             return Reply::problem(BAD_KEY);
         };
-        let realm = kit.realm();
-        let notifier = self.messages.notifier(&realm);
+        let environment = kit.environment();
+        let notifier = self.messages.notifier(&environment);
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let made = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let cx = Context {
                 actor: &actor,
@@ -383,7 +383,7 @@ where
     /// `POST /v1/approvers/{device}/retire`: after a sign-in in the last 5 minutes.
     pub async fn retire_approver(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         device: &str,
     ) -> Reply {
@@ -401,7 +401,7 @@ where
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let done = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let cx = Context {
                 actor: &actor,

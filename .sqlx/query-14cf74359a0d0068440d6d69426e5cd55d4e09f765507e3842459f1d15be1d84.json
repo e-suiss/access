@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT org_id FROM access.org_scim_sources\n              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND ended_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_scim_sources",
+            "name": "org_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "14cf74359a0d0068440d6d69426e5cd55d4e09f765507e3842459f1d15be1d84"
+}

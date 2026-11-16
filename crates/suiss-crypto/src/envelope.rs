@@ -1,4 +1,4 @@
-//! Envelope encryption (CR-32, T27, T39, OP-135): per-body DEKs wrapped by a domain or realm
+//! Envelope encryption (CR-32, T27, T39, OP-135): per-body DEKs wrapped by a domain or environment
 //! KEK. A body DEK encrypts one message and is consumed by it; a long-lived DEK counts its
 //! messages and refuses past its limit (V4).
 

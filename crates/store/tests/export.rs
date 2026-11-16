@@ -20,10 +20,10 @@ use access_store::events::SealedKey;
 use access_store::export::{
     NewSink, advance, audit_after, cursor, failed, notified, sink, sinks, write,
 };
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -89,12 +89,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, "acme", "pool-default")
+    let r = create_environment(&mut tx, d, "acme", "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     tx.commit().await.unwrap();
     r
@@ -153,7 +153,7 @@ async fn sinks_follow_decisions_and_cursors_only_move_forward() {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, tenant, 41, 3).await;
-    let r = realm(&db, tenant, &d).await;
+    let r = environment(&db, tenant, &d).await;
 
     let mut tx = TenantTx::begin(&db.app, tenant, r).await.unwrap();
     let unbound = bind(

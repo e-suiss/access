@@ -77,15 +77,15 @@ const RESERVED: &str = "reserved change (CT3): the reconciler's Grant holds no r
 const RELEASE: &str =
     "emergency escape (TN-124): a restriction Exercise; the reconciler never undoes it";
 
-/// Plans and applies `doc` for `realm`.
+/// Plans and applies `doc` for `environment`.
 pub(crate) async fn reconcile<T: Transport, E: Env>(
     client: &Client<'_, T, E>,
-    realm: &str,
+    environment: &str,
     doc: &Value,
     prune: bool,
     managed_by: Option<String>,
 ) -> Result<Outcome, ApplyError> {
-    let live = runtime(client, realm)
+    let live = runtime(client, environment)
         .await
         .map_err(|source| ApplyError::Client {
             source,
@@ -94,7 +94,7 @@ pub(crate) async fn reconcile<T: Transport, E: Env>(
         })?;
     let steps = gitops::plan(
         api::contract(),
-        realm,
+        environment,
         doc,
         &live,
         &PlanOptions { prune, managed_by },
@@ -141,7 +141,7 @@ pub(crate) async fn reconcile<T: Transport, E: Env>(
         let tag = if *exists && matches!(op.method, Method::Put) && op.keyed() && if_match.is_none()
         {
             match client
-                .read(Method::Get, &op.url_path(realm, key.as_deref()), None)
+                .read(Method::Get, &op.url_path(environment, key.as_deref()), None)
                 .await
             {
                 Ok(r) if r.status == 200 => r.header("etag").map(String::from),
@@ -233,7 +233,7 @@ pub(crate) async fn run(args: ApplyArgs) -> Code {
     };
     let client = Client::new(&https, &instance, &target, &System);
     let managed_by = Some(b64url_encode(instance.kid()));
-    match reconcile(&client, &target.realm, &doc, args.prune, managed_by).await {
+    match reconcile(&client, &target.environment, &doc, args.prune, managed_by).await {
         Ok(o) => report(&o, args.proposals.as_ref()),
         Err(ApplyError::Client {
             source, outcome, ..

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\", min(created_ms) AS oldest\n             FROM access.approval_invites\n            WHERE tenant_id = $1 AND environment_id = $2 AND requester = $3 AND approver = $4\n              AND created_ms >= $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "oldest",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "dfe17d0f559c00c6dcfafcdbcbb34dd23c3c884f033cdeadbc7986658bd95b05"
+}

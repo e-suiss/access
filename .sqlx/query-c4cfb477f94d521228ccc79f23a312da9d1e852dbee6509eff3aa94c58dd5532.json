@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid FROM access.client_subjects\n              WHERE tenant_id = $1 AND environment_id = $2 AND sector = $3 AND value = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.client_subjects",
+            "name": "client_uuid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c4cfb477f94d521228ccc79f23a312da9d1e852dbee6509eff3aa94c58dd5532"
+}

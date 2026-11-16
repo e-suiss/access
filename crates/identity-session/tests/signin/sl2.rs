@@ -42,7 +42,7 @@ fn with_atlas(mut e: Env) -> Env {
     e
 }
 
-/// Commits one ALLOW of `action` in the realm's domain and binds it in `tx`.
+/// Commits one ALLOW of `action` in the environment's domain and binds it in `tx`.
 async fn allow(e: &Env, tx: &mut TenantTx, n: u8, action: &str) -> Bound {
     let (lease, head) = acquire_lease(&e.db.sequencer, &e.domain, "t", Duration::from_secs(10))
         .await
@@ -106,14 +106,18 @@ async fn allow(e: &Env, tx: &mut TenantTx, n: u8, action: &str) -> Bound {
 }
 
 async fn set_mode(e: &Env, n: u8, m: &ProtectionMode) {
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let bound = allow(e, &mut tx, n, PROTECTION_MODE_ACTION).await;
     apply_mode(&mut tx, &bound, m).await.unwrap();
     tx.commit().await.unwrap();
 }
 
 async fn reviews(e: &Env) -> Vec<access_store::risk::ReviewRow> {
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let r = tx.open_reviews(100).await.unwrap();
     tx.commit().await.unwrap();
     r
@@ -122,7 +126,7 @@ async fn reviews(e: &Env) -> Vec<access_store::risk::ReviewRow> {
 async fn status_of(e: &Env, s: [u8; 16]) -> String {
     use access_identity_account::ports::{AccountDb, AccountTx};
     let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
-    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    let mut tx = pg.begin(e.tenant, e.environment).await.unwrap();
     let status = tx.subject(s, false).await.unwrap().unwrap().status;
     tx.commit().await.unwrap();
     status
@@ -219,7 +223,9 @@ async fn stepup_asks_a_second_step_and_signals_caep() {
 async fn a_canary_never_gets_a_session() {
     let mut e = env(0x64, "sl2-canary").await;
     let bait = e.account("admin-backup@example.com").await;
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let bound = allow(&e, &mut tx, 1, CANARY_ACTION).await;
     assert!(mark_canary(&mut tx, &bound, bait).await.unwrap());
     tx.commit().await.unwrap();
@@ -237,8 +243,10 @@ async fn a_canary_never_gets_a_session() {
 #[tokio::test]
 async fn protection_mode_needs_its_own_committed_allow() {
     let e = env(0x65, "sl2-mode").await;
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
-    let bound = allow(&e, &mut tx, 1, "idp.realm.branding").await;
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    let bound = allow(&e, &mut tx, 1, "idp.environment.branding").await;
     let m = ProtectionMode::parse(&[], "stepup", &[]).unwrap();
     assert!(apply_mode(&mut tx, &bound, &m).await.is_err());
 }

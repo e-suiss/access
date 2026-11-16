@@ -120,7 +120,7 @@ impl ReviewChange {
         }
     }
 
-    /// Its resource path below the realm.
+    /// Its resource path below the environment.
     #[must_use]
     pub fn path(&self) -> [String; 2] {
         let name = match self {

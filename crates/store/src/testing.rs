@@ -652,7 +652,7 @@ async fn admin_connection(db: &TestDb) -> Result<PgConnection, TestDbError> {
         .at("connect admin")
 }
 
-/// Writes identity audit row `n` of `tenant` (its realm the same id) at `at` (RFC 3339), as a
+/// Writes identity audit row `n` of `tenant` (its environment the same id) at `at` (RFC 3339), as a
 /// row of a past month would be (OP-158 m.3 (w)).
 ///
 /// # Errors
@@ -665,7 +665,7 @@ pub async fn past_audit_row(
 ) -> Result<(), TestDbError> {
     let mut c = admin_connection(db).await?;
     sqlx::query(
-        "INSERT INTO access.identity_audit (tenant_id, realm_id, at, event_type, actor, target, correlation)
+        "INSERT INTO access.identity_audit (tenant_id, environment_id, at, event_type, actor, target, correlation)
          VALUES ($1, $1, $2::timestamptz, 'session.created', 'usr_1', $3, $4)",
     )
     .bind(sqlx::types::Uuid::from_bytes(tenant))
@@ -768,7 +768,7 @@ pub async fn server_version(db: &TestDb) -> Result<String, TestDbError> {
         .at("server version")
 }
 
-/// Writes `n` identity audit rows of `tenant` (its realm the same id) in one transaction, as a
+/// Writes `n` identity audit rows of `tenant` (its environment the same id) in one transaction, as a
 /// busy cell would (OP-158 m.3 (w)).
 ///
 /// # Errors
@@ -776,7 +776,7 @@ pub async fn server_version(db: &TestDb) -> Result<String, TestDbError> {
 pub async fn bulk_audit_rows(db: &TestDb, tenant: [u8; 16], n: i32) -> Result<(), TestDbError> {
     let mut c = admin_connection(db).await?;
     sqlx::query(
-        "INSERT INTO access.identity_audit (tenant_id, realm_id, event_type, actor, target, correlation)
+        "INSERT INTO access.identity_audit (tenant_id, environment_id, event_type, actor, target, correlation)
          SELECT $1, $1, 'session.created', 'usr_1', 'ses_' || g, 'req_' || g FROM generate_series(1, $2) g",
     )
     .bind(sqlx::types::Uuid::from_bytes(tenant))
@@ -819,7 +819,7 @@ pub async fn age_audit_checkpoints(db: &TestDb, years: i32) -> Result<(), TestDb
 #[derive(Clone, Debug)]
 pub struct SubjectBackup {
     tenant: sqlx::types::Uuid,
-    realm: sqlx::types::Uuid,
+    environment: sqlx::types::Uuid,
     subject: sqlx::types::Uuid,
     status: String,
     own: Option<Vec<u8>>,
@@ -833,19 +833,19 @@ pub struct SubjectBackup {
 pub async fn backup_subject(
     db: &TestDb,
     tenant: [u8; 16],
-    realm: [u8; 16],
+    environment: [u8; 16],
     subject: [u8; 16],
 ) -> Result<SubjectBackup, TestDbError> {
     use sqlx::Row as _;
     let (t, r, s) = (
         sqlx::types::Uuid::from_bytes(tenant),
-        sqlx::types::Uuid::from_bytes(realm),
+        sqlx::types::Uuid::from_bytes(environment),
         sqlx::types::Uuid::from_bytes(subject),
     );
     let mut c = admin_connection(db).await?;
     let row = sqlx::query(
         "SELECT status, wrapped_dek FROM access.identity_subjects
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
     )
     .bind(t)
     .bind(r)
@@ -855,7 +855,7 @@ pub async fn backup_subject(
     .at("backup subject")?;
     let classes = sqlx::query(
         "SELECT class, wrapped_dek FROM access.identity_subject_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 ORDER BY class",
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 ORDER BY class",
     )
     .bind(t)
     .bind(r)
@@ -868,7 +868,7 @@ pub async fn backup_subject(
     .collect();
     Ok(SubjectBackup {
         tenant: t,
-        realm: r,
+        environment: r,
         subject: s,
         status: row.get(0),
         own: row.get(1),
@@ -892,10 +892,10 @@ pub async fn restore_subject(db: &TestDb, backup: &SubjectBackup) -> Result<(), 
     sqlx::query(
         "UPDATE access.identity_subjects SET status = $4, wrapped_dek = $5,
                 shredded_at = CASE WHEN $5::bytea IS NULL THEN shredded_at END
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
     )
     .bind(backup.tenant)
-    .bind(backup.realm)
+    .bind(backup.environment)
     .bind(backup.subject)
     .bind(&backup.status)
     .bind(&backup.own)
@@ -906,10 +906,10 @@ pub async fn restore_subject(db: &TestDb, backup: &SubjectBackup) -> Result<(), 
         sqlx::query(
             "UPDATE access.identity_subject_keys SET wrapped_dek = $5,
                     shredded_at = CASE WHEN $5::bytea IS NULL THEN shredded_at END
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND class = $4",
         )
         .bind(backup.tenant)
-        .bind(backup.realm)
+        .bind(backup.environment)
         .bind(backup.subject)
         .bind(class)
         .bind(wrapped)

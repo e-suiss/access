@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_deletion_facts SET cancelled_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n                AND cancelled_at IS NULL AND deleted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5b4e292bea7710df7ad969c9b8a10c8bc220101e97699628a3e3101328f2d1e7"
+}

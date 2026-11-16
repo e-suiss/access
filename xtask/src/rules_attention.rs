@@ -168,7 +168,7 @@ mod tests {
         assert!(scheduled("crates/x/src/hygiene_sweep.rs"));
         assert!(!scheduled("crates/x/src/grant.rs"));
         assert!(!scheduled("crates/x/tests/jobs.rs"));
-        assert!(!scheduled("crates/http/src/api/realm/jobs.rs"));
+        assert!(!scheduled("crates/http/src/api/environment/jobs.rs"));
     }
 
     #[test]

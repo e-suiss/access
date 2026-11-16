@@ -22,7 +22,7 @@ access-gw-radius
 App passwords are created per application on the account page. The account's primary password
 never authenticates over RADIUS. An unknown user name and a wrong password get the same
 Access-Reject. Each accepted request becomes an AAL1 `authentication` Claim with method
-`password`, signed by the realm's issuer inside `access-server`; the digest of the RadSec
+`password`, signed by the environment's issuer inside `access-server`; the digest of the RadSec
 client's certificate is its evidence. There is no eduroam profile.
 
 ## Transport
@@ -35,7 +35,7 @@ Authenticator, and `User-Password` travels as is inside TLS. A client that does 
 Each RadSec client is registered with the gateway by its certificate:
 
 ```
-POST /admin/v1/realms/{slug}/gateways/radius:{gateway}/radius-clients
+POST /admin/v1/envs/{slug}/gateways/radius:{gateway}/radius-clients
 { "client": "vpn-1", "certificate": "<base64url DER>" }
 ```
 
@@ -57,7 +57,7 @@ A packet is at most 4096 bytes; its length is checked before it is read.
 | `ACCESS_GW_RADIUS_RUN_AS` | `uid:gid` to drop to when started as root |
 
 The gateway reads its files, binds its listener and locks itself down before it serves; it
-refuses to start without the lockdown. The realm registers the gateway first with
+refuses to start without the lockdown. The environment registers the gateway first with
 `idp.gateway.register`.
 
 ## License

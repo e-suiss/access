@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_evidence\n                SET expires_at = expires_at + interval '24 hours', extended_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND attempt_id = $3\n                AND class = 'recovery_contact' AND consumed_at IS NULL AND extended_at IS NULL\n                AND expires_at > clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1c161ba19397ba0214f228f290bcd69484128205e5da8ccb2cbb8bb24e46bdb"
+}

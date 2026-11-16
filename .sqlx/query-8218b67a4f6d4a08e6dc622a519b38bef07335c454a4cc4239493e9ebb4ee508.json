@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.environment_key_cutoff($1, $2) AS \"cutoff\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cutoff",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8218b67a4f6d4a08e6dc622a519b38bef07335c454a4cc4239493e9ebb4ee508"
+}

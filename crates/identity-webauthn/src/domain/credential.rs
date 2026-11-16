@@ -1,7 +1,7 @@
-//! The registry entry of a passkey: realm-local public material only (CMP-15.7, §7.1).
+//! The registry entry of a passkey: environment-local public material only (CMP-15.7, §7.1).
 
 use super::cose::CoseAlgorithm;
-use super::ids::{Aaguid, CredentialId, RealmId, UserHandle};
+use super::ids::{Aaguid, CredentialId, EnvironmentId, UserHandle};
 use super::prf::PrfConfig;
 
 /// How the registration's attestation was treated.
@@ -9,7 +9,7 @@ use super::prf::PrfConfig;
 pub enum AttestationKind {
     /// `none`.
     None,
-    /// Another format under a `none` realm: kept as a hint, never verified or trusted.
+    /// Another format under a `none` environment: kept as a hint, never verified or trusted.
     Unverified(String),
     /// A statement of this format verified against FIDO metadata and revocation (OP-159 m.3
     /// (ll)).
@@ -39,8 +39,8 @@ pub fn bounded_transports(transports: &[String]) -> Vec<String> {
 /// A registered credential.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CredentialRecord {
-    /// The realm; credentials never cross realms.
-    pub realm: RealmId,
+    /// The environment; credentials never cross environments.
+    pub environment: EnvironmentId,
     /// Credential ID.
     pub id: CredentialId,
     /// The account's WebAuthn `user.id`.

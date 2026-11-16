@@ -3,7 +3,7 @@
 //!
 //! 1. The proxy is a PEP its transport names; one with no live registration for the host gets
 //!    `401`.
-//! 2. Without a live `__Host-access-proxy` session the browser is sent to the realm's hosted
+//! 2. Without a live `__Host-access-proxy` session the browser is sent to the environment's hosted
 //!    sign-in (OIDC code + PKCE); the callback on the application host redeems the code once and
 //!    sets the cookie.
 //! 3. Every other request is a real eligibility check of the session's Party for the
@@ -199,14 +199,14 @@ impl<P: Ports> Proxy<P> {
         let r = &registered.registration;
         let Some(sid) = self
             .ports
-            .session(&registered.realm, &r.name, &session)
+            .session(&registered.environment, &r.name, &session)
             .await?
         else {
             return self.sign_in(&registered, &asked, true).await;
         };
         let Some(holder) = self
             .ports
-            .holder(&registered.realm, &r.client_id, &sid)
+            .holder(&registered.environment, &r.client_id, &sid)
             .await?
         else {
             self.cache.flush_session(&session);
@@ -218,7 +218,7 @@ impl<P: Ports> Proxy<P> {
     #[expect(clippy::too_many_lines, reason = "one decision, its steps in order")]
     async fn decide(
         &self,
-        registered: &Registered<P::Realm>,
+        registered: &Registered<P::Environment>,
         asked: &Forwarded,
         session: [u8; 32],
         holder: &Holder,
@@ -296,7 +296,7 @@ impl<P: Ports> Proxy<P> {
                 let token = self
                     .ports
                     .app_token(
-                        &registered.realm,
+                        &registered.environment,
                         &r.client_id,
                         holder,
                         (&r.audience(), &decision),
@@ -348,7 +348,7 @@ impl<P: Ports> Proxy<P> {
 
     async fn sign_in(
         &self,
-        registered: &Registered<P::Realm>,
+        registered: &Registered<P::Environment>,
         asked: &Forwarded,
         ended: bool,
     ) -> Result<Answer, Refusal> {
@@ -365,7 +365,7 @@ impl<P: Ports> Proxy<P> {
         };
         self.ports
             .begin(
-                &registered.realm,
+                &registered.environment,
                 &r.name,
                 &stored(STATE_CONTEXT, &state),
                 &Pending {
@@ -378,7 +378,7 @@ impl<P: Ports> Proxy<P> {
         let location = self
             .ports
             .authorize_url(
-                &registered.realm,
+                &registered.environment,
                 &r.client_id,
                 &r.redirect_uri(),
                 (&state, &nonce, &challenge),
@@ -397,7 +397,7 @@ impl<P: Ports> Proxy<P> {
 
     async fn callback(
         &self,
-        registered: &Registered<P::Realm>,
+        registered: &Registered<P::Environment>,
         asked: &Forwarded,
         cookies: Option<&str>,
     ) -> Result<Answer, Refusal> {
@@ -420,7 +420,11 @@ impl<P: Ports> Proxy<P> {
         }
         let Some(pending) = self
             .ports
-            .take(&registered.realm, &r.name, &stored(STATE_CONTEXT, &state))
+            .take(
+                &registered.environment,
+                &r.name,
+                &stored(STATE_CONTEXT, &state),
+            )
             .await?
         else {
             return Ok(refused(self.random_text::<16>()?));
@@ -428,7 +432,7 @@ impl<P: Ports> Proxy<P> {
         let Some(redeemed): Option<Redeemed> = self
             .ports
             .redeem(
-                &registered.realm,
+                &registered.environment,
                 &r.client_id,
                 &r.redirect_uri(),
                 (&code, &pending.verifier),
@@ -440,7 +444,7 @@ impl<P: Ports> Proxy<P> {
         let value = self.random_text::<32>()?;
         self.ports
             .open(
-                &registered.realm,
+                &registered.environment,
                 &r.name,
                 &stored(COOKIE_CONTEXT, &value),
                 &redeemed,

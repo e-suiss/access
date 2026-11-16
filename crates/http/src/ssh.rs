@@ -1,9 +1,9 @@
-//! The realm's SSH certificate authority on axum (OP-156 m.3 (o), IDP-32): the CA public key a
+//! The environment's SSH certificate authority on axum (OP-156 m.3 (o), IDP-32): the CA public key a
 //! server's `TrustedUserCAKeys` reads, the KRL its `RevokedKeys` reads, and the certificate of an
 //! ephemeral key. A certificate request carries the holder's DPoP-bound access token of the
-//! realm and its proof; the first call answers a draft `projection.issue` drawn from the
+//! environment and its proof; the first call answers a draft `projection.issue` drawn from the
 //! holder's `ssh.login` Grant, the second carries that draft and the holder's AIS over it. The
-//! routes are at the realm's host and under `/realms/{slug}`.
+//! routes are at the environment's host and under `/env/{slug}`.
 
 #![allow(
     clippy::result_large_err,
@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use access_identity_oauth::app::oauth::{OAuth, RealmHolder};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::app::oauth::{EnvironmentHolder, OAuth};
+use access_identity_oauth::ports::EnvironmentEntry;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -26,7 +26,7 @@ use serde_json::Value;
 
 use crate::oauth::render;
 use crate::problem::Code;
-use crate::problem::codes::realm as r;
+use crate::problem::codes::environment as r;
 
 /// Largest certificate request body.
 pub const MAX_BODY: usize = 16 * 1024;
@@ -47,21 +47,26 @@ pub enum SshReply {
     Unavailable,
 }
 
-/// The realm's SSH certificate authority behind these routes (access-server).
+/// The environment's SSH certificate authority behind these routes (access-server).
 pub trait SshFront: Send + Sync + 'static {
     /// The CA keys servers trust now, one `authorized_keys` line each; `None` while the CA is
     /// off.
-    fn ca_pub(&self, realm: &RealmEntry)
-    -> impl Future<Output = Result<Option<String>, ()>> + Send;
+    fn ca_pub(
+        &self,
+        environment: &EnvironmentEntry,
+    ) -> impl Future<Output = Result<Option<String>, ()>> + Send;
 
-    /// The realm's KRL.
-    fn krl(&self, realm: &RealmEntry) -> impl Future<Output = Result<Vec<u8>, ()>> + Send;
+    /// The environment's KRL.
+    fn krl(
+        &self,
+        environment: &EnvironmentEntry,
+    ) -> impl Future<Output = Result<Vec<u8>, ()>> + Send;
 
     /// A draft or a certificate for `holder`.
     fn certificate(
         &self,
-        realm: &RealmEntry,
-        holder: RealmHolder,
+        environment: &EnvironmentEntry,
+        holder: EnvironmentHolder,
         body: Value,
     ) -> impl Future<Output = SshReply> + Send;
 }
@@ -74,7 +79,7 @@ struct Svc<E: access_identity_oauth::app::oauth::Env, S> {
 type St<E, S> = State<Arc<Svc<E, S>>>;
 type Params0 = Path<HashMap<String, String>>;
 
-/// The CA routes over the realm's authorization server (its tokens) and `front`.
+/// The CA routes over the environment's authorization server (its tokens) and `front`.
 pub fn router<E, S>(oauth: Arc<OAuth<E>>, front: impl Into<Arc<S>>) -> Router
 where
     E: access_identity_oauth::app::oauth::Env + 'static,
@@ -85,7 +90,7 @@ where
         front: front.into(),
     });
     let mut out = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         out = out
             .route(&format!("{prefix}/ssh/ca.pub"), get(ca_pub::<E, S>))
             .route(&format!("{prefix}/ssh/krl"), get(krl::<E, S>))
@@ -109,21 +114,21 @@ fn unavailable() -> Response {
     crate::problem::codes::UNAVAILABLE.problem().into_response()
 }
 
-async fn realm_of<E: access_identity_oauth::app::oauth::Env, S>(
+async fn environment_of<E: access_identity_oauth::app::oauth::Env, S>(
     s: &Svc<E, S>,
     params: &HashMap<String, String>,
     uri: &Uri,
     headers: &HeaderMap,
-) -> Result<RealmEntry, Response> {
+) -> Result<EnvironmentEntry, Response> {
     match s
         .oauth
-        .realm(
+        .environment(
             authority(uri, headers),
             params.get("slug").map(String::as_str),
         )
         .await
     {
-        Ok(Some(realm)) => Ok(realm),
+        Ok(Some(environment)) => Ok(environment),
         Ok(None) => Err(crate::not_found_problem().into_response()),
         Err(_) => Err(unavailable()),
     }
@@ -148,11 +153,11 @@ async fn ca_pub<E: access_identity_oauth::app::oauth::Env, S: SshFront>(
     uri: Uri,
     headers: HeaderMap,
 ) -> Response {
-    let realm = match realm_of(&s, &p, &uri, &headers).await {
+    let environment = match environment_of(&s, &p, &uri, &headers).await {
         Ok(r) => r,
         Err(e) => return e,
     };
-    match s.front.ca_pub(&realm).await {
+    match s.front.ca_pub(&environment).await {
         Ok(Some(lines)) => cached(
             (StatusCode::OK, lines).into_response(),
             "text/plain; charset=utf-8",
@@ -168,11 +173,11 @@ async fn krl<E: access_identity_oauth::app::oauth::Env, S: SshFront>(
     uri: Uri,
     headers: HeaderMap,
 ) -> Response {
-    let realm = match realm_of(&s, &p, &uri, &headers).await {
+    let environment = match environment_of(&s, &p, &uri, &headers).await {
         Ok(r) => r,
         Err(e) => return e,
     };
-    match s.front.krl(&realm).await {
+    match s.front.krl(&environment).await {
         Ok(bytes) => cached(
             (StatusCode::OK, bytes).into_response(),
             "application/octet-stream",
@@ -188,7 +193,7 @@ async fn certificate<E: access_identity_oauth::app::oauth::Env, S: SshFront>(
     headers: HeaderMap,
     bytes: Bytes,
 ) -> Response {
-    let realm = match realm_of(&s, &p, &uri, &headers).await {
+    let environment = match environment_of(&s, &p, &uri, &headers).await {
         Ok(r) => r,
         Err(e) => return e,
     };
@@ -217,10 +222,10 @@ async fn certificate<E: access_identity_oauth::app::oauth::Env, S: SshFront>(
         .iter()
         .filter_map(|v| v.to_str().ok())
         .collect();
-    let htu = realm.issuer.endpoint("/ssh/certificate");
+    let htu = environment.issuer.endpoint("/ssh/certificate");
     let holder = match s
         .oauth
-        .realm_holder(&realm, "POST", &htu, Some(authorization), &proofs)
+        .environment_holder(&environment, "POST", &htu, Some(authorization), &proofs)
         .await
     {
         Ok(Ok(h)) => h,
@@ -230,7 +235,7 @@ async fn certificate<E: access_identity_oauth::app::oauth::Env, S: SshFront>(
     let Ok(body) = serde_json::from_slice::<Value>(&bytes) else {
         return r::INVALID_SSH_REQUEST.problem().into_response();
     };
-    let mut out = match s.front.certificate(&realm, holder, body).await {
+    let mut out = match s.front.certificate(&environment, holder, body).await {
         SshReply::Ok(v) => (StatusCode::OK, axum::Json(v)).into_response(),
         SshReply::Refused(code) => code.problem().into_response(),
         SshReply::NotAllowed(outcome) => {

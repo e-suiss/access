@@ -1,5 +1,5 @@
 //! The Access Executor against the real server path (OP-154 m.3 (u), OP-153 m.3 (gg)): the
-//! token vault's bootstrapped realm, its Resource listing the executor's PEP name, and an
+//! token vault's bootstrapped environment, its Resource listing the executor's PEP name, and an
 //! executor registered as an Instance of its own operator Party. The executor reaches Access
 //! only through the public routes a third-party PEP uses (ADP evaluation and Domain Metadata,
 //! the vault's release route, Claim Ingest), on the real sequencer and `SoftHSM`; its job
@@ -105,10 +105,10 @@ impl access_executor::ports::Access for Public {
         .await
     }
 
-    async fn release(&self, realm: String, body: Vec<u8>) -> Answer {
+    async fn release(&self, environment: String, body: Vec<u8>) -> Answer {
         call(
             &self.pages,
-            HttpRequestOf::post(format!("/realms/{realm}/v1/vault/releases")),
+            HttpRequestOf::post(format!("/env/{environment}/v1/vault/releases")),
             true,
             body,
         )
@@ -386,7 +386,7 @@ impl Rig {
         ));
         let job = exec
             .start(Start {
-                realm: String::from("acme"),
+                environment: String::from("acme"),
                 connection: self.connection.clone(),
                 intent: intent.to_bytes().unwrap(),
                 ais,
@@ -617,7 +617,7 @@ async fn an_executor_runs_an_allowed_exercise_and_its_reports_never_change_the_d
     };
     let refused = exec
         .start(Start {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             connection: rig.connection.clone(),
             intent: intent.to_bytes().unwrap(),
             ais,
@@ -655,7 +655,7 @@ async fn an_executor_runs_an_allowed_exercise_and_its_reports_never_change_the_d
     };
     let refused = exec
         .start(Start {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             connection: rig.connection.clone(),
             intent: intent.to_bytes().unwrap(),
             ais: other,

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environment_hostnames SET status = 'deleted', deleted_at = now()\n          WHERE tenant_id = $1 AND environment_id = $2 AND hostname = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6486c97d011858d4fcffd45725631ef685cd5f0de4bbb36f72232b9b9988d3b4"
+}

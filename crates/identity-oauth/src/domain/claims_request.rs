@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 /// Longest `claims` parameter read.
 pub const MAX_CLAIMS_PARAM: usize = 4096;
 
-/// The claims this realm can release.
+/// The claims this environment can release.
 pub const SUPPORTED: [&str; 7] = [
     "email",
     "email_verified",

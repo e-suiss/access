@@ -133,7 +133,7 @@ pub enum IdentityKind {
     ApiClientDisabled,
     /// `party.disabled` from a suspension.
     PartyDisabled,
-    /// `projection-invalidated`: the realm's authorization server ended a refresh family of
+    /// `projection-invalidated`: the environment's authorization server ended a refresh family of
     /// authority tokens on reuse (§9.9.3 rule 6).
     ProjectionInvalidated,
     /// An account, session or credential event of the account use cases (OP-151 m.3 (i)).
@@ -164,7 +164,7 @@ pub enum IdentityKind {
     HrRecordDue,
     /// `proxy.registered`: `idp.proxy.register` committed (OP-156 m.3 (l)).
     ProxyRegistered,
-    /// `ssh.certificate_issued`: the realm SSH CA issued a certificate projection (OP-156 m.3 (o)).
+    /// `ssh.certificate_issued`: the environment SSH CA issued a certificate projection (OP-156 m.3 (o)).
     SshCertificateIssued,
     /// `export.sink_failed`: an export sink stopped accepting the projection (OP-156 m.3 (s)).
     ExportSinkFailed,
@@ -403,8 +403,8 @@ pub use access_internal_api::instances::PlatformProduct;
 pub struct ClientChange<'a> {
     /// Tenant, its external `tnt_` id.
     pub tenant: &'a str,
-    /// Realm.
-    pub realm: &'a [u8; 16],
+    /// Environment.
+    pub environment: &'a [u8; 16],
     /// The `client_id`.
     pub client_id: &'a str,
     /// The `ExerciseID` that allowed it.
@@ -421,7 +421,7 @@ impl IdentityEvent {
     pub fn api_client(kind: IdentityKind, id: [u8; 32], c: &ClientChange<'_>) -> Self {
         let mut p = json!({
             "tenant": c.tenant,
-            "realm": uuid(c.realm),
+            "environment": uuid(c.environment),
             "client_id": c.client_id,
             "exercise": b64url_encode(c.exercise),
             "at": c.at,
@@ -482,7 +482,7 @@ impl IdentityEvent {
     pub fn membership(
         kind: IdentityKind,
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         organization: &[u8; 16],
         at: u64,
@@ -491,7 +491,7 @@ impl IdentityEvent {
             kind,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "organization": uuid(organization),
                 "at": at,
@@ -504,7 +504,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn preference_changed(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         topics: &[&str],
         at: u64,
@@ -512,7 +512,7 @@ impl IdentityEvent {
         Self {
             kind: IdentityKind::PreferenceChanged,
             id,
-            payload: json!({"realm": uuid(realm), "account": account, "topics": topics, "at": at}),
+            payload: json!({"environment": uuid(environment), "account": account, "topics": topics, "at": at}),
         }
     }
 
@@ -520,7 +520,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn document_accepted(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         account: &str,
         document: &str,
         version: &str,
@@ -530,7 +530,7 @@ impl IdentityEvent {
             kind: IdentityKind::DocumentAccepted,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "document": document,
                 "version": version,
@@ -541,11 +541,16 @@ impl IdentityEvent {
 
     /// `agent.suspended`: the agent Party `agent` was suspended.
     #[must_use]
-    pub fn agent_suspended(id: [u8; 32], realm: &[u8; 16], agent: &[u8; 16], at: u64) -> Self {
+    pub fn agent_suspended(
+        id: [u8; 32],
+        environment: &[u8; 16],
+        agent: &[u8; 16],
+        at: u64,
+    ) -> Self {
         Self {
             kind: IdentityKind::AgentSuspended,
             id,
-            payload: json!({"realm": uuid(realm), "agent": b64url_encode(agent), "at": at}),
+            payload: json!({"environment": uuid(environment), "agent": b64url_encode(agent), "at": at}),
         }
     }
 
@@ -554,7 +559,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn agent_sponsor_assigned(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         agent: &[u8; 16],
         sponsor: &[u8; 16],
         at: u64,
@@ -563,7 +568,7 @@ impl IdentityEvent {
             kind: IdentityKind::AgentSponsorAssigned,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "agent": b64url_encode(agent),
                 "sponsor": b64url_encode(sponsor),
                 "at": at,
@@ -578,7 +583,7 @@ impl IdentityEvent {
     pub fn scim(
         kind: IdentityKind,
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (scim_client, resource_type, resource): (&str, ScimResource, &str),
         at: u64,
     ) -> Self {
@@ -586,7 +591,7 @@ impl IdentityEvent {
             kind,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "scim_client": scim_client,
                 "resource_type": resource_type.name(),
                 "resource": resource,
@@ -601,7 +606,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn org_sso_enforced(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         organization: &[u8; 16],
         (connection, invitations): (&str, InvitationFate),
         at: u64,
@@ -610,7 +615,7 @@ impl IdentityEvent {
             kind: IdentityKind::OrgSsoEnforced,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "organization": uuid(organization),
                 "connection": connection,
                 "invitations": invitations.name(),
@@ -624,7 +629,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn hr_record_due(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (source, account, change): (&str, &str, HrChange),
         due_at: u64,
         at: u64,
@@ -633,7 +638,7 @@ impl IdentityEvent {
             kind: IdentityKind::HrRecordDue,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "source": source,
                 "account": account,
                 "change": change.name(),
@@ -647,7 +652,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn proxy_registered(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (proxy, engine): (&str, &str),
         at: u64,
     ) -> Self {
@@ -655,7 +660,7 @@ impl IdentityEvent {
             kind: IdentityKind::ProxyRegistered,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "proxy": proxy,
                 "engine": engine,
                 "at": at,
@@ -668,7 +673,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn ssh_certificate_issued(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (party, holder, key_id, host_group): (&[u8; 16], CertificateHolder, &str, &str),
         valid_before: u64,
         at: u64,
@@ -677,7 +682,7 @@ impl IdentityEvent {
             kind: IdentityKind::SshCertificateIssued,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "party": uuid(party),
                 "holder": holder.name(),
                 "key_id": key_id,
@@ -693,7 +698,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn export_sink_failed(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (sink, adapter): (&str, &str),
         since: u64,
         at: u64,
@@ -702,7 +707,7 @@ impl IdentityEvent {
             kind: IdentityKind::ExportSinkFailed,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "sink": sink,
                 "adapter": adapter,
                 "since": since,
@@ -717,7 +722,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn support_access_changed(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (account, grant, operator, case_system): (&str, &str, &[u8; 16], &str),
         change: &str,
         at: u64,
@@ -726,7 +731,7 @@ impl IdentityEvent {
             kind: IdentityKind::SupportAccessChanged,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "grant": grant,
                 "operator": uuid(operator),
@@ -743,7 +748,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn breakglass_used(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         (account, exercise, org): (&str, &str, &[u8; 16]),
         (approvals, until): (u32, u64),
         at: u64,
@@ -752,7 +757,7 @@ impl IdentityEvent {
             kind: IdentityKind::BreakglassUsed,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "account": account,
                 "exercise": exercise,
                 "organization": uuid(org),
@@ -763,11 +768,11 @@ impl IdentityEvent {
         }
     }
 
-    /// `login.failed_surge`: `failures` failed sign-ins in the realm within `window_ms`.
+    /// `login.failed_surge`: `failures` failed sign-ins in the environment within `window_ms`.
     #[must_use]
     pub fn login_failed_surge(
         id: [u8; 32],
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         failures: u32,
         window_ms: u64,
         at: u64,
@@ -776,7 +781,7 @@ impl IdentityEvent {
             kind: IdentityKind::LoginFailedSurge,
             id,
             payload: json!({
-                "realm": uuid(realm),
+                "environment": uuid(environment),
                 "failures": failures,
                 "window_ms": window_ms,
                 "at": at,
@@ -892,7 +897,7 @@ fn subject_id(p: &Value) -> String {
         "client_id",
         "organization",
         "tenant",
-        "realm",
+        "environment",
     ]
     .into_iter()
     .find_map(|k| p.get(k).and_then(Value::as_str))

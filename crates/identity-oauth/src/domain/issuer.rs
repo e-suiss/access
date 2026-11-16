@@ -1,15 +1,15 @@
-//! The realm issuer: an `https` URL fixed when the realm is created and stored on its row; the
-//! request's `Host` only selects the realm (TN-10, TN-16, §12.1.2, §17.9.6).
+//! The environment issuer: an `https` URL fixed when the environment is created and stored on its row; the
+//! request's `Host` only selects the environment (TN-10, TN-16, §12.1.2, §17.9.6).
 
 use core::fmt;
 
 /// The longest issuer Access accepts (PD).
 pub const MAX_ISSUER: usize = 255;
 
-/// The path prefix of a path-based issuer: `https://<base>/realms/<slug>`.
-pub const PATH_PREFIX: &str = "/realms/";
+/// The path prefix of a path-based issuer: `https://<base>/env/<slug>`.
+pub const PATH_PREFIX: &str = "/env/";
 
-/// Why an issuer or realm base is refused.
+/// Why an issuer or environment base is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum IssuerError {
@@ -43,12 +43,12 @@ impl IssuerError {
             Self::Path => "issuer-path",
             Self::Extra => "issuer-extra",
             Self::Length => "issuer-length",
-            Self::Slug => "realm-slug",
+            Self::Slug => "environment-slug",
         }
     }
 }
 
-/// A realm issuer URL: `https`, a lower-case host with an optional port, an optional path of
+/// An environment issuer URL: `https`, a lower-case host with an optional port, an optional path of
 /// unreserved segments, no trailing slash, no query, fragment or user info. Compared byte for
 /// byte (RFC 9207 §2.4, OIDC Discovery §4.3).
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -96,7 +96,7 @@ fn segment_ok(seg: &str) -> bool {
         && seg != ".."
 }
 
-/// Checks a realm slug (TN-16, §12.1.2).
+/// Checks an environment slug (TN-16, §12.1.2).
 ///
 /// # Errors
 /// [`IssuerError::Slug`].
@@ -211,21 +211,21 @@ impl fmt::Display for Issuer {
     }
 }
 
-/// How a new realm's issuer is formed (TN-10, §12.1.2).
+/// How a new environment's issuer is formed (TN-10, §12.1.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IssuerStyle {
-    /// `https://<slug>.<base>`, the default: one origin per realm.
+    /// `https://<slug>.<base>`, the default: one origin per environment.
     Subdomain,
-    /// `https://<base>/realms/<slug>`: supported, not the default; both well-known variants are
+    /// `https://<base>/env/<slug>`: supported, not the default; both well-known variants are
     /// served.
     Path,
 }
 
-/// The configured origin realm issuers are formed under: `https://<host>[:port]`, no path.
+/// The configured origin environment issuers are formed under: `https://<host>[:port]`, no path.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RealmBase(Issuer);
+pub struct EnvironmentBase(Issuer);
 
-impl RealmBase {
+impl EnvironmentBase {
     /// Parses a base.
     ///
     /// # Errors
@@ -244,7 +244,7 @@ impl RealmBase {
         self.0.as_str()
     }
 
-    /// The issuer of a new realm with `slug`; fixed from then on (TN-16).
+    /// The issuer of a new environment with `slug`; fixed from then on (TN-16).
     ///
     /// # Errors
     /// [`IssuerError`].

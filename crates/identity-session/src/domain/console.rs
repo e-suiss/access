@@ -1,7 +1,7 @@
 //! The console session policy (TN-128, TN-129, TN-33, OP-151 m.3 (f)): a session for the
 //! management listener's surfaces, 12 hours absolute and 15 minutes idle, bound to the client's
 //! network (its ASN when a `GeoResolver` source is configured, else its /24 or /48 prefix; its full
-//! address when the realm asks), carried by a strict host-only cookie that is DBSC-ready. The
+//! address when the environment asks), carried by a strict host-only cookie that is DBSC-ready. The
 //! cookie carries navigation and the identity plane's own screens only; it authorises no
 //! authority read and no write (MD-14).
 
@@ -29,15 +29,15 @@ pub const IDLE_MS: u64 = 15 * 60_000;
 
 const CSRF_CONTEXT: &str = "access/console-csrf/v1";
 
-/// What the console session's network binding takes from the realm session policy.
+/// What the console session's network binding takes from the environment session policy.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BindingPolicy {
-    /// The realm asks for the client's full address (TN-129 "optional IP binding").
+    /// The environment asks for the client's full address (TN-129 "optional IP binding").
     pub full_ip: bool,
 }
 
 impl BindingPolicy {
-    /// The binding of the realm's stored session policy (`idp.realm.session_policy`, OP-151
+    /// The binding of the environment's stored session policy (`idp.environment.session_policy`, OP-151
     /// m.11 (d)): `ip` binds to the full address, `asn` to the ASN or prefix. `None` when the
     /// bytes are not the written form or name another binding: never read as the default
     /// (MD-8).
@@ -68,7 +68,7 @@ pub enum Binding {
     V4Prefix([u8; 3]),
     /// The client's IPv6 /48.
     V6Prefix([u8; 6]),
-    /// The client's full address, when the realm asks for it.
+    /// The client's full address, when the environment asks for it.
     Address(IpAddr),
 }
 

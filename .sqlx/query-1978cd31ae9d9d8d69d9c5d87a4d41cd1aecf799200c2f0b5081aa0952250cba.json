@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_memberships SET owner = false\n                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND subject_id = $4\n                  AND ended_at IS NULL AND owner",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1978cd31ae9d9d8d69d9c5d87a4d41cd1aecf799200c2f0b5081aa0952250cba"
+}

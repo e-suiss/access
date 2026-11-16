@@ -117,7 +117,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              archive = {{ user = \"x\", password_file = {pw:?}, pool = 1 }}\n\
              outbox_reader = {{ user = \"o\", password_file = {pw:?}, pool = 1 }}\n\
              checkpointer = {{ user = \"c\", password_file = {pw:?}, pool = 1 }}\n\
-             [identity]\nrealm_base = \"https://id.access.example\"\n\
+             [identity]\nenvironment_base = \"https://id.access.example\"\n\
              signer = \"/run/access/identity-signer.sock\"\n\
              [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\
              [login]\ndist_dir = {dist:?}\n\

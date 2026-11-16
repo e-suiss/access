@@ -1,4 +1,4 @@
-//! The `ssh.login` action (IDP-32, OP-156 m.3 (o)): its Action Schema, the catalog a realm
+//! The `ssh.login` action (IDP-32, OP-156 m.3 (o)): its Action Schema, the catalog an environment
 //! accepts with the existing `schema-definition` Acceptance, and the resource of a server group.
 //! A Grant of `ssh.login` names the principals a certificate may carry and the constraints it
 //! must carry; a certificate is a projection of it, never a source of authority.

@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:preference.changed`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "account",
     "topics",
     "at",
@@ -13,7 +13,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "account": {
@@ -38,7 +38,7 @@
         "recipient_type",
         "source"
       ],
-      "description": "Present when the realm sends İYS consent records (idp.realm.iys, OP-156 m.3 (c), IDP-37 (4)): the commercial message channels the change touched, the recipient type, how it was given, and approved or rejected when every touched channel ended the same. The consent date is `at`; the address goes to Relay only, inside each channel's sealed relay.message.iys_consent.v1, never in this event.",
+      "description": "Present when the environment sends İYS consent records (idp.environment.iys, OP-156 m.3 (c), IDP-37 (4)): the commercial message channels the change touched, the recipient type, how it was given, and approved or rejected when every touched channel ended the same. The consent date is `at`; the address goes to Relay only, inside each channel's sealed relay.message.iys_consent.v1, never in this event.",
       "properties": {
         "channels": {
           "type": "array",

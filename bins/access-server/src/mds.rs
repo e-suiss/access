@@ -158,7 +158,7 @@ impl Metadata {
     }
 }
 
-/// The blob this process holds, which the refresh job keeps and a realm's `direct` attestation
+/// The blob this process holds, which the refresh job keeps and an environment's `direct` attestation
 /// policy reads (OP-159 m.3 (ll)); empty without a configured service.
 pub(crate) fn shared() -> Arc<MemoryMdsCache> {
     static HELD: OnceLock<Arc<MemoryMdsCache>> = OnceLock::new();

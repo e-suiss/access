@@ -83,7 +83,7 @@ fn meta_write(
 
 /// A proposal of `change` valid for an hour from `from`.
 fn proposal_at(
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     change: Change,
     nonce: u8,
     basis: ExerciseBasis,
@@ -100,7 +100,7 @@ fn proposal_at(
 /// An `idp.hr.import` of `content` by the root, valid for an hour from `from`.
 async fn import_late(
     w: &World,
-    (at, d): ((TenantId, RealmId), Digest),
+    (at, d): ((TenantId, EnvironmentId), Digest),
     content: &str,
     nonce: u8,
     from: u64,
@@ -130,7 +130,7 @@ fn group(name: &str, w: &World) -> Change {
     .unwrap()
 }
 
-/// The baseline authority: creating groups in the realm, for good.
+/// The baseline authority: creating groups in the environment, for good.
 fn baseline(w: &World) -> CanonicalAuthority {
     CanonicalAuthority {
         authority: AuthoritySet {
@@ -181,7 +181,7 @@ async fn episode(w: &World, d: Digest, grant: Id, at: u64) -> Option<u64> {
 #[tokio::test]
 async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboarding() {
     let w = World::new().await;
-    let (t, r, d) = w.realm_with(SLUG, Some(0)).await;
+    let (t, r, d) = w.environment_with(SLUG, Some(0)).await;
     let at = (t, r);
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let RegistrationVerdict::Registered(alice) =

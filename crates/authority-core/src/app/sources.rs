@@ -21,7 +21,7 @@ use crate::ports::{Binding, Reader, Salts};
 /// Who issues what a source admits.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Issuer {
-    /// A Party of this domain or of a realm it accepts.
+    /// A Party of this domain or of an environment it accepts.
     Party(Id),
     /// A foreign domain (OP-143 m.13).
     Foreign(Digest),

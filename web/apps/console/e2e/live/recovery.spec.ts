@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 test.describe("@live console recovery", () => {
   test("@live the recovery read answers nothing without a session", async ({ page }) => {
-    const read = await page.request.get("/console/api/proxy/admin/realms/acme/recovery");
+    const read = await page.request.get("/console/api/proxy/admin/envs/acme/recovery");
     expect([401, 403]).toContain(read.status());
   });
 

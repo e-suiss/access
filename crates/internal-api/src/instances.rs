@@ -21,7 +21,7 @@ use suiss_crypto::dcbor::{self, Value};
 /// The resource namespace an `instance_terminate` intent names its Instance in.
 pub const INSTANCE_NAMESPACE: &str = "access.instance";
 
-/// The PEP name the identity plane commits as in a realm's governing domain: device
+/// The PEP name the identity plane commits as in an environment's governing domain: device
 /// registrations, terminations, `idp.*` changes and approvals name it (OP-149 m.16 (a), m.9).
 pub const IDENTITY_PEP: &str = "access-identity";
 
@@ -83,8 +83,8 @@ impl core::fmt::Display for PlatformProduct {
 pub enum Registrant {
     /// A user's device, from a stepped-up session (OP-149 m.6): a human Party.
     Device {
-        /// The realm.
-        realm: [u8; 16],
+        /// The environment.
+        environment: [u8; 16],
         /// The session's subject.
         subject: [u8; 16],
     },
@@ -96,11 +96,11 @@ pub enum Registrant {
         /// The product's platform client.
         client: String,
     },
-    /// A realm's identity Claim issuer (§10.1.7, OP-150 L2): a system Party whose Instance is
-    /// the realm's Claim issuer key, the issuer the governing domain's default Acceptance names.
+    /// An environment's identity Claim issuer (§10.1.7, OP-150 L2): a system Party whose Instance is
+    /// the environment's Claim issuer key, the issuer the governing domain's default Acceptance names.
     ClaimIssuer {
-        /// The realm.
-        realm: [u8; 16],
+        /// The environment.
+        environment: [u8; 16],
     },
 }
 
@@ -306,7 +306,7 @@ pub const RECOVERY_UNBOUND: &str = "actor-binding";
 
 /// A self-signed `instance_recover` (OP-153 m.3 (c), INV-13): the successor key signs it under
 /// the Genesis bootstrap Grant, as `instance_create`; the authority plane takes the actor from
-/// the predecessor's Party and accepts it only while the realm issuer's `recovery_result`
+/// the predecessor's Party and accepts it only while the environment issuer's `recovery_result`
 /// names the key.
 #[derive(Clone, Debug)]
 pub struct Recovery {

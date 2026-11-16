@@ -5,7 +5,7 @@ use std::future::Future;
 
 use access_store::accounts::{CredentialRow, NewCredential, Revoke, SealedSecret, SubjectRow};
 use access_store::audit::AuditEvent;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::throttle::ThrottleRow;
 
 use crate::AccountError;
@@ -63,15 +63,15 @@ impl BotSignals for NoBotProvider {
     }
 }
 
-/// Opens account transactions in one realm.
+/// Opens account transactions in one environment.
 pub trait AccountDb: Send + Sync {
     /// The transaction.
     type Tx: AccountTx;
-    /// Begins a transaction scoped to `tenant` and `realm`.
+    /// Begins a transaction scoped to `tenant` and `environment`.
     fn begin(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> impl Future<Output = Result<Self::Tx, AccountError>> + Send;
 }
 
@@ -112,7 +112,7 @@ pub trait AccountTx: Send {
         id: [u8; 16],
         reason: &'static str,
     ) -> impl Future<Output = Result<Option<i64>, AccountError>> + Send;
-    /// Adds an identifier; false when the realm has it.
+    /// Adds an identifier; false when the environment has it.
     fn add_identifier(
         &mut self,
         subject: [u8; 16],

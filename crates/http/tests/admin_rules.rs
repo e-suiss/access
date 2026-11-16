@@ -97,16 +97,16 @@ fn the_limiter_counts_concurrency_slots() {
 fn route_groups_are_longest_prefix() {
     assert_eq!(group_of("/admin/v1/platform", GROUPS), "/admin/v1/platform");
     assert_eq!(
-        group_of("/admin/v1/realms/{slug}/clients/{id}", GROUPS),
-        "/admin/v1/realms/{slug}"
+        group_of("/admin/v1/envs/{slug}/clients/{id}", GROUPS),
+        "/admin/v1/envs/{slug}"
     );
     assert_eq!(
         group_of("/admin/v1/platformx", GROUPS),
         "/admin/v1/platformx"
     );
     assert_eq!(
-        rate::actor_quota(access_http::api::domain::Surface::Realm, true),
-        rate::REALM_WRITE
+        rate::actor_quota(access_http::api::domain::Surface::Environment, true),
+        rate::ENVIRONMENT_WRITE
     );
 }
 
@@ -184,17 +184,20 @@ fn list_queries_are_closed() {
 fn cursors_are_sealed_to_their_list() {
     let c = SivCursors::new(Secret::new([1; 32]));
     let params: BTreeMap<String, String> = [("filter".to_owned(), "active pr".to_owned())].into();
-    let ctx = cursor_context("listClients", "realm:acme", &params);
+    let ctx = cursor_context("listClients", "environment:acme", &params);
     let cursor = c.seal(&ctx, b"position-42").unwrap();
     assert!(!cursor.contains("position"));
     assert_eq!(c.open(&ctx, &cursor).unwrap(), b"position-42");
-    let other = cursor_context("listClients", "realm:other", &params);
-    assert!(c.open(&other, &cursor).is_none(), "another realm's list");
-    let refiltered = cursor_context("listClients", "realm:acme", &BTreeMap::new());
+    let other = cursor_context("listClients", "environment:other", &params);
+    assert!(
+        c.open(&other, &cursor).is_none(),
+        "another environment's list"
+    );
+    let refiltered = cursor_context("listClients", "environment:acme", &BTreeMap::new());
     assert!(c.open(&refiltered, &cursor).is_none(), "another filter");
     assert!(c.open(&ctx, "AAAA").is_none());
-    let link = next_link("/admin/v1/realms/acme/clients", &params, &cursor);
-    assert!(link.starts_with("</admin/v1/realms/acme/clients?filter=active%20pr&cursor="));
+    let link = next_link("/admin/v1/envs/acme/clients", &params, &cursor);
+    assert!(link.starts_with("</admin/v1/envs/acme/clients?filter=active%20pr&cursor="));
     assert!(link.ends_with(">; rel=\"next\""));
 }
 
@@ -209,7 +212,7 @@ fn lifecycle_headers_are_well_formed() {
     let l = Lifecycle {
         deprecated_at: 1_688_169_599,
         sunset_at: Some(1_782_864_000),
-        successor: Some("/admin/v1/realms/{slug}/clients/v2"),
+        successor: Some("/admin/v1/envs/{slug}/clients/v2"),
     };
     let h = l.headers();
     assert_eq!(h[0], ("deprecation", "@1688169599".to_owned()));
@@ -256,39 +259,47 @@ fn token(audience: &str, scopes: &[&str], iat: u64, exp: u64) -> ReadToken {
 // OP-151 m.3 (a), (c), TN-119, TN-130
 #[test]
 fn read_tokens_are_held_to_their_surface() {
-    let realm = SurfaceScope::Realm("acme".into());
+    let environment = SurfaceScope::Environment("acme".into());
     let now = 1_000_000_000;
     let ok = token(
-        "access-admin:realm:acme",
-        &["realm.read"],
+        "access-admin:environment:acme",
+        &["environment.read"],
         now,
         now + 60_000,
     );
-    assert_eq!(check_read(&ok, &realm, "realm.read", now), Ok(()));
+    assert_eq!(
+        check_read(&ok, &environment, "environment.read", now),
+        Ok(())
+    );
     assert_eq!(
         check_read(&ok, &SurfaceScope::Platform, "platform.read", now),
         Err(Refusal::WrongAudience)
     );
     assert_eq!(
-        check_read(&ok, &SurfaceScope::Realm("acme2".into()), "realm.read", now),
+        check_read(
+            &ok,
+            &SurfaceScope::Environment("acme2".into()),
+            "environment.read",
+            now
+        ),
         Err(Refusal::WrongAudience)
     );
     assert_eq!(
-        check_read(&ok, &realm, "realm.audit.read", now),
+        check_read(&ok, &environment, "environment.audit.read", now),
         Err(Refusal::InsufficientScope)
     );
     assert_eq!(
-        check_read(&ok, &realm, "realm.read", now + 60_000),
+        check_read(&ok, &environment, "environment.read", now + 60_000),
         Err(Refusal::InvalidToken)
     );
     let long = token(
-        "access-admin:realm:acme",
-        &["realm.read"],
+        "access-admin:environment:acme",
+        &["environment.read"],
         now,
         now + MAX_TOKEN_LIFETIME_MS + 1,
     );
     assert_eq!(
-        check_read(&long, &realm, "realm.read", now),
+        check_read(&long, &environment, "environment.read", now),
         Err(Refusal::TokenLifetime)
     );
     assert_eq!(authorization(&[]), Authorization::None);

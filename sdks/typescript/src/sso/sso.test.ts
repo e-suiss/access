@@ -17,9 +17,9 @@ describe("the SSO setup client", () => {
   it("names a link only by its 256-bit token", () => {
     expect(isLink(LINK)).toBe(true);
     expect(isLink("short")).toBe(false);
-    expect(linkOf(`/realms/acme/login/sso-setup/${LINK}`)).toBe(LINK);
+    expect(linkOf(`/env/acme/login/sso-setup/${LINK}`)).toBe(LINK);
     expect(linkOf("/login/sso-setup/../x")).toBeNull();
-    expect(setupPath("/realms/acme", LINK)).toBe(`/realms/acme/v1/sso-setup/${LINK}`);
+    expect(setupPath("/env/acme", LINK)).toBe(`/env/acme/v1/sso-setup/${LINK}`);
   });
 
   it("keeps a wizard's steps of one protocol and the shared ones", () => {
@@ -38,7 +38,7 @@ describe("the SSO setup client", () => {
     expect(stepsFor(w, "saml").map((s) => s.action)).toEqual(["open", "copy"]);
   });
 
-  it("reads and submits on the realm's origin, a refusal by its problem code", async () => {
+  it("reads and submits on the environment's origin, a refusal by its problem code", async () => {
     const seen: { url: string; init: RequestInit | undefined }[] = [];
     const fetcher = ((url: string, init?: RequestInit) => {
       seen.push({ url, init });

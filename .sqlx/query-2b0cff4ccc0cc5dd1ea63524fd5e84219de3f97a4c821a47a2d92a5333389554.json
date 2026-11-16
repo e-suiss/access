@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_groups (tenant_id, environment_id, name, display_name, membership_issuer,\n                domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2b0cff4ccc0cc5dd1ea63524fd5e84219de3f97a4c821a47a2d92a5333389554"
+}

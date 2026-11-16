@@ -66,7 +66,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let row = t.device_key_by_thumbprint(&print).await.unwrap().unwrap();
@@ -80,7 +80,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let rows = t.audit_page(None, 10_000).await.unwrap();
@@ -208,7 +208,7 @@ impl Desk {
         .len()
     }
 
-    /// Another active account of the realm with a registered passkey of its own, as the
+    /// Another active account of the environment with a registered passkey of its own, as the
     /// registration ceremony stores one: the key that answers for it.
     async fn someone_elses_passkey(&self) -> SoftSigner {
         use access_identity_account::adapters::pg::PgAccounts;
@@ -227,7 +227,7 @@ impl Desk {
         use access_identity_webauthn::domain::software::SOFTWARE_AAGUID;
         use access_identity_webauthn::ports::CredentialRegistry as _;
 
-        use crate::login::{HsmKits, RealmKeks};
+        use crate::login::{EnvironmentKeks, HsmKits};
 
         const WHO: Actor<'static> = Actor {
             actor: "test",
@@ -239,24 +239,24 @@ impl Desk {
             .unwrap()
             .unwrap();
         let kits = HsmKits::new(
-            RealmKeks::new(Arc::clone(&self.w.keys)),
+            EnvironmentKeks::new(Arc::clone(&self.w.keys)),
             self.w.db.router.clone(),
             self.w.db.app.clone(),
             SessionPolicy::DEFAULT,
         );
         let kit = kits.kit(&entry).await.unwrap();
         let pg = PgAccounts::sealed(self.w.db.app.clone(), kit.vault());
-        let realm = kit.realm();
+        let environment = kit.environment();
         let id = Identifier::new(IdentifierKind::Email, "q@acme.test").unwrap();
-        let q = create(&pg, &realm, &[id], &WHO).await.unwrap();
+        let q = create(&pg, &environment, &[id], &WHO).await.unwrap();
         for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-            change_status(&pg, &realm, q, to, &WHO).await.unwrap();
+            change_status(&pg, &environment, q, to, &WHO).await.unwrap();
         }
         let mut handle = [0_u8; 64];
         for half in handle.chunks_mut(32) {
             half.copy_from_slice(&access_crypto::random::bytes::<32>().unwrap());
         }
-        let mut t = TenantTx::begin(&self.w.db.app, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, kit.tenant, kit.environment)
             .await
             .unwrap();
         assert!(t.insert_user_handle(q, &handle).await.unwrap());
@@ -274,7 +274,7 @@ impl Desk {
             ids: &kit.ids,
         }
         .insert(&CredentialRecord {
-            realm: kit.rp.realm,
+            environment: kit.rp.environment,
             id: CredentialId::new(&authenticator.credential_id).unwrap(),
             user: UserHandle::from_bytes(handle),
             public_key: authenticator.cose_key(),
@@ -342,7 +342,7 @@ fn inline_request(intent: &Value) -> (InlineRequest, render::Render) {
 }
 
 /// The assertion an app's platform passkey API returns for `key` over `challenge`, at the
-/// realm's origin with `rp_id` and the authenticator data `flags`.
+/// environment's origin with `rp_id` and the authenticator data `flags`.
 fn platform_assertion(
     d: &Desk,
     key: &dyn Signer,
@@ -659,7 +659,7 @@ async fn a_ct2_request_is_only_invited_and_cannot_be_answered_from_a_notificatio
 
 // §13.7.3, SEC26, TN-100, OP-157 m.3 (m), Ek B 5477, 5499
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_realm_that_did_not_open_the_channel_answers_approval_inline_off() {
+async fn a_environment_that_did_not_open_the_channel_answers_approval_inline_off() {
     let d = Desk::open("v7-inline-off", false).await;
     let phone = d.phone().await;
     let (_, held) = d.agent_grant().await;
@@ -710,7 +710,7 @@ async fn the_sixth_invitation_in_an_hour_is_429_and_one_intent_invites_once() {
         .unwrap()
         .unwrap();
     let invites = || async {
-        let mut t = TenantTx::begin(&d.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&d.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let (n, _) = access_store::approvals::invites_since(&mut t, &AGENT.0, &d.subject, 0)

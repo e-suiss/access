@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.support_requests (tenant_id, environment_id, operator_id, operator_party,\n                    subject_id, subject_party, case_system, case_label, case_ref, scope, minutes,\n                    created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n             RETURNING request_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5c2077df1df83342db6ea9cb7b02bdaa8055e9ebf932884392fcb6910b7cfda5"
+}

@@ -1,5 +1,5 @@
 //! `idp.support.*` changes (catalog 7, OP-157 m.3 (a), (e), (g)): registering and retiring the
-//! support case systems whose `support_case` Claims hold support Grants, and the realm's support
+//! support case systems whose `support_case` Claims hold support Grants, and the environment's support
 //! artifact policy. Sans-I/O: the REST body becomes one change, which the intent binds (EI-25).
 
 use access_internal_api::idp::IdpAction;
@@ -50,7 +50,7 @@ pub enum CaseSystemChange {
     Retire(String),
 }
 
-/// The realm's support artifact policy (OP-157 m.3 (g)): `idp.support.artifact_policy` when
+/// The environment's support artifact policy (OP-157 m.3 (g)): `idp.support.artifact_policy` when
 /// present, `artifact_policy_close` when absent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArtifactPolicy {
@@ -148,7 +148,7 @@ impl CaseSystemChange {
         }
     }
 
-    /// Its resource path below the realm.
+    /// Its resource path below the environment.
     #[must_use]
     pub fn path(&self) -> [String; 2] {
         let name = match self {

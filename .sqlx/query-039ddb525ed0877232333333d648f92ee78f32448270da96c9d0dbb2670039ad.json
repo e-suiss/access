@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_webhook_attempts\n                (tenant_id, environment_id, webhook_id, event_id, attempt, outcome, status, latency_ms,\n                 reason)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "039ddb525ed0877232333333d648f92ee78f32448270da96c9d0dbb2670039ad"
+}

@@ -630,7 +630,7 @@ async fn run(under: Under) {
     let mut cookies: BTreeMap<&str, String> = BTreeMap::new();
     let all = behaviour();
     let jwks = SignerKeys::new(l.w.identity_signer.clone())
-        .jwks(l.route.realm)
+        .jwks(l.route.environment)
         .await
         .unwrap();
     let keys =
@@ -715,7 +715,7 @@ async fn ask(
         let last = seen.last.lock().unwrap().clone();
         let token = last.get("access-identity").cloned().unwrap_or_default();
         let rules = AppTokenRules {
-            issuer: "https://access.test/realms/acme",
+            issuer: "https://access.test/env/acme",
             audience: &format!("https://{host}"),
             now: now_ms(),
             skew_ms: APP_SKEW_MS,

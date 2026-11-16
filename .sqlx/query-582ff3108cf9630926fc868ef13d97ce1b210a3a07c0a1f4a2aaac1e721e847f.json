@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mode FROM access.vault_release_modes\n              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_release_modes",
+            "name": "mode"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "582ff3108cf9630926fc868ef13d97ce1b210a3a07c0a1f4a2aaac1e721e847f"
+}

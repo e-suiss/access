@@ -1,6 +1,6 @@
 //! Access as a SAML 2.0 service provider of an enterprise upstream, sans I/O (OP-155 m.3 (h),
 //! §10.6.1, §10.2.6). The `AuthnRequest` is written in canonical form and signed in the
-//! HTTP-Redirect binding with the realm's SAML key; the Response is read and its assertion's
+//! HTTP-Redirect binding with the environment's SAML key; the Response is read and its assertion's
 //! signature verified in the parser worker against the identity provider's pinned certificates; what comes
 //! back is checked here: issuer, audience, recipient, time and `InResponseTo`. An unsolicited
 //! Response is refused unless the connection opens it, and then only while fresh.

@@ -33,8 +33,8 @@ export function Profile({ session }: { readonly session: SessionInfo }): ReactEl
             <dd data-testid="display-name">{session.display_name}</dd>
             <dt>{t("profileAccount")}</dt>
             <dd className={MONO}>{session.account}</dd>
-            <dt>{t("profileRealm")}</dt>
-            <dd className={MONO}>{session.realm}</dd>
+            <dt>{t("profileEnvironment")}</dt>
+            <dd className={MONO}>{session.environment}</dd>
           </dl>
           <p className={HINT}>{t("profileEditNote")}</p>
         </CardContent>

@@ -212,7 +212,7 @@ mod tests {
 
     // OP-153 m.2, m.23 (f)
     #[tokio::test]
-    async fn a_page_under_a_realm_path_loads_its_assets_from_there() {
+    async fn a_page_under_an_environment_path_loads_its_assets_from_there() {
         let dir = std::env::temp_dir().join(format!("access-login-page-at-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("assets")).unwrap_or_default();
         std::fs::write(
@@ -224,10 +224,10 @@ mod tests {
         let assets = Assets::load(&dir).unwrap_or_else(|_| Assets {
             files: HashMap::new(),
         });
-        let moved = body(assets.page_at("/realms/acme").unwrap_or_default()).await;
+        let moved = body(assets.page_at("/env/acme").unwrap_or_default()).await;
         assert_eq!(
             moved,
-            "<script type=\"module\" src=\"/realms/acme/assets/a.js\"></script><link href=/realms/acme/assets/a.css>"
+            "<script type=\"module\" src=\"/env/acme/assets/a.js\"></script><link href=/env/acme/assets/a.css>"
         );
         let root = body(assets.page_at("").unwrap_or_default()).await;
         assert!(root.contains("src=\"/assets/a.js\""));

@@ -1,5 +1,5 @@
 //! The edge channel between a protocol gateway and access-server (OP-155 m.3 (c), MD-1, IDP-26,
-//! IDI-11). A gateway is never an issuer: it names who authenticated and how, and the realm
+//! IDI-11). A gateway is never an issuer: it names who authenticated and how, and the environment
 //! issuer inside access-server makes the Claim. Each body is one deterministic CBOR map.
 //! Sans-I/O: the transport (mTLS) lives in the gateway's edge core and in the HTTP layer.
 
@@ -127,12 +127,12 @@ impl GatewayUri {
 /// One call a gateway makes (OP-155 m.3 (c): the channel offers these and nothing else).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Call {
-    /// Who the gateway is: its registration and realm.
+    /// Who the gateway is: its registration and environment.
     Hello,
     /// Checks a legacy credential (LDAP bind, RADIUS PAP) or Kerberos acceptance facts; its body
     /// is the gateway kind's ([`ldap`], [`radius`], [`kerberos`]).
     Authenticate,
-    /// Asks the realm issuer for the `authentication` Claim of a user the gateway authenticated.
+    /// Asks the environment issuer for the `authentication` Claim of a user the gateway authenticated.
     IssueClaim,
     /// Looks a subject up by the identifier a legacy protocol carries.
     SubjectLookup,
@@ -211,15 +211,15 @@ pub enum WireError {
 pub struct Hello {
     /// The gateway's identity.
     pub gateway: GatewayUri,
-    /// The slug of the one realm it serves.
-    pub realm: String,
+    /// The slug of the one environment it serves.
+    pub environment: String,
 }
 
 /// [`Call::SubjectLookup`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectLookup {
-    /// The realm the gateway asks in; it must be its own.
-    pub realm: String,
+    /// The environment the gateway asks in; it must be its own.
+    pub environment: String,
     /// The login identifier the protocol carried (user name or e-mail).
     pub identifier: String,
 }
@@ -233,11 +233,11 @@ pub struct Subject {
 }
 
 /// [`Call::IssueClaim`]: the facts of one authentication the gateway made. The gateway signs
-/// nothing; the realm issuer signs the Claim (IDP-26, P-ID-5).
+/// nothing; the environment issuer signs the Claim (IDP-26, P-ID-5).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IssueClaim {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// The subject.
     pub subject: [u8; 16],
     /// The method, as the Kernel names it; it must be its kind's.
@@ -248,7 +248,7 @@ pub struct IssueClaim {
     pub evidence: Option<[u8; 32]>,
 }
 
-/// The answer to [`IssueClaim`]: the Claim is queued for the realm issuer.
+/// The answer to [`IssueClaim`]: the Claim is queued for the environment issuer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Issued {
     /// Always `true`; a refusal is a problem answer.
@@ -258,8 +258,8 @@ pub struct Issued {
 /// [`Call::Audit`]: one event, codes only (OP-47: no body, no personal data).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Audit {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// Event code, e.g. `ldap.bind`.
     pub event: String,
     /// Outcome code, e.g. `ok`, `refused`.
@@ -370,7 +370,7 @@ impl Hello {
     pub fn encode(&self) -> Vec<u8> {
         encode(vec![
             ("gateway", Value::text(&self.gateway.uri())),
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
         ])
     }
 
@@ -380,10 +380,10 @@ impl Hello {
     /// [`WireError`].
     pub fn decode(body: &[u8]) -> Result<Self, WireError> {
         let v = decode_map(body)?;
-        only(&v, &["gateway", "realm"])?;
+        only(&v, &["gateway", "environment"])?;
         Ok(Self {
             gateway: GatewayUri::parse(&text(&v, "gateway", 256)?).ok_or(WireError::Malformed)?,
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
         })
     }
 }
@@ -393,7 +393,7 @@ impl SubjectLookup {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         encode(vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("identifier", Value::text(&self.identifier)),
         ])
     }
@@ -404,9 +404,9 @@ impl SubjectLookup {
     /// [`WireError`].
     pub fn decode(body: &[u8]) -> Result<Self, WireError> {
         let v = decode_map(body)?;
-        only(&v, &["realm", "identifier"])?;
+        only(&v, &["environment", "identifier"])?;
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             identifier: text(&v, "identifier", MAX_IDENTIFIER)?,
         })
     }
@@ -439,7 +439,7 @@ impl IssueClaim {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut entries = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("subject", Value::Bytes(self.subject.to_vec())),
             ("method", Value::text(&self.method)),
             ("auth_time", Value::Unsigned(self.auth_time)),
@@ -454,12 +454,15 @@ impl IssueClaim {
     /// [`WireError`].
     pub fn decode(body: &[u8]) -> Result<Self, WireError> {
         let v = decode_map(body)?;
-        only(&v, &["realm", "subject", "method", "auth_time", "evidence"])?;
+        only(
+            &v,
+            &["environment", "subject", "method", "auth_time", "evidence"],
+        )?;
         let Some(Value::Unsigned(auth_time)) = v.get("auth_time") else {
             return Err(WireError::Malformed);
         };
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             subject: required::<16>(&v, "subject")?,
             method: text(&v, "method", 32)?,
             auth_time: *auth_time,
@@ -506,7 +509,7 @@ impl Audit {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut entries = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("event", Value::text(&self.event)),
             ("outcome", Value::text(&self.outcome)),
         ];
@@ -521,9 +524,9 @@ impl Audit {
     /// [`WireError`].
     pub fn decode(body: &[u8]) -> Result<Self, WireError> {
         let v = decode_map(body)?;
-        only(&v, &["realm", "event", "outcome", "subject"])?;
+        only(&v, &["environment", "event", "outcome", "subject"])?;
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             event: code(&v, "event", MAX_EVENT)?,
             outcome: code(&v, "outcome", MAX_OUTCOME)?,
             subject: fixed::<16>(v.get("subject"))?,
@@ -582,7 +585,7 @@ mod tests {
     #[test]
     fn bodies_round_trip_and_refuse_unknown_fields() {
         let c = IssueClaim {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             subject: [1; 16],
             method: String::from("ldap-bind"),
             auth_time: 5,
@@ -590,14 +593,14 @@ mod tests {
         };
         assert_eq!(IssueClaim::decode(&c.encode()).unwrap(), c);
         let a = Audit {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             event: String::from("ldap.bind"),
             outcome: String::from("ok"),
             subject: None,
         };
         assert_eq!(Audit::decode(&a.encode()).unwrap(), a);
         let extra = encode(vec![
-            ("realm", Value::text("corp")),
+            ("environment", Value::text("corp")),
             ("identifier", Value::text("alice")),
             ("password", Value::text("x")),
         ]);

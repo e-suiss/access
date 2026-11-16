@@ -60,4 +60,4 @@ database:
   name: access
 
 issuer: https://access-server.access.svc
-realmBase: https://id.access.example
+environmentBase: https://id.access.example

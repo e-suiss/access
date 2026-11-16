@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_oidf_jti (tenant_id, environment_id, replay_key, exp_ms)\n             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f6818fdf7fc6717b9652d6a24a5a9b8e8440fa91ec8ef5737277656b3e80834a"
+}

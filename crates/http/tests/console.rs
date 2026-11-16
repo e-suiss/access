@@ -179,7 +179,7 @@ struct Hosted;
 
 fn who(account: &str) -> SignedIn {
     SignedIn {
-        realm: "acme".to_owned(),
+        environment: "acme".to_owned(),
         domain: DOMAIN,
         account: account.to_owned(),
         display_name: "<b>Ada</b>".to_owned(),
@@ -192,11 +192,11 @@ fn who(account: &str) -> SignedIn {
 impl SignIn for Hosted {
     async fn start(
         &self,
-        realm: &str,
+        environment: &str,
         state: &str,
         callback: &str,
     ) -> Result<Option<String>, Unavailable> {
-        Ok((realm == "acme")
+        Ok((environment == "acme")
             .then(|| format!("https://acme.example/login?state={state}&cb={callback}")))
     }
 
@@ -489,7 +489,7 @@ impl Harness {
     /// Signs in through the hosted login hand-off and returns the cookie header.
     async fn sign_in(&self) -> Session {
         let (r, _) = self
-            .send(get("/console/api/sign-in?realm=acme", None), CLIENT)
+            .send(get("/console/api/sign-in?environment=acme", None), CLIENT)
             .await;
         assert_eq!(r.status(), StatusCode::SEE_OTHER);
         let started = set_cookie(&r, "__Host-access-console-signin");
@@ -608,7 +608,7 @@ fn json(bytes: &[u8]) -> serde_json::Value {
 async fn sign_in_opens_a_strict_console_session() {
     let h = Harness::new();
     let (r, _) = h
-        .send(get("/console/api/sign-in?realm=acme", None), CLIENT)
+        .send(get("/console/api/sign-in?environment=acme", None), CLIENT)
         .await;
     let line = set_cookie_line(&r, "__Host-access-console-signin");
     assert!(
@@ -625,13 +625,16 @@ async fn sign_in_opens_a_strict_console_session() {
     assert_eq!(r.status(), StatusCode::OK);
     let v = json(&body);
     assert_eq!(v["account"], "acc_ada");
-    assert_eq!(v["realm"], "acme");
+    assert_eq!(v["environment"], "acme");
     assert_eq!(v["domain"], b64url_encode(&DOMAIN.0));
     assert_eq!(v["display_name"], "<b>Ada</b>");
     assert_eq!(v["idle_timeout_s"], "900");
     assert!(v["instance"].is_null());
     assert_eq!(r.headers()["cache-control"], "no-store");
-    for bad in ["/console/api/sign-in", "/console/api/sign-in?realm=A!"] {
+    for bad in [
+        "/console/api/sign-in",
+        "/console/api/sign-in?environment=A!",
+    ] {
         let (r, _) = h.send(get(bad, None), CLIENT).await;
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     }
@@ -717,8 +720,8 @@ async fn a_session_store_failure_fails_closed() {
     let h = Harness::new();
     let s = h.with_instance().await;
     h.env().sessions.down.store(true, Ordering::SeqCst);
-    let target = "/admin/v1/realms/acme";
-    let mut read = s.get("/console/api/proxy/admin/realms/acme");
+    let target = "/admin/v1/envs/acme";
+    let mut read = s.get("/console/api/proxy/admin/envs/acme");
     read.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Check, read_intent(&Method::GET, target), h.now())
@@ -736,7 +739,7 @@ async fn a_session_store_failure_fails_closed() {
     }
     assert!(h.env().up.take().is_empty());
     let (r, _) = h
-        .send(get("/console/api/sign-in?realm=acme", None), CLIENT)
+        .send(get("/console/api/sign-in?environment=acme", None), CLIENT)
         .await;
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
 }
@@ -791,13 +794,13 @@ async fn the_cookie_alone_cannot_read_or_write() {
     let h = Harness::new();
     let s = h.with_instance().await;
     let (r, body) = h
-        .send(s.get("/console/api/proxy/admin/realms/acme"), CLIENT)
+        .send(s.get("/console/api/proxy/admin/envs/acme"), CLIENT)
         .await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(json(&body)["code"], "ais-required");
     let (r, body) = h
         .send(
-            s.post("/console/api/proxy/admin/realms/acme/groups", "{}"),
+            s.post("/console/api/proxy/admin/envs/acme/groups", "{}"),
             CLIENT,
         )
         .await;
@@ -813,8 +816,8 @@ async fn another_key_proves_nothing() {
     let h = Harness::new();
     let s = h.with_instance().await;
     let (thief, _) = SoftSigner::generate_p256().unwrap();
-    let target = "/admin/v1/realms/acme";
-    let mut read = s.get("/console/api/proxy/admin/realms/acme");
+    let target = "/admin/v1/envs/acme";
+    let mut read = s.get("/console/api/proxy/admin/envs/acme");
     read.headers_mut().insert(
         "x-access-ais",
         ais_by(
@@ -826,14 +829,14 @@ async fn another_key_proves_nothing() {
         .parse()
         .unwrap(),
     );
-    let mut write = s.post("/console/api/proxy/admin/realms/acme/groups", "{}");
+    let mut write = s.post("/console/api/proxy/admin/envs/acme/groups", "{}");
     write.headers_mut().insert(
         "x-access-ais",
         ais_by(&thief, Mode::Commit, Digest([5; 32]), h.now())
             .parse()
             .unwrap(),
     );
-    let mut replayed = s.get("/console/api/proxy/admin/realms/acme/clients");
+    let mut replayed = s.get("/console/api/proxy/admin/envs/acme/clients");
     replayed.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Check, read_intent(&Method::GET, target), h.now())
@@ -853,9 +856,9 @@ async fn another_key_proves_nothing() {
 async fn a_read_proof_gets_the_holder_bound_read_token() {
     let h = Harness::new();
     let s = h.with_instance().await;
-    let target = "/admin/v1/realms/acme/clients?limit=5";
+    let target = "/admin/v1/envs/acme/clients?limit=5";
     for _ in 0..2 {
-        let mut read = s.get("/console/api/proxy/admin/realms/acme/clients?limit=5");
+        let mut read = s.get("/console/api/proxy/admin/envs/acme/clients?limit=5");
         read.headers_mut().insert(
             "x-access-ais",
             h.ais(Mode::Check, read_intent(&Method::GET, target), h.now())
@@ -893,7 +896,7 @@ async fn a_read_proof_gets_the_holder_bound_read_token() {
         .clone();
     assert_eq!(
         dpop,
-        "proof GET https://access-server:9443/admin/v1/realms/acme/clients"
+        "proof GET https://access-server:9443/admin/v1/envs/acme/clients"
     );
 }
 
@@ -902,9 +905,9 @@ async fn a_read_proof_gets_the_holder_bound_read_token() {
 async fn drafting_an_intent_is_a_read() {
     let h = Harness::new();
     let s = h.with_instance().await;
-    let target = "/admin/v1/realms/acme/intents";
+    let target = "/admin/v1/envs/acme/intents";
     let body = "{\"operation\":\"createGroup\",\"body\":{\"name\":\"ops\"}}";
-    let mut commit = s.post("/console/api/proxy/admin/realms/acme/intents", body);
+    let mut commit = s.post("/console/api/proxy/admin/envs/acme/intents", body);
     commit.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Commit, Digest([5; 32]), h.now())
@@ -914,7 +917,7 @@ async fn drafting_an_intent_is_a_read() {
     let (r, refused) = h.send(commit, CLIENT).await;
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
     assert_eq!(json(&refused)["code"], "read-proof-rejected");
-    let mut draft = s.post("/console/api/proxy/admin/realms/acme/intents", body);
+    let mut draft = s.post("/console/api/proxy/admin/envs/acme/intents", body);
     draft.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Check, read_intent(&Method::POST, target), h.now())
@@ -962,18 +965,14 @@ async fn a_platform_read_presents_the_platform_surfaces_own_token() {
         );
         r
     };
-    for path in [
-        "platform/tenants",
-        "realms/acme",
-        "platform/operator/health",
-    ] {
+    for path in ["platform/tenants", "envs/acme", "platform/operator/health"] {
         let (r, _) = h.send(read(path), CLIENT).await;
         assert_eq!(r.status(), StatusCode::OK, "{path}");
     }
     assert_eq!(h.env().grants.issued.load(Ordering::SeqCst), 2);
     let seen = h.env().up.take();
     assert!(authorization(&seen[0].1).starts_with("DPoP tok-platform-"));
-    assert!(authorization(&seen[1].1).starts_with("DPoP tok-realm-"));
+    assert!(authorization(&seen[1].1).starts_with("DPoP tok-environment-"));
     assert_eq!(authorization(&seen[2].1), authorization(&seen[0].1));
 
     let h = Harness::new();
@@ -1002,8 +1001,8 @@ async fn no_read_token_means_no_read() {
     let h = Harness::new();
     let s = h.with_instance().await;
     h.env().grants.refuse.store(true, Ordering::SeqCst);
-    let target = "/admin/v1/realms/acme";
-    let mut read = s.get("/console/api/proxy/admin/realms/acme");
+    let target = "/admin/v1/envs/acme";
+    let mut read = s.get("/console/api/proxy/admin/envs/acme");
     read.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Check, read_intent(&Method::GET, target), h.now())
@@ -1023,7 +1022,7 @@ async fn a_write_passes_on_the_browsers_ais_only() {
     let s = h.with_instance().await;
     let ais = h.ais(Mode::Commit, Digest([5; 32]), h.now());
     let mut write = s.post(
-        "/console/api/proxy/admin/realms/acme/groups",
+        "/console/api/proxy/admin/envs/acme/groups",
         "{\"name\":\"ops\"}",
     );
     write
@@ -1037,7 +1036,7 @@ async fn a_write_passes_on_the_browsers_ais_only() {
     let seen = h.env().up.take();
     let (_, f) = &seen[0];
     assert_eq!(f.method, Method::POST);
-    assert_eq!(f.path_and_query, "/admin/v1/realms/acme/groups");
+    assert_eq!(f.path_and_query, "/admin/v1/envs/acme/groups");
     assert_eq!(f.body.as_ref(), b"{\"name\":\"ops\"}");
     let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
     assert!(names.contains(&"x-access-ais") && names.contains(&"idempotency-key"));
@@ -1052,7 +1051,7 @@ async fn a_write_passes_on_the_browsers_ais_only() {
 async fn no_instance_no_proxy() {
     let h = Harness::new();
     let s = h.sign_in().await;
-    let mut write = s.post("/console/api/proxy/admin/realms/acme/groups", "{}");
+    let mut write = s.post("/console/api/proxy/admin/envs/acme/groups", "{}");
     write.headers_mut().insert(
         "x-access-ais",
         h.ais(Mode::Commit, Digest([5; 32]), h.now())

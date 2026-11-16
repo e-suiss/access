@@ -12,7 +12,7 @@
 
 migration-bundle = {
   version: 1,
-  realm: tstr,                      ; the exporting realm's issuer
+  environment: tstr,                      ; the exporting environment's issuer
   exported_at: uint,                ; Unix milliseconds
   accounts: uint,                   ; lines in the plaintext
   recipient: bstr .size 32,         ; RFC 7638 thumbprint of the recipient key
@@ -23,8 +23,8 @@ migration-bundle = {
 
 ; The change bodies the catalog's account actions bind (EI-25, OP-153 m.25 (b)).
 account-bind = {                    ; idp.account.bind, CT2 (OP-153 m.18 (e))
-  subject: id,                      ; the account in this realm
-  peer_realm: id,                   ; another realm of the same tenant
+  subject: id,                      ; the account in this environment
+  peer_environment: id,                   ; another environment of the same tenant
   peer_subject: id,                 ; the account there
 }
 account-import = {                  ; idp.account.import, CT2 (TN-85, OP-153 m.19 (d))
@@ -40,15 +40,15 @@ guardianship-record = {             ; idp.account.guardianship_record, CT2 (E53,
   basis: "parent" / "legal_guardian",
   country: tstr .regexp "[A-Z]{2}",
 }
-csp-mode = {                        ; idp.realm.csp_mode (CT1) / csp_mode_loosen (CT2), m.22 (g)
+csp-mode = {                        ; idp.environment.csp_mode (CT1) / csp_mode_loosen (CT2), m.22 (g)
   csp_mode: "enforce" / "report_only",
 }
 
-; The claims of a realm-signed binding offer (OP-153 m.18 (e)): a compact JWS with
-; `typ` "binding-offer+jwt" under the offering realm's JOSE key, carried in JSON.
+; The claims of an environment-signed binding offer (OP-153 m.18 (e)): a compact JWS with
+; `typ` "binding-offer+jwt" under the offering environment's JOSE key, carried in JSON.
 binding-offer = {
-  iss: tstr,                        ; the offering realm's issuer
-  aud: tstr,                        ; the realm the offer is for
+  iss: tstr,                        ; the offering environment's issuer
+  aud: tstr,                        ; the environment the offer is for
   binding: tstr,                    ; base64url of the 16-byte binding id
   proof: "verified_idp_subject",
   idp_subject: tstr,                ; base64url SHA-256("access/binding-offer-subject/v1" || 0x00

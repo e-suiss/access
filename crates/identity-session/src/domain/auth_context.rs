@@ -82,8 +82,8 @@ impl Content {
 /// The artifact.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthContext {
-    /// The realm's issuer.
-    pub realm: String,
+    /// The environment's issuer.
+    pub environment: String,
     /// [`session_ref`] of the session.
     pub session_ref: Digest,
     /// NIST AAL.
@@ -175,7 +175,7 @@ impl AuthContext {
     /// # Errors
     /// [`EncodeError`].
     pub fn of(
-        realm: &str,
+        environment: &str,
         session: &[u8; 16],
         assurance: &AssuranceVector,
         step_up_time: Option<u64>,
@@ -183,7 +183,7 @@ impl AuthContext {
         content: Option<Content>,
     ) -> Result<Self, EncodeError> {
         Ok(Self {
-            realm: String::from(realm),
+            environment: String::from(environment),
             session_ref: session_ref(session),
             aal: assurance.aal,
             assurance_flags: flags(assurance),
@@ -200,7 +200,7 @@ impl AuthContext {
     pub fn to_value(&self) -> Value {
         let mut m = vec![
             (Value::text("v"), Value::Unsigned(VERSION)),
-            (Value::text("realm"), Value::text(&self.realm)),
+            (Value::text("environment"), Value::text(&self.environment)),
             (Value::text("session_ref"), self.session_ref.to_value()),
             (Value::text("aal"), Value::text(aal_name(self.aal))),
             (

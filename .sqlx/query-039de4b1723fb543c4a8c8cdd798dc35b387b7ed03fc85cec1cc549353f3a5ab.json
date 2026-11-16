@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.oauth_environment_frontchannel\n                           WHERE tenant_id = $1 AND environment_id = $2) AS \"on!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "on!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "039de4b1723fb543c4a8c8cdd798dc35b387b7ed03fc85cec1cc549353f3a5ab"
+}

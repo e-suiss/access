@@ -52,7 +52,7 @@ impl SmsPurpose {
         }
     }
 
-    /// Whether the realm's profile lets a code serve this purpose (OP-156 m.3 (f)): under the TR
+    /// Whether the environment's profile lets a code serve this purpose (OP-156 m.3 (f)): under the TR
     /// payment profile only enrolment and activation take one.
     #[must_use]
     pub const fn allowed_in(self, profile: AssuranceProfile) -> bool {

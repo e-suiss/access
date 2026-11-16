@@ -8,17 +8,18 @@ use access_identity_signer::protocol::{Request, Response};
 
 use access_store::Pool;
 use access_store::audit::{AuditRow, CheckpointRow, append_checkpoint, last_checkpoint, pending};
-use access_store::audit_lease::{AuditChain, append_held_checkpoint};
-use access_store::audit_realm::{
-    RealmCheckpointRow, append_realm_checkpoint, last_realm_checkpoint, realm_pending,
+use access_store::audit_environment::{
+    EnvironmentCheckpointRow, append_environment_checkpoint, environment_pending,
+    last_environment_checkpoint,
 };
+use access_store::audit_lease::{AuditChain, append_held_checkpoint};
 use access_store::identity::Cursor;
 use access_store::operational::{
     OperationalRow, append_operational_checkpoint, last_operational_checkpoint, pending_operational,
 };
 
 use crate::AuditError;
-use crate::ports::{AuditLog, NoteSigner, RealmTrees};
+use crate::ports::{AuditLog, EnvironmentTrees, NoteSigner};
 
 pub mod cef;
 pub mod ocsf;
@@ -66,49 +67,57 @@ impl AuditLog for PgAudit {
     }
 }
 
-impl RealmTrees for PgAudit {
-    async fn realm_last(
+impl EnvironmentTrees for PgAudit {
+    async fn environment_last(
         &self,
-        (tenant, realm): ([u8; 16], [u8; 16]),
-    ) -> Result<Option<RealmCheckpointRow>, AuditError> {
-        Ok(last_realm_checkpoint(&self.0, tenant, realm).await?)
+        (tenant, environment): ([u8; 16], [u8; 16]),
+    ) -> Result<Option<EnvironmentCheckpointRow>, AuditError> {
+        Ok(last_environment_checkpoint(&self.0, tenant, environment).await?)
     }
 
-    async fn realm_pending(
+    async fn environment_pending(
         &self,
         scope: ([u8; 16], [u8; 16]),
         after: Cursor,
         upto: Cursor,
         limit: u32,
     ) -> Result<Vec<AuditRow>, AuditError> {
-        Ok(realm_pending(&self.0, scope, after, upto, limit).await?)
+        Ok(environment_pending(&self.0, scope, after, upto, limit).await?)
     }
 
-    async fn realm_append(&self, checkpoint: &RealmCheckpointRow) -> Result<(), AuditError> {
-        Ok(append_realm_checkpoint(&self.0, checkpoint).await?)
+    async fn environment_append(
+        &self,
+        checkpoint: &EnvironmentCheckpointRow,
+    ) -> Result<(), AuditError> {
+        Ok(append_environment_checkpoint(&self.0, checkpoint).await?)
     }
 }
 
-impl RealmTrees for Held<PgAudit> {
-    async fn realm_last(
+impl EnvironmentTrees for Held<PgAudit> {
+    async fn environment_last(
         &self,
         scope: ([u8; 16], [u8; 16]),
-    ) -> Result<Option<RealmCheckpointRow>, AuditError> {
-        self.log.realm_last(scope).await
+    ) -> Result<Option<EnvironmentCheckpointRow>, AuditError> {
+        self.log.environment_last(scope).await
     }
 
-    async fn realm_pending(
+    async fn environment_pending(
         &self,
         scope: ([u8; 16], [u8; 16]),
         after: Cursor,
         upto: Cursor,
         limit: u32,
     ) -> Result<Vec<AuditRow>, AuditError> {
-        self.log.realm_pending(scope, after, upto, limit).await
+        self.log
+            .environment_pending(scope, after, upto, limit)
+            .await
     }
 
-    async fn realm_append(&self, checkpoint: &RealmCheckpointRow) -> Result<(), AuditError> {
-        self.log.realm_append(checkpoint).await
+    async fn environment_append(
+        &self,
+        checkpoint: &EnvironmentCheckpointRow,
+    ) -> Result<(), AuditError> {
+        self.log.environment_append(checkpoint).await
     }
 }
 

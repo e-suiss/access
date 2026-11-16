@@ -322,7 +322,7 @@ fn key_changes_and_deletion_are_declared() {
     };
     assert!(!drop.action().reserved());
     assert!(Change::KeyRotate { retire: [1; 32] }.action().reserved());
-    assert!(Change::KeyPolicy(Policy::REALM).action().reserved());
+    assert!(Change::KeyPolicy(Policy::ENVIRONMENT).action().reserved());
     assert!(IdpAction::AccountDelete.reserved());
     assert_eq!(IdpAction::AccountDelete.label(), "idp.account.delete");
     assert_eq!(drop.resource("acme").path, ["acme", "keys"]);
@@ -415,7 +415,7 @@ fn extension_changes_bind_the_same_intent_as_their_own_contract() {
         IdpAction::HookRegister,
         IdpAction::WebhookRegister,
         IdpAction::WebhookUpdate,
-        IdpAction::RealmExtensionPolicy,
+        IdpAction::EnvironmentExtensionPolicy,
     ] {
         assert!(!a.reserved(), "{a:?} is CT2, not reserved");
         assert_eq!(a.effect(), access_kernel::schema::EffectClass::Irreversible);
@@ -438,6 +438,6 @@ fn the_extension_policy_defaults_closed() {
         allow_private_targets: true,
         hook_disclosure: vec![Disclosure::Email],
     });
-    assert_eq!(change.resource("shop").path, ["shop", "realm"]);
-    assert_eq!(change.action().label(), "idp.realm.extension_policy");
+    assert_eq!(change.resource("shop").path, ["shop", "environment"]);
+    assert_eq!(change.action().label(), "idp.environment.extension_policy");
 }

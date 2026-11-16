@@ -11,25 +11,25 @@ export const en = {
   navSessions: "Your sign-ins",
   navAbout: "About",
   signOut: "Sign out",
-  realmSwitch: "Realm {realm}: switch realm",
-  realmSwitchPlatform: "Realms on this platform",
-  realmSwitchKnown: "Signed in from this browser",
-  realmSwitchNote: "Each realm has its own sign-in.",
+  environmentSwitch: "Environment {environment}: switch environment",
+  environmentSwitchPlatform: "Environments on this platform",
+  environmentSwitchKnown: "Signed in from this browser",
+  environmentSwitchNote: "Each environment has its own sign-in.",
   loading: "Loading…",
   unavailable: "The console cannot reach Access right now. Nothing was changed. Try again shortly.",
   signInTitle: "Sign in to the console",
   signInIntro:
-    "The console opens the sign-in page of {realm}. After you sign in you come back here.",
-  signInAction: "Sign in to {realm}",
-  signInOpening: "Opening the sign-in page of {realm}…",
+    "The console opens the sign-in page of {environment}. After you sign in you come back here.",
+  signInAction: "Sign in to {environment}",
+  signInOpening: "Opening the sign-in page of {environment}…",
   signedOutNote: "You signed out.",
-  noRealmTitle: "Use your organization's console link",
-  noRealmText:
+  noEnvironmentTitle: "Use your organization's console link",
+  noEnvironmentText:
     "Each organization has its own console address. Ask your administrator for it. It looks like this:",
-  otherRealmTitle: "You're signed in to another realm",
-  otherRealmNote: "You're signed in to {current}. This address is the console of {wanted}.",
-  otherRealmGo: "Go to {current}",
-  otherRealmSwitch: "Sign out and sign in to {wanted}",
+  otherEnvironmentTitle: "You're signed in to another environment",
+  otherEnvironmentNote: "You're signed in to {current}. This address is the console of {wanted}.",
+  otherEnvironmentGo: "Go to {current}",
+  otherEnvironmentSwitch: "Sign out and sign in to {wanted}",
   signInEnded: "You were signed out: {reason}.",
   reasonIdle: "the console was idle for 15 minutes",
   reasonExpired: "console sign-ins last at most 12 hours",
@@ -47,8 +47,8 @@ export const en = {
   profileTitle: "Your profile",
   profileAccount: "Account ID",
   profileName: "Display name",
-  profileRealm: "Realm",
-  profileEditNote: "To change your profile, use your realm's account page.",
+  profileEnvironment: "Environment",
+  profileEditNote: "To change your profile, use your environment's account page.",
   sessionsTitle: "Your sign-ins",
   sessionsIntro: "Every place your account is signed in. Ending a sign-in signs that place out.",
   sessionsKind: "Where",
@@ -56,7 +56,7 @@ export const en = {
   sessionsLastSeen: "Last used",
   sessionsActions: "Actions",
   sessionsConsole: "Console",
-  sessionsLogin: "Realm sign-in",
+  sessionsLogin: "Environment sign-in",
   sessionsCurrent: "This sign-in",
   sessionsEnd: "End sign-in",
   sessionsEmpty: "No other sign-ins.",
@@ -105,8 +105,8 @@ export const en = {
   screenOrganizations: "Organizations",
   screenAgents: "Agents",
   agentsIntro:
-    "The realm's agents: each is an agent, shown with its kind, its operator and the people who sponsor it.",
-  agentsNone: "No agents in this realm.",
+    "The environment's agents: each is an agent, shown with its kind, its operator and the people who sponsor it.",
+  agentsNone: "No agents in this environment.",
   agentOpen: "Agent",
   agentBadge: "AI agent · operated by {operator}",
   agentName: "Name",
@@ -140,7 +140,7 @@ export const en = {
   historyRecord: "Record {position} · {at}",
   orgIntro:
     "Each organization's roots, members and how they joined, its domains, owner handovers and connection drafts. Owning an organization is standing over its authority, not billing.",
-  orgNone: "No organizations in this realm.",
+  orgNone: "No organizations in this environment.",
   orgOpen: "Organization",
   orgId: "Organization ID",
   orgRoots: "Roots",
@@ -161,7 +161,7 @@ export const en = {
   orgSourceAutojoin: "Domain rule",
   orgSourceOther: "Other",
   orgSourceApart:
-    "The membership source is how someone joined. It is not the sign-in source, and a realm's groups only count as membership through a separate, protected acceptance.",
+    "The membership source is how someone joined. It is not the sign-in source, and an environment's groups only count as membership through a separate, protected acceptance.",
   orgNoRole: "No role",
   orgRoleIssued: "delegation recorded",
   orgRoleDenied: "not allowed",
@@ -203,7 +203,7 @@ export const en = {
   containIgnored:
     "If a decision point does not report applying a recorded step, its status stays unknown and the remaining steps stay listed here.",
   sectionAdminIntro:
-    "Authority admin: roles, sources, restrictions and the history of changes in this domain. Realm configuration is under Sign-in settings; billing is not managed here.",
+    "Authority admin: roles, sources, restrictions and the history of changes in this domain. Environment configuration is under Sign-in settings; billing is not managed here.",
   sectionDeveloperIntro:
     "Publish action definitions, connect apps and ask Access how it would decide. Nothing here changes authority.",
   sectionAuditIntro:
@@ -295,7 +295,7 @@ export const en = {
   metaAnchorAmend: "Change an authority root",
   metaAnchorRetire: "Retire an authority root",
   peopleIntro:
-    "Accounts of this realm, and the authority you may see. By default you see only what you hold, what you gave and what came from it.",
+    "Accounts of this environment, and the authority you may see. By default you see only what you hold, what you gave and what came from it.",
   peopleAccounts: "Accounts",
   peopleAccount: "Account",
   peopleStatus: "Status",
@@ -401,7 +401,7 @@ export const en = {
     "A person is shown as offboarded only after their departure change is recorded.",
   domainIntro: "This domain's constitution and who hosts it.",
   domainId: "Domain ID",
-  domainRealm: "Realm",
+  domainEnvironment: "Environment",
   domainProvider: "Provider",
   domainProviderText: "Hosted by Suiss Access — the host holds no authority here.",
   domainSandbox: "Sandbox domain",
@@ -416,7 +416,7 @@ export const en = {
     "Information only: what changed in this domain's authority. Nothing here asks you to act.",
   changesNone: "No changes to show.",
   settingsIntro:
-    "Realm configuration: sign-in methods, apps, upstream providers, branding and keys. Each change is one signed change.",
+    "Environment configuration: sign-in methods, apps, upstream providers, branding and keys. Each change is one signed change.",
   settingsGitops: "Managed by GitOps: change it in the repository.",
   settingsSignin: "Sign-in policy",
   settingsSession: "Console sign-in policy",
@@ -428,10 +428,10 @@ export const en = {
   settingsRpNew: "New sign-in domain",
   settingsRpWarning:
     "Changing the sign-in domain can't be undone for passkeys: users must create new passkeys.",
-  settingsRpCount: "Number of passkeys registered in this realm",
+  settingsRpCount: "Number of passkeys registered in this environment",
   settingsRpCountHint: "Type the count to confirm that every one of them stops working.",
   settingsRpIrreversible: "Recorded. This change can't be reversed for passkeys.",
-  settingsRpMismatch: "The count does not match this realm's passkeys. Nothing was changed.",
+  settingsRpMismatch: "The count does not match this environment's passkeys. Nothing was changed.",
   settingsRelated: "Related origins",
   settingsRelatedText:
     "Each related origin must be on a registrable domain from the public suffix list, and at most 5 distinct labels are allowed.",
@@ -468,7 +468,7 @@ export const en = {
   keySigning: "Signing",
   keyUnavailable: "The signer did not answer",
   signingAt:
-    "This realm can sign from {at} at the latest. Until then, sign-ins that need a signature wait.",
+    "This environment can sign from {at} at the latest. Until then, sign-ins that need a signature wait.",
   signalsDelayed:
     "Signals from {provider} delayed since {since} — decisions use declared validity windows",
   geoipMissing: "GeoIP source not configured",
@@ -496,10 +496,10 @@ export const en = {
   paramAffects: "What it affects (empty if nothing about authority)",
   paramType: "Mapped type",
   colHolder: "Holder",
-  labOtherDomain: "Sign in to the console of {realm} to ask its decision point.",
+  labOtherDomain: "Sign in to the console of {environment} to ask its decision point.",
   schemasPendingIn: "Pending acceptance in: {domains}",
   schemasNoPending: "No domain is waiting on this version.",
-  integrationsIntro: "Apps that sign people in, and the hooks and webhooks of this realm.",
+  integrationsIntro: "Apps that sign people in, and the hooks and webhooks of this environment.",
   oauthGrantType: "OAuth grant type",
   clientAuth: "Client authentication",
   clientRedirects: "Redirect URIs",
@@ -742,7 +742,7 @@ export const en = {
   screenSiem: "SIEM export",
   exportSinksTitle: "Export sinks",
   exportSinksIntro:
-    "Every audit event of the realm goes to each sink in order, none sampled. A sink that is down keeps its place and gets the backlog when it returns.",
+    "Every audit event of the environment goes to each sink in order, none sampled. A sink that is down keeps its place and gets the backlog when it returns.",
   exportCopyNote:
     "A sink holds a copy, not the record: every audit question is answered from the audit records.",
   exportRecordsLink: "Open the audit records",
@@ -912,7 +912,7 @@ export const en = {
     "Break-glass is a protected Grant given in advance: using it needs two approvals from different people, is recorded and is reviewed afterwards. Marking an account for break-glass gives it no authority.",
   breakglassAccountsTitle: "Break-glass accounts",
   breakglassAccountsIntro:
-    "A marked account signs in only with this realm's own security key or certificate, never through single sign-on, and with a different kind of key than the other admins. Every sign-in alerts the people on call.",
+    "A marked account signs in only with this environment's own security key or certificate, never through single sign-on, and with a different kind of key than the other admins. Every sign-in alerts the people on call.",
   breakglassMark: "Mark for break-glass",
   breakglassClear: "Clear the mark",
   breakglassGrantsTitle: "Break-glass Grants",
@@ -1009,12 +1009,12 @@ export const en = {
   // OP-158 m.4 (a): Stage 13 screens
   screenPlacement: "Placement",
   placementIntro:
-    "Where this realm and its domain are served from. Placement only routes requests; it never decides who can do what.",
+    "Where this environment and its domain are served from. Placement only routes requests; it never decides who can do what.",
   placementCell: "Cell",
   placementResidency: "Data stays in {region} ({class})",
   placementRehome: "Move to another governing domain",
   placementRehomeBoth:
-    "A move needs an approval in both the current and the new governing domain. Until both are recorded, the realm stays where it is.",
+    "A move needs an approval in both the current and the new governing domain. Until both are recorded, the environment stays where it is.",
   placementDedicated: "Dedicated cell",
   screenDurability: "Durability",
   durabilityIntro:
@@ -1065,7 +1065,7 @@ export const en = {
   // OP-159 m.4 (a): Stage 14 signing screen and hosting lines
   screenSigning: "Signing",
   signingIntro:
-    "Which algorithms this realm signs tokens with. Adding post-quantum signatures keeps the classical ones; apps get them only when they ask.",
+    "Which algorithms this environment signs tokens with. Adding post-quantum signatures keeps the classical ones; apps get them only when they ask.",
   signingPqOn: "Post-quantum signatures on ({alg})",
   signingPqOff: "Classical signatures only",
   signingPqTurnOff: "Turn off post-quantum signatures",
@@ -1091,9 +1091,9 @@ export const en = {
   // OP-159 m.41 (b): the Platform section
   navPlatform: "Platform",
   sectionPlatformIntro:
-    "Tenants, the realms and sandbox domains in them, and how this deployment is doing. You see each realm's metadata only, never its accounts, apps, authority, records or settings.",
+    "Tenants, the environments and sandbox domains in them, and how this deployment is doing. You see each environment's metadata only, never its accounts, apps, authority, records or settings.",
   screenTenants: "Tenants",
-  screenRealms: "Realms",
+  screenEnvironments: "Environments",
   screenSandboxes: "Sandbox domains",
   screenOperator: "Operator health",
   platformTenantsIntro: "Every tenant of this deployment, with its state and placement.",
@@ -1107,18 +1107,18 @@ export const en = {
   platformTenantCreateHint:
     "Access gives the tenant its ID when it drafts the change. Leave the placement empty for the default pool.",
   platformTenantCreateSend: "Create tenant",
-  platformRealmsIntro: "A tenant's realms, each with the state of its signing keys.",
+  platformEnvironmentsIntro: "A tenant's environments, each with the state of its signing keys.",
   platformSandboxesIntro:
-    "A tenant's sandbox domains. Authority never flows between a sandbox and a production realm, and each sandbox has a fixed daily budget.",
+    "A tenant's sandbox domains. Authority never flows between a sandbox and a production environment, and each sandbox has a fixed daily budget.",
   platformBoundary:
-    "To manage what is inside a realm, sign in to that realm with one of its own administrators.",
-  platformRealmDetails: "Realm {slug}",
+    "To manage what is inside an environment, sign in to that environment with one of its own administrators.",
+  platformEnvironmentDetails: "Environment {slug}",
   platformSandbox: "Sandbox",
   platformSlug: "Short name",
   platformSlugHint:
     "Lowercase letters, digits and hyphens, 3 to 63 characters, but not api or assets. It can't be changed later.",
   platformConsoleLink: "Console link",
-  platformConsoleLinkCreated: "The new realm's console:",
+  platformConsoleLinkCreated: "The new environment's console:",
   platformIssuer: "Issuer",
   platformKeys: "Signing keys",
   platformKeyPending: "No keys published yet",
@@ -1129,10 +1129,10 @@ export const en = {
   platformKexShare: "Post-quantum key exchange",
   platformBudget: "Daily budget",
   platformBudgetValue: "{exercises} changes and {projections} answers a day",
-  platformRealmCreate: "New realm",
-  platformRealmCreateHint:
-    "A new realm starts with its own founding root, chosen here. This deployment's operator holds nothing in it.",
-  platformRealmCreateSend: "Create realm",
+  platformEnvironmentCreate: "New environment",
+  platformEnvironmentCreateHint:
+    "A new environment starts with its own founding root, chosen here. This deployment's operator holds nothing in it.",
+  platformEnvironmentCreateSend: "Create environment",
   platformSandboxCreate: "New sandbox domain",
   platformSandboxCreateHint:
     "A sandbox domain starts from the sandbox template with its own founding root and a fixed daily budget.",
@@ -1147,7 +1147,7 @@ export const en = {
   platformRootPartiesHint: "One per line or separated by commas; yours is filled in.",
   platformRootK: "How many of them must sign",
   platformRootSoleAcknowledge:
-    "I understand that a realm with a single founding root can't be recovered if that key is lost.",
+    "I understand that an environment with a single founding root can't be recovered if that key is lost.",
   platformOperatorIntro:
     "This deployment's readiness checks, by name. No addresses, keys or secrets are shown.",
   platformReady: "Ready",

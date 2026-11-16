@@ -1,7 +1,7 @@
 //! The hosted login surface of the identity plane (CMP-15.6, OP-146 m.12): the login flow
 //! endpoints of the node contract (`sdks/openapi/login.json`), magic link confirmation, the
 //! signed-in user's sessions and methods, `/.well-known/webauthn`, and the built login app.
-//! The request's `Host` selects the realm exactly as for discovery; an unknown host gets the
+//! The request's `Host` selects the environment exactly as for discovery; an unknown host gets the
 //! router's plain 404 (§17.9.6). [`me_router`] adds the product-facing endpoints of OP-149
 //! (`sdks/openapi/frontend.json`).
 
@@ -86,7 +86,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/login/flows"),
@@ -322,7 +322,7 @@ where
     }
     // OP-153 m.4
     for r in ROUTES.iter().filter(|r| !r.live) {
-        for prefix in ["", "/realms/{slug}"] {
+        for prefix in ["", "/env/{slug}"] {
             let path = format!("{prefix}{}", r.path);
             reads = match r.verb {
                 Verb::Get => reads.route(&path, get(web::not_yet_served::<D, K, KI, C, M>)),
@@ -342,16 +342,16 @@ where
         .route("/login/{*rest}", get(web::page::<D, K, KI, C, M>))
         // OP-154 m.3 (p), m.7 (f)
         .route("/device", get(web::page::<D, K, KI, C, M>))
-        .route("/realms/{slug}/device", get(web::page::<D, K, KI, C, M>))
+        .route("/env/{slug}/device", get(web::page::<D, K, KI, C, M>))
         .route("/assets/{*path}", get(web::asset::<D, K, KI, C, M>))
         // OP-153 m.2
-        .route("/realms/{slug}/login", get(web::page::<D, K, KI, C, M>))
+        .route("/env/{slug}/login", get(web::page::<D, K, KI, C, M>))
         .route(
-            "/realms/{slug}/login/{*rest}",
+            "/env/{slug}/login/{*rest}",
             get(web::page::<D, K, KI, C, M>),
         )
         .route(
-            "/realms/{slug}/assets/{*path}",
+            "/env/{slug}/assets/{*path}",
             get(web::asset::<D, K, KI, C, M>),
         );
     let cache = Arc::new(idempotency::Cache::default());

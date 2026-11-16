@@ -1,5 +1,5 @@
 //! What the product client API needs (OP-63): the domains' key and Party lookups, the tenant
-//! directory, the realms' subjects and the platform clients' assertions.
+//! directory, the environments' subjects and the platform clients' assertions.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -62,14 +62,14 @@ pub struct Tenant {
     pub status: String,
     /// Its organizations' external ids.
     pub organizations: Vec<String>,
-    /// Its live realms, by slug.
-    pub realms: Vec<Realm>,
+    /// Its live environments, by slug.
+    pub environments: Vec<Environment>,
 }
 
-/// A live realm of a tenant as its snapshot shows it (OP-149 m.4).
+/// A live environment of a tenant as its snapshot shows it (OP-149 m.4).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Realm {
-    /// The realm's id, as events name it in `accessrealm`.
+pub struct Environment {
+    /// The environment's id, as events name it in `accessenvironment`.
     pub id: [u8; 16],
     /// Its fixed issuer.
     pub issuer: String,
@@ -138,7 +138,7 @@ pub enum SubjectQuery {
 pub struct Resolved {
     /// `(party, sub)` for every entry that resolved to a Party.
     pub pairs: Vec<([u8; 16], String)>,
-    /// `(client_id, sub)` for every `sub` that is the pairwise pseudonym of a client of the realm
+    /// `(client_id, sub)` for every `sub` that is the pairwise pseudonym of a client of the environment
     /// without a Party: the `sub` of its service tokens (OP-149 m.34 (b)).
     pub clients: Vec<(String, String)>,
     /// The governing domain's head before the read, as an opaque token (OP-141 m.22 (f)).
@@ -148,22 +148,22 @@ pub struct Resolved {
 /// Whose pairwise `sub`s a resolution is about: its sector (MD-10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sector<'a> {
-    /// A client of the realm itself, the one the request names (OP-149 m.19 (g)).
-    RealmClient(&'a str),
-    /// The platform product client that asked with its assertion, registered in its own realm
+    /// A client of the environment itself, the one the request names (OP-149 m.19 (g)).
+    EnvironmentClient(&'a str),
+    /// The platform product client that asked with its assertion, registered in its own environment
     /// (OP-149 m.37).
     Platform(&'a PlatformClient),
 }
 
-/// Resolves between a realm's Parties and the pairwise `sub` a client of it sees (OP-149 A11,
+/// Resolves between an environment's Parties and the pairwise `sub` a client of it sees (OP-149 A11,
 /// MD-10).
 pub trait Subjects: Send + Sync {
-    /// The pairs of `lookup` in `realm` of `tenant` for `sector`. `None` when the realm, or an
+    /// The pairs of `lookup` in `environment` of `tenant` for `sector`. `None` when the environment, or an
     /// active client the sector names, is not there.
     fn resolve(
         &self,
         tenant: [u8; 16],
-        realm: [u8; 16],
+        environment: [u8; 16],
         sector: Sector<'_>,
         lookup: SubjectQuery,
     ) -> impl Future<Output = Result<Option<Resolved>, Unavailable>> + Send;
@@ -175,8 +175,8 @@ pub trait Subjects: Send + Sync {
 pub struct PlatformClient {
     /// The platform tenant.
     pub tenant: [u8; 16],
-    /// The client's realm.
-    pub realm: [u8; 16],
+    /// The client's environment.
+    pub environment: [u8; 16],
     /// The `client_id`.
     pub client_id: String,
     /// The product name.
@@ -204,7 +204,7 @@ pub enum AssertionRefused {
 }
 
 /// Verifies platform clients' RFC 7523 assertions as the platform routes do (OP-149 m.19 (e),
-/// m.20 (b)): ES256 with the client's registered P-256 key, `aud` the platform realm's issuer or
+/// m.20 (b)): ES256 with the client's registered P-256 key, `aud` the platform environment's issuer or
 /// `endpoint`, `exp` at most 5 minutes ahead, `jti` used once.
 pub trait ClientAssertions: Send + Sync {
     /// The client `assertion` authenticates for a call to `endpoint`.

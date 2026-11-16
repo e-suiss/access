@@ -1,5 +1,5 @@
 //! Account recovery on the authority side (§12.3.2, INV-13, INV-40, SEC18, OP-153 m.3 (c)): the
-//! realm issuer's `recovery_result` Claim is the actor-binding of a self-signed
+//! environment issuer's `recovery_result` Claim is the actor-binding of a self-signed
 //! `instance_recover`; the successor it names binds no Mandate and receives no CT3 Grant while
 //! the recovery path that proved it is weaker than the authority, and it meets no CT2+ term for
 //! the first 24 hours.
@@ -199,7 +199,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// OP-153 m.3 (c): a self-signed `instance_recover` stands only while a live, accepted
-    /// `recovery_result` of the realm issuer names its key; otherwise the recorded DENY
+    /// `recovery_result` of the environment issuer names its key; otherwise the recorded DENY
     /// `actor-binding`.
     pub(crate) async fn recovery_binding(
         &self,

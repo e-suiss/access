@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_memberships SET ended_at = clock_timestamp(), ended_by = $4\n                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cbbd06727d0c06120d09a006cda6544d45e66725336ff776b5b96848488da2a1"
+}

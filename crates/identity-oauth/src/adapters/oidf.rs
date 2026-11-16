@@ -1,5 +1,5 @@
 //! OpenID Federation over the identity plane's adapters (OP-155 m.3 (j), §10.7.1 item 8): every
-//! federation document is fetched through the guarded outbound client, the realm's settings and
+//! federation document is fetched through the guarded outbound client, the environment's settings and
 //! pinned trust anchors are read in its own scope.
 
 use access_identity_oidf::chain::TrustAnchor;
@@ -7,24 +7,24 @@ use access_identity_oidf::ports::{Fetch, Unreachable};
 use access_identity_oidf::statement::{MAX_STATEMENT, parse_jwks};
 use access_kernel::json;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantTx};
 use access_store::oidf::{FederationSettingsRow, TrustAnchorRow};
 
 use crate::ports::oauth::ClientDocuments;
-use crate::ports::{RealmEntry, Unavailable};
+use crate::ports::{EnvironmentEntry, Unavailable};
 
-/// The realm's federation settings, read in its scope; `None` without an `access_app` pool.
+/// The environment's federation settings, read in its scope; `None` without an `access_app` pool.
 ///
 /// # Errors
 /// [`Unavailable`].
 pub async fn settings(
     app: Option<&Pool>,
-    realm: &RealmEntry,
+    environment: &EnvironmentEntry,
 ) -> Result<Option<FederationSettingsRow>, Unavailable> {
     let Some(app) = app else {
         return Ok(None);
     };
-    let mut t = TenantTx::begin(app, realm.tenant, realm.realm)
+    let mut t = TenantTx::begin(app, environment.tenant, environment.environment)
         .await
         .map_err(|_| Unavailable)?;
     let s = t.federation_settings().await.map_err(|_| Unavailable)?;
@@ -53,7 +53,7 @@ pub fn anchors(rows: &[TrustAnchorRow]) -> Vec<TrustAnchor> {
 pub struct Refreshed {
     /// Chains that resolved.
     pub resolved: u32,
-    /// Chains that did not resolve, or whose realm is no federation leaf.
+    /// Chains that did not resolve, or whose environment is no federation leaf.
     pub unresolved: u32,
     /// Chains whose metadata policies conflict.
     pub conflict: u32,
@@ -80,18 +80,21 @@ pub async fn refresh_issuers(
         .await
         .map_err(|_| Unavailable)?;
     for row in rows {
-        let (tenant, realm) = (
-            TenantId::from_bytes(row.realm.0),
-            RealmId::from_bytes(row.realm.1),
+        let (tenant, environment) = (
+            TenantId::from_bytes(row.environment.0),
+            EnvironmentId::from_bytes(row.environment.1),
         );
-        let mut t = TenantTx::begin(app, tenant, realm)
+        let mut t = TenantTx::begin(app, tenant, environment)
             .await
             .map_err(|_| Unavailable)?;
         let fed = t.federation_settings().await.map_err(|_| Unavailable)?;
         let rows = t.trust_anchors().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         let outcome = if fed.enabled {
-            let fetch = GuardedFetch { documents, realm };
+            let fetch = GuardedFetch {
+                documents,
+                environment,
+            };
             access_identity_oidf::app::resolve(&fetch, &row.entity_id, anchors(&rows), now_ms).await
         } else {
             Err(ChainError::Unresolved)
@@ -117,13 +120,13 @@ pub async fn refresh_issuers(
     Ok(out)
 }
 
-/// Federation fetches for `realm` through the guarded outbound client: each URL is vetted
+/// Federation fetches for `environment` through the guarded outbound client: each URL is vetted
 /// first, the body is read up to [`MAX_STATEMENT`].
 pub struct GuardedFetch<'a> {
     /// The outbound client.
     pub documents: &'a (dyn ClientDocuments + Sync),
-    /// The realm fetching.
-    pub realm: RealmId,
+    /// The environment fetching.
+    pub environment: EnvironmentId,
 }
 
 impl Fetch for GuardedFetch<'_> {
@@ -131,7 +134,7 @@ impl Fetch for GuardedFetch<'_> {
         self.documents.vet(url).await.map_err(|_| Unreachable)?;
         let f = self
             .documents
-            .fetch(self.realm, url, accept, MAX_STATEMENT)
+            .fetch(self.environment, url, accept, MAX_STATEMENT)
             .await
             .map_err(|_| Unreachable)?;
         Ok((f.status, f.body))

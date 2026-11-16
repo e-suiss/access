@@ -59,9 +59,9 @@ pub struct Endpoint {
     pub path: &'static str,
 }
 
-/// `POST`: a pairing challenge per realm of a tenant (OP-149 m.4).
+/// `POST`: a pairing challenge per environment of a tenant (OP-149 m.4).
 pub const PAIRING_CHALLENGES: &str = "/access/v1/tenants/{tenant}/pairing/challenges";
-/// `POST`: the product's own signed Exercises for those realms (OP-149 m.16 (a)).
+/// `POST`: the product's own signed Exercises for those environments (OP-149 m.16 (a)).
 pub const PAIRING: &str = "/access/v1/tenants/{tenant}/pairing";
 /// `POST`: a Schema Publication Package (L1-ADP-18).
 pub const PUBLICATIONS: &str = "/access/v1/publications";

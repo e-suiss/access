@@ -2,7 +2,7 @@
 //! and status, and disable (never delete, OP-73); and RFC 8936 poll.
 //!
 //! - A webhook stream gets a Standard Webhooks secret, shown once at creation and stored
-//!   sealed under the realm KEK.
+//!   sealed under the environment KEK.
 //! - A poll stream gets a bearer credential, shown once and stored as its digest (CR-38).
 //!   It authenticates poll and the stream's own management calls (RFC 6750).
 
@@ -10,13 +10,13 @@ use access_crypto::webhook::WebhookSecret;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_kernel::json::b64url_encode;
 use access_store::events::SubscriptionRow;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp;
 use access_store::ssf::StreamProfile;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
-use crate::app::{Db, down, realm_signing};
+use crate::app::{Db, down, environment_signing};
 use crate::domain::Invalid;
 use crate::domain::set::{SET_TYP, stamp_issued};
 use crate::domain::stream::{
@@ -50,7 +50,7 @@ pub enum StreamError {
     /// The platform client already owns a live stream to that endpoint (OP-149 m.17 (e)).
     #[error("stream exists")]
     Exists,
-    /// The SET algorithm asked for cannot be signed in this realm (TN-40, OP-151 m.3 (k)).
+    /// The SET algorithm asked for cannot be signed in this environment (TN-40, OP-151 m.3 (k)).
     #[error("unsupported alg")]
     UnsupportedAlg,
     /// Storage, keys or the signer failed.
@@ -140,8 +140,12 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         self
     }
 
-    async fn issuer(&self, tenant: TenantId, realm: RealmId) -> Result<String, StreamError> {
-        let (issuer, _) = realm_signing(&self.db.app, tenant, realm)
+    async fn issuer(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<String, StreamError> {
+        let (issuer, _) = environment_signing(&self.db.app, tenant, environment)
             .await?
             .ok_or(StreamError::NotFound)?;
         Ok(String::from(issuer.as_str()))
@@ -161,43 +165,45 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         )
     }
 
-    /// Creates a stream of `realm` (OP-149 m.7: one channel per stream).
+    /// Creates a stream of `environment` (OP-149 m.7: one channel per stream).
     ///
     /// # Errors
     /// [`StreamError`].
     pub async fn create(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         req: &StreamRequest,
     ) -> Result<Created, StreamError> {
-        self.open(tenant, realm, req, None).await
+        self.open(tenant, environment, req, None).await
     }
 
-    /// Creates a stream owned by the platform client `client_id` of `realm` (OP-149 m.17 (e)):
+    /// Creates a stream owned by the platform client `client_id` of `environment` (OP-149 m.17 (e)):
     /// it receives the events of every tenant, `tenant.created` among them.
     ///
     /// # Errors
-    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the realm.
+    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the environment.
     pub async fn create_for_platform(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         req: &StreamRequest,
         client_id: &str,
     ) -> Result<Created, StreamError> {
-        let product = self.platform_product(tenant, realm, client_id).await?;
-        self.open(tenant, realm, req, Some((client_id, product)))
+        let product = self
+            .platform_product(tenant, environment, client_id)
+            .await?;
+        self.open(tenant, environment, req, Some((client_id, product)))
             .await
     }
 
     async fn platform_product(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
     ) -> Result<String, StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let product = idp::client(&mut t, client_id)
@@ -216,11 +222,11 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     /// m.17 (e)).
     ///
     /// # Errors
-    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the realm.
+    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the environment.
     pub async fn ensure_platform_push(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         endpoint: &str,
     ) -> Result<[u8; 16], StreamError> {
@@ -236,16 +242,16 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             alg: None,
         };
         match self
-            .create_for_platform(tenant, realm, &req, client_id)
+            .create_for_platform(tenant, environment, &req, client_id)
             .await
         {
             Ok(c) => Ok(c.id),
             Err(StreamError::Exists) => {
-                let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+                let mut t = TenantTx::begin(&self.db.app, tenant, environment)
                     .await
                     .map_err(down)?;
                 let owned = t
-                    .owned_subscriptions(realm, client_id)
+                    .owned_subscriptions(environment, client_id)
                     .await
                     .map_err(down)?;
                 t.commit().await.map_err(down)?;
@@ -263,7 +269,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         }
     }
 
-    /// The streams the platform client `client_id` owns in `realm`, live first (OP-149
+    /// The streams the platform client `client_id` owns in `environment`, live first (OP-149
     /// m.17 (g)).
     ///
     /// # Errors
@@ -271,15 +277,15 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn owned(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
     ) -> Result<Vec<Value>, StreamError> {
-        let issuer = self.issuer(tenant, realm).await?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let issuer = self.issuer(tenant, environment).await?;
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let owned = t
-            .owned_subscriptions(realm, client_id)
+            .owned_subscriptions(environment, client_id)
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
@@ -289,14 +295,14 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     async fn owned_row(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         id: [u8; 16],
     ) -> Result<SubscriptionRow, StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
-        let s = t.subscription(realm, id).await.map_err(down)?;
+        let s = t.subscription(environment, id).await.map_err(down)?;
         t.commit().await.map_err(down)?;
         s.filter(|s| s.owner_client_id.as_deref() == Some(client_id))
             .ok_or(StreamError::NotFound)
@@ -309,12 +315,12 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn get_owned(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         id: [u8; 16],
     ) -> Result<Value, StreamError> {
-        let issuer = self.issuer(tenant, realm).await?;
-        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        let issuer = self.issuer(tenant, environment).await?;
+        let s = self.owned_row(tenant, environment, client_id, id).await?;
         Ok(Self::render(&issuer, &s))
     }
 
@@ -325,21 +331,21 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn disable_owned(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         id: [u8; 16],
     ) -> Result<(), StreamError> {
-        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        let s = self.owned_row(tenant, environment, client_id, id).await?;
         if s.disabled {
             return Err(StreamError::NotFound);
         }
-        self.disable(tenant, realm, id).await
+        self.disable(tenant, environment, id).await
     }
 
     async fn open(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         req: &StreamRequest,
         owner: Option<(&str, String)>,
     ) -> Result<Created, StreamError> {
@@ -351,12 +357,12 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         {
             return Err(Invalid("endpoint_url").into());
         }
-        let (issuer, realm_alg) = realm_signing(&self.db.app, tenant, realm)
+        let (issuer, environment_alg) = environment_signing(&self.db.app, tenant, environment)
             .await?
             .ok_or(StreamError::NotFound)?;
         let issuer = String::from(issuer.as_str());
         // TN-40, OP-151 m.3 (k)
-        let alg = match (req.alg, realm_alg) {
+        let alg = match (req.alg, environment_alg) {
             (None, a) | (Some(SetAlg::Es256), a @ JwsAlg::Es256) => a,
             (Some(SetAlg::Es256 | SetAlg::Rs256), _) => return Err(StreamError::UnsupportedAlg),
         };
@@ -365,7 +371,9 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         let id = as_v4(raw);
         let (secret, sealed) = if req.channel == Channel::Webhook {
             let s = WebhookSecret::generate().map_err(down)?;
-            let sealed = self.sealer.seal(tenant, realm, &id, s.expose_bytes())?;
+            let sealed = self
+                .sealer
+                .seal(tenant, environment, &id, s.expose_bytes())?;
             (Some(s.expose_text()), Some(sealed))
         } else {
             (None, None)
@@ -378,7 +386,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             None
         };
         let row = SubscriptionRow {
-            realm: *realm.as_bytes(),
+            environment: *environment.as_bytes(),
             id,
             channel: String::from(req.channel.name()),
             endpoint: req.endpoint.clone(),
@@ -392,7 +400,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             owner_client_id: owner.as_ref().map(|(c, _)| String::from(*c)),
             platform_product: owner.map(|(_, p)| p),
         };
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         if row.owner_client_id.is_some() && row.endpoint.is_some() {
@@ -428,14 +436,14 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn by_token(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         token: &str,
     ) -> Result<SubscriptionRow, StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let s = t
-            .subscription_by_token(realm, &token_digest(token))
+            .subscription_by_token(environment, &token_digest(token))
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
@@ -449,15 +457,15 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn get(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
     ) -> Result<Value, StreamError> {
-        let issuer = self.issuer(tenant, realm).await?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let issuer = self.issuer(tenant, environment).await?;
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
-        let s = t.subscription(realm, id).await.map_err(down)?;
-        let profiles = t.stream_profiles(realm).await.map_err(down)?;
+        let s = t.subscription(environment, id).await.map_err(down)?;
+        let profiles = t.stream_profiles(environment).await.map_err(down)?;
         t.commit().await.map_err(down)?;
         let mut stream = Self::render(&issuer, &s.ok_or(StreamError::NotFound)?);
         decorate(&mut stream, profiles.iter().find(|p| p.subscription == id));
@@ -471,7 +479,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn update(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
         body: &[u8],
     ) -> Result<Value, StreamError> {
@@ -483,18 +491,18 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             Some(_) => return Err(Invalid("status").into()),
         };
         let description = v.get("description").and_then(Value::as_str);
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let done = t
-            .update_subscription(realm, id, &events, status, description)
+            .update_subscription(environment, id, &events, status, description)
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
         if !done {
             return Err(StreamError::NotFound);
         }
-        self.get(tenant, realm, id).await
+        self.get(tenant, environment, id).await
     }
 
     /// Disables a stream; its pending deliveries fail (OP-73: nothing is deleted).
@@ -504,13 +512,16 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn disable(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
     ) -> Result<(), StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
-        let done = t.disable_subscription(realm, id).await.map_err(down)?;
+        let done = t
+            .disable_subscription(environment, id)
+            .await
+            .map_err(down)?;
         t.commit().await.map_err(down)?;
         if done {
             Ok(())
@@ -527,11 +538,11 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn ack(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         s: &SubscriptionRow,
         ack: &crate::domain::control::SemanticAck,
     ) -> Result<bool, StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let done = t
@@ -542,7 +553,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         Ok(done)
     }
 
-    /// The realm's delivery, semantic and authority-state ack counts (E30), for the staleness
+    /// The environment's delivery, semantic and authority-state ack counts (E30), for the staleness
     /// exposure view.
     ///
     /// # Errors
@@ -550,9 +561,9 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn ack_counts(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> Result<access_store::ssf::AckCounts, StreamError> {
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let counts = t.ack_counts().await.map_err(down)?;
@@ -562,7 +573,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
 
     /// RFC 8936 poll by the stream's bearer credential: settles what the receiver acknowledged
     /// or reported, then returns up to `maxEvents` pending SETs, each with `iat` now (OP-149
-    /// m.34 (d)) and signed now with the realm's key.
+    /// m.34 (d)) and signed now with the environment's key.
     ///
     /// # Errors
     /// [`StreamError`].
@@ -571,27 +582,27 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         signer: &S,
         clock: &C,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         token: &str,
         body: &[u8],
     ) -> Result<Value, StreamError> {
         let req = parse_poll(body)?;
-        let s = self.by_token(tenant, realm, token).await?;
+        let s = self.by_token(tenant, environment, token).await?;
         if s.channel != Channel::SsfPoll.name() {
             return Err(StreamError::NotFound);
         }
-        let (_, alg) = realm_signing(&self.db.app, tenant, realm)
+        let (_, alg) = environment_signing(&self.db.app, tenant, environment)
             .await?
             .ok_or(StreamError::NotFound)?;
         let now = clock.now().map_err(down)?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
-        t.settle_polled(realm, s.id, &req.ack, &req.errors)
+        t.settle_polled(environment, s.id, &req.ack, &req.errors)
             .await
             .map_err(down)?;
         let rows = t
-            .pollable(realm, s.id, req.max_events.saturating_add(1))
+            .pollable(environment, s.id, req.max_events.saturating_add(1))
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
@@ -604,7 +615,9 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             let mut claims: Value = serde_json::from_slice(&r.payload).map_err(down)?;
             stamp_issued(&mut claims, now / 1000);
             let payload = serde_json::to_vec(&claims).map_err(down)?;
-            let token = signer.sign(realm, alg, SET_TYP, &payload, now).await?;
+            let token = signer
+                .sign(environment, alg, SET_TYP, &payload, now)
+                .await?;
             sets.push((r.event_id.clone(), token));
         }
         Ok(poll_response(&sets, more))

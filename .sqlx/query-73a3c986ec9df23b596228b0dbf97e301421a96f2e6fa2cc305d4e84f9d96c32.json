@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.login_sessions\n                SET ended_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, end_reason = $5\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_ms IS NULL\n                AND session_epoch < $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73a3c986ec9df23b596228b0dbf97e301421a96f2e6fa2cc305d4e84f9d96c32"
+}

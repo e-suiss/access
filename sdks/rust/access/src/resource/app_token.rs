@@ -1,11 +1,11 @@
 //! The application token a forward-auth proxy carries to the application (IDP-30 (3), OP-156
 //! m.3 (l)): a compact JWS in the `Access-Identity` header, `typ: access-app+jwt`, ES256 under
-//! the realm JOSE key, for this application only (`aud`), with the realm's pairwise `sub` for it,
+//! the environment JOSE key, for this application only (`aud`), with the environment's pairwise `sub` for it,
 //! living 60 s. The application reads identity from it, never from a plain header unless it
 //! knows it is only reachable through the proxy.
 //!
 //! It is an identity assertion: it carries who the request is for and the decision that let it
-//! through, not authority (§10.4.5). Read the keys with [`super::keys::key_set`] from the realm
+//! through, not authority (§10.4.5). Read the keys with [`super::keys::key_set`] from the environment
 //! JWKS with [`app_token_algorithms`]. Nothing is accepted on a fault (MD-8, TI-9).
 
 use alloc::collections::BTreeSet;
@@ -41,7 +41,7 @@ pub fn app_token_algorithms() -> BTreeSet<Algorithm> {
 /// What the application expects.
 #[derive(Clone, Copy, Debug)]
 pub struct AppTokenRules<'a> {
-    /// The realm's issuer.
+    /// The environment's issuer.
     pub issuer: &'a str,
     /// This application's origin, the `aud` its proxy was registered with.
     pub audience: &'a str,
@@ -54,7 +54,7 @@ pub struct AppTokenRules<'a> {
 /// Who a verified token says the request is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppIdentity {
-    /// The realm's issuer.
+    /// The environment's issuer.
     pub issuer: String,
     /// The `sub` this application reads: pairwise, never the same at another application.
     pub sub: String,
@@ -71,7 +71,7 @@ pub enum AppTokenError {
     /// Larger than [`MAX_APP_TOKEN`].
     #[error("app-token-size")]
     Size,
-    /// Not an ES256 `access-app+jwt` signed by a realm key.
+    /// Not an ES256 `access-app+jwt` signed by an environment key.
     #[error("app-token-signature")]
     Signature,
     /// `iss`, `aud`, `exp` or `iat` wrong, or expired.
@@ -93,7 +93,7 @@ fn text(claims: &Json, name: &str, len: core::ops::RangeInclusive<usize>) -> Opt
         .map(String::from)
 }
 
-/// Verifies `token` against the realm's `keys` under `rules`.
+/// Verifies `token` against the environment's `keys` under `rules`.
 ///
 /// # Errors
 /// [`AppTokenError`].

@@ -130,10 +130,10 @@ pub fn router<E: Env>(api: &Arc<Api<E>>) -> Result<Router, ManifestError> {
             handlers::platform_root::<E>,
         )?
         .handle(
-            super::manifest::REALM_ROOT.operation_id,
-            handlers::realm_root::<E>,
+            super::manifest::ENVIRONMENT_ROOT.operation_id,
+            handlers::environment_root::<E>,
         )
-        .and_then(super::realm::register::<_, E>)
+        .and_then(super::environment::register::<_, E>)
         .and_then(super::platform::register::<_, E>)
     })
 }

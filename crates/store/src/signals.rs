@@ -1,4 +1,4 @@
-//! The realm's signal sources (OP-156 m.3 (r)): each a Claim issuer of KYC, MDM, risk or DLP
+//! The environment's signal sources (OP-156 m.3 (r)): each a Claim issuer of KYC, MDM, risk or DLP
 //! signals, written under its `idp.signal.*` decision. A retired name is never reused and
 //! nothing is deleted (OP-73).
 
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -78,18 +78,18 @@ impl TenantTx {
         bound: &Bound,
         s: &NewSignalSource<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let interval = i32::try_from(s.expected_interval_s).map_err(|_| StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.signal_sources (tenant_id, realm_id, name, version, state, kind,
+            "INSERT INTO access.signal_sources (tenant_id, environment_id, name, version, state, kind,
                     provider, issuer, format, transmitter, expected_interval_s, domain_id,
                     decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11,
                     $12
                FROM access.signal_sources
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             s.name,
             if s.live { "live" } else { "retired" },
             s.kind,
@@ -112,19 +112,19 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn signal_sources(&mut self) -> Result<Vec<SignalSourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT DISTINCT ON (s.name) s.name, s.state, s.kind, s.provider, s.issuer, s.format,
                       s.transmitter, s.expected_interval_s, s.version, s.decision_pos,
                       (SELECT (EXTRACT(EPOCH FROM MIN(f.created_at)) * 1000)::bigint
                          FROM access.signal_sources f
-                        WHERE f.tenant_id = s.tenant_id AND f.realm_id = s.realm_id
+                        WHERE f.tenant_id = s.tenant_id AND f.environment_id = s.environment_id
                           AND f.name = s.name) AS "created_ms!"
                  FROM access.signal_sources s
-                WHERE s.tenant_id = $1 AND s.realm_id = $2
+                WHERE s.tenant_id = $1 AND s.environment_id = $2
                 ORDER BY s.name, s.version DESC"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;

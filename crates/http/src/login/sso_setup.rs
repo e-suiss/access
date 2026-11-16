@@ -1,5 +1,5 @@
 //! The organization SSO setup portal on axum (TN-134, OP-155 m.3 (i)): `GET` and `POST
-//! /v1/sso-setup/{link}` at the realm's host and under `/realms/{slug}`, on the login surface's
+//! /v1/sso-setup/{link}` at the environment's host and under `/env/{slug}`, on the login surface's
 //! same-origin rule. The link is bound to one browser by its own cookie. Steps take an
 //! `Idempotency-Key`.
 
@@ -19,7 +19,7 @@ use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::response::Response;
 use axum::routing::{get, post};
 
-use super::web::{cookies, json_only, problem, realm, same_origin, send};
+use super::web::{cookies, environment, json_only, problem, same_origin, send};
 use super::{Shared, idempotency};
 
 type St<D, K, KI, C, M> = State<Arc<Shared<D, K, KI, C, M>>>;
@@ -50,7 +50,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         let path = format!("{prefix}/v1/sso-setup/{{link}}");
         writes = writes.route(&path, post(submit::<D, K, KI, C, M>));
         reads = reads.route(&path, get(read::<D, K, KI, C, M>));
@@ -95,7 +95,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -122,7 +122,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

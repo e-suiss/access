@@ -13,27 +13,27 @@ export const tr: Record<Key, string> = {
   navSessions: "Girişleriniz",
   navAbout: "Hakkında",
   signOut: "Çıkış yap",
-  realmSwitch: "Realm {realm}: realm değiştir",
-  realmSwitchPlatform: "Bu platformdaki realm'ler",
-  realmSwitchKnown: "Bu tarayıcıdan girilenler",
-  realmSwitchNote: "Her realm'in kendi girişi vardır.",
+  environmentSwitch: "Ortam {environment}: ortam değiştir",
+  environmentSwitchPlatform: "Bu platformdaki ortamlar",
+  environmentSwitchKnown: "Bu tarayıcıdan girilenler",
+  environmentSwitchNote: "Her ortamın kendi girişi vardır.",
   loading: "Yükleniyor…",
   unavailable:
     "Konsol şu anda Access'e ulaşamıyor. Hiçbir şey değiştirilmedi. Biraz sonra yeniden deneyin.",
   signInTitle: "Konsola giriş",
   signInIntro:
-    "Konsol, {realm} realm'inin giriş sayfasını açar. Giriş yaptıktan sonra buraya dönersiniz.",
-  signInAction: "{realm} realm'ine giriş yap",
-  signInOpening: "{realm} realm'inin giriş sayfası açılıyor…",
+    "Konsol, {environment} ortamının giriş sayfasını açar. Giriş yaptıktan sonra buraya dönersiniz.",
+  signInAction: "{environment} ortamına giriş yap",
+  signInOpening: "{environment} ortamının giriş sayfası açılıyor…",
   signedOutNote: "Çıkış yaptınız.",
-  noRealmTitle: "Kuruluşunuzun konsol bağlantısını kullanın",
-  noRealmText:
+  noEnvironmentTitle: "Kuruluşunuzun konsol bağlantısını kullanın",
+  noEnvironmentText:
     "Her kuruluşun kendi konsol adresi vardır. Bu adresi yöneticinizden isteyin. Adres şuna benzer:",
-  otherRealmTitle: "Başka bir realm'de giriş yapmışsınız",
-  otherRealmNote:
-    "Şu an {current} realm'inde giriş yapmış durumdasınız. Bu adres, {wanted} realm'inin konsoluna ait.",
-  otherRealmGo: "{current} realm'ine dön",
-  otherRealmSwitch: "Çıkış yapıp {wanted} realm'ine giriş yap",
+  otherEnvironmentTitle: "Başka bir ortamda giriş yapmışsınız",
+  otherEnvironmentNote:
+    "Şu an {current} ortamında giriş yapmış durumdasınız. Bu adres, {wanted} ortamının konsoluna ait.",
+  otherEnvironmentGo: "{current} ortamına dön",
+  otherEnvironmentSwitch: "Çıkış yapıp {wanted} ortamına giriş yap",
   signInEnded: "Girişiniz sona erdi: {reason}.",
   reasonIdle: "konsol 15 dakika kullanılmadı",
   reasonExpired: "konsol girişi en çok 12 saat sürer",
@@ -52,8 +52,8 @@ export const tr: Record<Key, string> = {
   profileTitle: "Profiliniz",
   profileAccount: "Hesap kimliği",
   profileName: "Görünen ad",
-  profileRealm: "Realm",
-  profileEditNote: "Profilinizi değiştirmek için realm'inizin hesap sayfasını kullanın.",
+  profileEnvironment: "Ortam",
+  profileEditNote: "Profilinizi değiştirmek için ortamınızın hesap sayfasını kullanın.",
   sessionsTitle: "Girişleriniz",
   sessionsIntro:
     "Hesabınızla giriş yapılmış her yer. Bir girişi sonlandırmak o yerden çıkış yapar.",
@@ -62,7 +62,7 @@ export const tr: Record<Key, string> = {
   sessionsLastSeen: "Son kullanım",
   sessionsActions: "İşlemler",
   sessionsConsole: "Konsol",
-  sessionsLogin: "Realm girişi",
+  sessionsLogin: "Ortam girişi",
   sessionsCurrent: "Bu giriş",
   sessionsEnd: "Girişi sonlandır",
   sessionsEmpty: "Başka giriş yok.",
@@ -111,8 +111,8 @@ export const tr: Record<Key, string> = {
   screenOrganizations: "Kuruluşlar",
   screenAgents: "Ajanlar",
   agentsIntro:
-    "Realm'in ajanları: her biri bir ajandır; türü, işleteni ve sorumlu kişileriyle gösterilir.",
-  agentsNone: "Bu realm'de ajan yok.",
+    "Ortamın ajanları: her biri bir ajandır; türü, işleteni ve sorumlu kişileriyle gösterilir.",
+  agentsNone: "Bu ortamda ajan yok.",
   agentOpen: "Ajan",
   agentBadge: "Yapay zekâ ajanı · işleten: {operator}",
   agentName: "Ad",
@@ -145,7 +145,7 @@ export const tr: Record<Key, string> = {
   historyRecord: "Kayıt {position} · {at}",
   orgIntro:
     "Her kuruluşun kökleri, üyeleri ve nasıl katıldıkları, alan adları, sahip devirleri ve bağlantı taslakları. Kuruluşun sahibi olmak yetkisi üzerinde söz sahibi olmaktır, faturalama değildir.",
-  orgNone: "Bu realm'de kuruluş yok.",
+  orgNone: "Bu ortamda kuruluş yok.",
   orgOpen: "Kuruluş",
   orgId: "Kuruluş kimliği",
   orgRoots: "Kökler",
@@ -166,7 +166,7 @@ export const tr: Record<Key, string> = {
   orgSourceAutojoin: "Alan adı kuralı",
   orgSourceOther: "Diğer",
   orgSourceApart:
-    "Üyelik kaynağı birinin nasıl katıldığıdır. Giriş kaynağı değildir; realm grupları ancak ayrı, korunan bir kabulle üyelik sayılır.",
+    "Üyelik kaynağı birinin nasıl katıldığıdır. Giriş kaynağı değildir; ortam grupları ancak ayrı, korunan bir kabulle üyelik sayılır.",
   orgNoRole: "Rol yok",
   orgRoleIssued: "yetki kaydedildi",
   orgRoleDenied: "izin verilmedi",
@@ -208,7 +208,7 @@ export const tr: Record<Key, string> = {
   containIgnored:
     "Bir karar noktası kaydedilmiş bir adımı uyguladığını bildirmezse durumu bilinmiyor olarak kalır ve kalan adımlar burada listelenmeye devam eder.",
   sectionAdminIntro:
-    "Yetki yönetimi: bu domain'deki roller, kaynaklar, kısıtlar ve değişikliklerin geçmişi. Realm yapılandırması Giriş ayarları'ndadır; abonelik ve faturalama burada yönetilmez.",
+    "Yetki yönetimi: bu domain'deki roller, kaynaklar, kısıtlar ve değişikliklerin geçmişi. Ortam yapılandırması Giriş ayarları'ndadır; abonelik ve faturalama burada yönetilmez.",
   sectionDeveloperIntro:
     "Eylem tanımları yayımlayın, uygulama bağlayın ve Access'in nasıl karar vereceğini sorun. Buradaki hiçbir şey yetkiyi değiştirmez.",
   sectionAuditIntro:
@@ -301,7 +301,7 @@ export const tr: Record<Key, string> = {
   metaAnchorAmend: "Yetki kökünü değiştir",
   metaAnchorRetire: "Yetki kökünü emekliye ayır",
   peopleIntro:
-    "Bu realm'in hesapları ve görebileceğiniz yetki. Varsayılan olarak yalnız tuttuklarınızı, verdiklerinizi ve onlardan türeyenleri görürsünüz.",
+    "Bu ortamın hesapları ve görebileceğiniz yetki. Varsayılan olarak yalnız tuttuklarınızı, verdiklerinizi ve onlardan türeyenleri görürsünüz.",
   peopleAccounts: "Hesaplar",
   peopleAccount: "Hesap",
   peopleStatus: "Durum",
@@ -407,7 +407,7 @@ export const tr: Record<Key, string> = {
     "Bir kişi, ayrılış değişikliği kaydedildikten sonra ayrılmış olarak gösterilir.",
   domainIntro: "Bu domain'in anayasası ve onu kimin barındırdığı.",
   domainId: "Domain kimliği",
-  domainRealm: "Realm",
+  domainEnvironment: "Ortam",
   domainProvider: "Sağlayıcı",
   domainProviderText:
     "Suiss Access tarafından barındırılır — barındıran burada hiçbir yetki tutmaz.",
@@ -423,7 +423,7 @@ export const tr: Record<Key, string> = {
     "Yalnız bilgi: bu domain'in yetkisinde neyin değiştiği. Buradaki hiçbir şey sizden işlem istemez.",
   changesNone: "Gösterilecek değişiklik yok.",
   settingsIntro:
-    "Realm yapılandırması: giriş yöntemleri, uygulamalar, üst kimlik sağlayıcılar, marka ve anahtarlar. Her değişiklik tek bir imzalı değişikliktir.",
+    "Ortam yapılandırması: giriş yöntemleri, uygulamalar, üst kimlik sağlayıcılar, marka ve anahtarlar. Her değişiklik tek bir imzalı değişikliktir.",
   settingsGitops: "GitOps ile yönetiliyor: depoda değiştirin.",
   settingsSignin: "Giriş politikası",
   settingsSession: "Konsol girişi politikası",
@@ -435,10 +435,10 @@ export const tr: Record<Key, string> = {
   settingsRpNew: "Yeni giriş alan adı",
   settingsRpWarning:
     "Giriş alan adını değiştirmek passkey'ler için geri alınamaz: kullanıcılar yeni passkey oluşturmak zorundadır.",
-  settingsRpCount: "Bu realm'de kayıtlı passkey sayısı",
+  settingsRpCount: "Bu ortamda kayıtlı passkey sayısı",
   settingsRpCountHint: "Hepsinin çalışmayı bırakacağını onaylamak için sayıyı yazın.",
   settingsRpIrreversible: "Kaydedildi. Bu değişiklik passkey'ler için geri döndürülemez.",
-  settingsRpMismatch: "Sayı bu realm'in passkey'leriyle eşleşmiyor. Hiçbir şey değiştirilmedi.",
+  settingsRpMismatch: "Sayı bu ortamın passkey'leriyle eşleşmiyor. Hiçbir şey değiştirilmedi.",
   settingsCspMode: "Sayfa güvenlik politikası",
   settingsCspCurrent: "Şu an",
   settingsCspEnforce: "Uygula: markanın görsel kökenleri yalnız listelendiği gibi yüklenir",
@@ -475,7 +475,7 @@ export const tr: Record<Key, string> = {
   keySigning: "İmzalıyor",
   keyUnavailable: "İmzalayıcı cevap vermedi",
   signingAt:
-    "Bu realm en geç {at} zamanından itibaren imzalayabilir. O zamana dek imza gerektiren girişler bekler.",
+    "Bu ortam en geç {at} zamanından itibaren imzalayabilir. O zamana dek imza gerektiren girişler bekler.",
   signalsDelayed:
     "{provider} sinyalleri {since} zamanından beri gecikiyor — kararlar beyan edilmiş geçerlilik pencerelerini kullanır",
   geoipMissing: "GeoIP kaynağı yapılandırılmadı",
@@ -504,10 +504,11 @@ export const tr: Record<Key, string> = {
   paramAffects: "Neyi etkiliyor (yetkiyle ilgisi yoksa boş)",
   paramType: "Eşlenen tip",
   colHolder: "Sahip",
-  labOtherDomain: "{realm} karar noktasına sormak için o realm'in konsoluna giriş yapın.",
+  labOtherDomain:
+    "{environment} ortamının karar noktasına sormak için o ortamın konsoluna giriş yapın.",
   schemasPendingIn: "Kabul bekleniyor: {domains}",
   schemasNoPending: "Bu sürümü bekleyen domain yok.",
-  integrationsIntro: "Kişileri giriş yaptıran uygulamalar ve bu realm'in hook ve webhook'ları.",
+  integrationsIntro: "Kişileri giriş yaptıran uygulamalar ve bu ortamın hook ve webhook'ları.",
   oauthGrantType: "OAuth grant type",
   clientAuth: "İstemci kimlik doğrulaması",
   clientRedirects: "Yönlendirme URI'leri",
@@ -752,7 +753,7 @@ export const tr: Record<Key, string> = {
   screenSiem: "SIEM dışa aktarımı",
   exportSinksTitle: "Dışa aktarım hedefleri",
   exportSinksIntro:
-    "Realm'in her denetim olayı her hedefe sırayla gider; örnekleme yoktur. Kapalı bir hedef yerini korur ve dönünce birikeni alır.",
+    "Ortamın her denetim olayı her hedefe sırayla gider; örnekleme yoktur. Kapalı bir hedef yerini korur ve dönünce birikeni alır.",
   exportCopyNote:
     "Hedefte kaydın kendisi değil kopyası durur: her denetim sorusu denetim kayıtlarından cevaplanır.",
   exportRecordsLink: "Denetim kayıtlarını aç",
@@ -922,7 +923,7 @@ export const tr: Record<Key, string> = {
     "Acil erişim önceden verilmiş korunan bir Grant'tır: kullanmak farklı kişilerden iki onay ister, kaydedilir ve sonradan incelenir. Bir hesabı acil erişim için işaretlemek ona hiçbir yetki vermez.",
   breakglassAccountsTitle: "Acil erişim hesapları",
   breakglassAccountsIntro:
-    "İşaretli hesap yalnız bu realm'in kendi güvenlik anahtarı ya da sertifikasıyla girer, SSO ile asla; diğer yöneticilerden farklı türde bir anahtar kullanır. Her girişi nöbetçileri uyarır.",
+    "İşaretli hesap yalnız bu ortamın kendi güvenlik anahtarı ya da sertifikasıyla girer, SSO ile asla; diğer yöneticilerden farklı türde bir anahtar kullanır. Her girişi nöbetçileri uyarır.",
   breakglassMark: "Acil erişim için işaretle",
   breakglassClear: "İşareti kaldır",
   breakglassGrantsTitle: "Acil erişim Grant'ları",
@@ -1019,12 +1020,12 @@ export const tr: Record<Key, string> = {
   // OP-158 m.4 (a): Aşama 13 ekranları
   screenPlacement: "Yerleşim",
   placementIntro:
-    "Bu realm ve alanının nereden sunulduğu. Yerleşim yalnız istekleri yönlendirir; kimin ne yapabileceğine hiç karar vermez.",
+    "Bu ortamın ve alanının nereden sunulduğu. Yerleşim yalnız istekleri yönlendirir; kimin ne yapabileceğine hiç karar vermez.",
   placementCell: "Hücre",
   placementResidency: "Veriler {region} içinde kalır ({class})",
   placementRehome: "Başka bir yönetişim alanına taşıyın",
   placementRehomeBoth:
-    "Taşıma hem şimdiki hem yeni yönetişim alanında bir onay ister. İkisi de kaydedilene kadar realm olduğu yerde kalır.",
+    "Taşıma hem şimdiki hem yeni yönetişim alanında bir onay ister. İkisi de kaydedilene kadar ortam olduğu yerde kalır.",
   placementDedicated: "Ayrılmış hücre",
   screenDurability: "Dayanıklılık",
   durabilityIntro:
@@ -1077,7 +1078,7 @@ export const tr: Record<Key, string> = {
   // OP-159 m.4 (a): Stage 14 signing screen and hosting lines
   screenSigning: "İmza",
   signingIntro:
-    "Bu realm'in token'ları hangi algoritmalarla imzaladığı. Kuantum sonrası imza eklemek klasik imzaları korur; uygulamalar onları yalnız isterlerse alır.",
+    "Bu ortamın token'ları hangi algoritmalarla imzaladığı. Kuantum sonrası imza eklemek klasik imzaları korur; uygulamalar onları yalnız isterlerse alır.",
   signingPqOn: "Kuantum sonrası imzalar açık ({alg})",
   signingPqOff: "Yalnız klasik imzalar",
   signingPqTurnOff: "Kuantum sonrası imzaları kapat",
@@ -1102,9 +1103,9 @@ export const tr: Record<Key, string> = {
   // OP-159 m.41 (b)
   navPlatform: "Platform",
   sectionPlatformIntro:
-    "Kiracılar, içlerindeki realm'ler ve sandbox domain'leri, ve bu kurulumun durumu. Her realm'in yalnız metadata'sını görürsünüz; hesaplarını, uygulamalarını, yetkilerini, kayıtlarını ya da ayarlarını asla.",
+    "Kiracılar, içlerindeki ortamlar ve sandbox domain'leri, ve bu kurulumun durumu. Her ortamın yalnız metadata'sını görürsünüz; hesaplarını, uygulamalarını, yetkilerini, kayıtlarını ya da ayarlarını asla.",
   screenTenants: "Kiracılar",
-  screenRealms: "Realm'ler",
+  screenEnvironments: "Ortamlar",
   screenSandboxes: "Sandbox domain'leri",
   screenOperator: "Operatör sağlığı",
   platformTenantsIntro: "Bu kurulumun her kiracısı, durumu ve yerleşimiyle.",
@@ -1118,18 +1119,18 @@ export const tr: Record<Key, string> = {
   platformTenantCreateHint:
     "Kiracının kimliğini Access değişikliği taslak olarak hazırlarken verir. Varsayılan havuz için yerleşimi boş bırakın.",
   platformTenantCreateSend: "Kiracı oluştur",
-  platformRealmsIntro: "Bir kiracının realm'leri, her birinin imza anahtarlarının durumuyla.",
+  platformEnvironmentsIntro: "Bir kiracının ortamları, her birinin imza anahtarlarının durumuyla.",
   platformSandboxesIntro:
-    "Bir kiracının sandbox domain'leri. Yetki bir sandbox ile üretim realm'i arasında hiçbir yönde akmaz ve her sandbox'ın sabit bir günlük bütçesi vardır.",
+    "Bir kiracının sandbox domain'leri. Yetki bir sandbox ile üretim ortamı arasında hiçbir yönde akmaz ve her sandbox'ın sabit bir günlük bütçesi vardır.",
   platformBoundary:
-    "Bir realm'in içindekileri yönetmek için o realm'e kendi yöneticilerinden biriyle giriş yapın.",
-  platformRealmDetails: "Realm {slug}",
+    "Bir ortamın içindekileri yönetmek için o ortama kendi yöneticilerinden biriyle giriş yapın.",
+  platformEnvironmentDetails: "Ortam {slug}",
   platformSandbox: "Sandbox",
   platformSlug: "Kısa ad",
   platformSlugHint:
     "Küçük harf, rakam ve tire; 3 ile 63 karakter arası. api ve assets kullanılamaz. Sonradan değiştirilemez.",
   platformConsoleLink: "Konsol bağlantısı",
-  platformConsoleLinkCreated: "Yeni realm'in konsolu:",
+  platformConsoleLinkCreated: "Yeni ortamın konsolu:",
   platformIssuer: "Yayımlayıcı",
   platformKeys: "İmza anahtarları",
   platformKeyPending: "Henüz yayımlanmış anahtar yok",
@@ -1140,10 +1141,10 @@ export const tr: Record<Key, string> = {
   platformKexShare: "Kuantum sonrası anahtar değişimi",
   platformBudget: "Günlük bütçe",
   platformBudgetValue: "Günde {exercises} değişiklik ve {projections} yanıt",
-  platformRealmCreate: "Yeni realm",
-  platformRealmCreateHint:
-    "Yeni bir realm burada seçilen kendi kurucu köküyle başlar. Bu kurulumun operatörü onda hiçbir şeye sahip değildir.",
-  platformRealmCreateSend: "Realm oluştur",
+  platformEnvironmentCreate: "Yeni ortam",
+  platformEnvironmentCreateHint:
+    "Yeni bir ortam burada seçilen kendi kurucu köküyle başlar. Bu kurulumun operatörü onda hiçbir şeye sahip değildir.",
+  platformEnvironmentCreateSend: "Ortam oluştur",
   platformSandboxCreate: "Yeni sandbox domain'i",
   platformSandboxCreateHint:
     "Bir sandbox domain'i kendi kurucu kökü ve sabit günlük bütçesiyle sandbox şablonundan başlar.",
@@ -1158,7 +1159,7 @@ export const tr: Record<Key, string> = {
   platformRootPartiesHint: "Her satıra bir tane ya da virgülle ayırarak; sizinki dolduruldu.",
   platformRootK: "Kaçının imzalaması gerekir",
   platformRootSoleAcknowledge:
-    "Tek kurucu köklü bir realm'in, o anahtar kaybolursa kurtarılamayacağını anlıyorum.",
+    "Tek kurucu köklü bir ortamın, o anahtar kaybolursa kurtarılamayacağını anlıyorum.",
   platformOperatorIntro:
     "Bu kurulumun hazır olma denetimleri, adlarıyla. Adres, anahtar ya da sır gösterilmez.",
   platformReady: "Hazır",

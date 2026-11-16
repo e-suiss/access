@@ -1,4 +1,4 @@
-//! The key set of one realm: it follows the rotation schedule, keeps the JWKS current and signs
+//! The key set of one environment: it follows the rotation schedule, keeps the JWKS current and signs
 //! tokens with the key that may sign now (CR-23, CR-25, CR-27, CR-59, SAI-46).
 
 use access_crypto::jose::{JwsAlg, sign_compact};
@@ -19,7 +19,7 @@ struct Entry {
     sealed: Option<Vec<u8>>,
 }
 
-/// One realm key as a vault keeps it.
+/// One environment key as a vault keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Saved {
     /// Rotation record.
@@ -53,7 +53,7 @@ impl core::fmt::Debug for Signed {
     }
 }
 
-/// What a schedule round did; each applied step is a realm audit event (CR-27).
+/// What a schedule round did; each applied step is an environment audit event (CR-27).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Round {
     /// Steps applied.
@@ -62,7 +62,7 @@ pub struct Round {
     pub outage: bool,
 }
 
-/// The key set of one realm: 1 active and at least 1 published backup (CR-27, MD-6).
+/// The key set of one environment: 1 active and at least 1 published backup (CR-27, MD-6).
 pub struct Keyring {
     alg: JwsAlg,
     policy: Policy,
@@ -89,11 +89,11 @@ const EMPTY_JWKS: &str = r#"{"keys":[]}"#;
 const PASSES: usize = 4;
 
 impl Keyring {
-    /// An empty key set whose new keys use `alg`: ES256 by default, Ed25519 when the realm
+    /// An empty key set whose new keys use `alg`: ES256 by default, Ed25519 when the environment
     /// selects it (CR-2, MD-3).
     ///
     /// # Errors
-    /// [`PolicyError`] for a policy the realm may not take.
+    /// [`PolicyError`] for a policy the environment may not take.
     pub fn new(alg: JwsAlg, policy: Policy) -> Result<Self, PolicyError> {
         domain::check(&policy)?;
         Ok(Self {
@@ -122,11 +122,11 @@ impl Keyring {
         self.policy
     }
 
-    /// Replaces the rotation policy (TN-118: an `idp.realm.key_policy` decision); the keys it
+    /// Replaces the rotation policy (TN-118: an `idp.environment.key_policy` decision); the keys it
     /// holds keep their windows and follow the new policy from the next round.
     ///
     /// # Errors
-    /// [`PolicyError`] for a policy the realm may not take (CR-26).
+    /// [`PolicyError`] for a policy the environment may not take (CR-26).
     pub fn set_policy(&mut self, policy: Policy) -> Result<(), PolicyError> {
         domain::check(&policy)?;
         self.policy = policy;
@@ -146,7 +146,7 @@ impl Keyring {
         }
     }
 
-    /// Rotates now, outside the schedule (TN-118: an `idp.realm.key_rotate` decision): the
+    /// Rotates now, outside the schedule (TN-118: an `idp.environment.key_rotate` decision): the
     /// published backup past its lead becomes the signing key, the active key retires and stays
     /// in the JWKS until its tokens expire, and a new backup is generated and published.
     /// Publish-before-use holds: only a key relying parties could already have seen signs
@@ -205,7 +205,7 @@ impl Keyring {
     }
 
     /// Withdraws `kid` at once, outside the schedule, and destroys its private material: the
-    /// emergency drop of a compromised key (§13.2, `idp.realm.key_drop`). It leaves the JWKS
+    /// emergency drop of a compromised key (§13.2, `idp.environment.key_drop`). It leaves the JWKS
     /// now, so nothing it signed verifies any more and its `key_epoch` window ends; when it was
     /// the signing key, the published backup past its lead takes over, and without one nothing
     /// is signed until one is (CR-23, fail closed). Dropping a dropped key changes nothing.
@@ -372,7 +372,7 @@ impl Keyring {
         }
     }
 
-    /// The realm's JWKS: published, active and retiring keys, the active one first (CR-25,
+    /// The environment's JWKS: published, active and retiring keys, the active one first (CR-25,
     /// CR-26). Served with [`domain::CACHE_CONTROL`].
     #[must_use]
     pub fn jwks(&self) -> &str {
@@ -393,7 +393,7 @@ impl Keyring {
 
     /// Signs a JSON object `payload` as a compact JWS of type `typ` at `now`, with the key
     /// that may sign now (SAI-46); without one, nothing is signed (CR-23, G42). An access token
-    /// is signed only when it carries no `authorization_details`: a realm key never signs an
+    /// is signed only when it carries no `authorization_details`: an environment key never signs an
     /// authority projection (§10.4.5, §12.1.2).
     ///
     /// # Errors
@@ -471,7 +471,7 @@ impl Keyring {
     /// (CR-23). A key that cannot be loaded, or whose `kid` does not match, no longer signs.
     ///
     /// # Errors
-    /// [`PolicyError`] for a policy the realm may not take.
+    /// [`PolicyError`] for a policy the environment may not take.
     pub fn restore(
         alg: JwsAlg,
         policy: Policy,

@@ -394,11 +394,14 @@ impl Reader for PgReader {
     }
 
     async fn key_cutoff(&self, iss: &str, kid: &[u8; 32]) -> Result<Option<u64>, CoreError> {
-        Ok(access_store::authority::realm_key_cutoff(&self.pool, iss, kid).await?)
+        Ok(access_store::authority::environment_key_cutoff(&self.pool, iss, kid).await?)
     }
 
     async fn delegated_admin_open(&self) -> Result<bool, CoreError> {
-        Ok(access_store::authority::realm_delegated_admin_open(&self.pool, &self.domain).await?)
+        Ok(
+            access_store::authority::environment_delegated_admin_open(&self.pool, &self.domain)
+                .await?,
+        )
     }
 
     async fn opening(&self, intent: &Digest) -> Result<Option<crate::ports::Opening>, CoreError> {

@@ -1,5 +1,5 @@
 //! The LDAP gateway's edge calls (§10.6.3, IDP-16, OP-155 m.3 (n)): `authenticate` checks an LDAP
-//! credential or a client certificate, `directory_read` reads the realm's read-only directory
+//! credential or a client certificate, `directory_read` reads the environment's read-only directory
 //! tree. The tree model, the filter semantics and the paging cookie live in access-server; the
 //! gateway only translates the protocol.
 
@@ -83,8 +83,8 @@ impl Mechanism {
 /// [`super::Call::Authenticate`]: one LDAP bind, or an RFC 3062 change of the LDAP credential.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Authenticate {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// How the bind proves who it is.
     pub mechanism: Mechanism,
     /// Simple: the bind DN or `dn=token`.
@@ -101,7 +101,7 @@ pub struct Authenticate {
 impl core::fmt::Debug for Authenticate {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Authenticate")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("mechanism", &self.mechanism)
             .field("rotate", &self.rotate)
             .finish_non_exhaustive()
@@ -168,7 +168,7 @@ impl Authenticate {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut entries = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("mechanism", Value::text(self.mechanism.name())),
         ];
         if let Some(n) = &self.name {
@@ -198,7 +198,14 @@ impl Authenticate {
         let v = decode_map(body)?;
         only(
             &v,
-            &["realm", "mechanism", "name", "secret", "chain", "rotate"],
+            &[
+                "environment",
+                "mechanism",
+                "name",
+                "secret",
+                "chain",
+                "rotate",
+            ],
         )?;
         let mechanism =
             Mechanism::parse(&text(&v, "mechanism", 16)?).ok_or(WireError::Malformed)?;
@@ -214,7 +221,7 @@ impl Authenticate {
             Some(_) => return Err(WireError::Malformed),
         };
         let q = Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             mechanism,
             name: opt_text(v.get("name"), MAX_BIND_NAME)?,
             secret: bytes(v.get("secret"), MAX_SECRET)?,
@@ -522,12 +529,12 @@ fn node(v: &Value) -> Result<Node, WireError> {
     })
 }
 
-/// [`super::Call::DirectoryRead`]: one page of a search of the realm's directory tree, on behalf
+/// [`super::Call::DirectoryRead`]: one page of a search of the environment's directory tree, on behalf
 /// of a bind.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DirectoryRead {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// The handle [`Authenticated::bind`] gave the bind.
     pub bind: Vec<u8>,
     /// The base DN as the client sent it.
@@ -553,7 +560,7 @@ impl DirectoryRead {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut entries = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("bind", Value::Bytes(self.bind.clone())),
             ("base", Value::text(&self.base)),
             ("scope", Value::text(self.scope.name())),
@@ -583,7 +590,7 @@ impl DirectoryRead {
         only(
             &v,
             &[
-                "realm",
+                "environment",
                 "bind",
                 "base",
                 "scope",
@@ -614,7 +621,7 @@ impl DirectoryRead {
             return Err(WireError::Malformed);
         }
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             bind: bytes(v.get("bind"), MAX_HANDLE)?.ok_or(WireError::Malformed)?,
             base,
             scope: Scope::parse(&text(&v, "scope", 8)?).ok_or(WireError::Malformed)?,
@@ -815,7 +822,7 @@ mod tests {
     #[test]
     fn ldap_bodies_round_trip() {
         let simple = Authenticate {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             mechanism: Mechanism::Simple,
             name: Some(String::from("dn=token")),
             secret: Some(vec![1; 8]),
@@ -841,7 +848,7 @@ mod tests {
             Err(WireError::Malformed)
         );
         let read = DirectoryRead {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             bind: vec![3; 40],
             base: String::from("ou=people,o=corp"),
             scope: Scope::Sub,

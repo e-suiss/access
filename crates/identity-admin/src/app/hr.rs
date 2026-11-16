@@ -22,7 +22,7 @@ use access_identity_account::adapters::pg::PgTx;
 use access_identity_account::app::accounts::status_moved;
 use access_identity_account::app::hr::{self as records, Next};
 use access_identity_account::app::vault::Vault;
-use access_identity_account::app::{Actor, Named, Naming as _, Realm};
+use access_identity_account::app::{Actor, Environment, Named, Naming as _};
 use access_identity_account::domain::claims::{ClaimOrder, Placement};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::AccountTx as _;
@@ -38,7 +38,7 @@ use access_kernel::json::b64url_encode;
 use access_kernel::model::Id;
 use access_store::Pool;
 use access_store::hr::{DueRow, SourceRow};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{self, Bound};
 use access_store::issuer::{self as issued, IssuedClaim};
 use serde_json::{Value as Json, json};
@@ -59,18 +59,18 @@ pub const INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
 /// The actor the HR job's audit rows name.
 pub const JOB_ACTOR: &str = "hr-job";
 
-/// Realms, people and dates the job takes per run.
+/// Environments, people and dates the job takes per run.
 const BATCH: u32 = 256;
 
-/// The issuer Party of source `name` of the transaction's realm: the same for every version of
-/// it, different for every realm and name.
+/// The issuer Party of source `name` of the transaction's environment: the same for every version of
+/// it, different for every environment and name.
 ///
 /// # Errors
-/// [`AdminError::NoRealm`] outside a realm.
+/// [`AdminError::NoEnvironment`] outside an environment.
 pub fn issuer_party(t: &TenantTx, name: &str) -> Result<[u8; 16], AdminError> {
-    let realm = t.realm().ok_or(AdminError::NoRealm)?;
+    let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
     let mut input = t.tenant().as_bytes().to_vec();
-    input.extend_from_slice(realm.as_bytes());
+    input.extend_from_slice(environment.as_bytes());
     input.extend_from_slice(name.as_bytes());
     let d = suiss_crypto::digest::context_digest(ISSUER_CONTEXT, &input).0;
     let mut id = [0; 16];
@@ -172,7 +172,7 @@ pub(crate) async fn write(
 }
 
 /// Writes the records of import `i` bound by `bound` in the decision's transaction `t` with the
-/// realm's vault: one bad write rolls back the decision's whole application (OP-156 m.3 (q)).
+/// environment's vault: one bad write rolls back the decision's whole application (OP-156 m.3 (q)).
 ///
 /// # Errors
 /// [`AdminError`].
@@ -189,12 +189,12 @@ pub(crate) async fn import(
     )
     .await?;
     let tenant = t.0.tenant();
-    let realm_id = t.0.realm().ok_or(AdminError::NoRealm)?;
+    let environment_id = t.0.environment().ok_or(AdminError::NoEnvironment)?;
     let kek = vault.kek.clone();
     t.1 = Some(vault);
-    let realm = Realm {
+    let environment = Environment {
         tenant,
-        realm: realm_id,
+        environment: environment_id,
         kek: &*kek,
         ids,
     };
@@ -203,7 +203,7 @@ pub(crate) async fn import(
         actor: "idp-decision",
         correlation: &correlation,
     };
-    let out = records::apply(t, &realm, (&i.source, bound), &i.lines, (now, &who))
+    let out = records::apply(t, &environment, (&i.source, bound), &i.lines, (now, &who))
         .await
         .map_err(|e| match e {
             access_identity_account::AccountError::Store(s) => AdminError::from(s),
@@ -212,7 +212,7 @@ pub(crate) async fn import(
         })?;
     // IDP-35 (4), AG-41, OP-157 m.3 (v)
     let named = Named {
-        realm: realm_id,
+        environment: environment_id,
         ids,
     };
     leavers(t, (&named, &who), &i.source, now)
@@ -280,10 +280,10 @@ pub(crate) async fn connectors(
         .collect())
 }
 
-/// The realm vaults the job seals and opens records with.
+/// The environment vaults the job seals and opens records with.
 pub trait Vaults: Send + Sync {
-    /// The realm's vault, or `None` when its keys are not here.
-    fn vault(&self, realm: RealmId) -> Option<Vault>;
+    /// The environment's vault, or `None` when its keys are not here.
+    fn vault(&self, environment: EnvironmentId) -> Option<Vault>;
 }
 
 /// What one run of the job did.
@@ -330,7 +330,7 @@ async fn started(
 async fn ended(
     t: &mut PgTx,
     (named, who): (&Named<'_>, &Actor<'_>),
-    (realm, subject): (RealmId, [u8; 16]),
+    (environment, subject): (EnvironmentId, [u8; 16]),
     status: AccountStatus,
     now: u64,
 ) -> Result<bool, Unavailable> {
@@ -363,7 +363,7 @@ async fn ended(
     status_moved(t, named, subject, (status, to), who)
         .await
         .map_err(account_down)?;
-    super::agents::sponsor_left(t, realm, subject, now)
+    super::agents::sponsor_left(t, environment, subject, now)
         .await
         .map_err(down)?;
     Ok(true)
@@ -403,7 +403,7 @@ async fn dealt(
     let id = access_crypto::random::bytes::<32>().map_err(|_| down("random"))?;
     let event = IdentityEvent::hr_record_due(
         id,
-        named.realm.as_bytes(),
+        named.environment.as_bytes(),
         (&due.source, &account, change),
         due.due_ms,
         now,
@@ -438,7 +438,14 @@ pub(crate) async fn leavers(
             .as_ref()
             .and_then(|r| AccountStatus::parse(&r.status))
             .ok_or_else(|| Unavailable(String::from("hr job: subject")))?;
-        let applied = ended(t, (named, who), (named.realm, due.subject), status, now).await?;
+        let applied = ended(
+            t,
+            (named, who),
+            (named.environment, due.subject),
+            status,
+            now,
+        )
+        .await?;
         dealt(t, (named, who), &due, applied, now).await?;
         out = out.saturating_add(u64::from(applied));
     }
@@ -449,11 +456,11 @@ pub(crate) async fn leavers(
 pub struct HrJob<'a, I, V> {
     /// `access_app`.
     pub app: &'a Pool,
-    /// `access_outbox_reader`, to find the realms with work.
+    /// `access_outbox_reader`, to find the environments with work.
     pub reader: &'a Pool,
     /// Claim Ingest of the authority plane.
     pub ingest: &'a I,
-    /// The realms' vaults.
+    /// The environments' vaults.
     pub vaults: &'a V,
     /// The cell's opaque id key.
     pub ids: &'a IdKey,
@@ -478,11 +485,15 @@ enum Issued {
 }
 
 impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
-    async fn sealed(&self, tenant: TenantId, realm: RealmId) -> Result<Option<PgTx>, Unavailable> {
-        let Some(vault) = self.vaults.vault(realm) else {
+    async fn sealed(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<Option<PgTx>, Unavailable> {
+        let Some(vault) = self.vaults.vault(environment) else {
             return Ok(None);
         };
-        let t = TenantTx::begin(self.app, tenant, realm)
+        let t = TenantTx::begin(self.app, tenant, environment)
             .await
             .map_err(down)?;
         Ok(Some(PgTx(t, Some(vault))))
@@ -490,18 +501,18 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
 
     async fn issue(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         source: &SourceRow,
         order: &ClaimOrder,
         now: u64,
     ) -> Result<Issued, Unavailable> {
-        let mut tx = TenantTx::begin(self.app, tenant, realm)
+        let mut tx = TenantTx::begin(self.app, tenant, environment)
             .await
             .map_err(down)?;
         let g = idp::governance(&mut tx)
             .await
             .map_err(down)?
-            .ok_or_else(|| Unavailable(String::from("hr job: no realm")))?;
+            .ok_or_else(|| Unavailable(String::from("hr job: no environment")))?;
         let Some(party) = idp::subject_party(&mut tx, &order.subject)
             .await
             .map_err(down)?
@@ -549,7 +560,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             ClaimVerdict::Quarantined { reason, .. } => format!("quarantined-{}", reason.word()),
             ClaimVerdict::Rejected { code } => format!("rejected-{code}"),
         };
-        let mut t = TenantTx::begin(self.app, tenant, realm)
+        let mut t = TenantTx::begin(self.app, tenant, environment)
             .await
             .map_err(down)?;
         issued::record_issued(
@@ -572,13 +583,13 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
     /// States the next HR Claims of `(source, person)`; returns how many Claim Ingest answered.
     async fn person(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (source, person): (&str, &[u8; 32]),
         now: u64,
     ) -> Result<u32, Unavailable> {
         let mut answered = 0_u32;
         for _ in 0..8 {
-            let Some(mut tx) = self.sealed(tenant, realm).await? else {
+            let Some(mut tx) = self.sealed(tenant, environment).await? else {
                 return Ok(answered);
             };
             let row = tx.0.hr_source(source).await.map_err(down)?;
@@ -596,7 +607,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
                     Some(s) => {
                         let mut quarantined = false;
                         for o in &orders {
-                            match self.issue((tenant, realm), &s, o, now).await? {
+                            match self.issue((tenant, environment), &s, o, now).await? {
                                 Issued::NoParty => return Ok(answered),
                                 Issued::Answered(v) => {
                                     answered = answered.saturating_add(1);
@@ -615,7 +626,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
                     }
                 },
             };
-            let mut t = TenantTx::begin(self.app, tenant, realm)
+            let mut t = TenantTx::begin(self.app, tenant, environment)
                 .await
                 .map_err(down)?;
             t.hr_record_dealt((source, person, version), outcome, now)
@@ -629,11 +640,11 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
     /// Applies one date that came, at most once: its newest version must still be pending.
     async fn apply_due(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         due: &DueRow,
         now: u64,
     ) -> Result<bool, Unavailable> {
-        let Some(mut t) = self.sealed(tenant, realm).await? else {
+        let Some(mut t) = self.sealed(tenant, environment).await? else {
             return Ok(false);
         };
         let current =
@@ -651,7 +662,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
         let g = idp::governance(&mut t.0)
             .await
             .map_err(down)?
-            .ok_or_else(|| Unavailable(String::from("hr job: no realm")))?;
+            .ok_or_else(|| Unavailable(String::from("hr job: no environment")))?;
         let subject = due.subject;
         let row = t.subject(subject, true).await.map_err(account_down)?;
         let status = row
@@ -659,7 +670,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             .and_then(|r| AccountStatus::parse(&r.status))
             .ok_or_else(|| Unavailable(String::from("hr job: subject")))?;
         let named = Named {
-            realm,
+            environment,
             ids: self.ids,
         };
         let correlation = format!("hr:{}:{}", due.source, due.change);
@@ -675,11 +686,12 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
                 );
             if applied {
                 started(&mut t, (&named, &who), subject, status).await?;
-                self.invite(&mut t, (tenant, realm), &g, due, now).await?;
+                self.invite(&mut t, (tenant, environment), &g, due, now)
+                    .await?;
             }
             applied
         } else {
-            ended(&mut t, (&named, &who), (realm, subject), status, now).await?
+            ended(&mut t, (&named, &who), (environment, subject), status, now).await?
         };
         dealt(&mut t, (&named, &who), due, applied, now).await?;
         t.0.commit().await.map_err(down)?;
@@ -693,7 +705,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
     async fn invite(
         &self,
         t: &mut PgTx,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         g: &idp::Governing,
         due: &DueRow,
         now: u64,
@@ -740,9 +752,9 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
         .await
         .map_err(down)?;
         let vault = t.vault().map_err(account_down)?.clone();
-        let named = Realm {
+        let named = Environment {
             tenant,
-            realm,
+            environment,
             kek: &*vault.kek,
             ids: self.ids,
         };
@@ -772,30 +784,33 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             .map_err(down)
     }
 
-    /// One run at `now`: every realm with work states its next HR Claims and applies its dates
+    /// One run at `now`: every environment with work states its next HR Claims and applies its dates
     /// that came.
     ///
     /// # Errors
     /// [`Unavailable`]; what was done stays done and the rest runs next time.
     pub async fn run_once(&self, now: u64) -> Result<Ran, Unavailable> {
         let mut ran = Ran::default();
-        for (tenant, realm) in access_store::hr::realms_with_work(self.reader, now, BATCH)
-            .await
-            .map_err(down)?
+        for (tenant, environment) in
+            access_store::hr::environments_with_work(self.reader, now, BATCH)
+                .await
+                .map_err(down)?
         {
-            let Some(mut tx) = self.sealed(tenant, realm).await? else {
+            let Some(mut tx) = self.sealed(tenant, environment).await? else {
                 continue;
             };
             let people = tx.0.hr_unissued(BATCH).await.map_err(down)?;
             let due = tx.0.hr_due_now(now, BATCH).await.map_err(down)?;
             tx.0.commit().await.map_err(down)?;
             for (source, person) in &people {
-                let n = self.person((tenant, realm), (source, person), now).await?;
+                let n = self
+                    .person((tenant, environment), (source, person), now)
+                    .await?;
                 ran.claims = ran.claims.saturating_add(n);
             }
             for d in &due {
                 ran.due = ran.due.saturating_add(1);
-                if self.apply_due((tenant, realm), d, now).await? {
+                if self.apply_due((tenant, environment), d, now).await? {
                     ran.applied = ran.applied.saturating_add(1);
                 }
             }

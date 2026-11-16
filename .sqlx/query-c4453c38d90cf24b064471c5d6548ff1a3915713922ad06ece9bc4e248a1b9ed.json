@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.upstream_subject_conflicts\n               (tenant_id, environment_id, connection, subject_id, identity_key, created_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT (tenant_id, environment_id, connection, identity_key)\n               WHERE resolved_ms IS NULL DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c4453c38d90cf24b064471c5d6548ff1a3915713922ad06ece9bc4e248a1b9ed"
+}

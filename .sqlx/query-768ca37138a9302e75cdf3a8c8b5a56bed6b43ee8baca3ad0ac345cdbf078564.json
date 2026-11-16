@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT name FROM access.scim_clients\n          WHERE tenant_id = $1 AND environment_id = $2 AND secret_sha256 = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "768ca37138a9302e75cdf3a8c8b5a56bed6b43ee8baca3ad0ac345cdbf078564"
+}

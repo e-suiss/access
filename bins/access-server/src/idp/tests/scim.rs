@@ -112,7 +112,7 @@ async fn member_entry(w: &World, d: Digest, subject: Id, claim: Id) -> bool {
 #[tokio::test]
 async fn a_scim_membership_selects_only_through_a_subject_selection_acceptance() {
     let w = World::new().await;
-    let (t, r, d) = w.realm_with("scim-select", Some(0)).await;
+    let (t, r, d) = w.environment_with("scim-select", Some(0)).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let register = proposal(
         (t, r),
@@ -142,7 +142,7 @@ async fn a_scim_membership_selects_only_through_a_subject_selection_acceptance()
         .unwrap()
         .unwrap();
     let alice = tx
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(

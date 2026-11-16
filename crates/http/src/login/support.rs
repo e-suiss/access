@@ -1,6 +1,6 @@
 //! Support access on axum (MD-9, TN-137, OP-157 m.3 (f), (g)): the `frontend-v1` `/v1/support/*`,
-//! `/v1/me/support-access*` and `/v1/me/support-block` routes at the realm's host and under
-//! `/realms/{slug}`. They ride on the session cookie and the same-origin rule; every grant,
+//! `/v1/me/support-access*` and `/v1/me/support-block` routes at the environment's host and under
+//! `/env/{slug}`. They ride on the session cookie and the same-origin rule; every grant,
 //! revoke, upload and read carries the device Instance's own signed Exercise. Writes take an
 //! `Idempotency-Key`.
 
@@ -22,7 +22,7 @@ use axum::routing::{get, post, put};
 use axum::{Extension, Router};
 use serde::de::DeserializeOwned;
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 /// Largest JSON body other than an artifact upload.
@@ -70,7 +70,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/support/requests"),
@@ -152,7 +152,7 @@ fn param<'a>(p: &'a HashMap<String, String>, name: &str) -> Option<&'a str> {
 
 macro_rules! entry {
     ($s:expr, $p:expr, $uri:expr, $headers:expr, $write:expr) => {{
-        let e = match realm(&$s.login, &$p, &$uri, &$headers).await {
+        let e = match environment(&$s.login, &$p, &$uri, &$headers).await {
             Ok(e) => e,
             Err(r) => return r,
         };
@@ -424,9 +424,9 @@ async fn stream_in(mut body: Body, limit: usize) -> Result<(Vec<u8>, [u8; 32]), 
 /// `POST /v1/support/artifacts?request={request}` (OP-157 m.3 (g), OP-159 m.3 (mm)): the body
 /// is the artifact itself (`application/json`, `application/har+json` or `text/plain`), and the
 /// person's signed `idp.account.artifact_upload` Exercise rides in the [`EXERCISE_HEADER`]
-/// header. An image or video answers 415, and the session, the realm's artifact policy and the
+/// header. An image or video answers 415, and the session, the environment's artifact policy and the
 /// person's own request are checked, before a byte of the body is read
-/// (GHSA-84jc-3hj2-hwc7). The body then streams in under the realm's `max_bytes`, and the
+/// (GHSA-84jc-3hj2-hwc7). The body then streams in under the environment's `max_bytes`, and the
 /// `Idempotency-Key` covers its content digest.
 async fn upload<D, K, KI, C, M, A>(
     State(s): St<D, K, KI, C, M, A>,

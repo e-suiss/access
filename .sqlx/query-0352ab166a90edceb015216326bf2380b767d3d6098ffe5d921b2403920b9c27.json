@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_dcr_clients SET last_used_ms = GREATEST(last_used_ms, $4)\n              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0352ab166a90edceb015216326bf2380b767d3d6098ffe5d921b2403920b9c27"
+}

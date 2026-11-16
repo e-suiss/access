@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.admin_jobs SET status = $4, finished_ms = $5\n          WHERE tenant_id = $1 AND environment_id = $2 AND job_id = $3 AND status = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df33e470db924fd9dbe0be5cfabbbc72b366705fa99a2663860b1ca31a9f0894"
+}

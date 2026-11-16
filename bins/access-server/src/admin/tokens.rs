@@ -1,8 +1,8 @@
-//! Management read tokens in this process (TN-130, TN-27, OP-151 m.3 (c)): the realm AS's RFC
+//! Management read tokens in this process (TN-130, TN-27, OP-151 m.3 (c)): the environment AS's RFC
 //! 8693 exchange reads the authority plane's live Instance keys through [`PlaneHolders`]; the
-//! management API verifies a presented token with [`ManagementTokens`]: the issuing realm's
+//! management API verifies a presented token with [`ManagementTokens`]: the issuing environment's
 //! signature, the DPoP proof for this method and URI by the bound key, used once, and that
-//! nothing it was issued under has ended: the Instance is still live in the realm's domain, and
+//! nothing it was issued under has ended: the Instance is still live in the environment's domain, and
 //! a console session's token needs that session live and its account's `session_epoch`
 //! unchanged (OP-21). The console BFF's tokens are issued here too, bound to the BFF's DPoP key
 //! of the session and naming the session's device Instance (TN-128).
@@ -16,7 +16,7 @@ use access_http::console::ports::{ConsoleSession, IssuedRead, SessionInstance};
 use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::domain::jwt::realm_key_set;
+use access_identity_oauth::domain::jwt::environment_key_set;
 use access_identity_oauth::domain::management::{
     CONSOLE_CLIENT, READ_TTL_MS, ReadClaims, ReadFacts, Surface, read_claims, read_token_claims,
     unverified_audience,
@@ -24,7 +24,7 @@ use access_identity_oauth::domain::management::{
 use access_identity_oauth::domain::tokens::ACCESS_TYP;
 use access_identity_oauth::ports::dpop::ReplayCache as _;
 use access_identity_oauth::ports::oauth::{Held, ManagementHolders, TokenSigner as _};
-use access_identity_oauth::ports::{Directory as _, RealmEntry};
+use access_identity_oauth::ports::{Directory as _, EnvironmentEntry};
 use access_identity_session::domain::console::ABSOLUTE_MS;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
@@ -37,13 +37,13 @@ use suiss_crypto::digest::sha256;
 use suiss_crypto::secret::Secret;
 
 use super::WallClock;
-use super::realm::LiveKeys;
+use super::environment::LiveKeys;
 use access_http::api::ports::Clock as _;
 
 const DAY_MS: u64 = 86_400_000;
 
-/// The authority plane's live Instance keys, for the realm AS's management read token exchange,
-/// and the platform realm's slug (`suiss.platform_realm`, OP-151 m.2 M2): only its Instances get
+/// The authority plane's live Instance keys, for the environment AS's management read token exchange,
+/// and the platform environment's slug (`suiss.platform_environment`, OP-151 m.2 M2): only its Instances get
 /// `access-admin:platform` tokens; without one none do (MD-8).
 pub(crate) struct PlaneHolders<P>(pub(crate) P, pub(crate) Option<String>);
 
@@ -57,13 +57,13 @@ impl<P: LiveKeys + 'static> ManagementHolders for PlaneHolders<P> {
         })
     }
 
-    fn platform(&self, realm: &RealmEntry) -> Held<'_, bool> {
-        let yes = self.1.as_deref() == Some(realm.slug.as_str());
+    fn platform(&self, environment: &EnvironmentEntry) -> Held<'_, bool> {
+        let yes = self.1.as_deref() == Some(environment.slug.as_str());
         Box::pin(async move { Ok(yes) })
     }
 }
 
-/// Verifies and issues management read tokens over the realm directory, the identity signer,
+/// Verifies and issues management read tokens over the environment directory, the identity signer,
 /// the application pool and the authority plane's keys.
 pub(crate) struct ManagementTokens<P> {
     pub(crate) directory: PgDirectory,
@@ -71,7 +71,7 @@ pub(crate) struct ManagementTokens<P> {
     pub(crate) app: Pool,
     pub(crate) plane: P,
     pub(crate) dpop: DpopProfile,
-    /// The platform realm's slug, whose tokens read the platform surface (OP-151 m.2 M2).
+    /// The platform environment's slug, whose tokens read the platform surface (OP-151 m.2 M2).
     pub(crate) platform: Option<String>,
 }
 
@@ -86,9 +86,12 @@ enum Standing {
 }
 
 impl<P: LiveKeys> ManagementTokens<P> {
-    async fn realm_of(&self, surface: &Surface) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn environment_of(
+        &self,
+        surface: &Surface,
+    ) -> Result<Option<EnvironmentEntry>, Unavailable> {
         match surface {
-            Surface::Realm(slug) => self.directory.by_slug(slug).await.map_err(down),
+            Surface::Environment(slug) => self.directory.by_slug(slug).await.map_err(down),
             // OP-151 m.2 M2
             Surface::Platform => match self.platform.as_deref() {
                 Some(slug) => self.directory.by_slug(slug).await.map_err(down),
@@ -97,8 +100,11 @@ impl<P: LiveKeys> ManagementTokens<P> {
         }
     }
 
-    async fn governing(&self, realm: &RealmEntry) -> Result<Option<Digest>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+    async fn governing(
+        &self,
+        environment: &EnvironmentEntry,
+    ) -> Result<Option<Digest>, Unavailable> {
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let g = access_store::idp::governance(&mut t).await.map_err(down)?;
@@ -108,10 +114,10 @@ impl<P: LiveKeys> ManagementTokens<P> {
 
     async fn epoch(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         subject: [u8; 16],
     ) -> Result<Option<i64>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let s = t.subject(subject, false).await.map_err(down)?;
@@ -123,11 +129,11 @@ impl<P: LiveKeys> ManagementTokens<P> {
     /// live, within its absolute end, holding that Instance, its account's epoch unchanged.
     async fn standing(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         c: &ReadClaims,
         now: u64,
     ) -> Result<Standing, Unavailable> {
-        let Some(domain) = self.governing(realm).await? else {
+        let Some(domain) = self.governing(environment).await? else {
             return Ok(Standing::Ended);
         };
         if self.plane.live_key(domain, c.instance).await?.is_none() {
@@ -145,9 +151,9 @@ impl<P: LiveKeys> ManagementTokens<P> {
             .is_some_and(|(kid, _)| *kid == c.instance);
         let live = s.ended_ms.is_none()
             && s.created_ms.saturating_add(ABSOLUTE_MS) > now
-            && s.realm == realm.realm
+            && s.environment == environment.environment
             && held;
-        if !live || c.rev.is_none() || self.epoch(realm, s.subject).await? != c.rev {
+        if !live || c.rev.is_none() || self.epoch(environment, s.subject).await? != c.rev {
             return Ok(Standing::Ended);
         }
         Ok(Standing::Live)
@@ -156,7 +162,7 @@ impl<P: LiveKeys> ManagementTokens<P> {
     /// A read token on `surface` for the console session `row` and its device Instance, bound
     /// to the BFF's DPoP key `jkt` of the session; `None` when the session, its account or its
     /// Instance is not live, or when `surface` is the platform's and the session is not in the
-    /// platform realm (OP-151 m.2 M2, OP-159 m.41).
+    /// platform environment (OP-151 m.2 M2, OP-159 m.41).
     pub(crate) async fn issue_console(
         &self,
         row: &ConsoleSessionRow,
@@ -173,16 +179,16 @@ impl<P: LiveKeys> ManagementTokens<P> {
         }
         // OP-159 m.41, TN-119
         let surface = match surface {
-            ApiSurface::Realm => Surface::Realm(row.slug.clone()),
+            ApiSurface::Environment => Surface::Environment(row.slug.clone()),
             ApiSurface::Platform => Surface::Platform,
         };
-        let Some(realm) = self.realm_of(&surface).await? else {
+        let Some(environment) = self.environment_of(&surface).await? else {
             return Ok(None);
         };
-        if realm.realm != row.realm {
+        if environment.environment != row.environment {
             return Ok(None);
         }
-        let Some(rev) = self.epoch(&realm, row.subject).await? else {
+        let Some(rev) = self.epoch(&environment, row.subject).await? else {
             return Ok(None);
         };
         if self
@@ -193,11 +199,11 @@ impl<P: LiveKeys> ManagementTokens<P> {
         {
             return Ok(None);
         }
-        let alg = self.alg(&realm).await?;
+        let alg = self.alg(&environment).await?;
         let jti = b64url_encode(&access_crypto::random::bytes::<16>().map_err(down)?);
         let claims = read_token_claims(
             &ReadFacts {
-                issuer: realm.issuer.as_str(),
+                issuer: environment.issuer.as_str(),
                 surface: &surface,
                 sub: &row.account,
                 client_id: CONSOLE_CLIENT,
@@ -212,7 +218,7 @@ impl<P: LiveKeys> ManagementTokens<P> {
         );
         let token = self
             .signer
-            .sign(realm.realm, alg, ACCESS_TYP, &claims, now)
+            .sign(environment.environment, alg, ACCESS_TYP, &claims, now)
             .await
             .map_err(down)?;
         Ok(Some(IssuedRead {
@@ -221,8 +227,8 @@ impl<P: LiveKeys> ManagementTokens<P> {
         }))
     }
 
-    async fn alg(&self, realm: &RealmEntry) -> Result<JwsAlg, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+    async fn alg(&self, environment: &EnvironmentEntry) -> Result<JwsAlg, Unavailable> {
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let s = access_store::idp::settings(&mut t).await.map_err(down)?;
@@ -260,12 +266,16 @@ impl<P: LiveKeys + 'static> ReadTokens for ManagementTokens<P> {
         let Some(surface) = unverified_audience(p.token).and_then(|a| Surface::of(&a)) else {
             return Ok(None);
         };
-        let Some(realm) = self.realm_of(&surface).await? else {
+        let Some(environment) = self.environment_of(&surface).await? else {
             return Ok(None);
         };
-        let jwks = self.signer.jwks(realm.realm).await.map_err(down)?;
-        let keys = realm_key_set(jwks.as_bytes()).map_err(down)?;
-        let Ok(claims) = read_claims(p.token, &keys, realm.issuer.as_str()) else {
+        let jwks = self
+            .signer
+            .jwks(environment.environment)
+            .await
+            .map_err(down)?;
+        let keys = environment_key_set(jwks.as_bytes()).map_err(down)?;
+        let Ok(claims) = read_claims(p.token, &keys, environment.issuer.as_str()) else {
             return Ok(None);
         };
         // TN-27, RFC 9449 §7
@@ -287,14 +297,21 @@ impl<P: LiveKeys + 'static> ReadTokens for ManagementTokens<P> {
             return Ok(None);
         };
         let day = u32::try_from(proof.iat / DAY_MS).map_err(down)?;
-        let first = PgReplayCache::new(self.app.clone(), realm.tenant, realm.realm)
-            .first_use(day, replay_key(&proof.htm, &proof.htu, &proof.jti))
-            .await
-            .map_err(down)?;
+        let first = PgReplayCache::new(
+            self.app.clone(),
+            environment.tenant,
+            environment.environment,
+        )
+        .first_use(day, replay_key(&proof.htm, &proof.htu, &proof.jti))
+        .await
+        .map_err(down)?;
         if !first {
             return Ok(None);
         }
-        if matches!(self.standing(&realm, &claims, now).await?, Standing::Ended) {
+        if matches!(
+            self.standing(&environment, &claims, now).await?,
+            Standing::Ended
+        ) {
             return Ok(None);
         }
         Ok(Some(ReadToken {

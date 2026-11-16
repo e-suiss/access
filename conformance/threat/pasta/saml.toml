@@ -3,11 +3,11 @@
 flow = "saml"
 title = "SAML single sign-on"
 tree = "conformance/threat/trees/saml.toml"
-components = ["realm-signing-key", "parser-worker", "identity-plane"]
+components = ["environment-signing-key", "parser-worker", "identity-plane"]
 
 [[stage]]
 name = "objectives"
-summary = "Issue SAML responses only for attested sessions and refuse tampered input. Assets: assertions, the realm SAML key, metadata"
+summary = "Issue SAML responses only for attested sessions and refuse tampered input. Assets: assertions, the environment SAML key, metadata"
 refs = ["RR-20"]
 
 [[stage]]
@@ -27,7 +27,7 @@ refs = ["identity plane #2", "TH-28", "TH-30"]
 
 [[stage]]
 name = "vulnerability-analysis"
-summary = "XSW-class misparsing; a leaked realm signing key"
+summary = "XSW-class misparsing; a leaked environment signing key"
 refs = ["RR-20", "HL-35"]
 
 [[stage]]
@@ -37,5 +37,5 @@ refs = []
 
 [[stage]]
 name = "risk-impact"
-summary = "Residual: a leaked realm key forges assertions until rotation"
+summary = "Residual: a leaked environment key forges assertions until rotation"
 refs = ["HL-35", "RR-20"]

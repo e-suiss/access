@@ -10,7 +10,7 @@ export const DEFAULT_LANGUAGE = "en";
 /** One parsed Fluent file: key to pattern. */
 export type Messages = ReadonlyMap<string, string>;
 
-/** A realm's overrides of unprotected keys, by lower-case locale (`idp.realm.locale_overrides`). */
+/** An environment's overrides of unprotected keys, by lower-case locale (`idp.environment.locale_overrides`). */
 export type Overrides = ReadonlyMap<string, Messages>;
 
 /** Why a catalog or an override is refused. */
@@ -108,7 +108,7 @@ export class Catalogs {
 
   /**
    * `sources` is each locale's Fluent files (`login`, `account`, `hub`, `mail`); `protectedKeys`
-   * the keys no realm may replace. A key defined twice in one locale is refused.
+   * the keys no environment may replace. A key defined twice in one locale is refused.
    */
   constructor(
     sources: Readonly<Record<string, readonly string[]>>,
@@ -133,12 +133,12 @@ export class Catalogs {
     return this.access.get(locale);
   }
 
-  /** Whether a realm may not override `key` (X35). */
+  /** Whether an environment may not override `key` (X35). */
   isProtected(key: string): boolean {
     return this.protectedKeys.has(key);
   }
 
-  /** Checks a realm's overrides: known keys only, never a protected one (X35). */
+  /** Checks an environment's overrides: known keys only, never a protected one (X35). */
   check(overrides: Overrides): void {
     const en = this.access.get(DEFAULT_LANGUAGE);
     for (const [locale, messages] of overrides) {
@@ -151,13 +151,13 @@ export class Catalogs {
   }
 
   /**
-   * The pattern of `key` for `locale`: realm (locale) → realm (language) → Access (locale) →
-   * Access (language) → `en`. A protected key skips the realm's layers; a malformed tag reads
+   * The pattern of `key` for `locale`: environment (locale) → environment (language) → Access (locale) →
+   * Access (language) → `en`. A protected key skips the environment's layers; a malformed tag reads
    * as `en`.
    */
-  pattern(key: string, locale: string, realm?: Overrides): string | undefined {
+  pattern(key: string, locale: string, environment?: Overrides): string | undefined {
     const [full, language] = safeTag(locale);
-    const r = this.isProtected(key) ? undefined : realm;
+    const r = this.isProtected(key) ? undefined : environment;
     const layers = [
       r?.get(full),
       r?.get(language),
@@ -176,10 +176,10 @@ export class Catalogs {
   format(
     key: string,
     locale: string,
-    realm?: Overrides,
+    environment?: Overrides,
     args: Readonly<Record<string, string>> = {},
   ): string | undefined {
-    let text = this.pattern(key, locale, realm);
+    let text = this.pattern(key, locale, environment);
     if (text === undefined) return undefined;
     for (const [name, value] of Object.entries(args)) {
       text = text.replaceAll(`{ $${name} }`, value);
@@ -191,10 +191,10 @@ export class Catalogs {
    * Every key of `en` resolved for `locale`, by wire id (`.`), for a component's `catalogue`
    * prop.
    */
-  catalogue(locale: string, realm?: Overrides): Readonly<Record<string, string>> {
+  catalogue(locale: string, environment?: Overrides): Readonly<Record<string, string>> {
     const out: Record<string, string> = {};
     for (const k of this.access.get(DEFAULT_LANGUAGE)?.keys() ?? []) {
-      const v = this.pattern(k, locale, realm);
+      const v = this.pattern(k, locale, environment);
       if (v !== undefined) out[idOf(k)] = v;
     }
     return out;

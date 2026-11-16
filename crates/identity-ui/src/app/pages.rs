@@ -3,7 +3,7 @@
 //! sign-in" (X36), and the S11 sign-in methods and password (TN-99, TN-68).
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::dbsc::DbscRefusal;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::settings::MethodRefusal;
@@ -21,7 +21,7 @@ use time::format_description::well_known::Rfc3339;
 use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, failed, issuer_path, signin};
 use crate::domain::branding::Theme;
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// Opaque id prefix of a session (OP-137).
 const SESSION_PREFIX: &str = "ses";
@@ -29,7 +29,7 @@ const SESSION_PREFIX: &str = "ses";
 /// Opaque id prefix of a sign-in method.
 const METHOD_PREFIX: &str = "crd";
 
-/// Most CSP reports a realm keeps a minute (OP-153 m.3 (t)).
+/// Most CSP reports an environment keeps a minute (OP-153 m.3 (t)).
 pub const CSP_REPORTS_PER_MINUTE: i64 = 100;
 
 /// How long a CSP report is kept (OP-153 m.3 (t)).
@@ -102,7 +102,7 @@ fn rfc3339(ms: i64) -> Value {
         .map_or(Value::Null, Value::String)
 }
 
-/// The origin of the realm issuer: `https://host[:port]`.
+/// The origin of the environment issuer: `https://host[:port]`.
 fn origin(issuer: &str) -> &str {
     let scheme = if issuer.starts_with("http://") { 7 } else { 8 };
     let end = issuer
@@ -209,7 +209,7 @@ pub(crate) fn violations(body: &[u8]) -> Option<Vec<Violation>> {
     }
 }
 
-fn source_pseudonym(realm: &[u8; 16], ip: std::net::IpAddr) -> [u8; 32] {
+fn source_pseudonym(environment: &[u8; 16], ip: std::net::IpAddr) -> [u8; 32] {
     let v6 = match ip {
         std::net::IpAddr::V4(a) => a.to_ipv6_mapped().octets(),
         std::net::IpAddr::V6(a) => a.octets(),
@@ -218,7 +218,7 @@ fn source_pseudonym(realm: &[u8; 16], ip: std::net::IpAddr) -> [u8; 32] {
     suiss_crypto::digest::sha256(
         &[
             b"access/csp-source/v1\0".as_slice(),
-            realm.as_slice(),
+            environment.as_slice(),
             &prefix,
         ]
         .concat(),
@@ -245,14 +245,14 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// The realm's theme record, checked (TN-106).
+    /// The environment's theme record, checked (TN-106).
     ///
     /// # Errors
     /// The reply to send instead: no kit, or the store is unavailable.
-    pub async fn theme(&self, entry: &RealmEntry) -> Result<Theme, Reply> {
+    pub async fn theme(&self, entry: &EnvironmentEntry) -> Result<Theme, Reply> {
         let kit = self.kit(entry).await?;
         let bytes = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let b = access_store::idp::branding(&mut t).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(b)
@@ -261,33 +261,33 @@ where
         Ok(Theme::decode(bytes.as_deref()))
     }
 
-    /// The path of the realm issuer below its host, for links and headers (§17.9.6).
+    /// The path of the environment issuer below its host, for links and headers (§17.9.6).
     ///
     /// # Errors
     /// The reply to send instead: no kit.
-    pub async fn base_path(&self, entry: &RealmEntry) -> Result<String, Reply> {
+    pub async fn base_path(&self, entry: &EnvironmentEntry) -> Result<String, Reply> {
         let kit = self.kit(entry).await?;
         Ok(issuer_path(&kit.issuer).to_owned())
     }
 
     /// `GET /v1/login/branding` (TN-106).
-    pub async fn branding(&self, entry: &RealmEntry) -> Reply {
+    pub async fn branding(&self, entry: &EnvironmentEntry) -> Reply {
         match self.theme(entry).await {
             Ok(t) => Reply::json(200, t.json()),
             Err(r) => r,
         }
     }
 
-    /// `GET /v1/login/messages` (X35, XI-25, OP-153 m.22 (k)): the realm's stored texts by
+    /// `GET /v1/login/messages` (X35, XI-25, OP-153 m.22 (k)): the environment's stored texts by
     /// locale and key, rechecked as they are read; a protected key or a text with a placeholder
     /// or markup is never handed to the page.
-    pub async fn message_overrides(&self, entry: &RealmEntry) -> Reply {
+    pub async fn message_overrides(&self, entry: &EnvironmentEntry) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let b = access_store::idp::locale_overrides(&mut t).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(b)
@@ -304,8 +304,13 @@ where
     }
 
     /// `POST /csp-reports` (OP-153 m.3 (t), IDP-36): accepted with `204`, at most
-    /// [`CSP_REPORTS_PER_MINUTE`] a minute per realm, kept pseudonymous for 30 days.
-    pub async fn csp_report(&self, entry: &RealmEntry, b: &Browser<'_>, body: &[u8]) -> Reply {
+    /// [`CSP_REPORTS_PER_MINUTE`] a minute per environment, kept pseudonymous for 30 days.
+    pub async fn csp_report(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        body: &[u8],
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -314,9 +319,9 @@ where
             return Reply::problem(BAD_REPORT);
         };
         let now = self.clock.now_ms();
-        let source = source_pseudonym(kit.realm.as_bytes(), b.ip);
+        let source = source_pseudonym(kit.environment.as_bytes(), b.ip);
         let stored = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now_i = i64::try_from(now).unwrap_or(i64::MAX);
             let recent = t.csp_reports_since(now_i.saturating_sub(60_000)).await?;
             let room = usize::try_from(CSP_REPORTS_PER_MINUTE.saturating_sub(recent)).unwrap_or(0);
@@ -352,7 +357,7 @@ where
     pub(crate) async fn offer_dbsc<D, R, N, P, S>(
         &self,
         auth: &access_identity_session::app::Auth<'_, D, C, R, N, P, S>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         session: [u8; 16],
         reply: Reply,
     ) -> Reply
@@ -379,7 +384,7 @@ where
     /// `POST /v1/dbsc/register` (TN-33): the browser's proof ties this session to its key.
     pub async fn dbsc_register(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         proof: Option<&str>,
     ) -> Reply {
@@ -415,7 +420,7 @@ where
     /// session.
     pub async fn dbsc_refresh(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         proof: Option<&str>,
     ) -> Reply {
@@ -457,7 +462,12 @@ where
 
     /// `POST /v1/sessions/{session}/end` (X36, OP-153 m.3 (y)): ends another sign-in of the
     /// person; answers with the device Instance the page then terminates with its own key.
-    pub async fn end_sign_in(&self, entry: &RealmEntry, b: &Browser<'_>, session: &str) -> Reply {
+    pub async fn end_sign_in(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        session: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -487,7 +497,7 @@ where
     /// The live session's subject, re-authenticated within the step-up window when `fresh`.
     async fn settings_subject(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         fresh: bool,
     ) -> Result<[u8; 16], Reply> {
@@ -497,7 +507,7 @@ where
     }
 
     /// `GET /v1/account/methods` (S11, TN-99, OP-148).
-    pub async fn sign_in_methods(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn sign_in_methods(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -540,7 +550,7 @@ where
     /// never the last method.
     pub async fn remove_sign_in_method(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         credential: &str,
     ) -> Reply {
@@ -566,7 +576,12 @@ where
 
     /// `PUT /v1/account/password` (§10.2.1, TN-50): after a recent re-authentication; every
     /// sign-in of the person ends, this one too, with reason `password`.
-    pub async fn set_password(&self, entry: &RealmEntry, b: &Browser<'_>, new: &str) -> Reply {
+    pub async fn set_password(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        new: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -617,10 +632,7 @@ mod tests {
         assert_eq!(v[0].blocked, "inline");
         assert_eq!(v[0].disposition, "report");
         assert!(violations(b"[1").is_none());
-        assert_eq!(
-            origin("https://acme.example/realms/a"),
-            "https://acme.example"
-        );
+        assert_eq!(origin("https://acme.example/env/a"), "https://acme.example");
         assert_eq!(origin("https://acme.example"), "https://acme.example");
     }
 }

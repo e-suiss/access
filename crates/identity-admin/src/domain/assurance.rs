@@ -1,5 +1,5 @@
-//! The catalog 9 realm settings (OP-159 m.3 (a)): the post-quantum signing profile and the
-//! hybrid key exchange share policy. Each compiles into its `idp.realm.*` change; until its lane
+//! The catalog 9 environment settings (OP-159 m.3 (a)): the post-quantum signing profile and the
+//! hybrid key exchange share policy. Each compiles into its `idp.environment.*` change; until its lane
 //! applies it the change is refused as not yet served.
 
 use access_internal_api::idp::IdpAction;
@@ -24,7 +24,7 @@ fn text<'a>(m: &'a Map<String, Json>, key: &str) -> Result<&'a str, Invalid> {
     m.get(key).and_then(Json::as_str).ok_or(Invalid::Body)
 }
 
-/// The ML-DSA parameter sets a realm signs with (FIPS 204, CR-41 m.1).
+/// The ML-DSA parameter sets an environment signs with (FIPS 204, CR-41 m.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MlDsa {
     /// ML-DSA-65, the default profile.
@@ -55,7 +55,7 @@ impl MlDsa {
     }
 }
 
-/// `idp.realm.signing_profile` (CR-41, CR-8, OP-159 m.3 (a), (o)): ML-DSA joins the realm's
+/// `idp.environment.signing_profile` (CR-41, CR-8, OP-159 m.3 (a), (o)): ML-DSA joins the environment's
 /// accept and signing set; the classical algorithms stay (CR-41 m.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SigningProfile {
@@ -83,8 +83,8 @@ impl SigningProfile {
     #[must_use]
     pub const fn action(profile: Option<&Self>) -> IdpAction {
         match profile {
-            Some(_) => IdpAction::RealmSigningProfile,
-            None => IdpAction::RealmSigningProfileClose,
+            Some(_) => IdpAction::EnvironmentSigningProfile,
+            None => IdpAction::EnvironmentSigningProfileClose,
         }
     }
 
@@ -119,7 +119,7 @@ impl KexMode {
     }
 }
 
-/// `idp.realm.kex_share` (CR-12 m.3, OP-159 m.3 (a), (t)): CT2 in both directions.
+/// `idp.environment.kex_share` (CR-12 m.3, OP-159 m.3 (a), (t)): CT2 in both directions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KexShare {
     /// The share policy.
@@ -167,13 +167,13 @@ mod tests {
             assert_eq!(p.profile.name(), name);
             assert_eq!(
                 SigningProfile::action(Some(&p)),
-                IdpAction::RealmSigningProfile
+                IdpAction::EnvironmentSigningProfile
             );
         }
         assert_eq!(SigningProfile::parse(&json!({})), Ok(None));
         assert_eq!(
             SigningProfile::action(None),
-            IdpAction::RealmSigningProfileClose
+            IdpAction::EnvironmentSigningProfileClose
         );
         for bad in [
             json!({ "profile": "ed25519" }),

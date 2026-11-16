@@ -1,5 +1,5 @@
 //! The authorization server over HTTP: routes at the host root and under a path issuer,
-//! form-only bodies, `no-store`, and `503 + Retry-After` when the realm's rows cannot be read.
+//! form-only bodies, `no-store`, and `503 + Retry-After` when the environment's rows cannot be read.
 
 #![allow(
     clippy::unwrap_used,
@@ -22,33 +22,33 @@ use access_identity_oauth::domain::dpop::DpopProfile;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::dpop::{CacheUnavailable, Clock, ClockUnavailable, ReplayCache};
 use access_identity_oauth::ports::oauth::{ClientKeys, OAuthDb};
-use access_identity_oauth::ports::{Directory, RealmEntry, Unavailable};
-use access_store::identity::{RealmId, TenantId};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Unavailable};
+use access_store::identity::{EnvironmentId, TenantId};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use tower::ServiceExt;
 
 struct Rows;
 
-fn entry(n: u8, slug: &str, issuer: &str) -> RealmEntry {
-    RealmEntry {
+fn entry(n: u8, slug: &str, issuer: &str) -> EnvironmentEntry {
+    EnvironmentEntry {
         tenant: TenantId::from_bytes([n; 16]),
-        realm: RealmId::from_bytes([n; 16]),
+        environment: EnvironmentId::from_bytes([n; 16]),
         slug: slug.to_owned(),
         issuer: Issuer::parse(issuer).unwrap(),
     }
 }
 
 impl Directory for Rows {
-    async fn by_host(&self, host: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_host(&self, host: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok((host == "acme.id.test").then(|| entry(1, "acme", "https://acme.id.test")))
     }
 
-    async fn by_slug(&self, slug: &str) -> Result<Option<RealmEntry>, Unavailable> {
-        Ok((slug == "beta").then(|| entry(2, "beta", "https://id.test/realms/beta")))
+    async fn by_slug(&self, slug: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
+        Ok((slug == "beta").then(|| entry(2, "beta", "https://id.test/env/beta")))
     }
 
-    async fn all(&self) -> Result<Vec<RealmEntry>, Unavailable> {
+    async fn all(&self) -> Result<Vec<EnvironmentEntry>, Unavailable> {
         Ok(Vec::new())
     }
 }
@@ -75,7 +75,7 @@ struct NoDb;
 impl OAuthDb for NoDb {
     type Tx = PgOAuthTx;
 
-    async fn begin(&self, _: TenantId, _: RealmId) -> Result<PgOAuthTx, Unavailable> {
+    async fn begin(&self, _: TenantId, _: EnvironmentId) -> Result<PgOAuthTx, Unavailable> {
         Err(Unavailable)
     }
 
@@ -95,7 +95,7 @@ impl ReplayCache for NoCache {
     }
 }
 
-/// Realm rows behind a database nobody answers at.
+/// Environment rows behind a database nobody answers at.
 struct Down {
     signer: SignerKeys,
     profile: DpopProfile,
@@ -135,10 +135,10 @@ impl Env for Down {
     fn directory(&self) -> &Rows {
         &Rows
     }
-    fn replay(&self, _: TenantId, _: RealmId) -> NoCache {
+    fn replay(&self, _: TenantId, _: EnvironmentId) -> NoCache {
         NoCache
     }
-    fn nonces(&self, _: RealmId, _: Role) -> Option<Arc<NonceRing>> {
+    fn nonces(&self, _: EnvironmentId, _: Role) -> Option<Arc<NonceRing>> {
         None
     }
     fn dpop(&self) -> &DpopProfile {
@@ -180,7 +180,7 @@ async fn routes_forms_and_outages() {
     assert_eq!(json.headers()[header::CACHE_CONTROL], "no-store");
     for (path, host) in [
         ("/token", "acme.id.test"),
-        ("/realms/beta/token", "id.test"),
+        ("/env/beta/token", "id.test"),
         ("/par", "acme.id.test"),
         ("/revoke", "acme.id.test"),
     ] {
@@ -279,10 +279,10 @@ async fn a_browser_sees_the_error_page_with_owner_and_reference() {
 
 // TN-35 OP-154 m.3 (p) (dd)
 #[tokio::test]
-async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it() {
+async fn the_device_authorization_endpoint_is_absent_until_the_environment_enables_it() {
     for (path, host) in [
         ("/device_authorization", "acme.id.test"),
-        ("/realms/beta/device_authorization", "id.test"),
+        ("/env/beta/device_authorization", "id.test"),
     ] {
         let r = send(
             Request::post(path)
@@ -314,10 +314,10 @@ async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it(
 
 // OP-155 m.3 (l), m.4
 #[tokio::test]
-async fn the_backchannel_authentication_endpoint_is_off_until_the_realm_turns_it_on() {
+async fn the_backchannel_authentication_endpoint_is_off_until_the_environment_turns_it_on() {
     for (path, host) in [
         ("/bc-authorize", "acme.id.test"),
-        ("/realms/beta/bc-authorize", "id.test"),
+        ("/env/beta/bc-authorize", "id.test"),
     ] {
         let r = send(
             Request::post(path)
@@ -360,9 +360,9 @@ async fn the_backchannel_authentication_endpoint_is_off_until_the_realm_turns_it
         &access_identity_oauth::domain::metadata::authorization_server_of(
             &issuer,
             &access_identity_oauth::domain::metadata::SERVED,
-            &access_identity_oauth::domain::metadata::RealmFacts {
+            &access_identity_oauth::domain::metadata::EnvironmentFacts {
                 ciba: true,
-                ..access_identity_oauth::domain::metadata::RealmFacts::default()
+                ..access_identity_oauth::domain::metadata::EnvironmentFacts::default()
             },
         ),
     )

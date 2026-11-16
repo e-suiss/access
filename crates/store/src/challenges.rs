@@ -25,7 +25,7 @@ pub struct NewChallenge<'a> {
     pub flow_hash: &'a [u8; 32],
     /// Digest of the browser's flow cookie.
     pub device_hash: &'a [u8; 32],
-    /// The realm KEK's id.
+    /// The environment KEK's id.
     pub kek_id: &'a str,
     /// The challenge's own DEK, wrapped.
     pub wrapped_dek: &'a [u8],
@@ -33,9 +33,9 @@ pub struct NewChallenge<'a> {
     pub nonce: &'a [u8; 12],
     /// The address, sealed under the challenge's DEK.
     pub ciphertext: &'a [u8],
-    /// The realm's blind index of the address.
+    /// The environment's blind index of the address.
     pub address_index: &'a [u8; 32],
-    /// The realm's blind index of the canonical address.
+    /// The environment's blind index of the canonical address.
     pub canonical_index: &'a [u8; 32],
     /// Digest of the code; `None` when no code can answer it.
     pub code_digest: Option<&'a [u8; 32]>,
@@ -62,7 +62,7 @@ pub struct ChallengeRow {
     pub purpose: String,
     /// Digest of the browser's flow cookie.
     pub device_hash: [u8; 32],
-    /// The realm KEK's id.
+    /// The environment KEK's id.
     pub kek_id: String,
     /// The wrapped DEK; `None` once shredded.
     pub wrapped_dek: Option<Vec<u8>>,
@@ -88,8 +88,8 @@ pub struct ChallengeRow {
 
 impl TenantTx {
     fn challenge_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Stores a new challenge; returns its id.
@@ -97,16 +97,16 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_challenge(&mut self, c: &NewChallenge<'_>) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.identity_address_challenges
-               (tenant_id, realm_id, purpose, flow_hash, device_hash, kek_id, wrapped_dek, nonce,
+               (tenant_id, environment_id, purpose, flow_hash, device_hash, kek_id, wrapped_dek, nonce,
                 ciphertext, address_index, canonical_index, code_digest, attempts_left, step_up,
                 score, subject_id, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
              RETURNING challenge_id",
             tenant,
-            realm,
+            environment,
             c.purpose,
             c.flow_hash.as_slice(),
             c.device_hash.as_slice(),
@@ -137,15 +137,15 @@ impl TenantTx {
         &mut self,
         flow_hash: &[u8; 32],
     ) -> Result<Option<ChallengeRow>, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let row = sqlx::query!(
             "SELECT challenge_id, purpose, device_hash, kek_id, wrapped_dek, nonce, ciphertext,
                     address_index, code_digest, attempts_left, step_up, subject_id, status, expires_ms
                FROM access.identity_address_challenges
-              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             flow_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -176,12 +176,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn challenge_attempt(&mut self, id: [u8; 16], left: i16) -> Result<(), StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         sqlx::query!(
             "UPDATE access.identity_address_challenges SET attempts_left = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3 AND status = 'open'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3 AND status = 'open'",
             tenant,
-            realm,
+            environment,
             uuid(id),
             left,
         )
@@ -202,14 +202,14 @@ impl TenantTx {
         subject: Option<[u8; 16]>,
         now_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_address_challenges
                 SET status = $4, ended_ms = $5, subject_id = COALESCE(subject_id, $6),
                     wrapped_dek = NULL, shredded_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3 AND status = 'open'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3 AND status = 'open'",
             tenant,
-            realm,
+            environment,
             uuid(id),
             status,
             now_ms,
@@ -227,16 +227,16 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn expire_challenges(&mut self, now_ms: i64, limit: i64) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_address_challenges
                 SET status = 'expired', ended_ms = $3, wrapped_dek = NULL, shredded_at = now()
-              WHERE (tenant_id, realm_id, challenge_id) IN (
-                SELECT tenant_id, realm_id, challenge_id FROM access.identity_address_challenges
-                 WHERE tenant_id = $1 AND realm_id = $2 AND status = 'open' AND expires_ms <= $3
+              WHERE (tenant_id, environment_id, challenge_id) IN (
+                SELECT tenant_id, environment_id, challenge_id FROM access.identity_address_challenges
+                 WHERE tenant_id = $1 AND environment_id = $2 AND status = 'open' AND expires_ms <= $3
                  ORDER BY expires_ms LIMIT $4)",
             tenant,
-            realm,
+            environment,
             now_ms,
             limit,
         )
@@ -254,12 +254,12 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<SubjectKeyRow>, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let row = sqlx::query!(
             "SELECT kek_id, wrapped_dek FROM access.identity_address_challenges
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3",
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -279,13 +279,13 @@ impl TenantTx {
         subject: [u8; 16],
         index: &[u8; 32],
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let id = sqlx::query_scalar!(
             "SELECT identifier_id FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 AND value_index = $4",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             index.as_slice(),
         )
@@ -304,12 +304,12 @@ impl TenantTx {
         subject: [u8; 16],
         owner_since_ms: i64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         sqlx::query!(
-            "INSERT INTO access.identity_mailboxes (tenant_id, realm_id, identifier_id, subject_id, owner_since_ms)
+            "INSERT INTO access.identity_mailboxes (tenant_id, environment_id, identifier_id, subject_id, owner_since_ms)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             uuid(identifier),
             uuid(subject),
             owner_since_ms,
@@ -325,18 +325,18 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn mailbox_since(&mut self, subject: [u8; 16]) -> Result<Option<i64>, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let since = sqlx::query_scalar!(
             r#"SELECT COALESCE(m.owner_since_ms, (extract(epoch FROM i.created_at) * 1000)::bigint) AS "since!"
                  FROM access.identity_identifiers i
                  LEFT JOIN access.identity_mailboxes m
-                   ON m.tenant_id = i.tenant_id AND m.realm_id = i.realm_id
+                   ON m.tenant_id = i.tenant_id AND m.environment_id = i.environment_id
                   AND m.identifier_id = i.identifier_id
-                WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.subject_id = $3
+                WHERE i.tenant_id = $1 AND i.environment_id = $2 AND i.subject_id = $3
                   AND i.status = 'active' AND i.kind = 'email'
                 ORDER BY i.identifier_id LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -355,13 +355,13 @@ impl TenantTx {
         retired_ms: i64,
         reusable_ms: Option<i64>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         sqlx::query!(
             "INSERT INTO access.identity_identifier_tombstones
-               (tenant_id, realm_id, value_index, subject_id, retired_ms, reusable_ms)
+               (tenant_id, environment_id, value_index, subject_id, retired_ms, reusable_ms)
              VALUES ($1, $2, $3, $4, $5, $6)",
             tenant,
-            realm,
+            environment,
             index.as_slice(),
             uuid(subject),
             retired_ms,
@@ -381,13 +381,13 @@ impl TenantTx {
         index: &[u8; 32],
         now_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let hit = sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM access.identity_identifier_tombstones
-                 WHERE tenant_id = $1 AND realm_id = $2 AND value_index = $3
+                 WHERE tenant_id = $1 AND environment_id = $2 AND value_index = $3
                    AND (reusable_ms IS NULL OR reusable_ms > $4)) AS "hit!""#,
             tenant,
-            realm,
+            environment,
             index.as_slice(),
             now_ms,
         )
@@ -402,12 +402,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn revoke_all_credentials(&mut self, subject: [u8; 16]) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.challenge_scope()?;
+        let (tenant, environment) = self.challenge_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_credentials SET status = 'revoked', revoked_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)

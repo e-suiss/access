@@ -231,7 +231,7 @@ mod tests {
         );
         assert!(!sql_scope("crates/store/src/authority.rs"));
         assert!(!sql_scope("crates/store/migrations/20260101000000_x.sql"));
-        assert!(sql_scope("crates/http/src/api/realm/handlers.rs"));
+        assert!(sql_scope("crates/http/src/api/environment/handlers.rs"));
         assert!(sql_scope("deploy/breakglass/run.sh"));
     }
 
@@ -240,7 +240,7 @@ mod tests {
     fn ci_13_a_switch_over_everything_is_refused() {
         for named in [
             r#".route("/admin/v1/kill-switch", post(h))"#,
-            "fn disable_all(realm: &str) {}",
+            "fn disable_all(environment: &str) {}",
             "async function stopAll(): Promise<void> {}",
             r#""operationId": "panicButton""#,
             "const KILLSWITCH: bool = true;",

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.offboarding_previews (tenant_id, environment_id, party, version,\n                    subject_id, choices, reentry, departure, departure_pos, actor)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9\n               FROM access.offboarding_previews\n              WHERE tenant_id = $1 AND environment_id = $2 AND party = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e7fb5edb00c13510348fe6d312cde25a608ab6a1ed573eb80457968b3567f5a8"
+}

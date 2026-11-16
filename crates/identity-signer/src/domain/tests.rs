@@ -2,15 +2,15 @@ use super::*;
 
 // CR-19, CR-25, CR-26
 #[test]
-fn the_realm_policy_is_coherent() {
-    assert_eq!(check(&Policy::REALM), Ok(()));
+fn the_environment_policy_is_coherent() {
+    assert_eq!(check(&Policy::ENVIRONMENT), Ok(()));
     assert_eq!(check(&Policy::AUTHORITY), Err(PolicyError::Lifetime));
 }
 
 // CR-25, CR-26, CR-27
 #[test]
 fn broken_policies_are_refused() {
-    let p = Policy::REALM;
+    let p = Policy::ENVIRONMENT;
     let short_retain = Policy {
         retain_ms: TOKEN_MAX_MS - 1,
         ..p

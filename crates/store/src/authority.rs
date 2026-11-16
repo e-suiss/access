@@ -1230,19 +1230,19 @@ pub async fn read_outbox(
         .collect()
 }
 
-/// The issuer cutoff a decided drop of the realm key `kid` recorded for the realm whose issuer
+/// The issuer cutoff a decided drop of the environment key `kid` recorded for the environment whose issuer
 /// is `issuer` (§13.7.7, SEC9); `None` when no such key was dropped. Read across tenants through
 /// the one database function that exposes only this number.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_key_cutoff(
+pub async fn environment_key_cutoff(
     pool: &PgPool,
     issuer: &str,
     kid: &[u8; 32],
 ) -> Result<Option<u64>, StoreError> {
     let cutoff = sqlx::query_scalar!(
-        r#"SELECT access.realm_key_cutoff($1, $2) AS "cutoff""#,
+        r#"SELECT access.environment_key_cutoff($1, $2) AS "cutoff""#,
         issuer,
         kid.as_slice(),
     )
@@ -1251,18 +1251,18 @@ pub async fn realm_key_cutoff(
     cutoff.map(unsigned).transpose()
 }
 
-/// Whether `domain`'s realm has opened delegated administration (TN-114, OP-157 m.3 (t)): the
+/// Whether `domain`'s environment has opened delegated administration (TN-114, OP-157 m.3 (t)): the
 /// last decided change of the flag; closed when none. Read across tenants through the one
 /// database function that exposes only this.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_delegated_admin_open(
+pub async fn environment_delegated_admin_open(
     pool: &PgPool,
     domain: &DomainId,
 ) -> Result<bool, StoreError> {
     Ok(sqlx::query_scalar!(
-        r#"SELECT access.realm_delegated_admin_open($1) AS "open!""#,
+        r#"SELECT access.environment_delegated_admin_open($1) AS "open!""#,
         domain.as_bytes().as_slice(),
     )
     .fetch_one(pool)

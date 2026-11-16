@@ -1,6 +1,6 @@
 //! The tenant directory of the product client API (OP-149 m.4): tenants read through the router
 //! role, named outside by the cell's opaque ids (OP-137, MD-18), the same `tnt_` ids the events
-//! carry (OP-149 m.15 (i)); and the resolution between a realm's Parties and a client's pairwise
+//! carry (OP-149 m.15 (i)); and the resolution between an environment's Parties and a client's pairwise
 //! `sub` (OP-149 A11, m.37).
 
 use std::sync::Arc;
@@ -12,21 +12,21 @@ use access_authority_sequencer::ports::Clock;
 use access_http::product::adapters::router as product_router;
 use access_http::product::app::Service;
 use access_http::product::ports::{
-    ClientAssertions, Exercises, KeyDirectory, Realm, Resolved, Sector, SubjectQuery, Subjects,
-    Tenant, Tenants, Unavailable,
+    ClientAssertions, Environment, Exercises, KeyDirectory, Resolved, Sector, SubjectQuery,
+    Subjects, Tenant, Tenants, Unavailable,
 };
 use access_identity_events::ports::TenantIds;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp;
-use access_store::tenancy::{RealmRoute, TenantRow, tenant, tenant_routes, tenants_after};
+use access_store::tenancy::{EnvironmentRoute, TenantRow, tenant, tenant_routes, tenants_after};
 
 use crate::config::Config;
 
 /// The product client routes over the domains `keys`, the tenants the router role reads, the
-/// realms' subjects and the platform clients' `assertions` (OP-149 m.4, m.5, m.9, A11, m.37).
+/// environments' subjects and the platform clients' `assertions` (OP-149 m.4, m.5, m.9, A11, m.37).
 pub(crate) fn routes<K, A>(
     config: &Config,
     keys: Arc<K>,
@@ -95,7 +95,7 @@ where
     }
 }
 
-/// A realm's subjects (OP-149 A11): the Party a session subject's device Instances belong to
+/// An environment's subjects (OP-149 A11): the Party a session subject's device Instances belong to
 /// (`subject_party`) and the pairwise `sub` a client sees of that subject (MD-10).
 pub(crate) struct PgSubjects<D> {
     pub(crate) app: Pool,
@@ -109,15 +109,17 @@ fn candidate() -> Result<String, Unavailable> {
         .map_err(|_| Unavailable)
 }
 
-/// The `client_uuid` of the active client `client_id` of `realm`, the pairwise sector.
+/// The `client_uuid` of the active client `client_id` of `environment`, the pairwise sector.
 async fn client_uuid(
     app: &Pool,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     client_id: &str,
 ) -> Result<Option<[u8; 16]>, Unavailable> {
     let down = |_| Unavailable;
-    let mut t = TenantTx::begin(app, tenant, realm).await.map_err(down)?;
+    let mut t = TenantTx::begin(app, tenant, environment)
+        .await
+        .map_err(down)?;
     let client = idp::client(&mut t, client_id).await.map_err(down)?;
     t.commit().await.map_err(down)?;
     Ok(client.filter(|c| c.active).map(|c| c.client_uuid))
@@ -127,27 +129,30 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
     async fn resolve(
         &self,
         tenant: [u8; 16],
-        realm: [u8; 16],
+        environment: [u8; 16],
         sector: Sector<'_>,
         lookup: SubjectQuery,
     ) -> Result<Option<Resolved>, Unavailable> {
         let down = |_| Unavailable;
-        let (tenant, realm) = (TenantId::from_bytes(tenant), RealmId::from_bytes(realm));
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let (tenant, environment) = (
+            TenantId::from_bytes(tenant),
+            EnvironmentId::from_bytes(environment),
+        );
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         let g = idp::governance(&mut t).await.map_err(down)?;
         t.commit().await.map_err(down)?;
         // OP-149 m.37, m.26 (a)
         let sector = match sector {
-            Sector::RealmClient(client_id) => {
-                client_uuid(&self.app, tenant, realm, client_id).await?
+            Sector::EnvironmentClient(client_id) => {
+                client_uuid(&self.app, tenant, environment, client_id).await?
             }
             Sector::Platform(c) => {
                 client_uuid(
                     &self.app,
                     TenantId::from_bytes(c.tenant),
-                    RealmId::from_bytes(c.realm),
+                    EnvironmentId::from_bytes(c.environment),
                     &c.client_id,
                 )
                 .await?
@@ -162,7 +167,7 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
             .consistency(Digest(*g.domain.as_bytes()))
             .await
             .map_err(|_| Unavailable)?;
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         let mut pairs = Vec::new();
@@ -231,12 +236,12 @@ impl PgTenants {
     }
 }
 
-/// The tenants of `rows` with their live realms (OP-149 m.4).
-async fn with_realms(router: &Pool, rows: &[TenantRow]) -> Result<Vec<Tenant>, Unavailable> {
+/// The tenants of `rows` with their live environments (OP-149 m.4).
+async fn with_environments(router: &Pool, rows: &[TenantRow]) -> Result<Vec<Tenant>, Unavailable> {
     let ids: Vec<TenantId> = rows.iter().map(|r| r.tenant).collect();
     let found = tenant_routes(router, &ids).await.map_err(|_| Unavailable)?;
-    let realm = |r: &RealmRoute| Realm {
-        id: *r.realm.as_bytes(),
+    let environment = |r: &EnvironmentRoute| Environment {
+        id: *r.environment.as_bytes(),
         issuer: r.issuer.clone(),
         slug: r.slug.clone(),
     };
@@ -246,10 +251,10 @@ async fn with_realms(router: &Pool, rows: &[TenantRow]) -> Result<Vec<Tenant>, U
             id: *row.tenant.as_bytes(),
             status: row.status.clone(),
             organizations: Vec::new(),
-            realms: found
+            environments: found
                 .iter()
                 .filter(|r| r.tenant == row.tenant)
-                .map(realm)
+                .map(environment)
                 .collect(),
         })
         .collect())
@@ -263,14 +268,14 @@ impl Tenants for PgTenants {
         let Some(row) = row else {
             return Ok(None);
         };
-        Ok(with_realms(&self.router, &[row]).await?.pop())
+        Ok(with_environments(&self.router, &[row]).await?.pop())
     }
 
     async fn after(&self, after: Option<[u8; 16]>, limit: u32) -> Result<Vec<Tenant>, Unavailable> {
         let rows = tenants_after(&self.router, after.map(TenantId::from_bytes), limit)
             .await
             .map_err(|_| Unavailable)?;
-        with_realms(&self.router, &rows).await
+        with_environments(&self.router, &rows).await
     }
 
     fn external(&self, id: [u8; 16]) -> Option<String> {

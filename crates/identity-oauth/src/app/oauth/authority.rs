@@ -15,7 +15,7 @@ use access_kernel::json::b64url_encode;
 use serde_json::{Value, json};
 use suiss_crypto::dcbor::Value as Cbor;
 
-use super::{Env, OAuth, Realm, Reply};
+use super::{Env, Environment, OAuth, Reply};
 use crate::domain::authority::{
     AuthorityError, DETAILS_PARAM, EXERCISE_PARAM, Kind, check, parse_details, parse_exercise,
     within,
@@ -148,7 +148,7 @@ struct Requested<'a> {
 
 /// Reads `asked`: one resource server, never a default one (RFC 8707, AG-8), details within
 /// what was authorized (RFC 9396 §6.1), and the Exercise.
-fn requested<'a>(realm: &Realm, asked: &'a Asked<'a>) -> Result<Requested<'a>, Reply> {
+fn requested<'a>(environment: &Environment, asked: &'a Asked<'a>) -> Result<Requested<'a>, Reply> {
     let p = asked.params;
     let resource = match (p.get("resource"), asked.authorized) {
         (Some(r), Some(a)) if r != a.resource => {
@@ -166,7 +166,7 @@ fn requested<'a>(realm: &Realm, asked: &'a Asked<'a>) -> Result<Requested<'a>, R
             ));
         }
     };
-    if resource == realm.issuer.as_str() {
+    if resource == environment.issuer.as_str() {
         return Err(refused(AuthorityError::Target, "not a resource server"));
     }
     let raw = p
@@ -212,16 +212,16 @@ impl<E: Env> OAuth<E> {
     /// `jkt`.
     pub(crate) async fn project(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         asked: &Asked<'_>,
         jkt: Jkt,
     ) -> Result<Result<Projected, Reply>, Unavailable> {
-        let r = match requested(realm, asked) {
+        let r = match requested(environment, asked) {
             Ok(r) => r,
             Err(reply) => return Ok(Err(reply)),
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let domain = tx.governing().await?.ok_or(Unavailable)?;
         tx.commit().await?;
         let domain = Digest(domain);
@@ -239,8 +239,8 @@ impl<E: Env> OAuth<E> {
             basis: e.basis,
             capacity: e.capacity,
             ais: e.ais,
-            pep: String::from(realm.issuer.as_str()),
-            issuer: String::from(realm.issuer.as_str()),
+            pep: String::from(environment.issuer.as_str()),
+            issuer: String::from(environment.issuer.as_str()),
             client_id: client.id.clone(),
             kind: match checked.kind {
                 Kind::Intent => TokenKind::Intent,
@@ -277,7 +277,7 @@ impl<E: Env> OAuth<E> {
     /// authorized, only as a decision; the grant then holds the family it opened.
     pub(crate) async fn code_projection(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         grant: &mut crate::domain::tokens::GrantDetails,
@@ -298,14 +298,16 @@ impl<E: Env> OAuth<E> {
             authorized: Some(&a),
             family: None,
         };
-        Ok(match self.project(realm, client, &asked, jkt).await? {
-            Ok(p) => {
-                grant.family = Some(p.token.family);
-                grant.projection = Some(p.token.exercise.0);
-                Ok(Some(p))
-            }
-            Err(r) => Err(r),
-        })
+        Ok(
+            match self.project(environment, client, &asked, jkt).await? {
+                Ok(p) => {
+                    grant.family = Some(p.token.family);
+                    grant.projection = Some(p.token.exercise.0);
+                    Ok(Some(p))
+                }
+                Err(r) => Err(r),
+            },
+        )
     }
 
     /// `client_credentials` (RFC 6749 §4.4, §10.4.1): a confidential client's own authority
@@ -313,7 +315,7 @@ impl<E: Env> OAuth<E> {
     /// refresh token (RFC 6749 §4.4.3).
     pub(crate) async fn client_credentials(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -327,16 +329,19 @@ impl<E: Env> OAuth<E> {
             ));
         }
         // OP-154 m.3 (d)
-        self.first_presentation(realm, client, jkt, now).await?;
+        self.first_presentation(environment, client, jkt, now)
+            .await?;
         let asked = Asked {
             params,
             authorized: None,
             family: None,
         };
-        Ok(match self.project(realm, client, &asked, jkt).await? {
-            Ok(p) => Reply::json(200, &projected_body(&p, now)),
-            Err(r) => r,
-        })
+        Ok(
+            match self.project(environment, client, &asked, jkt).await? {
+                Ok(p) => Reply::json(200, &projected_body(&p, now)),
+                Err(r) => r,
+            },
+        )
     }
 }
 
@@ -383,7 +388,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn authority_tokens(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         grant: &access_store::oauth::GrantRow,
         details: &crate::domain::tokens::GrantDetails,
@@ -403,7 +408,7 @@ impl<E: Env> OAuth<E> {
             m.insert("refresh_token".into(), b64url_encode(&refresh).into());
             if details.openid {
                 let id = self
-                    .id_token(tx, realm, client, grant, details, nonce, now)
+                    .id_token(tx, environment, client, grant, details, nonce, now)
                     .await?;
                 m.insert("id_token".into(), id.into());
             }
@@ -436,15 +441,15 @@ pub(crate) fn looks_authority(token: &str) -> bool {
 }
 
 impl<E: Env> OAuth<E> {
-    /// The verified claims of an authority token of this realm that `client` holds, with the
+    /// The verified claims of an authority token of this environment that `client` holds, with the
     /// head the authority plane answered at; `None` when it is not active (MD-8, OPI-3).
     pub(crate) async fn authority_claims(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         token: &str,
     ) -> Result<Option<(Value, u64, Digest)>, Unavailable> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let domain = Digest(tx.governing().await?.ok_or(Unavailable)?);
         tx.commit().await?;
         let answer = self
@@ -458,7 +463,7 @@ impl<E: Env> OAuth<E> {
             .filter(|_| answer.active)
             .and_then(|c| serde_json::from_str::<Value>(&c).ok())
             .filter(|c| {
-                member(c, "iss") == realm.issuer.as_str()
+                member(c, "iss") == environment.issuer.as_str()
                     && member(c, "client_id") == client.id.as_str()
             });
         Ok(claims.map(|c| (c, answer.as_of, domain)))
@@ -469,11 +474,11 @@ impl<E: Env> OAuth<E> {
     /// prove is `active: false`, never 503 (OPI-3).
     pub(crate) async fn introspect_authority(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         token: &str,
     ) -> Result<Reply, Unavailable> {
-        let Some((c, as_of, _)) = self.authority_claims(realm, client, token).await? else {
+        let Some((c, as_of, _)) = self.authority_claims(environment, client, token).await? else {
             return Ok(Reply::json(200, &json!({ "active": false })));
         };
         let exercise = c
@@ -504,11 +509,11 @@ impl<E: Env> OAuth<E> {
     /// nowhere else (§9.9 table, PI-10); `false` when it is not one of `client`'s.
     pub(crate) async fn revoke_authority(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         token: &str,
     ) -> Result<bool, Unavailable> {
-        let Some((c, _, domain)) = self.authority_claims(realm, client, token).await? else {
+        let Some((c, _, domain)) = self.authority_claims(environment, client, token).await? else {
             return Ok(false);
         };
         let family = c

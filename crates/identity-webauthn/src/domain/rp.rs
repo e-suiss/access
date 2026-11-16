@@ -1,9 +1,9 @@
-//! The realm's relying party: RP ID, allowed origins and the Related Origin Requests document
+//! The environment's relying party: RP ID, allowed origins and the Related Origin Requests document
 //! (IDP-5, MD-5, TN-17, TN-18).
 
 use core::fmt;
 
-use super::ids::RealmId;
+use super::ids::EnvironmentId;
 
 /// Ceiling for distinct registrable-domain labels in `/.well-known/webauthn` (TN-18, PD).
 pub const MAX_RELATED_LABELS: usize = 5;
@@ -31,7 +31,7 @@ fn is_localhost(host: &str) -> bool {
     host == "localhost" || host.ends_with(".localhost")
 }
 
-/// A WebAuthn RP ID: a lower-case DNS name, never an IP address. One per realm (MD-5).
+/// A WebAuthn RP ID: a lower-case DNS name, never an IP address. One per environment (MD-5).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RpId(String);
 
@@ -129,11 +129,11 @@ impl fmt::Debug for Origin {
     }
 }
 
-/// A realm's relying party.
+/// An environment's relying party.
 #[derive(Clone)]
 pub struct RelyingParty {
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// The RP ID, fixed on day one (TN-17).
     pub rp_id: RpId,
     /// Display name for `rp.name`.
@@ -214,7 +214,7 @@ mod tests {
 
     fn rp(related: &[&str]) -> RelyingParty {
         RelyingParty {
-            realm: RealmId::from_bytes([1; 16]),
+            environment: EnvironmentId::from_bytes([1; 16]),
             rp_id: RpId::parse("acme.example").unwrap(),
             name: "Acme".into(),
             pinned: true,

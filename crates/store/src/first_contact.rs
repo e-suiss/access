@@ -1,4 +1,4 @@
-//! First-contact token rows of a realm (OP-156 m.3 (z), E58): the issuer key of each 30-day
+//! First-contact token rows of an environment (OP-156 m.3 (z), E58): the issuer key of each 30-day
 //! period, sealed, and one row per issued token for the per-identity daily limit. Nothing names
 //! a blinded message or a token; the spent set is Relay's. Nothing is deleted (OP-73).
 
@@ -8,10 +8,10 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -24,7 +24,7 @@ pub struct FirstContactKey {
     pub token_key_id: [u8; 32],
     /// The RFC 9578 token key.
     pub token_key: Vec<u8>,
-    /// The PKCS#8 key, sealed under the realm KEK.
+    /// The PKCS#8 key, sealed under the environment KEK.
     pub sealed_key: Vec<u8>,
 }
 
@@ -37,12 +37,12 @@ impl TenantTx {
         &mut self,
         from: i64,
     ) -> Result<Vec<FirstContactKey>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "SELECT period, token_key_id, token_key, sealed_key FROM access.first_contact_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND period >= $3 ORDER BY period",
+              WHERE tenant_id = $1 AND environment_id = $2 AND period >= $3 ORDER BY period",
             tenant,
-            realm,
+            environment,
             from,
         )
         .fetch_all(&mut *self.tx)
@@ -68,14 +68,14 @@ impl TenantTx {
         &mut self,
         key: &FirstContactKey,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "INSERT INTO access.first_contact_keys
-               (tenant_id, realm_id, period, token_key_id, token_key, sealed_key)
+               (tenant_id, environment_id, period, token_key_id, token_key, sealed_key)
              VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (tenant_id, realm_id, period) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, period) DO NOTHING",
             tenant,
-            realm,
+            environment,
             key.period,
             key.token_key_id.as_slice(),
             key.token_key,
@@ -96,12 +96,12 @@ impl TenantTx {
         subject: [u8; 16],
         day: i32,
     ) -> Result<i64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.first_contact_issued
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND day = $4"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND day = $4"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             day,
         )
@@ -119,12 +119,12 @@ impl TenantTx {
         day: i32,
         period: i64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.first_contact_issued (tenant_id, realm_id, subject_id, day, period)
+            "INSERT INTO access.first_contact_issued (tenant_id, environment_id, subject_id, day, period)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             day,
             period,

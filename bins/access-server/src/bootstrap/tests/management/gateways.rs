@@ -29,7 +29,7 @@ async fn register(c: &Console, kind: &str, name: &str) {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/gateways",
+            "/admin/v1/envs/acme/gateways",
             ("registerGateway", None),
             serde_json::json!({
                 "kind": kind,
@@ -57,7 +57,7 @@ async fn gateway_settings_are_committed_by_rest() {
         async move {
             c.rest_write(
                 &Method::POST,
-                &format!("/admin/v1/realms/acme/gateways/{gateway}/radius-clients"),
+                &format!("/admin/v1/envs/acme/gateways/{gateway}/radius-clients"),
                 ("registerRadiusClient", Some(gateway)),
                 body,
                 None,
@@ -101,7 +101,7 @@ async fn gateway_settings_are_committed_by_rest() {
         async move {
             c.rest_write(
                 &Method::PUT,
-                "/admin/v1/realms/acme/gateways/kerberos:corp-krb/keytab-policy",
+                "/admin/v1/envs/acme/gateways/kerberos:corp-krb/keytab-policy",
                 ("putKeytabPolicy", Some("kerberos:corp-krb")),
                 body,
                 None,
@@ -121,7 +121,7 @@ async fn gateway_settings_are_committed_by_rest() {
     let w = policy(serde_json::json!({ "spn": spn, "rotate_days": 30 })).await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
 
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let registered = access_store::edge::radius_client_registered(

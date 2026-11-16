@@ -1,4 +1,4 @@
-//! The realm's account recovery policy (`idp.account.recovery_policy`, OP-153 m.3 (a), (e),
+//! The environment's account recovery policy (`idp.account.recovery_policy`, OP-153 m.3 (a), (e),
 //! (f); TN-55, TN-61, TN-62): the cooling table, temporary access passes and reset intents, and
 //! the rule that a change which loosens any of them is `idp.account.recovery_policy_loosen`
 //! (CT3) and never goes below the floor of OP-153 m.3 (e). The identity plane reads it; the
@@ -57,7 +57,7 @@ pub struct CoolingTable {
     pub high_value_ms: u64,
 }
 
-/// RR-45, TN-17: how long after a change of the realm's RP ID every new recovery attempt is
+/// RR-45, TN-17: how long after a change of the environment's RP ID every new recovery attempt is
 /// treated as a high-value account's: at least 24 hours of objection window whatever the path
 /// (PD).
 pub const RP_ID_CHANGE_WINDOW_MS: u64 = 30 * DAY_MS;
@@ -147,13 +147,13 @@ impl CoolingTable {
     }
 }
 
-/// The realm's recovery policy (`idp.account.recovery_policy`, OP-153 m.3 (a), (e), (f)).
+/// The environment's recovery policy (`idp.account.recovery_policy`, OP-153 m.3 (a), (e), (f)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecoveryPolicy {
     /// The cooling table.
     pub cooling: CoolingTable,
-    /// Whether temporary access passes exist (TN-62: only if the realm opts in).
+    /// Whether temporary access passes exist (TN-62: only if the environment opts in).
     pub tap: bool,
     /// A pass's default lifetime.
     pub tap_ttl_ms: u64,

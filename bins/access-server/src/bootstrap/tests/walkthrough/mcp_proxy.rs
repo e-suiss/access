@@ -147,7 +147,7 @@ async fn a_credential_broker_is_a_pep_and_a_revoked_grant_shreds_the_token_set()
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{r}");
     assert_eq!(r["code"], "release-basis-ended");
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     let id = <[u8; 16]>::try_from(b64url_decode(&connection).unwrap()).unwrap();

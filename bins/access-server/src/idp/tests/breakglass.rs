@@ -1,6 +1,6 @@
 //! Break-glass accounts, uses and reviews through commit against real PostgreSQL and the
 //! authority plane (OP-157 m.3 (h), INV-28, §12.3.8): the mark is an `idp.org.*` Exercise that
-//! carries no authority, a use's notice reaches its subject whatever the realm's notice setting,
+//! carries no authority, a use's notice reaches its subject whatever the environment's notice setting,
 //! and only another Party reviews a use.
 
 use access_identity_admin::app::rest::{Kind as ReadKind, Op, compile};
@@ -43,7 +43,7 @@ fn review(w: &World, exercise: [u8; 32], classification: &str) -> Change {
     .unwrap()
 }
 
-async fn audited(w: &World, at: (TenantId, RealmId)) -> Vec<String> {
+async fn audited(w: &World, at: (TenantId, EnvironmentId)) -> Vec<String> {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let rows = t.audit_page(None, 1_000).await.unwrap();
     t.commit().await.unwrap();
@@ -66,7 +66,7 @@ fn used(exercise: [u8; 32], actor: [u8; 16]) -> BreakglassUse {
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
-    reason = "one realm through its break-glass admin rules"
+    reason = "one environment through its break-glass admin rules"
 )]
 async fn a_mark_and_a_review_are_committed_exercises_that_grant_nothing() {
     let (w, at, d, founder) = Box::pin(ready("bg-admin")).await;
@@ -216,13 +216,15 @@ fn breakglass_used(d: Digest, subject: [u8; 16]) -> access_internal_api::events:
 #[tokio::test]
 async fn a_use_reaches_its_subject_whatever_the_notice_setting_and_falls_overdue() {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("bg-notice").await;
+    let (tenant, environment, d) = w.environment("bg-notice").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    let at = (tenant, realm);
+    let at = (tenant, environment);
     let owner = super::relay::account(&w, at, "owner@bg.example").await;
     let subject = super::relay::account(&w, at, "subject@bg.example").await;
     let party = access_crypto::random::bytes::<16>().unwrap();
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &subject, &party)
             .await
@@ -279,7 +281,7 @@ async fn a_use_reaches_its_subject_whatever_the_notice_setting_and_falls_overdue
             .unwrap();
         let n = |k: &str| {
             rows.iter()
-                .filter(|o| o.realm == at.1 && o.kind == k)
+                .filter(|o| o.environment == at.1 && o.kind == k)
                 .count()
         };
         if n("relay.message.breakglass_used.v1") == 1
@@ -298,7 +300,8 @@ async fn a_use_reaches_its_subject_whatever_the_notice_setting_and_falls_overdue
     let pending = t.breakglass_reviews().await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].state, ReviewState::Pending);
-    let kek = access_identity_events::adapters::RealmKek::kek(&w.vault.0, at.0, at.1).unwrap();
+    let kek =
+        access_identity_events::adapters::EnvironmentKek::kek(&w.vault.0, at.0, at.1).unwrap();
     let late = 1_800_000_000_000 + 72 * 3_600_000 + 1;
     assert_eq!(
         access_identity_account::app::breakglass::sweep(

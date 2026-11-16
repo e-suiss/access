@@ -143,12 +143,12 @@
             "maxItems": 64,
             "type": "array"
           },
-          "intent": {
-            "description": "The intent envelope, canonical bytes, base64url.",
+          "environment": {
+            "description": "The environment whose token vault holds the connection.",
             "type": "string"
           },
-          "realm": {
-            "description": "The realm whose token vault holds the connection.",
+          "intent": {
+            "description": "The intent envelope, canonical bytes, base64url.",
             "type": "string"
           },
           "steps": {
@@ -161,7 +161,7 @@
           }
         },
         "required": [
-          "realm",
+          "environment",
           "connection",
           "intent",
           "ais",

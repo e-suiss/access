@@ -1,5 +1,5 @@
 //! The health and metrics layer (§10.6, OP-47, OP-67): per-call counters labelled only by call
-//! and outcome, never by tenant, realm or subject, in the Prometheus text format; and the
+//! and outcome, never by tenant, environment or subject, in the Prometheus text format; and the
 //! lockdown state for `/healthz`.
 
 use std::fmt::Write as _;
@@ -94,7 +94,7 @@ mod tests {
 
     // OP-47
     #[test]
-    fn metrics_carry_no_tenant_or_realm_label() {
+    fn metrics_carry_no_tenant_or_environment_label() {
         let h = Health::default();
         h.call(Call::IssueClaim, Outcome::Refused);
         h.parse(Outcome::Failed);
@@ -103,7 +103,7 @@ mod tests {
             text.contains("access_edge_calls_total{call=\"issue_claim\",outcome=\"refused\"} 1")
         );
         assert!(text.contains("access_edge_parses_total{outcome=\"failed\"} 1"));
-        for forbidden in ["tenant=", "realm=", "subject=", "domain="] {
+        for forbidden in ["tenant=", "environment=", "subject=", "domain="] {
             assert!(!text.contains(forbidden), "{forbidden}");
         }
     }

@@ -21,7 +21,7 @@ use access_identity_hooks::domain::{
 use access_identity_hooks::ports::{
     HookCaller, HookClock, HookKey, HookRegistry, HookTransport, LiveHook, NoHooks, Unavailable,
 };
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
 const SEED: [u8; 32] = [7; 32];
 const NOW_MS: u64 = 1_793_784_600_000;
@@ -32,7 +32,7 @@ impl HookRegistry for Registry {
     fn live(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         point: HookPoint,
     ) -> impl Future<Output = Result<Option<LiveHook>, Unavailable>> + Send {
         if self.1 {
@@ -47,7 +47,7 @@ impl HookRegistry for Registry {
                 disclose: Vec::new(),
             },
             key: HookKey::Ed25519(WebhookSigningKey::from_seed(&SEED).unwrap()),
-            realm_allows_disclosure: false,
+            environment_allows_disclosure: false,
         })))
     }
 }
@@ -101,8 +101,11 @@ impl HookClock for Clock {
     }
 }
 
-fn ids() -> (TenantId, RealmId) {
-    (TenantId::from_bytes([3; 16]), RealmId::from_bytes([4; 16]))
+fn ids() -> (TenantId, EnvironmentId) {
+    (
+        TenantId::from_bytes([3; 16]),
+        EnvironmentId::from_bytes([4; 16]),
+    )
 }
 
 fn login() -> Call {

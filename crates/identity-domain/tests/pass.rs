@@ -1,6 +1,6 @@
-//! OP-156 m.3 (i), OP-73, OP-41: the pass over a realm's custom domains on the real store. Both
+//! OP-156 m.3 (i), OP-73, OP-41: the pass over an environment's custom domains on the real store. Both
 //! DNS records verify a registration; the twin issues its certificate, whose key is sealed under
-//! the realm KEK and served; a removed record lapses it, and a lapsed domain is neither served
+//! the environment KEK and served; a removed record lapses it, and a lapsed domain is neither served
 //! nor renewed. A DNS outage changes nothing.
 
 #![allow(
@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use access_identity_domain::adapters::seal::{KeySeal, RealmKek};
+use access_identity_domain::adapters::seal::{EnvironmentKek, KeySeal};
 use access_identity_domain::app::acme::Client;
 use access_identity_domain::app::pass::{self, Acme, Pass};
 use access_identity_domain::domain::host::{Base, CustomHost};
@@ -25,10 +25,10 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
 use access_store::custom_domains::{self as cd, NewDomain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use suiss_crypto::envelope::{Kek, SoftKek};
 
@@ -94,14 +94,14 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8) -> DomainId {
     d
 }
 
-async fn registered(db: &TestDb) -> (TenantId, RealmId) {
+async fn registered(db: &TestDb) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(db, t, 80).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, "acme", "pool-default")
+    let r = create_environment(&mut tx, &d, "acme", "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     let b = bind(
         &mut tx,
@@ -136,8 +136,8 @@ async fn registered(db: &TestDb) -> (TenantId, RealmId) {
 
 struct OneKek(Arc<SoftKek>);
 
-impl RealmKek for OneKek {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for OneKek {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
@@ -152,14 +152,14 @@ fn now() -> i64 {
     .unwrap()
 }
 
-async fn status(db: &TestDb, scope: (TenantId, RealmId)) -> String {
+async fn status(db: &TestDb, scope: (TenantId, EnvironmentId)) -> String {
     let mut tx = TenantTx::begin(&db.app, scope.0, scope.1).await.unwrap();
     let s = cd::domains(&mut tx).await.unwrap().remove(0).status;
     tx.commit().await.unwrap();
     s
 }
 
-async fn audit_events(db: &TestDb, scope: (TenantId, RealmId)) -> Vec<String> {
+async fn audit_events(db: &TestDb, scope: (TenantId, EnvironmentId)) -> Vec<String> {
     let mut tx = TenantTx::begin(&db.app, scope.0, scope.1).await.unwrap();
     let page = tx.audit_page(None, 100).await.unwrap();
     tx.commit().await.unwrap();
@@ -196,18 +196,18 @@ async fn a_verified_domain_gets_its_certificate_and_a_lapsed_one_is_neither_serv
     };
     let t0 = now();
 
-    let out = p.realm(scope, t0).await.unwrap();
+    let out = p.environment(scope, t0).await.unwrap();
     assert_eq!((out.verified, out.issued), (0, 0));
     assert_eq!(status(&db, scope).await, "pending");
 
     dns.down.store(true, Ordering::SeqCst);
     dns.publish(HOST, CHALLENGE, "acme.suiss.id");
-    let out = p.realm(scope, t0 + 600).await.unwrap();
+    let out = p.environment(scope, t0 + 600).await.unwrap();
     assert_eq!(out.unavailable, 1);
     assert_eq!(status(&db, scope).await, "pending");
     dns.down.store(false, Ordering::SeqCst);
 
-    let out = p.realm(scope, t0 + 1200).await.unwrap();
+    let out = p.environment(scope, t0 + 1200).await.unwrap();
     assert_eq!((out.verified, out.issued), (1, 1));
     assert_eq!(status(&db, scope).await, "verified");
     let hosts = cd::served_hosts(&db.router).await.unwrap();
@@ -220,13 +220,13 @@ async fn a_verified_domain_gets_its_certificate_and_a_lapsed_one_is_neither_serv
     let leaf = access_identity_domain::x509::read_leaf(&served[0].chain[0]).unwrap();
     assert_eq!(leaf.dns_names, [HOST]);
 
-    let out = p.realm(scope, t0 + 1800).await.unwrap();
+    let out = p.environment(scope, t0 + 1800).await.unwrap();
     assert_eq!(out.issued, 0);
     assert_eq!(twin.issued(), 1);
 
     dns.remove_challenge(HOST);
     let later = t0 + 1200 + 86_400;
-    let out = p.realm(scope, later).await.unwrap();
+    let out = p.environment(scope, later).await.unwrap();
     assert_eq!((out.lapsed, out.issued), (1, 0));
     assert_eq!(status(&db, scope).await, "lapsed");
     assert_eq!(
@@ -240,7 +240,7 @@ async fn a_verified_domain_gets_its_certificate_and_a_lapsed_one_is_neither_serv
             .is_none()
     );
     let renewal_due = later + 61 * 86_400;
-    let out = p.realm(scope, renewal_due).await.unwrap();
+    let out = p.environment(scope, renewal_due).await.unwrap();
     assert_eq!(out.issued, 0);
     assert_eq!(twin.issued(), 1);
 
@@ -285,7 +285,7 @@ async fn a_failed_order_is_recorded_and_retried_later() {
         keys: &keys,
     };
     let t0 = now();
-    let out = p.realm(scope, t0).await.unwrap();
+    let out = p.environment(scope, t0).await.unwrap();
     assert_eq!((out.verified, out.failed), (1, 1));
     let mut tx = TenantTx::begin(&db.app, scope.0, scope.1).await.unwrap();
     let row = cd::domains(&mut tx).await.unwrap().remove(0);
@@ -294,9 +294,9 @@ async fn a_failed_order_is_recorded_and_retried_later() {
     assert_eq!(row.acme_error.as_deref(), Some("acme-refused"));
     assert!(row.acme_next_at.unwrap() > t0);
     twin.refuse_finalize(false);
-    assert_eq!(p.realm(scope, t0 + 1).await.unwrap().issued, 0);
+    assert_eq!(p.environment(scope, t0 + 1).await.unwrap().issued, 0);
     assert_eq!(
-        p.realm(scope, row.acme_next_at.unwrap())
+        p.environment(scope, row.acme_next_at.unwrap())
             .await
             .unwrap()
             .issued,

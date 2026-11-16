@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_requests SET used_ms = $5\n              WHERE tenant_id = $1 AND environment_id = $2 AND day = $3 AND request_hash = $4\n                AND used_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1249a4170d2ed59afdf165506359989f67b4037d7181afa3658510fbdb78f9b5"
+}

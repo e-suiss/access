@@ -1,6 +1,6 @@
 //! The console's Platform section against the real BFF, admin surface, sequencer and store
 //! (OP-159 m.41, TN-119, INV-29, IA-5): the bootstrapped platform administrator signs in to the
-//! platform realm, its `idp.platform.*` probes are eligible on its Grant alone, its session reads
+//! platform environment, its `idp.platform.*` probes are eligible on its Grant alone, its session reads
 //! the platform surface with a `platform.read` token, and a tenant creation is drafted, signed on
 //! that Grant and committed as one Exercise.
 
@@ -16,7 +16,7 @@ fn admin_plan() -> Plan {
             identifier: String::from(ADMIN),
             password: Secret::new(String::from("platform horse battery staple")),
             totp: None,
-            realms: Vec::new(),
+            environments: Vec::new(),
         }),
         ..plan()
     }
@@ -59,7 +59,7 @@ async fn the_platform_admin_reads_and_provisions_through_the_console() {
     let party = b64url_decode(&out.party).unwrap();
 
     // IA-5, XI-11
-    for name in ["tenant_create", "realm_create", "sandbox_create"] {
+    for name in ["tenant_create", "environment_create", "sandbox_create"] {
         let ask = serde_json::json!({
             "action": { "namespace": "idp.platform", "name": name, "major": 1 },
             "resources": [{ "namespace": "idp", "path": ["platform"] }],
@@ -117,7 +117,7 @@ async fn the_platform_admin_reads_and_provisions_through_the_console() {
     for path in [
         "platform/tenants",
         "platform/operator/health",
-        "platform/realms/acme",
+        "platform/envs/acme",
     ] {
         let (r, body) = send(&c.management, read(&c, path)).await;
         assert_eq!(
@@ -216,35 +216,38 @@ async fn the_platform_admin_reads_and_provisions_through_the_console() {
     assert_eq!(after, before + 1);
 
     // TN-119, X31
-    let (r, _) = send(&c.management, read(&c, "realms/acme")).await;
+    let (r, _) = send(&c.management, read(&c, "envs/acme")).await;
     assert_ne!(r.status(), StatusCode::OK);
 }
 
-/// The account of `identifier` in the realm `route` names, if it has one.
+/// The account of `identifier` in the environment `route` names, if it has one.
 async fn subject_in(
     w: &World,
-    route: &access_store::tenancy::RealmRoute,
+    route: &access_store::tenancy::EnvironmentRoute,
     identifier: &str,
 ) -> Option<[u8; 16]> {
     use access_identity_account::adapters::pg::PgAccounts;
     use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-    let keks = crate::login::RealmKeks::new(w.keys.clone());
-    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.realm).unwrap());
-    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let keks = crate::login::EnvironmentKeks::new(w.keys.clone());
+    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.environment).unwrap());
+    let mut tx = accounts
+        .begin(route.tenant, route.environment)
+        .await
+        .unwrap();
     let subject = tx.subject_by_identifier(identifier).await.unwrap();
     tx.commit().await.unwrap();
     subject
 }
 
-/// The probe `(namespace, name, resource)` drafted in the console session's realm `realm`.
+/// The probe `(namespace, name, resource)` drafted in the console session's environment `environment`.
 async fn drafted(
     c: &Console,
-    realm: &str,
+    environment: &str,
     (namespace, name, resource): (&str, &str, &str),
 ) -> Option<serde_json::Value> {
     let ask = serde_json::json!({
         "action": { "namespace": namespace, "name": name, "major": 1 },
-        "resources": [{ "namespace": resource, "path": [realm] }],
+        "resources": [{ "namespace": resource, "path": [environment] }],
         "mode": "check",
     })
     .to_string();
@@ -321,10 +324,10 @@ async fn the_platform_admin_administers_acme_on_acmes_root_grants_alone() {
     let mut plan = admin_plan();
     plan.tenants = vec![String::from("acme"), String::from("globex")];
     if let Some(p) = plan.platform_admin.as_mut() {
-        p.realms = vec![String::from("acme")];
+        p.environments = vec![String::from("acme")];
     }
     let c = console_as(
-        "mgmt-realm-admin",
+        "mgmt-environment-admin",
         true,
         &plan,
         DeclaredTargets::default(),
@@ -333,16 +336,16 @@ async fn the_platform_admin_administers_acme_on_acmes_root_grants_alone() {
     .await;
     let summary = c.w.run(&plan).await;
     let out = summary.platform_admin.unwrap();
-    let [acme] = out.realms.as_slice() else {
-        panic!("one realm: {:?}", out.realms);
+    let [acme] = out.environments.as_slice() else {
+        panic!("one environment: {:?}", out.environments);
     };
-    assert_eq!(acme.realm, "acme");
+    assert_eq!(acme.environment, "acme");
     assert!(!acme.created, "the second run makes nothing");
     assert!(!acme.delegated_admin_opened);
     assert_ne!(acme.subject, out.subject);
     assert_ne!(acme.party, out.party);
     let party = b64url_decode(&acme.party).unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let bound = idp::subject_party(&mut t, &c.subject).await.unwrap();
@@ -379,12 +382,12 @@ async fn the_platform_admin_administers_acme_on_acmes_root_grants_alone() {
         ("access", "grant_revoke", "access.domain"),
         ("access", "read", "access.audit"),
         ("idp.account", "suspend", "idp"),
-        ("idp.realm", "delegated_admin", "idp"),
-        ("idp.realm", "signin_policy", "idp"),
+        ("idp.environment", "delegated_admin", "idp"),
+        ("idp.environment", "signin_policy", "idp"),
         ("idp.org", "create", "idp"),
         ("idp.agent", "register", "idp"),
         ("idp.review", "schedule", "idp"),
-        ("idp.realm", "rate_limit", "idp"),
+        ("idp.environment", "rate_limit", "idp"),
         ("idp.client", "register", "idp"),
         ("idp.client", "update", "idp"),
     ];
@@ -408,7 +411,7 @@ async fn the_platform_admin_administers_acme_on_acmes_root_grants_alone() {
     }
     // INV-29
     let bases: Vec<serde_json::Value> = acme.grants.iter().map(|g| g.basis.clone()).collect();
-    if let Some(draft) = drafted(&c, "acme", ("idp.platform", "realm_create", "idp")).await {
+    if let Some(draft) = drafted(&c, "acme", ("idp.platform", "environment_create", "idp")).await {
         assert!(!eligible_on(&c, &party, &draft, &bases[..1], false).await);
     }
 

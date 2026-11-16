@@ -417,7 +417,7 @@ jobs:
           if-no-files-found: error
 
   # OP-3, OP-146 I11, §14.8 SA-T2, B9, OP-152 m.5 (j), OP-155 m.3 (q): the OIDF profile plans
-  # against one seeded realm (SKIPPED and REVIEW fail unless expected.json lists the module), the
+  # against one seeded environment (SKIPPED and REVIEW fail unless expected.json lists the module), the
   # differential tests and the interop lab
   conformance:
     name: conformance

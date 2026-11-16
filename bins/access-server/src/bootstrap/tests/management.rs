@@ -1,7 +1,7 @@
 //! The management surface end to end against the real sequencer (OP-151 m.2 M1b, m.12, Ek B
-//! 3300): a bootstrapped realm with its console client, a user signed in at the realm's own
+//! 3300): a bootstrapped environment with its console client, a user signed in at the environment's own
 //! authorization server, the console's session and device Instance, a read through the BFF with
-//! a read proof and a realm-issued, DPoP-bound read token, and a branding write that the BFF
+//! a read proof and an environment-issued, DPoP-bound read token, and a branding write that the BFF
 //! passes on with the browser's AIS and that moves the domain's log.
 
 use std::net::{IpAddr, Ipv4Addr};
@@ -178,9 +178,9 @@ pub(super) struct Console {
     pub(super) browser: Browser,
     pub(super) domain: Digest,
     pub(super) root: access_kernel::model::Id,
-    pub(super) route: access_store::tenancy::RealmRoute,
+    pub(super) route: access_store::tenancy::EnvironmentRoute,
     pub(super) subject: [u8; 16],
-    /// The realm authorization server's routes.
+    /// The environment authorization server's routes.
     pub(super) oauth: axum::Router,
     /// The SPIFFE bundles the authorization server reaches (OP-154 m.3 (r)).
     pub(super) bundles: Arc<ServedBundles>,
@@ -189,7 +189,7 @@ pub(super) struct Console {
 }
 
 /// The authority plane's trust domain Acceptances, or every trust domain once `scripted`: a
-/// root-established Acceptance waits out the CT3 time lock, which this realm keeps.
+/// root-established Acceptance waits out the CT3 time lock, which this environment keeps.
 pub(super) struct TrustDomains {
     plane: TestPlane,
     /// Whether every trust domain is taken as accepted.
@@ -209,7 +209,7 @@ impl access_identity_oauth::ports::oauth::WorkloadTrust for TrustDomains {
     }
 }
 
-/// SPIFFE bundles kept in the realm's rows, Bundle Endpoints served in process (OP-154 m.3
+/// SPIFFE bundles kept in the environment's rows, Bundle Endpoints served in process (OP-154 m.3
 /// (r)): the guarded outbound fetch is the one part not on the wire.
 pub(super) struct ServedBundles {
     app: access_store::Pool,
@@ -239,7 +239,7 @@ impl ServedBundles {
         TenantTx::begin(
             &self.app,
             access_store::identity::TenantId::from_bytes(s.tenant),
-            access_store::identity::RealmId::from_bytes(s.realm),
+            access_store::identity::EnvironmentId::from_bytes(s.environment),
         )
         .await
         .map_err(|_| access_identity_attest::ports::Unavailable)
@@ -249,12 +249,12 @@ impl ServedBundles {
 impl access_identity_attest::ports::Bundles for ServedBundles {
     fn kept<'a>(
         &'a self,
-        realm: access_identity_attest::ports::Scope,
+        environment: access_identity_attest::ports::Scope,
         trust_domain: &'a str,
     ) -> access_identity_attest::ports::Pending<'a, Option<access_identity_attest::ports::Kept>>
     {
         Box::pin(async move {
-            let mut t = self.begin(realm).await?;
+            let mut t = self.begin(environment).await?;
             let k = access_store::workloads::kept_bundle(&mut t, trust_domain)
                 .await
                 .unwrap();
@@ -269,12 +269,12 @@ impl access_identity_attest::ports::Bundles for ServedBundles {
 
     fn keep<'a>(
         &'a self,
-        realm: access_identity_attest::ports::Scope,
+        environment: access_identity_attest::ports::Scope,
         trust_domain: &'a str,
         kept: access_identity_attest::ports::Kept,
     ) -> access_identity_attest::ports::Pending<'a, ()> {
         Box::pin(async move {
-            let mut t = self.begin(realm).await?;
+            let mut t = self.begin(environment).await?;
             access_store::workloads::keep_bundle(
                 &mut t,
                 trust_domain,
@@ -300,7 +300,7 @@ impl access_identity_attest::ports::Bundles for ServedBundles {
     }
 }
 
-/// A bootstrapped realm `acme` whose founder signed in to the console at the realm's own
+/// A bootstrapped environment `acme` whose founder signed in to the console at the environment's own
 /// authorization server and registered the browser's key as the session's device Instance; the
 /// console's ADP proxy reaches the real decision point when `with_adp`.
 pub(super) async fn console(label: &str, with_adp: bool) -> Console {
@@ -323,9 +323,9 @@ pub(super) async fn console_declaring(
     console_as(label, with_adp, plan, targets, ("acme", None)).await
 }
 
-/// [`console_declaring`] signed in to the realm `slug`: as the bootstrapped account whose
+/// [`console_declaring`] signed in to the environment `slug`: as the bootstrapped account whose
 /// identifier `account` names, with the Party the bootstrap bound it to, or else as a new
-/// account bound to the realm's founding root (OP-159 m.41).
+/// account bound to the environment's founding root (OP-159 m.41).
 pub(super) async fn console_as(
     label: &str,
     with_adp: bool,
@@ -339,7 +339,7 @@ pub(super) async fn console_as(
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -363,7 +363,7 @@ pub(super) async fn console_as(
         Some(identifier) => Some(bootstrapped_subject(&w, &route, identifier).await),
         None => None,
     };
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let (subject, party) = if let Some(subject) = found {
@@ -371,7 +371,7 @@ pub(super) async fn console_as(
         (subject, access_kernel::model::Id(party))
     } else {
         let subject = t
-            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .insert_subject("active", "environment-kek:1", &[9; 40])
             .await
             .unwrap();
         assert!(
@@ -428,7 +428,7 @@ pub(super) async fn console_as(
     let management = crate::admin::router(
         (String::from(ORIGIN), w.identity_signer.clone()),
         &w.keys,
-        crate::admin::realm::Realms {
+        crate::admin::environment::Environments {
             app: w.db.app.clone(),
             reads: access_store::replica_reads::ReplicaReads::primary_only(w.db.app.clone()),
             checkpointer: w.db.checkpointer.clone(),
@@ -436,14 +436,14 @@ pub(super) async fn console_as(
             ids: Arc::clone(&ids),
             plane: w.plane.clone(),
             base: w.base.clone(),
-            keys: Arc::new(RealmKeyring::new(
+            keys: Arc::new(EnvironmentKeyring::new(
                 SignerKeys::new(w.identity_signer.clone()),
                 w.keys.clone(),
             )),
             declared: targets,
             platform: Some(plan.platform.clone()),
             outbound: Outbound::disabled(Duration::from_secs(5)),
-            vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
+            vault: access_identity_events::adapters::KekSealer(crate::login::EnvironmentKeks::new(
                 w.keys.clone(),
             )),
             geo: std::sync::Arc::new(access_identity_risk::adapters::NoGeoSource),
@@ -473,7 +473,7 @@ pub(super) async fn console_as(
     // TN-131, OP-151 m.12 (b)
     let (r, _) = send(
         &management,
-        Request::get(format!("/console/api/sign-in?realm={slug}"))
+        Request::get(format!("/console/api/sign-in?environment={slug}"))
             .body(Body::empty())
             .unwrap(),
     )
@@ -481,7 +481,7 @@ pub(super) async fn console_as(
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let authorize = location(&r);
     let started = cookies(&r);
-    assert!(authorize.starts_with(&format!("https://access.test/realms/{slug}/authorize?")));
+    assert!(authorize.starts_with(&format!("https://access.test/env/{slug}/authorize?")));
     assert!(authorize.contains("prompt=login") && authorize.contains("code_challenge_method=S256"));
     let (r, _) = send(
         &oauth,
@@ -500,7 +500,7 @@ pub(super) async fn console_as(
         .to_owned();
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     t.insert_session(&NewSession {
@@ -580,7 +580,7 @@ pub(super) async fn console_as(
     .await;
     assert_eq!(r.status(), StatusCode::OK);
     let session: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(session["realm"], slug);
+    assert_eq!(session["environment"], slug);
     assert!(session["instance"].is_null());
 
     // OP-149 m.6, OP-151 m.3 (e)
@@ -648,17 +648,20 @@ pub(super) async fn console_as(
     }
 }
 
-/// The account `identifier` of the realm `route`, as the bootstrap made it.
+/// The account `identifier` of the environment `route`, as the bootstrap made it.
 async fn bootstrapped_subject(
     w: &World,
-    route: &access_store::tenancy::RealmRoute,
+    route: &access_store::tenancy::EnvironmentRoute,
     identifier: &str,
 ) -> [u8; 16] {
     use access_identity_account::adapters::pg::PgAccounts;
     use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-    let keks = crate::login::RealmKeks::new(w.keys.clone());
-    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.realm).unwrap());
-    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let keks = crate::login::EnvironmentKeks::new(w.keys.clone());
+    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.environment).unwrap());
+    let mut tx = accounts
+        .begin(route.tenant, route.environment)
+        .await
+        .unwrap();
     let subject = tx.subject_by_identifier(identifier).await.unwrap().unwrap();
     tx.commit().await.unwrap();
     subject
@@ -678,7 +681,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     } = console("mgmt-e2e", false).await;
     // TN-128, TN-130
     let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
-    let target = "/admin/v1/realms/acme/settings";
+    let target = "/admin/v1/envs/acme/settings";
     let proof = browser.ais(
         domain,
         &access_crypto::random::bytes::<16>().unwrap(),
@@ -691,7 +694,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         browser
             .request(
                 &Method::GET,
-                "/console/api/proxy/admin/realms/acme/settings",
+                "/console/api/proxy/admin/envs/acme/settings",
                 "",
             )
             .header("x-access-ais", proof)
@@ -728,7 +731,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
             .body(Body::empty())
             .unwrap()
     };
-    let (r, body) = send(&management, read("/admin/v1/realms/acme/signals")).await;
+    let (r, body) = send(&management, read("/admin/v1/envs/acme/signals")).await;
     assert_eq!(
         r.status(),
         StatusCode::OK,
@@ -739,7 +742,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     assert_eq!(signals["geoip"], "not_configured");
     assert_eq!(signals["transmitters"], serde_json::json!([]));
     assert_eq!(signals["verifiers"], serde_json::json!([]));
-    let (r, body) = send(&management, read("/admin/v1/realms/acme/analytics")).await;
+    let (r, body) = send(&management, read("/admin/v1/envs/acme/analytics")).await;
     assert_eq!(
         r.status(),
         StatusCode::OK,
@@ -750,7 +753,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     assert!(analytics["days"].is_array() && analytics["surges"].is_array());
     let (r, _) = send(
         &management,
-        read("/admin/v1/realms/acme/webhooks/whk_unknown/deliveries"),
+        read("/admin/v1/envs/acme/webhooks/whk_unknown/deliveries"),
     )
     .await;
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
@@ -761,7 +764,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         browser
             .request(
                 &Method::GET,
-                "/console/api/proxy/admin/realms/acme/settings",
+                "/console/api/proxy/admin/envs/acme/settings",
                 "",
             )
             .body(Body::empty())
@@ -771,7 +774,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     assert_ne!(r.status(), StatusCode::OK);
 
     // TN-110, OP-151 m.11 (a)
-    let drafts = "/admin/v1/realms/acme/intents";
+    let drafts = "/admin/v1/envs/acme/intents";
     let ask = serde_json::json!({
         "operation": "putBranding",
         "body": { "display_name": "Acme Admin" },
@@ -789,7 +792,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/intents",
+                "/console/api/proxy/admin/envs/acme/intents",
                 "x",
             )
             .header("x-access-ais", proof)
@@ -816,7 +819,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         browser
             .request(
                 &Method::PUT,
-                "/console/api/proxy/admin/realms/acme/settings/branding",
+                "/console/api/proxy/admin/envs/acme/settings/branding",
                 "x",
             )
             .header("x-access-ais", ais)
@@ -846,10 +849,11 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         dpop: DpopProfile::default(),
         platform: Some(String::from("platform")),
     };
-    let row = access_store::console::live_of(&w.db.app, route.tenant, route.realm, &subject, 10)
-        .await
-        .unwrap()
-        .remove(0);
+    let row =
+        access_store::console::live_of(&w.db.app, route.tenant, route.environment, &subject, 10)
+            .await
+            .unwrap()
+            .remove(0);
     let (kid, cose) = row.instance.clone().unwrap();
     let instance = access_http::console::ports::SessionInstance {
         kid,
@@ -861,7 +865,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
             &row,
             &instance,
             dpop.jkt(row.id).unwrap(),
-            access_http::api::domain::Surface::Realm,
+            access_http::api::domain::Surface::Environment,
         )
         .await
         .unwrap()
@@ -894,14 +898,14 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     };
     let good = leak(fresh(row.id));
     let read = tokens.verify(presented(good)).await.unwrap().unwrap();
-    assert_eq!(read.audience, "access-admin:realm:acme");
-    assert_eq!(read.scopes, ["realm.read"]);
+    assert_eq!(read.audience, "access-admin:environment:acme");
+    assert_eq!(read.scopes, ["environment.read"]);
     assert!(read.expires_at_ms - read.issued_at_ms <= MAX_TOKEN_LIFETIME_MS);
     assert_eq!(
         check_read(
             &read,
-            &SurfaceScope::Realm(String::from("platform")),
-            "realm.read",
+            &SurfaceScope::Environment(String::from("platform")),
+            "environment.read",
             now()
         ),
         Err(Refusal::WrongAudience)
@@ -1174,7 +1178,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
             .collect::<Vec<_>>()
     };
     let before = audit_reads().await.len();
-    let (r, body) = send(&management, read("/admin/v1/realms/acme/audit/events")).await;
+    let (r, body) = send(&management, read("/admin/v1/envs/acme/audit/events")).await;
     assert_eq!(
         r.status(),
         StatusCode::OK,
@@ -1190,7 +1194,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
     assert!(events.iter().all(|e| e["class_uid"].is_u64()), "{ocsf}");
     let (r, body) = send(
         &management,
-        read("/admin/v1/realms/acme/audit/events?format=cef"),
+        read("/admin/v1/envs/acme/audit/events?format=cef"),
     )
     .await;
     assert_eq!(r.status(), StatusCode::OK);
@@ -1205,7 +1209,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
     );
     let (r, body) = send(
         &management,
-        read("/admin/v1/realms/acme/audit/events?format=set"),
+        read("/admin/v1/envs/acme/audit/events?format=set"),
     )
     .await;
     assert_eq!(r.status(), StatusCode::OK);
@@ -1214,12 +1218,12 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
         set["items"][0]["iss"]
             .as_str()
             .unwrap()
-            .starts_with("urn:suiss:access:realm:"),
+            .starts_with("urn:suiss:access:environment:"),
         "{set}"
     );
     let (r, body) = send(
         &management,
-        read("/admin/v1/realms/acme/audit/events?format=leef"),
+        read("/admin/v1/envs/acme/audit/events?format=leef"),
     )
     .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);

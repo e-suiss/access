@@ -1,4 +1,4 @@
-//! N5: the realm's theme record as the hosted pages apply it (TN-106, CMP-15.6, F23, OP-153
+//! N5: the environment's theme record as the hosted pages apply it (TN-106, CMP-15.6, F23, OP-153
 //! m.3 (t)): branding is data, never a template. The page draws the name and the logo itself;
 //! the colours become CSS custom properties of a generated style sheet; the only outside
 //! content is the logo, drawn with `<img>` from an origin the record lists, so an SVG logo
@@ -34,17 +34,17 @@ const MAX_NAME: usize = 64;
 /// Most image origins.
 const MAX_ORIGINS: usize = 8;
 
-/// The report endpoint below the realm issuer.
+/// The report endpoint below the environment issuer.
 pub const CSP_REPORTS_PATH: &str = "/csp-reports";
 
 /// How the branding's extra sources are applied (OP-153 m.3 (t)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CspMode {
-    /// The policy with the branding origins is enforced (a new realm's default).
+    /// The policy with the branding origins is enforced (a new environment's default).
     #[default]
     Enforce,
     /// The base policy is enforced; the one with the branding origins is only reported, so a
-    /// new source loads only once the realm moves to `enforce`.
+    /// new source loads only once the environment moves to `enforce`.
     ReportOnly,
 }
 
@@ -97,7 +97,7 @@ fn text<'a>(m: &'a [(Value, Value)], key: &str) -> Option<&'a str> {
 }
 
 impl Theme {
-    /// The stored record (`idp.realm.branding`, deterministic CBOR), checked; anything that
+    /// The stored record (`idp.environment.branding`, deterministic CBOR), checked; anything that
     /// does not check is no branding.
     #[must_use]
     pub fn decode(bytes: Option<&[u8]>) -> Self {
@@ -269,11 +269,11 @@ mod tests {
             origins: vec![String::from("https://cdn.acme.example")],
             ..Theme::default()
         };
-        let (enforced, report_only) = t.csp("/realms/acme");
+        let (enforced, report_only) = t.csp("/env/acme");
         assert!(enforced.contains("img-src 'self' https://cdn.acme.example;"));
         assert!(enforced.contains("script-src 'self';"));
         assert!(enforced.contains("frame-ancestors 'none'"));
-        assert!(enforced.contains("report-uri /realms/acme/csp-reports"));
+        assert!(enforced.contains("report-uri /env/acme/csp-reports"));
         assert!(report_only.is_none());
         t.csp_mode = CspMode::ReportOnly;
         let (enforced, report_only) = t.csp("");

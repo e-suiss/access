@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id FROM access.pairwise_subjects\n              WHERE tenant_id = $1 AND environment_id = $2 AND sector = $3 AND value = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.pairwise_subjects",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d5830704f72213467deba29ec94e05671b6a65ea55441bd0a5d9164950aeca43"
+}

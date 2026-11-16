@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_tokens SET revoked_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kind = ANY($4)\n                AND used_at IS NULL AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "31b6b06f00bc6dcfdbc49b0a059584ff7f4ead83f2747a7570128c0ef08d000d"
+}

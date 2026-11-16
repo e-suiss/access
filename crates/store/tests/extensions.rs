@@ -21,10 +21,10 @@ use access_store::extensions::{
     insert_webhook, live_hook, live_webhooks, retire_hook, retire_webhook, update_webhook, webhook,
     webhook_keys,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -90,12 +90,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, slug, "pool-default")
+    let r = create_environment(&mut tx, d, slug, "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     tx.commit().await.unwrap();
     r
@@ -147,11 +147,11 @@ fn key(seed: u8) -> WebhookKeyRow {
 
 // TN-135, EI-25, MD-14
 #[tokio::test]
-async fn tn_135_hooks_are_bound_realm_configuration() {
+async fn tn_135_hooks_are_bound_environment_configuration() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 61, 5).await;
-    let r = realm(&db, t, &d, "hooks").await;
+    let r = environment(&db, t, &d, "hooks").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let b = bind(&mut tx, &decision(&d, 1, &[1; 16], "idp.client.register"))
@@ -234,9 +234,9 @@ async fn tn_136_webhooks_are_bound_and_rotate_with_overlap() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 71, 4).await;
-    let r = realm(&db, t, &d, "webhooks").await;
+    let r = environment(&db, t, &d, "webhooks").await;
     let w = WebhookRow {
-        realm: *r.as_bytes(),
+        environment: *r.as_bytes(),
         id: [7; 16],
         url: String::from("https://sync.shop.example/access"),
         events: vec![String::from("account.created")],
@@ -310,9 +310,9 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 81, 1).await;
-    let r = realm(&db, t, &d, "deliveries").await;
+    let r = environment(&db, t, &d, "deliveries").await;
     let w = WebhookRow {
-        realm: *r.as_bytes(),
+        environment: *r.as_bytes(),
         id: [8; 16],
         url: String::from("https://sync.shop.example/access"),
         events: vec![String::from("account.created")],
@@ -329,7 +329,7 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
         .unwrap();
     insert_webhook(&mut tx, &b, &w, &k).await.unwrap();
     let delivery = WebhookDelivery {
-        realm: *r.as_bytes(),
+        environment: *r.as_bytes(),
         webhook: w.id,
         event_id: String::from("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"),
         event_type: String::from("urn:suiss:access:event:account.created"),
@@ -413,11 +413,11 @@ async fn tn_136_the_delivery_log_pages_without_bodies() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 82, 1).await;
-    let r = realm(&db, t, &d, "delivery-log").await;
+    let r = environment(&db, t, &d, "delivery-log").await;
     let d2 = domain(&db, t, 83, 1).await;
-    let other = realm(&db, t, &d2, "delivery-other").await;
+    let other = environment(&db, t, &d2, "delivery-other").await;
     let w = WebhookRow {
-        realm: *r.as_bytes(),
+        environment: *r.as_bytes(),
         id: [9; 16],
         url: String::from("https://sync.shop.example/access"),
         events: vec![String::from("account.created")],
@@ -438,7 +438,7 @@ async fn tn_136_the_delivery_log_pages_without_bodies() {
         .collect();
     for (n, id) in (1_u64..).zip(&ids) {
         let delivery = WebhookDelivery {
-            realm: *r.as_bytes(),
+            environment: *r.as_bytes(),
             webhook: w.id,
             event_id: id.clone(),
             event_type: String::from("urn:suiss:access:event:account.created"),

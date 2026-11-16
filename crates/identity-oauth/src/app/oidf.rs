@@ -1,5 +1,5 @@
-//! The realm issuer as an OpenID Federation leaf (OP-155 m.3 (j), IDP-19, §10.7.1 rule 1): its
-//! entity configuration at `/.well-known/openid-federation`, signed with the realm's
+//! The environment issuer as an OpenID Federation leaf (OP-155 m.3 (j), IDP-19, §10.7.1 rule 1): its
+//! entity configuration at `/.well-known/openid-federation`, signed with the environment's
 //! `federation` key and never with its token key. A leaf serves no fetch or list; the
 //! intermediate or trust anchor endpoints are announced only while that role is on.
 
@@ -8,7 +8,7 @@ use access_kernel::json::{self, Json};
 
 use super::Discovery;
 use crate::domain::metadata;
-use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
+use crate::ports::{Directory, EnvironmentEntry, Keys, Unavailable};
 
 /// How long an entity configuration is valid (PD, 24 hours).
 pub const CONFIGURATION_TTL_MS: u64 = 24 * 3_600_000;
@@ -30,7 +30,7 @@ pub enum OidfReply {
     Statement(String),
     /// A JSON list of entity identifiers, `application/json`.
     List(String),
-    /// No realm here, or the realm is not a federation leaf.
+    /// No environment here, or the environment is not a federation leaf.
     NotFound,
     /// A fetch about the issuer itself (OIDF §8.1.1): `invalid_request`.
     InvalidRequest,
@@ -44,7 +44,7 @@ fn member(m: &mut Vec<(String, Json)>, k: &str, v: Json) {
 }
 
 impl<D: Directory, K: Keys> Discovery<D, K> {
-    /// The realm issuer's entity configuration at `now_ms` for a request to `authority`, with
+    /// The environment issuer's entity configuration at `now_ms` for a request to `authority`, with
     /// `slug` from a path-issuer route.
     pub async fn entity_configuration(
         &self,
@@ -65,23 +65,23 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         slug: Option<&str>,
         now_ms: u64,
     ) -> Result<Option<String>, Unavailable> {
-        let Some(realm) = self.resolve(authority, slug).await? else {
+        let Some(environment) = self.resolve(authority, slug).await? else {
             return Ok(None);
         };
         // OP-155 m.3 (j)
         let Some(fed) = self
             .directory
-            .federation(&realm)
+            .federation(&environment)
             .await?
             .filter(|f| f.enabled)
         else {
             return Ok(None);
         };
-        let facts = self.directory.facts(&realm).await?;
+        let facts = self.directory.facts(&environment).await?;
         let op = metadata::authorization_server_of(
-            &realm.issuer,
+            &environment.issuer,
             &self.served,
-            &metadata::RealmFacts {
+            &metadata::EnvironmentFacts {
                 public_sub: facts.public_sub_clients > 0,
                 domain_metadata: None,
                 cimd: facts.cimd,
@@ -109,17 +109,20 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         let mut entity = Vec::new();
         if fed.ta_enabled {
             for (name, path) in AUTHORITY_ENDPOINTS {
-                entity.push((String::from(name), Json::Str(realm.issuer.endpoint(path))));
+                entity.push((
+                    String::from(name),
+                    Json::Str(environment.issuer.endpoint(path)),
+                ));
             }
         }
         let metadata = Json::Object(vec![
             (String::from("federation_entity"), Json::Object(entity)),
             (String::from("openid_provider"), Json::Object(op)),
         ]);
-        let jwks_doc = self.keys.federation_jwks(realm.realm).await?;
+        let jwks_doc = self.keys.federation_jwks(environment.environment).await?;
         let jwks = json::parse(jwks_doc.as_bytes(), MAX_DOC).map_err(|_| Unavailable)?;
         let payload = build::configuration(&Configuration {
-            entity_id: realm.issuer.as_str(),
+            entity_id: environment.issuer.as_str(),
             iat_ms: now_ms,
             exp_ms: now_ms.saturating_add(CONFIGURATION_TTL_MS),
             jwks: &jwks,
@@ -132,7 +135,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         let token = self
             .keys
             .sign_federation(
-                realm.realm,
+                environment.environment,
                 access_identity_oidf::statement::ENTITY_TYP,
                 payload.as_bytes(),
                 now_ms,
@@ -141,19 +144,19 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         Ok(Some(token))
     }
 
-    /// The subordinates the realm's intermediate or trust anchor role vouches for; `None` while
+    /// The subordinates the environment's intermediate or trust anchor role vouches for; `None` while
     /// the role is off (a leaf serves no fetch or list, §10.7.1 rule 1).
     async fn subordinates(
         &self,
         authority: &str,
         slug: Option<&str>,
-    ) -> Result<Option<(RealmEntry, Vec<(String, Json, Option<Json>)>)>, Unavailable> {
-        let Some(realm) = self.resolve(authority, slug).await? else {
+    ) -> Result<Option<(EnvironmentEntry, Vec<(String, Json, Option<Json>)>)>, Unavailable> {
+        let Some(environment) = self.resolve(authority, slug).await? else {
             return Ok(None);
         };
         let Some(fed) = self
             .directory
-            .federation(&realm)
+            .federation(&environment)
             .await?
             .filter(|f| f.enabled && f.ta_enabled)
         else {
@@ -170,7 +173,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                 Some((id, jwks, s.get("metadata_policy").cloned()))
             })
             .collect();
-        Ok(Some((realm, subs)))
+        Ok(Some((environment, subs)))
     }
 
     /// The list endpoint of the intermediate or trust anchor role (OIDF §8.2): the entity
@@ -187,7 +190,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
     }
 
     /// The fetch endpoint of the intermediate or trust anchor role (OIDF §8.1): its subordinate
-    /// statement about `sub`, signed with the realm's `federation` key at `now_ms`.
+    /// statement about `sub`, signed with the environment's `federation` key at `now_ms`.
     pub async fn federation_fetch(
         &self,
         authority: &str,
@@ -196,21 +199,21 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         now_ms: u64,
     ) -> OidfReply {
         let found = match self.subordinates(authority, slug).await {
-            Ok(Some((realm, _))) if realm.issuer.as_str() == sub => {
+            Ok(Some((environment, _))) if environment.issuer.as_str() == sub => {
                 return OidfReply::InvalidRequest;
             }
-            Ok(Some((realm, subs))) => subs
+            Ok(Some((environment, subs))) => subs
                 .into_iter()
                 .find(|(id, _, _)| id == sub)
-                .map(|s| (realm, s)),
+                .map(|s| (environment, s)),
             Ok(None) => None,
             Err(Unavailable) => return OidfReply::Unavailable,
         };
-        let Some((realm, (id, jwks, policy))) = found else {
+        let Some((environment, (id, jwks, policy))) = found else {
             return OidfReply::NotFound;
         };
         let Ok(payload) = build::subordinate(&build::Subordinate {
-            iss: realm.issuer.as_str(),
+            iss: environment.issuer.as_str(),
             sub: &id,
             iat_ms: now_ms,
             exp_ms: now_ms.saturating_add(CONFIGURATION_TTL_MS),
@@ -223,7 +226,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         };
         self.keys
             .sign_federation(
-                realm.realm,
+                environment.environment,
                 access_identity_oidf::statement::ENTITY_TYP,
                 payload.as_bytes(),
                 now_ms,

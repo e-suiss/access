@@ -1,5 +1,5 @@
 //! The token vault (OP-154 m.3 (t), MD-13, E36, EI-26, AG-32, AG-39, §11.13): Resources and the
-//! release mode as realm configuration bound to a committed `idp.vault.*` ALLOW, a person's
+//! release mode as environment configuration bound to a committed `idp.vault.*` ALLOW, a person's
 //! connections, their sealed `TokenSets` and the release records. None of it is authority
 //! (AGI-2); nothing is deleted (OP-73): a `TokenSet` is superseded and shredded, a connection is
 //! disconnected.
@@ -11,10 +11,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -37,13 +37,13 @@ fn key16(v: &[u8]) -> Result<[u8; 16], StoreError> {
 /// One version of a Resource.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceRow {
-    /// The realm's name for it.
+    /// The environment's name for it.
     pub name: String,
     /// Its version; the newest is the Resource.
     pub version: u64,
-    /// The upstream's catalog id, or the realm's own upstream's name.
+    /// The upstream's catalog id, or the environment's own upstream's name.
     pub upstream: String,
-    /// `catalog` or `realm`.
+    /// `catalog` or `environment`.
     pub origin: String,
     /// The dCBOR definition; `None` once disabled.
     pub definition: Option<Vec<u8>>,
@@ -54,11 +54,11 @@ pub struct ResourceRow {
 /// A Resource version to write.
 #[derive(Clone, Copy, Debug)]
 pub struct NewResource<'a> {
-    /// The realm's name for it.
+    /// The environment's name for it.
     pub name: &'a str,
     /// The upstream.
     pub upstream: &'a str,
-    /// `catalog` or `realm`.
+    /// `catalog` or `environment`.
     pub origin: &'a str,
     /// The dCBOR definition; `None` disables it.
     pub definition: Option<&'a [u8]>,
@@ -232,14 +232,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn vault_resource(&mut self, name: &str) -> Result<Option<ResourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT name, version, upstream, origin, definition, decision_pos
                FROM access.vault_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             name,
         )
         .fetch_optional(&mut *self.tx)
@@ -266,13 +266,13 @@ impl TenantTx {
         name: &str,
         version: u64,
     ) -> Result<Option<ResourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT name, version, upstream, origin, definition, decision_pos
                FROM access.vault_resources
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND version = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3 AND version = $4",
             tenant,
-            realm,
+            environment,
             name,
             i64_of(version)?,
         )
@@ -296,14 +296,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn vault_resources(&mut self) -> Result<Vec<ResourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (name) name, version, upstream, origin, definition, decision_pos
                FROM access.vault_resources
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY name, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -331,7 +331,7 @@ impl TenantTx {
         bound: &Bound,
         r: &NewResource<'_>,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let state = if r.definition.is_some() {
             "enabled"
         } else {
@@ -339,15 +339,15 @@ impl TenantTx {
         };
         let v = sqlx::query_scalar!(
             r#"INSERT INTO access.vault_resources
-                 (tenant_id, realm_id, name, version, upstream, origin, state, definition,
+                 (tenant_id, environment_id, name, version, upstream, origin, state, definition,
                   domain_id, decision_pos)
                SELECT $1, $2, $3,
                       COALESCE((SELECT max(version) FROM access.vault_resources
-                                 WHERE tenant_id = $1 AND realm_id = $2 AND name = $3), 0) + 1,
+                                 WHERE tenant_id = $1 AND environment_id = $2 AND name = $3), 0) + 1,
                       $4, $5, $6, $7, $8, $9
                RETURNING version"#,
             tenant,
-            realm,
+            environment,
             r.name,
             r.upstream,
             r.origin,
@@ -361,24 +361,24 @@ impl TenantTx {
         u64_of(v)
     }
 
-    /// Whether path (b) is open in the realm (OP-154 m.3 (t)); closed when never set.
+    /// Whether path (b) is open in the environment (OP-154 m.3 (t)); closed when never set.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn vault_release_open(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let mode = sqlx::query_scalar!(
             "SELECT mode FROM access.vault_release_modes
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
         Ok(mode.as_deref() == Some("open"))
     }
 
-    /// Writes the realm's release mode under `bound` (`idp.vault.release_mode_open`,
+    /// Writes the environment's release mode under `bound` (`idp.vault.release_mode_open`,
     /// `release_mode_close`).
     ///
     /// # Errors
@@ -388,17 +388,17 @@ impl TenantTx {
         bound: &Bound,
         open: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let mode = if open { "open" } else { "closed" };
         sqlx::query!(
             "INSERT INTO access.vault_release_modes
-               (tenant_id, realm_id, version, mode, domain_id, decision_pos)
+               (tenant_id, environment_id, version, mode, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.vault_release_modes
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             mode,
             bound.domain.as_bytes().as_slice(),
             bound.position,
@@ -416,16 +416,16 @@ impl TenantTx {
         &mut self,
         c: &NewConnection<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(c.now_ms)?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.vault_connections
-               (tenant_id, realm_id, subject_id, party, resource, resource_version, client_id,
+               (tenant_id, environment_id, subject_id, party, resource, resource_version, client_id,
                 scopes, created_ms, status_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
              RETURNING connection_id",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(c.subject),
             c.party.as_slice(),
             c.resource,
@@ -447,14 +447,14 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<ConnectionRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT connection_id, subject_id, party, resource, resource_version, client_id, scopes,
                     status, created_ms, status_ms
                FROM access.vault_connections
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -480,15 +480,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<ConnectionRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT connection_id, subject_id, party, resource, resource_version, client_id, scopes,
                     status, created_ms, status_ms
                FROM access.vault_connections
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status <> 'disconnected'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status <> 'disconnected'
               ORDER BY created_ms, connection_id",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -507,7 +507,7 @@ impl TenantTx {
             .collect()
     }
 
-    /// The connections of the realm whose client is `client_id` and that are not disconnected.
+    /// The connections of the environment whose client is `client_id` and that are not disconnected.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -515,15 +515,15 @@ impl TenantTx {
         &mut self,
         client_id: &str,
     ) -> Result<Vec<ConnectionRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT connection_id, subject_id, party, resource, resource_version, client_id, scopes,
                     status, created_ms, status_ms
                FROM access.vault_connections
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status <> 'disconnected'
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND status <> 'disconnected'
               ORDER BY created_ms, connection_id",
             tenant,
-            realm,
+            environment,
             client_id,
         )
         .fetch_all(&mut *self.tx)
@@ -554,15 +554,15 @@ impl TenantTx {
         scopes: Option<&[String]>,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.vault_connections
                 SET status = $4, scopes = COALESCE($5, scopes), status_ms = greatest(status_ms, $6),
                     refresh_lease_ms = NULL
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3
                 AND status <> 'disconnected'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             status,
             scopes,
@@ -585,13 +585,13 @@ impl TenantTx {
         now_ms: u64,
         until_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.vault_connections SET refresh_lease_ms = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3 AND status = 'active'
                 AND (refresh_lease_ms IS NULL OR refresh_lease_ms <= $4)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             i64_of(now_ms)?,
             i64_of(until_ms)?,
@@ -613,14 +613,14 @@ impl TenantTx {
         verifier: &str,
         (now_ms, expires_ms): (u64, u64),
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.vault_connect_attempts
-               (tenant_id, realm_id, state_hash, device_hash, connection_id, verifier, created_ms,
+               (tenant_id, environment_id, state_hash, device_hash, connection_id, verifier, created_ms,
                 expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tenant,
-            realm,
+            environment,
             state_hash.as_slice(),
             device_hash.as_slice(),
             Uuid::from_bytes(connection),
@@ -644,14 +644,14 @@ impl TenantTx {
         device_hash: &[u8; 32],
         now_ms: u64,
     ) -> Result<Option<([u8; 16], String)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "UPDATE access.vault_connect_attempts SET status = 'used', used_ms = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND state_hash = $3 AND device_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND state_hash = $3 AND device_hash = $4
                 AND status = 'open' AND expires_ms > $5
              RETURNING connection_id, verifier",
             tenant,
-            realm,
+            environment,
             state_hash.as_slice(),
             device_hash.as_slice(),
             i64_of(now_ms)?,
@@ -671,16 +671,16 @@ impl TenantTx {
         connection: [u8; 16],
         s: &NewTokenSet<'_>,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(s.now_ms)?;
         sqlx::query!(
             "UPDATE access.vault_token_sets
                 SET superseded_ms = $4, shredded_ms = $4, wrapped_dek = NULL, nonce = NULL,
                     ciphertext = NULL
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3
                 AND superseded_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(connection),
             now,
         )
@@ -688,15 +688,15 @@ impl TenantTx {
         .await?;
         let v = sqlx::query_scalar!(
             r#"INSERT INTO access.vault_token_sets
-                 (tenant_id, realm_id, connection_id, version, kek_id, wrapped_dek, nonce,
+                 (tenant_id, environment_id, connection_id, version, kek_id, wrapped_dek, nonce,
                   ciphertext, access_expires_ms, refreshable, created_ms)
                SELECT $1, $2, $3,
                       COALESCE((SELECT max(version) FROM access.vault_token_sets
-                                 WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3), 0) + 1,
+                                 WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3), 0) + 1,
                       $4, $5, $6, $7, $8, $9, $10
                RETURNING version"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(connection),
             s.kek_id,
             s.wrapped_dek,
@@ -719,15 +719,15 @@ impl TenantTx {
         &mut self,
         connection: [u8; 16],
     ) -> Result<Option<TokenSetRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT version, kek_id, wrapped_dek, nonce, ciphertext, access_expires_ms, refreshable,
                     created_ms
                FROM access.vault_token_sets
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3
                 AND superseded_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(connection),
         )
         .fetch_optional(&mut *self.tx)
@@ -765,15 +765,15 @@ impl TenantTx {
         connection: [u8; 16],
         now_ms: u64,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.vault_token_sets
                 SET superseded_ms = COALESCE(superseded_ms, $4), shredded_ms = $4,
                     wrapped_dek = NULL, nonce = NULL, ciphertext = NULL
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3
                 AND shredded_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(connection),
             i64_of(now_ms)?,
         )
@@ -793,18 +793,18 @@ impl TenantTx {
         before_ms: u64,
         limit: u32,
     ) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_scalar!(
             "SELECT s.connection_id
                FROM access.vault_token_sets s
                JOIN access.vault_connections c
-                 ON c.tenant_id = s.tenant_id AND c.realm_id = s.realm_id
+                 ON c.tenant_id = s.tenant_id AND c.environment_id = s.environment_id
                 AND c.connection_id = s.connection_id
-              WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.superseded_ms IS NULL
+              WHERE s.tenant_id = $1 AND s.environment_id = $2 AND s.superseded_ms IS NULL
                 AND s.refreshable AND s.access_expires_ms < $3 AND c.status = 'active'
               ORDER BY s.access_expires_ms LIMIT $4",
             tenant,
-            realm,
+            environment,
             i64_of(before_ms)?,
             i64::from(limit),
         )
@@ -819,15 +819,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_vault_release(&mut self, r: &NewRelease<'_>) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "INSERT INTO access.vault_releases
-               (tenant_id, realm_id, domain_id, exercise, decision_pos, intent_digest, actor,
+               (tenant_id, environment_id, domain_id, exercise, decision_pos, intent_digest, actor,
                 connection_id, token_set_version, pep, path, tier, use_until_ms, released_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $14, $7, $8, $9, $10, $11, $12, $13)
-             ON CONFLICT (tenant_id, realm_id, domain_id, exercise) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, domain_id, exercise) DO NOTHING",
             tenant,
-            realm,
+            environment,
             r.domain.as_slice(),
             r.exercise.as_slice(),
             i64_of(r.position)?,
@@ -856,13 +856,13 @@ impl TenantTx {
         connection: [u8; 16],
         limit: u32,
     ) -> Result<Vec<ReleaseRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT exercise, actor, pep, path, tier, released_ms FROM access.vault_releases
-              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3
               ORDER BY released_ms DESC, release_id DESC LIMIT $4",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(connection),
             i64::from(limit),
         )
@@ -891,13 +891,13 @@ impl TenantTx {
         &mut self,
         actor: [u8; 16],
     ) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_scalar!(
             r#"SELECT connection_id AS "connection_id!" FROM access.vault_releases
-                WHERE tenant_id = $1 AND realm_id = $2 AND actor = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND actor = $3
                 GROUP BY connection_id ORDER BY min(released_ms), connection_id"#,
             tenant,
-            realm,
+            environment,
             actor.as_slice(),
         )
         .fetch_all(&mut *self.tx)
@@ -915,21 +915,21 @@ impl TenantTx {
         subject: [u8; 16],
         client_id: &str,
     ) -> Result<Option<([u8; 32], [u8; 16])>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT r.grant_domain, r.grant_ref FROM access.oauth_consent_records r
-              WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.subject_id = $3
+              WHERE r.tenant_id = $1 AND r.environment_id = $2 AND r.subject_id = $3
                 AND r.ended_ms IS NULL
                 AND r.client_uuid IN (
                       SELECT c.client_uuid FROM access.idp_clients c
-                       WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.client_id = $4
+                       WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.client_id = $4
                       UNION ALL
                       SELECT m.client_uuid FROM access.oauth_cimd_clients m
-                       WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.client_id = $4
+                       WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.client_id = $4
                          AND m.retired_ms IS NULL)
               ORDER BY r.created_ms DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             client_id,
         )

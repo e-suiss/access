@@ -3,7 +3,7 @@
 //! request; and the identity JWTs made for it, signed with its algorithm and encrypted when it
 //! asked (CR-2, CR-4, MD-3).
 
-use super::{Env, OAuth, Realm};
+use super::{Env, Environment, OAuth};
 use crate::domain::client::{Client, ClientAuth};
 use crate::domain::fapi::{ClientProfile, IdAlg, TlsAuth, check};
 use crate::domain::jwe::{NESTED_CTY, encryption_key};
@@ -38,11 +38,11 @@ impl<E: Env> OAuth<E> {
     }
 
     /// RFC 9101, IDI-6, OP-155 m.3 (k): the authorization request a pushed request object
-    /// `object` carries. An encrypted one opens with the realm's `jwe-enc` key first; the
+    /// `object` carries. An encrypted one opens with the environment's `jwe-enc` key first; the
     /// signature verifies against the client's keys with an algorithm from its allowlist.
     pub(crate) async fn request_object(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         outer: &Params,
         object: &str,
@@ -53,7 +53,12 @@ impl<E: Env> OAuth<E> {
         }
         let opened;
         let signed = if object.split('.').count() == 5 {
-            let Some(plain) = self.env.request_keys().decrypt(realm.realm, object).await? else {
+            let Some(plain) = self
+                .env
+                .request_keys()
+                .decrypt(environment.environment, object)
+                .await?
+            else {
                 return Ok(Err(JarError::Encryption));
             };
             let Ok(text) = String::from_utf8(plain) else {
@@ -77,39 +82,47 @@ impl<E: Env> OAuth<E> {
         };
         let rules = JarRules {
             client_id: &client.id,
-            issuer: realm.issuer.as_str(),
+            issuer: environment.issuer.as_str(),
             now_ms: now,
             rs256: client.rs256 && !client.profile.fapi2,
         };
         Ok(jar::verify(signed, &keys, &rules))
     }
 
-    /// A JWS of `typ` over `claims` with `alg`, absent the realm's algorithm: the realm's own,
-    /// or ML-DSA with the realm's post-quantum key set while its signing profile holds that
+    /// A JWS of `typ` over `claims` with `alg`, absent the environment's algorithm: the environment's own,
+    /// or ML-DSA with the environment's post-quantum key set while its signing profile holds that
     /// parameter set and the token fits the header budget. Anything else refuses the token and
     /// nothing is signed in its place (CR-41, CR-43, MD-8, OP-159 m.3 (o), (p), m.21 (b)).
     pub(crate) async fn sign_as(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         alg: Option<IdAlg>,
         typ: &str,
         claims: &[u8],
         now: u64,
     ) -> Result<String, Unavailable> {
-        let realm_alg = tx.jose_alg().await?;
+        let environment_alg = tx.jose_alg().await?;
         let signer = self.env.signer();
         match alg {
-            None => signer.sign(realm.realm, realm_alg, typ, claims, now).await,
-            Some(a) if a.name() == realm_alg.name() => {
-                signer.sign(realm.realm, realm_alg, typ, claims, now).await
+            None => {
+                signer
+                    .sign(environment.environment, environment_alg, typ, claims, now)
+                    .await
+            }
+            Some(a) if a.name() == environment_alg.name() => {
+                signer
+                    .sign(environment.environment, environment_alg, typ, claims, now)
+                    .await
             }
             // CR-41, OP-159 m.3 (o)
             Some(a) if a.ml_dsa().is_some() => {
                 let profile = tx.signing_profile().await?;
                 match a.ml_dsa() {
                     Some(pq) if profile == Some(pq) => {
-                        let token = signer.sign_pq(realm.realm, pq, typ, claims, now).await?;
+                        let token = signer
+                            .sign_pq(environment.environment, pq, typ, claims, now)
+                            .await?;
                         // CR-43, OP-159 m.3 (p)
                         if access_crypto::budget::Carrier::Header
                             .check(token.len())
@@ -121,27 +134,27 @@ impl<E: Env> OAuth<E> {
                         Ok(token)
                     }
                     _ => {
-                        tracing::warn!("ML-DSA algorithm is not the realm's profile");
+                        tracing::warn!("ML-DSA algorithm is not the environment's profile");
                         Err(Unavailable)
                     }
                 }
             }
             Some(_) => {
-                tracing::warn!("signing algorithm is not served by the realm");
+                tracing::warn!("signing algorithm is not served by the environment");
                 Err(Unavailable)
             }
         }
     }
 
     /// An identity JWT of `typ` over `claims` for `client`: signed with its
-    /// `id_token_signed_response_alg` (the realm's algorithm, or RS256 with the realm's
+    /// `id_token_signed_response_alg` (the environment's algorithm, or RS256 with the environment's
     /// `rsa-id` key after its opt-in), then, when `encrypt`, a nested JWE to its encryption key.
-    /// A setting the realm cannot serve refuses the token (MD-8).
+    /// A setting the environment cannot serve refuses the token (MD-8).
     #[expect(clippy::too_many_arguments, reason = "the facts of one identity JWT")]
     pub(crate) async fn client_jwt(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         typ: &str,
         claims: &[u8],
@@ -153,10 +166,10 @@ impl<E: Env> OAuth<E> {
             Some(IdAlg::Rs256) if client.profile.rs256 && !client.profile.fapi2 => {
                 self.env
                     .signer()
-                    .sign_rs256(realm.realm, typ, claims, now)
+                    .sign_rs256(environment.environment, typ, claims, now)
                     .await?
             }
-            alg => self.sign_as(tx, realm, alg, typ, claims, now).await?,
+            alg => self.sign_as(tx, environment, alg, typ, claims, now).await?,
         };
         if !encrypt {
             return Ok(jws);

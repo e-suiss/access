@@ -3,7 +3,7 @@
 flow = "login-recovery"
 title = "Sign-in and account recovery"
 tree = "conformance/threat/trees/login-recovery.toml"
-components = ["identity-plane", "realm-signing-key", "external-idp"]
+components = ["identity-plane", "environment-signing-key", "external-idp"]
 
 [[stage]]
 name = "objectives"

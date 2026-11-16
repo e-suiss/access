@@ -1,7 +1,7 @@
-//! OpenID Federation (OP-155 m.3 (j), IDP-19, IDP-20, IDI-12): the realm's federation settings
+//! OpenID Federation (OP-155 m.3 (j), IDP-19, IDP-20, IDI-12): the environment's federation settings
 //! and trust anchors as decided, the clients resolved through a trust chain, the replay keys of
 //! automatic registration, and the chain state of each chain-constrained issuer per domain.
-//! Realm rows are scoped by row-level security to the transaction's realm, issuer rows to the
+//! Environment rows are scoped by row-level security to the transaction's environment, issuer rows to the
 //! transaction's domain; nothing is deleted (OP-73).
 
 use sqlx::PgPool;
@@ -13,10 +13,10 @@ use crate::idp::Bound;
 use crate::scope::{DomainId, DomainTx};
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -31,10 +31,10 @@ fn u64_of(v: i64) -> u64 {
 /// The empty subordinate list, a JSON array.
 pub const NO_SUBORDINATES: &[u8] = b"[]";
 
-/// The realm's federation settings as decided; off when never decided.
+/// The environment's federation settings as decided; off when never decided.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FederationSettingsRow {
-    /// Whether the realm issuer is a federation leaf.
+    /// Whether the environment issuer is a federation leaf.
     pub enabled: bool,
     /// The leaf's superiors.
     pub authority_hints: Vec<String>,
@@ -69,7 +69,7 @@ pub struct TrustAnchorRow {
     pub live: bool,
 }
 
-/// How an OIDF client came to the realm.
+/// How an OIDF client came to the environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OidfRegistration {
     /// Resolved from its `client_id` alone.
@@ -118,7 +118,7 @@ pub struct OidfClientRow {
     pub trust_marks: Vec<String>,
     /// How it came.
     pub registration: OidfRegistration,
-    /// When the realm first saw it.
+    /// When the environment first saw it.
     pub first_seen_ms: u64,
     /// When its chain was last resolved.
     pub fetched_ms: u64,
@@ -175,13 +175,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn federation_settings(&mut self) -> Result<FederationSettingsRow, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT enabled, authority_hints, ta_enabled, subordinates, registration_open
                FROM access.idp_federation_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -205,17 +205,17 @@ impl TenantTx {
         bound: &Bound,
         s: &FederationSettingsRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_federation_settings
-               (tenant_id, realm_id, version, enabled, authority_hints, ta_enabled, subordinates,
+               (tenant_id, environment_id, version, enabled, authority_hints, ta_enabled, subordinates,
                 registration_open, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_federation_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5, $6, $7, $8, $9",
             tenant,
-            realm,
+            environment,
             s.enabled,
             &s.authority_hints,
             s.ta_enabled,
@@ -229,19 +229,19 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Every trust anchor the realm ever named, each at its newest version.
+    /// Every trust anchor the environment ever named, each at its newest version.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn trust_anchors(&mut self) -> Result<Vec<TrustAnchorRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (entity_id) entity_id, state, jwks
                FROM access.idp_federation_trust_anchors
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY entity_id, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -266,16 +266,16 @@ impl TenantTx {
         jwks: &[u8],
         live: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_federation_trust_anchors
-               (tenant_id, realm_id, entity_id, version, state, jwks, domain_id, decision_pos)
+               (tenant_id, environment_id, entity_id, version, state, jwks, domain_id, decision_pos)
              SELECT $1, $2, $3,
                     COALESCE((SELECT max(version) FROM access.idp_federation_trust_anchors
-                               WHERE tenant_id = $1 AND realm_id = $2 AND entity_id = $3), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2 AND entity_id = $3), 0) + 1,
                     $4, $5, $6, $7",
             tenant,
-            realm,
+            environment,
             entity_id,
             if live { "live" } else { "removed" },
             jwks,
@@ -295,14 +295,14 @@ impl TenantTx {
         &mut self,
         client_id: &str,
     ) -> Result<Option<OidfClientRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT client_uuid, client_id, metadata, metadata_hash, anchor, trust_marks,
                     registration, first_seen_ms, fetched_ms, chain_exp_ms
                FROM access.oauth_oidf_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             client_id,
         )
         .fetch_optional(&mut *self.tx)
@@ -334,12 +334,12 @@ impl TenantTx {
         &mut self,
         client: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT client_id FROM access.oauth_oidf_clients
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
         )
         .fetch_optional(&mut *self.tx)
@@ -355,15 +355,15 @@ impl TenantTx {
         client_id: &str,
         s: &OidfSnapshot<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.oauth_oidf_clients (tenant_id, realm_id, client_id, metadata,
+            "INSERT INTO access.oauth_oidf_clients (tenant_id, environment_id, client_id, metadata,
                     metadata_hash, anchor, trust_marks, registration, first_seen_ms, fetched_ms,
                     chain_exp_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10)
              RETURNING client_uuid",
             tenant,
-            realm,
+            environment,
             client_id,
             s.metadata,
             s.metadata_hash.as_slice(),
@@ -387,14 +387,14 @@ impl TenantTx {
         client: [u8; 16],
         s: &OidfSnapshot<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_oidf_clients
                 SET metadata = $4, metadata_hash = $5, anchor = $6, trust_marks = $7,
                     fetched_ms = $8, chain_exp_ms = $9
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             s.metadata,
             s.metadata_hash.as_slice(),
@@ -418,12 +418,12 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_oidf_clients SET retired_ms = $4, retire_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             i64_of(now_ms)?,
             reason,
@@ -442,12 +442,12 @@ impl TenantTx {
         replay_key: &[u8; 32],
         exp_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
-            "INSERT INTO access.oauth_oidf_jti (tenant_id, realm_id, replay_key, exp_ms)
+            "INSERT INTO access.oauth_oidf_jti (tenant_id, environment_id, replay_key, exp_ms)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             replay_key.as_slice(),
             i64_of(exp_ms)?,
         )
@@ -500,8 +500,8 @@ pub struct IssuerStateRow {
     pub entity_id: String,
     /// Its issuer Party, when known.
     pub issuer: Option<[u8; 16]>,
-    /// The realm that resolves its chain.
-    pub realm: ([u8; 16], [u8; 16]),
+    /// The environment that resolves its chain.
+    pub environment: ([u8; 16], [u8; 16]),
     /// The state.
     pub state: ChainState,
     /// The anchor the chain ended at.
@@ -512,7 +512,7 @@ pub struct IssuerStateRow {
     pub chain_exp_ms: u64,
 }
 
-/// Starts tracking the issuer `entity_id` of `domain`, resolved by the realm `(tenant, realm)`:
+/// Starts tracking the issuer `entity_id` of `domain`, resolved by the environment `(tenant, environment)`:
 /// pending, so the gate refuses its Claims until its chain resolves. Tracking it again changes
 /// nothing.
 ///
@@ -521,7 +521,7 @@ pub struct IssuerStateRow {
 pub async fn track_issuer(
     app: &PgPool,
     domain: &DomainId,
-    realm: ([u8; 16], [u8; 16]),
+    environment: ([u8; 16], [u8; 16]),
     entity_id: &str,
     issuer: Option<[u8; 16]>,
     now_ms: u64,
@@ -529,13 +529,13 @@ pub async fn track_issuer(
     let mut t = DomainTx::begin(app, domain).await?;
     sqlx::query!(
         "INSERT INTO access.federation_issuer_state (domain_id, entity_id, issuer_id, tenant_id,
-                realm_id, state, checked_ms, chain_exp_ms, tracked_ms)
+                environment_id, state, checked_ms, chain_exp_ms, tracked_ms)
          VALUES ($1, $2, $3, $4, $5, 'pending', 0, 0, $6) ON CONFLICT DO NOTHING",
         domain.as_bytes().as_slice(),
         entity_id,
         issuer.as_ref().map(<[u8; 16]>::as_slice),
-        Uuid::from_bytes(realm.0),
-        Uuid::from_bytes(realm.1),
+        Uuid::from_bytes(environment.0),
+        Uuid::from_bytes(environment.1),
         i64_of(now_ms)?,
     )
     .execute(&mut *t.tx)
@@ -555,7 +555,7 @@ pub async fn issuer_states(
 ) -> Result<Vec<IssuerStateRow>, StoreError> {
     let mut t = DomainTx::begin(app, domain).await?;
     let rows = sqlx::query!(
-        "SELECT entity_id, issuer_id, tenant_id, realm_id, state, anchor, checked_ms, chain_exp_ms
+        "SELECT entity_id, issuer_id, tenant_id, environment_id, state, anchor, checked_ms, chain_exp_ms
            FROM access.federation_issuer_state
           WHERE domain_id = $1 AND untracked_ms IS NULL
             AND (entity_id = $2 OR issuer_id = $3)",
@@ -574,7 +574,7 @@ pub async fn issuer_states(
                     .issuer_id
                     .map(|i| <[u8; 16]>::try_from(i.as_slice()).map_err(|_| StoreError::Corrupt))
                     .transpose()?,
-                realm: (*r.tenant_id.as_bytes(), *r.realm_id.as_bytes()),
+                environment: (*r.tenant_id.as_bytes(), *r.environment_id.as_bytes()),
                 state: ChainState::of(&r.state)?,
                 anchor: r.anchor,
                 checked_ms: u64_of(r.checked_ms),
@@ -594,7 +594,7 @@ pub async fn tracked_issuers(
 ) -> Result<Vec<IssuerStateRow>, StoreError> {
     let mut t = DomainTx::begin(app, domain).await?;
     let rows = sqlx::query!(
-        "SELECT entity_id, issuer_id, tenant_id, realm_id, state, anchor, checked_ms, chain_exp_ms
+        "SELECT entity_id, issuer_id, tenant_id, environment_id, state, anchor, checked_ms, chain_exp_ms
            FROM access.federation_issuer_state
           WHERE domain_id = $1 AND untracked_ms IS NULL
           ORDER BY entity_id",
@@ -611,7 +611,7 @@ pub async fn tracked_issuers(
                     .issuer_id
                     .map(|i| <[u8; 16]>::try_from(i.as_slice()).map_err(|_| StoreError::Corrupt))
                     .transpose()?,
-                realm: (*r.tenant_id.as_bytes(), *r.realm_id.as_bytes()),
+                environment: (*r.tenant_id.as_bytes(), *r.environment_id.as_bytes()),
                 state: ChainState::of(&r.state)?,
                 anchor: r.anchor,
                 checked_ms: u64_of(r.checked_ms),

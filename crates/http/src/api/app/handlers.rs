@@ -23,8 +23,8 @@ fn surface(ctx: &Ctx<impl Env>) -> serde_json::Value {
         "domain": b64url_encode(&ctx.domain.0),
         "rate_policies": [write.policy_item(), read.policy_item()],
     });
-    if let (SurfaceScope::Realm(slug), Some(o)) = (&ctx.scope, body.as_object_mut()) {
-        o.insert("realm".to_owned(), json!(slug));
+    if let (SurfaceScope::Environment(slug), Some(o)) = (&ctx.scope, body.as_object_mut()) {
+        o.insert("environment".to_owned(), json!(slug));
     }
     body
 }
@@ -34,7 +34,7 @@ pub(super) async fn platform_root<E: Env>(Extension(ctx): Extension<Ctx<E>>) -> 
     json_ok(&surface(&ctx))
 }
 
-/// `GET /admin/v1/realms/{slug}`.
-pub(super) async fn realm_root<E: Env>(Extension(ctx): Extension<Ctx<E>>) -> Response {
+/// `GET /admin/v1/envs/{slug}`.
+pub(super) async fn environment_root<E: Env>(Extension(ctx): Extension<Ctx<E>>) -> Response {
     json_ok(&surface(&ctx))
 }

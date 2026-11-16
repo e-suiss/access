@@ -1,6 +1,6 @@
-// IDP-32, OP-156 m.3 (o): the realm's SSH certificate authority. Turning it on or off, rotating
+// IDP-32, OP-156 m.3 (o): the environment's SSH certificate authority. Turning it on or off, rotating
 // and replacing its key, and registering and retiring server groups are each one signed change;
-// servers trust the CA key the realm publishes and refuse what its KRL lists. Certificates are
+// servers trust the CA key the environment publishes and refuse what its KRL lists. Certificates are
 // projections of ssh.login Grants and show in the audit log.
 import { useState, type ReactElement } from "react";
 
@@ -26,9 +26,9 @@ interface Page<T> {
 
 /** The SSH certificate authority screen. */
 export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const groups = useLoad(() =>
-    adminGet<Page<HostGroup>>(ctx.instance, `realms/${realm}/ssh-host-groups`),
+    adminGet<Page<HostGroup>>(ctx.instance, `envs/${environment}/ssh-host-groups`),
   );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -41,7 +41,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
     key?: string,
   ) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method,
         path,
@@ -50,7 +50,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
       }),
     );
   };
-  const base = `/realms/${ctx.session.realm}`;
+  const base = `/env/${ctx.session.environment}`;
   return (
     <>
       <Panel id="ssh-ca" title={t("sshCaTitle")}>
@@ -182,7 +182,7 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <p data-testid="ssh-certificates-note">
           {t("sshCertificatesNote")}{" "}
           <a
-            href={consoleHref(ctx.session.realm, "audit/records")}
+            href={consoleHref(ctx.session.environment, "audit/records")}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("sshAuditLink")}

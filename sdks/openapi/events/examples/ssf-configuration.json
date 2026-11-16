@@ -1,15 +1,15 @@
 {
   "spec_version": "1_0",
-  "issuer": "https://id.example/realms/shop",
-  "jwks_uri": "https://id.example/realms/shop/jwks.json",
+  "issuer": "https://id.example/env/shop",
+  "jwks_uri": "https://id.example/env/shop/jwks.json",
   "delivery_methods_supported": [
     "urn:ietf:rfc:8935",
     "urn:ietf:rfc:8936",
     "urn:suiss:access:delivery:webhook"
   ],
-  "configuration_endpoint": "https://id.example/realms/shop/ssf/streams",
-  "status_endpoint": "https://id.example/realms/shop/ssf/status",
-  "verification_endpoint": "https://id.example/realms/shop/ssf/verify",
+  "configuration_endpoint": "https://id.example/env/shop/ssf/streams",
+  "status_endpoint": "https://id.example/env/shop/ssf/status",
+  "verification_endpoint": "https://id.example/env/shop/ssf/verify",
   "authorization_schemes": [
     {
       "spec_urn": "urn:ietf:rfc:6750"

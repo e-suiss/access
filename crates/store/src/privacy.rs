@@ -141,7 +141,7 @@ pub struct HoldRow {
 pub struct NewHold<'a> {
     /// `subject`, `classes` or `tenant`.
     pub scope: &'a str,
-    /// The subject of a subject hold (realm-scoped transaction).
+    /// The subject of a subject hold (environment-scoped transaction).
     pub subject: Option<[u8; 16]>,
     /// The classes of a class hold.
     pub classes: &'a [String],
@@ -228,8 +228,8 @@ macro_rules! deletion_rows {
 
 impl TenantTx {
     fn privacy_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Records a preference change (IDP-37); returns its time, Unix milliseconds.
@@ -245,14 +245,14 @@ impl TenantTx {
         method: &str,
         record_digest: &[u8; 32],
     ) -> Result<i64, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         Ok(sqlx::query_scalar!(
             r#"INSERT INTO access.identity_preferences
-                 (tenant_id, realm_id, subject_id, channel, topic, granted, method, record_digest)
+                 (tenant_id, environment_id, subject_id, channel, topic, granted, method, record_digest)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                RETURNING (extract(epoch FROM changed_at) * 1000)::bigint AS "ms!""#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             channel,
             topic,
@@ -272,15 +272,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<PreferenceRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT channel, topic, granted, method, record_digest,
                       (extract(epoch FROM changed_at) * 1000)::bigint AS "ms!"
                  FROM access.identity_preferences
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY change_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -308,15 +308,15 @@ impl TenantTx {
         subject: [u8; 16],
         a: &NewAcceptance<'_>,
     ) -> Result<i64, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         Ok(sqlx::query_scalar!(
             r#"INSERT INTO access.identity_document_acceptances
-                 (tenant_id, realm_id, subject_id, document_type, version, document_digest, locale,
+                 (tenant_id, environment_id, subject_id, document_type, version, document_digest, locale,
                   method, client, record_digest)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                RETURNING (extract(epoch FROM accepted_at) * 1000)::bigint AS "ms!""#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             a.document_type,
             a.version,
@@ -338,15 +338,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<AcceptanceRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT document_type, version, document_digest, locale, method, client, record_digest,
                       (extract(epoch FROM accepted_at) * 1000)::bigint AS "ms!"
                  FROM access.identity_document_acceptances
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY acceptance_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -380,16 +380,16 @@ impl TenantTx {
         exercise: Option<&[u8; 32]>,
         effective_ms: i64,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.identity_deletion_facts
-                 (tenant_id, realm_id, subject_id, source, requested_by, exercise_id, effective_at)
+                 (tenant_id, environment_id, subject_id, source, requested_by, exercise_id, effective_at)
                VALUES ($1, $2, $3, $4, $5, $6,
                        greatest(clock_timestamp(), to_timestamp($7::bigint / 1000.0)))
-               ON CONFLICT (tenant_id, realm_id, subject_id) WHERE cancelled_at IS NULL DO NOTHING
+               ON CONFLICT (tenant_id, environment_id, subject_id) WHERE cancelled_at IS NULL DO NOTHING
                RETURNING deletion_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             source,
             requested_by,
@@ -406,7 +406,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn deletions(&mut self, subject: [u8; 16]) -> Result<Vec<DeletionRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT deletion_id, subject_id, source, destruction_proof,
                       (extract(epoch FROM requested_at) * 1000)::bigint AS requested_ms,
@@ -416,10 +416,10 @@ impl TenantTx {
                       (extract(epoch FROM destroy_after) * 1000)::bigint AS destroy_after_ms,
                       (extract(epoch FROM destroyed_at) * 1000)::bigint AS destroyed_ms
                  FROM access.identity_deletion_facts
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY deletion_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -432,13 +432,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn cancel_deletion(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_deletion_facts SET cancelled_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 AND cancelled_at IS NULL AND deleted_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .execute(&mut *self.tx)
@@ -452,7 +452,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn due_tombstones(&mut self, limit: i64) -> Result<Vec<DeletionRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT deletion_id, subject_id, source, destruction_proof,
                       (extract(epoch FROM requested_at) * 1000)::bigint AS requested_ms,
@@ -462,11 +462,11 @@ impl TenantTx {
                       (extract(epoch FROM destroy_after) * 1000)::bigint AS destroy_after_ms,
                       (extract(epoch FROM destroyed_at) * 1000)::bigint AS destroyed_ms
                  FROM access.identity_deletion_facts
-                WHERE tenant_id = $1 AND realm_id = $2 AND cancelled_at IS NULL AND deleted_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND cancelled_at IS NULL AND deleted_at IS NULL
                   AND effective_at <= clock_timestamp()
                 ORDER BY effective_at LIMIT $3 FOR UPDATE SKIP LOCKED"#,
             tenant,
-            realm,
+            environment,
             limit,
         )
         .fetch_all(&mut *self.tx)
@@ -483,16 +483,16 @@ impl TenantTx {
         id: [u8; 16],
         destroy_after_s: i64,
     ) -> Result<Option<i64>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         Ok(sqlx::query_scalar!(
             r#"UPDATE access.identity_deletion_facts
                   SET deleted_at = clock_timestamp(),
                       destroy_after = clock_timestamp() + make_interval(secs => $4::bigint)
-                WHERE tenant_id = $1 AND realm_id = $2 AND deletion_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND deletion_id = $3
                   AND deleted_at IS NULL AND cancelled_at IS NULL
                 RETURNING (extract(epoch FROM destroy_after) * 1000)::bigint AS "ms!""#,
             tenant,
-            realm,
+            environment,
             uuid(id),
             destroy_after_s,
         )
@@ -505,7 +505,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn due_destructions(&mut self, limit: i64) -> Result<Vec<DeletionRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT deletion_id, subject_id, source, destruction_proof,
                       (extract(epoch FROM requested_at) * 1000)::bigint AS requested_ms,
@@ -515,11 +515,11 @@ impl TenantTx {
                       (extract(epoch FROM destroy_after) * 1000)::bigint AS destroy_after_ms,
                       (extract(epoch FROM destroyed_at) * 1000)::bigint AS destroyed_ms
                  FROM access.identity_deletion_facts
-                WHERE tenant_id = $1 AND realm_id = $2 AND deleted_at IS NOT NULL AND destroyed_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND deleted_at IS NOT NULL AND destroyed_at IS NULL
                   AND destroy_after <= clock_timestamp()
                 ORDER BY destroy_after LIMIT $3 FOR UPDATE SKIP LOCKED"#,
             tenant,
-            realm,
+            environment,
             limit,
         )
         .fetch_all(&mut *self.tx)
@@ -536,14 +536,14 @@ impl TenantTx {
         id: [u8; 16],
         proof: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_deletion_facts
                 SET destroyed_at = clock_timestamp(), destruction_proof = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND deletion_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND deletion_id = $3
                 AND deleted_at IS NOT NULL AND destroyed_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             proof.as_slice(),
         )
@@ -563,14 +563,14 @@ impl TenantTx {
         kind: &str,
         due_days: i32,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.identity_data_requests (tenant_id, realm_id, subject_id, kind, received_at, due_at)
+            r#"INSERT INTO access.identity_data_requests (tenant_id, environment_id, subject_id, kind, received_at, due_at)
                SELECT $1, $2, $3, $4, now.at, now.at + make_interval(days => $5)
                FROM (SELECT clock_timestamp() AS at) AS now
                RETURNING request_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             kind,
             due_days,
@@ -589,12 +589,12 @@ impl TenantTx {
         id: [u8; 16],
         outcome: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_data_requests SET answered_at = clock_timestamp(), outcome = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3 AND answered_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3 AND answered_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             outcome,
         )
@@ -604,7 +604,7 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// The realm's data subject requests after `after`, oldest first; only open ones when
+    /// The environment's data subject requests after `after`, oldest first; only open ones when
     /// `open` is set.
     ///
     /// # Errors
@@ -616,19 +616,19 @@ impl TenantTx {
         after: [u8; 16],
         limit: i64,
     ) -> Result<Vec<DataRequestRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT request_id, subject_id, kind, outcome,
                       (extract(epoch FROM received_at) * 1000)::bigint AS "received_ms!",
                       (extract(epoch FROM due_at) * 1000)::bigint AS "due_ms!",
                       (extract(epoch FROM answered_at) * 1000)::bigint AS answered_ms
                  FROM access.identity_data_requests
-                WHERE tenant_id = $1 AND realm_id = $2 AND request_id > $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND request_id > $3
                   AND ($4::uuid IS NULL OR subject_id = $4)
                   AND (NOT $5 OR answered_at IS NULL)
                 ORDER BY request_id LIMIT $6"#,
             tenant,
-            realm,
+            environment,
             uuid(after),
             subject.map(uuid),
             open,
@@ -651,22 +651,22 @@ impl TenantTx {
     }
 
     /// Places a hold (OP-74 m.3) in this transaction's tenant; a subject hold names a subject
-    /// of this transaction's realm.
+    /// of this transaction's environment.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_hold(&mut self, h: &NewHold<'_>) -> Result<[u8; 16], StoreError> {
         let tenant = uuid(*self.tenant.as_bytes());
-        let realm = self.realm().map(|r| uuid(*r.as_bytes()));
+        let environment = self.environment().map(|r| uuid(*r.as_bytes()));
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.retention_holds
-                 (tenant_id, scope, realm_id, subject_id, classes, kind, suspicious_activity, until)
+                 (tenant_id, scope, environment_id, subject_id, classes, kind, suspicious_activity, until)
                VALUES ($1, $2, CASE WHEN $2 = 'subject' THEN $3::uuid END, $4, $5, $6, $7,
                        CASE WHEN $8::bigint IS NULL THEN NULL ELSE to_timestamp($8::bigint / 1000.0) END)
                RETURNING hold_id AS "id!""#,
             tenant,
             h.scope,
-            realm,
+            environment,
             h.subject.map(uuid),
             h.classes,
             h.kind,
@@ -678,8 +678,8 @@ impl TenantTx {
         Ok(*id.as_bytes())
     }
 
-    /// The holds that can cover this transaction's realm: the tenant's, and subject holds of
-    /// this realm.
+    /// The holds that can cover this transaction's environment: the tenant's, and subject holds of
+    /// this environment.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -722,15 +722,15 @@ impl TenantTx {
         since_ms: i64,
         limit: i64,
     ) -> Result<Vec<HistoryRow>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", event_type
                  FROM access.identity_audit
-                WHERE tenant_id = $1 AND realm_id = $2 AND (target = $3 OR actor = $3)
+                WHERE tenant_id = $1 AND environment_id = $2 AND (target = $3 OR actor = $3)
                   AND at >= to_timestamp($4::bigint / 1000.0)
                 ORDER BY at DESC, id DESC LIMIT $5"#,
             tenant,
-            realm,
+            environment,
             who,
             since_ms,
             limit,
@@ -754,12 +754,12 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<LastSignIn>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let row = sqlx::query!(
             "SELECT last_at_ms, ip_prefix, country FROM access.risk_subject
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -783,26 +783,26 @@ impl TenantTx {
         idle_s: i64,
         limit: i64,
     ) -> Result<Vec<([u8; 16], i64)>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"WITH seen AS (
                  SELECT s.subject_id,
                         greatest(
                           (extract(epoch FROM s.created_at) * 1000)::bigint,
                           coalesce((SELECT max(l.last_seen_ms) FROM access.login_sessions l
-                                     WHERE l.tenant_id = s.tenant_id AND l.realm_id = s.realm_id
+                                     WHERE l.tenant_id = s.tenant_id AND l.environment_id = s.environment_id
                                        AND l.subject_id = s.subject_id), 0),
                           coalesce((SELECT (extract(epoch FROM max(c.last_used_at)) * 1000)::bigint
                                       FROM access.identity_credentials c
-                                     WHERE c.tenant_id = s.tenant_id AND c.realm_id = s.realm_id
+                                     WHERE c.tenant_id = s.tenant_id AND c.environment_id = s.environment_id
                                        AND c.subject_id = s.subject_id), 0)) AS last_ms
                    FROM access.identity_subjects s
-                  WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.status = ANY($3))
+                  WHERE s.tenant_id = $1 AND s.environment_id = $2 AND s.status = ANY($3))
                SELECT subject_id, last_ms AS "last_ms!" FROM seen
                 WHERE last_ms < (extract(epoch FROM clock_timestamp()) * 1000)::bigint - $4::bigint * 1000
                 ORDER BY last_ms LIMIT $5"#,
             tenant,
-            realm,
+            environment,
             statuses,
             idle_s,
             limit,
@@ -853,16 +853,16 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<AuthenticatorMeta>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             r#"SELECT kind, algorithm, status,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM last_used_at) * 1000)::bigint AS last_used_ms
                  FROM access.identity_credentials
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY credential_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -888,13 +888,13 @@ impl TenantTx {
         subject: [u8; 16],
         limit: i64,
     ) -> Result<Vec<SessionMeta>, StoreError> {
-        let (tenant, realm) = self.privacy_scope()?;
+        let (tenant, environment) = self.privacy_scope()?;
         let rows = sqlx::query!(
             "SELECT created_ms, auth_time_ms, ended_ms, end_reason FROM access.login_sessions
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
               ORDER BY session_id DESC LIMIT $4",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             limit,
         )

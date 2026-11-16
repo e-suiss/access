@@ -17,7 +17,7 @@ pub(super) fn scheme() -> Value {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform realm's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4).",
+        "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform environment's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4).",
     })
 }
 
@@ -83,12 +83,12 @@ fn pairing_components() -> Value {
     json!({
         "PairingChallengeRequest": object(
             &json!({
-                "realms": {
+                "environments": {
                     "type": "array",
-                    "items": uuid("A live realm of the tenant, as the tenant snapshot names it."),
+                    "items": uuid("A live environment of the tenant, as the tenant snapshot names it."),
                     "minItems": 1,
                     "maxItems": 64,
-                    "description": "The realms to pair with; every live realm of the tenant when absent (OP-149 m.16 (d)).",
+                    "description": "The environments to pair with; every live environment of the tenant when absent (OP-149 m.16 (d)).",
                 },
             }),
             &[],
@@ -97,9 +97,9 @@ fn pairing_components() -> Value {
         "PairingRegister": exercise("party_register"),
         "PairingTarget": object(
             &json!({
-                "realm": uuid("The realm."),
+                "environment": uuid("The environment."),
                 "status": { "type": "string", "enum": ["unpaired", "paired", "refused"] },
-                "domain": b64("The realm's governing DomainID, 32 bytes."),
+                "domain": b64("The environment's governing DomainID, 32 bytes."),
                 "basis": b64("The Genesis bootstrap Grant the Exercises name as `public` basis (L0-META-7)."),
                 "pep": text("The PEP the AIS addresses: the identity plane."),
                 "party": b64("The product's system Party in the domain, 16 bytes; new until its party_register commits."),
@@ -112,7 +112,7 @@ fn pairing_components() -> Value {
                 "party_register": r("PairingRegister"),
                 "code": text("Why the authority plane refused (refused)."),
             }),
-            &["realm", "status"],
+            &["environment", "status"],
         ),
         "PairingChallenges": object(
             &json!({
@@ -123,12 +123,12 @@ fn pairing_components() -> Value {
         ),
         "PairingAnswer": object(
             &json!({
-                "realm": uuid("The realm of the challenge."),
+                "environment": uuid("The environment of the challenge."),
                 "challenge": b64("The challenge answered."),
                 "ais": b64("AIS (tagged COSE_Sign1) by the service key over the instance_create intent: nonce the challenge, mode commit, capacity own, the challenge's domain, basis and pep."),
                 "register_ais": b64("AIS by the service key over the party_register intent (the Party roots itself, actor kind system); exactly when the challenge names party_register."),
             }),
-            &["realm", "challenge", "ais"],
+            &["environment", "challenge", "ais"],
         ),
         "PairingRequest": object(
             &json!({
@@ -191,12 +191,12 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
         "/access/v1/tenants/{tenant}/pairing/challenges".into(),
         json!({ "post": {
             "operationId": "createPairingChallenges",
-            "summary": "For each realm, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again.",
+            "summary": "For each environment, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again.",
             "security": security(),
             "parameters": [tenant.clone()],
             "requestBody": { "required": false, "content": { "application/json": { "schema": r("PairingChallengeRequest") } } },
             "responses": with(
-                problems(&[("400", "invalid-request, realms or unknown-member."), auth, ("404", "tenant-unknown or realm-unknown."), down]),
+                problems(&[("400", "invalid-request, environments or unknown-member."), auth, ("404", "tenant-unknown or environment-unknown."), down]),
                 "201",
                 json_ok("The targets.", "PairingChallenges"),
             ),
@@ -206,12 +206,12 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
         "/access/v1/tenants/{tenant}/pairing".into(),
         json!({ "post": {
             "operationId": "pair",
-            "summary": "The product's self-signed Exercises for the challenged realms (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)).",
+            "summary": "The product's self-signed Exercises for the challenged environments (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)).",
             "security": security(),
             "parameters": [tenant],
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("PairingRequest") } } },
             "responses": with(
-                problems(&[("400", "invalid-challenge, invalid-party, invalid-request, targets or unknown-member."), auth, ("404", "tenant-unknown or realm-unknown."), down]),
+                problems(&[("400", "invalid-challenge, invalid-party, invalid-request, targets or unknown-member."), auth, ("404", "tenant-unknown or environment-unknown."), down]),
                 "200",
                 json_ok("Each target paired or refused.", "PairingResult"),
             ),

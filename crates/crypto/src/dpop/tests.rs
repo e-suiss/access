@@ -1,6 +1,6 @@
 use super::*;
 
-const REALM: [u8; 16] = [3; 16];
+const ENVIRONMENT: [u8; 16] = [3; 16];
 const HOUR: u64 = 60 * 60 * 1000;
 const T0: u64 = 1_800_000_000_000;
 
@@ -10,7 +10,7 @@ fn key(n: u8) -> NonceKey {
 
 fn ring(role: Role) -> NonceRing {
     NonceRing::new(
-        REALM,
+        ENVIRONMENT,
         role,
         NoncePolicy::new(HOUR, MAX_STALE_MS).unwrap(),
         1,
@@ -83,8 +83,12 @@ fn nonce_missing_malformed_or_forged() {
         r.check(Some(&b64url_encode(&raw)), T0),
         Err(NonceError::Mismatch)
     );
-    let other_realm = NonceRing::new([4; 16], Role::AuthorizationServer, r.policy(), 1, key(1));
-    assert_eq!(other_realm.check(Some(&n), T0), Err(NonceError::Mismatch));
+    let other_environment =
+        NonceRing::new([4; 16], Role::AuthorizationServer, r.policy(), 1, key(1));
+    assert_eq!(
+        other_environment.check(Some(&n), T0),
+        Err(NonceError::Mismatch)
+    );
 }
 
 // TN-29, CR-3 (b)
@@ -92,14 +96,14 @@ fn nonce_missing_malformed_or_forged() {
 fn as_and_rs_nonces_are_separate() {
     let a = ring(Role::AuthorizationServer);
     let same_key_rs = ring(Role::ResourceServer);
-    let rs = NonceRing::new(REALM, Role::ResourceServer, a.policy(), 1, key(2));
+    let rs = NonceRing::new(ENVIRONMENT, Role::ResourceServer, a.policy(), 1, key(2));
     let n = a.issue(T0).unwrap();
     assert_eq!(same_key_rs.check(Some(&n), T0), Err(NonceError::Mismatch));
     assert_eq!(rs.check(Some(&n), T0), Err(NonceError::Mismatch));
     assert_eq!(rs.check(Some(&rs.issue(T0).unwrap()), T0), Ok(()));
     assert_ne!(
-        label(&REALM, Role::AuthorizationServer, 1),
-        label(&REALM, Role::ResourceServer, 1)
+        label(&ENVIRONMENT, Role::AuthorizationServer, 1),
+        label(&ENVIRONMENT, Role::ResourceServer, 1)
     );
     assert_eq!(
         label(&[0xab; 16], Role::ResourceServer, 7),

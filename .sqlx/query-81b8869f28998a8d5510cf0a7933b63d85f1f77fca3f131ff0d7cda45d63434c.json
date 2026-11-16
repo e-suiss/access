@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.agent_templates\n                 (tenant_id, environment_id, name, version, content, defined_exercise)\n               VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81b8869f28998a8d5510cf0a7933b63d85f1f77fca3f131ff0d7cda45d63434c"
+}

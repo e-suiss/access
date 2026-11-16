@@ -61,7 +61,7 @@ fn encoding_and_digest_are_deterministic() {
         .collect();
     for field in [
         "v",
-        "realm",
+        "environment",
         "session_ref",
         "aal",
         "assurance_flags",

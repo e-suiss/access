@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.user_keyed_copies\n               (tenant_id, environment_id, subject_id, class, record_key, holder, holder_id, wrapped)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e928926a886b8ff000ffeb727bcfad001d6c53a160fbfe81523316718d9af007"
+}

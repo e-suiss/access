@@ -183,7 +183,7 @@ impl Class {
 /// How an authentication was made (§10.1.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AuthMethod {
-    /// A WebAuthn assertion of the realm's RP.
+    /// A WebAuthn assertion of the environment's RP.
     Webauthn,
     /// A password.
     Password,

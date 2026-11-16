@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use access_http::SecurityTxt;
 use access_identity_oauth::adapters::outbound::DeclaredTarget;
-use access_identity_oauth::domain::issuer::{Issuer, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, Issuer};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
@@ -182,7 +182,7 @@ fn cell_name(name: &str) -> bool {
 pub(crate) struct Cell {
     /// The cell's name, in the placement grammar.
     pub(crate) name: String,
-    /// The region its data stays in; a realm declares residency only in it (OP-30).
+    /// The region its data stays in; an environment declares residency only in it (OP-30).
     #[serde(default)]
     pub(crate) region: Option<String>,
     /// `regional` (default) or `multi-region-sync` (§17.4.1, T28).
@@ -561,8 +561,8 @@ impl Signup {
     }
 }
 
-/// Social sign-in (IDP-31, OP-153 m.3 (l)): where the realms' client secrets are mounted and the
-/// shared development clients, which only a sandbox realm may use.
+/// Social sign-in (IDP-31, OP-153 m.3 (l)): where the environments' client secrets are mounted and the
+/// shared development clients, which only a sandbox environment may use.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Social {
@@ -637,11 +637,11 @@ pub(crate) struct Suiss {
     /// Product name to base URL.
     #[serde(default)]
     pub(crate) products: BTreeMap<String, String>,
-    /// The platform tenant's realm slug: its governing domain governs the platform-admin
+    /// The platform tenant's environment slug: its governing domain governs the platform-admin
     /// surface (OP-151 m.2 M2, TN-119). Without it the platform surface finds no domain and
     /// refuses every request.
     #[serde(default)]
-    pub(crate) platform_realm: Option<String>,
+    pub(crate) platform_environment: Option<String>,
     /// The product name Relay's platform product client is registered under: only that client
     /// may report İYS registration states (OP-156 m.3 (c), B23). Without it every report is
     /// refused.
@@ -689,7 +689,7 @@ impl Suiss {
             !n.is_empty() && n.len() <= 32 && n.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
         };
         let platform = self
-            .platform_realm
+            .platform_environment
             .as_deref()
             .is_none_or(|s| access_identity_admin::domain::provision::check_new_slug(s).is_ok());
         let relay_product = self
@@ -729,7 +729,7 @@ pub(crate) struct Console {
     pub(crate) dist_dir: Option<PathBuf>,
 }
 
-/// The account pages on the realm's public listener (OP-153 m.3 (w)).
+/// The account pages on the environment's public listener (OP-153 m.3 (w)).
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, default)]
 pub(crate) struct Account {
@@ -745,7 +745,7 @@ pub(crate) struct Login {
     /// The built `web/apps/login/dist`; read once before the lockdown. Without it only the login
     /// API is served.
     pub(crate) dist_dir: Option<PathBuf>,
-    /// Where a completed sign-in with no request to return to goes: a path under the realm's
+    /// Where a completed sign-in with no request to return to goes: a path under the environment's
     /// issuer (OP-159 m.29 (d)).
     pub(crate) redirect_to: String,
     /// Session idle lifetime, seconds (TN-36; OP-146 m.14 (c): 7 days).
@@ -782,14 +782,14 @@ impl Login {
     }
 }
 
-/// The identity plane's realm runtime.
+/// The identity plane's environment runtime.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Identity {
-    /// The origin realm issuers are formed under, `https://<host>[:port]` without a path:
-    /// `https://<slug>.<host>` by default (TN-10). Issuers are stored on the realm rows and
+    /// The origin environment issuers are formed under, `https://<host>[:port]` without a path:
+    /// `https://<slug>.<host>` by default (TN-10). Issuers are stored on the environment rows and
     /// never built from a request (§17.9.6).
-    pub(crate) realm_base: String,
+    pub(crate) environment_base: String,
     /// The identity signer's Unix socket (CMP-22b).
     pub(crate) signer: PathBuf,
     /// PEM trust anchors for clients' own endpoints: `jwks_uri` and back-channel logout
@@ -801,7 +801,7 @@ pub(crate) struct Identity {
     /// verified.
     #[serde(default)]
     pub(crate) org_domains: Option<OrgDomains>,
-    /// Where realms' custom domains get their certificates (OP-156 m.3 (i)). Their DNS records
+    /// Where environments' custom domains get their certificates (OP-156 m.3 (i)). Their DNS records
     /// are read through `org_domains`' resolver; without one no custom domain is verified.
     #[serde(default)]
     pub(crate) custom_domains: Option<CustomDomains>,
@@ -819,7 +819,7 @@ pub(crate) struct Identity {
     #[serde(default)]
     pub(crate) upstream_parser: Option<UpstreamParser>,
     /// Where the FIDO metadata blob comes from and the root its chain must end in (OP-148,
-    /// OP-158 m.3 (y)). Without it no blob is fetched, and a realm that needs one refuses.
+    /// OP-158 m.3 (y)). Without it no blob is fetched, and an environment that needs one refuses.
     #[serde(default)]
     pub(crate) fido_mds: Option<FidoMds>,
 }
@@ -927,7 +927,7 @@ pub(crate) struct Database {
     pub(crate) app: Role,
     /// `access_deriver` login (OP-141 m.22 (k)).
     pub(crate) deriver: Role,
-    /// `access_router` login: Host → realm resolution (OP-132 m.3).
+    /// `access_router` login: Host → environment resolution (OP-132 m.3).
     pub(crate) router: Role,
     /// `access_archive` login: opens the day partitions of the ephemeral protocol tables
     /// (OP-146 m.5 (f)).
@@ -1117,16 +1117,18 @@ pub(crate) enum ConfigError {
     NoIdentity,
     #[error("login session lifetimes are outside the TN-36 ranges")]
     SessionLifetimes,
-    #[error("login.redirect_to must be a path on the realm's origin")]
+    #[error("login.redirect_to must be a path on the environment's origin")]
     RedirectTo,
-    #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
-    RealmBase,
+    #[error(
+        "identity.environment_base must be an https origin without a path or trailing slash (TN-10)"
+    )]
+    EnvironmentBase,
     #[error(
         "identity.custom_domains needs an https directory and, if any, a mailto: contact (OP-156 m.3 (i))"
     )]
     CustomDomains,
     #[error(
-        "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), a realm slug as platform_realm when set (OP-151 m.2 M2), and relay_platform with Access's Relay tenant id and credential_file (E42, OP-156 m.3 (c))"
+        "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), an environment slug as platform_environment when set (OP-151 m.2 M2), and relay_platform with Access's Relay tenant id and credential_file (E42, OP-156 m.3 (c))"
     )]
     Suiss,
     #[error(
@@ -1257,6 +1259,7 @@ impl Config {
             .map_err(|e| ConfigError::Parse(Box::new(e)))
     }
 
+    #[expect(clippy::too_many_lines, reason = "one check per setting")]
     fn validate(&self) -> Result<(), ConfigError> {
         if self.security_contacts.is_empty() {
             return Err(ConfigError::NoSecurityContact);
@@ -1316,7 +1319,8 @@ impl Config {
         }
         let identity = self.identity.as_ref().ok_or(ConfigError::NoIdentity)?;
         // OP-138, §17.9.6
-        RealmBase::parse(&identity.realm_base).map_err(|_| ConfigError::RealmBase)?;
+        EnvironmentBase::parse(&identity.environment_base)
+            .map_err(|_| ConfigError::EnvironmentBase)?;
         // OP-156 m.3 (i)
         if let Some(c) = &identity.custom_domains {
             let directory = access_identity_domain::acme::wire::origin(&c.directory);
@@ -1470,7 +1474,7 @@ mod tests {
                 paths: Vec::new(),
             }),
             identity: Some(Identity {
-                realm_base: "https://id.access.example".to_owned(),
+                environment_base: "https://id.access.example".to_owned(),
                 signer: "/run/access/identity-signer.sock".into(),
                 outbound_ca_file: None,
                 org_domains: Some(OrgDomains {
@@ -1488,7 +1492,7 @@ mod tests {
                 relay: "https://relay.example".to_owned(),
                 management_api: "https://api.access.example".to_owned(),
                 products: BTreeMap::from([("work".to_owned(), "https://work.example".to_owned())]),
-                platform_realm: Some("platform".to_owned()),
+                platform_environment: Some("platform".to_owned()),
                 relay_product: Some("relay".to_owned()),
                 relay_platform: RelayPlatform {
                     tenant: "rtn_access".to_owned(),
@@ -1727,13 +1731,13 @@ mod tests {
         for base in [
             "http://id.example",
             "https://id.example/",
-            "https://id.example/realms",
+            "https://id.example/env",
             "https://ID.example",
             "https://id.example?x",
         ] {
             let config = Config {
                 identity: Some(Identity {
-                    realm_base: base.to_owned(),
+                    environment_base: base.to_owned(),
                     signer: "/run/s.sock".into(),
                     outbound_ca_file: None,
                     org_domains: None,
@@ -1746,7 +1750,7 @@ mod tests {
                 ..with_tls()
             };
             assert!(
-                matches!(config.validate(), Err(ConfigError::RealmBase)),
+                matches!(config.validate(), Err(ConfigError::EnvironmentBase)),
                 "{base}"
             );
         }

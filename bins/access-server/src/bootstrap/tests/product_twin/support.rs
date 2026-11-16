@@ -25,7 +25,7 @@ use super::*;
 /// The case system twin's own registered name: the `system` of every case ref it states.
 const SYSTEM: &str = "acme-desk";
 
-/// A deployment whose realm accepts the case system twin's `support_case` Claims.
+/// A deployment whose environment accepts the case system twin's `support_case` Claims.
 struct Desk {
     s: Seam,
     system: CaseSystem,
@@ -760,7 +760,7 @@ async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the
     );
 }
 
-const ISSUER: &str = "https://access.test/realms/seams";
+const ISSUER: &str = "https://access.test/env/seams";
 const RS: &str = "https://support.access.test/api";
 
 /// The operator's `projection.issue` of `authority` for [`RS`] in `capacity` on `basis`,
@@ -923,14 +923,14 @@ fn details_capacity(claims: &Json) -> Json {
 mod front {
     use access_identity_account::adapters::pg::PgAccounts;
     use access_identity_account::app::accounts::{change_status, create};
-    use access_identity_account::app::{Actor as Who, Realm};
+    use access_identity_account::app::{Actor as Who, Environment};
     use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
     use access_identity_account::domain::status::AccountStatus;
     use access_identity_admin::domain::Change;
     use access_identity_admin::domain::support::CaseSystemChange;
     use access_identity_ui::app::Hosted;
     use access_kernel::json::b64url_decode;
-    use access_store::identity::{RealmId, TenantId};
+    use access_store::identity::{EnvironmentId, TenantId};
     use axum::http::Method;
 
     use super::*;
@@ -942,11 +942,11 @@ mod front {
 
     pub(super) const HOST: &str = "access.test";
 
-    /// The realm's Frontend API with the support routes, as `main` mounts them, and the realm.
+    /// The environment's Frontend API with the support routes, as `main` mounts them, and the environment.
     pub(super) struct Front {
         pub(super) app: axum::Router,
         pub(super) tenant: TenantId,
-        pub(super) realm: RealmId,
+        pub(super) environment: EnvironmentId,
         pub(super) ids: Arc<access_crypto::opaque_id::IdKey>,
     }
 
@@ -964,7 +964,7 @@ mod front {
         use access_identity_account::domain::password::Argon2Params;
         use access_identity_account::domain::throttle::ThrottlePolicy;
         use access_identity_oauth::adapters::PgDirectory;
-        use access_identity_oauth::app::Discovery as RealmDiscovery;
+        use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
         use access_identity_session::domain::session::SessionPolicy;
         use access_identity_ui::adapters::Outbox;
         let w = &d.s.w;
@@ -976,7 +976,7 @@ mod front {
             .unwrap();
         let hosted = Arc::new(Hosted {
             kits: crate::login::HsmKits::new(
-                crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+                crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
                 w.db.router.clone(),
                 w.db.app.clone(),
                 SessionPolicy::DEFAULT,
@@ -997,7 +997,7 @@ mod front {
             signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         });
         let app = access_http::login::support_router(
-            RealmDiscovery::new(
+            EnvironmentDiscovery::new(
                 PgDirectory::new(w.db.router.clone()),
                 SignerKeys::new(w.identity_signer.clone()),
             ),
@@ -1008,7 +1008,7 @@ mod front {
         Front {
             app,
             tenant: route.tenant,
-            realm: route.realm,
+            environment: route.environment,
             ids: crate::ids::CellIds::new(w.keys.clone()).key().unwrap(),
         }
     }
@@ -1023,29 +1023,31 @@ mod front {
 
     impl Front {
         async fn tx(&self, d: &Desk) -> TenantTx {
-            TenantTx::begin(&d.s.w.db.app, self.tenant, self.realm)
+            TenantTx::begin(&d.s.w.db.app, self.tenant, self.environment)
                 .await
                 .unwrap()
         }
 
-        /// An active account of the realm bound to a new Party of its own, with a fresh session.
+        /// An active account of the environment bound to a new Party of its own, with a fresh session.
         pub(super) async fn person(&self, d: &Desk, address: &str, name: Option<&str>) -> Person {
             let actor = d.s.actor().await;
             let ids = crate::ids::CellIds::new(d.s.w.keys.clone()).key().unwrap();
-            let v = crate::login::RealmKeks::new(d.s.w.keys.clone())
-                .vault(self.realm)
+            let v = crate::login::EnvironmentKeks::new(d.s.w.keys.clone())
+                .vault(self.environment)
                 .unwrap();
-            let realm = Realm {
+            let environment = Environment {
                 tenant: self.tenant,
-                realm: self.realm,
+                environment: self.environment,
                 kek: &*v.kek,
                 ids: &ids,
             };
             let db = PgAccounts::sealed(d.s.w.db.app.clone(), v.clone());
             let email = Identifier::new(IdentifierKind::Email, address).unwrap();
-            let subject = create(&db, &realm, &[email], &WHO).await.unwrap();
+            let subject = create(&db, &environment, &[email], &WHO).await.unwrap();
             for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-                change_status(&db, &realm, subject, to, &WHO).await.unwrap();
+                change_status(&db, &environment, subject, to, &WHO)
+                    .await
+                    .unwrap();
             }
             let mut t = self.tx(d).await;
             access_store::idp::bind_subject_party(&mut t, &subject, &actor.party.0)
@@ -1115,7 +1117,7 @@ mod front {
             let ids = cell_ids(&d.s.w.db.app, &d.s.w.keys).await.unwrap();
             Box::pin(b.change(
                 &b.admin(&ids, None),
-                (self.tenant, self.realm),
+                (self.tenant, self.environment),
                 d.s.domain,
                 &d.s.root,
                 change,
@@ -1125,7 +1127,7 @@ mod front {
             schedule(&d.s.signer);
         }
 
-        /// The case system twin registered as the realm's support case system.
+        /// The case system twin registered as the environment's support case system.
         pub(super) async fn register(&self, d: &Desk) {
             let body = json!({ "name": SYSTEM, "issuer": b64url_encode(&d.s.party.0),
                                "provider": "zendesk", "format": "product-seam/v1" });
@@ -1146,7 +1148,7 @@ mod front {
         ) -> (u16, Json) {
             let mut b = HttpRequestOf::builder()
                 .method(method.clone())
-                .uri(format!("/realms/{SLUG}{path}"))
+                .uri(format!("/env/{SLUG}{path}"))
                 .header(header::HOST, HOST)
                 .header(
                     header::COOKIE,
@@ -1180,7 +1182,7 @@ mod front {
         pub(super) async fn upload(&self, who: &Person, u: Upload) -> (u16, Json) {
             let req = HttpRequestOf::builder()
                 .method(Method::POST)
-                .uri(format!("/realms/{SLUG}{}", u.path))
+                .uri(format!("/env/{SLUG}{}", u.path))
                 .header(header::HOST, HOST)
                 .header(
                     header::COOKIE,
@@ -1588,11 +1590,11 @@ async fn support_access_is_asked_given_used_seen_and_revoked_on_the_persons_own_
     ] {
         assert!(audited.iter().any(|a| a == e), "{e}: {audited:?}");
     }
-    let mut tx = TenantTx::begin(&d.s.w.db.app, f.tenant, f.realm)
+    let mut tx = TenantTx::begin(&d.s.w.db.app, f.tenant, f.environment)
         .await
         .unwrap();
-    let kek = crate::login::RealmKeks::new(d.s.w.keys.clone())
-        .vault(f.realm)
+    let kek = crate::login::EnvironmentKeks::new(d.s.w.keys.clone())
+        .vault(f.environment)
         .unwrap()
         .kek;
     let again = access_identity_account::app::support::revoked(
@@ -1824,7 +1826,7 @@ async fn a_support_artifact_is_redacted_on_upload_and_read_only_under_its_own_gr
         .unwrap()
         .try_into()
         .unwrap();
-    let mut tx = TenantTx::begin(&d.s.w.db.app, f.tenant, f.realm)
+    let mut tx = TenantTx::begin(&d.s.w.db.app, f.tenant, f.environment)
         .await
         .unwrap();
     let row = tx.support_artifact(id).await.unwrap().unwrap();
@@ -2042,17 +2044,17 @@ async fn support_access_that_reaches_its_end_ends_and_the_person_is_told() {
         )
         .await;
     assert_eq!(status, 201, "{given} {asked}");
-    let kek = crate::login::RealmKeks::new(d.s.w.keys.clone())
-        .vault(f.realm)
+    let kek = crate::login::EnvironmentKeks::new(d.s.w.keys.clone())
+        .vault(f.environment)
         .unwrap()
         .kek;
     let sweep = |at: u64| {
         let kek = Arc::clone(&kek);
         let ids = Arc::clone(&f.ids);
         let db = d.s.w.db.app.clone();
-        let (tenant, realm) = (f.tenant, f.realm);
+        let (tenant, environment) = (f.tenant, f.environment);
         async move {
-            let mut t = TenantTx::begin(&db, tenant, realm).await.unwrap();
+            let mut t = TenantTx::begin(&db, tenant, environment).await.unwrap();
             let ended = access_identity_account::app::support::sweep(
                 &mut t,
                 (&*kek, &ids),
@@ -2093,7 +2095,7 @@ async fn support_access_that_reaches_its_end_ends_and_the_person_is_told() {
 // OP-159 m.3 (mm), OP-157 m.16, GHSA-84jc-3hj2-hwc7, §13.7.4
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[allow(clippy::too_many_lines, reason = "one upload limit, both sides")]
-async fn a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_no_body() {
+async fn a_large_artifact_streams_in_under_the_environment_limit_and_no_session_reads_no_body() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -2178,7 +2180,7 @@ async fn a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_
     let req = HttpRequestOf::builder()
         .method(Method::POST)
         .uri(format!(
-            "/realms/{}/v1/support/artifacts?request={}",
+            "/env/{}/v1/support/artifacts?request={}",
             SLUG,
             asked["id"].as_str().unwrap()
         ))
@@ -2201,7 +2203,7 @@ async fn a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_
     let big = vec![b' '; (256 << 10) + 1];
     let req = HttpRequestOf::builder()
         .method(Method::POST)
-        .uri(format!("/realms/{SLUG}/v1/support/requests"))
+        .uri(format!("/env/{SLUG}/v1/support/requests"))
         .header(header::HOST, front::HOST)
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::CONTENT_LENGTH, big.len())

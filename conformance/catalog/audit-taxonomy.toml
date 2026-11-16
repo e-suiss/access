@@ -145,7 +145,7 @@ ocsf_activity = 1
 caep = ""
 webhook = false
 
-# OP-155 m.3 (d), §10.6.1, Golden SAML (HL-35): every signature the realm's SAML key makes
+# OP-155 m.3 (d), §10.6.1, Golden SAML (HL-35): every signature the environment's SAML key makes
 [[event]]
 event = "saml.signed"
 plane = "identity"
@@ -2164,7 +2164,7 @@ caep = ""
 webhook = false
 
 [[event]]
-event = "realm.rehomed"
+event = "environment.rehomed"
 plane = "identity"
 class = "configuration"
 outcome = "success"
@@ -2295,7 +2295,7 @@ ocsf_activity = 99
 caep = ""
 webhook = false
 
-# ---------------------------------------------------------------- Stage 14 (OP-159 m.3 (pp), m.4 (a), appended): post-quantum re-anchor and cosign, algorithm retirement, realm signing profile, projection references, WebAuthn attestation, the policy solver
+# ---------------------------------------------------------------- Stage 14 (OP-159 m.3 (pp), m.4 (a), appended): post-quantum re-anchor and cosign, algorithm retirement, environment signing profile, projection references, WebAuthn attestation, the policy solver
 
 [[event]]
 event = "pq.reanchored"

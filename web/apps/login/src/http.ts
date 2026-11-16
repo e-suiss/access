@@ -1,4 +1,4 @@
-// OP-65, OP-150 m.3 (r): the hosted pages call the realm's Frontend API on their own origin only;
+// OP-65, OP-150 m.3 (r): the hosted pages call the environment's Frontend API on their own origin only;
 // every write carries JSON and an `Idempotency-Key`.
 import { under } from "./base.js";
 
@@ -65,7 +65,7 @@ export function follow(target: string): void {
   if (url.protocol === "https:" || url.protocol === "http:") window.location.assign(url.href);
 }
 
-/** The request that sent the browser to this page, when `return_to` names this realm's own
+/** The request that sent the browser to this page, when `return_to` names this environment's own
  * `/authorize` (TN-104, X41), or its SAML or WS-Federation flow (`/saml/sso?flow=…`,
  * `/wsfed?flow=…`, OP-155 m.3 (c)), on this origin; otherwise `null`. */
 export function returnTo(): string | null {

@@ -257,17 +257,17 @@ jobs:
           done
           $COMPOSE logs --no-color bootstrap
           tls=(-fsS --cacert "$RUNNER_TEMP/ca.crt" --resolve access-server:8443:127.0.0.1)
-          curl "${tls[@]}" https://access-server:8443/realms/platform/.well-known/suiss-configuration
+          curl "${tls[@]}" https://access-server:8443/env/platform/.well-known/suiss-configuration
           # OP-151 m.3 (b): health is internal only; the management API answers on its own port
           test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
             --resolve access-server:8443:127.0.0.1 https://access-server:8443/healthz)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
             --resolve access-server.local:9443:127.0.0.1 https://access-server.local:9443/admin/v1/platform)" = 401
-          # OP-151 m.12 (b): the console sends a sign-in to the realm's own authorization server
+          # OP-151 m.12 (b): the console sends a sign-in to the environment's own authorization server
           test "$(curl -s -o /dev/null -w '%{redirect_url}' --cacert "$RUNNER_TEMP/ca.crt" \
             --resolve access-server.local:9443:127.0.0.1 \
-            'https://access-server.local:9443/console/api/sign-in?realm=acme' | cut -d'?' -f1)" \
-            = https://access-server:8443/realms/acme/authorize
+            'https://access-server.local:9443/console/api/sign-in?environment=acme' | cut -d'?' -f1)" \
+            = https://access-server:8443/env/acme/authorize
           curl "${tls[@]}" --cert "$RUNNER_TEMP/pep.crt" --key "$RUNNER_TEMP/pep.key" \
             https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
           $COMPOSE logs --no-color access-server | grep -q 'declared delivery targets'
@@ -293,7 +293,7 @@ jobs:
       - name: Local client
         run: |
           client_id="$(jq -r '.test_user.client_id' "$RUNNER_TEMP/again.json")"
-          issuer="$(jq -r '.realms[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/again.json")"
+          issuer="$(jq -r '.environments[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/again.json")"
           instance="$(jq -r '.test_user.instance' "$RUNNER_TEMP/again.json")"
           $COMPOSE run --rm --no-deps -T local-client login \
             --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
@@ -331,7 +331,7 @@ jobs:
             params: { ledger: { eq: "main" }, declaration: { eq: { bytes: "0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dE" } } },
             validity: { from: ($now - 60000), until: ($now + 600000) } }' "$RUNNER_TEMP/again.json")"
           read -r issuer domain party instance grant since cgrant csince < <(jq -r '.test_user as $u | [
-            (.realms[] | select(.slug == "acme") | .issuer), $u.allowed.domain, $u.party, $u.instance,
+            (.environments[] | select(.slug == "acme") | .issuer), $u.allowed.domain, $u.party, $u.instance,
             $u.allowed.basis.holding.grant, $u.allowed.basis.holding.since,
             $u.allowed.contribution.basis.holding.grant, $u.allowed.contribution.basis.holding.since] | @tsv' "$RUNNER_TEMP/again.json")
           $COMPOSE run --rm --no-deps -T local-client approve \
@@ -412,8 +412,8 @@ jobs:
             $COMPOSE exec -T access-server cat "/var/lib/access/certs/$f" > "$RUNNER_TEMP/mcp/$f"
           done
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/mcp/summary.json"
-          issuer="$(jq -er '.realms[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/mcp/summary.json")"
-          test "$issuer" = https://access-server:8443/realms/acme
+          issuer="$(jq -er '.environments[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/mcp/summary.json")"
+          test "$issuer" = https://access-server:8443/env/acme
           echo "MCP_ISSUER=$issuer" >> "$GITHUB_ENV"
       # §11.8.2, AG-17: the authorization server's metadata as an MCP client discovers it
       - name: MCP conformance, authorization server
@@ -425,14 +425,14 @@ jobs:
           --url "$MCP_ISSUER"
           --scenario authorization-server-metadata-endpoint
           --output-dir "$RUNNER_TEMP/mcp/results"
-      # AG-16, §11.5, OP-154 m.6 (k): the reference resource server on the deployment's realm
+      # AG-16, §11.5, OP-154 m.6 (k): the reference resource server on the deployment's environment
       - name: Start the reference MCP resource server
         run: |
           dir="$RUNNER_TEMP/mcp"
-          domain="sha-256:$(jq -er '.realms[] | select(.slug == "acme") | .domain' "$dir/summary.json")"
+          domain="sha-256:$(jq -er '.environments[] | select(.slug == "acme") | .domain' "$dir/summary.json")"
           curl -fsS --max-time 10 --cacert "$dir/ca.crt" -o "$dir/metadata.cose" \
             "https://access-server:8443/.well-known/access-domain-metadata/$domain"
-          jq -e '.sample.realm == "acme"' "$dir/summary.json"
+          jq -e '.sample.environment == "acme"' "$dir/summary.json"
           jq '[.sample | {
             name: "approve",
             action: (.action | .schema = ("sha-256:" + .schema)),
@@ -547,7 +547,7 @@ jobs:
             sleep 2
           done
           exit 1
-      # OP-149 m.26 (b): the realm asks the test user for a second factor; the browser tests answer
+      # OP-149 m.26 (b): the environment asks the test user for a second factor; the browser tests answer
       # it with a code of the authenticator app whose seed the bootstrap kept in its volume
       - name: Test user's authenticator app
         id: totp
@@ -580,7 +580,7 @@ jobs:
             params: { ledger: { eq: "main" }, declaration: { eq: { bytes: "0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dE" } } },
             validity: { from: ($now - 60000), until: ($now + 600000) } }' "$summary")"
           read -r issuer domain party instance grant since cgrant csince < <(jq -r '.test_user as $u | [
-            (.realms[] | select(.slug == "acme") | .issuer), $u.allowed.domain, $u.party, $u.instance,
+            (.environments[] | select(.slug == "acme") | .issuer), $u.allowed.domain, $u.party, $u.instance,
             $u.allowed.basis.holding.grant, $u.allowed.basis.holding.since,
             $u.allowed.contribution.basis.holding.grant, $u.allowed.contribution.basis.holding.since] | @tsv' "$summary")
           $COMPOSE run --rm --no-deps -T local-client push \

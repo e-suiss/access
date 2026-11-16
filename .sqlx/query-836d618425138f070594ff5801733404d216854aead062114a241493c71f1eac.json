@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.ldap_credentials SET phc = $4, rotated_at = clock_timestamp()\n              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "836d618425138f070594ff5801733404d216854aead062114a241493c71f1eac"
+}

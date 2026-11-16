@@ -1,4 +1,4 @@
-//! `access-cli admin`: a generic client of the realm-admin surface (OP-151 m.3 (h)). Resource
+//! `access-cli admin`: a generic client of the environment-admin surface (OP-151 m.3 (h)). Resource
 //! names come from the compiled-in contract (`admin-v1.json`); a name it does not list is
 //! refused before anything is sent. Reads use the DPoP-bound read token; `create`, `update` and
 //! `retire` draft the write, check the draft, sign the AIS with the Instance key and send it:
@@ -99,7 +99,7 @@ pub(crate) fn import_body(text: &str) -> Map<String, Value> {
 fn unknown(resource: &str) -> Code {
     let known: Vec<&str> = api::contract().resources().into_iter().collect();
     note(&format!(
-        "access-cli: no such operation on `{resource}`; the realm surface has: {}",
+        "access-cli: no such operation on `{resource}`; the environment surface has: {}",
         known.join(", ")
     ));
     exit::USAGE
@@ -199,7 +199,7 @@ pub(crate) async fn run(args: AdminArgs) -> Code {
         }
     };
     let client = Client::new(&https, &instance, &target, &System);
-    let path = op.url_path(&target.realm, key.as_deref());
+    let path = op.url_path(&target.environment, key.as_deref());
     match &args.verb {
         Verb::Get { .. } => match client.get(&path).await {
             Ok((v, _)) => out(&format!("{v:#}\n")),

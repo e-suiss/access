@@ -10,7 +10,7 @@ use serde_json::{Value as Json, json};
 use crate::AdminError;
 use crate::domain::Invalid;
 
-/// Whether the realm's CA is on: its newest change turned it on, rotated or replaced its key.
+/// Whether the environment's CA is on: its newest change turned it on, rotated or replaced its key.
 ///
 /// # Errors
 /// [`AdminError`].

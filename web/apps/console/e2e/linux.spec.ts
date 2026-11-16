@@ -9,7 +9,7 @@ const CERT = "x".repeat(43);
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/linux-hosts", {
+  bff.admin.set("envs/acme/linux-hosts", {
     items: [
       {
         name: "web-1",
@@ -64,8 +64,8 @@ test("hosts change only through signed changes", async ({ page, bff }) => {
   await expect(page.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["PUT", "realms/acme/linux-hosts/web-1/break-glass-policy"],
-    ["POST", "realms/acme/linux-hosts"],
+    ["PUT", "envs/acme/linux-hosts/web-1/break-glass-policy"],
+    ["POST", "envs/acme/linux-hosts"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({ enabled: true });
   expect(bff.writes[1]?.body).toMatchObject({ name: "web-2", host_group: "prod-web" });

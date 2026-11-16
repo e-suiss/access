@@ -1,7 +1,7 @@
 //! Use cases over the domain and its ports (OP-63): the hosted login's flows and the signed-in
 //! user's sessions and methods, as transport-neutral [`Reply`] values (OP-146 m.12 (b)).
 //!
-//! Every login answer is a [`Ui`]. Before the first factor the step is built from realm policy
+//! Every login answer is a [`Ui`]. Before the first factor the step is built from environment policy
 //! and from what the browser sent, never from the account, and every refusal that could tell
 //! whether an account exists is the one neutral `401` (CR-40, X34, TN-82).
 
@@ -51,7 +51,7 @@ use access_identity_account::app::hasher::Hasher;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::domain::login::{Problem, REJECTED};
 use access_identity_account::notify::ports::Notifier;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
@@ -75,7 +75,7 @@ use crate::domain::flow::{EmailMethods, EmailWait, FlowId, Requirement, SecondFa
 use crate::domain::message::{Message, TextId};
 use crate::domain::node::{FieldName, Method, PasskeyOptions};
 use crate::domain::submission::{Checked, Submission};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 pub use access_identity_session::domain::session::{FLOW_COOKIE, MARKER_COOKIE, SESSION_COOKIE};
 
@@ -234,7 +234,7 @@ enum Current {
 
 type Signin<'a, C, N> = Auth<'a, PgAccounts, C, OsRandom, N, PgPasskeys<'a>, LogSignals>;
 
-/// Builds the sign-in service of one realm for one request.
+/// Builds the sign-in service of one environment for one request.
 macro_rules! signin {
     ($self:ident, $kit:ident, $auth:ident) => {
         $crate::app::signin!($self, $kit, $auth, None);
@@ -250,13 +250,13 @@ macro_rules! signin {
             kek: &*$kit.kek,
             ids: &$kit.ids,
         };
-        let notifier_realm = $kit.realm();
-        let notifier = $self.messages.notifier(&notifier_realm);
+        let notifier_environment = $kit.environment();
+        let notifier = $self.messages.notifier(&notifier_environment);
         let link_base = format!("{}/login/link#", $kit.issuer);
-        let realm_hasher = $self.hasher.for_policy($kit.hash);
+        let environment_hasher = $self.hasher.for_policy($kit.hash);
         let $auth = ::access_identity_session::app::Auth {
             db: &db,
-            realm: $kit.realm(),
+            environment: $kit.environment(),
             policy: $kit.auth,
             lifetimes: $kit.lifetimes,
             clock: &$self.clock,
@@ -264,7 +264,7 @@ macro_rules! signin {
             notifier: &notifier,
             link_base: &link_base,
             gate: &$self.gate,
-            hasher: &realm_hasher,
+            hasher: &environment_hasher,
             hooks: &*$self.hooks,
             passkeys: ::access_identity_session::app::Passkeys {
                 registry: &registry,
@@ -284,14 +284,14 @@ macro_rules! signin {
 
 pub(crate) use signin;
 
-/// The hosted login of every realm this process serves (CMP-15.6).
+/// The hosted login of every environment this process serves (CMP-15.6).
 pub struct Hosted<K, C, M> {
-    /// Realm keys and settings.
+    /// Environment keys and settings.
     pub kits: K,
     /// The `access_app` pool.
     pub db: Pool,
     /// The outbox reader pool, which sees the platform product clients across tenants: the
-    /// Approval Surface accepts a product's registered return address from any realm with it
+    /// Approval Surface accepts a product's registered return address from any environment with it
     /// (OP-149 m.26 (a), m.33 (d)).
     pub products: Pool,
     /// Trusted time.
@@ -302,10 +302,10 @@ pub struct Hosted<K, C, M> {
     pub gate: LoginGate,
     /// The Argon2id service.
     pub hasher: Hasher,
-    /// Where a completed sign-in with no request to return to goes: a path under the realm's
+    /// Where a completed sign-in with no request to return to goes: a path under the environment's
     /// issuer (`redirect_to`; OP-159 m.29 (d)).
     pub redirect_to: String,
-    /// The realms' inline hooks (TN-135): `post_login` may refuse a sign-in.
+    /// The environments' inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
     /// SL2 risk sources (TN-46, OP-151 m.1 (b)).
     pub risk: access_identity_session::app::RiskServices,
@@ -320,8 +320,8 @@ fn failed(e: &SessionError) -> Reply {
     Reply::problem(e.problem())
 }
 
-/// The realm's requirement list before the first factor: realm policy only (OP-146 m.12 (c)).
-fn policy(kit: &RealmKit) -> Vec<Requirement> {
+/// The environment's requirement list before the first factor: environment policy only (OP-146 m.12 (c)).
+fn policy(kit: &EnvironmentKit) -> Vec<Requirement> {
     let mfa = kit.auth.mfa == MfaPolicy::Required || kit.auth.min_aal >= Aal::Aal2;
     if mfa {
         vec![Requirement::SecondFactor]
@@ -330,7 +330,7 @@ fn policy(kit: &RealmKit) -> Vec<Requirement> {
     }
 }
 
-fn email(kit: &RealmKit) -> EmailMethods {
+fn email(kit: &EnvironmentKit) -> EmailMethods {
     EmailMethods {
         code: kit.auth.email_otp,
         link: kit.auth.magic_link,
@@ -360,7 +360,7 @@ fn typed(b: &Browser<'_>, handle: &str) -> Option<String> {
     String::from_utf8(b64url_decode(id).ok()?).ok()
 }
 
-/// The first step of a realm in strict enumeration mode (OP-153 m.3 (j), TN-96): identifier and
+/// The first step of an environment in strict enumeration mode (OP-153 m.3 (j), TN-96): identifier and
 /// password on one screen, submitted together, with the passkey path kept; nothing branches on
 /// the identifier before the answer.
 fn strict(mut ui: Ui) -> Ui {
@@ -411,8 +411,8 @@ fn strict(mut ui: Ui) -> Ui {
     ui
 }
 
-/// The identifier step as the realm's enumeration mode draws it.
-fn first_step(kit: &RealmKit, ui: Ui) -> Ui {
+/// The identifier step as the environment's enumeration mode draws it.
+fn first_step(kit: &EnvironmentKit, ui: Ui) -> Ui {
     if kit.signin.strict && kit.auth.password {
         strict(ui)
     } else {
@@ -421,9 +421,9 @@ fn first_step(kit: &RealmKit, ui: Ui) -> Ui {
 }
 
 /// N5: the step-wide options of a login step (TN-36, X33, X-L2): "Keep me signed in" before
-/// the first factor, the 30-day second-step marker on the second step when the realm allows
+/// the first factor, the 30-day second-step marker on the second step when the environment allows
 /// it. Neither starts checked.
-fn with_options(kit: &RealmKit, mut ui: Ui) -> Ui {
+fn with_options(kit: &EnvironmentKit, mut ui: Ui) -> Ui {
     use crate::domain::flow::Step;
     use crate::domain::node::Node;
     if !ui.kind.is_login() {
@@ -464,7 +464,7 @@ fn offered_options(ui: &Ui, checked: &Checked) -> (Option<bool>, Option<bool>) {
     out
 }
 
-/// The path of an issuer URL below its host: empty for a host issuer, `/realms/{slug}` for a
+/// The path of an issuer URL below its host: empty for a host issuer, `/env/{slug}` for a
 /// path one (§17.9.6).
 fn issuer_path(issuer: &str) -> &str {
     let rest = issuer
@@ -487,11 +487,11 @@ fn shipped_presets() -> Option<&'static access_identity_federation::domain::pres
         .as_ref()
 }
 
-fn shape(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
+fn shape(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     shape_bare(kit, flow, current).map(|ui| with_options(kit, ui))
 }
 
-fn shape_bare(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
+fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     let blank = PasskeyOptions::new(json!({}))?;
     let reqs = policy(kit);
     Some(match current {
@@ -526,11 +526,11 @@ where
     M: Messages,
 {
     /// OP-159 m.29 (d)
-    pub(crate) fn done_to(&self, kit: &RealmKit) -> String {
+    pub(crate) fn done_to(&self, kit: &EnvironmentKit) -> String {
         format!("{}{}", kit.issuer, self.redirect_to)
     }
 
-    pub(crate) async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Reply> {
+    pub(crate) async fn kit(&self, entry: &EnvironmentEntry) -> Result<Arc<EnvironmentKit>, Reply> {
         self.kits.kit(entry).await.map_err(|_| {
             Reply::problem(Problem {
                 status: 503,
@@ -541,20 +541,20 @@ where
         })
     }
 
-    /// The realm's `/.well-known/webauthn` document (TN-18).
+    /// The environment's `/.well-known/webauthn` document (TN-18).
     ///
     /// # Errors
     /// The reply to send instead: no kit, or a list browsers would cut.
-    pub async fn related_origins(&self, entry: &RealmEntry) -> Result<String, Reply> {
+    pub async fn related_origins(&self, entry: &EnvironmentEntry) -> Result<String, Reply> {
         let kit = self.kit(entry).await?;
         related_origins_document(&kit.rp, &Psl)
             .map_err(|_| Reply::problem(SessionError::Corrupt.problem()))
     }
 
     /// N5: a login step as drawn: its step-wide options and, on the first step, a button for
-    /// each active sign-in provider of the realm (TN-36, X33, OP-153 m.3 (l)). A provider list
+    /// each active sign-in provider of the environment (TN-36, X33, OP-153 m.3 (l)). A provider list
     /// that cannot be read now leaves the buttons out; the step itself is unchanged.
-    async fn drawn(&self, kit: &RealmKit, mut reply: Reply) -> Reply {
+    async fn drawn(&self, kit: &EnvironmentKit, mut reply: Reply) -> Reply {
         use crate::domain::flow::Step;
         use crate::domain::node::Node;
         let Body::Ui(ui) = &mut reply.body else {
@@ -569,7 +569,8 @@ where
         }
         let rows = async {
             let mut t =
-                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                    .await?;
             let rows = t.social_providers().await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
@@ -604,14 +605,15 @@ where
         reply
     }
 
-    /// The realm's active upstream connections that sign anyone in: not an organization's,
-    /// which home realm discovery names (TN-98), with the name on their button.
-    async fn upstream_buttons(&self, kit: &RealmKit) -> Vec<(String, String)> {
+    /// The environment's active upstream connections that sign anyone in: not an organization's,
+    /// which home environment discovery names (TN-98), with the name on their button.
+    async fn upstream_buttons(&self, kit: &EnvironmentKit) -> Vec<(String, String)> {
         use access_identity_federation::domain::connection::Profile;
         let rows = async {
             let mut t =
-                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
-            let rows = access_store::idp::realm::upstreams(&mut t, "", 32).await?;
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                    .await?;
+            let rows = access_store::idp::environment::upstreams(&mut t, "", 32).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
         };
@@ -642,7 +644,7 @@ where
 
     /// `POST /v1/login/flows`: a new flow at the identifier step, with discoverable passkey
     /// options (TN-96, TN-99).
-    pub async fn create(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn create(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -657,13 +659,13 @@ where
 
     /// `POST /v1/login/step-up`: re-authenticates the live session in place when the
     /// authorization request's `max_age` or `acr_values` asks for it (`reason` `reauthenticate`
-    /// or `step_up` on `/login`): fresh steps reaching the asked AAL, never below the realm's,
-    /// restamp the session (TN-44, RFC 9470, §8.17.5.4, X-L3). The step is a passkey; a realm
+    /// or `step_up` on `/login`): fresh steps reaching the asked AAL, never below the environment's,
+    /// restamp the session (TN-44, RFC 9470, §8.17.5.4, X-L3). The step is a passkey; an environment
     /// without passkey sign-in, or a browser without a live session, answers with a problem
     /// and the page signs in afresh.
     pub async fn step_up(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         max_age_s: u64,
         acr: Option<&str>,
@@ -710,7 +712,7 @@ where
     async fn start<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         identifier: Option<&str>,
         status: u16,
@@ -752,7 +754,7 @@ where
 
     /// `GET /v1/login/flows/{flow}`: the flow's current step; a flow completed elsewhere (a
     /// confirmed magic link) signs this browser in here.
-    pub async fn get(&self, entry: &RealmEntry, b: &Browser<'_>, handle: &str) -> Reply {
+    pub async fn get(&self, entry: &EnvironmentEntry, b: &Browser<'_>, handle: &str) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -782,7 +784,7 @@ where
     /// neutral `401` (CR-40).
     pub async fn submit(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         handle: &str,
         submission: Submission,
@@ -803,7 +805,7 @@ where
     async fn submitted<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         handle: &str,
         submission: Submission,
@@ -921,7 +923,7 @@ where
     async fn strict_password<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         identifier: &str,
         password: &str,
@@ -985,7 +987,7 @@ where
     async fn current<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         fref: &FlowRef<'_>,
     ) -> Result<Current, Reply> {
@@ -1065,7 +1067,7 @@ where
     async fn render<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         flow: &FlowId,
         fref: &FlowRef<'_>,
         current: Current,
@@ -1142,7 +1144,7 @@ where
     async fn refused<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         flow: &FlowId,
         fref: &FlowRef<'_>,
@@ -1180,7 +1182,7 @@ where
     async fn outcome<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         flow: &FlowId,
         fref: &FlowRef<'_>,
@@ -1255,7 +1257,12 @@ where
 
     /// `POST /v1/login/link/preview`: what opening a magic link shows; consumes nothing
     /// (TN-102 rule 6).
-    pub async fn preview_link(&self, entry: &RealmEntry, b: &Browser<'_>, token: &str) -> Reply {
+    pub async fn preview_link(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        token: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -1276,7 +1283,7 @@ where
     /// sign-in (§10.2.2, OP-146 m.14 (h)).
     pub async fn confirm_link(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         token: &str,
         other_device: bool,

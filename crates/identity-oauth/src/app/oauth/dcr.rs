@@ -1,6 +1,6 @@
-//! `POST /register` (RFC 7591) under the realm's DCR profile (OP-154 m.3 (j), §11.4.5 #31-35):
+//! `POST /register` (RFC 7591) under the environment's DCR profile (OP-154 m.3 (j), §11.4.5 #31-35):
 //! open only while the decided policy is, and only with an initial access token it names; limited
-//! per IP prefix, per realm and in live clients; and the DCR clients' resolution, which retires a
+//! per IP prefix, per environment and in live clients; and the DCR clients' resolution, which retires a
 //! client the policy no longer admits or that went unused for 30 days (OP-73: nothing is deleted).
 
 use std::net::IpAddr;
@@ -9,11 +9,12 @@ use access_kernel::json::b64url_encode;
 use access_store::dcr::{DcrClientRow, DcrPolicyRow, NewDcrClient};
 use serde_json::json;
 
-use super::{Env, OAuth, Realm, Reply};
+use super::{Env, Environment, OAuth, Reply};
 use crate::domain::cimd::{self, redirect_hosts};
 use crate::domain::client::{CimdFacts, Client, TrustLevel};
 use crate::domain::dcr::{
-    self, CLIENT_PREFIX, DcrPolicy, MAX_LIVE, PER_PREFIX_PER_HOUR, PER_REALM_PER_DAY, UNUSED_MS,
+    self, CLIENT_PREFIX, DcrPolicy, MAX_LIVE, PER_ENVIRONMENT_PER_DAY, PER_PREFIX_PER_HOUR,
+    UNUSED_MS,
 };
 use crate::ports::Unavailable;
 use crate::ports::oauth::{OAuthDb, OAuthTx};
@@ -74,15 +75,18 @@ pub fn of_dcr(row: &DcrClientRow) -> Option<Client> {
 }
 
 impl<E: Env> OAuth<E> {
-    /// `POST /register` for `realm` from `peer` (RFC 7591 §3).
+    /// `POST /register` for `environment` from `peer` (RFC 7591 §3).
     pub async fn register_client(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         authorization: Option<&str>,
         body: &[u8],
         peer: Option<IpAddr>,
     ) -> Reply {
-        match self.register_inner(realm, authorization, body, peer).await {
+        match self
+            .register_inner(environment, authorization, body, peer)
+            .await
+        {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -90,13 +94,13 @@ impl<E: Env> OAuth<E> {
 
     async fn register_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         authorization: Option<&str>,
         body: &[u8],
         peer: Option<IpAddr>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let policy = policy_of(&tx.dcr_policy().await?);
         // §10.1.2
         if !policy.enabled {
@@ -127,7 +131,7 @@ impl<E: Env> OAuth<E> {
                 now.saturating_sub(DAY_MS),
             )
             .await?;
-        if ip >= PER_PREFIX_PER_HOUR || day >= PER_REALM_PER_DAY || live >= MAX_LIVE {
+        if ip >= PER_PREFIX_PER_HOUR || day >= PER_ENVIRONMENT_PER_DAY || live >= MAX_LIVE {
             return Ok(Reply::Problem {
                 status: 429,
                 code: "registration-limited",
@@ -143,13 +147,13 @@ impl<E: Env> OAuth<E> {
             return Ok(refused(
                 400,
                 dcr::Refused::RedirectUri.code(),
-                "a redirect host is outside the realm's registration policy",
+                "a redirect host is outside the environment's registration policy",
             ));
         }
         tx.insert_dcr_client(&NewDcrClient {
             client_id: &client_id,
             metadata: &metadata,
-            issuer: realm.issuer.as_str(),
+            issuer: environment.issuer.as_str(),
             token: digest,
             ip_prefix: &prefix,
             now_ms: now,
@@ -169,7 +173,7 @@ impl<E: Env> OAuth<E> {
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
                 // §11.4.5
-                "issuer": realm.issuer.as_str(),
+                "issuer": environment.issuer.as_str(),
             })
             .to_string(),
             dpop_nonce: None,

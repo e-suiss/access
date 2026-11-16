@@ -1,11 +1,11 @@
-//! The three-tier `session_epoch` check of one realm (MD-7, OP-21, §17.3.4): the node cache,
+//! The three-tier `session_epoch` check of one environment (MD-7, OP-21, §17.3.4): the node cache,
 //! the poll of moved epochs, and the primary. Never-seen subjects ask the primary; a primary
 //! that cannot answer is an error and the caller denies (G49, MD-8).
 
 use std::sync::{Mutex, PoisonError};
 
 use access_identity_account::ports::AccountTx;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
 use crate::SessionError;
 use crate::domain::epoch::{EpochCache, EpochCheck};
@@ -17,10 +17,10 @@ pub const POLL_OVERLAP_MS: i64 = 5_000;
 /// Rows one poll reads at most.
 pub const POLL_LIMIT: i64 = 10_000;
 
-/// The epoch tiers of one realm on one node.
+/// The epoch tiers of one environment on one node.
 pub struct Epochs {
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     cache: Mutex<EpochCache>,
 }
 
@@ -29,12 +29,12 @@ fn poisoned<T>(_: PoisonError<T>) -> SessionError {
 }
 
 impl Epochs {
-    /// The tiers of a realm; cache hits are trusted for `max_staleness_ms`.
+    /// The tiers of an environment; cache hits are trusted for `max_staleness_ms`.
     #[must_use]
-    pub fn new(tenant: TenantId, realm: RealmId, max_staleness_ms: u64) -> Self {
+    pub fn new(tenant: TenantId, environment: EnvironmentId, max_staleness_ms: u64) -> Self {
         Self {
             tenant,
-            realm,
+            environment,
             cache: Mutex::new(EpochCache::new(max_staleness_ms)),
         }
     }
@@ -66,7 +66,7 @@ impl Epochs {
             EpochCheck::Revoked => return Ok(false),
             EpochCheck::AskPrimary => {}
         }
-        let mut tx = db.begin(self.tenant, self.realm).await?;
+        let mut tx = db.begin(self.tenant, self.environment).await?;
         let row = tx.subject(subject, false).await?;
         tx.commit().await?;
         let Some(row) = row else {
@@ -100,7 +100,7 @@ impl Epochs {
                 .cursor_ms()
                 .saturating_sub(POLL_OVERLAP_MS),
         };
-        let mut tx = db.begin(self.tenant, self.realm).await?;
+        let mut tx = db.begin(self.tenant, self.environment).await?;
         let moved = tx.epochs_since(from, POLL_LIMIT).await?;
         tx.commit().await?;
         let mut cache = self.cache.lock().map_err(poisoned)?;

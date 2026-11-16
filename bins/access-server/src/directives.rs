@@ -86,18 +86,18 @@ pub(crate) struct Applied {
     refused: usize,
 }
 
-/// Moves every realm's subjects to the floor; true once all of them are there.
+/// Moves every environment's subjects to the floor; true once all of them are there.
 async fn raise_floor(app: &PgPool, router: &PgPool, floor_ms: u64) -> bool {
     let Ok(floor) = i64::try_from(floor_ms) else {
         return false;
     };
-    let Ok(realms) = access_store::tenancy::routes(router).await else {
+    let Ok(environments) = access_store::tenancy::routes(router).await else {
         return false;
     };
     let mut all = true;
-    for r in realms {
+    for r in environments {
         let moved = async {
-            let mut t = TenantTx::begin(app, r.tenant, r.realm).await?;
+            let mut t = TenantTx::begin(app, r.tenant, r.environment).await?;
             let n = t.raise_epoch_floor(floor).await?;
             t.commit().await?;
             Ok::<u64, access_store::StoreError>(n)

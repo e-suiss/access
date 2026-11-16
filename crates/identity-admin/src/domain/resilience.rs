@@ -1,6 +1,6 @@
-//! The catalog 8 realm settings (OP-158 m.3 (a)): rehome, residency, the DR profile, the rate
+//! The catalog 8 environment settings (OP-158 m.3 (a)): rehome, residency, the DR profile, the rate
 //! limit, the crypto and hash profiles and the audit tier. Each compiles into its
-//! `idp.realm.*` change; until its lane applies it the change is refused as not yet served.
+//! `idp.environment.*` change; until its lane applies it the change is refused as not yet served.
 
 use access_internal_api::idp::IdpAction;
 use access_kernel::json::b64url_decode;
@@ -44,7 +44,7 @@ fn map(entries: Vec<(&str, Value)>) -> Value {
     )
 }
 
-/// `idp.realm.rehome` (§12.1.1 2a, E14, OP-158 m.3 (o)): the governing domain the realm moves
+/// `idp.environment.rehome` (§12.1.1 2a, E14, OP-158 m.3 (o)): the governing domain the environment moves
 /// to. It needs an Exercise in both domains; reserved, CT3.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rehome {
@@ -53,7 +53,7 @@ pub struct Rehome {
 }
 
 impl Rehome {
-    /// `rehomeRealm`: `{"domain"}`, the domain id in base64url.
+    /// `rehomeEnvironment`: `{"domain"}`, the domain id in base64url.
     ///
     /// # Errors
     /// [`Invalid::Body`].
@@ -102,7 +102,7 @@ impl DrClass {
     }
 }
 
-/// `idp.realm.residency` (OP-158 m.3 (o)): the region the realm's cell is in; changing it is a
+/// `idp.environment.residency` (OP-158 m.3 (o)): the region the environment's cell is in; changing it is a
 /// cell move. Reserved, CT3.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Residency {
@@ -136,8 +136,8 @@ impl Residency {
     }
 }
 
-/// `idp.realm.dr_profile` (OP-158 m.3 (a), (r)): the declared async DR profile and its RPO; a
-/// realm without one is never promoted from an async copy.
+/// `idp.environment.dr_profile` (OP-158 m.3 (a), (r)): the declared async DR profile and its RPO; a
+/// environment without one is never promoted from an async copy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DrProfile {
     /// The declared recovery point objective, in seconds; above zero.
@@ -166,8 +166,8 @@ impl DrProfile {
     #[must_use]
     pub const fn action(profile: Option<&Self>) -> IdpAction {
         match profile {
-            Some(_) => IdpAction::RealmDrProfile,
-            None => IdpAction::RealmDrProfileClose,
+            Some(_) => IdpAction::EnvironmentDrProfile,
+            None => IdpAction::EnvironmentDrProfileClose,
         }
     }
 
@@ -180,17 +180,17 @@ impl DrProfile {
     }
 }
 
-/// The highest `rate_limit_rps` a realm can set (OP-158 m.3 (v)).
+/// The highest `rate_limit_rps` an environment can set (OP-158 m.3 (v)).
 pub const MAX_RPS: u32 = 1_000_000;
 
-/// The realm `rate_limit_rps` until `idp.realm.rate_limit` sets one (OP-35, PD).
+/// The environment `rate_limit_rps` until `idp.environment.rate_limit` sets one (OP-35, PD).
 pub const DEFAULT_RPS: u32 = 200;
-/// A tenant's identity requests per second across its realms (TN-24, PD).
+/// A tenant's identity requests per second across its environments (TN-24, PD).
 pub const TENANT_RPS: u32 = 1_000;
 /// Seconds of each rate a burst may take at once (PD).
 pub const BURST_S: u32 = 2;
 
-/// `idp.realm.rate_limit` (OP-35, OP-158 m.3 (a), (v)): the realm's `rate_limit_rps`.
+/// `idp.environment.rate_limit` (OP-35, OP-158 m.3 (a), (v)): the environment's `rate_limit_rps`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RateLimit {
     /// Requests per second; 1 to [`MAX_RPS`].
@@ -219,7 +219,7 @@ impl RateLimit {
     }
 }
 
-/// `idp.realm.crypto_profile` (CR-15, CR-36, OP-158 m.3 (a), (y)).
+/// `idp.environment.crypto_profile` (CR-15, CR-36, OP-158 m.3 (a), (y)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CryptoProfile {
     /// Only FIPS-approved algorithms, and PBKDF2-HMAC-SHA-256 for passwords.
@@ -265,7 +265,7 @@ impl HashProfile {
     }
 }
 
-/// `idp.realm.hash_profile` (OP-33, OP-158 m.3 (a)): raised, never lowered.
+/// `idp.environment.hash_profile` (OP-33, OP-158 m.3 (a)): raised, never lowered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HashProfileSet {
     /// The profile.
@@ -295,7 +295,7 @@ impl HashProfileSet {
     }
 }
 
-/// `idp.realm.audit_tier` (OP-37, OP-40, OP-158 m.3 (a), (w)): the cold tier target and the hot
+/// `idp.environment.audit_tier` (OP-37, OP-40, OP-158 m.3 (a), (w)): the cold tier target and the hot
 /// window, at least [`MIN_HOT_DAYS`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditTier {
@@ -330,8 +330,8 @@ impl AuditTier {
     #[must_use]
     pub const fn action(tier: Option<&Self>) -> IdpAction {
         match tier {
-            Some(_) => IdpAction::RealmAuditTier,
-            None => IdpAction::RealmAuditTierClose,
+            Some(_) => IdpAction::EnvironmentAuditTier,
+            None => IdpAction::EnvironmentAuditTierClose,
         }
     }
 
@@ -388,7 +388,7 @@ mod tests {
         );
         assert_eq!(
             AuditTier::action(AuditTier::parse(&json!({})).unwrap().as_ref()),
-            IdpAction::RealmAuditTierClose
+            IdpAction::EnvironmentAuditTierClose
         );
     }
 }

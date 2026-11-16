@@ -1,6 +1,6 @@
 //! The `AuthZEN` 1.0 PDP checklist (§9.5.1, P35, OP-155 m.3 (q), Ek B 5075) and ADP CBOR (Ek B
 //! 5076) through the real ADP router, hardened as the server serves it, on the real sequencer,
-//! store and authority signer: an admin-created realm whose root acts with its own key, one test
+//! store and authority signer: an admin-created environment whose root acts with its own key, one test
 //! per checklist item.
 
 use access_http::adp::adapters::{Discovery, Pep, router as adp_router};
@@ -28,7 +28,7 @@ const ISSUER: &str = "https://access.test";
 
 const SLUG: &str = "authzen";
 
-/// A realm, its root and the ADP router over its domain.
+/// An environment, its root and the ADP router over its domain.
 pub(super) struct Pdp {
     pub(super) w: World,
     pub(super) domain: Digest,
@@ -40,13 +40,13 @@ pub(super) struct Pdp {
     _signer: AuthoritySigner,
 }
 
-/// The realm `authzen`, created by the admin path with the bootstrap root as founder, the root
+/// The environment `authzen`, created by the admin path with the bootstrap root as founder, the root
 /// onboarded and holding a Grant to read the audit stream; the ADP router hardened as served.
 pub(super) async fn pdp(label: &str) -> Pdp {
     pdp_timed(label, None).await
 }
 
-/// [`pdp`] whose realm has the CT3 time-lock `ct3_delay_s`; a test domain's is zero
+/// [`pdp`] whose environment has the CT3 time-lock `ct3_delay_s`; a test domain's is zero
 /// (OP-153 m.7 (a)).
 pub(super) async fn pdp_timed(label: &str, ct3_delay_s: Option<u64>) -> Pdp {
     pdp_with(
@@ -66,7 +66,7 @@ pub(super) async fn pdp_with(
     let (w, signer) = World::open_analysed(label, true, None, fresh().await.unwrap(), analysis);
     let signer = signer.unwrap();
     schedule(&signer);
-    let (tenant, created) = w.admin_realm_timed(SLUG, ct3_delay_s).await;
+    let (tenant, created) = w.admin_environment_timed(SLUG, ct3_delay_s).await;
     let root = root_key(&w.keys).unwrap();
     let party = root_party(&root.public_key());
     let declared = DeclaredTargets::default();
@@ -74,7 +74,7 @@ pub(super) async fn pdp_with(
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -82,7 +82,7 @@ pub(super) async fn pdp_with(
     };
     schedule(&signer);
     bootstrap
-        .onboard(tenant, created.realm, created.domain, &root, party)
+        .onboard(tenant, created.environment, created.domain, &root, party)
         .await
         .unwrap();
     let nonce = access_crypto::random::bytes::<16>().unwrap();
@@ -159,7 +159,7 @@ impl Pdp {
         server_time(&self.w.db.app).await.unwrap()
     }
 
-    /// An `idp` action of the root on `kind` in this realm, under the IDP anchor.
+    /// An `idp` action of the root on `kind` in this environment, under the IDP anchor.
     pub(super) async fn idp_intent(&self, action: IdpAction, kind: &str) -> IntentEnvelope {
         let at = Moment::at(self.now().await);
         IntentEnvelope {

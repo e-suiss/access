@@ -23,7 +23,9 @@ use access_identity_webauthn::domain::ceremony::{
 use access_identity_webauthn::domain::credential::{AttestationKind, CredentialRecord};
 use access_identity_webauthn::domain::ids::{CredentialId, UserHandle};
 use access_identity_webauthn::domain::options::UserEntity;
-use access_identity_webauthn::domain::policy::{RealmPolicy, SignCountAction, UserVerification};
+use access_identity_webauthn::domain::policy::{
+    EnvironmentPolicy, SignCountAction, UserVerification,
+};
 use access_identity_webauthn::domain::prf::PrfSalt;
 use access_identity_webauthn::ports::CredentialRegistry;
 use access_parse::cbor::CborError;
@@ -41,7 +43,7 @@ fn user() -> UserEntity<'static> {
 
 async fn register_with(
     s: &Service,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     a: &mut Authenticator,
     origin: &str,
     extensions: ClientExtensionResults,
@@ -70,14 +72,18 @@ async fn register_with(
     .unwrap()
 }
 
-async fn register(s: &Service, policy: &RealmPolicy, a: &mut Authenticator) -> CredentialRecord {
+async fn register(
+    s: &Service,
+    policy: &EnvironmentPolicy,
+    a: &mut Authenticator,
+) -> CredentialRecord {
     match register_with(s, policy, a, ORIGIN, ClientExtensionResults::default()).await {
         RegistrationOutcome::Registered(r) => *r,
         RegistrationOutcome::Rejected(e) => panic!("rejected: {e:?}"),
     }
 }
 
-async fn start_for_alice(s: &Service, policy: &RealmPolicy) -> AuthenticationStart {
+async fn start_for_alice(s: &Service, policy: &EnvironmentPolicy) -> AuthenticationStart {
     s.start_authentication(
         &rp(),
         policy,
@@ -93,7 +99,7 @@ async fn start_for_alice(s: &Service, policy: &RealmPolicy) -> AuthenticationSta
 
 async fn authenticate(
     s: &Service,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     a: &mut Authenticator,
 ) -> AuthenticationOutcome {
     let start = start_for_alice(s, policy).await;
@@ -126,7 +132,7 @@ fn rejected(o: &AuthenticationOutcome) -> Option<Rejection> {
 #[tokio::test]
 async fn es256_device_bound_passkey_registers_and_authenticates_at_aal3() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     let record = register(&s, &policy, &mut a).await;
     assert_eq!(record.attestation, AttestationKind::None);
@@ -153,7 +159,7 @@ async fn es256_device_bound_passkey_registers_and_authenticates_at_aal3() {
     assert_eq!(signals, []);
     let stored = s
         .registry
-        .find(REALM, &CredentialId::new(&a.credential_id).unwrap())
+        .find(ENVIRONMENT, &CredentialId::new(&a.credential_id).unwrap())
         .await
         .unwrap()
         .unwrap();
@@ -171,7 +177,7 @@ async fn every_accepted_algorithm_round_trips() {
         Key::rsa(),
     ] {
         let s = service();
-        let policy = RealmPolicy::default();
+        let policy = EnvironmentPolicy::default();
         let mut a = Authenticator::synced(key);
         let record = register(&s, &policy, &mut a).await;
         let AuthenticationOutcome::Authenticated { assurance, .. } =
@@ -193,9 +199,9 @@ async fn every_accepted_algorithm_round_trips() {
 #[tokio::test]
 async fn rs256_can_be_refused_by_policy() {
     let s = service();
-    let policy = RealmPolicy {
+    let policy = EnvironmentPolicy {
         allow_rs256: false,
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     let mut a = Authenticator::new(Key::rsa());
     let out = register_with(
@@ -214,7 +220,7 @@ async fn rs256_can_be_refused_by_policy() {
 async fn creation_options_order_algorithms_and_request_extensions() {
     let s = service();
     let start = s
-        .start_registration(&rp(), &RealmPolicy::default(), &user(), true, None)
+        .start_registration(&rp(), &EnvironmentPolicy::default(), &user(), true, None)
         .await
         .unwrap();
     let algs: Vec<i64> = start.options["pubKeyCredParams"]
@@ -243,7 +249,7 @@ async fn creation_options_order_algorithms_and_request_extensions() {
 #[tokio::test]
 async fn registration_waits_for_a_pinned_rp_id() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut unpinned = rp();
     unpinned.pinned = false;
     let start = s
@@ -274,7 +280,7 @@ async fn registration_waits_for_a_pinned_rp_id() {
 // TN-18, §10.2.4
 #[tokio::test]
 async fn origins_are_bound_to_the_rp() {
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     for (origin, ok) in [
         ("https://login.acme.example", true),
         ("https://acme-shop.example", true),
@@ -306,7 +312,7 @@ async fn origins_are_bound_to_the_rp() {
 #[tokio::test]
 async fn client_data_and_rp_id_hash_are_checked() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     register(&s, &policy, &mut a).await;
     let start = start_for_alice(&s, &policy).await;
@@ -370,9 +376,9 @@ async fn client_data_and_rp_id_hash_are_checked() {
 #[tokio::test]
 async fn user_verification_policy() {
     let s = service();
-    let required = RealmPolicy {
+    let required = EnvironmentPolicy {
         user_verification: UserVerification::Required,
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     let mut a = Authenticator::new(Key::es256());
     a.uv = false;
@@ -388,7 +394,7 @@ async fn user_verification_policy() {
         out,
         RegistrationOutcome::Rejected(Rejection::UserVerification)
     );
-    let preferred = RealmPolicy::default();
+    let preferred = EnvironmentPolicy::default();
     register(&s, &preferred, &mut a).await;
     let AuthenticationOutcome::Authenticated { assurance, .. } =
         authenticate(&s, &preferred, &mut a).await
@@ -418,9 +424,9 @@ async fn user_verification_policy() {
         .unwrap();
     assert_eq!(rejected(&out), Some(Rejection::UserVerification));
     a.uv = true;
-    let md11 = RealmPolicy {
+    let md11 = EnvironmentPolicy {
         platform_uv_is_factor: false,
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     let AuthenticationOutcome::Authenticated { assurance, .. } =
         authenticate(&s, &md11, &mut a).await
@@ -434,7 +440,7 @@ async fn user_verification_policy() {
 #[tokio::test]
 async fn user_presence_is_required_outside_conditional_create() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     a.up = false;
     let out = register_with(
@@ -477,7 +483,7 @@ async fn user_presence_is_required_outside_conditional_create() {
 // IDI-5, TN-63
 #[tokio::test]
 async fn backup_flags() {
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let s = service();
     let mut a = Authenticator::new(Key::es256());
     a.bs = true;
@@ -519,9 +525,9 @@ async fn backup_flags() {
     assert_eq!(signals, [Signal::BackupStateGained]);
     assert_eq!(s.signals.taken().unwrap().len(), 2);
 
-    let enterprise = RealmPolicy {
+    let enterprise = EnvironmentPolicy {
         require_device_bound: true,
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     let mut synced = Authenticator::synced(Key::es256());
     synced.credential_id = vec![0xc2; 32];
@@ -548,7 +554,7 @@ async fn sign_count_policy() {
     assert!(!sign_count_regressed(false, 5, 6));
     assert!(!sign_count_regressed(true, 5, 0));
 
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let s = service();
     let mut a = Authenticator::new(Key::es256());
     a.counter = 10;
@@ -569,7 +575,7 @@ async fn sign_count_policy() {
     let id = CredentialId::new(&a.credential_id).unwrap();
     assert_eq!(
         s.registry
-            .find(REALM, &id)
+            .find(ENVIRONMENT, &id)
             .await
             .unwrap()
             .unwrap()
@@ -577,9 +583,9 @@ async fn sign_count_policy() {
         10
     );
 
-    let strict = RealmPolicy {
+    let strict = EnvironmentPolicy {
         sign_count: SignCountAction::Reject,
-        ..RealmPolicy::default()
+        ..EnvironmentPolicy::default()
     };
     a.counter = 0;
     assert_eq!(
@@ -607,7 +613,7 @@ async fn sign_count_policy() {
 #[tokio::test]
 async fn expiry_and_duplicates() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     register(&s, &policy, &mut a).await;
     let out = register_with(
@@ -647,7 +653,7 @@ async fn expiry_and_duplicates() {
 #[tokio::test]
 async fn passkey_enumeration_protection() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let discoverable = s
         .start_authentication(&rp(), &policy, Identified::Discoverable, false)
         .await
@@ -713,7 +719,7 @@ async fn passkey_enumeration_protection() {
 #[tokio::test]
 async fn user_handle_rules() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     register(&s, &policy, &mut a).await;
     for (handle, expected) in [
@@ -749,25 +755,25 @@ async fn user_handle_rules() {
 #[tokio::test]
 async fn soft_deleted_credentials_are_unknown() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     register(&s, &policy, &mut a).await;
     let id = CredentialId::new(&a.credential_id).unwrap();
-    s.registry.soft_delete(REALM, &id, NOW).await.unwrap();
+    s.registry.soft_delete(ENVIRONMENT, &id, NOW).await.unwrap();
     assert_eq!(
         rejected(&authenticate(&s, &policy, &mut a).await),
         Some(Rejection::UnknownCredential)
     );
     assert!(
         s.registry
-            .find(REALM, &id)
+            .find(ENVIRONMENT, &id)
             .await
             .unwrap()
             .unwrap()
             .deleted_at
             .is_some()
     );
-    assert_eq!(s.registry.list(REALM, &ALICE).await.unwrap(), []);
+    assert_eq!(s.registry.list(ENVIRONMENT, &ALICE).await.unwrap(), []);
 }
 
 // §10.2.4 PRF
@@ -780,7 +786,7 @@ async fn prf_and_cred_props() {
     assert_eq!(ext.cred_props_rk, Some(true));
     assert_eq!(ext.prf_enabled, Some(true));
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut a = Authenticator::new(Key::es256());
     let RegistrationOutcome::Registered(record) =
         register_with(&s, &policy, &mut a, ORIGIN, ext).await
@@ -804,7 +810,7 @@ async fn prf_and_cred_props() {
 #[tokio::test]
 async fn independence_groups_and_hardware_keys() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let mut synced_a = Authenticator::synced(Key::es256());
     synced_a.credential_id = vec![1; 16];
     let mut synced_b = Authenticator::synced(Key::es256());
@@ -840,7 +846,7 @@ async fn independence_groups_and_hardware_keys() {
 #[tokio::test]
 async fn oversized_and_malformed_attestation_objects_are_rejected() {
     let s = service();
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let start = s
         .start_registration(&rp(), &policy, &user(), false, None)
         .await

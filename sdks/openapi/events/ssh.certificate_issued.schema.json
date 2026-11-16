@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:event:ssh.certificate_issued:1",
-  "title": "The realm SSH CA issued a certificate (OP-156 m.3 (o))",
+  "title": "The environment SSH CA issued a certificate (OP-156 m.3 (o))",
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:ssh.certificate_issued`. A projection.issue; the principals and the public key are not carried. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "party",
     "holder",
     "key_id",
@@ -16,7 +16,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "party": {

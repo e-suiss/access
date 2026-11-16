@@ -27,8 +27,8 @@ pub trait Access: Send + Sync {
     fn evaluate(&self, body: Vec<u8>) -> impl Future<Output = Answer> + Send;
     /// `GET /.well-known/access-domain-metadata/sha-256:{domain}`.
     fn metadata(&self, domain: String) -> impl Future<Output = Answer> + Send;
-    /// `POST /realms/{realm}/v1/vault/releases`.
-    fn release(&self, realm: String, body: Vec<u8>) -> impl Future<Output = Answer> + Send;
+    /// `POST /env/{environment}/v1/vault/releases`.
+    fn release(&self, environment: String, body: Vec<u8>) -> impl Future<Output = Answer> + Send;
     /// `POST /access/v1/claims:ingest` with `Idempotency-Key: key`.
     fn ingest(&self, key: String, body: Vec<u8>) -> impl Future<Output = Answer> + Send;
 }

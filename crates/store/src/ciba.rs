@@ -1,6 +1,6 @@
-//! CIBA as an invitation (OP-155 m.3 (l), IDP-14, §10.5.3): the realm's decided setting and the
+//! CIBA as an invitation (OP-155 m.3 (l), IDP-14, §10.5.3): the environment's decided setting and the
 //! backchannel requests by the SHA-256 of their `auth_req_id`, each carrying the `exercise_ref`
-//! of the `REQUIRE_ACTION` it invites the person to answer. Scoped to the transaction's realm by
+//! of the `REQUIRE_ACTION` it invites the person to answer. Scoped to the transaction's environment by
 //! row-level security; nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -25,10 +25,10 @@ fn u64_of(v: i64) -> u64 {
     u64::try_from(v).unwrap_or(0)
 }
 
-/// The realm's CIBA setting (`idp.realm.ciba`, `ciba_close`).
+/// The environment's CIBA setting (`idp.environment.ciba`, `ciba_close`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CibaSettingsRow {
-    /// Whether the realm offers CIBA.
+    /// Whether the environment offers CIBA.
     pub enabled: bool,
     /// Whether a free `login_hint` is accepted.
     pub login_hint: bool,
@@ -160,17 +160,17 @@ macro_rules! row_of {
 }
 
 impl TenantTx {
-    /// The realm's newest CIBA setting; off when never decided.
+    /// The environment's newest CIBA setting; off when never decided.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn ciba_settings(&mut self) -> Result<CibaSettingsRow, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT enabled, login_hint, ping_clients, ping_endpoints FROM access.idp_ciba_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -188,24 +188,24 @@ impl TenantTx {
         )
     }
 
-    /// Writes the next CIBA setting under `bound` (`idp.realm.ciba`, `ciba_close`).
+    /// Writes the next CIBA setting under `bound` (`idp.environment.ciba`, `ciba_close`).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn put_ciba(&mut self, bound: &Bound, s: &CibaSettingsRow) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let clients: Vec<Uuid> = s.ping.iter().map(|(c, _)| Uuid::from_bytes(*c)).collect();
         let endpoints: Vec<String> = s.ping.iter().map(|(_, e)| e.clone()).collect();
         sqlx::query!(
             "INSERT INTO access.idp_ciba_settings
-               (tenant_id, realm_id, version, enabled, login_hint, ping_clients, ping_endpoints,
+               (tenant_id, environment_id, version, enabled, login_hint, ping_clients, ping_endpoints,
                 domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_ciba_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5, $6, $7, $8",
             tenant,
-            realm,
+            environment,
             s.enabled,
             s.login_hint,
             &clients,
@@ -223,15 +223,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_ciba(&mut self, c: &NewCibaRequest<'_>) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.oauth_ciba_requests (tenant_id, realm_id, handle_hash, client_uuid,
+            "INSERT INTO access.oauth_ciba_requests (tenant_id, environment_id, handle_hash, client_uuid,
                     subject_id, domain_id, nonce, intent, details, scope, binding_message, mode,
                     notification_token, ping_handle, created_ms, expires_ms, interval_s)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
              RETURNING ciba_id",
             tenant,
-            realm,
+            environment,
             c.handle_hash.as_slice(),
             Uuid::from_bytes(c.client),
             c.subject.map(Uuid::from_bytes),
@@ -261,16 +261,16 @@ impl TenantTx {
         &mut self,
         handle_hash: &[u8; 32],
     ) -> Result<Option<CibaRequestRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT ciba_id, client_uuid, subject_id, domain_id, nonce, intent, details, scope,
                     binding_message, mode, notification_token, ping_handle, created_ms, expires_ms,
                     interval_s,
                     polled_ms, decision, session_id, contribution, used_ms
                FROM access.oauth_ciba_requests
-              WHERE tenant_id = $1 AND realm_id = $2 AND handle_hash = $3 FOR UPDATE",
+              WHERE tenant_id = $1 AND environment_id = $2 AND handle_hash = $3 FOR UPDATE",
             tenant,
-            realm,
+            environment,
             handle_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -283,16 +283,16 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ciba(&mut self, id: [u8; 16]) -> Result<Option<CibaRequestRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let r = sqlx::query!(
             "SELECT ciba_id, client_uuid, subject_id, domain_id, nonce, intent, details, scope,
                     binding_message, mode, notification_token, ping_handle, created_ms, expires_ms,
                     interval_s,
                     polled_ms, decision, session_id, contribution, used_ms
                FROM access.oauth_ciba_requests
-              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3 FOR UPDATE",
+              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3 FOR UPDATE",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -311,14 +311,14 @@ impl TenantTx {
         nonce: &[u8],
         contribution: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM access.oauth_ciba_requests
-                WHERE tenant_id = $1 AND realm_id = $2
+                WHERE tenant_id = $1 AND environment_id = $2
                   AND ((domain_id = $3 AND nonce = $4 AND decision = 'approved')
                        OR contribution = $5)) AS "answered!""#,
             tenant,
-            realm,
+            environment,
             domain.as_slice(),
             nonce,
             contribution.as_slice(),
@@ -337,12 +337,12 @@ impl TenantTx {
         now_ms: u64,
         interval_s: u32,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_ciba_requests SET polled_ms = $4, interval_s = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             i64_of(now_ms)?,
             i32::try_from(interval_s).map_err(|_| StoreError::Range)?,
@@ -362,7 +362,7 @@ impl TenantTx {
         approved: Option<([u8; 16], [u8; 32])>,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let decision = if approved.is_some() {
             "approved"
         } else {
@@ -371,10 +371,10 @@ impl TenantTx {
         let n = sqlx::query!(
             "UPDATE access.oauth_ciba_requests
                 SET decision = $4, decided_ms = $5, session_id = $6, contribution = $7
-              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3 AND decision IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3 AND decision IS NULL
                 AND subject_id IS NOT NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             decision,
             i64_of(now_ms)?,
@@ -392,12 +392,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ping_ciba(&mut self, id: [u8; 16], now_ms: u64) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.oauth_ciba_requests SET pinged_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             i64_of(now_ms)?,
         )
@@ -411,13 +411,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn use_ciba(&mut self, id: [u8; 16], now_ms: u64) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.oauth_ciba_requests SET used_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3
                 AND decision = 'approved' AND used_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             i64_of(now_ms)?,
         )

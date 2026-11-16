@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_governors (tenant_id, environment_id, domain_id) VALUES ($1, $2, $3)\n         ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "be37d2c27ed8161f25333b5146eb6812e5bf0d68cd9cc2f36164a12d29e65c39"
+}

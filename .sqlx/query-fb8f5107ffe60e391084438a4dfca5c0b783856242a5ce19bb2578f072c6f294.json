@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_environment_branding (tenant_id, environment_id, branding, domain_id,\n                decision_pos)\n         VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (tenant_id, environment_id) DO UPDATE\n            SET branding = EXCLUDED.branding, domain_id = EXCLUDED.domain_id,\n                decision_pos = EXCLUDED.decision_pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb8f5107ffe60e391084438a4dfca5c0b783856242a5ce19bb2578f072c6f294"
+}

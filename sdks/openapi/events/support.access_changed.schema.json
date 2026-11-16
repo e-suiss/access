@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:support.access_changed`. A support Grant was given, started, ended or revoked; ids and names only, never the case text. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "account",
     "grant",
     "operator",
@@ -16,7 +16,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "account": {
@@ -37,7 +37,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
-      "description": "The case system's name in the realm."
+      "description": "The case system's name in the environment."
     },
     "change": {
       "type": "string",

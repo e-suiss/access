@@ -8,12 +8,12 @@ use access_crypto::jose::JwsAlg;
 /// One purpose. A key is made for one purpose and is never used for another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum KeyPurpose {
-    /// The realm JOSE key set: identity tokens and identity plane `COSE_Sign1` artefacts
+    /// The environment JOSE key set: identity tokens and identity plane `COSE_Sign1` artefacts
     /// (CR-18 to CR-27).
     Jose,
     /// The cell key that signs the identity audit log's checkpoints (OP-150 m.3 (h)).
     AuditCheckpoint,
-    /// The realm's Claim issuer key (§10.1.7).
+    /// The environment's Claim issuer key (§10.1.7).
     ClaimIssuer,
     /// SAML assertions, responses and metadata, and WS-Federation tokens: RSA-3072, or P-256
     /// for a service provider whose template supports it (OP-155 m.3 (d), (e)).
@@ -27,14 +27,14 @@ pub enum KeyPurpose {
     /// RS256 identity assertions for clients that opted in, RSA-3072, made on the first opt-in
     /// (MD-6, OP-155 m.3 (k)).
     RsaId,
-    /// The realm's OpenSSH user certificate authority, Ed25519 (OP-156 m.3 (o), IDP-32).
+    /// The environment's OpenSSH user certificate authority, Ed25519 (OP-156 m.3 (o), IDP-32).
     SshCa,
     /// The Privacy Pass issuer key of RFC 9578 token type `0x0002`, RSA-2048: only the raw
     /// blind private operation, never a PKCS#1 or PSS signature over a message (OP-156 m.3 (z)).
     PrivacyPass,
     /// The ACME account key that signs RFC 8555 requests, P-256 (OP-156 m.3 (i)).
     Acme,
-    /// The realm's post-quantum key set, ML-DSA, opened by its signing profile: identity tokens
+    /// The environment's post-quantum key set, ML-DSA, opened by its signing profile: identity tokens
     /// of clients that registered its algorithm (CR-41, OP-159 m.3 (o)).
     Pq,
 }
@@ -61,7 +61,7 @@ pub enum KeyAlg {
 }
 
 impl KeyAlg {
-    /// The JOSE signature algorithm, for the algorithms the realm JOSE key set uses.
+    /// The JOSE signature algorithm, for the algorithms the environment JOSE key set uses.
     #[must_use]
     pub const fn jws(self) -> Option<JwsAlg> {
         match self {
@@ -91,11 +91,11 @@ pub enum Artefact {
     SamlXml,
     /// An OpenID Federation entity statement or trust mark.
     EntityStatement,
-    /// The unwrapping of a JWE content key addressed to the realm.
+    /// The unwrapping of a JWE content key addressed to the environment.
     JweDecrypt,
     /// An RS256 identity assertion: ID token, userinfo or introspection answer.
     Rs256Assertion,
-    /// An OpenSSH user certificate (`ssh-ed25519-cert-v01@openssh.com`) or the realm's KRL.
+    /// An OpenSSH user certificate (`ssh-ed25519-cert-v01@openssh.com`) or the environment's KRL.
     SshCertificate,
     /// A blind signature over a blinded Privacy Pass token request.
     BlindSignature,
@@ -136,7 +136,7 @@ impl KeyPurpose {
             Self::SshCa => "ssh-ca",
             Self::PrivacyPass => "privacy-pass",
             Self::Acme => "acme",
-            Self::Pq => "realm-pq",
+            Self::Pq => "environment-pq",
         }
     }
 
@@ -191,8 +191,8 @@ impl KeyPurpose {
         self.algs().contains(&alg)
     }
 
-    /// Whether the key is made only when a realm or client first opts in, rather than when the
-    /// realm opens (MD-6).
+    /// Whether the key is made only when an environment or client first opts in, rather than when the
+    /// environment opens (MD-6).
     #[must_use]
     pub const fn on_first_opt_in(self) -> bool {
         matches!(

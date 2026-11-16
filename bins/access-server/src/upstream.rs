@@ -17,7 +17,7 @@ use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::oauth::Held;
 use access_identity_oauth::ports::profile::{SamlAssertions, SamlRefused, SamlSubject};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantTx};
 
 /// The parser worker supervisor as the [`AssertionReader`]; no supervisor configured refuses
 /// every read as unavailable (MD-8).
@@ -49,7 +49,7 @@ impl AssertionReader for ParserReader {
     }
 }
 
-/// SAML 2.0 bearer assertions (RFC 7522) of a realm's accepted SAML upstream connection (OP-155
+/// SAML 2.0 bearer assertions (RFC 7522) of an environment's accepted SAML upstream connection (OP-155
 /// m.3 (k)): verified in the parser worker, addressed to the token endpoint, from an identity provider whose
 /// issuer the governing domain accepts; the account is the one the identity is linked to.
 pub(crate) struct UpstreamSamlAssertions {
@@ -62,17 +62,17 @@ pub(crate) struct UpstreamSamlAssertions {
 impl UpstreamSamlAssertions {
     async fn connection(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         upstream: &str,
     ) -> Result<Option<(Connection, [u8; 32], TenantTx)>, Unavailable> {
-        let tenant = access_store::tenancy::realm_tenant(&self.router, realm)
+        let tenant = access_store::tenancy::environment_tenant(&self.router, environment)
             .await
             .map_err(|_| Unavailable)?
             .ok_or(Unavailable)?;
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(|_| Unavailable)?;
-        let row = access_store::idp::realm::upstream(&mut t, upstream)
+        let row = access_store::idp::environment::upstream(&mut t, upstream)
             .await
             .map_err(|_| Unavailable)?;
         let domain = access_store::idp::governance(&mut t)
@@ -107,14 +107,14 @@ impl UpstreamSamlAssertions {
 impl SamlAssertions for UpstreamSamlAssertions {
     fn verify<'a>(
         &'a self,
-        realm: RealmId,
+        environment: EnvironmentId,
         upstream: &'a str,
         assertion: &'a str,
         audience: &'a str,
         now_ms: u64,
     ) -> Held<'a, Result<SamlSubject, SamlRefused>> {
         Box::pin(async move {
-            let Some((c, domain, mut t)) = self.connection(realm, upstream).await? else {
+            let Some((c, domain, mut t)) = self.connection(environment, upstream).await? else {
                 return Ok(Err(SamlRefused::Issuer));
             };
             let Some(idp) = c.profile.saml.clone() else {

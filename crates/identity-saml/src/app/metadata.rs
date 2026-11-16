@@ -37,7 +37,7 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
-    /// The endpoints of the realm whose issuer URL is `issuer` (no trailing slash).
+    /// The endpoints of the environment whose issuer URL is `issuer` (no trailing slash).
     #[must_use]
     pub fn of(issuer: &str) -> Self {
         let issuer = issuer.trim_end_matches('/');

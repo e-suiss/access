@@ -1,8 +1,8 @@
 //! The management API client (OP-151 m.3 (c), m.6, m.11 (a), (b)).
 //!
 //! A read presents a read token bound to the Instance key with DPoP. The token comes from the
-//! realm's token endpoint by an RFC 8693 token exchange: the subject token is the Instance's own
-//! AIS in `check` mode over the surface's audience and `realm.read`, in the realm's governing
+//! environment's token endpoint by an RFC 8693 token exchange: the subject token is the Instance's own
+//! AIS in `check` mode over the surface's audience and `environment.read`, in the environment's governing
 //! domain, with a single-use nonce; there is no client authentication, and the DPoP proof is made
 //! by the same Instance key, which becomes the token's `cnf.jkt`. The token lives at most 60
 //! minutes and is never written anywhere (TN-130, TN-27, OP-151 m.18 (b)).
@@ -50,8 +50,8 @@ pub(crate) const ACCESS_TOKEN_TYPE: &str = "urn:ietf:params:oauth:token-type:acc
 /// The digest context of the exchange's AIS intent.
 pub(crate) const EXCHANGE_CONTEXT: &str = "access/management-read/v1";
 
-/// The read scope of the realm-admin surface.
-pub(crate) const REALM_READ: &str = "realm.read";
+/// The read scope of the environment-admin surface.
+pub(crate) const ENVIRONMENT_READ: &str = "environment.read";
 
 /// The AS metadata member naming the governing domain's Domain Metadata (§9.15.1 k.2).
 const DOMAIN_METADATA_MEMBER: &str = "suiss_domain_metadata";
@@ -70,7 +70,7 @@ pub(crate) fn exchange_intent(audience: &str, scope: &str) -> Digest {
     Digest(context_digest(EXCHANGE_CONTEXT, &canonical).0)
 }
 
-/// The realm's governing domain, from the `DomainID` its AS metadata's Domain Metadata address
+/// The environment's governing domain, from the `DomainID` its AS metadata's Domain Metadata address
 /// ends with; `None` when the metadata names none.
 pub(crate) fn governing_domain(metadata: &Value) -> Option<Digest> {
     let address = metadata.get(DOMAIN_METADATA_MEMBER)?.as_str()?;
@@ -94,7 +94,7 @@ pub(crate) enum ClientError {
     /// No randomness.
     #[error("random source unavailable")]
     Random,
-    /// The realm's metadata cannot be used.
+    /// The environment's metadata cannot be used.
     #[error("discovery: {0}")]
     Discovery(discovery::DiscoveryError),
     /// No read token (P15: an unknown OAuth error is `Refused`).
@@ -173,14 +173,14 @@ impl Env for System {
     }
 }
 
-/// Where the realm's management surface and token endpoint are.
+/// Where the environment's management surface and token endpoint are.
 #[derive(Clone, Debug)]
 pub(crate) struct Target {
     /// The management API origin, `https://host[:port]`.
     pub(crate) api: String,
-    /// The realm slug.
-    pub(crate) realm: String,
-    /// The realm issuer; its metadata names the token endpoint.
+    /// The environment slug.
+    pub(crate) environment: String,
+    /// The environment issuer; its metadata names the token endpoint.
     pub(crate) issuer: String,
     /// The basis every AIS declares (the caller's Grant holding or anchor).
     pub(crate) basis: ExerciseBasis,
@@ -189,7 +189,7 @@ pub(crate) struct Target {
 impl Target {
     /// The read token's audience (TN-119).
     pub(crate) fn audience(&self) -> String {
-        format!("access-admin:realm:{}", self.realm)
+        format!("access-admin:environment:{}", self.environment)
     }
 }
 
@@ -298,7 +298,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
         let statement = Statement {
             domain,
             nonce,
-            intent: exchange_intent(audience, REALM_READ),
+            intent: exchange_intent(audience, ENVIRONMENT_READ),
             mode: Mode::Check,
             pep: String::from(IDENTITY_PEP),
             capacity: Capacity::Own,
@@ -343,7 +343,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
                 ("subject_token", &subject),
                 ("requested_token_type", ACCESS_TOKEN_TYPE),
                 ("audience", &audience),
-                ("scope", REALM_READ),
+                ("scope", ENVIRONMENT_READ),
             ]);
             let dpop = self.proof("POST", &meta.token_endpoint, None, nonce.as_deref())?;
             let r = self
@@ -472,12 +472,12 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
         Ok(out)
     }
 
-    /// The surface's governing domain (`GET /admin/v1/realms/{slug}`).
+    /// The surface's governing domain (`GET /admin/v1/envs/{slug}`).
     pub(crate) async fn domain(&self) -> Result<Digest, ClientError> {
         if let Some(d) = *self.domain.borrow() {
             return Ok(d);
         }
-        let path = format!("/admin/v1/realms/{}", api::segment(&self.target.realm));
+        let path = format!("/admin/v1/envs/{}", api::segment(&self.target.environment));
         let (root, _) = self.get(&path).await?;
         let d = root
             .get("domain")
@@ -501,8 +501,8 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
         let basis = self.target.basis;
         let domain = self.domain().await?;
         let draft_path = format!(
-            "/admin/v1/realms/{}/intents",
-            api::segment(&self.target.realm)
+            "/admin/v1/envs/{}/intents",
+            api::segment(&self.target.environment)
         );
         let request = json!({ "operation": op.id, "key": key, "body": body });
         let r = self.read(Method::Post, &draft_path, Some(&request)).await?;
@@ -539,7 +539,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
             .transport
             .send(Request {
                 method: op.method.as_str(),
-                url: self.url(&op.url_path(&self.target.realm, key)),
+                url: self.url(&op.url_path(&self.target.environment, key)),
                 headers,
                 body: Some(("application/json", checked.body.to_string().into_bytes())),
             })

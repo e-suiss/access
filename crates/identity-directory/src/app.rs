@@ -1,5 +1,5 @@
 //! One sync run (§10.6.4, OP-155 m.3 (n)): pull above the watermark, read the changes, and keep
-//! only the memberships the realm accepted this connector for.
+//! only the memberships the environment accepted this connector for.
 
 use std::collections::BTreeMap;
 
@@ -18,7 +18,7 @@ pub struct Pulled {
     pub watermark: u64,
 }
 
-/// Pulls from `source` above `since` for connector `connector`; `groups` is how the realm
+/// Pulls from `source` above `since` for connector `connector`; `groups` is how the environment
 /// decided each group's membership issuer.
 ///
 /// # Errors

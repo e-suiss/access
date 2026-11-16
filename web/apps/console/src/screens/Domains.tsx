@@ -1,5 +1,5 @@
-// OP-156 m.3 (i), §10.2.4, TN-16, TN-17: a realm's custom domains. Registering one shows the two
-// records to publish, the TXT challenge and the CNAME to the realm's own host; Access checks them
+// OP-156 m.3 (i), §10.2.4, TN-16, TN-17: an environment's custom domains. Registering one shows the two
+// records to publish, the TXT challenge and the CNAME to the environment's own host; Access checks them
 // and checks them again every 90 days, and a domain is served with its own certificate only while
 // they hold. Binding the issuer or the passkey domain to a confirmed domain is one signed CT3
 // change that can't be reversed. Each change is one signed Exercise.
@@ -55,17 +55,17 @@ function State({ d }: { readonly d: Domain }): ReactElement {
   return <p data-testid="domain-state">{t("domainCheckFailed")}</p>;
 }
 
-/** The custom domains panel of the realm's sign-in settings. */
+/** The custom domains panel of the environment's sign-in settings. */
 export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(() =>
-    adminGet<{ readonly items: readonly Domain[] }>(ctx.instance, `realms/${realm}/domains`),
+    adminGet<{ readonly items: readonly Domain[] }>(ctx.instance, `envs/${environment}/domains`),
   );
   const [host, setHost] = useState("");
   const [w, write] = useRun<WriteResult>();
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         ...(key === undefined ? {} : { key }),
         method: "POST",

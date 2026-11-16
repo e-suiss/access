@@ -22,7 +22,7 @@ fn security_txt() -> SecurityTxt {
         contacts: vec!["https://github.com/e-suiss/access/security/advisories/new".into()],
         expires: datetime!(2027-04-01 00:00 UTC),
         policy: Some("https://github.com/e-suiss/access/security/policy".into()),
-        canonical: SecurityTxt::canonical_for("https://access.example/realms/acme"),
+        canonical: SecurityTxt::canonical_for("https://access.example/env/acme"),
         preferred_languages: Some("en, tr".into()),
     }
 }

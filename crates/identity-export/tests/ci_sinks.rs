@@ -156,7 +156,7 @@ async fn the_parquet_object_lands_in_minio_and_reads_back_with_the_ocsf_schema()
     };
     let recs = records(6);
     let file = parquet::file(&recs).unwrap();
-    let object = s3::key(&spec, "realm-ci", (7, 1), recs[0].occurred_at_ms);
+    let object = s3::key(&spec, "environment-ci", (7, 1), recs[0].occurred_at_ms);
     let now = recs[0].occurred_at_ms;
     let request = s3::put(&spec, &SinkSecret::new(&secret), &object, file, now).unwrap();
     let outbound = Outbound::new(tls(), Duration::from_secs(30)).declaring(vec![

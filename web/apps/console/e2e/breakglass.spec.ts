@@ -11,7 +11,7 @@ const USE = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/breakglass/accounts", {
+  bff.admin.set("envs/acme/breakglass/accounts", {
     items: [
       {
         account_id: "usr_01j00000000000000000000000",
@@ -23,7 +23,7 @@ test.beforeEach(async ({ context, bff }) => {
       },
     ],
   });
-  bff.admin.set("realms/acme/breakglass/reviews", {
+  bff.admin.set("envs/acme/breakglass/reviews", {
     items: [
       {
         exercise: USE,
@@ -68,8 +68,8 @@ test("a mark and a review change only through signed changes", async ({ page, bf
   await expect(page.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", `realms/acme/breakglass/reviews/${USE}`],
-    ["POST", "realms/acme/breakglass/accounts"],
+    ["POST", `envs/acme/breakglass/reviews/${USE}`],
+    ["POST", "envs/acme/breakglass/accounts"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({ classification: "emergency" });
   expect(bff.writes[1]?.body).toMatchObject({ organization: ORG, member: MEMBER });

@@ -1,4 +1,4 @@
-//! OP-149 m.7, SSF 1.0 §7.1, §8, RFC 8936, RFC 6750: the realm's SSF transmitter over HTTP on
+//! OP-149 m.7, SSF 1.0 §7.1, §8, RFC 8936, RFC 6750: the environment's SSF transmitter over HTTP on
 //! a real PostgreSQL.
 
 #![allow(
@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use access_crypto::jose::JwsAlg;
 use access_http::ssf::router;
-use access_identity_events::adapters::{KekSealer, RealmKek};
+use access_identity_events::adapters::{EnvironmentKek, KekSealer};
 use access_identity_events::app::Db;
 use access_identity_events::app::ssf::Transmitter;
 use access_identity_events::app::streams::Streams;
@@ -22,12 +22,12 @@ use access_identity_oauth::adapters::oauth::OsRandom;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
 use access_identity_oauth::ports::oauth::TokenSigner;
-use access_identity_oauth::ports::{Directory, RealmEntry, Unavailable};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Unavailable};
 use access_kernel::json::b64url_encode;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::create_settings;
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::fresh;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -36,28 +36,28 @@ use serde_json::Value;
 use suiss_crypto::envelope::{Kek, SoftKek};
 use tower::ServiceExt;
 
-const ISSUER: &str = "https://id.test/realms/shop";
+const ISSUER: &str = "https://id.test/env/shop";
 
-struct One(Mutex<Option<RealmEntry>>);
+struct One(Mutex<Option<EnvironmentEntry>>);
 
 impl Directory for One {
-    async fn by_host(&self, _: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_host(&self, _: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok(None)
     }
 
-    async fn by_slug(&self, slug: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_slug(&self, slug: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok(self.0.lock().unwrap().clone().filter(|e| e.slug == slug))
     }
 
-    async fn all(&self) -> Result<Vec<RealmEntry>, Unavailable> {
+    async fn all(&self) -> Result<Vec<EnvironmentEntry>, Unavailable> {
         Ok(Vec::new())
     }
 }
 
 struct Kek1(Arc<SoftKek>);
 
-impl RealmKek for Kek1 {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for Kek1 {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
@@ -67,7 +67,7 @@ struct Clear;
 impl TokenSigner for Clear {
     async fn sign(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         _: JwsAlg,
         _: &str,
         payload: &[u8],
@@ -76,7 +76,7 @@ impl TokenSigner for Clear {
         Ok(format!("e30.{}.c2ln", b64url_encode(payload)))
     }
 
-    async fn jwks(&self, _: RealmId) -> Result<String, Unavailable> {
+    async fn jwks(&self, _: EnvironmentId) -> Result<String, Unavailable> {
         Ok(String::from("{}"))
     }
 }
@@ -148,10 +148,10 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     .await
     .unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+    let environment = create_environment(&mut t, &domain, "shop", "pool-default")
         .await
         .unwrap();
-    t.enter_realm(realm).await.unwrap();
+    t.enter_environment(environment).await.unwrap();
     assert!(set_issuer(&mut t, ISSUER).await.unwrap());
     create_settings(&mut t).await.unwrap();
     t.commit().await.unwrap();
@@ -167,15 +167,15 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     let created = Streams::new(pools.clone(), sealer(), OsRandom)
         .create(
             tenant,
-            realm,
+            environment,
             &parse_stream(br#"{"delivery":{"method":"urn:ietf:rfc:8936"},"aud":"work","events_requested":["urn:suiss:access:event:party.compromised"]}"#).unwrap(),
         )
         .await
         .unwrap();
     let token = created.token.unwrap();
-    let directory = One(Mutex::new(Some(RealmEntry {
+    let directory = One(Mutex::new(Some(EnvironmentEntry {
         tenant,
-        realm,
+        environment,
         slug: String::from("shop"),
         issuer: Issuer::parse(ISSUER).unwrap(),
     })));
@@ -186,32 +186,22 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         Fixed,
     ));
 
-    let (status, meta, _) = call(
-        &app,
-        "GET",
-        "/.well-known/ssf-configuration/realms/shop",
-        None,
-    )
-    .await;
+    let (status, meta, _) =
+        call(&app, "GET", "/.well-known/ssf-configuration/env/shop", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(meta["issuer"], ISSUER);
     assert_eq!(
         meta["configuration_endpoint"],
         format!("{ISSUER}/ssf/streams")
     );
-    let (status, same, _) = call(
-        &app,
-        "GET",
-        "/realms/shop/.well-known/ssf-configuration",
-        None,
-    )
-    .await;
+    let (status, same, _) =
+        call(&app, "GET", "/env/shop/.well-known/ssf-configuration", None).await;
     assert_eq!((status, &same), (StatusCode::OK, &meta));
     assert_eq!(
         call(
             &app,
             "GET",
-            "/realms/other/.well-known/ssf-configuration",
+            "/env/other/.well-known/ssf-configuration",
             None
         )
         .await
@@ -219,7 +209,7 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         StatusCode::NOT_FOUND
     );
 
-    let (status, stream, cache) = call(&app, "GET", "/realms/shop/ssf/streams", Some(&token)).await;
+    let (status, stream, cache) = call(&app, "GET", "/env/shop/ssf/streams", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(cache.as_deref(), Some("no-store"));
     assert_eq!(
@@ -227,25 +217,25 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         format!("{ISSUER}/ssf/poll")
     );
     assert_eq!(
-        call(&app, "GET", "/realms/shop/ssf/streams", None).await.0,
+        call(&app, "GET", "/env/shop/ssf/streams", None).await.0,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        call(&app, "GET", "/realms/shop/ssf/streams", Some("other"))
+        call(&app, "GET", "/env/shop/ssf/streams", Some("other"))
             .await
             .0,
         StatusCode::UNAUTHORIZED
     );
 
-    let (status, polled, _) = call(&app, "POST", "/realms/shop/ssf/poll", Some(&token)).await;
+    let (status, polled, _) = call(&app, "POST", "/env/shop/ssf/poll", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(polled["moreAvailable"], false);
     assert_eq!(
-        call(&app, "POST", "/realms/shop/ssf/poll", None).await.0,
+        call(&app, "POST", "/env/shop/ssf/poll", None).await.0,
         StatusCode::UNAUTHORIZED
     );
 
-    let (status, updated, _) = call(&app, "PATCH", "/realms/shop/ssf/streams", Some(&token)).await;
+    let (status, updated, _) = call(&app, "PATCH", "/env/shop/ssf/streams", Some(&token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(updated["status"], "paused");
     assert_eq!(
@@ -263,7 +253,7 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     let (status, state, cache) = call(
         &app,
         "GET",
-        &format!("/realms/shop/ssf/status?stream_id={id}"),
+        &format!("/env/shop/ssf/status?stream_id={id}"),
         Some(&token),
     )
     .await;
@@ -278,25 +268,25 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     for (method, path, token, want) in [
         (
             "GET",
-            "/realms/shop/ssf/status",
+            "/env/shop/ssf/status",
             Some(token.as_str()),
             StatusCode::BAD_REQUEST,
         ),
         (
             "GET",
-            "/realms/shop/ssf/status",
+            "/env/shop/ssf/status",
             None,
             StatusCode::UNAUTHORIZED,
         ),
         (
             "POST",
-            "/realms/shop/ssf/verify",
+            "/env/shop/ssf/verify",
             Some(token.as_str()),
             StatusCode::BAD_REQUEST,
         ),
         (
             "POST",
-            "/realms/shop/ssf/verify",
+            "/env/shop/ssf/verify",
             None,
             StatusCode::UNAUTHORIZED,
         ),
@@ -309,13 +299,13 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     }
 
     assert_eq!(
-        call(&app, "DELETE", "/realms/shop/ssf/streams", Some(&token))
+        call(&app, "DELETE", "/env/shop/ssf/streams", Some(&token))
             .await
             .0,
         StatusCode::NO_CONTENT
     );
     assert_eq!(
-        call(&app, "GET", "/realms/shop/ssf/streams", Some(&token))
+        call(&app, "GET", "/env/shop/ssf/streams", Some(&token))
             .await
             .0,
         StatusCode::UNAUTHORIZED

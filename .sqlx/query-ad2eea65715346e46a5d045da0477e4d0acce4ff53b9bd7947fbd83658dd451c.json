@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hostname FROM access.environment_domains\n          WHERE status = 'verified' AND reverify_by > clock_timestamp() ORDER BY hostname",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environment_domains",
+            "name": "hostname"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ad2eea65715346e46a5d045da0477e4d0acce4ff53b9bd7947fbd83658dd451c"
+}

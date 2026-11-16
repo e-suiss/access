@@ -27,11 +27,11 @@ pub fn last_owner(e: &StoreError) -> bool {
 pub struct OrgRow {
     /// Its id.
     pub id: [u8; 16],
-    /// Its Party in the realm's governing domain.
+    /// Its Party in the environment's governing domain.
     pub party: [u8; 16],
     /// Its display name, attacker-controlled text (OP-153 m.3 (o)).
     pub display_name: String,
-    /// Whether home realm discovery routes to it (TN-98).
+    /// Whether home environment discovery routes to it (TN-98).
     pub hrd: bool,
     /// Whether it ended.
     pub ended: bool,
@@ -110,7 +110,7 @@ pub struct NewInvitation<'a> {
     pub token_hash: &'a [u8; 32],
     /// SHA-256 of the magic code.
     pub code_hash: &'a [u8; 32],
-    /// The realm's keyed blind index of the invitee's folded identifier.
+    /// The environment's keyed blind index of the invitee's folded identifier.
     pub invitee_index: &'a [u8; 32],
     /// The invitee's domain, for the different-domain interstitial.
     pub invitee_domain: &'a str,
@@ -185,8 +185,8 @@ pub struct DomainRow {
 
 impl TenantTx {
     pub(crate) fn org_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Records an organization bound to its registered Party and the Exercise that created it.
@@ -199,12 +199,12 @@ impl TenantTx {
         display_name: &str,
         exercise: &[u8; 32],
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.organizations (tenant_id, realm_id, party, display_name, created_exercise)
+            r#"INSERT INTO access.organizations (tenant_id, environment_id, party, display_name, created_exercise)
                VALUES ($1, $2, $3, $4, $5) RETURNING org_id"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
             display_name,
             exercise.as_slice(),
@@ -223,13 +223,13 @@ impl TenantTx {
         subject: [u8; 16],
         since_s: i64,
     ) -> Result<i64, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.org_memberships
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND source = 'founder'
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND source = 'founder'
                   AND joined_at > clock_timestamp() - make_interval(secs => $4)"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             f64::from(i32::try_from(since_s).map_err(|_| StoreError::Range)?),
         )
@@ -242,13 +242,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn org(&mut self, id: [u8; 16]) -> Result<Option<OrgRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT org_id, party, display_name, hrd, ended_at IS NOT NULL AS "ended!"
                  FROM access.organizations
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3"#,
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -270,12 +270,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn org_by_party(&mut self, party: [u8; 16]) -> Result<Option<OrgRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let id = sqlx::query_scalar!(
             r#"SELECT org_id FROM access.organizations
-                WHERE tenant_id = $1 AND realm_id = $2 AND party = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND party = $3"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -291,12 +291,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn set_org_name(&mut self, id: [u8; 16], name: &str) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.organizations SET display_name = $4
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND ended_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(id),
             name,
         )
@@ -305,42 +305,42 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// The organization's domains home realm discovery may name (§10.2.6, TN-90): verified now
-    /// and claimed by no other organization of the realm.
+    /// The organization's domains home environment discovery may name (§10.2.6, TN-90): verified now
+    /// and claimed by no other organization of the environment.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn hrd_domains(&mut self, org: [u8; 16]) -> Result<Vec<String>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT d.domain FROM access.org_domains d
-                WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.org_id = $3
+                WHERE d.tenant_id = $1 AND d.environment_id = $2 AND d.org_id = $3
                   AND d.released_at IS NULL AND d.verified_at IS NOT NULL
                   AND d.reverify_by > clock_timestamp()
                   AND NOT EXISTS (
                     SELECT 1 FROM access.org_domains o
-                     WHERE o.tenant_id = d.tenant_id AND o.realm_id = d.realm_id
+                     WHERE o.tenant_id = d.tenant_id AND o.environment_id = d.environment_id
                        AND o.domain = d.domain AND o.org_id <> d.org_id AND o.released_at IS NULL)
                 ORDER BY d.domain"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
         .await?)
     }
 
-    /// Turns home realm discovery to the organization on or off (TN-98: off by default).
+    /// Turns home environment discovery to the organization on or off (TN-98: off by default).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn set_org_hrd(&mut self, id: [u8; 16], on: bool) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.organizations SET hrd = $4
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND ended_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(id),
             on,
         )
@@ -361,19 +361,19 @@ impl TenantTx {
         owner: bool,
         role: Option<(&str, u64)>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let version = role
             .map(|(_, v)| i64::try_from(v).map_err(|_| StoreError::Range))
             .transpose()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_memberships
-                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version,
+                 (tenant_id, environment_id, org_id, subject_id, source, owner, role_name, role_version,
                   grant_state)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
                        CASE WHEN $7::text IS NULL THEN NULL ELSE 'pending' END)
                RETURNING membership_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             uuid(subject),
             source.word(),
@@ -391,14 +391,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn memberships(&mut self, org: [u8; 16]) -> Result<Vec<MembershipRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query!(
             r#"SELECT membership_id, subject_id, source, owner, role_name, role_version, grant_id
                  FROM access.org_memberships
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND ended_at IS NULL
                 ORDER BY membership_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
@@ -435,13 +435,13 @@ impl TenantTx {
         subject: [u8; 16],
         by: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_memberships SET ended_at = clock_timestamp(), ended_by = $5
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND subject_id = $4
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND subject_id = $4
                   AND ended_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             uuid(subject),
             by,
@@ -451,7 +451,7 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// Ends every open membership of the subject in every organization of the realm, as the
+    /// Ends every open membership of the subject in every organization of the environment, as the
     /// account's deletion or the inactivity sweep does; the last owner is kept ([`last_owner`]).
     ///
     /// # Errors
@@ -461,12 +461,12 @@ impl TenantTx {
         subject: [u8; 16],
         by: &str,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_memberships SET ended_at = clock_timestamp(), ended_by = $4
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_at IS NULL"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
             by,
         )
@@ -484,13 +484,13 @@ impl TenantTx {
         org: [u8; 16],
         subject: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_memberships SET owner = false
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND subject_id = $4
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND subject_id = $4
                   AND ended_at IS NULL AND owner"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             uuid(subject),
         )
@@ -508,13 +508,13 @@ impl TenantTx {
         org: [u8; 16],
         since_s: i64,
     ) -> Result<i64, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3
                   AND created_at > clock_timestamp() - make_interval(secs => $4)"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             f64::from(i32::try_from(since_s).map_err(|_| StoreError::Range)?),
         )
@@ -530,19 +530,19 @@ impl TenantTx {
         &mut self,
         i: &NewInvitation<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let version = i64::try_from(i.role.1).map_err(|_| StoreError::Range)?;
         let ttl = f64::from(i32::try_from(i.ttl_s).map_err(|_| StoreError::Range)?);
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_invitations
-                 (tenant_id, realm_id, org_id, token_hash, code_hash, invitee_index, invitee_domain,
+                 (tenant_id, environment_id, org_id, token_hash, code_hash, invitee_index, invitee_domain,
                   inviter_party, role_name, role_version, created_exercise, created_at, expires_at)
                SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                       now.at, now.at + make_interval(secs => $12)
                  FROM (SELECT clock_timestamp() AS at) AS now
                RETURNING invitation_id"#,
             tenant,
-            realm,
+            environment,
             uuid(i.org),
             i.token_hash.as_slice(),
             i.code_hash.as_slice(),
@@ -567,16 +567,16 @@ impl TenantTx {
         &mut self,
         token_hash: &[u8; 32],
     ) -> Result<Option<InvitationRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT invitation_id, org_id, code_hash, invitee_index, invitee_domain, inviter_party,
                       role_name, role_version, scanner_clicks,
                       (accepted_at IS NULL AND revoked_at IS NULL
                        AND expires_at > clock_timestamp()) AS "open!"
                  FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND token_hash = $3"#,
             tenant,
-            realm,
+            environment,
             token_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -609,7 +609,7 @@ impl TenantTx {
         &mut self,
         org: [u8; 16],
     ) -> Result<Vec<InvitationListed>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query!(
             r#"SELECT invitation_id, invitee_domain, role_name, role_version, scanner_clicks,
                       (accepted_at IS NULL AND revoked_at IS NULL
@@ -617,11 +617,11 @@ impl TenantTx {
                       accepted_at IS NOT NULL AS "accepted!",
                       (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
                  FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3
                 ORDER BY created_at DESC, invitation_id DESC
                 LIMIT 100"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
@@ -652,15 +652,15 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<([u8; 16], bool)>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT org_id,
                       (accepted_at IS NULL AND revoked_at IS NULL
                        AND expires_at > clock_timestamp()) AS "open!"
                  FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3"#,
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -678,16 +678,16 @@ impl TenantTx {
         code_hash: &[u8; 32],
         invitees: &[[u8; 32]],
     ) -> Result<Vec<[u8; 32]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let invitees: Vec<Vec<u8>> = invitees.iter().map(|i| i.to_vec()).collect();
         let rows = sqlx::query_scalar!(
             r#"SELECT token_hash FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND code_hash = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND code_hash = $3
                   AND invitee_index = ANY($4)
                   AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()
                 ORDER BY invitation_id"#,
             tenant,
-            realm,
+            environment,
             code_hash.as_slice(),
             &invitees,
         )
@@ -704,14 +704,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn email_indexes(&mut self, subject: [u8; 16]) -> Result<Vec<[u8; 32]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query_scalar!(
             r#"SELECT value_index AS "index!" FROM access.identity_identifiers
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                   AND kind = 'email' AND value_index IS NOT NULL
                 ORDER BY identifier_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -730,13 +730,13 @@ impl TenantTx {
         org: [u8; 16],
         subject: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM access.org_access_requests
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND subject_id = $4
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND subject_id = $4
                   AND decided_at IS NULL) AS "e!""#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             uuid(subject),
         )
@@ -752,16 +752,16 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<(OrgRow, MembershipRow)>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let ids = sqlx::query_scalar!(
             r#"SELECT m.org_id FROM access.org_memberships m
                  JOIN access.organizations o
-                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
-                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                   ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3
                   AND m.ended_at IS NULL AND o.ended_at IS NULL
                 ORDER BY m.membership_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -788,13 +788,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn count_scanner_click(&mut self, invitation: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         sqlx::query!(
             r#"UPDATE access.org_invitations SET scanner_clicks = scanner_clicks + 1
-                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3
                   AND accepted_at IS NULL AND revoked_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(invitation),
         )
         .execute(&mut *self.tx)
@@ -811,13 +811,13 @@ impl TenantTx {
         invitation: [u8; 16],
         subject: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_invitations SET accepted_at = clock_timestamp(), accepted_subject = $4
-                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3
                   AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()"#,
             tenant,
-            realm,
+            environment,
             uuid(invitation),
             uuid(subject),
         )
@@ -831,13 +831,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn revoke_invitation(&mut self, invitation: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_invitations SET revoked_at = clock_timestamp()
-                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND invitation_id = $3
                   AND accepted_at IS NULL AND revoked_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(invitation),
         )
         .execute(&mut *self.tx)
@@ -856,12 +856,12 @@ impl TenantTx {
         method: &str,
         challenge_hash: &[u8; 32],
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.org_domains (tenant_id, realm_id, org_id, domain, method, challenge_hash)
+            r#"INSERT INTO access.org_domains (tenant_id, environment_id, org_id, domain, method, challenge_hash)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING claim_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             domain,
             method,
@@ -884,16 +884,16 @@ impl TenantTx {
         mx: &[u8; 32],
         rdap: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let secs = f64::from(i32::try_from(reverify_s).map_err(|_| StoreError::Range)?);
         let done = sqlx::query!(
             r#"UPDATE access.org_domains
                   SET verified_at = clock_timestamp(),
                       reverify_by = clock_timestamp() + make_interval(secs => $4),
                       mx_digest = $5, rdap_digest = $6, changed_at = NULL
-                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND claim_id = $3 AND released_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(claim),
             secs,
             mx.as_slice(),
@@ -915,14 +915,14 @@ impl TenantTx {
         mx: &[u8; 32],
         rdap: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_domains SET changed_at = clock_timestamp()
-                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND claim_id = $3 AND released_at IS NULL
                   AND verified_at IS NOT NULL AND changed_at IS NULL
                   AND (mx_digest IS DISTINCT FROM $4 OR rdap_digest IS DISTINCT FROM $5)"#,
             tenant,
-            realm,
+            environment,
             uuid(claim),
             mx.as_slice(),
             rdap.as_slice(),
@@ -939,18 +939,18 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn lapse_domains(&mut self, grace_s: i64) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let secs = f64::from(i32::try_from(grace_s).map_err(|_| StoreError::Range)?);
         let rows = sqlx::query_scalar!(
             r#"UPDATE access.org_domains
                   SET verified_at = NULL, reverify_by = NULL, autojoin = false
-                WHERE tenant_id = $1 AND realm_id = $2 AND released_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND released_at IS NULL
                   AND verified_at IS NOT NULL
                   AND (reverify_by <= clock_timestamp()
                        OR changed_at <= clock_timestamp() - make_interval(secs => $3))
                RETURNING claim_id"#,
             tenant,
-            realm,
+            environment,
             secs,
         )
         .fetch_all(&mut *self.tx)
@@ -963,12 +963,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn release_domain(&mut self, claim: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_domains SET released_at = clock_timestamp(), autojoin = false
-                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND claim_id = $3 AND released_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             uuid(claim),
         )
         .execute(&mut *self.tx)
@@ -981,13 +981,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn set_autojoin(&mut self, claim: [u8; 16], on: bool) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.org_domains SET autojoin = $4
-                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND claim_id = $3 AND released_at IS NULL
                   AND (NOT $4 OR (verified_at IS NOT NULL AND reverify_by > clock_timestamp()))"#,
             tenant,
-            realm,
+            environment,
             uuid(claim),
             on,
         )
@@ -996,22 +996,22 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// Every open claim of `domain` in the realm, by any organization: more than one
+    /// Every open claim of `domain` in the environment, by any organization: more than one
     /// organization is a contested domain (TN-90).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn domain_claims(&mut self, domain: &str) -> Result<Vec<DomainRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query!(
             r#"SELECT claim_id, org_id, domain, autojoin,
                       (verified_at IS NOT NULL AND reverify_by > clock_timestamp()) AS "verified!",
                       (extract(epoch FROM changed_at) * 1000)::bigint AS changed_ms
                  FROM access.org_domains
-                WHERE tenant_id = $1 AND realm_id = $2 AND domain = $3 AND released_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND domain = $3 AND released_at IS NULL
                 ORDER BY claim_id"#,
             tenant,
-            realm,
+            environment,
             domain,
         )
         .fetch_all(&mut *self.tx)
@@ -1038,12 +1038,12 @@ impl TenantTx {
         org: [u8; 16],
         subject: [u8; 16],
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.org_access_requests (tenant_id, realm_id, org_id, subject_id)
+            r#"INSERT INTO access.org_access_requests (tenant_id, environment_id, org_id, subject_id)
                VALUES ($1, $2, $3, $4) RETURNING request_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             uuid(subject),
         )
@@ -1061,15 +1061,15 @@ impl TenantTx {
         request: [u8; 16],
         approved: bool,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let subject = sqlx::query_scalar!(
             r#"UPDATE access.org_access_requests
                   SET decided_at = clock_timestamp(),
                       decision = CASE WHEN $4 THEN 'approved' ELSE 'denied' END
-                WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3 AND decided_at IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3 AND decided_at IS NULL
                RETURNING subject_id"#,
             tenant,
-            realm,
+            environment,
             uuid(request),
             approved,
         )

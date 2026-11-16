@@ -1,5 +1,5 @@
-//! The realm issuer's Claims on a real PostgreSQL (CMP-8, §10.1.7, TN-49, OP-150 L2): orders
-//! queued with their identity events, placed in the realm's governing domain and handed to Claim
+//! The environment issuer's Claims on a real PostgreSQL (CMP-8, §10.1.7, TN-49, OP-150 L2): orders
+//! queued with their identity events, placed in the environment's governing domain and handed to Claim
 //! Ingest by the courier, at least once.
 
 #![allow(
@@ -20,7 +20,7 @@ use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::change_status;
 use access_identity_account::app::claims::{ClaimSigner, Courier, Issued, NotSigned, Report, emit};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::claims::{AuthFacts, Bind, RiskSignal, authentication, risk};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb, AccountTx, Clock};
@@ -32,11 +32,11 @@ use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::model::{EqValue, Id};
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::bind_subject_party;
-use access_store::issuer::{NewDeviceKey, insert_device_key, set_realm_issuer};
+use access_store::issuer::{NewDeviceKey, insert_device_key, set_environment_issuer};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 const NOW: u64 = 1_800_000_000_000;
@@ -58,7 +58,7 @@ struct Plain;
 impl ClaimSigner for Plain {
     fn sign(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         payload: Vec<u8>,
         at: u64,
     ) -> impl Future<Output = Result<Vec<u8>, NotSigned>> + Send {
@@ -96,7 +96,7 @@ impl ClaimIngest for &Plane {
 struct Env {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     domain: [u8; 32],
     kek: SoftKek,
     vault: access_identity_account::app::vault::Vault,
@@ -125,33 +125,33 @@ impl Env {
             .await
             .unwrap();
         let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut tx, &d, "claims", "pool-default")
+        let environment = create_environment(&mut tx, &d, "claims", "pool-default")
             .await
             .unwrap();
-        tx.enter_realm(realm).await.unwrap();
+        tx.enter_environment(environment).await.unwrap();
         if issuer {
-            assert!(set_realm_issuer(&mut tx, &ISSUER).await.unwrap());
-            assert!(!set_realm_issuer(&mut tx, &[1; 16]).await.unwrap());
+            assert!(set_environment_issuer(&mut tx, &ISSUER).await.unwrap());
+            assert!(!set_environment_issuer(&mut tx, &[1; 16]).await.unwrap());
         }
         tx.commit().await.unwrap();
         Self {
             db,
             tenant,
-            realm,
+            environment,
             domain,
-            kek: SoftKek::new("realm-kek:1", [seed; 32]),
+            kek: SoftKek::new("environment-kek:1", [seed; 32]),
             vault: access_identity_account::app::vault::Vault::in_memory(
-                std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+                std::sync::Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
                 [seed; 32],
             ),
             ids: IdKey::new(Secret::new([seed; 32])),
         }
     }
 
-    fn realm(&self) -> Realm<'_> {
-        Realm {
+    fn environment(&self) -> Environment<'_> {
+        Environment {
             tenant: self.tenant,
-            realm: self.realm,
+            environment: self.environment,
             kek: &self.kek,
             ids: &self.ids,
         }
@@ -159,16 +159,16 @@ impl Env {
 
     async fn subject(&self, party: Option<[u8; 16]>) -> [u8; 16] {
         let mut tx = PgAccounts::sealed(self.db.app.clone(), self.vault.clone())
-            .begin(self.tenant, self.realm)
+            .begin(self.tenant, self.environment)
             .await
             .unwrap();
         let s = tx
-            .insert_subject(AccountStatus::Active, "realm-kek:1", &[0; 40])
+            .insert_subject(AccountStatus::Active, "environment-kek:1", &[0; 40])
             .await
             .unwrap();
         tx.commit().await.unwrap();
         if let Some(p) = party {
-            let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
                 .await
                 .unwrap();
             assert!(bind_subject_party(&mut t, &s, &p).await.unwrap());
@@ -237,20 +237,26 @@ async fn status_changes_become_superseding_status_claims() {
     let e = Env::new(0x31, true).await;
     let s = e.subject(Some(PARTY)).await;
     let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
-    change_status(&pg, &e.realm(), s, AccountStatus::Suspended, &ADMIN)
+    change_status(&pg, &e.environment(), s, AccountStatus::Suspended, &ADMIN)
         .await
         .unwrap();
     let plane = Plane::default();
     let c = e.courier(&plane);
     assert_eq!(answered(&c, 1).await.answered, 1);
-    change_status(&pg, &e.realm(), s, AccountStatus::Active, &ADMIN)
+    change_status(&pg, &e.environment(), s, AccountStatus::Active, &ADMIN)
         .await
         .unwrap();
     assert_eq!(answered(&c, 1).await.answered, 1);
     let other = e.subject(Some(OTHER_PARTY)).await;
-    change_status(&pg, &e.realm(), other, AccountStatus::Suspended, &ADMIN)
-        .await
-        .unwrap();
+    change_status(
+        &pg,
+        &e.environment(),
+        other,
+        AccountStatus::Suspended,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
     assert_eq!(answered(&c, 1).await.answered, 1);
     assert_eq!(c.step().await.unwrap().answered, 0);
     let got = statements(&plane);
@@ -282,12 +288,24 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
     let plane = Plane::default();
     plane.down.store(true, Ordering::SeqCst);
     let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
-    change_status(&pg, &e.realm(), lone, AccountStatus::Suspended, &ADMIN)
-        .await
-        .unwrap();
-    change_status(&pg, &e.realm(), bound, AccountStatus::Suspended, &ADMIN)
-        .await
-        .unwrap();
+    change_status(
+        &pg,
+        &e.environment(),
+        lone,
+        AccountStatus::Suspended,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    change_status(
+        &pg,
+        &e.environment(),
+        bound,
+        AccountStatus::Suspended,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
     let courier = e.courier(&plane);
     until_down(&courier).await;
     plane.down.store(false, Ordering::SeqCst);
@@ -301,7 +319,7 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
         none.courier(&plane)
             .issue(
                 none.tenant,
-                none.realm,
+                none.environment,
                 &risk(other, RiskSignal::NewDevice, Bind::None, NOW)
             )
             .await
@@ -309,7 +327,10 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
         Issued::Unplaced("no-issuer")
     );
     assert!(matches!(
-        courier.issue(e.tenant, e.realm, &order).await.unwrap(),
+        courier
+            .issue(e.tenant, e.environment, &order)
+            .await
+            .unwrap(),
         Issued::Answered {
             verdict: ClaimVerdict::Admitted { .. },
             ..
@@ -323,7 +344,9 @@ async fn session_authentications_bind_the_registered_instance() {
     let e = Env::new(0x34, true).await;
     let s = e.subject(Some(PARTY)).await;
     let session = [0x5e; 16];
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     insert_device_key(
         &mut t,
         &NewDeviceKey {
@@ -340,7 +363,7 @@ async fn session_authentications_bind_the_registered_instance() {
     .unwrap();
     t.commit().await.unwrap();
     let mut tx = PgAccounts::sealed(e.db.app.clone(), e.vault.clone())
-        .begin(e.tenant, e.realm)
+        .begin(e.tenant, e.environment)
         .await
         .unwrap();
     emit(
@@ -391,8 +414,10 @@ async fn password_changes_become_authenticator_binding_claims() {
     let e = Env::new(0x36, true).await;
     let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     let id = Identifier::new(IdentifierKind::Username, "pat").unwrap();
-    let s = create(&pg, &e.realm(), &[id], &ADMIN).await.unwrap();
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let s = create(&pg, &e.environment(), &[id], &ADMIN).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(bind_subject_party(&mut t, &s, &PARTY).await.unwrap());
     t.commit().await.unwrap();
     let hasher = Hasher::new(HasherConfig::sized(
@@ -411,7 +436,7 @@ async fn password_changes_become_authenticator_binding_claims() {
     };
     let first = set_password(
         &pg,
-        &e.realm(),
+        &e.environment(),
         &services,
         s,
         "correct horse battery",
@@ -421,7 +446,7 @@ async fn password_changes_become_authenticator_binding_claims() {
     .unwrap();
     set_password(
         &pg,
-        &e.realm(),
+        &e.environment(),
         &services,
         s,
         "another horse battery",

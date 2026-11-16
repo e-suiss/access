@@ -11,14 +11,14 @@
 use access_identity_account::app::SUBJECT_PREFIX;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::model::Id;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::offboarding::NewOffboarding;
 use serde_json::{Value as Json, json};
 
 use super::rest::rfc3339;
 use super::{Admin, Applied};
 use crate::AdminError;
-use crate::ports::{Decider, Departing, Governance, Instances, RealmKeys, Selects};
+use crate::ports::{Decider, Departing, EnvironmentKeys, Governance, Instances, Selects};
 
 /// The choices of each channel, in the order the preview lists them (§8.17.9.6).
 pub const GRANT_CHOICES: [&str; 2] = ["keep", "revoke"];
@@ -140,9 +140,9 @@ pub struct Departure {
     pub actor: [u8; 32],
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
-    /// The offboarding preview of the Party `key` (base64url) in `t`'s realm; `None` for a key
-    /// that is no Party of the realm's governing domain.
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
+    /// The offboarding preview of the Party `key` (base64url) in `t`'s environment; `None` for a key
+    /// that is no Party of the environment's governing domain.
     ///
     /// # Errors
     /// [`AdminError`].
@@ -156,7 +156,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         };
         let g = access_store::idp::governance(t)
             .await?
-            .ok_or(AdminError::NoRealm)?;
+            .ok_or(AdminError::NoEnvironment)?;
         let Some(d) = self
             .governance
             .offboarding(
@@ -196,7 +196,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`].
     pub async fn offboard(
         &self,
-        place: (TenantId, RealmId),
+        place: (TenantId, EnvironmentId),
         departure: &Departure,
         submission: access_internal_api::idp::Submission,
     ) -> Result<Applied, AdminError> {

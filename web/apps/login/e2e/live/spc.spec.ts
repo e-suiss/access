@@ -4,9 +4,9 @@
 // the sign-in pages.
 import { expect, test } from "@playwright/test";
 
-const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
-// The local deployment's realms do not decide idp.realm.spc.
-const NO_SPC_REALM = process.env["ACCESS_LIVE_NO_SPC_REALM"] ?? REALM;
+const ENVIRONMENT = process.env["ACCESS_LIVE_ENVIRONMENT"] ?? "/env/acme";
+// The local deployment's environments do not decide idp.environment.spc.
+const NO_SPC_ENVIRONMENT = process.env["ACCESS_LIVE_NO_SPC_ENVIRONMENT"] ?? ENVIRONMENT;
 
 test.describe("@live secure payment confirmation", () => {
   test("@live the approval surface takes a payment.get assertion only for a started flow", async ({
@@ -23,26 +23,29 @@ test.describe("@live secure payment confirmation", () => {
         isUserVerified: true,
       },
     });
-    const login = await page.goto(`${REALM}/login`);
+    const login = await page.goto(`${ENVIRONMENT}/login`);
     expect(login?.status()).toBe(200);
     expect(login?.headers()["permissions-policy"]).toContain("payment=()");
     const origin = new URL(page.url()).origin;
-    // OP-156 m.3 (g): a realm without idp.realm.spc keeps payment closed on its payment page too
+    // OP-156 m.3 (g): an environment without idp.environment.spc keeps payment closed on its payment page too
     const pay = await page.goto(
-      `${NO_SPC_REALM}/login?reason=pay&request=urn:x&redirect_uri=x&state=s`,
+      `${NO_SPC_ENVIRONMENT}/login?reason=pay&request=urn:x&redirect_uri=x&state=s`,
     );
     expect(pay?.status()).toBe(200);
     expect(pay?.headers()["permissions-policy"]).toContain("payment=()");
-    const start = await page.request.post(`${REALM}/v1/approve/flows`, {
+    const start = await page.request.post(`${ENVIRONMENT}/v1/approve/flows`, {
       data: { request: "urn:x", redirect_uri: "https://shop.example/a", state: "s" },
       headers: { origin, "idempotency-key": crypto.randomUUID() },
     });
     expect(start.status()).not.toBe(501);
     expect(start.status()).toBeGreaterThanOrEqual(400);
-    const finish = await page.request.post(`${REALM}/v1/approve/flows/AAAAAAAAAAAAAAAAAAAAAA`, {
-      data: { credential: {}, redirect_uri: "https://shop.example/a", state: "s" },
-      headers: { origin, "idempotency-key": crypto.randomUUID() },
-    });
+    const finish = await page.request.post(
+      `${ENVIRONMENT}/v1/approve/flows/AAAAAAAAAAAAAAAAAAAAAA`,
+      {
+        data: { credential: {}, redirect_uri: "https://shop.example/a", state: "s" },
+        headers: { origin, "idempotency-key": crypto.randomUUID() },
+      },
+    );
     expect(finish.status()).toBeGreaterThanOrEqual(400);
   });
 });

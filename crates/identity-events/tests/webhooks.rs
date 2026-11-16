@@ -25,11 +25,11 @@ use access_crypto::secret::Secret;
 use access_crypto::webhook::WebhookPublicKey;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::{change_status, create};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::events::EventOrder;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
-use access_identity_events::adapters::{KekSealer, RealmKek};
+use access_identity_events::adapters::{EnvironmentKek, KekSealer};
 use access_identity_events::app::webhooks::{WebhookCourier, WebhookFanout, Written};
 use access_identity_events::app::{Db, emit};
 use access_identity_events::domain::catalog::{IdentityEvent, uuid};
@@ -41,15 +41,15 @@ use access_kernel::json::b64url_encode;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx, poll};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx, poll};
 use access_store::idp::{Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 use serde_json::Value as Json;
 use suiss_crypto::envelope::{Kek, SoftKek};
 
-const ISSUER: &str = "https://id.test/realms/shop";
+const ISSUER: &str = "https://id.test/env/shop";
 const T0: u64 = 1_793_750_400_000;
 const INTENT: [u8; 32] = [9; 32];
 const ACTOR: Actor<'static> = Actor {
@@ -68,14 +68,14 @@ impl Clock for TestClock {
 
 struct OneKek(Arc<SoftKek>);
 
-impl RealmKek for OneKek {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for OneKek {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
 
 fn kek() -> Arc<SoftKek> {
-    Arc::new(SoftKek::new("realm-kek-1", [9; 32]))
+    Arc::new(SoftKek::new("environment-kek-1", [9; 32]))
 }
 
 fn vault() -> KekSealer<OneKek> {
@@ -152,7 +152,7 @@ impl Transport for Fake {
 struct World {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     domain: DomainId,
     clock: TestClock,
     next_pos: AtomicU64,
@@ -224,17 +224,17 @@ impl World {
             head = next;
         }
         let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+        let environment = create_environment(&mut t, &domain, "shop", "pool-default")
             .await
             .unwrap();
-        t.enter_realm(realm).await.unwrap();
+        t.enter_environment(environment).await.unwrap();
         assert!(set_issuer(&mut t, ISSUER).await.unwrap());
         create_settings(&mut t).await.unwrap();
         t.commit().await.unwrap();
         Self {
             db,
             tenant,
-            realm,
+            environment,
             domain,
             clock: TestClock(Arc::new(AtomicU64::new(T0))),
             next_pos: AtomicU64::new(1),
@@ -262,7 +262,7 @@ impl World {
         let pos = self.next_pos.fetch_add(1, Ordering::SeqCst);
         let nonce = vec![u8::try_from(pos).unwrap(); 16];
         let label = change.action().label();
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let b = bind(
@@ -314,11 +314,11 @@ impl World {
         let id = [seed; 32];
         let e = IdentityEvent::account(&EventOrder::created(
             id,
-            self.realm.as_bytes(),
+            self.environment.as_bytes(),
             "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc",
             T0,
         ));
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         emit(&mut t, &e).await.unwrap();
@@ -347,7 +347,7 @@ impl World {
     }
 
     async fn attempts(&self, webhook: u8, event: &str) -> Vec<(String, Option<u16>, Option<u32>)> {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let a = t.webhook_attempts(&[webhook; 16], event).await.unwrap();
@@ -356,7 +356,7 @@ impl World {
     }
 
     async fn state(&self, webhook: u8, event: &str) -> String {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let d = t
@@ -520,9 +520,9 @@ async fn inv_24_a_lost_delivery_changes_no_decision() {
         .await;
     let kek = kek();
     let id_key = ids();
-    let realm = Realm {
+    let environment = Environment {
         tenant: w.tenant,
-        realm: w.realm,
+        environment: w.environment,
         kek: kek.as_ref(),
         ids: &id_key,
     };
@@ -531,18 +531,26 @@ async fn inv_24_a_lost_delivery_changes_no_decision() {
         access_identity_account::app::vault::Vault::in_memory(kek.clone(), [9; 32]),
     );
     let ident = Identifier::new(IdentifierKind::Username, "ada").unwrap();
-    let s = create(&db, &realm, &[ident], &ACTOR).await.unwrap();
-    change_status(&db, &realm, s, AccountStatus::PendingUserAction, &ACTOR)
+    let s = create(&db, &environment, &[ident], &ACTOR).await.unwrap();
+    change_status(
+        &db,
+        &environment,
+        s,
+        AccountStatus::PendingUserAction,
+        &ACTOR,
+    )
+    .await
+    .unwrap();
+    change_status(&db, &environment, s, AccountStatus::Active, &ACTOR)
         .await
         .unwrap();
-    change_status(&db, &realm, s, AccountStatus::Active, &ACTOR)
-        .await
-        .unwrap();
-    change_status(&db, &realm, s, AccountStatus::Suspended, &ACTOR)
+    change_status(&db, &environment, s, AccountStatus::Suspended, &ACTOR)
         .await
         .unwrap();
 
-    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+        .await
+        .unwrap();
     let row = t.subject(s, false).await.unwrap().unwrap();
     t.commit().await.unwrap();
     assert!(

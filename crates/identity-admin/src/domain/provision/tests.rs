@@ -11,8 +11,8 @@ use access_internal_api::idp::NAMESPACES;
 
 use super::*;
 
-fn order(root: Root, ack: bool) -> RealmOrder {
-    RealmOrder {
+fn order(root: Root, ack: bool) -> EnvironmentOrder {
+    EnvironmentOrder {
         tenant: [1; 16],
         slug: String::from("acme"),
         style: IssuerStyle::Subdomain,
@@ -199,15 +199,15 @@ fn orders_are_checked_before_a_decision() {
 #[test]
 fn the_intent_binds_the_change() {
     let w = Window { from: 1, until: 2 };
-    let a = PlatformChange::Realm(order(joint(2, 3), false));
-    let b = PlatformChange::Realm(order(joint(3, 3), false));
+    let a = PlatformChange::Environment(order(joint(2, 3), false));
+    let b = PlatformChange::Environment(order(joint(3, 3), false));
     let s = PlatformChange::Sandbox(order(joint(2, 3), false));
     let ia = a.intent("platform", w).unwrap();
     assert_eq!(ia.action.namespace, NAMESPACE);
-    assert_eq!(ia.action.name, "realm_create");
+    assert_eq!(ia.action.name, "environment_create");
     assert_eq!(
         ia.resources[0].path,
-        ["platform", "platform", "realm", "acme"]
+        ["platform", "platform", "environment", "acme"]
     );
     assert_ne!(a.digest().unwrap(), b.digest().unwrap());
     assert_ne!(a.digest().unwrap(), s.digest().unwrap());
@@ -228,7 +228,7 @@ fn nothing_flows_across_the_sandbox_line() {
 
 // OP-141 m.35 (c), INV-29
 #[test]
-fn only_the_platform_realm_publishes_the_platform_catalog() {
+fn only_the_platform_environment_publishes_the_platform_catalog() {
     assert!(!NAMESPACES.contains(&NAMESPACE));
     let spp = catalog(Id([5; 16]));
     assert_eq!(spp.namespace, NAMESPACE);

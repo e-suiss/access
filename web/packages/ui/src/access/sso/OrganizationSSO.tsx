@@ -1,6 +1,6 @@
 // TN-133, TN-134, OP-155 m.3 (i): the organization SSO setup portal as one embeddable component.
 // It renders what a one-use setup link opens and hands each step back through `onSubmit`; the
-// host calls the realm's setup API (the hosted page and a tenant's page use the same one). It
+// host calls the environment's setup API (the hosted page and a tenant's page use the same one). It
 // keeps no copy and decides nothing: what it submits is a connection draft, and only an owner's
 // signed change puts a connection into effect.
 import { Button } from "@access/ui/components/button";

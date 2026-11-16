@@ -1,5 +1,5 @@
 //! What social sign-in needs from the outside world (OP-63): HTTPS to the provider and the
-//! secret store that holds the realm's client secrets. Both fail closed: no answer, no sign-in
+//! secret store that holds the environment's client secrets. Both fail closed: no answer, no sign-in
 //! (MD-8).
 
 use std::future::Future;
@@ -47,11 +47,17 @@ pub trait ProviderHttp: Send + Sync {
 /// A boxed future of [`ClientAssertion`].
 pub type Signed<'a> = Pin<Box<dyn Future<Output = Result<String, Unreachable>> + Send + 'a>>;
 
-/// Signs the RFC 7523 client assertions of `private_key_jwt` with a key of the realm, the one
+/// Signs the RFC 7523 client assertions of `private_key_jwt` with a key of the environment, the one
 /// its `JWKS` publishes (OP-155 m.3 (h)).
 pub trait ClientAssertion: Send + Sync {
     /// The compact JWS of `claims` under `alg` (`ES256` or `RS256`) at `at_ms`.
-    fn sign(&self, realm: [u8; 16], alg: &'static str, claims: Vec<u8>, at_ms: u64) -> Signed<'_>;
+    fn sign(
+        &self,
+        environment: [u8; 16],
+        alg: &'static str,
+        claims: Vec<u8>,
+        at_ms: u64,
+    ) -> Signed<'_>;
 }
 
 /// No signer: every `private_key_jwt` connection is unreachable (MD-8).
@@ -134,13 +140,13 @@ impl AssertionReader for NoAssertionReader {
     }
 }
 
-/// Signs an `AuthnRequest` in the HTTP-Redirect binding with the realm's SAML key (OP-155
+/// Signs an `AuthnRequest` in the HTTP-Redirect binding with the environment's SAML key (OP-155
 /// m.3 (d), (h)).
 pub trait SamlRequestSigner: Send + Sync {
     /// The signed redirect URL of `request` to `location` with `relay_state`.
     fn redirect<'a>(
         &'a self,
-        realm: [u8; 16],
+        environment: [u8; 16],
         location: &'a str,
         request: &'a str,
         relay_state: &'a str,

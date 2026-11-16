@@ -1,4 +1,4 @@
-//! A realm's custom domains, their ACME orders and certificates (OP-156 m.3 (i), TN-16, TN-20).
+//! An environment's custom domains, their ACME orders and certificates (OP-156 m.3 (i), TN-16, TN-20).
 //! A registration is written under a committed `idp.domain.register` ALLOW; the verification
 //! check moves its state without a decision; retiring and binding it need their own ALLOWs. A
 //! certificate's key is stored sealed and is crypto-shredded when the certificate ends (OP-73).
@@ -8,14 +8,14 @@ use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::events::SealedKey;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -27,7 +27,7 @@ pub struct NewDomain<'a> {
     pub hostname: &'a str,
     /// The TXT challenge value.
     pub challenge: &'a str,
-    /// The realm hostname its CNAME must name.
+    /// The environment hostname its CNAME must name.
     pub cname_target: &'a str,
 }
 
@@ -40,7 +40,7 @@ pub struct DomainRow {
     pub hostname: String,
     /// The TXT challenge value.
     pub challenge: String,
-    /// The realm hostname its CNAME must name.
+    /// The environment hostname its CNAME must name.
     pub cname_target: String,
     /// `pending`, `verified`, `lapsed`, `expired` or `retired`.
     pub status: String,
@@ -92,19 +92,19 @@ macro_rules! row {
 /// Registers a custom domain under `bound` (`idp.domain.register`).
 ///
 /// # Errors
-/// [`StoreError`]; a host already registered and live in the realm fails its integrity check.
+/// [`StoreError`]; a host already registered and live in the environment fails its integrity check.
 pub async fn register(
     t: &mut TenantTx,
     bound: &Bound,
     d: &NewDomain<'_>,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.realm_domains (tenant_id, realm_id, domain_uuid, hostname, challenge,
+        "INSERT INTO access.environment_domains (tenant_id, environment_id, domain_uuid, hostname, challenge,
                 cname_target, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(d.id),
         d.hostname,
         d.challenge,
@@ -117,12 +117,12 @@ pub async fn register(
     Ok(())
 }
 
-/// Every registration of the realm, newest first.
+/// Every registration of the environment, newest first.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn domains(t: &mut TenantTx) -> Result<Vec<DomainRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT domain_uuid, hostname, challenge, cname_target, status, finding,
                 extract(epoch FROM registered_at)::bigint AS "registered_s!",
@@ -130,10 +130,10 @@ pub async fn domains(t: &mut TenantTx) -> Result<Vec<DomainRow>, StoreError> {
                 extract(epoch FROM verified_at)::bigint AS verified_s,
                 extract(epoch FROM reverify_by)::bigint AS reverify_s, bound_as, acme_failures,
                 extract(epoch FROM acme_next_at)::bigint AS acme_next_s, acme_error, decision_pos
-           FROM access.realm_domains WHERE tenant_id = $1 AND realm_id = $2
+           FROM access.environment_domains WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY registered_at DESC, domain_uuid"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -145,7 +145,7 @@ pub async fn domains(t: &mut TenantTx) -> Result<Vec<DomainRow>, StoreError> {
 /// # Errors
 /// [`StoreError`].
 pub async fn domain(t: &mut TenantTx, id: [u8; 16]) -> Result<Option<DomainRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query!(
         r#"SELECT domain_uuid, hostname, challenge, cname_target, status, finding,
                 extract(epoch FROM registered_at)::bigint AS "registered_s!",
@@ -153,10 +153,10 @@ pub async fn domain(t: &mut TenantTx, id: [u8; 16]) -> Result<Option<DomainRow>,
                 extract(epoch FROM verified_at)::bigint AS verified_s,
                 extract(epoch FROM reverify_by)::bigint AS reverify_s, bound_as, acme_failures,
                 extract(epoch FROM acme_next_at)::bigint AS acme_next_s, acme_error, decision_pos
-           FROM access.realm_domains WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3
+           FROM access.environment_domains WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3
             FOR UPDATE"#,
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
     )
     .fetch_optional(&mut *t.tx)
@@ -164,7 +164,7 @@ pub async fn domain(t: &mut TenantTx, id: [u8; 16]) -> Result<Option<DomainRow>,
     r.map(|r| Ok(row!(r))).transpose()
 }
 
-/// The live registration of `hostname` in the realm, if any.
+/// The live registration of `hostname` in the environment, if any.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -172,7 +172,7 @@ pub async fn live_by_host(
     t: &mut TenantTx,
     hostname: &str,
 ) -> Result<Option<DomainRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query!(
         r#"SELECT domain_uuid, hostname, challenge, cname_target, status, finding,
                 extract(epoch FROM registered_at)::bigint AS "registered_s!",
@@ -180,11 +180,11 @@ pub async fn live_by_host(
                 extract(epoch FROM verified_at)::bigint AS verified_s,
                 extract(epoch FROM reverify_by)::bigint AS reverify_s, bound_as, acme_failures,
                 extract(epoch FROM acme_next_at)::bigint AS acme_next_s, acme_error, decision_pos
-           FROM access.realm_domains
-          WHERE tenant_id = $1 AND realm_id = $2 AND hostname = $3
+           FROM access.environment_domains
+          WHERE tenant_id = $1 AND environment_id = $2 AND hostname = $3
             AND status IN ('pending', 'verified', 'lapsed')"#,
         tenant,
-        realm,
+        environment,
         hostname,
     )
     .fetch_optional(&mut *t.tx)
@@ -192,19 +192,19 @@ pub async fn live_by_host(
     r.map(|r| Ok(row!(r))).transpose()
 }
 
-/// The hosts the realm holds verified now (the RP ID rule, OP-156 m.3 (i)).
+/// The hosts the environment holds verified now (the RP ID rule, OP-156 m.3 (i)).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn verified_hosts(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        "SELECT hostname FROM access.realm_domains
-          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'verified'
+        "SELECT hostname FROM access.environment_domains
+          WHERE tenant_id = $1 AND environment_id = $2 AND status = 'verified'
             AND reverify_by > clock_timestamp()
           ORDER BY hostname",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?)
@@ -224,23 +224,23 @@ pub struct Checked<'a> {
     pub now: i64,
 }
 
-/// Records a check. A registration another realm holds verified fails the integrity check and
+/// Records a check. A registration another environment holds verified fails the integrity check and
 /// stays as it was (TN-20).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn record_check(t: &mut TenantTx, c: &Checked<'_>) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "UPDATE access.realm_domains
+        "UPDATE access.environment_domains
             SET status = $4, finding = $5, checked_at = to_timestamp($6::bigint),
                 reverify_by = to_timestamp($7::bigint),
                 verified_at = CASE WHEN $4 = 'verified' AND status <> 'verified'
                                    THEN to_timestamp($6::bigint) ELSE verified_at END
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3
             AND status IN ('pending', 'verified', 'lapsed')",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(c.id),
         c.status,
         c.finding,
@@ -258,14 +258,14 @@ pub async fn record_check(t: &mut TenantTx, c: &Checked<'_>) -> Result<bool, Sto
 /// # Errors
 /// [`StoreError`].
 pub async fn retire(t: &mut TenantTx, bound: &Bound, id: [u8; 16]) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "UPDATE access.realm_domains
+        "UPDATE access.environment_domains
             SET status = 'retired', retire_pos = $4, retired_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND domain_id = $5
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3 AND domain_id = $5
             AND status IN ('pending', 'verified', 'lapsed') AND bound_as IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         bound.raw_position(),
         bound.domain().as_bytes().as_slice(),
@@ -279,7 +279,7 @@ pub async fn retire(t: &mut TenantTx, bound: &Bound, id: [u8; 16]) -> Result<boo
     Ok(done == 1)
 }
 
-/// Binds verified registration `id` as the realm's `issuer` or `rp_id` under `bound`
+/// Binds verified registration `id` as the environment's `issuer` or `rp_id` under `bound`
 /// (`idp.domain.issuer_bind`); a binding never comes undone.
 ///
 /// # Errors
@@ -290,14 +290,14 @@ pub async fn bind(
     id: [u8; 16],
     as_: &str,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "UPDATE access.realm_domains
+        "UPDATE access.environment_domains
             SET bound_as = $4, bind_pos = $5, bound_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND domain_id = $6
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3 AND domain_id = $6
             AND status = 'verified' AND reverify_by > clock_timestamp() AND bound_as IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         as_,
         bound.raw_position(),
@@ -309,36 +309,36 @@ pub async fn bind(
     Ok(done == 1)
 }
 
-/// Whether the realm was ever activated: it ever registered an OAuth client or a SAML service
+/// Whether the environment was ever activated: it ever registered an OAuth client or a SAML service
 /// provider (the issuer stays fixed from then on, TN-16, OP-156 m.3 (i)).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn activated(t: &mut TenantTx) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2)
-               OR EXISTS (SELECT 1 FROM access.saml_sps WHERE tenant_id = $1 AND realm_id = $2)
+        r#"SELECT EXISTS (SELECT 1 FROM access.idp_clients WHERE tenant_id = $1 AND environment_id = $2)
+               OR EXISTS (SELECT 1 FROM access.saml_sps WHERE tenant_id = $1 AND environment_id = $2)
                AS "activated!""#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_one(&mut *t.tx)
     .await?)
 }
 
-/// Moves the realm's issuer from `from` to `to` (`idp.domain.issuer_bind` before the first
+/// Moves the environment's issuer from `from` to `to` (`idp.domain.issuer_bind` before the first
 /// activation, OP-156 m.3 (i)); only the stored issuer `from` is replaced.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn rebind_issuer(t: &mut TenantTx, from: &str, to: &str) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "UPDATE access.realms SET issuer = $4
-          WHERE tenant_id = $1 AND realm_id = $2 AND issuer = $3 AND status = 'active'",
+        "UPDATE access.environments SET issuer = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND issuer = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         from,
         to,
     )
@@ -359,13 +359,13 @@ pub async fn record_acme(
     next_at: Option<i64>,
     error: Option<&str>,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "UPDATE access.realm_domains
+        "UPDATE access.environment_domains
             SET acme_failures = $4, acme_next_at = to_timestamp($5::bigint), acme_error = $6
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(id),
         i32::try_from(failures).map_err(|_| StoreError::Range)?,
         next_at,
@@ -387,13 +387,13 @@ pub async fn open_order(
     hostname: &str,
     digest: &[u8; 32],
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.acme_orders (tenant_id, realm_id, order_uuid, domain_uuid, hostname,
+        "INSERT INTO access.acme_orders (tenant_id, environment_id, order_uuid, domain_uuid, hostname,
                 alpn_digest)
          VALUES ($1, $2, $3, $4, $5, $6)",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(order),
         Uuid::from_bytes(domain),
         hostname,
@@ -404,7 +404,7 @@ pub async fn open_order(
     Ok(())
 }
 
-/// Closes the open orders of `hostname` in the realm as `valid` or `failed`.
+/// Closes the open orders of `hostname` in the environment as `valid` or `failed`.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -414,12 +414,12 @@ pub async fn close_orders(
     status: &str,
     error: Option<&str>,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query!(
         "UPDATE access.acme_orders SET status = $4, error = $5, ended_at = clock_timestamp()
-          WHERE tenant_id = $1 AND realm_id = $2 AND hostname = $3 AND status = 'challenging'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND hostname = $3 AND status = 'challenging'",
         tenant,
-        realm,
+        environment,
         hostname,
         status,
         error,
@@ -439,7 +439,7 @@ pub struct NewCertificate<'a> {
     pub hostname: &'a str,
     /// The chain, PEM.
     pub chain_pem: &'a str,
-    /// Its key, sealed under the realm KEK.
+    /// Its key, sealed under the environment KEK.
     pub key: &'a SealedKey,
     /// Unix seconds.
     pub not_before: i64,
@@ -454,14 +454,14 @@ async fn end_certificates(
     domain: [u8; 16],
     status: &str,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "UPDATE access.domain_certificates
             SET status = $4, ended_at = clock_timestamp(), kek_id = NULL, wrapped_dek = NULL,
                 key_nonce = NULL, key_sealed = NULL
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(domain),
         status,
     )
@@ -476,16 +476,16 @@ async fn end_certificates(
 /// # Errors
 /// [`StoreError`].
 pub async fn put_certificate(t: &mut TenantTx, c: &NewCertificate<'_>) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     end_certificates(t, c.domain, "superseded").await?;
     sqlx::query!(
-        "INSERT INTO access.domain_certificates (tenant_id, realm_id, cert_uuid, domain_uuid,
+        "INSERT INTO access.domain_certificates (tenant_id, environment_id, cert_uuid, domain_uuid,
                 hostname, chain_pem, kek_id, wrapped_dek, key_nonce, key_sealed, not_before,
                 not_after, renew_after)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11::bigint),
                  to_timestamp($12::bigint), to_timestamp($13::bigint))",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(c.id),
         Uuid::from_bytes(c.domain),
         c.hostname,
@@ -530,12 +530,12 @@ impl core::fmt::Debug for CertificateRow {
     }
 }
 
-/// The realm's active certificates.
+/// The environment's active certificates.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn active_certificates(t: &mut TenantTx) -> Result<Vec<CertificateRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT cert_uuid, domain_uuid, hostname, chain_pem, kek_id AS "kek_id!",
                   wrapped_dek AS "wrapped_dek!", key_nonce AS "key_nonce!",
@@ -543,10 +543,10 @@ pub async fn active_certificates(t: &mut TenantTx) -> Result<Vec<CertificateRow>
                   extract(epoch FROM not_after)::bigint AS "not_after_s!",
                   extract(epoch FROM renew_after)::bigint AS "renew_after_s!"
              FROM access.domain_certificates
-            WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+            WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'
             ORDER BY hostname"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -570,17 +570,17 @@ pub async fn active_certificates(t: &mut TenantTx) -> Result<Vec<CertificateRow>
         .collect()
 }
 
-/// The realm a request's `Host` names through a verified custom domain whose verification
-/// holds, read by the router role (§17.9.6): the realm's route, and what the domain is bound as.
+/// The environment a request's `Host` names through a verified custom domain whose verification
+/// holds, read by the router role (§17.9.6): the environment's route, and what the domain is bound as.
 #[derive(Clone)]
 pub struct CustomRoute {
-    /// The realm's route: its slug and the issuer stored on its row.
-    pub route: crate::tenancy::RealmRoute,
+    /// The environment's route: its slug and the issuer stored on its row.
+    pub route: crate::tenancy::EnvironmentRoute,
     /// `issuer` or `rp_id` once bound.
     pub bound_as: Option<String>,
 }
 
-/// The realm with an issuer serving the verified custom domain `hostname` (lower case), if any.
+/// The environment with an issuer serving the verified custom domain `hostname` (lower case), if any.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -589,9 +589,9 @@ pub async fn route_by_custom_host(
     hostname: &str,
 ) -> Result<Option<CustomRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT d.tenant_id, d.realm_id, d.bound_as, r.slug, r.issuer AS "issuer!"
-             FROM access.realm_domains d
-             JOIN access.realms r ON r.tenant_id = d.tenant_id AND r.realm_id = d.realm_id
+        r#"SELECT d.tenant_id, d.environment_id, d.bound_as, r.slug, r.issuer AS "issuer!"
+             FROM access.environment_domains d
+             JOIN access.environments r ON r.tenant_id = d.tenant_id AND r.environment_id = d.environment_id
             WHERE d.hostname = lower($1) AND d.status = 'verified'
               AND d.reverify_by > clock_timestamp() AND r.status = 'active'
               AND r.issuer IS NOT NULL"#,
@@ -600,9 +600,9 @@ pub async fn route_by_custom_host(
     .fetch_optional(router)
     .await?;
     Ok(row.map(|r| CustomRoute {
-        route: crate::tenancy::RealmRoute {
+        route: crate::tenancy::EnvironmentRoute {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             issuer: r.issuer,
         },
@@ -617,7 +617,7 @@ pub async fn route_by_custom_host(
 /// [`StoreError`].
 pub async fn served_hosts(router: &PgPool) -> Result<Vec<String>, StoreError> {
     Ok(sqlx::query_scalar!(
-        "SELECT hostname FROM access.realm_domains
+        "SELECT hostname FROM access.environment_domains
           WHERE status = 'verified' AND reverify_by > clock_timestamp() ORDER BY hostname",
     )
     .fetch_all(router)

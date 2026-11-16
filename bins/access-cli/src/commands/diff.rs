@@ -108,13 +108,13 @@ pub(crate) async fn run(args: DiffArgs) -> Code {
         }
     };
     let client = Client::new(&https, &instance, &target, &System);
-    let live = match runtime(&client, &target.realm).await {
+    let live = match runtime(&client, &target.environment).await {
         Ok(r) => r,
         Err(e) => return failed(&e),
     };
     let steps = match gitops::plan(
         api::contract(),
-        &target.realm,
+        &target.environment,
         &doc,
         &live,
         &PlanOptions {

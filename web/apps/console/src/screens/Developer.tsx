@@ -136,7 +136,7 @@ function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [l, run] = useRun<{ published: Published; status?: PublicationStatus }>();
   const pkg = packageOf(namespace, version, lines(actionsText), lines(paramsText));
   const domains = lines(domainsText);
-  const name = (d: string) => (d === ctx.session.domain ? ctx.session.realm : d);
+  const name = (d: string) => (d === ctx.session.domain ? ctx.session.environment : d);
   return (
     <Panel id="publish" title={t("publishTitle")}>
       <p className={HINT}>{t("publishIntro")}</p>
@@ -309,7 +309,7 @@ export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 <p data-testid="pending-in">
                   {pending.length === 0
                     ? t("schemasNoPending")
-                    : t("schemasPendingIn", { domains: ctx.session.realm })}
+                    : t("schemasPendingIn", { domains: ctx.session.environment })}
                 </p>
                 {a.results.map((p) => (
                   <PublicationView key={p.fingerprint} p={p} />
@@ -400,9 +400,9 @@ function Deliveries({
   );
 }
 
-/** §8.11, Ek B 3109: OAuth terms only as "OAuth grant type"; hooks and webhooks of the realm. */
+/** §8.11, Ek B 3109: OAuth terms only as "OAuth grant type"; hooks and webhooks of the environment. */
 export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const base = `realms/${encodeURIComponent(ctx.session.realm)}`;
+  const base = `envs/${encodeURIComponent(ctx.session.environment)}`;
   const clients = useLoad(() => adminGet<Items<Client>>(ctx.instance, `${base}/clients`));
   const hooks = useLoad(() => adminGet<Items<Hook>>(ctx.instance, `${base}/hooks`));
   const webhooks = useLoad(() => adminGet<Items<Webhook>>(ctx.instance, `${base}/webhooks`));
@@ -578,25 +578,25 @@ interface Sandbox {
   readonly items: readonly { readonly slug: string; readonly domain: string }[];
 }
 
-interface RealmMetadata {
+interface EnvironmentMetadata {
   readonly tenant_id?: string;
 }
 
 /** D7, L25, X21: the domains the lab can ask: this one and its tenant's sandbox domains. */
 function useDomains(ctx: Ctx) {
   return useLoad(async () => {
-    const own = [{ slug: ctx.session.realm, domain: ctx.session.domain }];
+    const own = [{ slug: ctx.session.environment, domain: ctx.session.domain }];
     try {
-      const m = await adminGet<RealmMetadata>(
+      const m = await adminGet<EnvironmentMetadata>(
         ctx.instance,
-        `platform/realms/${encodeURIComponent(ctx.session.realm)}`,
+        `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
       );
       if (m.tenant_id === undefined) return own;
       const s = await adminGet<Sandbox>(
         ctx.instance,
         `platform/tenants/${encodeURIComponent(m.tenant_id)}/sandbox-domains`,
       );
-      return [...own, ...s.items.filter((x) => x.slug !== ctx.session.realm)];
+      return [...own, ...s.items.filter((x) => x.slug !== ctx.session.environment)];
     } catch {
       return own;
     }
@@ -606,7 +606,7 @@ function useDomains(ctx: Ctx) {
 /** §8.17.10.4: Check and Explain. Check is advisory: not recorded, not a promise (E-2). */
 export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const domains = useDomains(ctx);
-  const [domain, setDomain] = useState(ctx.session.realm);
+  const [domain, setDomain] = useState(ctx.session.environment);
   const [subject, setSubject] = useState(ctx.session.account);
   const [ns, setNs] = useState("");
   const [name, setName] = useState("");
@@ -619,7 +619,7 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
     action: { namespace: ns, name, major: Number(major) },
     resources: [{ namespace: rns, path: rpath.split("/").filter((p) => p !== "") }],
   });
-  const here = domain === ctx.session.realm;
+  const here = domain === ctx.session.environment;
   return (
     <>
       <p>{t("labIntro")}</p>
@@ -638,7 +638,7 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
           >
             {(domains.status === "done"
               ? domains.value
-              : [{ slug: ctx.session.realm, domain: ctx.session.domain }]
+              : [{ slug: ctx.session.environment, domain: ctx.session.domain }]
             ).map((d) => (
               <NativeSelectOption key={d.slug} value={d.slug}>
                 {d.slug}
@@ -646,7 +646,7 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
             ))}
           </NativeSelect>
         </FieldRoot>
-        {!here && <p className={HINT}>{t("labOtherDomain", { realm: domain })}</p>}
+        {!here && <p className={HINT}>{t("labOtherDomain", { environment: domain })}</p>}
         <Field id="lab-subject" label={t("labSubject")} value={subject} onChange={setSubject} />
         <Field id="lab-ns" label={t("labNamespace")} value={ns} onChange={setNs} />
         <Field id="lab-name" label={t("labAction")} value={name} onChange={setName} />

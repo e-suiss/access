@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_social_attempts (tenant_id, environment_id, state_hash,\n                    device_hash, provider, purpose, subject_id, nonce, verifier, created_ms,\n                    expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "05831fb83d9b8c4ba339fbd4c6555c458ba856d000bcccca1c2847395bc3f101"
+}

@@ -1,7 +1,7 @@
 //! Enveloped XML signatures over the canonical elements Access writes (§10.6.1 rule 6, OP-155
 //! m.3 (d)): one `Reference` to the element's own identifier, the enveloped-signature and
 //! exclusive c14n transforms, a SHA-2 digest. The signature value comes from an [`XmlSigner`]: the
-//! realm's `saml` key in the identity signer, never a key in this process (Golden SAML, HL-35).
+//! environment's `saml` key in the identity signer, never a key in this process (Golden SAML, HL-35).
 
 use crate::alg::SigAlg;
 use crate::sp::b64;

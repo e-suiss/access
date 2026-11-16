@@ -9,10 +9,10 @@ use crate::adapters::SealedFactory;
 fn factory() -> SealedFactory<SoftKek> {
     let mut k = [0_u8; 32];
     aws_lc_rs::rand::fill(&mut k).unwrap();
-    SealedFactory::new(SoftKek::new("realm-kek", k))
+    SealedFactory::new(SoftKek::new("environment-kek", k))
 }
 
-const REALM: Realm = Realm([4; 16]);
+const ENVIRONMENT: Environment = Environment([4; 16]);
 
 fn body() -> Vec<u8> {
     let mut b = CERT_PREFIX.to_vec();
@@ -30,9 +30,9 @@ fn active(ring: &Ring) -> [u8; 32] {
 
 // OP-156 m.3 (o), IDP-32
 #[test]
-fn the_realm_ca_key_signs_certificate_bodies_only() {
+fn the_environment_ca_key_signs_certificate_bodies_only() {
     let mut f = factory();
-    let mut ring = Ring::new(REALM);
+    let mut ring = Ring::new(ENVIRONMENT);
     assert_eq!(ring.sign(&[0; 32], &body()), Err(SshKeyError::NoKey));
     assert!(ring.open(1_000, &mut f).unwrap());
     assert!(!ring.open(2_000, &mut f).unwrap());
@@ -45,16 +45,16 @@ fn the_realm_ca_key_signs_certificate_bodies_only() {
     );
     assert_eq!(ring.sign(&key, b"a JWS"), Err(SshKeyError::Data));
     assert_eq!(ring.sign(&[1; 32], &body()), Err(SshKeyError::Changed));
-    let restored = Ring::restore(REALM, &ring.stored().unwrap(), &mut f).unwrap();
+    let restored = Ring::restore(ENVIRONMENT, &ring.stored().unwrap(), &mut f).unwrap();
     assert_eq!(restored.keys(), ring.keys());
-    assert!(Ring::restore(Realm([5; 16]), &ring.stored().unwrap(), &mut f).is_err());
+    assert!(Ring::restore(Environment([5; 16]), &ring.stored().unwrap(), &mut f).is_err());
 }
 
 // OP-156 m.3 (o)
 #[test]
 fn rotation_publishes_switches_and_removes() {
     let mut f = factory();
-    let mut ring = Ring::new(REALM);
+    let mut ring = Ring::new(ENVIRONMENT);
     ring.open(1, &mut f).unwrap();
     let first = active(&ring);
     assert_eq!(
@@ -82,20 +82,20 @@ fn rotation_publishes_switches_and_removes() {
 #[test]
 fn requests_and_answers_round_trip() {
     for r in [
-        SshRequest::Open(REALM),
-        SshRequest::Keys(REALM),
+        SshRequest::Open(ENVIRONMENT),
+        SshRequest::Keys(ENVIRONMENT),
         SshRequest::Sign {
-            realm: REALM,
+            environment: ENVIRONMENT,
             key: [1; 32],
             data: body(),
         },
         SshRequest::Rotate {
-            realm: REALM,
+            environment: ENVIRONMENT,
             step: Step::Emergency,
         },
     ] {
         assert_eq!(SshRequest::from_value(&r.to_value()).unwrap(), r);
-        assert_eq!(r.realm(), REALM);
+        assert_eq!(r.environment(), ENVIRONMENT);
     }
     for a in [
         SshResponse::Keys(vec![KeyInfo {

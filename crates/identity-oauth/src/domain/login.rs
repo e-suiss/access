@@ -1,7 +1,7 @@
 //! The contract between `/authorize` and the hosted login (OP-146 I7, I9): a request that needs
 //! the user is stored, the browser goes to the login page with a `return_to` that names only
 //! that stored request, and comes back to `/authorize` once signed in. `return_to` is a
-//! path under the realm issuer, never a URL the login page could be steered elsewhere with.
+//! path under the environment issuer, never a URL the login page could be steered elsewhere with.
 
 use crate::domain::issuer::{Issuer, form_encode};
 use crate::domain::metadata::Endpoint;
@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn return_to_names_only_the_stored_request() {
         let sub = Issuer::parse("https://acme.id.test").unwrap();
-        let path = Issuer::parse("https://id.test/realms/beta").unwrap();
+        let path = Issuer::parse("https://id.test/env/beta").unwrap();
         let r = return_to(&sub, "cli_x", "urn:ietf:params:oauth:request_uri:abc");
         assert_eq!(
             r,

@@ -359,7 +359,7 @@ async fn a_merchant_charges_only_itself_within_the_customers_grant() {
     s_only_public(&p);
 }
 
-/// The realm authenticator's `authentication` Claim for `intent`, carried whole: bound to that
+/// The environment authenticator's `authentication` Claim for `intent`, carried whole: bound to that
 /// one intent (dynamic linking) with the assurance `levels`.
 fn authentication(
     p: &Product,
@@ -504,12 +504,12 @@ fn s_only_public(p: &Product) {
 
 // IDP-9, U62, N-52, §10.3.4, OP-159 m.3 (ii), Ek B 6261
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn under_the_tr_gkd_realm_template_a_payment_without_dynamic_linking_is_refused() {
-    let realm: toml::Value = toml::from_str(include_str!(
-        "../../../../../../../deploy/realm-templates/tr-gkd.toml"
+async fn under_the_tr_gkd_environment_template_a_payment_without_dynamic_linking_is_refused() {
+    let environment: toml::Value = toml::from_str(include_str!(
+        "../../../../../../../deploy/environment-templates/tr-gkd.toml"
     ))
     .unwrap();
-    let template = Template::parse(realm["regulatory"].as_str().unwrap()).unwrap();
+    let template = Template::parse(environment["regulatory"].as_str().unwrap()).unwrap();
     assert_eq!(template, Template::TrGkd);
     let p = Product::open("j9-tr-gkd", "pay").await;
     let payer = p.s.actor().await;

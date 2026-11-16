@@ -4,7 +4,7 @@
 
 use access_kernel::json::b64url_encode;
 use access_store::events::{DeliveryRow, SubscriptionRow};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
 use super::{StreamError, Streams};
 use crate::app::down;
@@ -49,19 +49,21 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn set_status(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         s: &SubscriptionRow,
         update: &StatusUpdate,
     ) -> Result<serde_json::Value, StreamError> {
         named(s, &update.stream_id)?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let done = if update.status == "disabled" {
-            t.disable_subscription(realm, s.id).await.map_err(down)?
+            t.disable_subscription(environment, s.id)
+                .await
+                .map_err(down)?
         } else {
             t.update_subscription(
-                realm,
+                environment,
                 s.id,
                 &s.events,
                 &update.status,
@@ -85,11 +87,11 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn status_owned(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         id: [u8; 16],
     ) -> Result<serde_json::Value, StreamError> {
-        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        let s = self.owned_row(tenant, environment, client_id, id).await?;
         Ok(status_json(&uuid(&s.id), status_of(&s)))
     }
 
@@ -102,16 +104,16 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn set_status_owned(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
         id: [u8; 16],
         update: &StatusUpdate,
     ) -> Result<serde_json::Value, StreamError> {
-        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        let s = self.owned_row(tenant, environment, client_id, id).await?;
         if s.disabled {
             return Err(StreamError::NotFound);
         }
-        self.set_status(tenant, realm, &s, update).await
+        self.set_status(tenant, environment, &s, update).await
     }
 
     /// Queues a verification SET on the stream `s` at `now` (SSF 1.0 §8.1.4): its subject is the
@@ -122,7 +124,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     pub async fn verify(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         s: &SubscriptionRow,
         request: &VerifyRequest,
         now: u64,
@@ -131,7 +133,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         if s.disabled || Channel::from_name(&s.channel).is_none_or(|c| c == Channel::Webhook) {
             return Err(Invalid("stream").into());
         }
-        let issuer = self.issuer(tenant, realm).await?;
+        let issuer = self.issuer(tenant, environment).await?;
         let mut raw = [0_u8; 16];
         self.random.fill(&mut raw)?;
         let jti = b64url_encode(&raw);
@@ -145,7 +147,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         );
         let row = DeliveryRow {
             tenant: *tenant.as_bytes(),
-            realm: s.realm,
+            environment: s.environment,
             subscription: s.id,
             channel: s.channel.clone(),
             event_id: jti,
@@ -156,7 +158,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             state: String::from("pending"),
             last_reason: None,
         };
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         t.enqueue_delivery(&row, now).await.map_err(down)?;

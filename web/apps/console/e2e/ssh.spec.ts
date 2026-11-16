@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/ssh-host-groups", {
+  bff.admin.set("envs/acme/ssh-host-groups", {
     items: [
       { name: "prod-web", description: "Web servers", status: "live", version: 1 },
       { name: "old-db", description: "", status: "retired", version: 2 },
@@ -19,8 +19,8 @@ test.beforeEach(async ({ context, bff }) => {
 test("the CA and its server groups change only through signed changes", async ({ page, bff }) => {
   await open(page, bff, "/console/acme/admin/ssh");
   await expect(page.getByRole("heading", { level: 2, name: "SSH access" })).toBeVisible();
-  await expect(page.getByTestId("ssh-ca-url")).toHaveText("/realms/acme/ssh/ca.pub");
-  await expect(page.getByTestId("ssh-krl-url")).toHaveText("/realms/acme/ssh/krl");
+  await expect(page.getByTestId("ssh-ca-url")).toHaveText("/env/acme/ssh/ca.pub");
+  await expect(page.getByTestId("ssh-krl-url")).toHaveText("/env/acme/ssh/krl");
   await expect(page.getByTestId("ssh-sshd-config")).toContainText(
     "TrustedUserCAKeys /etc/ssh/access-ca.pub",
   );
@@ -55,9 +55,9 @@ test("the CA and its server groups change only through signed changes", async ({
   await expect(page.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["PUT", "realms/acme/settings/ssh-ca"],
-    ["POST", "realms/acme/ssh-host-groups"],
-    ["POST", "realms/acme/ssh-host-groups/prod-web/retire"],
+    ["PUT", "envs/acme/settings/ssh-ca"],
+    ["POST", "envs/acme/ssh-host-groups"],
+    ["POST", "envs/acme/ssh-host-groups/prod-web/retire"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({ enabled: true });
   expect(bff.writes[1]?.body).toMatchObject({ name: "staging", description: "Staging" });

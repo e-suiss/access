@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fips, hash_profile FROM access.environment_crypto\n              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fips",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.environment_crypto",
+            "name": "fips"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "hash_profile",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environment_crypto",
+            "name": "hash_profile"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2980ab3fee4debe76bcbf9b489c1b32cfd5a5d3a16b6739a6d5f38c6a97b0d0f"
+}

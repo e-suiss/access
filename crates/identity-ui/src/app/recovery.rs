@@ -6,7 +6,7 @@
 use std::net::IpAddr;
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::recovery::{
     Answer, AttemptView, Proof, Recovered, RecoverySetup, SetupChange,
 };
@@ -87,7 +87,7 @@ pub struct RecoveryCookies<'a> {
     pub rebind: Option<&'a str>,
 }
 
-/// The network the start limit counts: the pseudonym of the /24 or /48 when the realm has a
+/// The network the start limit counts: the pseudonym of the /24 or /48 when the environment has a
 /// key for it, else the prefix itself, which is hashed into the counter key and never stored.
 fn network(pseudonym: Option<[u8; 32]>, ip: IpAddr) -> Vec<u8> {
     if let Some(p) = pseudonym {
@@ -188,7 +188,7 @@ where
     /// exists (OP-153 m.3 (d), CR-40).
     pub async fn start_recovery(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &StartBody,
     ) -> Reply {
@@ -207,7 +207,7 @@ where
         let net = network(
             self.risk
                 .ips
-                .prefix(kit.tenant.as_bytes(), kit.realm.as_bytes(), b.ip),
+                .prefix(kit.tenant.as_bytes(), kit.environment.as_bytes(), b.ip),
             b.ip,
         );
         match auth
@@ -222,7 +222,7 @@ where
     /// `GET /v1/recovery/{attempt}`.
     pub async fn recovery(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         c: RecoveryCookies<'_>,
         attempt: &str,
@@ -241,7 +241,7 @@ where
     /// `POST /v1/recovery/{attempt}/extension`: the contact codes' one 24-hour extension.
     pub async fn extend_recovery(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         c: RecoveryCookies<'_>,
         attempt: &str,
@@ -263,7 +263,7 @@ where
     /// `POST /v1/recovery/{attempt}`: one proof or step (TN-54).
     pub async fn prove_recovery(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         c: RecoveryCookies<'_>,
         attempt: &str,
@@ -350,7 +350,12 @@ where
     }
 
     /// `POST /v1/recovery/intents/{token}` (TN-61, TN-62).
-    pub async fn redeem_intent(&self, entry: &RealmEntry, b: &Browser<'_>, token: &str) -> Reply {
+    pub async fn redeem_intent(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        token: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -363,7 +368,7 @@ where
     }
 
     /// `GET /v1/account/recovery-contacts`.
-    pub async fn recovery_contacts(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn recovery_contacts(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -379,7 +384,7 @@ where
     /// `PUT /v1/account/recovery-contacts`.
     pub async fn set_recovery_contacts(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &SetupBody,
     ) -> Reply {
@@ -407,7 +412,7 @@ where
     /// `POST /v1/account/link-codes` (TN-59): shown once, never sent by e-mail.
     pub async fn create_link_code(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         with_identifier: bool,
     ) -> Reply {
@@ -440,7 +445,7 @@ where
     /// TN-56: the grace period's answer for `action`, or `None` when it lets it through.
     pub(super) async fn grace_refusal(
         &self,
-        kit: &crate::ports::RealmKit,
+        kit: &crate::ports::EnvironmentKit,
         b: &Browser<'_>,
         action: Restricted,
     ) -> Option<Reply> {

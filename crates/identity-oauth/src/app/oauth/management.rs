@@ -1,5 +1,5 @@
 //! The management read token exchange (RFC 8693, TN-130, TN-27, OP-151 m.3 (c)): an Instance
-//! of the realm's governing domain trades its own `check` statement over the audience and scope
+//! of the environment's governing domain trades its own `check` statement over the audience and scope
 //! for a read token bound to its own key. There is no client authentication: the AIS and the
 //! DPoP proof by the same key are the caller's proof, and the AIS nonce is used once. The token
 //! reads one management surface for at most [`READ_TTL_MS`]; it never writes (MD-14).
@@ -9,7 +9,7 @@ use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use serde_json::json;
 
-use super::{Env, OAuth, Realm, Reply, TokenHttp};
+use super::{Env, Environment, OAuth, Reply, TokenHttp};
 use crate::app::dpop::DpopRequest;
 use crate::domain::dpop::Failure;
 use crate::domain::management::{
@@ -58,16 +58,20 @@ fn invalid_target() -> Reply {
     Reply::oauth_error(
         400,
         "invalid_target",
-        "not a management surface of this realm",
+        "not a management surface of this environment",
     )
 }
 
 impl<E: Env> OAuth<E> {
     /// `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693 §2.1) with an
     /// AIS subject token, for a management read token (TN-130).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one step per check of the exchange, in order"
+    )]
     pub(crate) async fn exchange_read(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         http: TokenHttp<'_>,
     ) -> Result<Reply, Unavailable> {
@@ -76,8 +80,10 @@ impl<E: Env> OAuth<E> {
             Err(r) => return Ok(r),
         };
         let surface = match Surface::of(audience) {
-            Some(Surface::Realm(slug)) if slug == realm.slug => Surface::Realm(slug),
-            Some(Surface::Platform) if self.env.management().platform(realm).await? => {
+            Some(Surface::Environment(slug)) if slug == environment.slug => {
+                Surface::Environment(slug)
+            }
+            Some(Surface::Platform) if self.env.management().platform(environment).await? => {
                 Surface::Platform
             }
             _ => return Ok(invalid_target()),
@@ -95,11 +101,11 @@ impl<E: Env> OAuth<E> {
         else {
             return Ok(invalid_grant());
         };
-        let token_uri = realm.issuer.endpoint(Endpoint::Token.path());
+        let token_uri = environment.issuer.endpoint(Endpoint::Token.path());
         // TN-27, IDP-11
         let proof = match self
             .dpop(
-                realm,
+                environment,
                 Role::AuthorizationServer,
                 &DpopRequest {
                     proofs: http.dpop,
@@ -127,7 +133,7 @@ impl<E: Env> OAuth<E> {
             return Ok(invalid_grant().with_nonce(nonce));
         }
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let Some(domain) = tx.governing().await? else {
             return Ok(invalid_target().with_nonce(nonce));
         };
@@ -144,7 +150,7 @@ impl<E: Env> OAuth<E> {
         let (day, replay_key) = replay_slot(&statement).ok_or(Unavailable)?;
         match self
             .env
-            .replay(realm.tenant, realm.realm)
+            .replay(environment.tenant, environment.environment)
             .first_use(day, replay_key)
             .await
         {
@@ -152,7 +158,9 @@ impl<E: Env> OAuth<E> {
             Ok(false) => return Ok(invalid_grant().with_nonce(nonce)),
             Err(_) => return Err(Unavailable),
         }
-        let token = self.issue_read(realm, &surface, kid, alg, now).await?;
+        let token = self
+            .issue_read(environment, &surface, kid, alg, now)
+            .await?;
         tracing::info!(
             event = "oauth.management.read_issued",
             outcome = "ok",
@@ -173,7 +181,7 @@ impl<E: Env> OAuth<E> {
 
     async fn issue_read(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         surface: &Surface,
         kid: [u8; 32],
         alg: access_crypto::jose::JwsAlg,
@@ -183,7 +191,7 @@ impl<E: Env> OAuth<E> {
         let jti = b64url_encode(&self.random::<16>()?);
         let claims = read_token_claims(
             &ReadFacts {
-                issuer: realm.issuer.as_str(),
+                issuer: environment.issuer.as_str(),
                 surface,
                 sub: &holder,
                 client_id: &holder,
@@ -198,7 +206,7 @@ impl<E: Env> OAuth<E> {
         );
         self.env
             .signer()
-            .sign(realm.realm, alg, ACCESS_TYP, &claims, now)
+            .sign(environment.environment, alg, ACCESS_TYP, &claims, now)
             .await
     }
 }

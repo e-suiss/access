@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_federated SET verified_ms = GREATEST(verified_ms, $4)\n              WHERE tenant_id = $1 AND environment_id = $2 AND link_id = $3 AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ddc6ee14fc6c125c77e5a04206da8eeff3e44d382836af7dc23221a850644342"
+}

@@ -1,7 +1,7 @@
 //! The read-only SIEM projection on the real server (OP-156 m.3 (s), OP-41, OP-44, X22, Ek B 5299,
 //! 5300, 5312, 5313, 5314): sinks of every adapter and preset are registered through the admin
 //! REST surface and committed by the real decision point, the server's export pass sends the
-//! realm's audit log to the S3, collector and syslog TLS twins over the guarded outbound client,
+//! environment's audit log to the S3, collector and syslog TLS twins over the guarded outbound client,
 //! and the audit question is answered from the record however the copy changes. A sink that is
 //! down keeps its cursor and loses nothing; its secret never shows.
 
@@ -23,9 +23,9 @@ fn token() -> String {
     b64url_encode(&access_crypto::random::bytes::<24>().unwrap())
 }
 
-/// The event ids of the realm's audit record.
+/// The event ids of the environment's audit record.
 async fn record(c: &Console) -> BTreeSet<String> {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let rows = t.list_audit(10_000).await.unwrap();
@@ -39,9 +39,9 @@ async fn record(c: &Console) -> BTreeSet<String> {
 /// batches, so a sink that can accept catches up in a handful.
 const MAX_PASSES: usize = 600;
 
-/// The position of the newest row of the realm's audit record.
+/// The position of the newest row of the environment's audit record.
 async fn head(c: &Console) -> access_store::identity::Cursor {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let rows = t.list_audit(10_000).await.unwrap();
@@ -57,7 +57,7 @@ async fn head(c: &Console) -> access_store::identity::Cursor {
 
 /// The live sinks other than `skip` whose cursor is still before `target`.
 async fn behind(c: &Console, target: access_store::identity::Cursor, skip: &str) -> Vec<String> {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let mut out = Vec::new();
@@ -204,7 +204,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         let w = c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/export-sinks",
+                "/admin/v1/envs/acme/export-sinks",
                 ("registerExportSink", None),
                 body.clone(),
                 None,
@@ -233,7 +233,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         let w = c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/export-sinks",
+                "/admin/v1/envs/acme/export-sinks",
                 ("registerExportSink", None),
                 body,
                 None,
@@ -243,7 +243,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     }
 
     // OP-64
-    let (status, page, _) = c.rest_read("/admin/v1/realms/acme/export-sinks").await;
+    let (status, page, _) = c.rest_read("/admin/v1/envs/acme/export-sinks").await;
     assert_eq!(status, StatusCode::OK, "{page}");
     let text = page.to_string();
     assert!(!text.contains(&hec_token) && !text.contains(&s3_secret));
@@ -261,7 +261,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
 
     let outbound = Outbound::new(http.tls.clone(), Duration::from_secs(10)).declaring(declared);
     let wire = OutboundWire(outbound);
-    let keys = crate::login::RealmKeks::new(Arc::clone(&c.w.keys));
+    let keys = crate::login::EnvironmentKeks::new(Arc::clone(&c.w.keys));
     let pools = (&c.w.db.app, &c.w.db.router);
     let step = u64::try_from(INTERVAL.as_millis()).unwrap();
     let mut clock = now();
@@ -302,13 +302,13 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
 
     // X22
     let (_, before, _) = c
-        .rest_read("/admin/v1/realms/acme/audit/events?page%5Bsize%5D=100")
+        .rest_read("/admin/v1/envs/acme/audit/events?page%5Bsize%5D=100")
         .await;
     for path in http.objects().keys() {
         http.tamper(path, b"not the record".to_vec());
     }
     let (_, after, _) = c
-        .rest_read("/admin/v1/realms/acme/audit/events?page%5Bsize%5D=100")
+        .rest_read("/admin/v1/envs/acme/audit/events?page%5Bsize%5D=100")
         .await;
     assert_eq!(before["items"], after["items"]);
     assert_ne!(before["items"].as_array().map(Vec::len), Some(0));
@@ -319,7 +319,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/export-sinks/collector/retire",
+            "/admin/v1/envs/acme/export-sinks/collector/retire",
             ("retireExportSink", Some("collector")),
             serde_json::json!({}),
             None,
@@ -327,7 +327,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         .await;
     assert!(w.status.is_success(), "{:?}", w.body);
     let held_before = record(&c).await;
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     for i in 0..3 {
@@ -344,7 +344,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     let fresh: BTreeSet<String> = record(&c).await.difference(&held_before).cloned().collect();
     assert!(fresh.len() >= 3);
     let sent_before: Vec<String> = {
-        let (_, page, _) = c.rest_read("/admin/v1/realms/acme/export-sinks").await;
+        let (_, page, _) = c.rest_read("/admin/v1/envs/acme/export-sinks").await;
         page["items"]
             .as_array()
             .unwrap()
@@ -355,7 +355,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     let mut refused = false;
     for _ in 0..MAX_PASSES {
         pass().await;
-        let (_, page, _) = c.rest_read("/admin/v1/realms/acme/export-sinks").await;
+        let (_, page, _) = c.rest_read("/admin/v1/envs/acme/export-sinks").await;
         let live: Vec<&serde_json::Value> = page["items"]
             .as_array()
             .unwrap()
@@ -388,7 +388,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert!(refused);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let failed = t
@@ -406,7 +406,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/export-sinks/hec",
+            "/admin/v1/envs/acme/export-sinks/hec",
             ("putExportSink", Some("hec")),
             serde_json::json!({ "adapter": "collector", "preset": "splunk",
                 "endpoint": format!("{}/services/collector/event", http.base),

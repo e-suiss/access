@@ -2,7 +2,7 @@
 //! catalog `conformance/catalog/messages.toml` and the Fluent files under `locales/` agree.
 //! Every locale has every key of `en`, file by file; every key is catalogued with its §8.15.2
 //! class and owner; the protected keys are exactly those of `protected-messages.toml`, and no
-//! realm override file (`*.ftl` outside `locales/`) defines one; a guarantee-bearing text names
+//! environment override file (`*.ftl` outside `locales/`) defines one; a guarantee-bearing text names
 //! exactly one §3.3 class; and no end-user text says a word the glossary bans or a forbidden UI
 //! term, in any language.
 
@@ -28,7 +28,7 @@ const END_USER: &[&str] = &["login", "account", "hub", "mail"];
 /// The §8.15.2 owners (E25).
 const OWNERS: &[&str] = &[
     "identity_plane",
-    "realm_admin",
+    "environment_admin",
     "access",
     "client_developer",
     "upstream_idp",
@@ -226,7 +226,9 @@ pub(crate) fn check_texts(
                 if declared.contains(k.as_str()) {
                     out.push(violation(
                         path,
-                        format!("`{k}` is protected; a realm cannot override it (X35, XI-25)"),
+                        format!(
+                            "`{k}` is protected; an environment cannot override it (X35, XI-25)"
+                        ),
                     ));
                 }
             }
@@ -377,7 +379,7 @@ mod tests {
         vec![
             Banned {
                 words: BTreeMap::from([
-                    (String::from("en"), vec![String::from("realm")]),
+                    (String::from("en"), vec![String::from("environment")]),
                     (String::from("tr"), vec![String::from("oturum")]),
                 ]),
                 classes: Vec::new(),
@@ -440,10 +442,10 @@ mod tests {
 
     // X35, XI-25
     #[test]
-    fn a_protected_key_overridden_in_a_realm_file_fails() {
+    fn a_protected_key_overridden_in_an_environment_file_fails() {
         let mut f = files(TR);
         f.push((
-            String::from("deploy/realm-templates/acme/en.ftl"),
+            String::from("deploy/environment-templates/acme/en.ftl"),
             String::from("login-failed = Wrong password.\n"),
         ));
         let v = run(&f, &catalog());

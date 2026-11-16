@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT party_id FROM access.environment_claim_issuer WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.environment_claim_issuer",
+            "name": "party_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a2b1e6d240b5eea56861423d2e1f86f305a8af64ab0371b670c0c463630da848"
+}

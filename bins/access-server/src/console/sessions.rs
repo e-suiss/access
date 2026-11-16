@@ -2,7 +2,7 @@
 //! `access_ops.console_sessions`, ended softly (OP-73). A session is revoked when its subject's
 //! `session_epoch` moved past the one it opened under or the account cannot authenticate (TN-50,
 //! MD-7). Any store failure is `503` (Ek B "BFF session store failure is fail-closed"). The
-//! signed-in user's own profile is the realm's account view of the subject (Ek B 3089).
+//! signed-in user's own profile is the environment's account view of the subject (Ek B 3089).
 
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::Pool;
 use access_store::console::{self, ConsoleSessionRow, EndReason};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
 use crate::ids::CellIds;
 
@@ -53,10 +53,10 @@ impl PgConsoleSessions {
     async fn epoch(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> Result<Option<i64>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         let s = t.subject(subject, false).await.map_err(down)?;
@@ -70,7 +70,7 @@ impl PgConsoleSessions {
     async fn session(&self, row: ConsoleSessionRow) -> Result<ConsoleSession, Unavailable> {
         let binding = Binding::decode(&row.binding).ok_or(Unavailable)?;
         let revoked =
-            self.epoch(row.tenant, row.realm, row.subject).await? != Some(row.session_epoch);
+            self.epoch(row.tenant, row.environment, row.subject).await? != Some(row.session_epoch);
         let instance = match &row.instance {
             Some((kid, key)) => {
                 let key = instance_key(key).map_err(down)?;
@@ -84,7 +84,7 @@ impl PgConsoleSessions {
         Ok(ConsoleSession {
             id: row.id,
             who: SignedIn {
-                realm: row.slug.clone(),
+                environment: row.slug.clone(),
                 domain: Digest(row.domain),
                 display_name: row.account.clone(),
                 account: row.account.clone(),
@@ -113,23 +113,28 @@ impl PgConsoleSessions {
 
 impl ConsoleSessions for PgConsoleSessions {
     async fn open(&self, new: NewConsoleSession) -> Result<[u8; 16], Unavailable> {
-        let Some(realm) = self.directory.by_slug(&new.who.realm).await.map_err(down)? else {
+        let Some(environment) = self
+            .directory
+            .by_slug(&new.who.environment)
+            .await
+            .map_err(down)?
+        else {
             return Err(Unavailable);
         };
         let epoch = self
-            .epoch(realm.tenant, realm.realm, new.who.subject)
+            .epoch(environment.tenant, environment.environment, new.who.subject)
             .await?
             .ok_or(Unavailable)?;
         console::open(
             &self.app,
             &console::NewConsoleSession {
                 cookie_digest: &new.cookie_digest,
-                tenant: realm.tenant,
-                realm: realm.realm,
+                tenant: environment.tenant,
+                environment: environment.environment,
                 subject: new.who.subject,
                 login_session: new.who.login_session,
                 session_epoch: epoch,
-                slug: &new.who.realm,
+                slug: &new.who.environment,
                 domain: &new.who.domain.0,
                 account: &new.who.account,
                 binding: &new.binding.encode(),
@@ -182,19 +187,24 @@ impl ConsoleSessions for PgConsoleSessions {
             return Ok(Vec::new());
         };
         let now = crate::admin::now_ms()?;
-        let mut out: Vec<SessionSummary> =
-            console::live_of(&self.app, row.tenant, row.realm, &row.subject, MAX_LISTED)
-                .await
-                .map_err(down)?
-                .into_iter()
-                .map(|s| SessionSummary {
-                    id: s.id,
-                    kind: "console",
-                    created_ms: s.created_ms,
-                    last_seen_ms: s.last_seen_ms,
-                })
-                .collect();
-        let mut t = TenantTx::begin(&self.app, row.tenant, row.realm)
+        let mut out: Vec<SessionSummary> = console::live_of(
+            &self.app,
+            row.tenant,
+            row.environment,
+            &row.subject,
+            MAX_LISTED,
+        )
+        .await
+        .map_err(down)?
+        .into_iter()
+        .map(|s| SessionSummary {
+            id: s.id,
+            kind: "console",
+            created_ms: s.created_ms,
+            last_seen_ms: s.last_seen_ms,
+        })
+        .collect();
+        let mut t = TenantTx::begin(&self.app, row.tenant, row.environment)
             .await
             .map_err(down)?;
         let logins = t.live_sessions(row.subject).await.map_err(down)?;
@@ -224,7 +234,9 @@ impl ConsoleSessions for PgConsoleSessions {
             return Ok(false);
         };
         if let Some(t) = self.row(&target).await? {
-            let mine = t.tenant == own.tenant && t.realm == own.realm && t.subject == own.subject;
+            let mine = t.tenant == own.tenant
+                && t.environment == own.environment
+                && t.subject == own.subject;
             return if mine {
                 console::end(&self.app, &target, now_ms, EndReason::Revoked)
                     .await
@@ -233,7 +245,7 @@ impl ConsoleSessions for PgConsoleSessions {
                 Ok(false)
             };
         }
-        let mut t = TenantTx::begin(&self.app, own.tenant, own.realm)
+        let mut t = TenantTx::begin(&self.app, own.tenant, own.environment)
             .await
             .map_err(down)?;
         let ended = match t.session_by_id(target).await.map_err(down)? {
@@ -248,27 +260,27 @@ impl ConsoleSessions for PgConsoleSessions {
     }
 }
 
-/// The network facts of a console session (TN-129, OP-151 m.3 (f), m.11 (d)): the realm's
+/// The network facts of a console session (TN-129, OP-151 m.3 (f), m.11 (d)): the environment's
 /// session policy says whether it binds to the full address; no `GeoResolver` source answers
 /// yet, so the ASN is never known and sessions bind to the prefix otherwise.
-pub(crate) struct RealmBinding {
+pub(crate) struct EnvironmentBinding {
     pub(crate) app: Pool,
     pub(crate) directory: PgDirectory,
 }
 
-impl Network for RealmBinding {
+impl Network for EnvironmentBinding {
     fn asn(&self, _: IpAddr) -> Option<u32> {
         None
     }
 
-    async fn policy(&self, realm: &str) -> Result<BindingPolicy, Unavailable> {
-        let Some(entry) = self.directory.by_slug(realm).await.map_err(down)? else {
+    async fn policy(&self, environment: &str) -> Result<BindingPolicy, Unavailable> {
+        let Some(entry) = self.directory.by_slug(environment).await.map_err(down)? else {
             return Err(Unavailable);
         };
-        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.realm)
+        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.environment)
             .await
             .map_err(down)?;
-        let stored = access_store::idp::realm::policies(&mut t)
+        let stored = access_store::idp::environment::policies(&mut t)
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
@@ -288,17 +300,17 @@ impl Profiles for PgConsoleSessions {
             return Ok(None);
         };
         let ids = self.ids.key().ok_or(Unavailable)?;
-        let mut t = TenantTx::begin(&self.app, row.tenant, row.realm)
+        let mut t = TenantTx::begin(&self.app, row.tenant, row.environment)
             .await
             .map_err(down)?;
-        let account = access_store::idp::realm::account(&mut t, row.subject)
+        let account = access_store::idp::environment::account(&mut t, row.subject)
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
         Ok(account.map(|a| {
             let mut view = account_view(&a, &ids);
             if let Some(m) = view.as_object_mut() {
-                m.insert("realm".into(), row.slug.clone().into());
+                m.insert("environment".into(), row.slug.clone().into());
             }
             view
         }))

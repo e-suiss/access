@@ -35,10 +35,10 @@ pub enum AccountError {
     /// A status change outside TN-49.
     #[error(transparent)]
     Transition(#[from] InvalidTransition),
-    /// No such account in this realm.
+    /// No such account in this environment.
     #[error("no such account")]
     NotFound,
-    /// The realm already has this identifier.
+    /// The environment already has this identifier.
     #[error("identifier taken")]
     IdentifierTaken,
     /// The credential is the account's last method (TN-68).

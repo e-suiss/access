@@ -1,9 +1,9 @@
 //! Certificate, PIV and CAC sign-in on the real server path (§10.2.5, MD-8, OP-155 m.3 (k), (m),
-//! OP-153 m.3 (gg)): `putCertificateLogin` commits `idp.realm.certificate_login`; a browser then
+//! OP-153 m.3 (gg)): `putCertificateLogin` commits `idp.environment.certificate_login`; a browser then
 //! presents its client certificate to the real mTLS listener, which hands the chain to the
 //! hosted login over the real store. A CA without the domain's Acceptance signs nobody in;
 //! revoked, unreachable and stale statuses refuse; a mapped PIV policy signs in at AAL3 and
-//! queues the realm issuer's `authentication` Claim with method `x509`. The OCSP responder is
+//! queues the environment issuer's `authentication` Claim with method `x509`. The OCSP responder is
 //! the one part served in process.
 
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ const ADMIN: Actor<'static> = Actor {
 };
 
 /// The authority plane's CA Acceptances, or every CA once `scripted`: a root-established
-/// Acceptance waits out the CT3 time lock this realm keeps (the real path is
+/// Acceptance waits out the CT3 time lock this environment keeps (the real path is
 /// `idp::tests::certificate`).
 struct ScriptedCa {
     plane: TestPlane,
@@ -91,7 +91,7 @@ fn hosted(
     let w = &c.w;
     Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -152,7 +152,7 @@ struct Answer {
     body: serde_json::Value,
 }
 
-/// `GET /realms/acme/login/certificate` over TLS, presenting `leaf` when given.
+/// `GET /env/acme/login/certificate` over TLS, presenting `leaf` when given.
 async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
     let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
@@ -175,7 +175,7 @@ async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
         .await
         .unwrap();
     let head = format!(
-        "GET /realms/acme/login/certificate HTTP/1.1\r\nHost: {HOST}:{}\r\n\
+        "GET /env/acme/login/certificate HTTP/1.1\r\nHost: {HOST}:{}\r\n\
          Sec-Fetch-Site: same-site\r\nConnection: close\r\n\r\n",
         l.addr.port()
     );
@@ -202,7 +202,7 @@ async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
     }
 }
 
-/// An active account of the realm with `email` as its identifier.
+/// An active account of the environment with `email` as its identifier.
 async fn account(c: &Console, email: &str) -> [u8; 16] {
     let h = hosted(c);
     let entry = PgDirectory::new(c.w.db.router.clone())
@@ -212,18 +212,20 @@ async fn account(c: &Console, email: &str) -> [u8; 16] {
         .unwrap();
     let kit = h.kits.kit(&entry).await.unwrap();
     let pg = PgAccounts::sealed(c.w.db.app.clone(), kit.vault());
-    let realm = kit.realm();
+    let environment = kit.environment();
     let id = Identifier::new(IdentifierKind::Email, email).unwrap();
-    let s = create(&pg, &realm, &[id], &ADMIN).await.unwrap();
+    let s = create(&pg, &environment, &[id], &ADMIN).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&pg, &realm, s, to, &ADMIN).await.unwrap();
+        change_status(&pg, &environment, s, to, &ADMIN)
+            .await
+            .unwrap();
     }
     s
 }
 
 /// The `authentication` Claims queued for `subject`.
 async fn authentications(c: &Console, subject: [u8; 16]) -> Vec<ClaimOrder> {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let rows = t
@@ -282,7 +284,7 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/certificate-login",
+            "/admin/v1/envs/acme/settings/certificate-login",
             ("putCertificateLogin", None),
             serde_json::json!({
                 "enabled": true,
@@ -297,7 +299,7 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/certificate-login",
+            "/admin/v1/envs/acme/settings/certificate-login",
             ("putCertificateLogin", None),
             serde_json::json!({
                 "enabled": true,
@@ -408,7 +410,7 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
 
 // OP-155 m.3 (m), RFC 8705 §5, §10.4.3, Ek B 4673
 #[tokio::test]
-async fn mtls_aliases_are_advertised_once_the_realm_publishes_them() {
+async fn mtls_aliases_are_advertised_once_the_environment_publishes_them() {
     use access_identity_oauth::app::Reply;
     use access_identity_oauth::domain::metadata::Document;
     let c = console("mgmt-mtls-aliases", true).await;
@@ -431,7 +433,7 @@ async fn mtls_aliases_are_advertised_once_the_realm_publishes_them() {
         let w = c
             .rest_write(
                 &Method::PUT,
-                "/admin/v1/realms/acme/settings/mtls-aliases",
+                "/admin/v1/envs/acme/settings/mtls-aliases",
                 ("putMtlsAliases", None),
                 serde_json::json!({ "published": published }),
                 None,
@@ -442,11 +444,11 @@ async fn mtls_aliases_are_advertised_once_the_realm_publishes_them() {
         if published {
             assert_eq!(
                 a["token_endpoint"],
-                "https://access.test:8443/realms/acme/token"
+                "https://access.test:8443/env/acme/token"
             );
             assert_eq!(
                 a["introspection_endpoint"],
-                "https://access.test:8443/realms/acme/introspect"
+                "https://access.test:8443/env/acme/introspect"
             );
         } else {
             assert_eq!(a, serde_json::Value::Null);

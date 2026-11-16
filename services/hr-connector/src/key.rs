@@ -21,7 +21,7 @@ pub struct InstanceKey<C> {
     pub signer: SoftSigner,
     /// Its public key.
     pub public: PublicKey,
-    /// The basis the operator gave it, e.g. the realm's identity-plane Anchor.
+    /// The basis the operator gave it, e.g. the environment's identity-plane Anchor.
     pub basis: ExerciseBasis,
     /// Time.
     pub clock: C,

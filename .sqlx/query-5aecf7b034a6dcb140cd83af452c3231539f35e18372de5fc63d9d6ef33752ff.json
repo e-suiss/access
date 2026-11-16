@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT MAX(used_at_ms) FROM access.breakglass_reviews\n              WHERE tenant_id = $1 AND environment_id = $2 AND drill",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5aecf7b034a6dcb140cd83af452c3231539f35e18372de5fc63d9d6ef33752ff"
+}

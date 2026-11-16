@@ -31,7 +31,7 @@ WS-Federation tokens, and has them signed by the identity signer's `saml` key.
 | Attributes | `NameFormat` URI by default, per-registration override; `FriendlyName` is written, never matched |
 | Time | `NotBefore` −60 s, `NotOnOrAfter` +5 min (IdP-initiated: 2 min), request skew ±3 min, UTC `Z`, `OneTimeUse` off |
 | Requests | `IsPassive` wins over `ForceAuthn`; `NoPassive` when the user would have to interact; `InvalidNameIDPolicy` when the policy cannot be met; signed requests when `AuthnRequestsSigned`; request IDs kept 10 min against replay |
-| IdP-initiated | Off unless the registration opts in; only the `isDefault` ACS; a `RelayState` must carry the realm's HSM MAC |
+| IdP-initiated | Off unless the registration opts in; only the `isDefault` ACS; a `RelayState` must carry the environment's HSM MAC |
 | Metadata | `validUntil` +14 days, `cacheDuration` PT6H, re-signed each time it is served, every published certificate listed; PEM download and SSO URL for manual setup |
 
 ## Interop profiles
@@ -84,7 +84,7 @@ From the profiles of §10.6.1; actions 1 to 16 come first, 17 to 21 next. Each h
 
 ## Certificate rotation
 
-Rotation has two phases under the realm's policy (`idp.saml.cert_policy`). At T0 a new key and
+Rotation has two phases under the environment's policy (`idp.saml.cert_policy`). At T0 a new key and
 certificate are added and published in metadata next to the current one. After at least 14 days,
 at T1, signing switches to the new key. At T1 + 14 days the old certificate is removed. The
 scheduled steps and the metadata re-signing are operational; an emergency replacement is
@@ -94,7 +94,7 @@ scheduled steps and the metadata re-signing are operational; an emergency replac
 
 Entra reads no metadata, so each phase is done by hand in the Entra admin center:
 
-1. At T0, download the new certificate (PEM) from the realm's SAML settings.
+1. At T0, download the new certificate (PEM) from the environment's SAML settings.
 2. In Entra, open the federation settings of the domain and add the new certificate as the
    *next* signing certificate (`NextSigningCertificate` with the Graph or MSOnline tools).
 3. At T1, when Access switches, Entra promotes the next certificate; check one sign-in.

@@ -18,7 +18,7 @@ use crate::EdgeError;
 use crate::domain::{self, Gateway, Refusal};
 use crate::ports::Vaults;
 
-/// The RADIUS calls over the realms' account tables.
+/// The RADIUS calls over the environments' account tables.
 pub struct Radius<V> {
     vaults: V,
     app: Pool,
@@ -52,10 +52,10 @@ impl<V: Vaults> Radius<V> {
     async fn begin(&self, g: &Gateway) -> Result<PgTx, EdgeError> {
         let vault = self
             .vaults
-            .vault(g.tenant, g.realm)
+            .vault(g.tenant, g.environment)
             .ok_or_else(|| EdgeError::Unavailable(String::from("vault")))?;
         Ok(PgAccounts::sealed(self.app.clone(), vault)
-            .begin(g.tenant, g.realm)
+            .begin(g.tenant, g.environment)
             .await?)
     }
 
@@ -88,7 +88,7 @@ impl<V: Vaults> Radius<V> {
         g: &Gateway,
         q: &Authenticate,
     ) -> Result<Authenticated, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         if g.uri.kind != GatewayKind::Radius {
             return Err(Refusal::Method.into());
         }

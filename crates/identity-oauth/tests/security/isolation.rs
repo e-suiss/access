@@ -1,7 +1,7 @@
-//! Metamorphic realm and tenant isolation: the same script in
-//! two realms of two tenants gives the same decisions up to the realm's own names; random
-//! mutations in one realm leave the other's authentication and token decisions bit for bit the
-//! same; nothing minted in one realm is honoured in the other.
+//! Metamorphic environment and tenant isolation: the same script in
+//! two environments of two tenants gives the same decisions up to the environment's own names; random
+//! mutations in one environment leave the other's authentication and token decisions bit for bit the
+//! same; nothing minted in one environment is honoured in the other.
 
 use access_identity_oauth::app::oauth::Reply;
 use access_identity_oauth::domain::request::Params;
@@ -12,7 +12,7 @@ use crate::support::{
     query_opt, status,
 };
 
-/// What one realm minted, to be presented elsewhere.
+/// What one environment minted, to be presented elsewhere.
 struct Minted {
     cookie: String,
     code: String,
@@ -44,7 +44,9 @@ async fn mint(x: &At<'_>) -> Minted {
     )
     .unwrap();
     let pushed = body(
-        &x.oauth().par(x.realm(), &par, Some(&x.basic()), &[]).await,
+        &x.oauth()
+            .par(x.environment(), &par, Some(&x.basic()), &[])
+            .await,
         201,
     );
     Minted {
@@ -60,7 +62,7 @@ async fn mint(x: &At<'_>) -> Minted {
     }
 }
 
-/// A reply with the realm's own names replaced, so two realms compare.
+/// A reply with the environment's own names replaced, so two environments compare.
 fn shape(x: &At<'_>, r: &Reply) -> String {
     let text = match r {
         Reply::Redirect(to) => {
@@ -111,7 +113,7 @@ fn shape(x: &At<'_>, r: &Reply) -> String {
         .replace(&x.f.keyed, "{keyed}")
 }
 
-/// The shape of issued tokens: header and claim names, and which claims name the realm.
+/// The shape of issued tokens: header and claim names, and which claims name the environment.
 fn token_shape(x: &At<'_>, t: &Value) -> String {
     let at = claims(t["access_token"].as_str().unwrap());
     let id = claims(t["id_token"].as_str().unwrap());
@@ -134,7 +136,7 @@ fn token_shape(x: &At<'_>, t: &Value) -> String {
     )
 }
 
-/// The decision vector of realm `x`: its own flow, and everything `other` minted presented to
+/// The decision vector of environment `x`: its own flow, and everything `other` minted presented to
 /// it. Every entry is a normalised decision.
 async fn vector(x: &At<'_>, other: &Minted) -> Vec<String> {
     let mut v = Vec::new();
@@ -179,7 +181,9 @@ async fn vector(x: &At<'_>, other: &Minted) -> Vec<String> {
     let revoke = Params::new(vec![("token".into(), other.refresh.clone())]).unwrap();
     v.push(shape(
         x,
-        &x.oauth().revoke(x.realm(), &revoke, Some(&x.basic())).await,
+        &x.oauth()
+            .revoke(x.environment(), &revoke, Some(&x.basic()))
+            .await,
     ));
     let rotated = x.refresh(refresh).await;
     v.push(shape(x, &rotated));
@@ -190,7 +194,9 @@ async fn vector(x: &At<'_>, other: &Minted) -> Vec<String> {
     .unwrap();
     v.push(shape(
         x,
-        &x.oauth().authorize(x.realm(), &stored, Some(&cookie)).await,
+        &x.oauth()
+            .authorize(x.environment(), &stored, Some(&cookie))
+            .await,
     ));
     let token_uri = format!("{}/token", x.issuer());
     let foreign_nonce = x.proof_with("POST", &token_uri, None, &other.nonce);
@@ -228,7 +234,7 @@ async fn vector(x: &At<'_>, other: &Minted) -> Vec<String> {
     v
 }
 
-/// One mutation of a realm: users, factors, clients, keys.
+/// One mutation of an environment: users, factors, clients, keys.
 async fn mutate(x: &At<'_>, which: u64) -> String {
     match which % 7 {
         0 => {
@@ -260,7 +266,10 @@ async fn mutate(x: &At<'_>, which: u64) -> String {
                 t["access_token"].as_str().unwrap().into(),
             )])
             .unwrap();
-            let _ = x.oauth().revoke(x.realm(), &p, Some(&x.basic())).await;
+            let _ = x
+                .oauth()
+                .revoke(x.environment(), &p, Some(&x.basic()))
+                .await;
             String::from("revocation")
         }
         3 => {
@@ -289,13 +298,13 @@ async fn mutate(x: &At<'_>, which: u64) -> String {
         5 => {
             let mut tx = access_store::identity::TenantTx::begin(
                 &x.c.db.app,
-                x.f.realm.tenant,
-                x.f.realm.realm,
+                x.f.environment.tenant,
+                x.f.environment.environment,
             )
             .await
             .unwrap();
             let s = tx
-                .insert_subject("active", "realm-kek:1", &[3; 40])
+                .insert_subject("active", "environment-kek:1", &[3; 40])
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -310,16 +319,16 @@ async fn mutate(x: &At<'_>, which: u64) -> String {
 
 // MR7b, SA-45, SAI-6, MD-5, TN-2, TN-7, TN-8, INV-17, TN-23, §12.1.3
 #[tokio::test]
-async fn realms_are_isomorphic_and_never_cross() {
+async fn environments_are_isomorphic_and_never_cross() {
     // K05, X41
     let c = Cluster::new(&["iso-a", "iso-b"]).await;
     let (a, b) = (c.at(0), c.at(1));
-    assert!(a.realm().tenant != b.realm().tenant);
+    assert!(a.environment().tenant != b.environment().tenant);
     let from_a = mint(&a).await;
     let from_b = mint(&b).await;
     let va = vector(&a, &from_b).await;
     let vb = vector(&b, &from_a).await;
-    assert_eq!(va, vb, "the realms do not answer alike");
+    assert_eq!(va, vb, "the environments do not answer alike");
     for (n, line) in va.iter().enumerate() {
         assert!(!line.contains("iso-b"), "{n}: {line}");
         assert!(!line.contains(&b.f.public), "{n}: {line}");
@@ -339,7 +348,7 @@ async fn realms_are_isomorphic_and_never_cross() {
         let again = vector(&b, &from_a).await;
         assert_eq!(
             again, vb,
-            "round {round}: {done:?} in realm A changed realm B"
+            "round {round}: {done:?} in environment A changed environment B"
         );
         assert!(
             matches!(

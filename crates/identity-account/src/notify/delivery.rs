@@ -9,8 +9,8 @@ use serde_json::{Map, Value};
 use crate::notify::envelope::{EventId, Header};
 use crate::notify::message::{Invalid, Message, rfc3339};
 
-/// `CloudEvents` `source` prefix; the realm's UUID follows.
-pub const SOURCE_PREFIX: &str = "urn:suiss:access:realm:";
+/// `CloudEvents` `source` prefix; the environment's UUID follows.
+pub const SOURCE_PREFIX: &str = "urn:suiss:access:environment:";
 
 /// One `CloudEvent` in structured JSON mode, ready to post. The bytes carry the secret and the
 /// address, so they are a [`Secret`] and never printed.
@@ -45,7 +45,7 @@ fn uuid(b: &[u8; 16]) -> String {
 }
 
 /// Builds the `CloudEvent` (`CloudEvents` 1.0, structured JSON) for a message. Extension
-/// attributes `accesstenant` and `accessrealm` are the tenant mapping both products share
+/// attributes `accesstenant` and `accessenvironment` are the tenant mapping both products share
 /// (E42 m.4); `subject` is the subject's external id (OP-137).
 ///
 /// # Errors
@@ -60,14 +60,14 @@ pub fn cloud_event(
     e.insert("id".into(), header.event.to_string().into());
     e.insert(
         "source".into(),
-        format!("{SOURCE_PREFIX}{}", uuid(&header.realm)).into(),
+        format!("{SOURCE_PREFIX}{}", uuid(&header.environment)).into(),
     );
     e.insert("type".into(), message.body.kind().into());
     e.insert("subject".into(), subject_external.into());
     e.insert("time".into(), rfc3339(header.occurred_ms)?.into());
     e.insert("datacontenttype".into(), "application/json".into());
     e.insert("accesstenant".into(), uuid(&header.tenant).into());
-    e.insert("accessrealm".into(), uuid(&header.realm).into());
+    e.insert("accessenvironment".into(), uuid(&header.environment).into());
     e.insert("data".into(), message.to_wire_data()?);
     let body = serde_json::to_vec(&Value::Object(e)).map_err(|_| Invalid("encoding"))?;
     Ok(CloudEvent {
@@ -145,7 +145,7 @@ impl Backoff {
 pub enum Undeliverable {
     /// The payload does not parse or open.
     Malformed,
-    /// The subject does not exist in the realm.
+    /// The subject does not exist in the environment.
     NoSubject,
     /// The subject's key was shredded (OP-73).
     Shredded,

@@ -288,7 +288,7 @@ fn binding_value_and_context_round_trip() {
 
 // TN-4, §12.1.1, MD-5
 #[test]
-fn realm_claims_go_to_governing_and_accepting_domains() {
+fn environment_claims_go_to_governing_and_accepting_domains() {
     let gov = Digest([1; 32]);
     let a = Digest([2; 32]);
     let b = Digest([3; 32]);

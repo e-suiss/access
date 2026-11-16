@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environment_domains\n            SET status = 'retired', retire_pos = $4, retired_at = clock_timestamp()\n          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3 AND domain_id = $5\n            AND status IN ('pending', 'verified', 'lapsed') AND bound_as IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "309738e9fb917710eaea97d36729dd2947b04ce25216c3d9cf7a7ccf6840ee0b"
+}

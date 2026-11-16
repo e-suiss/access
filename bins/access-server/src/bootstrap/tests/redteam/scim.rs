@@ -12,7 +12,7 @@ async fn register(c: &Console, name: &str) -> String {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients",
+            "/admin/v1/envs/acme/scim-clients",
             ("registerScimClient", None),
             serde_json::json!({ "name": name }),
             None,

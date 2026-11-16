@@ -1,5 +1,5 @@
 //! First-contact tokens end to end on the real router, store and sequencer (E58, OP-156 m.3
-//! (z), Ek B 4495): the realm's public issuer directory, a signed-in person's blind issuance,
+//! (z), Ek B 4495): the environment's public issuer directory, a signed-in person's blind issuance,
 //! the client's finalization into an RFC 9578 type `0x0002` token that the existing redemption
 //! check accepts, the daily limit, and nothing kept that links a token to the person.
 
@@ -7,7 +7,7 @@ use access_crypto::blind_rsa;
 use access_crypto::privacy_pass::{self, Issuer};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::{change_status, create};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -33,14 +33,14 @@ fn hosted_router(c: &Console) -> axum::Router {
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::Hosted;
     let w = &c.w;
     let hosted = Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -61,7 +61,7 @@ fn hosted_router(c: &Console) -> axum::Router {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let discovery = || {
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         )
@@ -79,7 +79,7 @@ fn call(
 ) -> axum::http::Request<Body> {
     let mut b = axum::http::Request::builder()
         .method(method.clone())
-        .uri(format!("/realms/acme{path}"))
+        .uri(format!("/env/acme{path}"))
         .header(axum::http::header::HOST, "access.test");
     if let Some(c) = cookie {
         b = b.header(
@@ -100,27 +100,29 @@ fn call(
     b.body(Body::from(body.to_owned())).unwrap()
 }
 
-/// An active account of the realm with a live session; its cookie.
+/// An active account of the environment with a live session; its cookie.
 async fn signed_in(c: &Console, address: &str) -> ([u8; 16], String) {
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
-    let v = crate::login::RealmKeks::new(c.w.keys.clone())
-        .vault(c.route.realm)
+    let v = crate::login::EnvironmentKeks::new(c.w.keys.clone())
+        .vault(c.route.environment)
         .unwrap();
-    let realm = Realm {
+    let environment = Environment {
         tenant: c.route.tenant,
-        realm: c.route.realm,
+        environment: c.route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
     let db = PgAccounts::sealed(c.w.db.app.clone(), v.clone());
     let email = Identifier::new(IdentifierKind::Email, address).unwrap();
-    let subject = create(&db, &realm, &[email], &WHO).await.unwrap();
+    let subject = create(&db, &environment, &[email], &WHO).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, subject, to, &WHO).await.unwrap();
+        change_status(&db, &environment, subject, to, &WHO)
+            .await
+            .unwrap();
     }
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_session(&access_store::sessions::NewSession {
@@ -189,7 +191,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     let period = access_identity_account::app::first_contact::PERIOD_MS;
     let (old, _) = blind_rsa::IssuerKey::generate().unwrap();
     let old_key = old.token_key();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let previous = i64::try_from(now() / period).unwrap() - 1;
@@ -299,7 +301,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
         assert_eq!(&t[66..98], key_id.as_slice());
     }
     assert_ne!(tokens[0][2..34], tokens[1][2..34]);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let dump = format!("{:?}", t.list_audit(200).await.unwrap());
@@ -396,7 +398,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     .await;
     assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(json(&body)["code"], "first-contact-limit");
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let day = i32::try_from(now() / 86_400_000).unwrap();

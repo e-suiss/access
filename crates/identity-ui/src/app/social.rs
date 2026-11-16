@@ -21,7 +21,7 @@ use access_identity_federation::domain::preset::Presets;
 use access_identity_federation::domain::rules::{ATTEMPT_TTL_MS, LINK_FRESHNESS_MS};
 use access_identity_federation::domain::token::{Secrets, authorization_url};
 use access_identity_federation::ports::{ProviderHttp, SocialSecrets};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::flow::device_digest;
@@ -35,13 +35,13 @@ use serde_json::json;
 
 use super::signup::STEP_UP_REQUIRED;
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// What social sign-in needs beyond the login's services.
 pub struct Social<H, S> {
     /// HTTPS to providers.
     pub http: H,
-    /// The secret store of the realms' client secrets.
+    /// The secret store of the environments' client secrets.
     pub secrets: S,
     /// The operator's shared development clients by preset (`social.dev_clients`).
     pub dev: BTreeMap<String, DevClient>,
@@ -114,7 +114,7 @@ fn refused(e: FederationError) -> Reply {
 }
 
 /// The callback the provider redirects to.
-fn redirect_uri(kit: &RealmKit, provider: &str) -> String {
+fn redirect_uri(kit: &EnvironmentKit, provider: &str) -> String {
     format!("{}/v1/login/social/{provider}/callback", kit.issuer)
 }
 
@@ -136,14 +136,17 @@ where
 {
     async fn enabled<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         social: &Social<H, S>,
         provider: &str,
     ) -> Result<(Enabled, bool), Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
-        let sandbox = t.realm_is_sandbox().await.map_err(|_| unavailable())?;
+        let sandbox = t
+            .environment_is_sandbox()
+            .await
+            .map_err(|_| unavailable())?;
         let row = t
             .social_provider(provider)
             .await
@@ -170,14 +173,14 @@ where
     /// Records the domain upstream `issuer` asserted for `subject` (TN-90, Ek B 3611).
     async fn assert_domain(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: [u8; 16],
         issuer: &str,
         domain: &str,
         tenant: Option<&str>,
     ) -> Result<(), access_store::StoreError> {
         let mut t =
-            access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
         t.assert_upstream_domain(subject, issuer, domain, tenant)
             .await?;
         t.commit().await
@@ -185,7 +188,7 @@ where
 
     pub(crate) async fn fresh(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         max_age_ms: Option<u64>,
     ) -> Result<([u8; 16], u64), Reply> {
@@ -209,7 +212,7 @@ where
     /// the session's freshly re-authenticated subject (TN-65 (3)).
     async fn begin_social<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         provider: &str,
         link: bool,
@@ -238,7 +241,7 @@ where
         };
         let now = self.clock.now_ms();
         let state_hash = suiss_crypto::digest::sha256(secrets.state.as_bytes());
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         t.insert_social_attempt(&access_store::federation::NewAttempt {
@@ -267,7 +270,7 @@ where
     /// `GET /v1/login/social/{provider}` (OP-153 m.3 (l)): to the provider.
     pub async fn start_social<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         provider: &str,
         social: &Social<H, S>,
@@ -282,7 +285,7 @@ where
     /// to link, after a re-authentication within five minutes.
     pub async fn start_link<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         provider: &str,
         social: &Social<H, S>,
@@ -333,7 +336,7 @@ where
     #[expect(clippy::too_many_lines, reason = "the callback's steps in their order")]
     pub async fn finish_social<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         provider: &str,
         (code, state): (&str, &str),
@@ -352,7 +355,7 @@ where
         };
         let now = self.clock.now_ms();
         let attempt = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let a = t
                 .take_social_attempt(
                     &suiss_crypto::digest::sha256(state.as_bytes()),
@@ -400,11 +403,11 @@ where
             Err(FederationError::Refused(_)) => return Reply::problem(SOCIAL_FAILED),
             Err(e) => return refused(e),
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         let address = external
@@ -425,7 +428,7 @@ where
             if current != subject {
                 return Reply::problem(SESSION_REQUIRED);
             }
-            let actor_ref = realm.external(subject).unwrap_or_default();
+            let actor_ref = environment.external(subject).unwrap_or_default();
             let who = Actor {
                 actor: &actor_ref,
                 correlation: b.correlation,
@@ -476,7 +479,7 @@ where
     }
 
     /// `GET /v1/account/linked` (S11 "Linked sign-ins", §8.5): never "merged".
-    pub async fn linked(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn linked(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -485,11 +488,11 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         match externals.links(subject).await {
@@ -510,7 +513,7 @@ where
 
     /// `DELETE /v1/account/linked/{link}`: ends a linked sign-in after a fresh step-up; the
     /// record stays (OP-73) and the last way to sign in stays (TN-68).
-    pub async fn unlink(&self, entry: &RealmEntry, b: &Browser<'_>, link: &str) -> Reply {
+    pub async fn unlink(&self, entry: &EnvironmentEntry, b: &Browser<'_>, link: &str) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -536,14 +539,14 @@ where
         else {
             return Reply::problem(NO_PROVIDER);
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
-        let actor_ref = realm.external(subject).unwrap_or_default();
+        let actor_ref = environment.external(subject).unwrap_or_default();
         let who = Actor {
             actor: &actor_ref,
             correlation: b.correlation,
@@ -563,7 +566,7 @@ where
     /// fresh session gets one; with a ticket, the surviving account's fresh session combines.
     pub async fn combine(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         ticket: Option<&str>,
     ) -> Reply {
@@ -576,11 +579,11 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         let now = self.clock.now_ms();
@@ -600,7 +603,7 @@ where
                 Err(e) => failed(&e.into()),
             };
         };
-        let actor_ref = realm.external(subject).unwrap_or_default();
+        let actor_ref = environment.external(subject).unwrap_or_default();
         let who = Actor {
             actor: &actor_ref,
             correlation: b.correlation,
@@ -647,7 +650,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn pending(&self, kit: &RealmKit, return_to: &str) -> Result<Pending, Reply> {
+    async fn pending(&self, kit: &EnvironmentKit, return_to: &str) -> Result<Pending, Reply> {
         use access_identity_oauth::domain::claims_request::{ClaimsAsk, shared_set};
         use access_identity_oauth::domain::request::{AuthRequest, REQUEST_URI_PREFIX};
         let issuer = access_identity_oauth::domain::issuer::Issuer::parse(&kit.issuer)
@@ -669,7 +672,7 @@ where
         );
         let now = self.clock.now_ms();
         let from_day = i32::try_from((now / 86_400_000).saturating_sub(1)).unwrap_or(i32::MAX);
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let row = t
@@ -717,7 +720,7 @@ where
     /// only; authority is asked for through RAR and S1, never here.
     pub async fn share_preview(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         return_to: &str,
     ) -> Reply {
@@ -747,7 +750,7 @@ where
     /// the browser's device key.
     pub async fn connect_preview(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         return_to: &str,
     ) -> Reply {
@@ -786,7 +789,7 @@ where
     /// `POST /v1/account/connected-apps` (OP-153 m.3 (z)): the person shares the claims the
     /// waiting request asks for; the consent is kept per (person, app, claim set) and the
     /// browser goes back to the request.
-    pub async fn share(&self, entry: &RealmEntry, b: &Browser<'_>, return_to: &str) -> Reply {
+    pub async fn share(&self, entry: &EnvironmentEntry, b: &Browser<'_>, return_to: &str) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -800,7 +803,7 @@ where
             Err(r) => return r,
         };
         let stored = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.put_consent(
                 subject,
                 p.client.client_uuid,
@@ -819,7 +822,12 @@ where
     /// N5: `POST /v1/account/connected-apps/decline` (OP-153 m.3 (z), X-L8): the person chose
     /// not to share; the waiting request goes back to the app as `access_denied` with its
     /// `state` and `iss` (RFC 6749 §4.1.2.1, RFC 9207). Nothing is stored.
-    pub async fn decline(&self, entry: &RealmEntry, b: &Browser<'_>, return_to: &str) -> Reply {
+    pub async fn decline(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        return_to: &str,
+    ) -> Reply {
         use access_identity_oauth::domain::request::{AuthError, error_redirect};
         let kit = match self.kit(entry).await {
             Ok(k) => k,
@@ -846,7 +854,7 @@ where
 
     /// `GET /v1/account/connected-apps` (S11 "Connected apps", OP-153 m.3 (z)): the apps the
     /// person shares identity claims with, and which claims.
-    pub async fn connected_apps(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn connected_apps(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -856,7 +864,7 @@ where
             Err(r) => return r,
         };
         let rows = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let rows = t.consents_of(subject).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
@@ -881,7 +889,7 @@ where
     /// app; it receives no identity claims until the person shares again. The record stays.
     pub async fn stop_sharing(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         client_id: &str,
     ) -> Reply {
@@ -894,7 +902,7 @@ where
             Err(r) => return r,
         };
         let stopped = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let done = t
                 .stop_consent(subject, client_id, self.clock.now_ms())
                 .await?;
@@ -909,7 +917,7 @@ where
     }
 }
 
-/// The binding token was refused: no such offer, a lapsed one, or a half this realm keeps.
+/// The binding token was refused: no such offer, a lapsed one, or a half this environment keeps.
 const BINDING_REFUSED: Problem = Problem {
     status: 409,
     code: "binding-refused",
@@ -924,8 +932,8 @@ where
     M: Messages,
 {
     /// `POST /v1/account/bindings` (§12.1.3, TN-65): after a fresh re-authentication, an offer
-    /// to bind this account to one in another realm; the token goes to the other realm.
-    pub async fn offer_binding(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    /// to bind this account to one in another environment; the token goes to the other environment.
+    pub async fn offer_binding(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -934,11 +942,11 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         match externals.offer_binding(subject, self.clock.now_ms()).await {
@@ -953,12 +961,12 @@ where
         }
     }
 
-    /// `POST /v1/account/bindings/accept` and `/complete` (§12.1.3): this realm's half is
-    /// committed with the other realm's token and its Claim stated; an acceptance answers with
+    /// `POST /v1/account/bindings/accept` and `/complete` (§12.1.3): this environment's half is
+    /// committed with the other environment's token and its Claim stated; an acceptance answers with
     /// the token to carry back. A matching address never binds anything (MD-5).
     pub async fn bind_half(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         token: &str,
         accept: bool,
@@ -972,14 +980,14 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
-        let actor_ref = realm.external(subject).unwrap_or_default();
+        let actor_ref = environment.external(subject).unwrap_or_default();
         let who = Actor {
             actor: &actor_ref,
             correlation: b.correlation,
@@ -998,8 +1006,8 @@ where
         }
     }
 
-    /// `GET /v1/account/bindings`: this realm's halves of the account's cross-realm bindings.
-    pub async fn bindings(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    /// `GET /v1/account/bindings`: this environment's halves of the account's cross-environment bindings.
+    pub async fn bindings(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -1008,11 +1016,11 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         match externals.binding_halves(subject).await {

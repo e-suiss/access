@@ -38,7 +38,7 @@ fn signer_socket(label: &str) -> std::path::PathBuf {
         .join("a.sock")
 }
 
-/// The realm authorization server's routes of `w`, as the server builds them, with no SAML,
+/// The environment authorization server's routes of `w`, as the server builds them, with no SAML,
 /// client certificates, bundles, hooks, claims or CIBA.
 fn oauth_routes(w: &World) -> axum::Router {
     use access_identity_oauth::ports::oauth as po;
@@ -82,13 +82,13 @@ async fn identity(label: &str) -> (World, axum::Router) {
     (w, routes)
 }
 
-/// A form POST to the realm `acme` at `path`.
+/// A form POST to the environment `acme` at `path`.
 fn form(
     path: &str,
     body: &str,
     authorization: Option<&str>,
 ) -> axum::http::Request<axum::body::Body> {
-    let mut b = axum::http::Request::post(format!("/realms/acme{path}"))
+    let mut b = axum::http::Request::post(format!("/env/acme{path}"))
         .header(axum::http::header::HOST, "access.test")
         .header(
             axum::http::header::CONTENT_TYPE,

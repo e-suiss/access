@@ -1,4 +1,4 @@
-// OP-156 m.3 (r), E38, §8.10, §8.13: the realm's signal sources. A KYC provider, an MDM, a risk
+// OP-156 m.3 (r), E38, §8.10, §8.13: the environment's signal sources. A KYC provider, an MDM, a risk
 // service or a DLP system is registered as the issuer whose Claims it sends; registering it gives
 // them no effect, which comes only from the domain's own Acceptance and policies. A posture is
 // the provider's statement ("Compliant per Acme MDM (statement)"), never Access's own, and a
@@ -32,11 +32,14 @@ const KIND = {
   dlp: "signalKindDlp",
 } as const;
 
-/** The signal sources panel of the realm's sign-in settings. */
+/** The signal sources panel of the environment's sign-in settings. */
 export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(() =>
-    adminGet<{ readonly items: readonly Source[] }>(ctx.instance, `realms/${realm}/signal-sources`),
+    adminGet<{ readonly items: readonly Source[] }>(
+      ctx.instance,
+      `envs/${environment}/signal-sources`,
+    ),
   );
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Source["kind"]>("mdm");
@@ -45,7 +48,7 @@ export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, write] = useRun<WriteResult>();
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         ...(key === undefined ? {} : { key }),
         method: "POST",

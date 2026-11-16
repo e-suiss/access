@@ -1,5 +1,5 @@
 //! Path validation with rustls-webpki (RFC 5280 §6, OP-155 m.3 (m)): the presented chain must
-//! lead to one of the realm's accepted CAs, every certificate valid now, the leaf for client
+//! lead to one of the environment's accepted CAs, every certificate valid now, the leaf for client
 //! authentication (an extKeyUsage, when present, names `id-kp-clientAuth`).
 
 use core::time::Duration;

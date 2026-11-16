@@ -1,4 +1,4 @@
-//! The in-process seam for authority token projections (OP-62, OP-150 m.2, §9.9): the realm's
+//! The in-process seam for authority token projections (OP-62, OP-150 m.2, §9.9): the environment's
 //! authorization server asks, the authority core of this process decides the holder's
 //! `projection.issue` commit and the authority signer signs the token. The identity plane never
 //! signs an authority token (§9.9.3 rule 7).

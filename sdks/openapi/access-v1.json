@@ -705,11 +705,11 @@
     "/.well-known/suiss-configuration": {
       "get": {
         "operationId": "getSuissConfiguration",
-        "summary": "The realm's Suiss discovery document (OP-149 m.3); also under the realm path of a path issuer. `Cache-Control: max-age=300`.",
+        "summary": "The environment's Suiss discovery document (OP-149 m.3); also under the environment path of a path issuer. `Cache-Control: max-age=300`.",
         "security": [],
         "responses": {
           "404": {
-            "description": "No realm here.",
+            "description": "No environment here.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -741,10 +741,10 @@
         }
       }
     },
-    "/.well-known/suiss-configuration/realms/{slug}": {
+    "/.well-known/suiss-configuration/env/{slug}": {
       "get": {
-        "operationId": "getRealmSuissConfiguration",
-        "summary": "The same document of the realm `slug`, for a reader that names the realm rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
+        "operationId": "getEnvironmentSuissConfiguration",
+        "summary": "The same document of the environment `slug`, for a reader that names the environment rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
         "security": [],
         "parameters": [
           {
@@ -758,7 +758,7 @@
         ],
         "responses": {
           "404": {
-            "description": "No realm here.",
+            "description": "No environment here.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -812,7 +812,7 @@
     "/access/v1/tenants/{tenant}/subjects:resolve": {
       "post": {
         "operationId": "resolveSubjects",
-        "summary": "Between a realm's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37).",
+        "summary": "Between an environment's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37).",
         "security": [
           {
             "client": []
@@ -863,7 +863,7 @@
             }
           },
           "404": {
-            "description": "tenant-unknown, or client-unknown: no such realm or active client.",
+            "description": "tenant-unknown, or client-unknown: no such environment or active client.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1094,7 +1094,7 @@
     "/access/v1/tenants/{tenant}/pairing/challenges": {
       "post": {
         "operationId": "createPairingChallenges",
-        "summary": "For each realm, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again.",
+        "summary": "For each environment, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again.",
         "security": [
           {
             "platform_client": []
@@ -1122,7 +1122,7 @@
         },
         "responses": {
           "400": {
-            "description": "invalid-request, realms or unknown-member.",
+            "description": "invalid-request, environments or unknown-member.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1142,7 +1142,7 @@
             }
           },
           "404": {
-            "description": "tenant-unknown or realm-unknown.",
+            "description": "tenant-unknown or environment-unknown.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1177,7 +1177,7 @@
     "/access/v1/tenants/{tenant}/pairing": {
       "post": {
         "operationId": "pair",
-        "summary": "The product's self-signed Exercises for the challenged realms (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)).",
+        "summary": "The product's self-signed Exercises for the challenged environments (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)).",
         "security": [
           {
             "platform_client": []
@@ -1225,7 +1225,7 @@
             }
           },
           "404": {
-            "description": "tenant-unknown or realm-unknown.",
+            "description": "tenant-unknown or environment-unknown.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1861,7 +1861,7 @@
             }
           },
           "404": {
-            "description": "No live push transmitter with this id in the realm."
+            "description": "No live push transmitter with this id in the environment."
           },
           "413": {
             "description": "The SET is larger than 64 KiB."
@@ -3846,7 +3846,7 @@
             }
           },
           "404": {
-            "description": "not-found: the realm has no such record.",
+            "description": "not-found: the environment has no such record.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4289,7 +4289,7 @@
         "required": [
           "tenant",
           "organizations",
-          "realms",
+          "environments",
           "region",
           "status",
           "version",
@@ -4306,12 +4306,12 @@
               "type": "string"
             }
           },
-          "realms": {
+          "environments": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TenantRealm"
+              "$ref": "#/components/schemas/TenantEnvironment"
             },
-            "description": "The tenant's live realms, by slug."
+            "description": "The tenant's live environments, by slug."
           },
           "region": {
             "type": "string",
@@ -4336,7 +4336,7 @@
           }
         }
       },
-      "TenantRealm": {
+      "TenantEnvironment": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -4348,15 +4348,15 @@
           "id": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": "The realm, as events name it in `accessrealm` and `realm`."
+            "description": "The environment, as events name it in `accessenvironment` and `environment`."
           },
           "issuer": {
             "type": "string",
-            "description": "The realm's fixed issuer; its `/.well-known/suiss-configuration` describes it."
+            "description": "The environment's fixed issuer; its `/.well-known/suiss-configuration` describes it."
           },
           "slug": {
             "type": "string",
-            "description": "The realm's immutable slug."
+            "description": "The environment's immutable slug."
           }
         }
       },
@@ -4398,7 +4398,7 @@
           },
           "issuer": {
             "type": "string",
-            "description": "The realm issuer."
+            "description": "The environment issuer."
           },
           "suiss_region": {
             "type": "string",
@@ -4418,7 +4418,7 @@
             "properties": {
               "ssf_configuration": {
                 "type": "string",
-                "description": "The realm's SSF transmitter metadata (SSF 1.0 §7.1)."
+                "description": "The environment's SSF transmitter metadata (SSF 1.0 §7.1)."
               },
               "webhooks": {
                 "const": "urn:suiss:access:delivery:webhook",
@@ -4514,18 +4514,18 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "realm",
+          "environment",
           "client_id"
         ],
         "properties": {
-          "realm": {
+          "environment": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": "The realm, as the tenant snapshot names it."
+            "description": "The environment, as the tenant snapshot names it."
           },
           "client_id": {
             "type": "string",
-            "description": "The client whose pairwise `sub` is meant, its sector (MD-10): a client of the realm, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch)."
+            "description": "The client whose pairwise `sub` is meant, its sector (MD-10): a client of the environment, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch)."
           },
           "parties": {
             "type": "array",
@@ -4555,16 +4555,16 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "realm",
+          "environment",
           "client_id",
           "resolved",
           "unknown",
           "consistency_token"
         ],
         "properties": {
-          "realm": {
+          "environment": {
             "type": "string",
-            "description": "The realm."
+            "description": "The environment."
           },
           "client_id": {
             "type": "string",
@@ -4586,7 +4586,7 @@
                 },
                 "client_id": {
                   "type": "string",
-                  "description": "For a `sub` that is the pairwise pseudonym of a client of the realm without a Party (the `sub` of its service tokens), that client."
+                  "description": "For a `sub` that is the pairwise pseudonym of a client of the environment without a Party (the `sub` of its service tokens), that client."
                 },
                 "sub": {
                   "type": "string",
@@ -4790,16 +4790,16 @@
         "additionalProperties": false,
         "required": [],
         "properties": {
-          "realms": {
+          "environments": {
             "type": "array",
             "items": {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-              "description": "A live realm of the tenant, as the tenant snapshot names it."
+              "description": "A live environment of the tenant, as the tenant snapshot names it."
             },
             "minItems": 1,
             "maxItems": 64,
-            "description": "The realms to pair with; every live realm of the tenant when absent (OP-149 m.16 (d))."
+            "description": "The environments to pair with; every live environment of the tenant when absent (OP-149 m.16 (d))."
           }
         }
       },
@@ -4847,14 +4847,14 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "realm",
+          "environment",
           "status"
         ],
         "properties": {
-          "realm": {
+          "environment": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": "The realm."
+            "description": "The environment."
           },
           "status": {
             "type": "string",
@@ -4867,7 +4867,7 @@
           "domain": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]+$",
-            "description": "The realm's governing DomainID, 32 bytes."
+            "description": "The environment's governing DomainID, 32 bytes."
           },
           "basis": {
             "type": "string",
@@ -4944,15 +4944,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "realm",
+          "environment",
           "challenge",
           "ais"
         ],
         "properties": {
-          "realm": {
+          "environment": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": "The realm of the challenge."
+            "description": "The environment of the challenge."
           },
           "challenge": {
             "type": "string",
@@ -9927,7 +9927,7 @@
         "properties": {
           "attention": {
             "type": "string",
-            "description": "The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue."
+            "description": "The coordinator's public Needs Attention endpoint the environment named (`idp.environment.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue."
           }
         }
       },
@@ -9977,7 +9977,7 @@
         "additionalProperties": false,
         "required": [
           "tenant",
-          "realm",
+          "environment",
           "record",
           "status",
           "at"
@@ -9987,10 +9987,10 @@
             "type": "string",
             "description": "The tenant's external id (tnt_), as the Relay message's accesstenant names it."
           },
-          "realm": {
+          "environment": {
             "type": "string",
             "format": "uuid",
-            "description": "The realm, as the Relay message's accessrealm names it."
+            "description": "The environment, as the Relay message's accessenvironment names it."
           },
           "record": {
             "type": "string",
@@ -10025,7 +10025,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform realm's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4)."
+        "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform environment's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4)."
       },
       "stream_bearer": {
         "type": "http",

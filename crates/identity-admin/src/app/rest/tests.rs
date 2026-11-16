@@ -10,7 +10,7 @@ use access_crypto::opaque_id::IdKey;
 use serde_json::json;
 
 use super::*;
-use crate::domain::realm::{CONSOLE_ABSOLUTE_MAX_MS, CONSOLE_IDLE_MAX_MS};
+use crate::domain::environment::{CONSOLE_ABSOLUTE_MAX_MS, CONSOLE_IDLE_MAX_MS};
 
 fn ids() -> IdKey {
     IdKey::new(Secret::new([7; 32]))
@@ -110,25 +110,25 @@ fn each_operation_compiles_into_its_one_change() {
             None,
             json!({"methods": ["email", "passkey", "social:google"], "mfa_required": true,
                    "required_fields": ["email"], "domain_deny": ["spam.example"]}),
-            "idp.realm.signin_policy",
+            "idp.environment.signin_policy",
         ),
         (
             Op::PutSessionPolicy,
             None,
             json!({"absolute_ms": "3600000", "idle_ms": 600_000, "binding": "ip"}),
-            "idp.realm.session_policy",
+            "idp.environment.session_policy",
         ),
         (
             Op::PutBranding,
             None,
             json!({"display_name": "Acme"}),
-            "idp.realm.branding",
+            "idp.environment.branding",
         ),
         (
             Op::PutRpId,
             None,
             json!({"rp_id": "acme.example", "acknowledge_passkey_loss": "0"}),
-            "idp.realm.rp_id",
+            "idp.environment.rp_id",
         ),
         (
             Op::PutMapper,
@@ -189,45 +189,57 @@ fn catalog_8_writes_compile_into_their_changes_and_are_not_yet_served() {
     let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
     for (op, body, action) in [
         (
-            Op::RehomeRealm,
+            Op::RehomeEnvironment,
             json!({"domain": domain}),
-            "idp.realm.rehome",
+            "idp.environment.rehome",
         ),
         (
             Op::PutResidency,
             json!({"region": "eu-central", "class": "regional"}),
-            "idp.realm.residency",
+            "idp.environment.residency",
         ),
         (
             Op::PutDrProfile,
             json!({"rpo_s": 60}),
-            "idp.realm.dr_profile",
+            "idp.environment.dr_profile",
         ),
-        (Op::PutDrProfile, json!({}), "idp.realm.dr_profile_close"),
-        (Op::PutRateLimit, json!({"rps": 50}), "idp.realm.rate_limit"),
+        (
+            Op::PutDrProfile,
+            json!({}),
+            "idp.environment.dr_profile_close",
+        ),
+        (
+            Op::PutRateLimit,
+            json!({"rps": 50}),
+            "idp.environment.rate_limit",
+        ),
         (
             Op::PutCryptoProfile,
             json!({"fips": true}),
-            "idp.realm.crypto_profile",
+            "idp.environment.crypto_profile",
         ),
         (
             Op::PutHashProfile,
             json!({"profile": "high-memory"}),
-            "idp.realm.hash_profile",
+            "idp.environment.hash_profile",
         ),
         (
             Op::PutAuditTier,
             json!({"hot_days": 90, "target": "s3://audit"}),
-            "idp.realm.audit_tier",
+            "idp.environment.audit_tier",
         ),
-        (Op::PutAuditTier, json!({}), "idp.realm.audit_tier_close"),
+        (
+            Op::PutAuditTier,
+            json!({}),
+            "idp.environment.audit_tier_close",
+        ),
     ] {
         let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
         assert_eq!(change.action().label(), action, "{op:?}");
         // OP-158 m.3 (o), (r), (v), (w), (y)
         let served = matches!(
             op,
-            Op::RehomeRealm
+            Op::RehomeEnvironment
                 | Op::PutResidency
                 | Op::PutAuditTier
                 | Op::PutCryptoProfile
@@ -265,17 +277,17 @@ fn catalog_9_writes_compile_into_their_changes() {
         (
             Op::PutSigningProfile,
             json!({"profile": "ml-dsa-65"}),
-            "idp.realm.signing_profile",
+            "idp.environment.signing_profile",
         ),
         (
             Op::PutSigningProfile,
             json!({}),
-            "idp.realm.signing_profile_close",
+            "idp.environment.signing_profile_close",
         ),
         (
             Op::PutKexShare,
             json!({"mode": "advertise-only"}),
-            "idp.realm.kex_share",
+            "idp.environment.kex_share",
         ),
     ] {
         let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
@@ -703,8 +715,8 @@ fn upstream_mapping_and_its_assurance_map_are_reserved_ct3_actions() {
     assert_eq!(
         (on.action(), off.action()),
         (
-            access_internal_api::idp::IdpAction::RealmHrd,
-            access_internal_api::idp::IdpAction::RealmHrdClose
+            access_internal_api::idp::IdpAction::EnvironmentHrd,
+            access_internal_api::idp::IdpAction::EnvironmentHrdClose
         )
     );
 }

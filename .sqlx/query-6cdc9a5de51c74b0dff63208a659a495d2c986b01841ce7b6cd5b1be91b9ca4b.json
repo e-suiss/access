@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_dr_profiles (tenant_id, environment_id, version, rpo_s, domain_id, decision_pos)\n         SELECT $1, $2,\n                COALESCE((SELECT max(version) FROM access.environment_dr_profiles\n                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cdc9a5de51c74b0dff63208a659a495d2c986b01841ce7b6cd5b1be91b9ca4b"
+}

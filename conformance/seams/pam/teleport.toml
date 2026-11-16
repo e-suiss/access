@@ -2,7 +2,7 @@
 # for each access request it asks Access with the requesting user's own Actor Intent Statement,
 # carried beside the request, and sets the request's state from the answer. Teleport opens the
 # session only for an approved request and keeps its recording; the SSH certificate comes from
-# the realm's Access SSH CA (`access ssh login`).
+# the environment's Access SSH CA (`access ssh login`).
 vendor = "Teleport"
 integration = "access request plugin"
 recorded = "recorded/teleport-access-request.json"

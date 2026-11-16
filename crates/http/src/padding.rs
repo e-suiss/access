@@ -29,7 +29,7 @@ const AUTHORITY: [&str; 4] = [
     "/access/v1/eligibility:check",
 ];
 
-/// The [ID] answers that are padded, by path under the realm's host or `/realms/{slug}`: `*`
+/// The [ID] answers that are padded, by path under the environment's host or `/env/{slug}`: `*`
 /// is one path segment.
 const IDENTITY: [&str; 9] = [
     "/v1/login/flows",
@@ -63,11 +63,11 @@ pub fn padded(path: &str) -> bool {
     if AUTHORITY.contains(&path) {
         return true;
     }
-    let realm = path
-        .strip_prefix("/realms/")
+    let environment = path
+        .strip_prefix("/env/")
         .and_then(|rest| rest.find('/').and_then(|at| rest.get(at..)))
         .unwrap_or(path);
-    IDENTITY.iter().any(|p| matches(p, realm))
+    IDENTITY.iter().any(|p| matches(p, environment))
 }
 
 /// The size class of a body of `len` bytes; `None` above the largest class.
@@ -134,9 +134,9 @@ mod tests {
     fn the_sensitive_paths_and_classes() {
         assert!(padded("/access/v1/explain"));
         assert!(padded("/v1/login/flows"));
-        assert!(padded("/realms/acme/v1/login/flows/flw_1"));
+        assert!(padded("/env/acme/v1/login/flows/flw_1"));
         assert!(padded("/v1/recovery/rcv_1/extension"));
-        assert!(padded("/realms/acme/v1/invitations/inv_1"));
+        assert!(padded("/env/acme/v1/invitations/inv_1"));
         assert!(!padded("/v1/invitations/"));
         assert!(!padded("/v1/login/flows/flw_1/extra"));
         assert!(!padded("/v1/login/flows/"));

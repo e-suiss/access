@@ -21,7 +21,7 @@ control = "164.312(a)(2)(i) unique user identification"
 status = "met"
 rules = ["IDI-2"]
 tests = ["crates/identity-account/tests/accounts.rs::a_taken_identifier_creates_nothing"]
-note = "Each login identifier names one account of one realm."
+note = "Each login identifier names one account of one environment."
 
 [[control]]
 control = "164.312(a)(2)(ii) emergency access"
@@ -69,7 +69,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
   "crates/identity-webauthn/tests/ceremony.rs::es256_device_bound_passkey_registers_and_authenticates_at_aal3",
 ]
-note = "Users authenticate with the factors the realm requires."
+note = "Users authenticate with the factors the environment requires."
 
 [[control]]
 control = "164.312(e)(1) transmission security"

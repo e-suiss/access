@@ -150,15 +150,19 @@ const ACCOUNT: &str = "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc";
 fn identity_events() -> Vec<IdentityEvent> {
     use access_identity_account::domain::events::{AccountEvent, CredentialChange, EventOrder};
     use access_identity_account::domain::status::AccountStatus;
-    let realm = [2; 16];
+    let environment = [2; 16];
     let mut out = vec![
-        IdentityEvent::account(&EventOrder::created([10; 32], &realm, ACCOUNT, 5)),
+        IdentityEvent::account(&EventOrder::created([10; 32], &environment, ACCOUNT, 5)),
         IdentityEvent::account(&EventOrder::session_revoked(
-            [11; 32], &realm, ACCOUNT, 3, 5,
+            [11; 32],
+            &environment,
+            ACCOUNT,
+            3,
+            5,
         )),
         IdentityEvent::account(&EventOrder::credential(
             [12; 32],
-            &realm,
+            &environment,
             ACCOUNT,
             "webauthn",
             CredentialChange::Added,
@@ -167,7 +171,7 @@ fn identity_events() -> Vec<IdentityEvent> {
         IdentityEvent::membership(
             IdentityKind::MembershipAdded,
             [13; 32],
-            &realm,
+            &environment,
             ACCOUNT,
             &[4; 16],
             5,
@@ -175,20 +179,20 @@ fn identity_events() -> Vec<IdentityEvent> {
         IdentityEvent::membership(
             IdentityKind::MembershipRemoved,
             [14; 32],
-            &realm,
+            &environment,
             ACCOUNT,
             &[4; 16],
             5,
         ),
-        IdentityEvent::preference_changed([15; 32], &realm, ACCOUNT, &["marketing.email"], 5),
-        IdentityEvent::document_accepted([16; 32], &realm, ACCOUNT, "terms", "2026-11-01", 5),
-        IdentityEvent::agent_suspended([17; 32], &realm, &[5; 16], 5),
-        IdentityEvent::agent_sponsor_assigned([19; 32], &realm, &[5; 16], &[6; 16], 5),
-        IdentityEvent::login_failed_surge([18; 32], &realm, 250, 300_000, 5),
+        IdentityEvent::preference_changed([15; 32], &environment, ACCOUNT, &["marketing.email"], 5),
+        IdentityEvent::document_accepted([16; 32], &environment, ACCOUNT, "terms", "2026-11-01", 5),
+        IdentityEvent::agent_suspended([17; 32], &environment, &[5; 16], 5),
+        IdentityEvent::agent_sponsor_assigned([19; 32], &environment, &[5; 16], &[6; 16], 5),
+        IdentityEvent::login_failed_surge([18; 32], &environment, 250, 300_000, 5),
         IdentityEvent::scim(
             IdentityKind::ScimProvisioned,
             [40; 32],
-            &realm,
+            &environment,
             (
                 "scim_01jd8x7k2m3n4p5q6r7s8t9v0w",
                 ScimResource::User,
@@ -199,7 +203,7 @@ fn identity_events() -> Vec<IdentityEvent> {
         IdentityEvent::scim(
             IdentityKind::ScimDeprovisioned,
             [41; 32],
-            &realm,
+            &environment,
             (
                 "scim_01jd8x7k2m3n4p5q6r7s8t9v0w",
                 ScimResource::Group,
@@ -209,29 +213,41 @@ fn identity_events() -> Vec<IdentityEvent> {
         ),
         IdentityEvent::org_sso_enforced(
             [42; 32],
-            &realm,
+            &environment,
             &[4; 16],
             ("acme-entra", InvitationFate::Cancel),
             5,
         ),
-        IdentityEvent::hr_record_due([43; 32], &realm, ("personio", ACCOUNT, HrChange::End), 5, 5),
-        IdentityEvent::proxy_registered([44; 32], &realm, ("wiki", "caddy"), 5),
+        IdentityEvent::hr_record_due(
+            [43; 32],
+            &environment,
+            ("personio", ACCOUNT, HrChange::End),
+            5,
+            5,
+        ),
+        IdentityEvent::proxy_registered([44; 32], &environment, ("wiki", "caddy"), 5),
         IdentityEvent::ssh_certificate_issued(
             [45; 32],
-            &realm,
+            &environment,
             (&[4; 16], CertificateHolder::Agent, "prj_x", "prod-web"),
             5,
             5,
         ),
-        IdentityEvent::export_sink_failed([46; 32], &realm, ("splunk", "http"), 4, 5),
+        IdentityEvent::export_sink_failed([46; 32], &environment, ("splunk", "http"), 4, 5),
         IdentityEvent::support_access_changed(
             [47; 32],
-            &realm,
+            &environment,
             (ACCOUNT, "grt_x", &[5; 16], "zendesk"),
             "granted",
             5,
         ),
-        IdentityEvent::breakglass_used([48; 32], &realm, (ACCOUNT, "exr_x", &[6; 16]), (2, 9), 5),
+        IdentityEvent::breakglass_used(
+            [48; 32],
+            &environment,
+            (ACCOUNT, "exr_x", &[6; 16]),
+            (2, 9),
+            5,
+        ),
     ];
     for (i, (from, to)) in [
         (AccountStatus::Locked, AccountStatus::Active),
@@ -246,7 +262,7 @@ fn identity_events() -> Vec<IdentityEvent> {
         out.push(IdentityEvent::account(&EventOrder::status(
             kind,
             [20_u8.wrapping_add(i as u8); 32],
-            &realm,
+            &environment,
             ACCOUNT,
             to,
             5,
@@ -348,7 +364,7 @@ fn built_events_meet_the_contracts() {
             [1; 32],
             &ClientChange {
                 tenant: TENANT,
-                realm: &[2; 16],
+                environment: &[2; 16],
                 client_id: "cli_abc",
                 exercise: &[3; 32],
                 platform_product: Some(&PlatformProduct::parse(product).unwrap()),
@@ -396,7 +412,7 @@ fn built_events_meet_the_contracts() {
     names.dedup();
     assert_eq!(names.len(), NAMES.len(), "{names:?}");
     for r in &built {
-        let mut claims = set_claims(r, "https://id.example/realms/shop", "work", 1_793_750_400);
+        let mut claims = set_claims(r, "https://id.example/env/shop", "work", 1_793_750_400);
         assert_set(&claims);
         // OP-149 m.17 (e)
         set_tenant(&mut claims, OTHER);
@@ -412,7 +428,7 @@ fn built_events_meet_the_contracts() {
 // §7.1, §8.1.1, §2.5
 #[test]
 fn transmitter_documents_meet_the_contracts() {
-    let iss = "https://id.example/realms/shop";
+    let iss = "https://id.example/env/shop";
     assert_valid(
         "ssf-configuration.schema.json",
         &ssf_configuration(iss, &format!("{iss}/jwks.json")),
@@ -463,7 +479,7 @@ fn every_signal() -> Vec<Signal> {
 }
 
 fn signal_set(s: &Signal, receiver: &[u8]) -> Json {
-    let iss = "https://id.example/realms/shop";
+    let iss = "https://id.example/env/shop";
     let jti = derived_id("access/signal-set/v1", &s.id, receiver);
     let txn = derived_id("access/signal-txn/v1", &s.id, receiver);
     let sub_id = match s.subject {
@@ -540,7 +556,7 @@ fn counterparts_meet_the_caep_contracts() {
         assert_eq!(forms(r.name, Profile::Both, &events).len(), 2);
         let claims = standard_claims(
             &Envelope {
-                iss: "https://id.example/realms/shop",
+                iss: "https://id.example/env/shop",
                 aud: "rp",
                 iat_s: 1,
                 jti: &derived_id("access/set-counterpart/v1", &[4; 32], uri.as_bytes()),

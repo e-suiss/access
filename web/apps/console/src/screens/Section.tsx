@@ -1,5 +1,5 @@
 // IA-5, §8.17.4.1, Ek B 2995: one section and its screens. Only the screens the viewer can
-// exercise are listed; "Sign-in settings" (realm configuration) is its own screen apart from
+// exercise are listed; "Sign-in settings" (environment configuration) is its own screen apart from
 // authority administration, and billing is not part of the console.
 import type { MouseEvent, ReactElement } from "react";
 
@@ -69,7 +69,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   export: "screenExport",
   recovery: "screenRecovery",
   tenants: "screenTenants",
-  realms: "screenRealms",
+  envs: "screenEnvironments",
   sandboxes: "screenSandboxes",
   operator: "screenOperator",
 };
@@ -165,8 +165,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     // OP-159 m.41 (b)
     case "tenants":
       return <P.Tenants ctx={ctx} />;
-    case "realms":
-      return <P.Realms ctx={ctx} />;
+    case "envs":
+      return <P.Environments ctx={ctx} />;
     case "sandboxes":
       return <P.Sandboxes ctx={ctx} />;
     case "operator":
@@ -199,7 +199,7 @@ export function SectionPage({
           {shown.map((s) => (
             <li key={s}>
               <a
-                href={consoleHref(ctx.session.realm, `${section}/${s}`)}
+                href={consoleHref(ctx.session.environment, `${section}/${s}`)}
                 aria-current={s === current ? "page" : undefined}
                 onClick={go(`${section}/${s}`)}
                 className={cn(

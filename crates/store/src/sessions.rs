@@ -250,9 +250,9 @@ impl FlowRecord {
 }
 
 impl TenantTx {
-    fn realm_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+    fn environment_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Stores a new flow.
@@ -260,13 +260,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_flow(&mut self, f: &NewFlow<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query!(
             "INSERT INTO access.auth_flows
-               (tenant_id, realm_id, day, flow_hash, device_hash, resume_hash, expires_ms, state)
+               (tenant_id, environment_id, day, flow_hash, device_hash, resume_hash, expires_ms, state)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tenant,
-            realm,
+            environment,
             f.day,
             f.flow_hash.as_slice(),
             f.device_hash.as_slice(),
@@ -288,15 +288,15 @@ impl TenantTx {
         from_day: i32,
         hash: &[u8; 32],
     ) -> Result<Option<FlowRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query_as!(
             FlowRecord,
             "SELECT day, flow_hash, device_hash, resume_hash, version, status, expires_ms, state
                FROM access.auth_flows
-              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND flow_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day >= $3 AND flow_hash = $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             from_day,
             hash.as_slice(),
         )
@@ -315,15 +315,15 @@ impl TenantTx {
         from_day: i32,
         hash: &[u8; 32],
     ) -> Result<Option<FlowRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query_as!(
             FlowRecord,
             "SELECT day, flow_hash, device_hash, resume_hash, version, status, expires_ms, state
                FROM access.auth_flows
-              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND resume_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day >= $3 AND resume_hash = $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             from_day,
             hash.as_slice(),
         )
@@ -338,14 +338,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn update_flow(&mut self, u: &FlowUpdate<'_>) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.auth_flows
                 SET version = version + 1, status = $6, state = $7, resume_hash = $8
-              WHERE tenant_id = $1 AND realm_id = $2 AND day = $3 AND flow_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day = $3 AND flow_hash = $4
                 AND version = $5 AND status = 'open'",
             tenant,
-            realm,
+            environment,
             u.day,
             u.flow_hash.as_slice(),
             u.version,
@@ -364,15 +364,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_session(&mut self, s: &NewSession<'_>) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.login_sessions
-                 (tenant_id, realm_id, cookie_hash, subject_id, session_epoch, keep_signed_in,
+                 (tenant_id, environment_id, cookie_hash, subject_id, session_epoch, keep_signed_in,
                   created_ms, auth_time_ms, last_seen_ms, idle_ms, expires_ms, assurance)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $7, $9, $10, $11)
                RETURNING session_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             s.cookie_hash.as_slice(),
             uuid(s.subject),
             s.session_epoch,
@@ -397,7 +397,7 @@ impl TenantTx {
         &mut self,
         hash: &[u8; 32],
     ) -> Result<Option<SessionRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         Ok(sqlx::query_as!(
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
@@ -407,11 +407,11 @@ impl TenantTx {
                     l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
-                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
-              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.cookie_hash = $3
+                 ON s.tenant_id = l.tenant_id AND s.environment_id = l.environment_id AND s.subject_id = l.subject_id
+              WHERE l.tenant_id = $1 AND l.environment_id = $2 AND l.cookie_hash = $3
               FOR UPDATE OF l",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -424,7 +424,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn session_by_id(&mut self, id: [u8; 16]) -> Result<Option<SessionRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         Ok(sqlx::query_as!(
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
@@ -434,11 +434,11 @@ impl TenantTx {
                     l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
-                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
-              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.session_id = $3
+                 ON s.tenant_id = l.tenant_id AND s.environment_id = l.environment_id AND s.subject_id = l.subject_id
+              WHERE l.tenant_id = $1 AND l.environment_id = $2 AND l.session_id = $3
               FOR UPDATE OF l",
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -454,7 +454,7 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<SessionRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         Ok(sqlx::query_as!(
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
@@ -464,11 +464,11 @@ impl TenantTx {
                     l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
-                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
-              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.subject_id = $3 AND l.ended_ms IS NULL
+                 ON s.tenant_id = l.tenant_id AND s.environment_id = l.environment_id AND s.subject_id = l.subject_id
+              WHERE l.tenant_id = $1 AND l.environment_id = $2 AND l.subject_id = $3 AND l.ended_ms IS NULL
               ORDER BY l.session_id DESC",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -483,12 +483,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn touch_session(&mut self, id: [u8; 16], at_ms: i64) -> Result<(), StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query!(
             "UPDATE access.login_sessions SET last_seen_ms = greatest(last_seen_ms, $4)
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             at_ms,
         )
@@ -509,12 +509,12 @@ impl TenantTx {
         at_ms: i64,
         reason: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.login_sessions SET ended_ms = $4, end_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             at_ms,
             reason,
@@ -529,15 +529,15 @@ impl TenantTx {
         let notify = sqlx::query_scalar!(
             "WITH revoked AS (
                UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = $5
-                WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND revoked_ms IS NULL
+                WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND revoked_ms IS NULL
                RETURNING grant_id, client_uuid)
              SELECT r.grant_id FROM revoked r
                JOIN access.idp_clients c
-                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid
+                 ON c.tenant_id = $1 AND c.environment_id = $2 AND c.client_uuid = r.client_uuid
               WHERE c.backchannel_logout_uri IS NOT NULL
               ORDER BY r.grant_id",
             tenant,
-            realm,
+            environment,
             uuid(id),
             at_ms,
             grant_reason,
@@ -558,12 +558,12 @@ impl TenantTx {
         challenge: &[u8; 32],
         expires_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.login_sessions SET dbsc_challenge = $4, dbsc_challenge_expires_ms = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             challenge.as_slice(),
             expires_ms,
@@ -587,16 +587,16 @@ impl TenantTx {
         cookie_hash: &[u8; 32],
         cookie_expires_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.login_sessions
                 SET dbsc_key = $4, dbsc_bound_ms = $5, dbsc_challenge = NULL,
                     dbsc_challenge_expires_ms = NULL, dbsc_cookie_hash = $6,
                     dbsc_cookie_expires_ms = $7
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL
                 AND dbsc_key IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             key.as_slice(),
             now_ms,
@@ -620,15 +620,15 @@ impl TenantTx {
         cookie_hash: &[u8; 32],
         cookie_expires_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.login_sessions
                 SET dbsc_challenge = NULL, dbsc_challenge_expires_ms = NULL,
                     dbsc_cookie_hash = $4, dbsc_cookie_expires_ms = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL
                 AND dbsc_key IS NOT NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             cookie_hash.as_slice(),
             cookie_expires_ms,
@@ -647,17 +647,17 @@ impl TenantTx {
         &mut self,
         session: [u8; 16],
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let found = sqlx::query_scalar!(
             r#"SELECT instance_id AS "instance_id!" FROM (
                  SELECT instance_id, 0 AS rank FROM access.session_instances
-                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+                  WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND status = 'active'
                  UNION ALL
                  SELECT instance_id, 1 AS rank FROM access.device_keys
-                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+                  WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND status = 'active'
                ) b ORDER BY rank LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             uuid(session),
         )
         .fetch_optional(&mut *self.tx)
@@ -667,17 +667,17 @@ impl TenantTx {
             .transpose()
     }
 
-    /// How many CSP reports the realm received since `since_ms` (OP-153 m.3 (t)).
+    /// How many CSP reports the environment received since `since_ms` (OP-153 m.3 (t)).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn csp_reports_since(&mut self, since_ms: i64) -> Result<i64, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         Ok(sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.csp_reports
-                WHERE tenant_id = $1 AND realm_id = $2 AND received_ms > $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND received_ms > $3"#,
             tenant,
-            realm,
+            environment,
             since_ms,
         )
         .fetch_one(&mut *self.tx)
@@ -689,13 +689,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_csp_report(&mut self, r: &CspReport<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query!(
-            "INSERT INTO access.csp_reports (tenant_id, realm_id, received_ms, expires_ms,
+            "INSERT INTO access.csp_reports (tenant_id, environment_id, received_ms, expires_ms,
                     disposition, directive, blocked, page_path, source_pseudonym)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             r.received_ms,
             r.expires_ms,
             r.disposition,
@@ -724,15 +724,15 @@ impl TenantTx {
         assurance: &[u8],
         step_up: bool,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.login_sessions
                 SET session_epoch = $5, auth_time_ms = $6, assurance = $7,
                     step_up_ms = CASE WHEN $8 THEN $6 ELSE step_up_ms END
-              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL
                 AND session_epoch = $4",
             tenant,
-            realm,
+            environment,
             uuid(id),
             from,
             to,
@@ -758,13 +758,13 @@ impl TenantTx {
         created_ms: i64,
         expires_ms: i64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         sqlx::query!(
             "INSERT INTO access.device_markers
-               (tenant_id, realm_id, marker_hash, subject_id, session_epoch, created_ms, expires_ms)
+               (tenant_id, environment_id, marker_hash, subject_id, session_epoch, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
             uuid(subject),
             session_epoch,
@@ -781,12 +781,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn marker(&mut self, hash: &[u8; 32]) -> Result<Option<MarkerRow>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let row = sqlx::query!(
             "SELECT subject_id, session_epoch, expires_ms, revoked_ms FROM access.device_markers
-              WHERE tenant_id = $1 AND realm_id = $2 AND marker_hash = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND marker_hash = $3",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -808,12 +808,12 @@ impl TenantTx {
         subject: [u8; 16],
         at_ms: i64,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         Ok(sqlx::query!(
             "UPDATE access.device_markers SET revoked_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND revoked_ms IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             at_ms,
         )
@@ -832,13 +832,13 @@ impl TenantTx {
         credential: [u8; 16],
         step: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_credentials SET otp_last_step = $4, last_used_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'
                 AND (otp_last_step IS NULL OR otp_last_step < $4)",
             tenant,
-            realm,
+            environment,
             uuid(credential),
             step,
         )
@@ -858,14 +858,14 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<(String, crate::accounts::StoredValue)>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let row = sqlx::query!(
             "SELECT kind, value, value_index, pii_class, nonce, ciphertext FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 AND kind IN ('email', 'phone')
               ORDER BY kind = 'email' DESC, identifier_id LIMIT 1",
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -895,16 +895,16 @@ impl TenantTx {
         since_ms: i64,
         limit: i64,
     ) -> Result<Vec<EpochChange>, StoreError> {
-        let (tenant, realm) = self.realm_scope()?;
+        let (tenant, environment) = self.environment_scope()?;
         let rows = sqlx::query!(
             r#"SELECT subject_id, session_epoch,
                       (extract(epoch FROM session_epoch_at) * 1000)::bigint AS "at_ms!"
                  FROM access.identity_subjects
-                WHERE tenant_id = $1 AND realm_id = $2
+                WHERE tenant_id = $1 AND environment_id = $2
                   AND session_epoch_at > to_timestamp($3::bigint / 1000.0)
                 ORDER BY session_epoch_at LIMIT $4"#,
             tenant,
-            realm,
+            environment,
             since_ms,
             limit,
         )

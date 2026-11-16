@@ -1,6 +1,6 @@
-//! The realm's post-quantum signing profile on the real server path (CR-41, CR-43, CR-44, HL-27,
+//! The environment's post-quantum signing profile on the real server path (CR-41, CR-43, CR-44, HL-27,
 //! OP-159 m.3 (a), (d), (o), (p), (r), (t), OP-153 m.3 (gg)): `putSigningProfile` opens an
-//! ML-DSA key set in the identity signer, the realm's JWKS publishes it as `AKP`, discovery
+//! ML-DSA key set in the identity signer, the environment's JWKS publishes it as `AKP`, discovery
 //! declares it, and only a client that registered ML-DSA gets ML-DSA tokens; FIPS and the
 //! post-quantum profile exclude each other in either order; without an ML-DSA key store the
 //! profile is refused.
@@ -11,9 +11,9 @@ use access_kernel::verify::jws::{Origin, verify_compact};
 use super::writes::Written;
 use super::*;
 
-const SIGNING: &str = "/admin/v1/realms/acme/signing";
-const PROFILE: &str = "/admin/v1/realms/acme/settings/signing-profile";
-const CRYPTO: &str = "/admin/v1/realms/acme/settings/crypto-profile";
+const SIGNING: &str = "/admin/v1/envs/acme/signing";
+const PROFILE: &str = "/admin/v1/envs/acme/settings/signing-profile";
+const CRYPTO: &str = "/admin/v1/envs/acme/settings/crypto-profile";
 
 async fn put(c: &Console, op: &str, path: &str, body: serde_json::Value) -> Written {
     c.rest_write(&Method::PUT, path, (op, None), body, None)
@@ -57,7 +57,7 @@ async fn id_token_algs(c: &Console) -> Vec<String> {
         .collect()
 }
 
-/// The `AKP` keys of the realm's JWKS as a relying party reads them.
+/// The `AKP` keys of the environment's JWKS as a relying party reads them.
 fn akp(doc: &str) -> KeySet {
     let doc: serde_json::Value = serde_json::from_str(doc).unwrap();
     let mut set = KeySet::default();
@@ -87,7 +87,7 @@ async fn client(c: &Console, name: &str) -> (String, String) {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/clients",
+            "/admin/v1/envs/acme/clients",
             ("createClient", None),
             serde_json::json!({
                 "display_name": name,
@@ -107,7 +107,7 @@ async fn client(c: &Console, name: &str) -> (String, String) {
 async fn client_alg(c: &Console, id: &str, alg: &str) -> Written {
     c.rest_write(
         &Method::PUT,
-        &format!("/admin/v1/realms/acme/clients/{id}/signing-alg"),
+        &format!("/admin/v1/envs/acme/clients/{id}/signing-alg"),
         ("putClientSigningAlg", Some(id)),
         serde_json::json!({ "id_token_signed_response_alg": alg }),
         None,
@@ -115,10 +115,10 @@ async fn client_alg(c: &Console, id: &str, alg: &str) -> Written {
     .await
 }
 
-/// The client's RFC 9701 introspection answer as the realm signs it: its media type and body.
+/// The client's RFC 9701 introspection answer as the environment signs it: its media type and body.
 async fn introspection(c: &Console, (id, secret): &(String, String)) -> (String, String) {
     let basic = base64(format!("{id}:{secret}").as_bytes());
-    let r = Request::post("/realms/acme/introspect")
+    let r = Request::post("/env/acme/introspect")
         .header(header::HOST, HOST)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::ACCEPT, "application/token-introspection+jwt")
@@ -246,7 +246,7 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     let w = put(
         &c,
         "putKexShare",
-        "/admin/v1/realms/acme/settings/kex-share",
+        "/admin/v1/envs/acme/settings/kex-share",
         serde_json::json!({"mode": "advertise-only"}),
     )
     .await;
@@ -272,7 +272,7 @@ async fn the_signing_profile_publishes_akp_and_signs_ml_dsa_only_for_clients_tha
     let (_, jwt) = introspection(&c, &classic).await;
     assert_eq!(header_alg(&jwt), "ES256");
 
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let events: Vec<String> = t
@@ -320,11 +320,11 @@ async fn fips_and_the_post_quantum_profile_exclude_each_other_in_either_order() 
     assert!(akp(&jwks(&c).await).keys.is_empty());
 
     // CR-15, OP-158 m.9
-    let (_, _, etag) = c.rest_read("/admin/v1/realms/acme/settings").await;
+    let (_, _, etag) = c.rest_read("/admin/v1/envs/acme/settings").await;
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/jose-alg",
+            "/admin/v1/envs/acme/settings/jose-alg",
             ("putJoseAlg", None),
             serde_json::json!({"alg": "Ed25519"}),
             etag.as_deref(),
@@ -429,7 +429,7 @@ async fn encrypted_identity_tokens_stay_classical_under_the_post_quantum_profile
         let w = c
             .rest_write(
                 &Method::PUT,
-                &format!("/admin/v1/realms/acme/clients/{id}/encryption"),
+                &format!("/admin/v1/envs/acme/clients/{id}/encryption"),
                 ("putClientEncryption", Some(&id)),
                 serde_json::json!({ "alg": alg, "jwks": { "keys": [] }, "id_token": true }),
                 None,

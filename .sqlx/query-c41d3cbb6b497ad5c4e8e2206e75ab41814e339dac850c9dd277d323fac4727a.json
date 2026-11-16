@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.vault_token_sets\n                 (tenant_id, environment_id, connection_id, version, kek_id, wrapped_dek, nonce,\n                  ciphertext, access_expires_ms, refreshable, created_ms)\n               SELECT $1, $2, $3,\n                      COALESCE((SELECT max(version) FROM access.vault_token_sets\n                                 WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3), 0) + 1,\n                      $4, $5, $6, $7, $8, $9, $10\n               RETURNING version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c41d3cbb6b497ad5c4e8e2206e75ab41814e339dac850c9dd277d323fac4727a"
+}

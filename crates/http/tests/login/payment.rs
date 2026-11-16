@@ -190,17 +190,19 @@ impl Env {
             Identifier::new(IdentifierKind::Email, who).unwrap(),
             Identifier::new(IdentifierKind::Phone, phone).unwrap(),
         ];
-        let s = create(&pg, &self.realm(), &ids, &ADMIN).await.unwrap();
+        let s = create(&pg, &self.environment(), &ids, &ADMIN)
+            .await
+            .unwrap();
         let services = PasswordServices {
             hasher: &self.hasher,
             ranges: &Corpus,
             entropy: &SystemEntropy,
         };
-        set_password(&pg, &self.realm(), &services, s, PW, &ADMIN)
+        set_password(&pg, &self.environment(), &services, s, PW, &ADMIN)
             .await
             .unwrap();
         for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-            change_status(&pg, &self.realm(), s, to, &ADMIN)
+            change_status(&pg, &self.environment(), s, to, &ADMIN)
                 .await
                 .unwrap();
         }
@@ -209,7 +211,7 @@ impl Env {
 
     /// Binds `subject` to a Party of its own, as its first device Instance would.
     async fn bind_party(&self, subject: [u8; 16]) {
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         access_store::idp::bind_subject_party(&mut tx, &subject, &party_of(subject))
@@ -266,7 +268,7 @@ impl Env {
         )
         .await
         .unwrap();
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let party = access_store::idp::subject_party(&mut tx, &subject)
@@ -562,7 +564,9 @@ async fn only_an_attested_key_with_its_app_pin_is_the_app_controlled_factor() {
             "{}",
             String::from_utf8_lossy(&done.body)
         );
-        let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+        let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+            .await
+            .unwrap();
         let newest = tx.live_sessions(subject).await.unwrap().remove(0);
         tx.commit().await.unwrap();
         let v: AssuranceVector = serde_json::from_slice(&newest.assurance).unwrap();
@@ -949,7 +953,7 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
 
 // OP-156 m.3 (g), Ek B 5120
 #[tokio::test]
-async fn only_the_payment_page_of_an_spc_realm_opens_payment() {
+async fn only_the_payment_page_of_an_spc_environment_opens_payment() {
     let policy = |a: &Answer| -> Vec<String> {
         a.headers
             .get_all("permissions-policy")

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environment_domains\n            SET acme_failures = $4, acme_next_at = to_timestamp($5::bigint), acme_error = $6\n          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bcdd3e646edba0848c032d0451ae9aa1c732a73d50c38e38809e5ddd1ded332c"
+}

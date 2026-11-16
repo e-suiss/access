@@ -12,12 +12,12 @@ use suiss_crypto::envelope::SoftKek;
 use super::*;
 use crate::adapters::SealedFactory;
 
-const REALM: [u8; 16] = [1; 16];
+const ENVIRONMENT: [u8; 16] = [1; 16];
 const PARTY: [u8; 16] = [2; 16];
 const DOMAIN: [u8; 32] = [3; 32];
 
 fn factory() -> SealedFactory<SoftKek> {
-    SealedFactory::new(SoftKek::new("realm-kek", [5; 32]))
+    SealedFactory::new(SoftKek::new("environment-kek", [5; 32]))
 }
 
 fn statement(class: &str, issuer: [u8; 16], at: u64) -> Statement {
@@ -52,7 +52,7 @@ fn statement(class: &str, issuer: [u8; 16], at: u64) -> Statement {
 // OP-144, §10.1.7, MD-3, L2-CLM-1
 #[test]
 fn the_issuer_key_signs_claims_of_its_party() {
-    let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
+    let key = IssuerKey::generate(ENVIRONMENT, PARTY, &mut factory()).unwrap();
     let payload = statement("authentication", PARTY, 50).to_bytes().unwrap();
     let sign1 = key.sign_claim(&payload, 50).unwrap();
     let got = claim::verify(
@@ -69,7 +69,7 @@ fn the_issuer_key_signs_claims_of_its_party() {
 // §10.1.5, §13.2, K07
 #[test]
 fn the_issuer_key_refuses_what_is_not_its_own() {
-    let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
+    let key = IssuerKey::generate(ENVIRONMENT, PARTY, &mut factory()).unwrap();
     let refused = |payload: &[u8], at| key.sign_claim(payload, at).err();
     let other = statement("authentication", [8; 16], 50).to_bytes().unwrap();
     assert_eq!(refused(&other, 50), Some(SignerError::Payload));
@@ -99,7 +99,7 @@ fn the_issuer_key_refuses_what_is_not_its_own() {
 // OP-149 m.16 (a), L0-META-7
 #[test]
 fn the_issuer_key_signs_its_own_registration() {
-    let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
+    let key = IssuerKey::generate(ENVIRONMENT, PARTY, &mut factory()).unwrap();
     let pk = PublicKey::Ed25519(key.key());
     let domain = Digest(DOMAIN);
     for (step, payload) in [
@@ -176,16 +176,16 @@ fn the_issuer_key_signs_its_own_registration() {
 // OP-73, CR-21 m.3
 #[test]
 fn the_issuer_key_restores_from_its_sealed_form() {
-    let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
+    let key = IssuerKey::generate(ENVIRONMENT, PARTY, &mut factory()).unwrap();
     let stored = key.stored().unwrap();
-    let again = IssuerKey::restore(REALM, &stored, &mut factory()).unwrap();
+    let again = IssuerKey::restore(ENVIRONMENT, &stored, &mut factory()).unwrap();
     assert_eq!((again.key(), again.party()), (key.key(), PARTY));
     assert_eq!(
         IssuerKey::restore([9; 16], &stored, &mut factory()).err(),
         Some(IssuerError::OtherIssuer)
     );
     assert_eq!(
-        IssuerKey::restore(REALM, b"junk", &mut factory()).err(),
+        IssuerKey::restore(ENVIRONMENT, b"junk", &mut factory()).err(),
         Some(IssuerError::Stored)
     );
 }

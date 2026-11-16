@@ -1,18 +1,18 @@
-//! A sink's secret sealed under the realm KEK (OP-156 m.3 (s), CR-32): its own DEK, bound to the
-//! tenant, realm and sink. It is opened only to send a batch and never written anywhere else.
+//! A sink's secret sealed under the environment KEK (OP-156 m.3 (s), CR-32): its own DEK, bound to the
+//! tenant, environment and sink. It is opened only to send a batch and never written anywhere else.
 
 use access_store::events::SealedKey;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 
 use super::sink::SinkSecret;
 
 const CONTEXT: &[u8] = b"access/export-secret/v1\0";
 
-fn context(tenant: TenantId, realm: RealmId, sink: &[u8; 16]) -> Vec<u8> {
+fn context(tenant: TenantId, environment: EnvironmentId, sink: &[u8; 16]) -> Vec<u8> {
     let mut c = CONTEXT.to_vec();
     c.extend_from_slice(tenant.as_bytes());
-    c.extend_from_slice(realm.as_bytes());
+    c.extend_from_slice(environment.as_bytes());
     c.extend_from_slice(sink);
     c
 }
@@ -28,7 +28,7 @@ pub struct Unsealed;
 /// [`Unsealed`].
 pub fn seal(
     kek: &dyn Kek,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     sink: &[u8; 16],
     secret: &SinkSecret,
 ) -> Result<SealedKey, Unsealed> {
@@ -36,7 +36,7 @@ pub fn seal(
     let wrapped_dek = kek.wrap(&dek).map_err(|_| Unsealed)?;
     let s = seal_body(
         dek,
-        &context(tenant, realm, sink),
+        &context(tenant, environment, sink),
         secret.expose().as_bytes(),
     )
     .map_err(|_| Unsealed)?;
@@ -54,7 +54,7 @@ pub fn seal(
 /// [`Unsealed`].
 pub fn open(
     kek: &dyn Kek,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     sink: &[u8; 16],
     sealed: &SealedKey,
 ) -> Result<SinkSecret, Unsealed> {
@@ -64,7 +64,7 @@ pub fn open(
     let dek = kek.unwrap(&sealed.wrapped_dek).map_err(|_| Unsealed)?;
     let plain = open_body(
         &dek,
-        &context(tenant, realm, sink),
+        &context(tenant, environment, sink),
         &Sealed {
             nonce: sealed.nonce,
             ciphertext: sealed.ciphertext.clone(),

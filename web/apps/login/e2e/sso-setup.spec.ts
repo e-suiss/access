@@ -1,5 +1,5 @@
 // TN-133, TN-134, OP-155 m.3 (i): the hosted SSO setup portal is <OrganizationSSO /> over the
-// realm's setup API. Reading spends nothing, a step drafts the connection the wizard filled in,
+// environment's setup API. Reading spends nothing, a step drafts the connection the wizard filled in,
 // the test waits for an owner, and a spent or expired link says so without detail.
 import AxeBuilder from "@axe-core/playwright";
 

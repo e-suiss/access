@@ -2,12 +2,12 @@
 //!
 //! - Only a chain presented to the mTLS listener counts; it arrives from the TLS layer of
 //!   access-server, never from a header.
-//! - The chain must lead to a CA the realm names, and the governing domain must hold an
+//! - The chain must lead to a CA the environment names, and the governing domain must hold an
 //!   actor-binding Acceptance of that CA; otherwise no Claim follows.
 //! - Revocation fails closed: revoked, unknown, unreachable or stale refuses.
-//! - The realm's rule maps exactly one subjectAltName entry to an active account. Every refusal
+//! - The environment's rule maps exactly one subjectAltName entry to an active account. Every refusal
 //!   answers the same, except a status that could not be checked.
-//! - A certificate whose issuer policy the realm mapped as hardware-bound PIV signs in at AAL3;
+//! - A certificate whose issuer policy the environment mapped as hardware-bound PIV signs in at AAL3;
 //!   any other at most AAL2 and never CT3.
 
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::domain::login::Problem;
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::assurance::Factor;
 use access_identity_session::ports::Clock;
@@ -30,7 +30,7 @@ use access_identity_x509::ports::CaTrust;
 use access_store::identity::TenantTx;
 
 use super::{Body, Browser, Hosted, Reply, failed, signin};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// What certificate sign-in needs beyond the login's services.
 pub struct Certificates {
@@ -46,7 +46,7 @@ impl core::fmt::Debug for Certificates {
     }
 }
 
-/// The realm has not turned certificate sign-in on.
+/// The environment has not turned certificate sign-in on.
 const CERTIFICATE_OFF: Problem = Problem {
     status: 404,
     code: "no-such-provider",
@@ -90,7 +90,7 @@ fn refused(why: &'static str) -> Reply {
     Reply::problem(CERTIFICATE_REFUSED)
 }
 
-/// The realm's setting and its governing domain.
+/// The environment's setting and its governing domain.
 struct Setting {
     rule: Rule,
     anchors: Vec<Vec<u8>>,
@@ -104,9 +104,9 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn certificate_setting(&self, kit: &RealmKit) -> Result<Option<Setting>, Reply> {
+    async fn certificate_setting(&self, kit: &EnvironmentKit) -> Result<Option<Setting>, Reply> {
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let row = t.certificate_login().await?;
             let domain = access_store::idp::governance(&mut t)
                 .await?
@@ -127,10 +127,10 @@ where
         }))
     }
 
-    async fn certificate_subject(&self, kit: &RealmKit, id: &str) -> Result<[u8; 16], Reply> {
+    async fn certificate_subject(&self, kit: &EnvironmentKit, id: &str) -> Result<[u8; 16], Reply> {
         let db = PgAccounts::sealed(self.db.clone(), kit.vault());
         let found = async {
-            let mut tx = db.begin(kit.tenant, kit.realm).await?;
+            let mut tx = db.begin(kit.tenant, kit.environment).await?;
             let Some(subject) = tx.subject_by_identifier(id).await? else {
                 return Ok(None);
             };
@@ -151,10 +151,10 @@ where
 
     /// `GET /login/certificate` on the mTLS listener: signs in with the client certificate
     /// `chain` (leaf first) the TLS layer handed over, then continues the flow or ends at the
-    /// realm's landing page (§10.2.5, OP-155 m.3 (m)).
+    /// environment's landing page (§10.2.5, OP-155 m.3 (m)).
     pub async fn certificate_login(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         chain: Option<&[Vec<u8>]>,
         certs: &Certificates,

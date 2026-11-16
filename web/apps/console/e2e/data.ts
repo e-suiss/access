@@ -14,24 +14,24 @@ const digest = (n: number) => Buffer.alloc(32, n).toString("base64url");
 export const UNDISCLOSED = "refunds over 4,321 TRY at night";
 
 export function seed(bff: ConsoleMock): void {
-  bff.admin.set("realms/acme", { audience: "access-admin:realm:acme", sandbox: false });
-  bff.admin.set("realms/acme/accounts", {
+  bff.admin.set("envs/acme", { audience: "access-admin:environment:acme", sandbox: false });
+  bff.admin.set("envs/acme/accounts", {
     items: [
       { account_id: "usr_active", status: "active" },
       { account_id: "usr_held", status: "suspended" },
     ],
   });
-  bff.admin.set("realms/acme/settings", {
+  bff.admin.set("envs/acme/settings", {
     rp_id: "acme.example",
     branding: { display_name: "Acme" },
     managed: [],
   });
-  bff.admin.set("realms/acme/signals", {
+  bff.admin.set("envs/acme/signals", {
     transmitters: [{ name: "Acme IdP", delayed_since: Date.UTC(2026, 10, 7, 14, 2) }],
     geoip: "not_configured",
     verifiers: [{ name: "POS-7", declared_until: Date.UTC(2026, 10, 7, 18, 0) }],
   });
-  bff.admin.set("platform/realms/acme", {
+  bff.admin.set("platform/envs/acme", {
     slug: "acme",
     tenant_id: "tnt_one",
     key_state: "published",
@@ -40,7 +40,7 @@ export function seed(bff: ConsoleMock): void {
   bff.admin.set("platform/tenants/tnt_one/sandbox-domains", {
     items: [{ slug: "acme-sandbox", domain: digest(9) }],
   });
-  bff.admin.set("realms/acme/clients", {
+  bff.admin.set("envs/acme/clients", {
     items: [
       {
         client_id: "cli_shop",
@@ -52,11 +52,11 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/organizations", {
+  bff.admin.set("envs/acme/organizations", {
     items: [{ organization: id(10), display_name: "Acme <b>Corp</b>", hrd: false }],
   });
   // TN-94, X20
-  bff.admin.set(`realms/acme/organizations/${id(10)}/sso-enforcement/preview`, {
+  bff.admin.set(`envs/acme/organizations/${id(10)}/sso-enforcement/preview`, {
     organization: id(10),
     enforced: false,
     invitations: null,
@@ -65,7 +65,7 @@ export function seed(bff: ConsoleMock): void {
     pending_invitations: 2,
     totals: { members: 3 },
   });
-  bff.admin.set(`realms/acme/organizations/${id(10)}`, {
+  bff.admin.set(`envs/acme/organizations/${id(10)}`, {
     organization: id(10),
     display_name: "Acme <b>Corp</b>",
     hrd: true,
@@ -129,9 +129,9 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/upstream-idps", { items: [{ name: "corp", status: "active" }] });
+  bff.admin.set("envs/acme/upstream-idps", { items: [{ name: "corp", status: "active" }] });
   // OP-156 m.3 (i)
-  bff.admin.set("realms/acme/domains", {
+  bff.admin.set("envs/acme/domains", {
     items: [
       {
         host: "login.acme.example",
@@ -155,7 +155,7 @@ export function seed(bff: ConsoleMock): void {
     ],
   });
   // OP-156 m.3 (r)
-  bff.admin.set("realms/acme/signal-sources", {
+  bff.admin.set("envs/acme/signal-sources", {
     items: [
       {
         name: "acme-mdm",
@@ -169,7 +169,7 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/social-providers", {
+  bff.admin.set("envs/acme/social-providers", {
     items: [
       {
         preset: "google",
@@ -181,7 +181,7 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/hooks", {
+  bff.admin.set("envs/acme/hooks", {
     items: [
       {
         hook_id: "hok_1",
@@ -191,10 +191,10 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/webhooks", {
+  bff.admin.set("envs/acme/webhooks", {
     items: [{ webhook_id: "whk_1", url: "https://hooks.example/w", events: ["account.created"] }],
   });
-  bff.admin.set("realms/acme/webhooks/whk_1/deliveries", {
+  bff.admin.set("envs/acme/webhooks/whk_1/deliveries", {
     items: [
       {
         event_id: "evt_1",
@@ -207,7 +207,7 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("realms/acme/analytics", {
+  bff.admin.set("envs/acme/analytics", {
     days: [
       {
         day: "2026-11-06",

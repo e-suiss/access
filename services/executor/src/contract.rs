@@ -164,9 +164,9 @@ fn request_schemas() -> Value {
         "StartJob": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["realm", "connection", "intent", "ais", "steps"],
+            "required": ["environment", "connection", "intent", "ais", "steps"],
             "properties": {
-                "realm": { "type": "string", "description": "The realm whose token vault holds the connection." },
+                "environment": { "type": "string", "description": "The environment whose token vault holds the connection." },
                 "connection": { "type": "string", "description": "The vault connection the Exercise's token is released from." },
                 "intent": { "type": "string", "description": "The intent envelope, canonical bytes, base64url." },
                 "ais": { "type": "string", "description": "The actor Instance's commit statement naming this executor as PEP, base64url; the executor forwards it and is never the actor." },

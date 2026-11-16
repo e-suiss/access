@@ -35,9 +35,9 @@ fuzz_target!(|data: &[u8]| {
         2 => {
             if let Ok(params) = page::parameters(Some(&text), &LISTED) {
                 let _ = page::page_size(&params);
-                let context = page::cursor_context("/admin/v1/realms/x/clients", "realm", &params);
+                let context = page::cursor_context("/admin/v1/envs/x/clients", "environment", &params);
                 assert!(!context.is_empty());
-                let link = page::next_link("/admin/v1/realms/x/clients", &params, &text);
+                let link = page::next_link("/admin/v1/envs/x/clients", &params, &text);
                 assert!(link.starts_with('<'));
             }
         }

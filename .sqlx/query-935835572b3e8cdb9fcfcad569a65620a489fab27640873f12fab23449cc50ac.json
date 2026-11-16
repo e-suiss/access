@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.relay_undelivered\n                (tenant_id, environment_id, event_id, outbox_xid, outbox_id, kind, reason, relay_status)\n             VALUES ($1, $2, $3, $4::bigint::text::xid8, $5, $6, $7, $8)\n             ON CONFLICT (tenant_id, environment_id, event_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "935835572b3e8cdb9fcfcad569a65620a489fab27640873f12fab23449cc50ac"
+}

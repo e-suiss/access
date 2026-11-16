@@ -111,7 +111,7 @@ mod tests {
 
     fn q(spn: &str, etype: i32, kvno: u32) -> Authenticate {
         Authenticate {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             principal: String::from("ada@CORP.EXAMPLE"),
             spn: String::from(spn),
             kvno,

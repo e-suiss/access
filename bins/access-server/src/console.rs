@@ -1,10 +1,10 @@
 //! The console BFF's ports in this process (TN-128–TN-131, OP-151 m.2 M3, m.12): system time
 //! and randomness, per-session DPoP keys held in memory, the session store in PostgreSQL, the
-//! sign-in through the realm's own authorization server, the device Instance through the same
-//! self-signed Exercises as the Frontend API, read tokens from the realm, and the management API
+//! sign-in through the environment's own authorization server, the device Instance through the same
+//! self-signed Exercises as the Frontend API, read tokens from the environment, and the management API
 //! and ADP in process. ADP sees the console as its own PEP, [`CONSOLE_PEP`], and only for the
 //! reads the BFF forwards. No `GeoResolver` source answers yet: sessions bind to the prefix, or
-//! to the full address when the realm's session policy says `ip`.
+//! to the full address when the environment's session policy says `ip`.
 
 pub(crate) mod devices;
 pub(crate) mod sessions;
@@ -161,8 +161,8 @@ pub(crate) struct ServerConsole<P> {
     dpop: MemoryDpop,
     upstream: InProcess,
     sessions: sessions::PgConsoleSessions,
-    network: sessions::RealmBinding,
-    sign_in: sign_in::RealmSignIn,
+    network: sessions::EnvironmentBinding,
+    sign_in: sign_in::EnvironmentSignIn,
     devices: devices::ConsoleDevices<P>,
     grants: crate::admin::tokens::ConsoleGrants<P>,
     accepted: P,
@@ -177,10 +177,10 @@ pub(crate) struct Parts<P> {
     pub(crate) adp: Router,
     /// The session store and profile source.
     pub(crate) sessions: sessions::PgConsoleSessions,
-    /// The realms' session binding policies.
-    pub(crate) network: sessions::RealmBinding,
-    /// The realm sign-in.
-    pub(crate) sign_in: sign_in::RealmSignIn,
+    /// The environments' session binding policies.
+    pub(crate) network: sessions::EnvironmentBinding,
+    /// The environment sign-in.
+    pub(crate) sign_in: sign_in::EnvironmentSignIn,
     /// The device Instances.
     pub(crate) devices: devices::ConsoleDevices<P>,
     /// Read tokens.
@@ -212,7 +212,7 @@ impl<P> ServerConsole<P> {
 
 impl<P> ConsoleEnv for ServerConsole<P>
 where
-    P: crate::admin::realm::LiveKeys
+    P: crate::admin::environment::LiveKeys
         + access_identity_ui::ports::DeviceInstances
         + access_http::console::ports::AcceptedActions
         + Send
@@ -220,8 +220,8 @@ where
         + 'static,
 {
     type Sessions = sessions::PgConsoleSessions;
-    type SignIn = sign_in::RealmSignIn;
-    type Network = sessions::RealmBinding;
+    type SignIn = sign_in::EnvironmentSignIn;
+    type Network = sessions::EnvironmentBinding;
     type Profiles = sessions::PgConsoleSessions;
     type Devices = devices::ConsoleDevices<P>;
     type Grants = crate::admin::tokens::ConsoleGrants<P>;
@@ -240,11 +240,11 @@ where
         &self.sessions
     }
 
-    fn sign_in(&self) -> &sign_in::RealmSignIn {
+    fn sign_in(&self) -> &sign_in::EnvironmentSignIn {
         &self.sign_in
     }
 
-    fn network(&self) -> &sessions::RealmBinding {
+    fn network(&self) -> &sessions::EnvironmentBinding {
         &self.network
     }
 

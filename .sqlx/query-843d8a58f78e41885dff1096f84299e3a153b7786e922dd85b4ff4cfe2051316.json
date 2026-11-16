@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_social_providers (tenant_id, environment_id, preset, client_id,\n                        client_secret_ref, status, previous_client_id, client_changed_ms,\n                        domain_id, decision_pos)\n                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "843d8a58f78e41885dff1096f84299e3a153b7786e922dd85b4ff4cfe2051316"
+}

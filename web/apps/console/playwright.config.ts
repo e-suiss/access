@@ -4,7 +4,7 @@ const port = 4173;
 const ci = process.env["CI"] !== undefined;
 // OP-153 m.3 (gg): the live project runs against a running local deployment's management listener
 const live = process.env["ACCESS_LIVE_CONSOLE_ORIGIN"] ?? "https://access-server.local:9443";
-const realm = process.env["ACCESS_LIVE_ORIGIN"] ?? "https://access-server:8443";
+const environment = process.env["ACCESS_LIVE_ORIGIN"] ?? "https://access-server:8443";
 
 export default defineConfig({
   // SA-59
@@ -31,7 +31,7 @@ export default defineConfig({
         ignoreHTTPSErrors: true,
         launchOptions: {
           args: [
-            `--host-resolver-rules=MAP ${new URL(live).hostname} 127.0.0.1, MAP ${new URL(realm).hostname} 127.0.0.1`,
+            `--host-resolver-rules=MAP ${new URL(live).hostname} 127.0.0.1, MAP ${new URL(environment).hostname} 127.0.0.1`,
           ],
         },
       },

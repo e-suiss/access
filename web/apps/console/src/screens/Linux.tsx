@@ -1,4 +1,4 @@
-// IDP-32, OP-156 m.3 (p): the realm's Linux client hosts. Registering a host, retiring it, its
+// IDP-32, OP-156 m.3 (p): the environment's Linux client hosts. Registering a host, retiring it, its
 // offline limits and its break-glass switch are each one signed change. A host resolves and
 // signs in exactly the people whose ssh.login access names its server group; sudo asks for a
 // security key every time and never works offline.
@@ -31,8 +31,10 @@ const hours = (s: number): string => String(Math.round((s / 3600) * 10) / 10);
 
 /** The Linux client screen. */
 export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const hosts = useLoad(() => adminGet<Page<Host>>(ctx.instance, `realms/${realm}/linux-hosts`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const hosts = useLoad(() =>
+    adminGet<Page<Host>>(ctx.instance, `envs/${environment}/linux-hosts`),
+  );
   const [name, setName] = useState("");
   const [group, setGroup] = useState("");
   const [certificate, setCertificate] = useState("");
@@ -45,7 +47,7 @@ export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
     key?: string,
   ) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method,
         path,

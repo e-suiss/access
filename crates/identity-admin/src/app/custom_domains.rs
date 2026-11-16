@@ -1,12 +1,12 @@
-//! `idp.domain.*` changes against the realm and under their committed ALLOW (OP-156 m.3 (i),
+//! `idp.domain.*` changes against the environment and under their committed ALLOW (OP-156 m.3 (i),
 //! §10.2.4, TN-16, TN-17): a registration names a host outside the base and gets its TXT
 //! challenge and CNAME target; retiring withdraws its certificate; binding a verified domain as
-//! the issuer is possible only before the realm's first activation, and binding it as the RP ID
+//! the issuer is possible only before the environment's first activation, and binding it as the RP ID
 //! pins the domain's registrable domain. Neither binding comes undone.
 
 use access_identity_domain::domain::host::{Base, CustomHost};
 use access_identity_domain::domain::verify::{self, Registration, Status};
-use access_identity_oauth::domain::issuer::{Issuer, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, Issuer};
 use access_store::custom_domains::{self as store, DomainRow, NewDomain};
 use access_store::identity::TenantTx;
 use access_store::idp::{self, Bound, Governing};
@@ -18,7 +18,7 @@ use crate::domain::custom_domain::{Binding, DomainChange};
 
 /// The deployment's base host of `base`.
 #[must_use]
-pub(crate) fn base_of(base: &RealmBase) -> Base {
+pub(crate) fn base_of(base: &EnvironmentBase) -> Base {
     let authority = base.as_str().strip_prefix("https://").unwrap_or_default();
     Base::new(authority.rsplit_once(':').map_or(authority, |(h, _)| h))
 }
@@ -65,7 +65,7 @@ async fn served(t: &mut TenantTx, host: &str) -> Result<DomainRow, AdminError> {
     }
 }
 
-/// Checks `change` against the realm (OP-156 m.3 (i)).
+/// Checks `change` against the environment (OP-156 m.3 (i)).
 ///
 /// # Errors
 /// [`AdminError`].
@@ -73,7 +73,7 @@ pub(crate) async fn current(
     t: &mut TenantTx,
     change: &DomainChange,
     g: &Governing,
-    base: &RealmBase,
+    base: &EnvironmentBase,
 ) -> Result<(), AdminError> {
     match change {
         DomainChange::Register(host) => {
@@ -142,7 +142,7 @@ pub(crate) async fn write(
     t: &mut TenantTx,
     bound: &Bound,
     change: &DomainChange,
-    (g, base, exercise): (&Governing, &RealmBase, &[u8]),
+    (g, base, exercise): (&Governing, &EnvironmentBase, &[u8]),
 ) -> Result<bool, AdminError> {
     match change {
         DomainChange::Register(host) => {
@@ -156,7 +156,7 @@ pub(crate) async fn write(
                     id: domain_id(host, exercise),
                     hostname: host,
                     challenge: &challenge,
-                    cname_target: &base_of(base).realm_host(&g.slug),
+                    cname_target: &base_of(base).environment_host(&g.slug),
                 },
             )
             .await?;
@@ -175,7 +175,7 @@ pub(crate) async fn write(
             }
             match bind {
                 Binding::Issuer => {
-                    let from = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+                    let from = g.issuer.as_deref().ok_or(AdminError::NoEnvironment)?;
                     let to = Issuer::parse(&format!("https://{host}"))
                         .map_err(|_| Invalid::CustomDomain)?;
                     if !store::rebind_issuer(t, from, to.as_str()).await? {
@@ -187,7 +187,7 @@ pub(crate) async fn write(
                         .registrable()
                         .map(String::from)
                         .ok_or(Invalid::RpId)?;
-                    let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                    let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
                     // RR-45, TN-17
                     if s.rp_id.as_deref() != Some(rp.as_str()) {
                         t.insert_rp_id_change(s.rp_id.as_deref(), &rp).await?;
@@ -208,7 +208,7 @@ fn rfc3339(s: Option<i64>) -> Json {
         .map_or(Json::Null, |ms| Json::from(super::rest::rfc3339(ms)))
 }
 
-/// The realm's custom domains as administrators read them, newest first: the records to
+/// The environment's custom domains as administrators read them, newest first: the records to
 /// publish, the verification state and the certificate's expiry; with `key`, only that host's.
 ///
 /// # Errors

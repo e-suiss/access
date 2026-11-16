@@ -1,6 +1,6 @@
 //! The in-process seam between the planes for `idp.*` (OP-62, MD-14, TN-111): the identity
 //! plane's ports, served by the authority core of this process, the actor-binding of
-//! self-signed registrations (OP-149 m.16 (a), L0-META-7), and the realm keys a new realm opens
+//! self-signed registrations (OP-149 m.16 (a), L0-META-7), and the environment keys a new environment opens
 //! (OP-146 m.16 (m)).
 
 use std::collections::HashMap;
@@ -18,8 +18,8 @@ use access_crypto::jose::JwsAlg;
 use access_crypto::webauthn::decoy_label;
 use access_identity_admin::domain::JoseAlg;
 use access_identity_admin::ports::{
-    AgentRegistration, Decider, Governance, Instances, OrgRegistered, OrgRegistration, PartyKind,
-    RealmKeys,
+    AgentRegistration, Decider, EnvironmentKeys, Governance, Instances, OrgRegistered,
+    OrgRegistration, PartyKind,
 };
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_ui::ports::{Approvals, DeviceInstances};
@@ -36,7 +36,7 @@ use access_kernel::meta::Payload;
 use access_kernel::model::{ActionRef, Id};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
-use access_store::identity::RealmId;
+use access_store::identity::EnvironmentId;
 use suiss_crypto::pkcs11::{HsmError, KeyStore};
 
 use crate::login::{kek_label, pepper_label};
@@ -305,26 +305,26 @@ where
     }
 }
 
-/// The realm's key signs `private_key_jwt` client assertions to upstream connections (RFC 7523,
-/// OP-155 m.3 (h)); the upstream reads the realm's published JWKS.
-pub(crate) struct RealmAssertions(pub(crate) SignerKeys);
+/// The environment's key signs `private_key_jwt` client assertions to upstream connections (RFC 7523,
+/// OP-155 m.3 (h)); the upstream reads the environment's published JWKS.
+pub(crate) struct EnvironmentAssertions(pub(crate) SignerKeys);
 
-impl access_identity_federation::ports::ClientAssertion for RealmAssertions {
+impl access_identity_federation::ports::ClientAssertion for EnvironmentAssertions {
     fn sign(
         &self,
-        realm: [u8; 16],
+        environment: [u8; 16],
         alg: &'static str,
         claims: Vec<u8>,
         at_ms: u64,
     ) -> access_identity_federation::ports::Signed<'_> {
         use access_identity_oauth::ports::oauth::TokenSigner as _;
         Box::pin(async move {
-            let realm = RealmId::from_bytes(realm);
+            let environment = EnvironmentId::from_bytes(environment);
             let signed = if alg == "RS256" {
-                self.0.sign_rs256(realm, "JWT", &claims, at_ms).await
+                self.0.sign_rs256(environment, "JWT", &claims, at_ms).await
             } else {
                 self.0
-                    .sign(realm, JwsAlg::Es256, "JWT", &claims, at_ms)
+                    .sign(environment, JwsAlg::Es256, "JWT", &claims, at_ms)
                     .await
             };
             signed.map_err(|_| access_identity_federation::ports::Unreachable)
@@ -430,7 +430,7 @@ where
     }
 }
 
-impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>
+impl<K, B, S, C> crate::admin::environment::LiveKeys for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
     B: Binding + Clone + Send + Sync + 'static,
@@ -1108,7 +1108,7 @@ where
 {
     async fn open(&self, order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
         let fields =
-            genesis::realm(&order, &mut OsSalts).map_err(|e| Unavailable(e.to_string()))?;
+            genesis::environment(&order, &mut OsSalts).map_err(|e| Unavailable(e.to_string()))?;
         // OP-129 m.1
         let now = self
             .clock
@@ -1132,15 +1132,15 @@ where
     }
 }
 
-/// A realm's keys outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)): its JOSE key set
+/// An environment's keys outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)): its JOSE key set
 /// in the identity signer, and in the HSM its KEK, its WebAuthn decoy key and its DPoP nonce
 /// keys for both roles. A key that exists is kept.
-pub(crate) struct RealmKeyring {
+pub(crate) struct EnvironmentKeyring {
     signer: SignerKeys,
     keys: Arc<KeyStore>,
 }
 
-impl RealmKeyring {
+impl EnvironmentKeyring {
     pub(crate) const fn new(signer: SignerKeys, keys: Arc<KeyStore>) -> Self {
         Self { signer, keys }
     }
@@ -1152,19 +1152,19 @@ impl RealmKeyring {
             .is_ok()
     }
 
-    fn hsm(&self, realm: &[u8; 16]) -> Result<(), HsmError> {
-        let kek = kek_label(realm);
+    fn hsm(&self, environment: &[u8; 16]) -> Result<(), HsmError> {
+        let kek = kek_label(environment);
         if self.keys.kek(&kek).is_err() {
             self.keys.generate_kek(&kek)?;
         }
         // CR-37, OP-150 m.3 (f)
-        let pepper = pepper_label(realm);
+        let pepper = pepper_label(environment);
         if self.keys.aead(&pepper).is_err() {
             self.keys.generate_aead(&pepper)?;
         }
-        let mut macs = vec![decoy_label(realm)];
+        let mut macs = vec![decoy_label(environment)];
         for role in [NonceRole::AuthorizationServer, NonceRole::ResourceServer] {
-            macs.push(nonce_label(realm, role, NONCE_GENERATION));
+            macs.push(nonce_label(environment, role, NONCE_GENERATION));
         }
         for label in macs {
             if self.keys.mac(&label).is_err() {
@@ -1175,7 +1175,7 @@ impl RealmKeyring {
     }
 }
 
-/// The JWS algorithm of a realm signing profile's parameter set (OP-159 m.3 (o)).
+/// The JWS algorithm of an environment signing profile's parameter set (OP-159 m.3 (o)).
 const fn pq_alg(alg: access_identity_admin::domain::assurance::MlDsa) -> JwsAlg {
     use access_identity_admin::domain::assurance::MlDsa;
     match alg {
@@ -1185,7 +1185,7 @@ const fn pq_alg(alg: access_identity_admin::domain::assurance::MlDsa) -> JwsAlg 
     }
 }
 
-impl RealmKeys for RealmKeyring {
+impl EnvironmentKeys for EnvironmentKeyring {
     // OP-159 m.3 (d)
     async fn pq_ready(
         &self,
@@ -1200,61 +1200,65 @@ impl RealmKeys for RealmKeyring {
     // CR-41, OP-159 m.3 (o)
     async fn pq_open(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: access_identity_admin::domain::assurance::MlDsa,
     ) -> Result<(), Unavailable> {
         self.signer
-            .pq_open(realm, pq_alg(alg))
+            .pq_open(environment, pq_alg(alg))
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
     // OP-159 m.3 (a)
-    async fn pq_close(&self, realm: RealmId) -> Result<(), Unavailable> {
+    async fn pq_close(&self, environment: EnvironmentId) -> Result<(), Unavailable> {
         self.signer
-            .pq_close(realm)
+            .pq_close(environment)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
     // MD-6, OP-155 m.3 (d)
-    async fn saml_open(&self, realm: RealmId, p256: bool) -> Result<(), Unavailable> {
-        crate::saml::open_key(self.signer.socket(), realm, p256)
+    async fn saml_open(&self, environment: EnvironmentId, p256: bool) -> Result<(), Unavailable> {
+        crate::saml::open_key(self.signer.socket(), environment, p256)
             .await
             .map_err(|e| Unavailable(e.0))
     }
 
     // OP-155 m.3 (a), (e)
-    async fn saml_emergency(&self, realm: RealmId, p256: bool) -> Result<(), Unavailable> {
-        crate::saml::emergency(self.signer.socket(), realm, p256)
+    async fn saml_emergency(
+        &self,
+        environment: EnvironmentId,
+        p256: bool,
+    ) -> Result<(), Unavailable> {
+        crate::saml::emergency(self.signer.socket(), environment, p256)
             .await
             .map_err(|e| Unavailable(e.0))
     }
 
-    async fn open(&self, realm: RealmId, alg: JoseAlg) -> Result<(), Unavailable> {
+    async fn open(&self, environment: EnvironmentId, alg: JoseAlg) -> Result<(), Unavailable> {
         let alg = match alg {
             JoseAlg::Es256 => JwsAlg::Es256,
             JoseAlg::Ed25519 => JwsAlg::Ed25519,
         };
         self.signer
-            .open(realm, alg)
+            .open(environment, alg)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))?;
-        self.hsm(realm.as_bytes())
+        self.hsm(environment.as_bytes())
             .map_err(|e| Unavailable(String::from(e.code())))
     }
 
     // OP-153 m.18 (e)
     async fn sign_jws(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         typ: &str,
         claims: &[u8],
         at: u64,
     ) -> Result<String, Unavailable> {
         access_identity_oauth::ports::oauth::TokenSigner::sign(
             &self.signer,
-            realm,
+            environment,
             JwsAlg::Es256,
             typ,
             claims,
@@ -1264,40 +1268,48 @@ impl RealmKeys for RealmKeyring {
         .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
-    async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
-        access_identity_oauth::ports::Keys::jwks(&self.signer, realm)
+    async fn jwks(&self, environment: EnvironmentId) -> Result<String, Unavailable> {
+        access_identity_oauth::ports::Keys::jwks(&self.signer, environment)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
-    async fn rotate(&self, realm: RealmId, retire: [u8; 32]) -> Result<(), Unavailable> {
+    async fn rotate(
+        &self,
+        environment: EnvironmentId,
+        retire: [u8; 32],
+    ) -> Result<(), Unavailable> {
         self.signer
-            .rotate(realm, retire)
+            .rotate(environment, retire)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
-    async fn drop_key(&self, realm: RealmId, kid: [u8; 32]) -> Result<(), Unavailable> {
+    async fn drop_key(&self, environment: EnvironmentId, kid: [u8; 32]) -> Result<(), Unavailable> {
         self.signer
-            .drop_key(realm, kid)
+            .drop_key(environment, kid)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
     async fn set_policy(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         policy: suiss_crypto::rotation::Policy,
     ) -> Result<(), Unavailable> {
         self.signer
-            .set_policy(realm, policy)
+            .set_policy(environment, policy)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
-    async fn open_issuer(&self, realm: RealmId, party: [u8; 16]) -> Result<PublicKey, Unavailable> {
+    async fn open_issuer(
+        &self,
+        environment: EnvironmentId,
+        party: [u8; 16],
+    ) -> Result<PublicKey, Unavailable> {
         self.signer
-            .open_issuer(realm, party)
+            .open_issuer(environment, party)
             .await
             .map(PublicKey::Ed25519)
             .map_err(|_| Unavailable(String::from("identity-signer")))
@@ -1305,18 +1317,21 @@ impl RealmKeys for RealmKeyring {
 
     async fn sign_issuer_registration(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         registration: access_identity_admin::ports::IssuerAis,
     ) -> Result<Vec<u8>, Unavailable> {
         self.signer
-            .sign_issuer_registration(realm, registration)
+            .sign_issuer_registration(environment, registration)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
 
-    fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
+    fn vault(
+        &self,
+        environment: EnvironmentId,
+    ) -> Option<access_identity_account::app::vault::Vault> {
         // OP-153 m.3 (aa)
-        crate::login::RealmKeks::new(self.keys.clone()).vault(realm)
+        crate::login::EnvironmentKeks::new(self.keys.clone()).vault(environment)
     }
 }
 

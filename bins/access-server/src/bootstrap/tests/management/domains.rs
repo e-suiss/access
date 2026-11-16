@@ -1,7 +1,7 @@
 //! A custom domain end to end (OP-156 m.3 (i), Ek B 5392): registered through the admin REST
 //! surface and committed by the real decision point, verified by the DNS pass, certified by the
 //! in-process ACME twin whose TLS-ALPN-01 validation reaches the real public listener, then served
-//! by SNI with the realm's Frontend API on the customer's host. An unverified or lapsed domain is
+//! by SNI with the environment's Frontend API on the customer's host. An unverified or lapsed domain is
 //! not served and an unknown SNI fails the handshake.
 
 use std::net::SocketAddr;
@@ -133,7 +133,7 @@ async fn get_at(
     Some(String::from_utf8_lossy(&out).into_owned())
 }
 
-/// The realm's public hosted surface (the Frontend API and hosted sign-in) over the SNI listener.
+/// The environment's public hosted surface (the Frontend API and hosted sign-in) over the SNI listener.
 async fn public_listener(c: &Console, sni: Arc<Sni>) -> SocketAddr {
     use access_http::login::router as login_router;
     use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
@@ -142,14 +142,14 @@ async fn public_listener(c: &Console, sni: Arc<Sni>) -> SocketAddr {
     use access_identity_account::app::login::LoginGate;
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::Hosted;
 
     let hosted = Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&c.w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&c.w.keys)),
             c.w.db.router.clone(),
             c.w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -170,7 +170,7 @@ async fn public_listener(c: &Console, sni: Arc<Sni>) -> SocketAddr {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let app = login_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(c.w.db.router.clone()),
             SignerKeys::new(c.w.identity_signer.clone()),
         ),
@@ -199,14 +199,14 @@ async fn a_custom_domain_serves_the_frontend_api_with_its_own_acme_certificate()
     let written = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/domains",
+            "/admin/v1/envs/acme/domains",
             ("registerDomain", None),
             serde_json::json!({ "host": HOST }),
             None,
         )
         .await;
     assert!(written.status.is_success(), "{:?}", written.body);
-    let (status, page, _) = c.rest_read("/admin/v1/realms/acme/domains").await;
+    let (status, page, _) = c.rest_read("/admin/v1/envs/acme/domains").await;
     assert_eq!(status, StatusCode::OK, "{page}");
     let d = &page["items"][0];
     assert_eq!(d["host"], HOST);
@@ -230,7 +230,9 @@ async fn a_custom_domain_serves_the_frontend_api_with_its_own_acme_certificate()
         directory: String::from(TWIN_DIRECTORY),
         contact: None,
     };
-    let keys = KeySeal(Keks(crate::login::RealmKeks::new(Arc::clone(&c.w.keys))));
+    let keys = KeySeal(Keks(crate::login::EnvironmentKeks::new(Arc::clone(
+        &c.w.keys,
+    ))));
     let dns = FakeDns::default();
     let pools = (&c.w.db.app, &c.w.db.router);
     let listener = Listener(sni.clone());
@@ -260,7 +262,7 @@ async fn a_custom_domain_serves_the_frontend_api_with_its_own_acme_certificate()
         .await
         .unwrap();
     assert!(served.starts_with("HTTP/1.1 200"), "{served}");
-    let (_, page, _) = c.rest_read("/admin/v1/realms/acme/domains").await;
+    let (_, page, _) = c.rest_read("/admin/v1/envs/acme/domains").await;
     assert_eq!(page["items"][0]["served"], true);
     assert!(page["items"][0]["certificate_expires_at"].is_string());
 

@@ -409,7 +409,7 @@ where
         match PlatformApi::authenticate(self, assertion, endpoint).await {
             Ok(c) => Ok(PlatformClient {
                 tenant: *c.tenant.as_bytes(),
-                realm: *c.realm.as_bytes(),
+                environment: *c.environment.as_bytes(),
                 client_id: c.client_id,
                 product: c.product.name().to_owned(),
             }),

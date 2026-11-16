@@ -1,9 +1,9 @@
 //! What the export pass reaches outside the database (OP-63): the sinks over HTTPS or syslog TLS,
-//! and the realm KEKs that open the sinks' secrets.
+//! and the environment KEKs that open the sinks' secrets.
 
 use std::future::Future;
 
-pub use access_identity_events::adapters::RealmKek;
+pub use access_identity_events::adapters::EnvironmentKek;
 
 use crate::domain::collector::Request;
 

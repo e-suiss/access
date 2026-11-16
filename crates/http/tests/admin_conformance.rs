@@ -18,9 +18,9 @@ use access_kernel::json::b64url_encode;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 
-use admin::{Harness, ais, ais_with, platform_domain, proof, realm_domain, send};
+use admin::{Harness, ais, ais_with, environment_domain, platform_domain, proof, send};
 
-const PATH: &str = "/admin/v1/realms/acme/groups/staff/retire";
+const PATH: &str = "/admin/v1/envs/acme/groups/staff/retire";
 
 fn write(key: &str, ais: Option<&str>, token: Option<&str>) -> Request<Body> {
     let mut b = Request::post(PATH)
@@ -46,36 +46,42 @@ async fn a_write_without_actor_proof_changes_nothing() {
     let key = b64url_encode(&nonce);
     let reader = h.token(
         "reader",
-        "access-admin:realm:acme",
-        &["realm.read", "realm.write"],
+        "access-admin:environment:acme",
+        &["environment.read", "environment.write"],
         600_000,
     );
     let wrong = h.instance(platform_domain());
     let stranger = suiss_crypto::signer::SoftSigner::generate_ed25519()
         .unwrap()
         .0;
-    let own = h.instance(realm_domain());
+    let own = h.instance(environment_domain());
     let refused = [
         write(&key, None, None),
         write(&key, None, Some(&reader)),
         write(
             &key,
-            Some(&ais(&wrong, realm_domain(), nonce, h.now())),
+            Some(&ais(&wrong, environment_domain(), nonce, h.now())),
             None,
         ),
         write(
             &key,
-            Some(&ais(&stranger, realm_domain(), nonce, h.now())),
+            Some(&ais(&stranger, environment_domain(), nonce, h.now())),
             None,
         ),
         write(
             &key,
-            Some(&ais_with(&own, realm_domain(), nonce, h.now(), Mode::Check)),
+            Some(&ais_with(
+                &own,
+                environment_domain(),
+                nonce,
+                h.now(),
+                Mode::Check,
+            )),
             None,
         ),
         write(
             &key,
-            Some(&ais(&own, realm_domain(), nonce, h.now() + 120_000)),
+            Some(&ais(&own, environment_domain(), nonce, h.now() + 120_000)),
             None,
         ),
     ];
@@ -91,7 +97,11 @@ async fn a_write_without_actor_proof_changes_nothing() {
     }
     let (r, body) = send(
         &router,
-        write(&key, Some(&ais(&own, realm_domain(), nonce, h.now())), None),
+        write(
+            &key,
+            Some(&ais(&own, environment_domain(), nonce, h.now())),
+            None,
+        ),
     )
     .await;
     assert_eq!(r.status(), StatusCode::OK, "{body}");
@@ -130,19 +140,19 @@ fn no_credential_setting_or_acting_as_route_exists() {
 
 // IDI-1, MD-14, TN-110
 #[test]
-fn every_realm_write_is_an_idp_exercise() {
+fn every_environment_write_is_an_idp_exercise() {
     use access_http::api::domain::Surface;
     use access_identity_admin::app::rest::Op;
     let mut writes = 0;
     for row in MANIFEST
         .iter()
-        .filter(|r| r.surface == Surface::Realm && r.changes_state())
+        .filter(|r| r.surface == Surface::Environment && r.changes_state())
     {
         assert_eq!(row.access, Access::Write, "{}", row.operation_id);
         // OP-154 m.4
         // OP-154 m.3 (f)
         if matches!(row.operation_id, "createJob" | "revokeAllAgentInstances")
-            || access_http::api::realm::planned(row.operation_id)
+            || access_http::api::environment::planned(row.operation_id)
         {
             continue;
         }

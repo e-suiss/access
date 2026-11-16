@@ -24,7 +24,7 @@ use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
 use access_crypto::webhook::WebhookSecret;
 use access_identity_account::notify::delivery::Backoff;
-use access_identity_events::adapters::{KekSealer, OutboundTransport, RealmKek};
+use access_identity_events::adapters::{EnvironmentKek, KekSealer, OutboundTransport};
 use access_identity_events::app::courier::{Courier, Step};
 use access_identity_events::app::fanout::Fanout;
 use access_identity_events::app::streams::{StreamError, Streams};
@@ -48,17 +48,17 @@ use access_kernel::model::Id;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, OutboxRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::create_settings;
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 use serde_json::Value as Json;
 use suiss_crypto::envelope::{Kek, SoftKek};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, TcpStream};
 
-const ISSUER: &str = "https://id.test/realms/shop";
+const ISSUER: &str = "https://id.test/env/shop";
 const T0: u64 = 1_793_750_400_000;
 
 #[derive(Clone)]
@@ -72,8 +72,8 @@ impl Clock for TestClock {
 
 struct OneKek(Arc<SoftKek>);
 
-impl RealmKek for OneKek {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for OneKek {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
@@ -82,13 +82,13 @@ impl RealmKek for OneKek {
 /// read back what would be signed.
 struct ClearSigner;
 
-/// A signer whose realm key is unavailable (down, or a realm it cannot open).
+/// A signer whose environment key is unavailable (down, or an environment it cannot open).
 struct RefusingSigner;
 
 impl TokenSigner for RefusingSigner {
     fn sign(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         _: JwsAlg,
         _: &str,
         _: &[u8],
@@ -99,7 +99,7 @@ impl TokenSigner for RefusingSigner {
 
     fn jwks(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
     ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
         std::future::ready(Err(Unavailable))
     }
@@ -108,7 +108,7 @@ impl TokenSigner for RefusingSigner {
 impl TokenSigner for ClearSigner {
     fn sign(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
@@ -124,7 +124,7 @@ impl TokenSigner for ClearSigner {
 
     fn jwks(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
     ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
         std::future::ready(Ok(String::from("{}")))
     }
@@ -246,7 +246,7 @@ impl Transport for Local {
 struct World {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     domain: DomainId,
     clock: TestClock,
 }
@@ -267,17 +267,17 @@ impl World {
             .await
             .unwrap();
         let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+        let environment = create_environment(&mut t, &domain, "shop", "pool-default")
             .await
             .unwrap();
-        t.enter_realm(realm).await.unwrap();
+        t.enter_environment(environment).await.unwrap();
         assert!(set_issuer(&mut t, ISSUER).await.unwrap());
         create_settings(&mut t).await.unwrap();
         t.commit().await.unwrap();
         Self {
             db,
             tenant,
-            realm,
+            environment,
             domain,
             clock: TestClock(Arc::new(AtomicU64::new(T0))),
         }
@@ -331,7 +331,7 @@ impl World {
     }
 
     async fn api_client_created(&self, client_id: &str) -> String {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let id = access_crypto::random::bytes::<32>().unwrap();
@@ -340,7 +340,7 @@ impl World {
             id,
             &ClientChange {
                 tenant: &self.tenant_id(),
-                realm: self.realm.as_bytes(),
+                environment: self.environment.as_bytes(),
                 client_id,
                 exercise: &[3; 32],
                 platform_product: None,
@@ -412,11 +412,11 @@ impl World {
     }
 
     async fn state(&self, sub: [u8; 16], event_id: &str) -> (String, Option<String>) {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let d = t
-            .delivery(self.realm, sub, event_id)
+            .delivery(self.environment, sub, event_id)
             .await
             .unwrap()
             .unwrap();
@@ -468,7 +468,7 @@ fn ids() -> IdKey {
 }
 
 fn sealer() -> KekSealer<OneKek> {
-    KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32]))))
+    KekSealer(OneKek(Arc::new(SoftKek::new("environment-kek-1", [9; 32]))))
 }
 
 fn stream_request(method: &str, endpoint: Option<&str>, events: &[&str]) -> Vec<u8> {
@@ -520,9 +520,11 @@ fn compromised(d: &DomainId) -> Event {
 async fn a_party_compromise_raises_its_subjects_session_epoch() {
     // TN-50, CMP-15.2
     let w = World::new().await;
-    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+        .await
+        .unwrap();
     let subject = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(
@@ -545,7 +547,9 @@ async fn a_party_compromise_raises_its_subjects_session_epoch() {
             .domain_step_in(&w.domain, Some(&w.db.router))
             .await
             .unwrap();
-        let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+        let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+            .await
+            .unwrap();
         let now = t
             .subject(subject, false)
             .await
@@ -560,7 +564,9 @@ async fn a_party_compromise_raises_its_subjects_session_epoch() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     // TN-48, §12.2.4, OP-157 m.3 (i), Ek B 5582
-    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+        .await
+        .unwrap();
     let contained = t
         .list_audit(100)
         .await
@@ -586,7 +592,7 @@ async fn webhook_delivery_is_signed_retried_and_deduplicated() {
     let hook = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:suiss:access:delivery:webhook",
                 Some("https://work.example/v1/access/events"),
@@ -669,7 +675,7 @@ async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
         .streams()
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8935",
                 Some("https://work.example/v1/inbound/events"),
@@ -708,8 +714,14 @@ async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
     assert_eq!(c1["aud"], c2["aud"]);
     assert_eq!(c1["sub_id"], c2["sub_id"]);
     // OP-73
-    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
-    let row = t.delivery(w.realm, push.id, &id).await.unwrap().unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.environment)
+        .await
+        .unwrap();
+    let row = t
+        .delivery(w.environment, push.id, &id)
+        .await
+        .unwrap()
+        .unwrap();
     t.commit().await.unwrap();
     let stored: Json = serde_json::from_slice(&row.payload).unwrap();
     assert_eq!(stored["iat"], T0 / 1000);
@@ -723,7 +735,7 @@ async fn poll_returns_and_settles_sets() {
     let poll = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8936",
                 None,
@@ -748,7 +760,7 @@ async fn poll_returns_and_settles_sets() {
             &ClearSigner,
             &w.clock,
             w.tenant,
-            w.realm,
+            w.environment,
             &token,
             br#"{"maxEvents":1}"#,
         )
@@ -759,7 +771,14 @@ async fn poll_returns_and_settles_sets() {
     // OP-149 m.34 (d)
     w.advance(6 * 60_000);
     let answer = streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            b"{}",
+        )
         .await
         .unwrap();
     assert_eq!(answer["moreAvailable"], false);
@@ -784,7 +803,14 @@ async fn poll_returns_and_settles_sets() {
     let acks: Vec<&String> = sets.keys().collect();
     let body = serde_json::to_vec(&serde_json::json!({ "ack": acks })).unwrap();
     let after = streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, &body)
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            &body,
+        )
         .await
         .unwrap();
     assert!(after["sets"].as_object().unwrap().is_empty());
@@ -793,7 +819,14 @@ async fn poll_returns_and_settles_sets() {
     }
     assert!(matches!(
         streams
-            .poll(&ClearSigner, &w.clock, w.tenant, w.realm, "wrong", b"{}")
+            .poll(
+                &ClearSigner,
+                &w.clock,
+                w.tenant,
+                w.environment,
+                "wrong",
+                b"{}"
+            )
             .await,
         Err(StreamError::NotFound)
     ));
@@ -808,7 +841,7 @@ async fn sets_carry_their_position_and_a_late_one_is_requeried() {
     let poll = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8936",
                 None,
@@ -824,7 +857,14 @@ async fn sets_carry_their_position_and_a_late_one_is_requeried() {
     let fanout = w.fanout();
     assert_eq!(settle_domain(&fanout, &w.domain, 2).await, 2);
     let answer = streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            b"{}",
+        )
         .await
         .unwrap();
     let mut got = Vec::new();
@@ -871,7 +911,7 @@ async fn delivery_and_acks_never_change_authority_state() {
     let poll = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8936",
                 None,
@@ -889,7 +929,14 @@ async fn delivery_and_acks_never_change_authority_state() {
     let fanout = w.fanout();
     assert_eq!(settle_domain(&fanout, &w.domain, 2).await, 2);
     let answer = streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            b"{}",
+        )
         .await
         .unwrap();
     let jtis: Vec<String> = answer["sets"]
@@ -901,14 +948,29 @@ async fn delivery_and_acks_never_change_authority_state() {
     assert_eq!(jtis.len(), 2);
     let body = serde_json::to_vec(&serde_json::json!({ "ack": jtis })).unwrap();
     streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, &body)
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            &body,
+        )
         .await
         .unwrap();
-    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    let own = streams
+        .by_token(w.tenant, w.environment, &token)
+        .await
+        .unwrap();
     for (jti, s) in jtis.iter().zip(["applied", "ignored"]) {
         assert_eq!(w.state(poll.id, jti).await.0, "acknowledged");
         let ack = parse_ack(format!(r#"{{"jti":"{jti}","state":"{s}"}}"#).as_bytes()).unwrap();
-        assert!(streams.ack(w.tenant, w.realm, &own, &ack).await.unwrap());
+        assert!(
+            streams
+                .ack(w.tenant, w.environment, &own, &ack)
+                .await
+                .unwrap()
+        );
     }
     assert_eq!(read_head(&w.db.sequencer, &w.domain).await.unwrap(), head);
     assert_eq!(state(&w.db.sequencer, &w.domain).await.unwrap(), truth);
@@ -932,7 +994,7 @@ async fn refused_endpoints_and_disabled_streams_get_nothing() {
             streams
                 .create(
                     w.tenant,
-                    w.realm,
+                    w.environment,
                     &parse_stream(&stream_request(
                         "urn:suiss:access:delivery:webhook",
                         Some(endpoint),
@@ -945,11 +1007,14 @@ async fn refused_endpoints_and_disabled_streams_get_nothing() {
         );
     }
     streams
-        .disable(w.tenant, w.realm, subs[2].id)
+        .disable(w.tenant, w.environment, subs[2].id)
         .await
         .unwrap();
     assert_eq!(
-        streams.get(w.tenant, w.realm, subs[2].id).await.unwrap()["status"],
+        streams
+            .get(w.tenant, w.environment, subs[2].id)
+            .await
+            .unwrap()["status"],
         "disabled"
     );
     let id = w.api_client_created("cli_x").await;
@@ -968,7 +1033,7 @@ async fn refused_endpoints_and_disabled_streams_get_nothing() {
     w.advance(3_600_000);
     assert_eq!(courier.step().await.unwrap(), Step::default());
     assert!(matches!(
-        streams.disable(w.tenant, w.realm, subs[2].id).await,
+        streams.disable(w.tenant, w.environment, subs[2].id).await,
         Err(StreamError::NotFound)
     ));
 }
@@ -994,7 +1059,7 @@ async fn only_declared_private_endpoints_open_streams() {
     ] {
         assert!(
             matches!(
-                w.streams().create(w.tenant, w.realm, &request(refused)).await,
+                w.streams().create(w.tenant, w.environment, &request(refused)).await,
                 Err(StreamError::Invalid(i)) if i.0 == "endpoint_url"
             ),
             "{refused}"
@@ -1011,14 +1076,16 @@ async fn only_declared_private_endpoints_open_streams() {
     ] {
         assert!(
             matches!(
-                streams.create(w.tenant, w.realm, &request(near)).await,
+                streams
+                    .create(w.tenant, w.environment, &request(near))
+                    .await,
                 Err(StreamError::Invalid(_))
             ),
             "{near}"
         );
     }
     let created = streams
-        .create(w.tenant, w.realm, &request(declared))
+        .create(w.tenant, w.environment, &request(declared))
         .await
         .unwrap();
     assert_eq!(created.stream["delivery"]["endpoint_url"], declared);
@@ -1033,7 +1100,7 @@ async fn a_stream_verifies_and_sets_its_status() {
     let poll = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8936",
                 None,
@@ -1045,7 +1112,10 @@ async fn a_stream_verifies_and_sets_its_status() {
         .unwrap();
     let token = poll.token.clone().unwrap();
     let id = poll.stream["stream_id"].as_str().unwrap().to_owned();
-    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    let own = streams
+        .by_token(w.tenant, w.environment, &token)
+        .await
+        .unwrap();
     assert_eq!(streams.status(&own, &id).unwrap()["status"], "enabled");
     assert!(matches!(
         streams.status(&own, "00000000-0000-4000-8000-000000000000"),
@@ -1054,20 +1124,30 @@ async fn a_stream_verifies_and_sets_its_status() {
     let paused =
         parse_status(format!(r#"{{"stream_id":"{id}","status":"paused"}}"#).as_bytes()).unwrap();
     streams
-        .set_status(w.tenant, w.realm, &own, &paused)
+        .set_status(w.tenant, w.environment, &own, &paused)
         .await
         .unwrap();
-    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    let own = streams
+        .by_token(w.tenant, w.environment, &token)
+        .await
+        .unwrap();
     assert_eq!(streams.status(&own, &id).unwrap()["status"], "paused");
 
     let verify =
         parse_verify(format!(r#"{{"stream_id":"{id}","state":"s-42"}}"#).as_bytes()).unwrap();
     streams
-        .verify(w.tenant, w.realm, &own, &verify, T0)
+        .verify(w.tenant, w.environment, &own, &verify, T0)
         .await
         .unwrap();
     let answer = streams
-        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .poll(
+            &ClearSigner,
+            &w.clock,
+            w.tenant,
+            w.environment,
+            &token,
+            b"{}",
+        )
         .await
         .unwrap();
     let sets = answer["sets"].as_object().unwrap();
@@ -1081,11 +1161,11 @@ async fn a_stream_verifies_and_sets_its_status() {
     let disabled =
         parse_status(format!(r#"{{"stream_id":"{id}","status":"disabled"}}"#).as_bytes()).unwrap();
     streams
-        .set_status(w.tenant, w.realm, &own, &disabled)
+        .set_status(w.tenant, w.environment, &own, &disabled)
         .await
         .unwrap();
     assert!(matches!(
-        streams.by_token(w.tenant, w.realm, &token).await,
+        streams.by_token(w.tenant, w.environment, &token).await,
         Err(StreamError::NotFound)
     ));
 }
@@ -1100,7 +1180,7 @@ async fn an_unsignable_delivery_is_retried_without_blocking_the_others() {
     let hook = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:suiss:access:delivery:webhook",
                 Some("https://work.example/v1/access/events"),
@@ -1113,7 +1193,7 @@ async fn an_unsignable_delivery_is_retried_without_blocking_the_others() {
     let push = streams
         .create(
             w.tenant,
-            w.realm,
+            w.environment,
             &parse_stream(&stream_request(
                 "urn:ietf:rfc:8935",
                 Some("https://work.example/v1/inbound/events"),

@@ -68,7 +68,7 @@ pub struct ReadToken {
 
 /// Verifies management read tokens (TN-27, TN-130, OP-151 m.3 (c)).
 pub trait ReadTokens: Send + Sync {
-    /// The token if its signature verifies with the issuing realm's keys, its DPoP proof binds
+    /// The token if its signature verifies with the issuing environment's keys, its DPoP proof binds
     /// it to the presenting holder for this method and URI, and it is not revoked (session and
     /// key epochs, OP-21); `None` otherwise. Audience, scope and lifetime are the caller
     /// model's checks, not the verifier's.
@@ -80,7 +80,7 @@ pub trait ReadTokens: Send + Sync {
 
 /// The governing domains and live Instance keys behind the management surfaces (PI-7, TN-119).
 pub trait Surfaces: Send + Sync {
-    /// The surface's governing domain; `None` when there is no such realm.
+    /// The surface's governing domain; `None` when there is no such environment.
     fn domain(
         &self,
         scope: &SurfaceScope,
@@ -155,10 +155,10 @@ pub trait CursorSeal: Send + Sync {
     fn open(&self, context: &[u8], cursor: &str) -> Option<Vec<u8>>;
 }
 
-/// A port answer that may be pending, boxed so [`RealmResources`] stays object safe.
+/// A port answer that may be pending, boxed so [`EnvironmentResources`] stays object safe.
 pub type Pending<'a, T> = Pin<Box<dyn Future<Output = Result<T, Unavailable>> + Send + 'a>>;
 
-/// A readable kind of realm resource (OP-151 m.2 M1).
+/// A readable kind of environment resource (OP-151 m.2 M1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResourceKind {
     /// Clients, by `client_id`.
@@ -175,9 +175,9 @@ pub enum ResourceKind {
     Hooks,
     /// Webhooks, by `webhook_id` (TN-136).
     Webhooks,
-    /// The realm's signal sources singleton (§8.13).
+    /// The environment's signal sources singleton (§8.13).
     Signals,
-    /// The realm's sign-in analytics singleton (IDP-36).
+    /// The environment's sign-in analytics singleton (IDP-36).
     Analytics,
     /// One webhook's delivery log, by `webhook_id` (TN-136).
     Deliveries,
@@ -233,16 +233,16 @@ pub enum ResourceKind {
     ReviewItems,
     /// What offboarding a Party would do, by its Party's base64url (OP-157 m.3 (v)).
     OffboardingPreviews,
-    /// The realm's cell placement, one resource (OP-158 m.3 (o)).
+    /// The environment's cell placement, one resource (OP-158 m.3 (o)).
     Placement,
-    /// The realm's durability and DR declaration, one resource (OP-158 m.3 (n), (p)).
+    /// The environment's durability and DR declaration, one resource (OP-158 m.3 (n), (p)).
     Durability,
-    /// The realm's rate limits and their use now, one resource (§12.5.4, OP-158 m.3 (v)).
+    /// The environment's rate limits and their use now, one resource (§12.5.4, OP-158 m.3 (v)).
     RateLimits,
     /// Whether the governing domain can be recovered, with its handover and recovery history,
     /// one resource (§8.17.9.7, §13.6, OP-158 m.4 (b) (W6)).
     Recovery,
-    /// The realm's signing profile, keys, key exchange share policy and crypto module, one
+    /// The environment's signing profile, keys, key exchange share policy and crypto module, one
     /// resource (OP-159 m.3 (o), (r), (t)).
     Signing,
 }
@@ -297,11 +297,11 @@ impl ResourceKind {
     }
 }
 
-/// A read of one realm resource, or of one page of a collection (TN-113: the answer holds only
-/// what the realm may see; the handler filters nothing).
+/// A read of one environment resource, or of one page of a collection (TN-113: the answer holds only
+/// what the environment may see; the handler filters nothing).
 #[derive(Clone, Debug)]
 pub struct ResourceQuery {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// What to read.
     pub kind: ResourceKind,
@@ -331,11 +331,11 @@ pub struct Listing {
     pub last: Option<String>,
 }
 
-/// A write to a realm resource, as one manifest operation with its natural key and its JSON body
+/// A write to an environment resource, as one manifest operation with its natural key and its JSON body
 /// (a merge patch already applied).
 #[derive(Clone, Debug)]
 pub struct ResourceWrite {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// Its governing domain.
     pub domain: Digest,
@@ -396,7 +396,7 @@ pub enum Written {
 /// as ADP decodes a `commit`, with its own AIS.
 #[derive(Clone, Debug)]
 pub struct MetaWrite {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// What the write is for beyond its meta-action, when the identity plane keeps a record of
     /// it.
@@ -446,11 +446,11 @@ pub enum Drafted {
     Rejected(&'static crate::problem::Code),
 }
 
-/// The realm resources behind the realm-admin surface (OP-151 m.2 M1): reads scoped to the realm
+/// The environment resources behind the environment-admin surface (OP-151 m.2 M1): reads scoped to the environment
 /// in the store (TN-113), drafts of the intent a write compiles to, and commits of exactly one
 /// `idp.*` Exercise per write through the identity plane (TN-110, PI-4, INV-2).
-pub trait RealmResources: Send + Sync {
-    /// Reads; `None` when there is no such realm.
+pub trait EnvironmentResources: Send + Sync {
+    /// Reads; `None` when there is no such environment.
     fn read(&self, query: ResourceQuery) -> Pending<'_, Option<Listing>>;
 
     /// The intent `write` compiles to; nothing is decided or changed.
@@ -459,17 +459,17 @@ pub trait RealmResources: Send + Sync {
     /// Commits `write` with the caller's verified AIS.
     fn commit(&self, write: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written>;
 
-    /// A page of the realm's full-taxonomy audit stream (channel B) in `query.format`, after
-    /// the read itself was audited (OP-41, OP-44); `None` when there is no such realm. None by
+    /// A page of the environment's full-taxonomy audit stream (channel B) in `query.format`, after
+    /// the read itself was audited (OP-41, OP-44); `None` when there is no such environment. None by
     /// default.
     fn audit(&self, query: AuditQuery) -> Pending<'_, Option<Listing>> {
         let _ = query;
         Box::pin(async { Err(Unavailable) })
     }
 
-    /// The inclusion proof of one audit event in the realm's own audit tree, after the read
-    /// itself was audited (OP-152 m.7 (d), OP-44); `None` when there is no such realm or the
-    /// event is not in a signed realm checkpoint yet. None by default.
+    /// The inclusion proof of one audit event in the environment's own audit tree, after the read
+    /// itself was audited (OP-152 m.7 (d), OP-44); `None` when there is no such environment or the
+    /// event is not in a signed environment checkpoint yet. None by default.
     fn audit_proof(&self, query: AuditProofQuery) -> Pending<'_, Option<serde_json::Value>> {
         let _ = query;
         Box::pin(async { Err(Unavailable) })
@@ -484,7 +484,7 @@ pub trait RealmResources: Send + Sync {
 
     /// V10, OP-157 m.4 (b): records the reviewer's keep of one campaign item as a
     /// `review.kept` identity audit record; no Exercise and no authority (OP-157 m.3 (w),
-    /// m.6 (a)). `None` when there is no such realm, `Some(false)` when the item is not one of
+    /// m.6 (a)). `None` when there is no such environment, `Some(false)` when the item is not one of
     /// the signer's. None by default.
     fn keep_review(&self, keep: ReviewKeep) -> Pending<'_, Option<bool>> {
         let _ = keep;
@@ -495,7 +495,7 @@ pub trait RealmResources: Send + Sync {
 /// A reviewer's keep of one campaign item (OP-157 m.3 (w)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReviewKeep {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// The campaign.
     pub review: String,
@@ -505,10 +505,10 @@ pub struct ReviewKeep {
     pub kid: [u8; 32],
 }
 
-/// A read of one audit event's realm inclusion proof (OP-152 m.7 (d)).
+/// A read of one audit event's environment inclusion proof (OP-152 m.7 (d)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditProofQuery {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// The event, as the audit stream names it.
     pub event: String,
@@ -541,10 +541,10 @@ impl AuditFormat {
     }
 }
 
-/// A read of one page of the realm's audit stream.
+/// A read of one page of the environment's audit stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditQuery {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
     /// The rendering.
     pub format: AuditFormat,
@@ -556,11 +556,11 @@ pub struct AuditQuery {
     pub reader: String,
 }
 
-/// Realm resources that do not exist: every read finds no realm and every write is refused
+/// Environment resources that do not exist: every read finds no environment and every write is refused
 /// (MD-8). The default until a process wires its own.
-pub struct NoRealmResources;
+pub struct NoEnvironmentResources;
 
-impl RealmResources for NoRealmResources {
+impl EnvironmentResources for NoEnvironmentResources {
     fn read(&self, _: ResourceQuery) -> Pending<'_, Option<Listing>> {
         Box::pin(async { Ok(None) })
     }
@@ -579,9 +579,9 @@ impl RealmResources for NoRealmResources {
 pub enum PlatformKind {
     /// Tenants, by opaque `tenant_id`.
     Tenants,
-    /// Realms, by slug: their metadata, never their settings or content.
-    Realms,
-    /// Sandbox domains, by their realm's slug.
+    /// Environments, by slug: their metadata, never their settings or content.
+    Environments,
+    /// Sandbox domains, by their environment's slug.
     SandboxDomains,
     /// The operator's health summary, without secrets.
     Health,
@@ -593,7 +593,7 @@ impl PlatformKind {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Tenants => "tenants",
-            Self::Realms => "realms",
+            Self::Environments => "environments",
             Self::SandboxDomains => "sandbox-domains",
             Self::Health => "health",
         }
@@ -606,7 +606,7 @@ impl PlatformKind {
 pub struct PlatformQuery {
     /// What to read.
     pub kind: PlatformKind,
-    /// The tenant the collection is in, for realms and sandbox domains.
+    /// The tenant the collection is in, for environments and sandbox domains.
     pub tenant: Option<String>,
     /// One resource's natural key; `None` for a page.
     pub key: Option<String>,
@@ -633,9 +633,9 @@ pub struct PlatformWrite {
 }
 
 /// The platform resources behind the platform-admin surface (OP-151 m.2 M2): metadata reads
-/// across tenants that never include realm content (INV-29, X31), drafts of the intent a write
+/// across tenants that never include environment content (INV-29, X31), drafts of the intent a write
 /// compiles to, and commits of exactly one `idp.platform.*` Exercise per write in the platform
-/// realm's governing domain (TN-110, PI-4, INV-2).
+/// environment's governing domain (TN-110, PI-4, INV-2).
 pub trait PlatformResources: Send + Sync {
     /// Reads; `None` when the tenant or resource does not exist.
     fn read(&self, query: PlatformQuery) -> Pending<'_, Option<Listing>>;
@@ -727,9 +727,9 @@ pub struct JobItem {
     pub position: Option<u64>,
 }
 
-/// Where bulk jobs are kept (TN-125): in the realm's scope, 7 days, never deleted (OP-73).
+/// Where bulk jobs are kept (TN-125): in the environment's scope, 7 days, never deleted (OP-73).
 pub trait Jobs: Send + Sync {
-    /// Records a job; `None` when there is no such realm.
+    /// Records a job; `None` when there is no such environment.
     fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>>;
 
     /// Records one item's outcome.
@@ -807,9 +807,9 @@ pub trait Env: Send + Sync + 'static {
     fn idempotency(&self) -> &Self::Idempotency;
     /// The management origin, `https://<host>[:port]`, from configuration only (§17.9.6).
     fn origin(&self) -> &str;
-    /// The realm resources; none by default.
-    fn realm(&self) -> &dyn RealmResources {
-        &NoRealmResources
+    /// The environment resources; none by default.
+    fn environment(&self) -> &dyn EnvironmentResources {
+        &NoEnvironmentResources
     }
     /// The platform resources; none by default.
     fn platform(&self) -> &dyn PlatformResources {

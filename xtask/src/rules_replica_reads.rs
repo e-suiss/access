@@ -20,7 +20,7 @@ const HOLDERS: [&str; 5] = [
     "crates/store/src/lib.rs",
     "bins/access-server/src/main.rs",
     "bins/access-server/src/config.rs",
-    "bins/access-server/src/admin/realm.rs",
+    "bins/access-server/src/admin/environment.rs",
 ];
 
 /// The other files that may name the configuration key: the command line's mirror of it.

@@ -2,13 +2,13 @@
 // surfaces against the running local deployment, signed in once as its bootstrap test user
 // (signin.setup.ts). The bootstrap's sample agent acts for the test user under the test user's
 // own Grant and made one allowed Exercise; no executor runs there, so nothing reported its
-// outcome, and no upstream account is connected. The realm's agent-connections route answers
+// outcome, and no upstream account is connected. The environment's agent-connections route answers
 // the cookie with the person's connections and agents and never a token; with this browser's
 // device set up, the hub shows the sample agent as an agent acting for the test user, and its
 // use with no report.
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, REALM } from "./signin.js";
+import { PASSWORD, ENVIRONMENT } from "./signin.js";
 
 test.describe("@live connected accounts for agents", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");
@@ -16,11 +16,11 @@ test.describe("@live connected accounts for agents", () => {
   test("@live S11 reads the person's connected accounts for agents from the agent-connections route", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     const box = page.getByTestId("agent-accounts");
     await expect(box.getByRole("heading", { name: "Connected accounts for agents" })).toBeVisible();
     await expect(box.getByText("We can't read your connected accounts right now.")).toHaveCount(0);
-    const r = await page.request.get(`${REALM}/v1/account/agent-connections`);
+    const r = await page.request.get(`${ENVIRONMENT}/v1/account/agent-connections`);
     expect(r.status()).toBe(200);
     const body = (await r.json()) as {
       agents: Record<string, unknown>[];
@@ -42,7 +42,7 @@ test.describe("@live connected accounts for agents", () => {
     page,
   }) => {
     // XI-17, A-12, E64, X30
-    await page.goto(`${REALM}/account/authority`);
+    await page.goto(`${ENVIRONMENT}/account/authority`);
     await page.getByRole("button", { name: "Set up this device" }).click();
     await page
       .getByRole("dialog", { name: "Check what you're signing" })
@@ -67,7 +67,7 @@ test.describe("@live connected accounts for agents", () => {
 
   test("@live an agent is never given a person badge on the account page", async ({ page }) => {
     // XI-17
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     await expect(page.getByTestId("agent-accounts")).toBeVisible();
     await expect(page.getByText(/\bhuman\b/i)).toHaveCount(0);
     for (const badge of await page.locator("[data-party-kind]").all()) {

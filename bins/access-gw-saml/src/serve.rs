@@ -1,5 +1,5 @@
 //! The forward listener: one bounded HTTP/1.1 `POST` per connection from access-server, answered
-//! with deterministic CBOR (OP-155 m.3 (c)). The edge core names the gateway's realm and carries
+//! with deterministic CBOR (OP-155 m.3 (c)). The edge core names the gateway's environment and carries
 //! its calls; the parser client reaches the worker supervisor.
 
 use std::sync::Arc;
@@ -28,7 +28,7 @@ const DEADLINE: Duration = Duration::from_secs(14);
 struct Live {
     core: EdgeCore,
     parser: ParserClient,
-    realm: String,
+    environment: String,
 }
 
 impl Ports for Live {
@@ -49,8 +49,8 @@ impl Ports for Live {
         }
     }
 
-    fn realm(&self) -> &str {
-        &self.realm
+    fn environment(&self) -> &str {
+        &self.environment
     }
 }
 
@@ -144,7 +144,7 @@ pub(crate) async fn run(
     let core = EdgeCore::connect(channel)
         .await
         .map_err(|e| format!("hello refused: {e}"))?;
-    let realm = String::from(core.realm(None).map_err(|e| e.to_string())?);
+    let environment = String::from(core.environment(None).map_err(|e| e.to_string())?);
     // SA-22
     locked
         .narrow()
@@ -152,7 +152,7 @@ pub(crate) async fn run(
     let live = Arc::new(Live {
         core,
         parser,
-        realm,
+        environment,
     });
     loop {
         let (s, _) = listener.accept().await.map_err(|e| e.to_string())?;

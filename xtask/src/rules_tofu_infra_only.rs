@@ -1,6 +1,6 @@
 //! `tofu-infra-only` (OP-158 m.3 (p), §12.5.3, T36): `deploy/tofu/**` provisions infrastructure only and makes no `idp.*` or ADP call.
 //!
-//! Realm and domain configuration is an Exercise through the management API, never
+//! Environment and domain configuration is an Exercise through the management API, never
 //! infrastructure: no file under `deploy/tofu/` names an `idp.*` action, the decision API
 //! (`/access/v1/`), the management API (`/admin/v1/`), the Access CLI or the provider's own
 //! write paths.
@@ -74,7 +74,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
                     rule: RULE,
                     path: r.clone().into(),
                     message: format!(
-                        "line {}: {what}; OpenTofu provisions infrastructure only, realm and domain configuration is an Exercise (OP-158 m.3 (p))",
+                        "line {}: {what}; OpenTofu provisions infrastructure only, environment and domain configuration is an Exercise (OP-158 m.3 (p))",
                         i.saturating_add(1)
                     ),
                 });
@@ -91,17 +91,17 @@ mod tests {
     // T36, OP-158 m.3 (p)
     #[test]
     fn t36_an_infrastructure_file_names_no_configuration_call() {
-        assert!(names_idp_action(r#"action = "idp.realm.rehome""#));
+        assert!(names_idp_action(r#"action = "idp.environment.rehome""#));
         assert!(names_idp_action("idp.client.register"));
         assert!(!names_idp_action("var.idp.host"));
-        assert!(!names_idp_action("cidp.realm.x"));
+        assert!(!names_idp_action("cidp.environment.x"));
         assert!(!names_idp_action("the idp. namespace"));
         assert_eq!(
-            call(r#"url = "https://a.example/admin/v1/realms/acme/clients""#),
+            call(r#"url = "https://a.example/admin/v1/envs/acme/clients""#),
             Some("/admin/v1/")
         );
         assert_eq!(
-            call("command = \"access-cli realm create\""),
+            call("command = \"access-cli environment create\""),
             Some("access-cli")
         );
         assert_eq!(call(r#"chart = "../helm/access""#), None);

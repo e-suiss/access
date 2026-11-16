@@ -60,13 +60,13 @@ test("a stolen cookie can neither write nor read authority state", async ({
 
   const csrf = stolen.find((c) => c.name === CSRF)?.value ?? "";
   const answers = await tp.evaluate(async (token) => {
-    const read = await fetch("/console/api/proxy/admin/realms/acme/clients");
-    const write = await fetch("/console/api/proxy/admin/realms/acme/groups", {
+    const read = await fetch("/console/api/proxy/admin/envs/acme/clients");
+    const write = await fetch("/console/api/proxy/admin/envs/acme/groups", {
       method: "POST",
       headers: { "content-type": "application/json", "x-csrf-token": token },
       body: "{}",
     });
-    const forged = await fetch("/console/api/proxy/admin/realms/acme/clients", {
+    const forged = await fetch("/console/api/proxy/admin/envs/acme/clients", {
       headers: { "x-access-ais": "0oRDoQEmoFhAAAA" },
     });
     const search = await fetch("/console/api/proxy/adp/search/grants", {

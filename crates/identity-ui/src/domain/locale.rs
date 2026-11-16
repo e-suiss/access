@@ -1,4 +1,4 @@
-//! Message catalogs (OP-153 m.3 (s), TN-108): Access's Fluent files under `locales/`, a realm's
+//! Message catalogs (OP-153 m.3 (s), TN-108): Access's Fluent files under `locales/`, an environment's
 //! overrides, and the five-step fallback chain. The canonical key of a login text is its
 //! [`TextId`]; its Fluent key is the wire id with `-` for `.`.
 //!
@@ -25,7 +25,7 @@ const ACCESS: &[(&str, &str)] = &[
     ("tr", include_str!("../../../../locales/tr/mail.ftl")),
 ];
 
-/// The keys no realm override may replace (X35, XI-25).
+/// The keys no environment override may replace (X35, XI-25).
 const PROTECTED: &str = include_str!("../../../../conformance/catalog/protected-messages.toml");
 
 /// Why a catalog or an override is refused.
@@ -37,10 +37,10 @@ pub enum LocaleError {
     /// A key defined twice.
     #[error("key {0} defined twice")]
     Duplicate(String),
-    /// A realm override of a protected key (X35).
+    /// An environment override of a protected key (X35).
     #[error("key {0} is protected")]
     Protected(String),
-    /// A realm override of a key Access does not define.
+    /// An environment override of a key Access does not define.
     #[error("key {0} is unknown")]
     Unknown(String),
     /// A locale tag outside BCP 47's simple form.
@@ -150,7 +150,7 @@ pub struct Catalogs {
     protected: BTreeSet<String>,
 }
 
-/// A realm's overrides of unprotected keys, by lower-case locale (`idp.realm.locale_overrides`).
+/// An environment's overrides of unprotected keys, by lower-case locale (`idp.environment.locale_overrides`).
 pub type Overrides = BTreeMap<String, Messages>;
 
 impl Catalogs {
@@ -180,13 +180,13 @@ impl Catalogs {
         self.access.get(locale)
     }
 
-    /// Whether a realm may not override `key` (X35).
+    /// Whether an environment may not override `key` (X35).
     #[must_use]
     pub fn is_protected(&self, key: &str) -> bool {
         self.protected.contains(key)
     }
 
-    /// Checks a realm's overrides: known keys only, never a protected one; there is no
+    /// Checks an environment's overrides: known keys only, never a protected one; there is no
     /// "override plus validator" escape (X35).
     ///
     /// # Errors
@@ -207,21 +207,21 @@ impl Catalogs {
         Ok(())
     }
 
-    /// The pattern of `key` for `locale`: realm (locale) → realm (language) → Access (locale)
-    /// → Access (language) → `en`. A protected key skips the realm's layers.
+    /// The pattern of `key` for `locale`: environment (locale) → environment (language) → Access (locale)
+    /// → Access (language) → `en`. A protected key skips the environment's layers.
     #[must_use]
     pub fn pattern<'a>(
         &'a self,
         key: &str,
         locale: &str,
-        realm: Option<&'a Overrides>,
+        environment: Option<&'a Overrides>,
     ) -> Option<&'a str> {
         let (full, language) =
             tag(locale).unwrap_or_else(|_| (String::from(DEFAULT_LANGUAGE), String::from("en")));
-        let realm = realm.filter(|_| !self.is_protected(key));
+        let environment = environment.filter(|_| !self.is_protected(key));
         let layers = [
-            realm.and_then(|r| r.get(&full)),
-            realm.and_then(|r| r.get(&language)),
+            environment.and_then(|r| r.get(&full)),
+            environment.and_then(|r| r.get(&language)),
             self.access.get(&full),
             self.access.get(&language),
             self.access.get(DEFAULT_LANGUAGE),
@@ -239,10 +239,10 @@ impl Catalogs {
         &self,
         key: &str,
         locale: &str,
-        realm: Option<&Overrides>,
+        environment: Option<&Overrides>,
         args: &[(&str, &str)],
     ) -> Option<String> {
-        let mut text = String::from(self.pattern(key, locale, realm)?);
+        let mut text = String::from(self.pattern(key, locale, environment)?);
         for (name, value) in args {
             text = text.replace(&format!("{{ ${name} }}"), value);
         }
@@ -250,7 +250,7 @@ impl Catalogs {
     }
 }
 
-/// The realm's stored overrides (`idp.realm.locale_overrides`, deterministic CBOR) as the
+/// The environment's stored overrides (`idp.environment.locale_overrides`, deterministic CBOR) as the
 /// hosted pages read them: `{locale: {key: text}}`, keeping only well-formed locales, known
 /// unprotected keys and plain texts (X35, XI-25, OP-153 m.22 (k)); anything else is dropped.
 #[must_use]

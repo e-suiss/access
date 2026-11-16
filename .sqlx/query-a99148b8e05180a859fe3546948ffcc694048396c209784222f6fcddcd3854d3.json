@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_environment_settings SET jose_alg = $3, argon2_m_kib = $4, argon2_t = $5,\n                argon2_p = $6, rp_id = $7, cimd_enabled = $8, cimd_domains = $9, domain_id = $10,\n                decision_pos = $11\n          WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Bool",
+        "TextArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a99148b8e05180a859fe3546948ffcc694048396c209784222f6fcddcd3854d3"
+}

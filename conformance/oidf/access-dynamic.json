@@ -1,6 +1,6 @@
 {
   "alias": "access-dynamic",
-  "description": "Access realm acme with DCR open to the suite's redirect host behind an initial access token made by the target at run time (OP-154 m.3 (j), OP-155 m.3 (q))",
+  "description": "Access environment acme with DCR open to the suite's redirect host behind an initial access token made by the target at run time (OP-154 m.3 (j), OP-155 m.3 (q))",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

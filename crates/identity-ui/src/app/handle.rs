@@ -6,7 +6,7 @@
 //! to anyone else.
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_store::audit::AuditEvent;
 use access_store::identity::TenantTx;
 use access_store::idp;
@@ -18,7 +18,7 @@ use super::me::unavailable;
 use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Body, Browser, Hosted, Reply};
 use crate::domain::handle::{Handle, Verdict, verify};
-use crate::ports::{Clock, HandleHosts, Kits, Messages, RealmKit};
+use crate::ports::{Clock, EnvironmentKit, HandleHosts, Kits, Messages};
 
 /// The opaque id prefix of a handle.
 pub const HANDLE_PREFIX: &str = "hdl";
@@ -50,7 +50,7 @@ const NOT_VERIFIED: Problem = problem(
     "Your site doesn't point back to you yet",
 );
 
-/// The base a Suiss handle of the realm is a subdomain of: the issuer's host, with the realm's
+/// The base a Suiss handle of the environment is a subdomain of: the issuer's host, with the environment's
 /// slug in front for a path issuer.
 #[must_use]
 pub fn suiss_base(issuer: &str) -> Option<String> {
@@ -76,8 +76,12 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn handle_party(&self, kit: &RealmKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn handle_party(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Result<[u8; 16], Reply> {
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let p = idp::subject_party(&mut t, &subject)
@@ -89,14 +93,14 @@ where
 
     async fn record_handle(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         (subject, id): ([u8; 16], [u8; 16]),
         event: &'static str,
         correlation: &str,
     ) -> Result<bool, Reply> {
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let new = t.handle_event(subject, id, event).await?;
             if new {
                 t.audit(&AuditEvent {
@@ -118,7 +122,7 @@ where
     }
 
     /// `GET /v1/me/handles`: the person's handles, each with whether it is shown.
-    pub async fn handles(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn handles(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -128,7 +132,7 @@ where
             Err(r) => return r,
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let rows = t.handles(Some(subject), None).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
@@ -157,7 +161,7 @@ where
     /// verified at once; one of the person's own domain waits for its host.
     pub async fn claim_handle(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         claim: &HandleClaim,
     ) -> Reply {
@@ -195,7 +199,7 @@ where
         let kind = if suiss { "suiss" } else { "own" };
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let made = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let id = t
                 .claim_handle((subject, party), handle.as_str(), &did, kind)
                 .await?;
@@ -243,7 +247,7 @@ where
     pub async fn verify_handle<H: HandleHosts>(
         &self,
         hosts: &H,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         id: &str,
     ) -> Reply {
@@ -259,7 +263,7 @@ where
             return Reply::problem(UNKNOWN);
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let rows = t.handles(Some(subject), None).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
@@ -291,7 +295,12 @@ where
 
     /// `POST /v1/me/handles/{handle}/retire`: the handle is no longer shown and never handed to
     /// anyone else.
-    pub async fn retire_handle(&self, entry: &RealmEntry, b: &Browser<'_>, id: &str) -> Reply {
+    pub async fn retire_handle(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        id: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -317,10 +326,10 @@ where
     /// `alsoKnownAs` (E56 (2)).
     pub(super) async fn shown_handles(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         party: [u8; 16],
     ) -> Result<Vec<String>, Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let rows = t
@@ -357,9 +366,9 @@ mod tests {
 
     // E56 (2)
     #[test]
-    fn a_suiss_handle_is_a_subdomain_of_the_realms_own_base() {
+    fn a_suiss_handle_is_a_subdomain_of_the_environments_own_base() {
         assert_eq!(
-            suiss_base("https://access.test/realms/acme").as_deref(),
+            suiss_base("https://access.test/env/acme").as_deref(),
             Some("acme.access.test")
         );
         assert_eq!(

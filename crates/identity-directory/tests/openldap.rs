@@ -56,15 +56,15 @@ async fn an_incremental_pull_reads_people_and_groups_above_the_watermark() {
         .collect();
     assert_eq!(later.len(), 1, "{later:?}");
     assert!(matches!(&later[0], Change::Group { name, .. } if name == "staff"));
-    let mut realm = BTreeMap::new();
-    realm.insert(
+    let mut environment = BTreeMap::new();
+    environment.insert(
         String::from("staff"),
         GroupIssuer {
             issuer: String::from("upstream:corp-ad"),
             accepted: false,
         },
     );
-    assert!(memberships("corp-ad", &all, &realm).is_empty());
+    assert!(memberships("corp-ad", &all, &environment).is_empty());
     let mut wrong = source();
     wrong.password = Secret::new(String::from("not-the-password"));
     assert!(wrong.changes(0).await.is_err());

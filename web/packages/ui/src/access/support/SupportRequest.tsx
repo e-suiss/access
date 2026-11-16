@@ -80,7 +80,7 @@ export function SupportRequest({
 export interface SupportActionsProps {
   /** Asks the person for support access; the person decides on their own page. */
   readonly onRequest: () => void;
-  /** Starts the break-glass path where the realm declared one. */
+  /** Starts the break-glass path where the environment declared one. */
   readonly onEmergency?: () => void;
   readonly catalogue?: Readonly<Record<string, string>> | undefined;
 }

@@ -30,14 +30,14 @@ pub async fn emit<T: AccountTx>(tx: &mut T, order: &EventOrder) -> Result<(), Ac
 /// [`AccountError`].
 pub async fn created<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
 ) -> Result<(), AccountError> {
     let at = tx.server_time().await?;
     let order = EventOrder::created(
         new_id()?,
-        realm.realm_id().as_bytes(),
-        &realm.external(subject)?,
+        environment.environment_id().as_bytes(),
+        &environment.external(subject)?,
         at,
     );
     emit(tx, &order).await
@@ -49,7 +49,7 @@ pub async fn created<T: AccountTx>(
 /// [`AccountError`].
 pub async fn status<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
     from: AccountStatus,
     to: AccountStatus,
@@ -61,8 +61,8 @@ pub async fn status<T: AccountTx>(
     let order = EventOrder::status(
         kind,
         new_id()?,
-        realm.realm_id().as_bytes(),
-        &realm.external(subject)?,
+        environment.environment_id().as_bytes(),
+        &environment.external(subject)?,
         to,
         at,
     );
@@ -75,15 +75,15 @@ pub async fn status<T: AccountTx>(
 /// [`AccountError`].
 pub async fn sessions_ended<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
     rev: i64,
 ) -> Result<(), AccountError> {
     let at = tx.server_time().await?;
     let order = EventOrder::session_revoked(
         new_id()?,
-        realm.realm_id().as_bytes(),
-        &realm.external(subject)?,
+        environment.environment_id().as_bytes(),
+        &environment.external(subject)?,
         rev,
         at,
     );
@@ -96,7 +96,7 @@ pub async fn sessions_ended<T: AccountTx>(
 /// [`AccountError`].
 pub async fn credential<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
     kind: &str,
     change: CredentialChange,
@@ -104,8 +104,8 @@ pub async fn credential<T: AccountTx>(
     let at = tx.server_time().await?;
     let order = EventOrder::credential(
         new_id()?,
-        realm.realm_id().as_bytes(),
-        &realm.external(subject)?,
+        environment.environment_id().as_bytes(),
+        &environment.external(subject)?,
         kind,
         change,
         at,

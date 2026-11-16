@@ -1,4 +1,4 @@
-//! The realm's discovery documents: OIDC Discovery and RFC 8414 AS metadata with the Access
+//! The environment's discovery documents: OIDC Discovery and RFC 8414 AS metadata with the Access
 //! corrections, and RFC 9728 Protected Resource Metadata. Only what is served is declared
 //! (§10.4.6, §11.4.5, CMP-15.1).
 
@@ -8,7 +8,7 @@ pub use access_identity_signer::domain::{CACHE_CONTROL as JWKS_CACHE_CONTROL, JW
 
 use crate::domain::issuer::Issuer;
 
-/// An endpoint of the realm's authorization server.
+/// An endpoint of the environment's authorization server.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Endpoint {
@@ -26,11 +26,11 @@ pub enum Endpoint {
     Introspect,
     /// `GET`/`POST /end-session` (OIDC RP-Initiated Logout 1.0).
     EndSession,
-    /// `POST /device_authorization` (RFC 8628), turned on per realm by
-    /// `idp.realm.device_code` (OP-154 m.3 (p)).
+    /// `POST /device_authorization` (RFC 8628), turned on per environment by
+    /// `idp.environment.device_code` (OP-154 m.3 (p)).
     DeviceAuthorization,
-    /// `POST /bc-authorize`, the CIBA backchannel authentication endpoint, turned on per realm
-    /// by `idp.realm.ciba` (OP-155 m.3 (l)).
+    /// `POST /bc-authorize`, the CIBA backchannel authentication endpoint, turned on per environment
+    /// by `idp.environment.ciba` (OP-155 m.3 (l)).
     BackchannelAuthentication,
 }
 
@@ -97,7 +97,7 @@ pub const SAML2_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:saml2-bea
 /// Grant type of OpenID CIBA Core 1.0 (OP-155 m.3 (l)).
 pub const CIBA_GRANT: &str = "urn:openid:params:grant-type:ciba";
 
-/// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).
+/// What the environment's authorization server serves; the metadata declares nothing else (§10.4.6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Served {
     /// Endpoints in service.
@@ -190,41 +190,41 @@ const SIGNING_ALGS: [&str; 2] = ["ES256", "Ed25519"];
 /// identity plane only (§11.4.5 (a), CR-2).
 const CLIENT_ASSERTION_ALGS: [&str; 2] = ["ES256", "RS256"];
 
-/// What a realm's AS metadata says about the realm itself.
+/// What an environment's AS metadata says about the environment itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is one realm decision the metadata declares"
+    reason = "each flag is one environment decision the metadata declares"
 )]
-pub struct RealmFacts {
-    /// At least one active client of the realm opted in to the public `sub` (MD-10).
+pub struct EnvironmentFacts {
+    /// At least one active client of the environment opted in to the public `sub` (MD-10).
     pub public_sub: bool,
     /// The address of the governing domain's signed Domain Metadata (§9.15.1 k.2, P60).
     pub domain_metadata: Option<String>,
-    /// The realm accepts CIMD clients (`idp.client.cimd_policy`); without it the member is
+    /// The environment accepts CIMD clients (`idp.client.cimd_policy`); without it the member is
     /// absent, which reads as unsupported (§11.3.3).
     pub cimd: bool,
-    /// The realm's DCR profile is open (`idp.client.dcr_policy`); without it no
+    /// The environment's DCR profile is open (`idp.client.dcr_policy`); without it no
     /// `registration_endpoint` is declared (§10.1.2, OP-154 m.3 (j)).
     pub dcr: bool,
-    /// The realm offers the device authorization grant (`idp.realm.device_code`); without it
+    /// The environment offers the device authorization grant (`idp.environment.device_code`); without it
     /// neither its endpoint nor its grant type is declared (TN-35, OP-154 m.3 (dd)).
     pub device_code: bool,
-    /// The realm lets its clients opt in to front-channel logout (`idp.realm.frontchannel_logout`);
+    /// The environment lets its clients opt in to front-channel logout (`idp.environment.frontchannel_logout`);
     /// without it nothing about front-channel logout is declared (IDP-24, OP-155 m.3 (k)).
     pub frontchannel: bool,
-    /// The realm offers CIBA (`idp.realm.ciba`); without it neither its endpoint, its grant type
+    /// The environment offers CIBA (`idp.environment.ciba`); without it neither its endpoint, its grant type
     /// nor its delivery modes are declared (OP-155 m.3 (l)).
     pub ciba: bool,
     /// An active client opted in to `client_secret_post`; without one it is not declared.
     pub secret_post: bool,
     /// An active client opted in to `client_secret_jwt`; without one it is not declared.
     pub secret_jwt: bool,
-    /// The port of the mTLS listener when the server runs one and the realm publishes its
-    /// aliases (`idp.realm.mtls_aliases`); without it `mtls_endpoint_aliases` is absent
+    /// The port of the mTLS listener when the server runs one and the environment publishes its
+    /// aliases (`idp.environment.mtls_aliases`); without it `mtls_endpoint_aliases` is absent
     /// (RFC 8705 §5, OP-155 m.3 (m)).
     pub mtls_port: Option<u16>,
-    /// The JWS name of the realm's open post-quantum signing profile; without it no ML-DSA
+    /// The JWS name of the environment's open post-quantum signing profile; without it no ML-DSA
     /// algorithm is declared (CR-41, OP-159 m.3 (o)).
     pub pq_alg: Option<&'static str>,
 }
@@ -248,8 +248,8 @@ const MTLS_ALIASED: [(Endpoint, &str); 7] = [
 ];
 
 /// `mtls_endpoint_aliases` (RFC 8705 §5, §10.2.5, OP-155 m.3 (m)): the declared endpoints of
-/// [`MTLS_ALIASED`] on the mTLS listener's port; nothing when the realm has no port to name.
-fn mtls_aliases(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFacts) {
+/// [`MTLS_ALIASED`] on the mTLS listener's port; nothing when the environment has no port to name.
+fn mtls_aliases(m: &mut Map<String, Value>, issuer: &Issuer, facts: &EnvironmentFacts) {
     let Some(port) = facts.mtls_port else {
         return;
     };
@@ -267,9 +267,9 @@ fn mtls_aliases(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFacts)
 /// The RFC 7591 registration endpoint under the issuer.
 pub const REGISTER_PATH: &str = "/register";
 
-/// The endpoints a realm turns on itself: `/register` while its DCR profile is open (§10.1.2,
+/// The endpoints an environment turns on itself: `/register` while its DCR profile is open (§10.1.2,
 /// OP-154 m.3 (j)).
-fn realm_endpoints(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFacts) {
+fn environment_endpoints(m: &mut Map<String, Value>, issuer: &Issuer, facts: &EnvironmentFacts) {
     if facts.dcr {
         m.insert(
             "registration_endpoint".into(),
@@ -279,20 +279,20 @@ fn realm_endpoints(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFac
 }
 
 /// The AS metadata member that names the governing domain's Domain Metadata: the AS metadata
-/// is the realm's identity document and refers to the authority document, never replaces it
+/// is the environment's identity document and refers to the authority document, never replaces it
 /// (§9.15.1 k.2, MD-5, P60).
 pub const DOMAIN_METADATA_MEMBER: &str = "suiss_domain_metadata";
 
-/// The AS metadata of the realm `issuer`, served both as OIDC Discovery and as RFC 8414
-/// metadata (§10.4.6, §11.4.5), with nothing known about the realm: pairwise `sub` only and no
+/// The AS metadata of the environment `issuer`, served both as OIDC Discovery and as RFC 8414
+/// metadata (§10.4.6, §11.4.5), with nothing known about the environment: pairwise `sub` only and no
 /// Domain Metadata reference.
 #[must_use]
 pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
-    authorization_server_of(issuer, served, &RealmFacts::default())
+    authorization_server_of(issuer, served, &EnvironmentFacts::default())
 }
 
 /// The grant types the token endpoint serves (OP-154 m.4).
-fn grant_types(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
+fn grant_types(served: &Served, facts: &EnvironmentFacts) -> Vec<&'static str> {
     let mut grants = vec!["authorization_code", "refresh_token"];
     if served.feature(Feature::AuthorizationDetails) {
         grants.push("client_credentials");
@@ -315,7 +315,7 @@ fn grant_types(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
 
 /// The CIBA members (OP-155 m.3 (l), IDP-14): poll and ping, never push; no user code; signed
 /// authentication requests with the client assertion algorithms.
-fn ciba_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmFacts) {
+fn ciba_members(m: &mut Map<String, Value>, served: &Served, facts: &EnvironmentFacts) {
     if !(served.has(Endpoint::BackchannelAuthentication) && facts.ciba) {
         return;
     }
@@ -354,8 +354,8 @@ fn agent_members(m: &mut Map<String, Value>, served: &Served) {
 
 /// The token endpoint's client authentication methods; the SPIFFE ones once served (OP-154
 /// m.3 (r)); mutual TLS once served, and a legacy secret method only while a client of the
-/// realm opted in to it (OP-155 m.3 (k)).
-fn auth_methods(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
+/// environment opted in to it (OP-155 m.3 (k)).
+fn auth_methods(served: &Served, facts: &EnvironmentFacts) -> Vec<&'static str> {
     use crate::domain::fapi::{
         CLIENT_SECRET_JWT, CLIENT_SECRET_POST, SELF_SIGNED_TLS_CLIENT_AUTH, TLS_CLIENT_AUTH,
     };
@@ -381,8 +381,8 @@ fn auth_methods(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
 const ENCRYPTION_ALGS: [&str; 2] = ["ECDH-ES+A256KW", "RSA-OAEP-256"];
 
 /// The high-assurance members (OP-155 m.3 (k)): JAR, JARM, JWE and mutual TLS, each once
-/// served; front-channel logout only when the realm turned it on (IDP-24).
-fn assurance_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmFacts) {
+/// served; front-channel logout only when the environment turned it on (IDP-24).
+fn assurance_members(m: &mut Map<String, Value>, served: &Served, facts: &EnvironmentFacts) {
     // OP-159 m.3 (o)
     let signing = match facts.pq_alg {
         Some(pq) => json!(["ES256", "Ed25519", "RS256", pq]),
@@ -436,13 +436,17 @@ fn assurance_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmF
     }
 }
 
-/// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
+/// The AS metadata of the environment `issuer` with what is known about the environment (`facts`).
 #[must_use]
 #[expect(
     clippy::too_many_lines,
     reason = "one metadata member after another, each behind its served flag"
 )]
-pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
+pub fn authorization_server_of(
+    issuer: &Issuer,
+    served: &Served,
+    facts: &EnvironmentFacts,
+) -> String {
     let mut m = Map::new();
     m.insert("issuer".into(), issuer.as_str().into());
     m.insert("jwks_uri".into(), issuer.endpoint(JWKS_PATH).into());
@@ -524,12 +528,12 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         ),
     ] {
         // OP-154 m.3 (dd), OP-155 m.3 (l)
-        let realm_on = match e {
+        let environment_on = match e {
             Endpoint::DeviceAuthorization => facts.device_code,
             Endpoint::BackchannelAuthentication => facts.ciba,
             _ => true,
         };
-        if served.has(e) && realm_on {
+        if served.has(e) && environment_on {
             m.insert(key.into(), issuer.endpoint(e.path()).into());
         }
     }
@@ -539,7 +543,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             json!(SIGNING_ALGS),
         );
     }
-    realm_endpoints(&mut m, issuer, facts);
+    environment_endpoints(&mut m, issuer, facts);
     ciba_members(&mut m, served, facts);
     // §11.3.3, AG-3
     if served.feature(Feature::ClientIdMetadataDocument) && facts.cimd {
@@ -565,8 +569,8 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
     Value::Object(m).to_string()
 }
 
-/// The RFC 9728 Protected Resource Metadata of the realm's own resource (its `userinfo`),
-/// whose authorization server is the realm (§9.4 A).
+/// The RFC 9728 Protected Resource Metadata of the environment's own resource (its `userinfo`),
+/// whose authorization server is the environment (§9.4 A).
 #[must_use]
 pub fn protected_resource(issuer: &Issuer, served: &Served) -> String {
     let mut m = Map::new();
@@ -583,7 +587,7 @@ pub fn protected_resource(issuer: &Issuer, served: &Served) -> String {
     Value::Object(m).to_string()
 }
 
-/// A realm document the HTTP surface serves.
+/// An environment document the HTTP surface serves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Document {
     /// `/.well-known/openid-configuration`.

@@ -59,9 +59,9 @@ impl From<IssueError> for RequestError {
     }
 }
 
-/// The realm issuer.
+/// The environment issuer.
 pub struct Issuer<'a, F, S, C, R> {
-    /// The realm issuer identifier.
+    /// The environment issuer identifier.
     pub issuer: &'a str,
     /// The person's verified facts.
     pub facts: F,
@@ -71,7 +71,7 @@ pub struct Issuer<'a, F, S, C, R> {
     pub clock: C,
     /// Randomness.
     pub random: R,
-    /// The realm issuer's signing key.
+    /// The environment issuer's signing key.
     pub signer: &'a dyn Signer,
 }
 

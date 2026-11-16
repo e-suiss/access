@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.upstream_assertions\n               (tenant_id, environment_id, subject_id, connection, evidence, nonce,\n                assertion_ciphertext, created_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f8078c72c9d1fd42fa3ef9e9eb96254389d877cb9391d24dbd9c628d77204240"
+}

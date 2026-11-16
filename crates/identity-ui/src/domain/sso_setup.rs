@@ -58,7 +58,7 @@ pub enum Value {
     MetadataUrl,
     /// The connection's OIDC redirect URI.
     RedirectUri,
-    /// The realm's SCIM 2.0 base URL.
+    /// The environment's SCIM 2.0 base URL.
     ScimBaseUrl,
 }
 
@@ -201,7 +201,7 @@ pub fn connection_name(org: &[u8; 16]) -> String {
     out
 }
 
-/// The values a wizard's copy steps hand out, under the realm's issuer `issuer`.
+/// The values a wizard's copy steps hand out, under the environment's issuer `issuer`.
 #[must_use]
 pub fn values(issuer: &str, connection: &str) -> serde_json::Value {
     let base = issuer.trim_end_matches('/');

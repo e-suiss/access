@@ -8,7 +8,7 @@
 ; `urn:suiss:access:gw:<kind>:<name>`; access-server looks the gateway up by (kind, name,
 ; certificate SHA-256) and needs one exact live match. That identity, never a body member, says
 ; which gateway calls. A gateway is not an issuer: it writes neither store, never calls ADP and
-; holds no realm key. The realm issuer signs every Claim inside access-server.
+; holds no environment key. The environment issuer signs every Claim inside access-server.
 ;
 ; Each body is one deterministic CBOR map (RFC 8949 §4.2.1), `application/cbor`, at most
 ; 64 KiB; a map with an unknown member is refused. A refusal is an RFC 9457 problem, not a CBOR
@@ -37,8 +37,8 @@ gateway-kind = "saml" / "ldap" / "kerberos" / "radius"
 ; `<kind>` is a gateway-kind; the name starts with a lower-case letter, at most 63 characters.
 gateway-uri = tstr .regexp "urn:suiss:access:gw:[a-z]{4,8}:[a-z][a-z0-9-]{0,62}"
 
-; The slug of the one realm the gateway serves; every call names it and it must be its own.
-realm-slug = tstr .size (1..64)
+; The slug of the one environment the gateway serves; every call names it and it must be its own.
+environment-slug = tstr .size (1..64)
 
 ; The identity plane's opaque subject id; never an e-mail address or a user name.
 subject-id = bstr .size 16
@@ -49,14 +49,14 @@ hello-request = {}
 
 hello-answer = {
   gateway: gateway-uri,
-  realm: realm-slug,
+  environment: environment-slug,
 }
 
 ; --- subject_lookup -----------------------------------------------------------------------
 
 ; The login identifier the protocol carried (user name or e-mail).
 subject-lookup-request = {
-  realm: realm-slug,
+  environment: environment-slug,
   identifier: tstr .size (1..256),
 }
 
@@ -67,19 +67,19 @@ subject-lookup-answer = {
 
 ; --- issue_claim --------------------------------------------------------------------------
 
-; The facts of one authentication the gateway made; the realm issuer signs the Claim. The
+; The facts of one authentication the gateway made; the environment issuer signs the Claim. The
 ; method is the Kernel's name for the gateway kind's one method (ldap: "ldap-bind", kerberos:
 ; "kerberos", radius: "password"; saml authenticates nobody itself). The authentication is AAL1
 ; with no assurance flags, at most 5 minutes old (3 minutes skew).
 issue-claim-request = {
-  realm: realm-slug,
+  environment: environment-slug,
   subject: subject-id,
   method: tstr .size (1..32),
   auth_time: uint,                      ; milliseconds since the epoch
   ? evidence: bstr .size 32,            ; digest of the raw protocol evidence
 }
 
-; The Claim is queued for the realm issuer; a refusal is a problem answer.
+; The Claim is queued for the environment issuer; a refusal is a problem answer.
 issue-claim-answer = {
   queued: bool,
 }
@@ -88,7 +88,7 @@ issue-claim-answer = {
 
 ; Codes only, no body and no personal data (OP-47).
 audit-request = {
-  realm: realm-slug,
+  environment: environment-slug,
   event: audit-code-32,                 ; e.g. ldap.bind
   outcome: audit-code-16,               ; e.g. ok, refused
   ? subject: subject-id,
@@ -105,15 +105,15 @@ audit-code-16 = tstr .regexp "[a-z][a-z0-9._]{0,15}"
 ; --- authenticate (LDAP) -----------------------------------------------------------------
 
 ; One LDAP bind (§10.6.3). `simple` carries an LDAP credential, as `dn=token` or under its
-; holder's DN `uid=<uid>,ou=people,o=<realm>`; the primary password never binds. `external` is
+; holder's DN `uid=<uid>,ou=people,o=<environment>`; the primary password never binds. `external` is
 ; SASL EXTERNAL: the client certificate chain the gateway's TLS session verified, leaf first; the
-; realm's certificate sign-in rules decide. There is no SCRAM and no DIGEST-MD5. `rotate` is
+; environment's certificate sign-in rules decide. There is no SCRAM and no DIGEST-MD5. `rotate` is
 ; RFC 3062 on the LDAP credential just presented: a new secret replaces it.
 authenticate-request = simple-bind / external-bind / radius-client / radius-pap /
   kerberos-acceptance
 
 simple-bind = {
-  realm: realm-slug,
+  environment: environment-slug,
   mechanism: "simple",
   name: tstr .size (1..512),
   secret: bstr .size (1..1024),         ; never logged, never kept by the gateway
@@ -121,7 +121,7 @@ simple-bind = {
 }
 
 external-bind = {
-  realm: realm-slug,
+  environment: environment-slug,
   mechanism: "external",
   chain: [+ bstr .size (1..8192)],     ; at most 8
 }
@@ -149,13 +149,13 @@ authenticate-answer = {} / {
 ; its user name or e-mail address; the primary password never authenticates here. The answer is
 ; `{}` or `{ subject }`, the same for an unknown name and a wrong password.
 radius-client = {
-  realm: realm-slug,
+  environment: environment-slug,
   mechanism: "client",
   client: bstr .size 32,
 }
 
 radius-pap = {
-  realm: realm-slug,
+  environment: environment-slug,
   mechanism: "pap",
   client: bstr .size 32,
   name: tstr .size (1..253),            ; User-Name
@@ -172,7 +172,7 @@ radius-pap = {
 ; must be a single-component `user@REALM` of the SPN's realm; `user` is looked up as a user name.
 ; The answer is `{}` or `{ subject }`.
 kerberos-acceptance = {
-  realm: realm-slug,
+  environment: environment-slug,
   mechanism: "kerberos",
   principal: tstr .size (1..512),
   spn: tstr .size (1..512),
@@ -186,19 +186,19 @@ kerberos-acceptance = {
 ; the SAML gateway with a one-use handle. The gateway asks for the pinned certificates of the
 ; entity its message names (`sp`), has the parser worker verify the message, then redeems the
 ; handle with the verified facts (`issue`). access-server decides and keeps the outcome in its
-; own flow; a handle that names no open flow of the realm is refused with `edge-attest`. Only a
+; own flow; a handle that names no open flow of the environment is refused with `edge-attest`. Only a
 ; `saml` gateway may call it.
 session-attest-request = session-attest-sp / session-attest-issue
 
 session-attest-sp = {
   op: "sp",
-  realm: realm-slug,
+  environment: environment-slug,
   entity: tstr .size (1..1024),
 }
 
 session-attest-issue = {
   op: "issue",
-  realm: realm-slug,
+  environment: environment-slug,
   handle: bstr .size 32,
   redirect_signed: bool,                ; a detached Redirect signature verified by the worker
   ? facts: bstr,                        ; parser-worker.cddl saml-facts, when a message was read
@@ -218,13 +218,13 @@ session-attest-decided = {
 
 ; --- directory_read (LDAP) ---------------------------------------------------------------
 
-; One page of a search of the realm's read-only directory tree for a live bind (IDP-16): filter
+; One page of a search of the environment's read-only directory tree for a live bind (IDP-16): filter
 ; depth ≤ 16 and ≤ 255 nodes, results ≤ 5000, page ≤ 1000, 10 s. The filter travels in prefix
 ; order as a flat list of nodes, so its depth never becomes CBOR nesting; `and`/`or` name how many
 ; filters follow. `chain` is the in-chain rule 1.2.840.113556.1.4.1941; `undefined` is any other
 ; extensible match (RFC 4511 §4.5.1.7).
 directory-read-request = {
-  realm: realm-slug,
+  environment: environment-slug,
   bind: bstr .size (1..256),
   base: tstr .size (0..1024),
   scope: "base" / "one" / "sub",

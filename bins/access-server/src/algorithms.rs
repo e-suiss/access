@@ -15,7 +15,7 @@ use access_store::pq_checkpoint::Reason;
 use access_store::scope::DomainId;
 use suiss_crypto::cose::Algorithm;
 
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The CT3 time-lock of an admission (OP-159 m.3 (e), m.9 (h)).
 pub(crate) const LOCK_MS: u64 = access_kernel::meta::CT3_DELAY_DEFAULT_S * 1_000;
@@ -25,10 +25,10 @@ pub(crate) const LAPSE_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
 
 /// Where the notice of a retirement is queued.
 pub(crate) struct Notify {
-    /// `access_router`, for the live realms.
+    /// `access_router`, for the live environments.
     pub(crate) router: Pool,
-    /// The realm KEKs.
-    pub(crate) keks: RealmKeks,
+    /// The environment KEKs.
+    pub(crate) keks: EnvironmentKeks,
     /// The opaque id key.
     pub(crate) ids: IdKey,
 }

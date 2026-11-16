@@ -185,7 +185,7 @@ pub enum Setup {
 }
 
 impl AccessHttps {
-    /// A client of the realm at `issuer` (its issuer URL) as `client_id`, presenting the host's
+    /// A client of the environment at `issuer` (its issuer URL) as `client_id`, presenting the host's
     /// `chain` and `key`, trusting `roots`. The DPoP key lives in memory only.
     ///
     /// # Errors

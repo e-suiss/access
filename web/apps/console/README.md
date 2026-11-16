@@ -2,7 +2,7 @@
 
 The administration console of Access: a React and TypeScript single-page app, served by the
 console's Backend-for-Frontend (BFF) at `/console` on the management listener, an origin of
-its own, apart from every realm's sign-in pages.
+its own, apart from every environment's sign-in pages.
 
 ## Architecture
 
@@ -16,14 +16,14 @@ browser                                  management listener (access-server)
 └──────────────────────────────┘         └──────────────────────────────────────────┘
 ```
 
-- **Sign-in.** A realm's console lives at `/console/<realm>`, for example `/console/acme`; the
-  console never asks for a realm name. Opening that link sends you to the realm's hosted login,
+- **Sign-in.** An environment's console lives at `/console/<environment>`, for example `/console/acme`; the
+  console never asks for an environment name. Opening that link sends you to the environment's hosted login,
   and the BFF opens a console session when you come back. Every screen's address carries the
-  realm: `/console/<realm>/<section>/<screen>`.
+  environment: `/console/<environment>/<section>/<screen>`.
 - **Session.** One cookie, `__Host-access-console`: `Secure`, `HttpOnly`, `SameSite=Strict`,
   host-only. A console session lasts at most 12 hours, ends after 15 minutes without use, and is
   bound to the network you signed in from (your autonomous system when a GeoIP source is
-  configured, otherwise your /24 or /48; your exact address when the realm asks for it).
+  configured, otherwise your /24 or /48; your exact address when the environment asks for it).
   The session row keeps a slot for a Device Bound Session Credentials key; until DBSC is
   implemented its endpoints answer `501`.
 - **Device key.** On first use the console asks you to register this browser. It generates a
@@ -61,7 +61,7 @@ on the signature screen as the Kernel decoded them, and sent as one Exercise.
 
 The BFF drafts every intent the console signs (`POST /console/api/intents`, a read that needs a
 read proof): only an action of the server's catalogue, with its pinned schema digest, on your
-realm's resources, or, for the decision lab's Check, an action your domain accepted, with the
+environment's resources, or, for the decision lab's Check, an action your domain accepted, with the
 schema digest the domain pinned, on a resource of its own namespace. A `check` draft also names
 the eligibility check it belongs to (the domain, the root that covers the action's family as
 basis, and capacity), and a screen appears when the eligibility check, run by the decision point
@@ -114,7 +114,7 @@ subcode reads as its class.
 Every page, asset and API answer carries a strict Content Security Policy (`default-src 'none'`,
 scripts and styles from the console itself, `'wasm-unsafe-eval'` for the Kernel only, Trusted
 Types enforced, no framing), `Referrer-Policy: no-referrer`, cross-origin isolation and a minimal
-`Permissions-Policy`. Strings a tenant controls (realm and display names, client names) are
+`Permissions-Policy`. Strings a tenant controls (environment and display names, client names) are
 rendered as text only; ESLint and `cargo xtask check` (`ui-text-nodes`) refuse HTML sinks, and
 `forbidden-ui-terms` keeps words the console must never use out of its strings.
 

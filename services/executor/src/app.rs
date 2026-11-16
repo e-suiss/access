@@ -131,8 +131,8 @@ impl Tokens {
 /// vault connection and the steps.
 #[derive(Clone, Debug)]
 pub struct Start {
-    /// The realm whose vault holds the connection.
-    pub realm: String,
+    /// The environment whose vault holds the connection.
+    pub environment: String,
     /// The vault connection.
     pub connection: String,
     /// The envelope's canonical bytes.
@@ -446,7 +446,7 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             })
         })?;
         if req.continuations.len() > MAX_CONTINUATIONS
-            || req.realm.is_empty()
+            || req.environment.is_empty()
             || req.connection.is_empty()
         {
             return Err(ExecError::Malformed("executor-malformed"));
@@ -491,7 +491,7 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             exercise: exercise.0,
             intent: req.intent,
             ais: req.ais,
-            realm: req.realm,
+            environment: req.environment,
             connection: req.connection,
             steps: req.steps,
             commit_window_ms: COMMIT_WINDOW_MS,
@@ -865,7 +865,10 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
         });
         let answer = self
             .access
-            .release(job.started.realm.clone(), body.to_string().into_bytes())
+            .release(
+                job.started.environment.clone(),
+                body.to_string().into_bytes(),
+            )
             .await;
         let Some((status, v)) = body_json(&answer) else {
             return Err(ExecError::Unavailable(String::from("release")));

@@ -1,7 +1,7 @@
 //! `access-cli ssh login`: a short-lived OpenSSH certificate for a fresh Ed25519 key (IDP-32,
 //! OP-156 m.3 (o)). The person signs in in the browser with a passkey or MFA through the
-//! realm's code flow (PKCE, RFC 8252 loopback redirect, DPoP bound to the Instance key); the
-//! realm drafts the certificate's `projection.issue` from the person's `ssh.login` Grant; the
+//! environment's code flow (PKCE, RFC 8252 loopback redirect, DPoP bound to the Instance key); the
+//! environment drafts the certificate's `projection.issue` from the person's `ssh.login` Grant; the
 //! command checks that the draft names the key and server group it asked for, signs the AIS
 //! with the Instance key and gets the certificate. The key and certificate go to `ssh-agent`
 //! with the certificate's lifetime, or to a `0600` file. Nothing is kept beyond that.
@@ -52,13 +52,13 @@ pub(crate) enum Verb {
 /// `ssh login` arguments.
 #[derive(Debug, Args)]
 pub(crate) struct LoginArgs {
-    /// The realm issuer, `https://host[:port]/realms/<slug>` or the realm's own host.
+    /// The environment issuer, `https://host[:port]/env/<slug>` or the environment's own host.
     #[arg(long, value_name = "URL")]
     pub(crate) issuer: String,
     /// PEM file of the CA the issuer chains to.
     #[arg(long, value_name = "PATH")]
     pub(crate) ca: PathBuf,
-    /// The realm's public client for the command line, with a loopback redirect URI.
+    /// The environment's public client for the command line, with a loopback redirect URI.
     #[arg(long, value_name = "ID")]
     pub(crate) client_id: String,
     #[command(flatten)]

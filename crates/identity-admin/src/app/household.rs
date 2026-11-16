@@ -1,5 +1,5 @@
 //! Guardianship, age and parent consent (E53, E47, OP-153 m.3 (q)): a guardian's standing for
-//! a ward is the realm issuer's `guardianship` Claim, effective only through an Acceptance, and
+//! a ward is the environment issuer's `guardianship` Claim, effective only through an Acceptance, and
 //! ends at the ward's majority by the country table; other products get the ward's `age_range`
 //! Claim, never the date of birth, which stays in the PII vault's `profile` class. A ward's
 //! request that needs a parent waits on a consent that lives 72 hours; silence is not consent.
@@ -12,7 +12,7 @@ use access_identity_account::domain::claims::{ClaimOrder, Content, line};
 use access_kernel::combinator::Outcome;
 use access_kernel::model::{EqValue, Id};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
 use crate::AdminError;
 use crate::domain::Invalid;
@@ -149,9 +149,9 @@ pub fn today(now_ms: u64) -> Date {
 /// [`AdminError`].
 pub async fn majorities(
     app: &Pool,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
 ) -> Result<u32, AdminError> {
-    let mut t = TenantTx::begin(app, tenant, realm).await?;
+    let mut t = TenantTx::begin(app, tenant, environment).await?;
     let now = t.server_time().await?;
     let ended = t.end_majorities().await?;
     let mut n = 0u32;
@@ -176,11 +176,11 @@ pub async fn majorities(
     Ok(n)
 }
 
-/// The household's use cases over the realm's rows.
+/// The household's use cases over the environment's rows.
 pub struct Household<'a> {
     /// The `access_app` pool.
     pub app: &'a Pool,
-    /// The realm's vault keys.
+    /// The environment's vault keys.
     pub vault: &'a Vault,
 }
 
@@ -203,11 +203,11 @@ impl Household<'_> {
     /// [`AdminError`]; a ward of age is [`Invalid::AccountState`].
     pub async fn recordable(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (guardian, ward): ([u8; 16], [u8; 16]),
         country: &str,
     ) -> Result<(), AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let now = t.server_time().await?;
         let birth = self
             .birth(&mut t, ward)
@@ -238,7 +238,7 @@ impl Household<'_> {
     /// [`AdminError`]; a ward of age is [`Invalid::AccountState`].
     pub async fn guardianship(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (guardian, ward): ([u8; 16], [u8; 16]),
         basis: GuardianshipBasis,
         country: &str,
@@ -246,7 +246,7 @@ impl Household<'_> {
         if country.len() != 2 || !country.bytes().all(|b| b.is_ascii_uppercase()) {
             return Err(Invalid::Body.into());
         }
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let now = t.server_time().await?;
         let birth = self
             .birth(&mut t, ward)
@@ -305,11 +305,11 @@ impl Household<'_> {
     /// [`AdminError`].
     pub async fn ask(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         guardianship: [u8; 16],
         purpose: &[u8; 32],
     ) -> Result<[u8; 16], AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         t.guardianship(guardianship)
             .await?
             .filter(|g| g.ended_by.is_none())
@@ -327,12 +327,12 @@ impl Household<'_> {
     /// [`AdminError`]; anyone but the guardian is refused.
     pub async fn decide(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         consent: [u8; 16],
         by: [u8; 16],
         approve: bool,
     ) -> Result<Outcome, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let c = t.consent(consent).await?.ok_or(Invalid::NoAccount)?;
         let g = t
             .guardianship(c.guardianship)
@@ -353,10 +353,10 @@ impl Household<'_> {
     /// [`AdminError`].
     pub async fn outcome(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         consent: [u8; 16],
     ) -> Result<Outcome, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let c = t.consent(consent).await?.ok_or(Invalid::NoAccount)?;
         t.commit().await?;
         Ok(consent_outcome(c.decision.as_deref(), c.expired))

@@ -19,10 +19,10 @@ fn ms(t: i64) -> u64 {
     u64::try_from(t).unwrap_or(0)
 }
 
-/// An agent of the realm.
+/// An agent of the environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentRow {
-    /// Its own agent Party in the realm's governing domain.
+    /// Its own agent Party in the environment's governing domain.
     pub party: [u8; 16],
     /// The operator Party: an organization or a person.
     pub operator: [u8; 16],
@@ -95,14 +95,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`]; a Party already bound is an integrity error.
     pub async fn insert_agent(&mut self, a: &NewAgent<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         sqlx::query!(
             r#"INSERT INTO access.agents
-                 (tenant_id, realm_id, party, operator, agent_kind, display_name, description,
+                 (tenant_id, environment_id, party, operator, agent_kind, display_name, description,
                   registered_exercise)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
             tenant,
-            realm,
+            environment,
             a.party.as_slice(),
             a.operator.as_slice(),
             a.kind,
@@ -120,16 +120,16 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn agent(&mut self, party: [u8; 16]) -> Result<Option<AgentRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT party, operator, agent_kind, display_name, description, status,
                       registered_exercise,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM status_at) * 1000)::bigint AS "status_ms!"
                FROM access.agents
-               WHERE tenant_id = $1 AND realm_id = $2 AND party = $3"#,
+               WHERE tenant_id = $1 AND environment_id = $2 AND party = $3"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -150,7 +150,7 @@ impl TenantTx {
         .transpose()
     }
 
-    /// A page of the realm's agents by Party, after `after`.
+    /// A page of the environment's agents by Party, after `after`.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -159,7 +159,7 @@ impl TenantTx {
         after: Option<[u8; 16]>,
         limit: u32,
     ) -> Result<Vec<AgentRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let after = after.map_or_else(Vec::new, |a| a.to_vec());
         let rows = sqlx::query!(
             r#"SELECT party, operator, agent_kind, display_name, description, status,
@@ -167,10 +167,10 @@ impl TenantTx {
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM status_at) * 1000)::bigint AS "status_ms!"
                FROM access.agents
-               WHERE tenant_id = $1 AND realm_id = $2 AND party > $3
+               WHERE tenant_id = $1 AND environment_id = $2 AND party > $3
                ORDER BY party LIMIT $4"#,
             tenant,
-            realm,
+            environment,
             after.as_slice(),
             i64::from(limit),
         )
@@ -203,12 +203,12 @@ impl TenantTx {
         display_name: &str,
         description: Option<&str>,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.agents SET display_name = $4, description = $5
-               WHERE tenant_id = $1 AND realm_id = $2 AND party = $3 AND status <> 'retired'"#,
+               WHERE tenant_id = $1 AND environment_id = $2 AND party = $3 AND status <> 'retired'"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
             display_name,
             description,
@@ -228,13 +228,13 @@ impl TenantTx {
         party: [u8; 16],
         status: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.agents SET status = $4, status_at = clock_timestamp()
-               WHERE tenant_id = $1 AND realm_id = $2 AND party = $3
+               WHERE tenant_id = $1 AND environment_id = $2 AND party = $3
                  AND status <> 'retired' AND status <> $4"#,
             tenant,
-            realm,
+            environment,
             party.as_slice(),
             status,
         )
@@ -253,13 +253,13 @@ impl TenantTx {
         subject: [u8; 16],
         exercise: &[u8; 32],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         sqlx::query!(
             r#"INSERT INTO access.agent_sponsors
-                 (tenant_id, realm_id, agent, subject_id, assigned_exercise)
+                 (tenant_id, environment_id, agent, subject_id, assigned_exercise)
                VALUES ($1, $2, $3, $4, $5)"#,
             tenant,
-            realm,
+            environment,
             agent.as_slice(),
             Uuid::from_bytes(subject),
             exercise.as_slice(),
@@ -280,14 +280,14 @@ impl TenantTx {
         by: &str,
         exercise: Option<&[u8; 32]>,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             r#"UPDATE access.agent_sponsors
                SET ended_at = clock_timestamp(), ended_by = $5, ended_exercise = $6
-               WHERE tenant_id = $1 AND realm_id = $2 AND agent = $3 AND subject_id = $4
+               WHERE tenant_id = $1 AND environment_id = $2 AND agent = $3 AND subject_id = $4
                  AND ended_at IS NULL"#,
             tenant,
-            realm,
+            environment,
             agent.as_slice(),
             Uuid::from_bytes(subject),
             by,
@@ -303,17 +303,17 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn sponsorships(&mut self, agent: [u8; 16]) -> Result<Vec<SponsorRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query!(
             r#"SELECT subject_id, assigned_exercise,
                       (extract(epoch FROM assigned_at) * 1000)::bigint AS "assigned_ms!",
                       (extract(epoch FROM ended_at) * 1000)::bigint AS ended_ms, ended_by,
                       ended_exercise
                FROM access.agent_sponsors
-               WHERE tenant_id = $1 AND realm_id = $2 AND agent = $3
+               WHERE tenant_id = $1 AND environment_id = $2 AND agent = $3
                ORDER BY assigned_at, sponsorship_id"#,
             tenant,
-            realm,
+            environment,
             agent.as_slice(),
         )
         .fetch_all(&mut *self.tx)
@@ -337,13 +337,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn sponsored_by(&mut self, subject: [u8; 16]) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query_scalar!(
             r#"SELECT agent FROM access.agent_sponsors
-               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_at IS NULL
+               WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_at IS NULL
                ORDER BY agent"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -356,14 +356,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`]; an existing version is an integrity error.
     pub async fn insert_agent_template(&mut self, t: &TemplateRow) -> Result<(), StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let version = i64::try_from(t.version).map_err(|_| StoreError::Range)?;
         sqlx::query!(
             r#"INSERT INTO access.agent_templates
-                 (tenant_id, realm_id, name, version, content, defined_exercise)
+                 (tenant_id, environment_id, name, version, content, defined_exercise)
                VALUES ($1, $2, $3, $4, $5, $6)"#,
             tenant,
-            realm,
+            environment,
             t.name,
             version,
             t.content.as_slice(),
@@ -379,13 +379,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn agent_template(&mut self, name: &str) -> Result<Option<TemplateRow>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT name, version, content, defined_exercise FROM access.agent_templates
-               WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
+               WHERE tenant_id = $1 AND environment_id = $2 AND name = $3
                ORDER BY version DESC LIMIT 1"#,
             tenant,
-            realm,
+            environment,
             name,
         )
         .fetch_optional(&mut *self.tx)

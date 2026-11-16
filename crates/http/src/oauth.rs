@@ -1,12 +1,12 @@
-//! The realm authorization server over HTTP (OP-146 I7, §11.4.5): `/authorize`, `/par`,
+//! The environment authorization server over HTTP (OP-146 I7, §11.4.5): `/authorize`, `/par`,
 //! `/token`, `/userinfo`, `/revoke`, `/introspect` and `/end-session`, at the host root for a
-//! subdomain issuer and under `/realms/{slug}` for a path issuer. Bodies are
+//! subdomain issuer and under `/env/{slug}` for a path issuer. Bodies are
 //! `application/x-www-form-urlencoded` only (§11.4.5 #19); every answer is `no-store`; an
 //! outage is `503 + Retry-After` (G50).
 
 use std::sync::Arc;
 
-use access_identity_oauth::app::oauth::{Env, OAuth, RETRY_AFTER_S, Realm, Reply, TokenHttp};
+use access_identity_oauth::app::oauth::{Env, Environment, OAuth, RETRY_AFTER_S, Reply, TokenHttp};
 use access_identity_oauth::domain::metadata::Endpoint;
 use access_identity_oauth::domain::request::Params;
 use axum::Router;
@@ -79,7 +79,7 @@ pub fn shared_router<E: Env>(shared: Arc<OAuth<E>>) -> Router {
             handle(s, e, incoming(m, u, h, b, (Some(p.0), c, peer)))
         };
         let path = e.path();
-        let slugged = format!("/realms/{{slug}}{path}");
+        let slugged = format!("/env/{{slug}}{path}");
         let (a, b) = match e {
             Endpoint::Authorize | Endpoint::Userinfo | Endpoint::EndSession => {
                 (get(root).post(root), get(under).post(under))
@@ -217,8 +217,8 @@ fn params(req: &Incoming) -> Option<Params> {
     reason = "one dispatch over the authorization server endpoints"
 )]
 async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) -> Response {
-    let realm: Realm = match s
-        .realm(authority(&req.uri, &req.headers), req.slug.as_deref())
+    let environment: Environment = match s
+        .environment(authority(&req.uri, &req.headers), req.slug.as_deref())
         .await
     {
         Ok(Some(r)) => r,
@@ -246,7 +246,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
         // RFC 8705 §3
         return render(
             s.userinfo_mtls(
-                &realm,
+                &environment,
                 req.method.as_str(),
                 authorization,
                 &proofs,
@@ -265,8 +265,8 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
     let cookie = session_cookie(&req.headers);
     let reply = match endpoint {
         Endpoint::Authorize => {
-            let reply = s.authorize(&realm, &p, cookie.as_deref()).await;
-            return render(error_page(&realm, &req.headers, reply));
+            let reply = s.authorize(&environment, &p, cookie.as_deref()).await;
+            return render(error_page(&environment, &req.headers, reply));
         }
         Endpoint::Par => {
             let proofs: Vec<&str> = req
@@ -276,7 +276,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 .filter_map(|v| v.to_str().ok())
                 .collect();
             s.par_mtls(
-                &realm,
+                &environment,
                 &p,
                 authorization,
                 &proofs,
@@ -292,7 +292,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 .filter_map(|v| v.to_str().ok())
                 .collect();
             s.token(
-                &realm,
+                &environment,
                 &p,
                 TokenHttp {
                     authorization,
@@ -302,13 +302,13 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             )
             .await
         }
-        Endpoint::Revoke => s.revoke(&realm, &p, authorization).await,
+        Endpoint::Revoke => s.revoke(&environment, &p, authorization).await,
         // RFC 9701 §4, OP-155 m.3 (k)
         Endpoint::Introspect => {
             let jwt = header_text(&req.headers, header::ACCEPT.as_str())
                 .is_some_and(|a| a.contains("application/token-introspection+jwt"));
             s.introspect_as(
-                &realm,
+                &environment,
                 &p,
                 authorization,
                 jwt,
@@ -316,11 +316,11 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             )
             .await
         }
-        Endpoint::EndSession => s.end_session(&realm, &p, cookie.as_deref()).await,
+        Endpoint::EndSession => s.end_session(&environment, &p, cookie.as_deref()).await,
         // OP-154 m.3 (p)
         Endpoint::DeviceAuthorization => {
             s.device_authorization(
-                &realm,
+                &environment,
                 &p,
                 TokenHttp {
                     authorization,
@@ -334,7 +334,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
         // OP-155 m.3 (l)
         Endpoint::BackchannelAuthentication => {
             s.backchannel_authentication(
-                &realm,
+                &environment,
                 &p,
                 TokenHttp {
                     authorization,
@@ -353,7 +353,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
 /// error page, which names who can fix it and shows the request's reference, never the raw
 /// code (§8.10, §8.15.2, X-L8, OP-153 m.3 (jj)). A client that does not ask for HTML keeps the
 /// RFC 9457 problem.
-fn error_page(realm: &Realm, headers: &HeaderMap, reply: Reply) -> Reply {
+fn error_page(environment: &Environment, headers: &HeaderMap, reply: Reply) -> Reply {
     use access_identity_ui::domain::error_page::{Owner, location};
     let html = headers
         .get(header::ACCEPT)
@@ -365,7 +365,7 @@ fn error_page(realm: &Realm, headers: &HeaderMap, reply: Reply) -> Reply {
     let id = crate::api::app::request_id_of(headers)
         .or_else(|| header_text(headers, "x-request-id").map(String::from))
         .unwrap_or_default();
-    let base = realm.issuer.as_str().trim_end_matches('/');
+    let base = environment.issuer.as_str().trim_end_matches('/');
     match reply {
         Reply::Problem { code, .. } => Reply::Redirect(location(base, code, Owner::App, &id)),
         Reply::Unavailable => Reply::Redirect(location(

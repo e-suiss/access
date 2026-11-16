@@ -13,11 +13,11 @@
 //! | `MCP_PEP` | This server's PEP name, as its client certificate names it to Access |
 //! | `MCP_TOOLS` | Path of the tool table (JSON array of `{name, action, resource, scopes, public?}`) |
 //! | `MCP_ORIGINS` | Allowed `Origin` values, comma-separated (may be empty) |
-//! | `ACCESS_ISSUER` | The realm's authorization server issuer |
+//! | `ACCESS_ISSUER` | The environment's authorization server issuer |
 //! | `ACCESS_API` | The Access API origin (`https://…`) |
 //! | `ACCESS_DOMAIN` | The domain, `sha-256:<base64url>` |
 //! | `ACCESS_METADATA` | Path of the domain's signed Domain Metadata, pinned at deployment |
-//! | `ACCESS_APPROVAL` | The realm's Approval Surface address |
+//! | `ACCESS_APPROVAL` | The environment's Approval Surface address |
 //! | `ACCESS_CA`, `MCP_CERT`, `MCP_KEY` | PEM paths: the CA Access is verified under, this server's certificate and key |
 
 use std::collections::BTreeSet;

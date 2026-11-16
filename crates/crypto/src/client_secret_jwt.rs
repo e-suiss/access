@@ -1,6 +1,6 @@
 //! `client_secret_jwt` (RFC 7523 §2.2, OIDC Core §9; CR-3, OP-148 m.16 (l), OP-155 m.3 (k)):
 //! the HS256 client assertion of a legacy client registered with that method. It is two-party:
-//! the secret is shared between the realm and that one client only, sealed under the realm's
+//! the secret is shared between the environment and that one client only, sealed under the environment's
 //! KEK, and never verifies any other token.
 
 use aws_lc_rs::hmac;

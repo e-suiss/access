@@ -78,7 +78,7 @@ pub enum AuthorityError {
     /// RFC 8707: no resource, or not the Exercise's audience; there is no default resource.
     #[error("invalid_target")]
     Target,
-    /// The Exercise is malformed or is not a `projection.issue` of this realm's domain.
+    /// The Exercise is malformed or is not a `projection.issue` of this environment's domain.
     #[error("invalid_request")]
     Exercise,
     /// The Exercise is not signed by the request's DPoP key (§9.9.4).

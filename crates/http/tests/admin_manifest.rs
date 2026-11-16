@@ -16,13 +16,15 @@ mod admin;
 use access_http::api::app::router_for;
 use access_http::api::domain::Surface;
 use access_http::api::manifest::{
-    Access, MANIFEST, ManifestError, PLATFORM_ROOT, REALM_ROOT, Route, Verb, Visibility, check,
+    Access, ENVIRONMENT_ROOT, MANIFEST, ManifestError, PLATFORM_ROOT, Route, Verb, Visibility,
+    check,
 };
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 
 use admin::{
-    Harness, MISSING, REALM, ROWS, ais, platform_domain, proof, realm_domain, send, surface,
+    ENVIRONMENT, Harness, MISSING, ROWS, ais, environment_domain, platform_domain, proof, send,
+    surface,
 };
 
 fn concrete(row: &Route, slug: &str) -> String {
@@ -51,15 +53,15 @@ fn read_as(row: &Route, path: &str, token: &str) -> Request<Body> {
 
 fn audience(row: &Route) -> String {
     match row.surface {
-        Surface::Realm => format!("access-admin:realm:{REALM}"),
+        Surface::Environment => format!("access-admin:environment:{ENVIRONMENT}"),
         Surface::Platform => "access-admin:platform".to_owned(),
     }
 }
 
 fn other_audience(row: &Route) -> String {
     match row.surface {
-        Surface::Realm => "access-admin:platform".to_owned(),
-        Surface::Platform => format!("access-admin:realm:{REALM}"),
+        Surface::Environment => "access-admin:platform".to_owned(),
+        Surface::Platform => format!("access-admin:environment:{ENVIRONMENT}"),
     }
 }
 
@@ -72,7 +74,7 @@ async fn code_of(router: &axum::Router, request: Request<Body>) -> (StatusCode, 
 async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
     for row in rows {
         h.pass(4_000);
-        let path = concrete(row, REALM);
+        let path = concrete(row, ENVIRONMENT);
         let op = row.operation_id;
         let before = h.position();
         match row.access {
@@ -117,7 +119,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                 let unscoped = h.token(
                     &format!("{op}-unscoped"),
                     &audience(row),
-                    &["realm.audit.read"],
+                    &["environment.audit.read"],
                     600_000,
                 );
                 let expected = match row.visibility {
@@ -137,10 +139,10 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     (StatusCode::UNAUTHORIZED, "token-lifetime".into()),
                     "{op}"
                 );
-                if row.surface == Surface::Realm {
+                if row.surface == Surface::Environment {
                     let ghost = h.token(
                         &format!("{op}-ghost"),
-                        &format!("access-admin:realm:{MISSING}"),
+                        &format!("access-admin:environment:{MISSING}"),
                         &[scope],
                         600_000,
                     );
@@ -148,17 +150,17 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     assert_eq!(
                         code_of(router, read_as(row, &missing, &ghost)).await,
                         (StatusCode::NOT_FOUND, "not-found".into()),
-                        "{op}: a missing realm is 404"
+                        "{op}: a missing environment is 404"
                     );
                     assert_eq!(
                         code_of(router, read_as(row, &missing, &good)).await,
                         (StatusCode::UNAUTHORIZED, "wrong-audience".into()),
-                        "{op}: a token never reaches another realm"
+                        "{op}: a token never reaches another environment"
                     );
                 }
                 assert_eq!(
                     code_of(router, read_as(row, &path, &good)).await.0,
-                    if access_http::api::realm::planned(op) {
+                    if access_http::api::environment::planned(op) {
                         StatusCode::NOT_IMPLEMENTED
                     } else if row.verb == Verb::Get {
                         StatusCode::OK
@@ -191,7 +193,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                 let token = h.token(
                     &format!("{op}-reader"),
                     &audience(row),
-                    &["realm.read", "platform.read"],
+                    &["environment.read", "platform.read"],
                     600_000,
                 );
                 assert_eq!(
@@ -205,8 +207,8 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     "{op}"
                 );
                 let (own, foreign) = match row.surface {
-                    Surface::Realm => (realm_domain(), platform_domain()),
-                    Surface::Platform => (platform_domain(), realm_domain()),
+                    Surface::Environment => (environment_domain(), platform_domain()),
+                    Surface::Platform => (platform_domain(), environment_domain()),
                 };
                 let stranger = suiss_crypto::signer::SoftSigner::generate_ed25519()
                     .unwrap()
@@ -260,9 +262,9 @@ async fn the_router_serves_only_manifest_rows() {
     let router = h.router();
     for path in [
         "/admin/v1",
-        "/admin/v1/realms",
-        "/admin/v1/realms/acme/users",
-        "/admin/v1/platform/realms",
+        "/admin/v1/envs",
+        "/admin/v1/envs/acme/users",
+        "/admin/v1/platform/envs",
         "/admin/v1/platform/tenants/t1/accounts",
         "/admin/v2/platform",
         "/console/login",
@@ -292,7 +294,7 @@ fn the_builder_holds_the_router_to_the_manifest() {
     assert!(matches!(missing, Err(ManifestError::Missing(_))));
     let unlisted = router_for(&h.api, MANIFEST, |b| {
         b.handle("getPlatformSurface", surface)?
-            .handle("getRealmSurface", surface)?
+            .handle("getEnvironmentSurface", surface)?
             .handle("setCredential", surface)
     });
     assert!(matches!(
@@ -314,12 +316,12 @@ fn manifest_rows_stay_on_their_surface() {
         access: Access::Read {
             scope: "platform.read",
         },
-        ..REALM_ROOT
+        ..ENVIRONMENT_ROOT
     }];
     assert!(matches!(check(CROSS), Err(ManifestError::Surface(_))));
     static ESCAPE: &[Route] = &[Route {
-        path: "/admin/v1/realmsx",
-        ..REALM_ROOT
+        path: "/admin/v1/environmentsx",
+        ..ENVIRONMENT_ROOT
     }];
     assert!(matches!(check(ESCAPE), Err(ManifestError::Surface(_))));
     static TOKEN_WRITE: &[Route] = &[Route {

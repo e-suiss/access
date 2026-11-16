@@ -32,7 +32,7 @@ use access_identity_federation::domain::token::Secrets;
 use access_identity_federation::ports::{
     AssertionReader, ClientAssertion, ProviderHttp, SamlRequestSigner, SocialSecrets, UpstreamTrust,
 };
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::assurance::{Factor, UpstreamStep};
 use access_identity_session::domain::flow::device_digest;
@@ -46,17 +46,17 @@ use serde_json::json;
 
 use super::social::Social;
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// What enterprise upstream sign-in needs beyond social sign-in's services.
 pub struct Upstreams {
     /// The governing domain's Acceptances of upstream issuers.
     pub trust: Arc<dyn UpstreamTrust>,
-    /// The realm's signer of `private_key_jwt` client assertions.
+    /// The environment's signer of `private_key_jwt` client assertions.
     pub assertions: Arc<dyn ClientAssertion>,
     /// The parser worker, for SAML upstreams' Responses.
     pub reader: Arc<dyn AssertionReader>,
-    /// The realm's SAML key, for `AuthnRequest`s.
+    /// The environment's SAML key, for `AuthnRequest`s.
     pub saml_signer: Arc<dyn SamlRequestSigner>,
 }
 
@@ -142,12 +142,12 @@ fn unreachable(name: &str) -> Reply {
 }
 
 /// The callback the connection redirects to.
-fn redirect_uri(kit: &RealmKit, connection: &str) -> String {
+fn redirect_uri(kit: &EnvironmentKit, connection: &str) -> String {
     format!("{}/v1/login/upstream/{connection}/callback", kit.issuer)
 }
 
 /// Access's entity ID and ACS for SAML connection `name`.
-fn sp_urls(kit: &RealmKit, name: &str) -> (String, String) {
+fn sp_urls(kit: &EnvironmentKit, name: &str) -> (String, String) {
     let base = format!("{}/v1/login/upstream/{name}/saml", kit.issuer);
     (format!("{base}/metadata"), format!("{base}/acs"))
 }
@@ -164,7 +164,7 @@ fn redirect(to: String) -> Reply {
     Reply::new(303, Body::Redirect(to))
 }
 
-/// A connection as this realm holds it.
+/// A connection as this environment holds it.
 pub(crate) struct Held {
     resolved: Resolved,
     domain: [u8; 32],
@@ -193,16 +193,16 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// The active connection `name` of the realm as registered, its governing domain and its
-    /// assurance map; `None` when the realm has no such connection.
+    /// The active connection `name` of the environment as registered, its governing domain and its
+    /// assurance map; `None` when the environment has no such connection.
     pub(crate) async fn registered_connection(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         name: &str,
     ) -> Result<Option<(Connection, [u8; 32], Option<String>)>, Reply> {
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
-            let row = access_store::idp::realm::upstream(&mut t, name).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+            let row = access_store::idp::environment::upstream(&mut t, name).await?;
             let domain = access_store::idp::governance(&mut t)
                 .await?
                 .map(|g| *g.domain.as_bytes());
@@ -230,11 +230,11 @@ where
         )))
     }
 
-    /// The active OIDC connection `name` of the realm with its discovery read; `None` when the
-    /// realm has no such connection.
+    /// The active OIDC connection `name` of the environment with its discovery read; `None` when the
+    /// environment has no such connection.
     pub(crate) async fn upstream_connection<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         social: &Social<H, S>,
         name: &str,
     ) -> Result<Option<Held>, Reply> {
@@ -259,7 +259,7 @@ where
     /// names the session's freshly re-authenticated subject (TN-65 (3)).
     pub(crate) async fn begin_upstream<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         name: &str,
         link_to: Option<[u8; 16]>,
@@ -286,7 +286,7 @@ where
         let now = self.clock.now_ms();
         let state_hash = suiss_crypto::digest::sha256(secrets.state.as_bytes());
         let stored = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.insert_social_attempt(&access_store::federation::NewAttempt {
                 state_hash: &state_hash,
                 device_hash: &device_digest(&device),
@@ -313,7 +313,7 @@ where
     /// connection gets a signed `AuthnRequest` in the HTTP-Redirect binding.
     pub async fn start_upstream<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         name: &str,
         q: StartQuery<'_>,
@@ -356,7 +356,7 @@ where
     /// with this browser's flow device, then signed into the identity provider's SSO URL (OP-155 m.3 (h)).
     async fn begin_saml(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         c: &Connection,
         upstreams: &Upstreams,
@@ -370,7 +370,7 @@ where
         let now = self.clock.now_ms();
         let state_hash = suiss_crypto::digest::sha256(secrets.state.as_bytes());
         let stored = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.insert_social_attempt(&access_store::federation::NewAttempt {
                 state_hash: &state_hash,
                 device_hash: &device_digest(&device),
@@ -398,7 +398,7 @@ where
         let url = upstreams
             .saml_signer
             .redirect(
-                *kit.realm.as_bytes(),
+                *kit.environment.as_bytes(),
                 &idp.sso_url,
                 &request,
                 &secrets.state,
@@ -409,8 +409,8 @@ where
     }
 
     /// `GET /v1/login/upstream/{connection}/saml/metadata`: Access's SP metadata for one SAML
-    /// connection; `None` when the realm has no such connection.
-    pub async fn upstream_metadata(&self, entry: &RealmEntry, name: &str) -> Option<String> {
+    /// connection; `None` when the environment has no such connection.
+    pub async fn upstream_metadata(&self, entry: &EnvironmentEntry, name: &str) -> Option<String> {
         let kit = self.kit(entry).await.ok()?;
         let (c, _, _) = self.registered_connection(&kit, name).await.ok()??;
         if c.profile.protocol != ConnectionProtocol::Saml {
@@ -429,7 +429,7 @@ where
     /// refused. Other connections pass.
     async fn organization_scope(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         name: &str,
         address: Option<&str>,
     ) -> Result<(), Reply> {
@@ -440,7 +440,7 @@ where
             return Ok(());
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let verified = match t.org_by_party(party).await?.filter(|o| !o.ended) {
                 Some(o) => t.hrd_domains(o.id).await?,
                 None => Vec::new(),
@@ -460,7 +460,7 @@ where
     /// `name`; when it does not, the sessions the connection opened end (SEC9).
     async fn upstream_accepted(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         (name, issuer, domain): (&str, &str, [u8; 32]),
         upstreams: &Upstreams,
     ) -> Result<(), Reply> {
@@ -484,7 +484,7 @@ where
     /// ID token are checked in the back end before any account is touched.
     pub async fn finish_upstream<H: ProviderHttp, S: SocialSecrets>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         name: &str,
         (code, state, iss): (&str, &str, Option<&str>),
@@ -504,7 +504,7 @@ where
         };
         let now = self.clock.now_ms();
         let attempt = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let a = t
                 .take_social_attempt(
                     &suiss_crypto::digest::sha256(state.as_bytes()),
@@ -548,7 +548,7 @@ where
             .finish_connection(
                 &held.resolved,
                 &*upstreams.assertions,
-                *kit.realm.as_bytes(),
+                *kit.environment.as_bytes(),
                 &redirect_uri(&kit, name),
                 code,
                 &secrets,
@@ -583,7 +583,7 @@ where
     )]
     async fn complete_upstream(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         name: &str,
         (signed, assurance, saml): (&UpstreamSignIn, Mapped, bool),
@@ -591,11 +591,11 @@ where
         display: &str,
     ) -> Reply {
         let now = self.clock.now_ms();
-        let realm = kit.realm();
+        let environment = kit.environment();
         let vault = kit.vault();
         let externals = Externals {
             pool: &self.db,
-            realm: &realm,
+            environment: &environment,
             vault: &vault,
         };
         let address = signed
@@ -632,7 +632,7 @@ where
             if current != subject {
                 return Reply::problem(SESSION_REQUIRED);
             }
-            let actor_ref = realm.external(subject).unwrap_or_default();
+            let actor_ref = environment.external(subject).unwrap_or_default();
             let who = Actor {
                 actor: &actor_ref,
                 correlation: b.correlation,
@@ -725,7 +725,7 @@ where
     #[expect(clippy::too_many_lines, reason = "the ACS's steps in their order")]
     pub async fn finish_upstream_saml(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         name: &str,
         answer: SamlAnswer<'_>,
@@ -759,7 +759,7 @@ where
         let attempt = match (answer.relay_state, device) {
             (Some(state), Some(device)) => {
                 let taken = async {
-                    let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+                    let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
                     let a = t
                         .take_social_attempt(
                             &suiss_crypto::digest::sha256(state.as_bytes()),
@@ -815,7 +815,7 @@ where
         let replay = access_identity_oauth::adapters::dpop::PgReplayCache::new(
             self.db.clone(),
             kit.tenant,
-            kit.realm,
+            kit.environment,
         );
         match replay.first_use(day, key).await {
             Ok(true) => {}

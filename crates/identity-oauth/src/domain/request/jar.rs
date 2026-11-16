@@ -1,7 +1,7 @@
 //! JWT-Secured Authorization Requests (RFC 9101; §10.4.3, CR-4, IDI-6, OP-155 m.3 (k)): a
 //! request object the client signed, sent as `request` to `/par` only. Its claims are the
 //! authorization request; the outer parameters may only repeat `client_id`. A request object
-//! encrypted to the realm is opened first with the realm's `jwe-enc` key.
+//! encrypted to the environment is opened first with the environment's `jwe-enc` key.
 
 use access_kernel::json::Json;
 
@@ -73,7 +73,7 @@ impl From<JwtError> for JarError {
 pub struct JarRules<'a> {
     /// The client that pushed it.
     pub client_id: &'a str,
-    /// The realm issuer, which `aud` names alone or among others (RFC 7519 §4.1.3).
+    /// The environment issuer, which `aud` names alone or among others (RFC 7519 §4.1.3).
     pub issuer: &'a str,
     /// Now, Unix milliseconds.
     pub now_ms: u64,

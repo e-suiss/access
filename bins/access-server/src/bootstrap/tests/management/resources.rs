@@ -16,14 +16,14 @@ async fn a_protected_resource_is_registered_and_listed_by_rest() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/resources",
+            "/admin/v1/envs/acme/resources",
             ("registerProtectedResource", None),
             body.clone(),
             None,
         )
         .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let list = c.admin_get("/admin/v1/realms/acme/resources").await;
+    let list = c.admin_get("/admin/v1/envs/acme/resources").await;
     assert_eq!(list.status, StatusCode::OK, "{}", list.body);
     let item = &list.body["items"][0];
     assert_eq!(item["resource"], "https://mcp.example.com/mcp");
@@ -33,7 +33,7 @@ async fn a_protected_resource_is_registered_and_listed_by_rest() {
     let again = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/resources",
+            "/admin/v1/envs/acme/resources",
             ("registerProtectedResource", None),
             body,
             None,
@@ -50,7 +50,7 @@ async fn a_protected_resource_is_registered_and_listed_by_rest() {
         let w = c
             .rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/resources",
+                "/admin/v1/envs/acme/resources",
                 ("registerProtectedResource", None),
                 serde_json::json!({ "resource": resource, "display_name": "Bad" }),
                 None,
@@ -64,14 +64,14 @@ async fn a_protected_resource_is_registered_and_listed_by_rest() {
 
 // CR-41, MD-6, OP-159 m.21 (b), (g)
 #[tokio::test]
-async fn a_resource_takes_ml_dsa_access_tokens_only_while_the_realm_profile_holds_it() {
+async fn a_resource_takes_ml_dsa_access_tokens_only_while_the_environment_profile_holds_it() {
     let c = console("mgmt-resources-pq", true).await;
     let register = |resource: &'static str, alg: &'static str| {
         let c = &c;
         async move {
             c.rest_write(
                 &Method::POST,
-                "/admin/v1/realms/acme/resources",
+                "/admin/v1/envs/acme/resources",
                 ("registerProtectedResource", None),
                 serde_json::json!({
                     "resource": resource,
@@ -93,7 +93,7 @@ async fn a_resource_takes_ml_dsa_access_tokens_only_while_the_realm_profile_hold
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/signing-profile",
+            "/admin/v1/envs/acme/settings/signing-profile",
             ("putSigningProfile", None),
             serde_json::json!({"profile": "ml-dsa-65"}),
             None,
@@ -104,7 +104,7 @@ async fn a_resource_takes_ml_dsa_access_tokens_only_while_the_realm_profile_hold
     assert_eq!(w.status, StatusCode::CONFLICT, "{}", w.body);
     let w = register("https://pq.example.com/api", "ML-DSA-65").await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
-    let list = c.admin_get("/admin/v1/realms/acme/resources").await;
+    let list = c.admin_get("/admin/v1/envs/acme/resources").await;
     assert_eq!(list.status, StatusCode::OK, "{}", list.body);
     assert_eq!(
         list.body["items"][0]["access_token_signed_response_alg"],

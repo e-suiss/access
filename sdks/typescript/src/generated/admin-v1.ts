@@ -21,15 +21,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}": {
+    "/admin/v1/envs/{slug}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** One realm's admin surface: its audience, scope namespace and rate policies. */
-        get: operations["getRealmSurface"];
+        /** One environment's admin surface: its audience, scope namespace and rate policies. */
+        get: operations["getEnvironmentSurface"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38,7 +38,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/intents": {
+    "/admin/v1/envs/{slug}/intents": {
         parameters: {
             query?: never;
             header?: never;
@@ -55,14 +55,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients": {
+    "/admin/v1/envs/{slug}/clients": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's clients. */
+        /** The environment's clients. */
         get: operations["listClients"];
         put?: never;
         /** Registers a client; a client_secret_basic client's secret is shown once. */
@@ -73,7 +73,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}": {
+    "/admin/v1/envs/{slug}/clients/{client_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -92,7 +92,7 @@ export interface paths {
         patch: operations["patchClient"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/retire": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -109,7 +109,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/secret/rotate": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/secret/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -126,14 +126,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/groups": {
+    "/admin/v1/envs/{slug}/groups": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's groups. */
+        /** The environment's groups. */
         get: operations["listGroups"];
         put?: never;
         post?: never;
@@ -143,7 +143,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/groups/{name}": {
+    "/admin/v1/envs/{slug}/groups/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -162,7 +162,7 @@ export interface paths {
         patch: operations["patchGroup"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/groups/{name}/retire": {
+    "/admin/v1/envs/{slug}/groups/{name}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -179,7 +179,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/groups/{name}/members": {
+    "/admin/v1/envs/{slug}/groups/{name}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -196,7 +196,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/groups/{name}/members/remove": {
+    "/admin/v1/envs/{slug}/groups/{name}/members/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -213,14 +213,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts": {
+    "/admin/v1/envs/{slug}/accounts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's accounts and their states. */
+        /** The environment's accounts and their states. */
         get: operations["listAccounts"];
         put?: never;
         post?: never;
@@ -230,7 +230,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -247,7 +247,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/import": {
+    "/admin/v1/envs/{slug}/accounts/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -264,7 +264,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/guardianships": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/guardianships": {
         parameters: {
             query?: never;
             header?: never;
@@ -281,7 +281,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/bind": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/bind": {
         parameters: {
             query?: never;
             header?: never;
@@ -290,7 +290,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Binds the account and `peer_account_id` of the tenant's realm `peer_realm` (its slug) as one person (idp.account.bind, CT2): the realm that binds first answers with its realm-signed `offer`, shown once; the peer realm's administrator binds the same pair sending that `offer`, which the peer realm verifies against this realm's keys. */
+        /** Binds the account and `peer_account_id` of the tenant's environment `peer_environment` (its slug) as one person (idp.account.bind, CT2): the environment that binds first answers with its environment-signed `offer`, shown once; the peer environment's administrator binds the same pair sending that `offer`, which the peer environment verifies against this environment's keys. */
         post: operations["bindAccount"];
         delete?: never;
         options?: never;
@@ -298,7 +298,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/migration-export": {
+    "/admin/v1/envs/{slug}/accounts/migration-export": {
         parameters: {
             query?: never;
             header?: never;
@@ -315,7 +315,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/suspend": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/suspend": {
         parameters: {
             query?: never;
             header?: never;
@@ -332,7 +332,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/reactivate": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/reactivate": {
         parameters: {
             query?: never;
             header?: never;
@@ -349,14 +349,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/upstream-idps": {
+    "/admin/v1/envs/{slug}/upstream-idps": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's upstream identity providers. */
+        /** The environment's upstream identity providers. */
         get: operations["listUpstreamIdps"];
         put?: never;
         post?: never;
@@ -366,7 +366,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/upstream-idps/{name}": {
+    "/admin/v1/envs/{slug}/upstream-idps/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -385,7 +385,7 @@ export interface paths {
         patch: operations["patchUpstreamIdp"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/upstream-idps/{name}/retire": {
+    "/admin/v1/envs/{slug}/upstream-idps/{name}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -402,14 +402,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/social-providers": {
+    "/admin/v1/envs/{slug}/social-providers": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The social presets the realm enabled, with their warnings (IDP-31, TN-87). */
+        /** The social presets the environment enabled, with their warnings (IDP-31, TN-87). */
         get: operations["listSocialProviders"];
         put?: never;
         post?: never;
@@ -419,16 +419,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/social-providers/{preset}": {
+    "/admin/v1/envs/{slug}/social-providers/{preset}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** One social preset the realm enabled. */
+        /** One social preset the environment enabled. */
         get: operations["getSocialProvider"];
-        /** Enables or changes a social preset; only a sandbox realm may omit its own client (idp.social.enable, update). */
+        /** Enables or changes a social preset; only a sandbox environment may omit its own client (idp.social.enable, update). */
         put: operations["putSocialProvider"];
         post?: never;
         delete?: never;
@@ -438,7 +438,7 @@ export interface paths {
         patch: operations["patchSocialProvider"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/social-providers/{preset}/disable": {
+    "/admin/v1/envs/{slug}/social-providers/{preset}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -455,14 +455,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations": {
+    "/admin/v1/envs/{slug}/organizations": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's live organizations (§8.5 S7). */
+        /** The environment's live organizations (§8.5 S7). */
         get: operations["listOrganizations"];
         put?: never;
         /** Creates an organization bound to the Party its founder's client registered; the founder becomes its first owner (TN-5). */
@@ -473,7 +473,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}": {
+    "/admin/v1/envs/{slug}/organizations/{organization}": {
         parameters: {
             query?: never;
             header?: never;
@@ -487,11 +487,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98). */
+        /** Renames an organization or turns home environment discovery to it on or off; on needs a verified domain no other organization claims (TN-98). */
         patch: operations["patchOrganization"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/members/remove": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/members/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -508,7 +508,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/invitations": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/invitations": {
         parameters: {
             query?: never;
             header?: never;
@@ -525,7 +525,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/invitations/revoke": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/invitations/revoke": {
         parameters: {
             query?: never;
             header?: never;
@@ -542,7 +542,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/domains": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/domains": {
         parameters: {
             query?: never;
             header?: never;
@@ -559,7 +559,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/domains/release": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/domains/release": {
         parameters: {
             query?: never;
             header?: never;
@@ -576,7 +576,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/connection-drafts": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/connection-drafts": {
         parameters: {
             query?: never;
             header?: never;
@@ -593,7 +593,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/upstream-idps/{name}/links": {
+    "/admin/v1/envs/{slug}/upstream-idps/{name}/links": {
         parameters: {
             query?: never;
             header?: never;
@@ -610,14 +610,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings": {
+    "/admin/v1/envs/{slug}/settings": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's settings: sign-in, session, branding, RP ID, mappers. */
+        /** The environment's settings: sign-in, session, branding, RP ID, mappers. */
         get: operations["getSettings"];
         put?: never;
         post?: never;
@@ -627,7 +627,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/signin-policy": {
+    "/admin/v1/envs/{slug}/settings/signin-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -645,7 +645,7 @@ export interface paths {
         patch: operations["patchSigninPolicy"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/session-policy": {
+    "/admin/v1/envs/{slug}/settings/session-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -663,7 +663,7 @@ export interface paths {
         patch: operations["patchSessionPolicy"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/branding": {
+    "/admin/v1/envs/{slug}/settings/branding": {
         parameters: {
             query?: never;
             header?: never;
@@ -681,7 +681,7 @@ export interface paths {
         patch: operations["patchBranding"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/csp-mode": {
+    "/admin/v1/envs/{slug}/settings/csp-mode": {
         parameters: {
             query?: never;
             header?: never;
@@ -698,7 +698,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/related-origins": {
+    "/admin/v1/envs/{slug}/settings/related-origins": {
         parameters: {
             query?: never;
             header?: never;
@@ -706,7 +706,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's Related Origins: https origins under the organizations' verified domains, at most five registrable labels with the RP ID's (TN-18). */
+        /** Sets the environment's Related Origins: https origins under the organizations' verified domains, at most five registrable labels with the RP ID's (TN-18). */
         put: operations["putRelatedOrigins"];
         post?: never;
         delete?: never;
@@ -715,7 +715,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/locale-overrides": {
+    "/admin/v1/envs/{slug}/settings/locale-overrides": {
         parameters: {
             query?: never;
             header?: never;
@@ -723,7 +723,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's texts for the hosted pages by locale and message key: plain text, known keys only, never a protected one (X35). */
+        /** Sets the environment's texts for the hosted pages by locale and message key: plain text, known keys only, never a protected one (X35). */
         put: operations["putLocaleOverrides"];
         post?: never;
         delete?: never;
@@ -732,7 +732,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/rp-id": {
+    "/admin/v1/envs/{slug}/settings/rp-id": {
         parameters: {
             query?: never;
             header?: never;
@@ -749,7 +749,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/mappers/{claim}": {
+    "/admin/v1/envs/{slug}/mappers/{claim}": {
         parameters: {
             query?: never;
             header?: never;
@@ -766,7 +766,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/jose-alg": {
+    "/admin/v1/envs/{slug}/settings/jose-alg": {
         parameters: {
             query?: never;
             header?: never;
@@ -774,7 +774,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's JOSE signing algorithm: ES256 or Ed25519. */
+        /** Sets the environment's JOSE signing algorithm: ES256 or Ed25519. */
         put: operations["putJoseAlg"];
         post?: never;
         delete?: never;
@@ -783,7 +783,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/cimd-policy": {
+    "/admin/v1/envs/{slug}/settings/cimd-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -791,7 +791,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets which Client ID Metadata Document clients the realm accepts. */
+        /** Sets which Client ID Metadata Document clients the environment accepts. */
         put: operations["putCimdPolicy"];
         post?: never;
         delete?: never;
@@ -801,7 +801,7 @@ export interface paths {
         patch: operations["patchCimdPolicy"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/protection-mode": {
+    "/admin/v1/envs/{slug}/settings/protection-mode": {
         parameters: {
             query?: never;
             header?: never;
@@ -819,7 +819,7 @@ export interface paths {
         patch: operations["patchProtectionMode"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/canary": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/canary": {
         parameters: {
             query?: never;
             header?: never;
@@ -836,7 +836,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/delete": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/delete": {
         parameters: {
             query?: never;
             header?: never;
@@ -853,7 +853,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/reset-intents": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/reset-intents": {
         parameters: {
             query?: never;
             header?: never;
@@ -870,7 +870,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/accounts/{account_id}/temporary-access-passes": {
+    "/admin/v1/envs/{slug}/accounts/{account_id}/temporary-access-passes": {
         parameters: {
             query?: never;
             header?: never;
@@ -879,7 +879,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issues a temporary access pass, shown once to read out, in a realm that allows them; its session binds an authenticator only (TN-62). */
+        /** Issues a temporary access pass, shown once to read out, in an environment that allows them; its session binds an authenticator only (TN-62). */
         post: operations["createTemporaryAccessPass"];
         delete?: never;
         options?: never;
@@ -887,7 +887,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/recovery-policy": {
+    "/admin/v1/envs/{slug}/settings/recovery-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -904,7 +904,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/jobs": {
+    "/admin/v1/envs/{slug}/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -921,7 +921,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/jobs/{job_id}": {
+    "/admin/v1/envs/{slug}/jobs/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -938,7 +938,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/jobs/{job_id}/items": {
+    "/admin/v1/envs/{slug}/jobs/{job_id}/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -955,7 +955,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/rehome": {
+    "/admin/v1/envs/{slug}/rehome": {
         parameters: {
             query?: never;
             header?: never;
@@ -964,15 +964,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Moves the realm to another governing domain {domain}: idp.realm.rehome, reserved and CT3; it needs an Exercise in both the old and the new governing domain, or the realm stays (OP-158 m.3 (o)). */
-        post: operations["rehomeRealm"];
+        /** Moves the environment to another governing domain {domain}: idp.environment.rehome, reserved and CT3; it needs an Exercise in both the old and the new governing domain, or the environment stays (OP-158 m.3 (o)). */
+        post: operations["rehomeEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/extension-policy": {
+    "/admin/v1/envs/{slug}/settings/extension-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -990,14 +990,14 @@ export interface paths {
         patch: operations["patchExtensionPolicy"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hooks": {
+    "/admin/v1/envs/{slug}/hooks": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's inline hooks. */
+        /** The environment's inline hooks. */
         get: operations["listHooks"];
         put?: never;
         /** Registers an inline hook at one call point; its verification key is shown once. */
@@ -1008,7 +1008,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hooks/{hook_id}": {
+    "/admin/v1/envs/{slug}/hooks/{hook_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1025,7 +1025,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hooks/{hook_id}/retire": {
+    "/admin/v1/envs/{slug}/hooks/{hook_id}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1042,14 +1042,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/webhooks": {
+    "/admin/v1/envs/{slug}/webhooks": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's webhooks. */
+        /** The environment's webhooks. */
         get: operations["listWebhooks"];
         put?: never;
         /** Registers a webhook; its verification key is shown once. */
@@ -1060,7 +1060,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/webhooks/{webhook_id}": {
+    "/admin/v1/envs/{slug}/webhooks/{webhook_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1079,7 +1079,7 @@ export interface paths {
         patch: operations["patchWebhook"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/webhooks/{webhook_id}/rotate": {
+    "/admin/v1/envs/{slug}/webhooks/{webhook_id}/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1096,7 +1096,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/webhooks/{webhook_id}/retire": {
+    "/admin/v1/envs/{slug}/webhooks/{webhook_id}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1113,7 +1113,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/webhooks/{webhook_id}/deliveries": {
+    "/admin/v1/envs/{slug}/webhooks/{webhook_id}/deliveries": {
         parameters: {
             query?: never;
             header?: never;
@@ -1130,14 +1130,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/signals": {
+    "/admin/v1/envs/{slug}/signals": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's signal sources: delayed transmitters, the GeoIP source, verifier reports. */
+        /** The environment's signal sources: delayed transmitters, the GeoIP source, verifier reports. */
         get: operations["getSignals"];
         put?: never;
         post?: never;
@@ -1147,14 +1147,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/analytics": {
+    "/admin/v1/envs/{slug}/analytics": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input. */
+        /** The environment's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input. */
         get: operations["getAnalytics"];
         put?: never;
         post?: never;
@@ -1164,14 +1164,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/audit/events": {
+    "/admin/v1/envs/{slug}/audit/events": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's full-taxonomy audit stream, oldest first, as OCSF, CEF or SET claims; a copy, not the record. Each read is itself audited. */
+        /** The environment's full-taxonomy audit stream, oldest first, as OCSF, CEF or SET claims; a copy, not the record. Each read is itself audited. */
         get: operations["listAuditEvents"];
         put?: never;
         post?: never;
@@ -1181,14 +1181,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/audit/events/{event_id}/proof": {
+    "/admin/v1/envs/{slug}/audit/events/{event_id}/proof": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The event's inclusion proof in the realm's own audit tree, checkpointed by the cell key under the realm's origin; it shows nothing of other realms. Each read is itself audited. */
+        /** The event's inclusion proof in the environment's own audit tree, checkpointed by the cell key under the environment's origin; it shows nothing of other environments. Each read is itself audited. */
         get: operations["getAuditEventProof"];
         put?: never;
         post?: never;
@@ -1198,14 +1198,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/domains": {
+    "/admin/v1/envs/{slug}/domains": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)). */
+        /** The environment's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)). */
         get: operations["listDomains"];
         put?: never;
         /** Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register. */
@@ -1216,7 +1216,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/domains/{domain}": {
+    "/admin/v1/envs/{slug}/domains/{domain}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1233,7 +1233,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/domains/{domain}/retire": {
+    "/admin/v1/envs/{slug}/domains/{domain}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1250,7 +1250,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind": {
+    "/admin/v1/envs/{slug}/domains/{domain}/issuer-bind": {
         parameters: {
             query?: never;
             header?: never;
@@ -1267,14 +1267,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/export-sinks": {
+    "/admin/v1/envs/{slug}/export-sinks": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's export sinks for the read-only SIEM projection and their cursors; a copy, not the record (OP-156 m.3 (s)). */
+        /** The environment's export sinks for the read-only SIEM projection and their cursors; a copy, not the record (OP-156 m.3 (s)). */
         get: operations["listExportSinks"];
         put?: never;
         /** Registers an export sink (OCSF Parquet on S3, OTLP logs, HTTP collector, syslog CEF or LEEF): idp.export.sink_register. */
@@ -1285,7 +1285,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/export-sinks/{sink}": {
+    "/admin/v1/envs/{slug}/export-sinks/{sink}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1302,7 +1302,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/export-sinks/{sink}/retire": {
+    "/admin/v1/envs/{slug}/export-sinks/{sink}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1319,14 +1319,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents": {
+    "/admin/v1/envs/{slug}/agents": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's agents: kind, operator, sponsors and status (OP-154 m.3 (c), (e)). */
+        /** The environment's agents: kind, operator, sponsors and status (OP-154 m.3 (c), (e)). */
         get: operations["listAgents"];
         put?: never;
         /** Registers an agent bound to one self-registered agent Party: idp.agent.register (OP-154 m.3 (c)). */
@@ -1337,7 +1337,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents/{agent}": {
+    "/admin/v1/envs/{slug}/agents/{agent}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1355,7 +1355,7 @@ export interface paths {
         patch: operations["patchAgent"];
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents/{agent}/retire": {
+    "/admin/v1/envs/{slug}/agents/{agent}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1372,7 +1372,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents/{agent}/revoke-all": {
+    "/admin/v1/envs/{slug}/agents/{agent}/revoke-all": {
         parameters: {
             query?: never;
             header?: never;
@@ -1389,7 +1389,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents/{agent}/sponsors": {
+    "/admin/v1/envs/{slug}/agents/{agent}/sponsors": {
         parameters: {
             query?: never;
             header?: never;
@@ -1407,7 +1407,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agents/{agent}/sponsors/{sponsor}/remove": {
+    "/admin/v1/envs/{slug}/agents/{agent}/sponsors/{sponsor}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -1424,7 +1424,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/agent-templates": {
+    "/admin/v1/envs/{slug}/agent-templates": {
         parameters: {
             query?: never;
             header?: never;
@@ -1441,14 +1441,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/resources": {
+    "/admin/v1/envs/{slug}/resources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's protected resources and MCP servers, by canonical URI. */
+        /** The environment's protected resources and MCP servers, by canonical URI. */
         get: operations["listProtectedResources"];
         put?: never;
         /** Registers a protected resource or MCP server for `resource` validation: idp.client.resource_register. */
@@ -1459,7 +1459,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/dcr-policy": {
+    "/admin/v1/envs/{slug}/settings/dcr-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -1476,7 +1476,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/cross-app-connections": {
+    "/admin/v1/envs/{slug}/cross-app-connections": {
         parameters: {
             query?: never;
             header?: never;
@@ -1493,7 +1493,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/cross-app-connections/{connection}/retire": {
+    "/admin/v1/envs/{slug}/cross-app-connections/{connection}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1510,7 +1510,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/device-code": {
+    "/admin/v1/envs/{slug}/settings/device-code": {
         parameters: {
             query?: never;
             header?: never;
@@ -1518,7 +1518,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns the device authorization grant on (idp.realm.device_code) or off (device_code_close) (OP-154 m.3 (p)). */
+        /** Turns the device authorization grant on (idp.environment.device_code) or off (device_code_close) (OP-154 m.3 (p)). */
         put: operations["putDeviceCode"];
         post?: never;
         delete?: never;
@@ -1527,14 +1527,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/vault/resources": {
+    "/admin/v1/envs/{slug}/vault/resources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's vault Resources: the catalog upstreams it enabled and its own (OP-154 m.3 (t)). */
+        /** The environment's vault Resources: the catalog upstreams it enabled and its own (OP-154 m.3 (t)). */
         get: operations["listVaultResources"];
         put?: never;
         post?: never;
@@ -1544,7 +1544,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/vault/resources/{resource}": {
+    "/admin/v1/envs/{slug}/vault/resources/{resource}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1552,7 +1552,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Enables a catalog upstream (idp.vault.resource_enable) or registers the realm's own (resource_register, reserved). */
+        /** Enables a catalog upstream (idp.vault.resource_enable) or registers the environment's own (resource_register, reserved). */
         put: operations["putVaultResource"];
         post?: never;
         delete?: never;
@@ -1561,7 +1561,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/vault/resources/{resource}/disable": {
+    "/admin/v1/envs/{slug}/vault/resources/{resource}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -1578,7 +1578,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/vault-release-mode": {
+    "/admin/v1/envs/{slug}/settings/vault-release-mode": {
         parameters: {
             query?: never;
             header?: never;
@@ -1595,14 +1595,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/saml-sps": {
+    "/admin/v1/envs/{slug}/saml-sps": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's SAML service providers and WS-Federation relying parties: entity ID, template, status (OP-155 m.3 (e)). */
+        /** The environment's SAML service providers and WS-Federation relying parties: entity ID, template, status (OP-155 m.3 (e)). */
         get: operations["listSamlSps"];
         put?: never;
         /** Registers a SAML service provider from its metadata or SSO catalog template: idp.saml.sp_register, or sp_mapping (reserved) when the template maps a Claim that selects authority. */
@@ -1613,7 +1613,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/saml-sps/{sp}": {
+    "/admin/v1/envs/{slug}/saml-sps/{sp}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1631,7 +1631,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/saml-sps/{sp}/retire": {
+    "/admin/v1/envs/{slug}/saml-sps/{sp}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1648,7 +1648,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/saml-certificate": {
+    "/admin/v1/envs/{slug}/settings/saml-certificate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1665,7 +1665,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/saml-certificate/replace": {
+    "/admin/v1/envs/{slug}/settings/saml-certificate/replace": {
         parameters: {
             query?: never;
             header?: never;
@@ -1682,14 +1682,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/scim-clients": {
+    "/admin/v1/envs/{slug}/scim-clients": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's inbound SCIM clients: name, tolerance profile, status, last request (OP-155 m.3 (g)). */
+        /** The environment's inbound SCIM clients: name, tolerance profile, status, last request (OP-155 m.3 (g)). */
         get: operations["listScimClients"];
         put?: never;
         /** Registers an inbound SCIM client: idp.scim.client_register; its opaque bearer secret is shown once and only its SHA-256 is kept. */
@@ -1700,7 +1700,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/scim-clients/{scim_client}/secret/rotate": {
+    "/admin/v1/envs/{slug}/scim-clients/{scim_client}/secret/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1717,7 +1717,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/scim-clients/{scim_client}/retire": {
+    "/admin/v1/envs/{slug}/scim-clients/{scim_client}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1734,14 +1734,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/scim-targets": {
+    "/admin/v1/envs/{slug}/scim-targets": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's outbound SCIM targets and their last results; never a secret. */
+        /** The environment's outbound SCIM targets and their last results; never a secret. */
         get: operations["listScimTargets"];
         put?: never;
         /** Registers an outbound SCIM target whose secret is sealed in the vault: idp.scim.outbound_register. */
@@ -1752,7 +1752,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/scim-targets/{target}/retire": {
+    "/admin/v1/envs/{slug}/scim-targets/{target}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1769,14 +1769,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/gateways": {
+    "/admin/v1/envs/{slug}/gateways": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's edge gateways (SAML, LDAP, RADIUS, Kerberos) with their internal identity and status (OP-155 m.3 (c)). */
+        /** The environment's edge gateways (SAML, LDAP, RADIUS, Kerberos) with their internal identity and status (OP-155 m.3 (c)). */
         get: operations["listGateways"];
         put?: never;
         /** Registers an edge gateway and its mTLS identity urn:suiss:access:gw:<kind>:<name>: idp.gateway.register. */
@@ -1787,7 +1787,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/gateways/{gateway}/retire": {
+    "/admin/v1/envs/{slug}/gateways/{gateway}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -1804,7 +1804,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/gateways/{gateway}/keytab-policy": {
+    "/admin/v1/envs/{slug}/gateways/{gateway}/keytab-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -1821,7 +1821,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/gateways/{gateway}/keytab/replace": {
+    "/admin/v1/envs/{slug}/gateways/{gateway}/keytab/replace": {
         parameters: {
             query?: never;
             header?: never;
@@ -1838,7 +1838,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/gateways/{gateway}/radius-clients": {
+    "/admin/v1/envs/{slug}/gateways/{gateway}/radius-clients": {
         parameters: {
             query?: never;
             header?: never;
@@ -1855,7 +1855,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/federation": {
+    "/admin/v1/envs/{slug}/settings/federation": {
         parameters: {
             query?: never;
             header?: never;
@@ -1872,14 +1872,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/federation/trust-anchors": {
+    "/admin/v1/envs/{slug}/federation/trust-anchors": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The trust anchors the realm trusts and each chain's state. */
+        /** The trust anchors the environment trusts and each chain's state. */
         get: operations["listTrustAnchors"];
         put?: never;
         /** Trusts a federation's trust anchor: idp.federation.trust_anchor_add (reserved). */
@@ -1890,7 +1890,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/federation/trust-anchors/{anchor}/remove": {
+    "/admin/v1/envs/{slug}/federation/trust-anchors/{anchor}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -1907,7 +1907,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/federation-authority": {
+    "/admin/v1/envs/{slug}/settings/federation-authority": {
         parameters: {
             query?: never;
             header?: never;
@@ -1924,7 +1924,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/federation-registration": {
+    "/admin/v1/envs/{slug}/settings/federation-registration": {
         parameters: {
             query?: never;
             header?: never;
@@ -1941,7 +1941,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/vc-verifier": {
+    "/admin/v1/envs/{slug}/settings/vc-verifier": {
         parameters: {
             query?: never;
             header?: never;
@@ -1958,7 +1958,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/vc-trusted-lists": {
+    "/admin/v1/envs/{slug}/settings/vc-trusted-lists": {
         parameters: {
             query?: never;
             header?: never;
@@ -1975,7 +1975,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/vc-issuer": {
+    "/admin/v1/envs/{slug}/settings/vc-issuer": {
         parameters: {
             query?: never;
             header?: never;
@@ -1992,7 +1992,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/profile": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/profile": {
         parameters: {
             query?: never;
             header?: never;
@@ -2009,7 +2009,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/legacy-authentication": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/legacy-authentication": {
         parameters: {
             query?: never;
             header?: never;
@@ -2026,7 +2026,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/signing-alg": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/signing-alg": {
         parameters: {
             query?: never;
             header?: never;
@@ -2034,7 +2034,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Lets a client take RS256 identity assertions: idp.client.alg_rs256; the realm's RSA-3072 key is made on first use (MD-6). */
+        /** Lets a client take RS256 identity assertions: idp.client.alg_rs256; the environment's RSA-3072 key is made on first use (MD-6). */
         put: operations["putClientSigningAlg"];
         post?: never;
         delete?: never;
@@ -2043,7 +2043,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/encryption": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/encryption": {
         parameters: {
             query?: never;
             header?: never;
@@ -2060,7 +2060,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/saml-bearer": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/saml-bearer": {
         parameters: {
             query?: never;
             header?: never;
@@ -2077,7 +2077,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/clients/{client_id}/legacy-bearer": {
+    "/admin/v1/envs/{slug}/clients/{client_id}/legacy-bearer": {
         parameters: {
             query?: never;
             header?: never;
@@ -2094,7 +2094,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/ciba": {
+    "/admin/v1/envs/{slug}/settings/ciba": {
         parameters: {
             query?: never;
             header?: never;
@@ -2102,7 +2102,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns CIBA poll and ping on (idp.realm.ciba) or off (ciba_close) (OP-155 m.3 (l)). */
+        /** Turns CIBA poll and ping on (idp.environment.ciba) or off (ciba_close) (OP-155 m.3 (l)). */
         put: operations["putCiba"];
         post?: never;
         delete?: never;
@@ -2111,7 +2111,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/certificate-login": {
+    "/admin/v1/envs/{slug}/settings/certificate-login": {
         parameters: {
             query?: never;
             header?: never;
@@ -2119,7 +2119,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns on certificate, PIV and CAC sign-in: idp.realm.certificate_login (OP-155 m.3 (m)). */
+        /** Turns on certificate, PIV and CAC sign-in: idp.environment.certificate_login (OP-155 m.3 (m)). */
         put: operations["putCertificateLogin"];
         post?: never;
         delete?: never;
@@ -2128,7 +2128,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/mtls-aliases": {
+    "/admin/v1/envs/{slug}/settings/mtls-aliases": {
         parameters: {
             query?: never;
             header?: never;
@@ -2136,7 +2136,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Publishes mtls_endpoint_aliases on the mTLS listener: idp.realm.mtls_aliases. */
+        /** Publishes mtls_endpoint_aliases on the mTLS listener: idp.environment.mtls_aliases. */
         put: operations["putMtlsAliases"];
         post?: never;
         delete?: never;
@@ -2145,7 +2145,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/hrd": {
+    "/admin/v1/envs/{slug}/settings/hrd": {
         parameters: {
             query?: never;
             header?: never;
@@ -2153,7 +2153,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns home realm discovery on (idp.realm.hrd) or off (hrd_close) (OP-155 m.3 (h)). */
+        /** Turns home environment discovery on (idp.environment.hrd) or off (hrd_close) (OP-155 m.3 (h)). */
         put: operations["putHrd"];
         post?: never;
         delete?: never;
@@ -2162,7 +2162,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/frontchannel-logout": {
+    "/admin/v1/envs/{slug}/settings/frontchannel-logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -2170,7 +2170,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Lets the realm's clients opt in to front-channel logout: idp.realm.frontchannel_logout. */
+        /** Lets the environment's clients opt in to front-channel logout: idp.environment.frontchannel_logout. */
         put: operations["putFrontchannelLogout"];
         post?: never;
         delete?: never;
@@ -2179,7 +2179,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement/preview": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/sso-enforcement/preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -2196,7 +2196,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/sso-enforcement": {
         parameters: {
             query?: never;
             header?: never;
@@ -2213,7 +2213,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement/lift": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/sso-enforcement/lift": {
         parameters: {
             query?: never;
             header?: never;
@@ -2230,7 +2230,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/organizations/{organization}/setup-links": {
+    "/admin/v1/envs/{slug}/organizations/{organization}/setup-links": {
         parameters: {
             query?: never;
             header?: never;
@@ -2247,7 +2247,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/upstream-idps/{name}/assurance-map": {
+    "/admin/v1/envs/{slug}/upstream-idps/{name}/assurance-map": {
         parameters: {
             query?: never;
             header?: never;
@@ -2264,14 +2264,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/proxies": {
+    "/admin/v1/envs/{slug}/proxies": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's forward-auth proxies and Access Proxy instances, each a PEP (OP-156 m.3 (l), (m)). */
+        /** The environment's forward-auth proxies and Access Proxy instances, each a PEP (OP-156 m.3 (l), (m)). */
         get: operations["listProxies"];
         put?: never;
         /** Registers a proxy as a PEP with its application, engine and upstream: idp.proxy.register. */
@@ -2282,7 +2282,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/proxies/{proxy}": {
+    "/admin/v1/envs/{slug}/proxies/{proxy}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2300,7 +2300,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/proxies/{proxy}/retire": {
+    "/admin/v1/envs/{slug}/proxies/{proxy}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2317,7 +2317,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/proxies/{proxy}/plain-headers": {
+    "/admin/v1/envs/{slug}/proxies/{proxy}/plain-headers": {
         parameters: {
             query?: never;
             header?: never;
@@ -2334,7 +2334,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/proxies/{proxy}/mcp-pins": {
+    "/admin/v1/envs/{slug}/proxies/{proxy}/mcp-pins": {
         parameters: {
             query?: never;
             header?: never;
@@ -2351,7 +2351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/ssh-ca": {
+    "/admin/v1/envs/{slug}/settings/ssh-ca": {
         parameters: {
             query?: never;
             header?: never;
@@ -2359,7 +2359,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns the realm's Ed25519 SSH user CA on (idp.ssh.ca_enable) or off (ca_disable) (OP-156 m.3 (o)). */
+        /** Turns the environment's Ed25519 SSH user CA on (idp.ssh.ca_enable) or off (ca_disable) (OP-156 m.3 (o)). */
         put: operations["putSshCa"];
         post?: never;
         delete?: never;
@@ -2368,7 +2368,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/ssh-ca/rotate": {
+    "/admin/v1/envs/{slug}/settings/ssh-ca/rotate": {
         parameters: {
             query?: never;
             header?: never;
@@ -2385,7 +2385,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/ssh-ca/replace": {
+    "/admin/v1/envs/{slug}/settings/ssh-ca/replace": {
         parameters: {
             query?: never;
             header?: never;
@@ -2402,14 +2402,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/ssh-host-groups": {
+    "/admin/v1/envs/{slug}/ssh-host-groups": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's SSH server groups, the resources of ssh.login Grants. */
+        /** The environment's SSH server groups, the resources of ssh.login Grants. */
         get: operations["listSshHostGroups"];
         put?: never;
         /** Registers an SSH server group: idp.ssh.host_group_register. */
@@ -2420,7 +2420,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/ssh-host-groups/{host_group}/retire": {
+    "/admin/v1/envs/{slug}/ssh-host-groups/{host_group}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2437,14 +2437,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/linux-hosts": {
+    "/admin/v1/envs/{slug}/linux-hosts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's Linux client hosts with their server group, offline limits and break-glass switch (OP-156 m.3 (p)). */
+        /** The environment's Linux client hosts with their server group, offline limits and break-glass switch (OP-156 m.3 (p)). */
         get: operations["listLinuxHosts"];
         put?: never;
         /** Registers a Linux host of the Linux client: idp.linux.host_register. */
@@ -2455,7 +2455,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/linux-hosts/{host}/retire": {
+    "/admin/v1/envs/{slug}/linux-hosts/{host}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2472,7 +2472,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/linux-hosts/{host}/offline-policy": {
+    "/admin/v1/envs/{slug}/linux-hosts/{host}/offline-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -2489,7 +2489,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/linux-hosts/{host}/break-glass-policy": {
+    "/admin/v1/envs/{slug}/linux-hosts/{host}/break-glass-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -2506,14 +2506,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-sources": {
+    "/admin/v1/envs/{slug}/hr-sources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's HR sources, each a Claim issuer whose selection effect is a CT3 subject-selection Acceptance (OP-156 m.3 (q)). */
+        /** The environment's HR sources, each a Claim issuer whose selection effect is a CT3 subject-selection Acceptance (OP-156 m.3 (q)). */
         get: operations["listHrSources"];
         put?: never;
         /** Registers an HR source: idp.hr.source_register. */
@@ -2524,7 +2524,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-sources/{source}/retire": {
+    "/admin/v1/envs/{slug}/hr-sources/{source}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2541,7 +2541,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-sources/{source}/records:batch": {
+    "/admin/v1/envs/{slug}/hr-sources/{source}/records:batch": {
         parameters: {
             query?: never;
             header?: never;
@@ -2558,7 +2558,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-sources/{source}/records:csv": {
+    "/admin/v1/envs/{slug}/hr-sources/{source}/records:csv": {
         parameters: {
             query?: never;
             header?: never;
@@ -2575,14 +2575,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-connectors": {
+    "/admin/v1/envs/{slug}/hr-connectors": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's HR connectors of services/hr-connector and their last pull. */
+        /** The environment's HR connectors of services/hr-connector and their last pull. */
         get: operations["listHrConnectors"];
         put?: never;
         /** Registers an HR connector: idp.hr.connector_register. */
@@ -2593,7 +2593,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/hr-connectors/{connector}/retire": {
+    "/admin/v1/envs/{slug}/hr-connectors/{connector}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2610,14 +2610,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/signal-sources": {
+    "/admin/v1/envs/{slug}/signal-sources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's signal sources (KYC, MDM, risk, DLP), each a Claim issuer whose effect needs an Acceptance (OP-156 m.3 (r)). */
+        /** The environment's signal sources (KYC, MDM, risk, DLP), each a Claim issuer whose effect needs an Acceptance (OP-156 m.3 (r)). */
         get: operations["listSignalSources"];
         put?: never;
         /** Registers a signal source: idp.signal.source_register. */
@@ -2628,7 +2628,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/signal-sources/{source}/retire": {
+    "/admin/v1/envs/{slug}/signal-sources/{source}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2645,7 +2645,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/push": {
+    "/admin/v1/envs/{slug}/settings/push": {
         parameters: {
             query?: never;
             header?: never;
@@ -2653,7 +2653,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns push verification with number matching on (idp.realm.push) or off (push_close) (OP-156 m.3 (d)). */
+        /** Turns push verification with number matching on (idp.environment.push) or off (push_close) (OP-156 m.3 (d)). */
         put: operations["putPush"];
         post?: never;
         delete?: never;
@@ -2662,7 +2662,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/sms-otp": {
+    "/admin/v1/envs/{slug}/settings/sms-otp": {
         parameters: {
             query?: never;
             header?: never;
@@ -2670,7 +2670,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns the restricted SMS one-time code on (idp.realm.sms_otp) or off (sms_otp_close) (OP-156 m.3 (f)). */
+        /** Turns the restricted SMS one-time code on (idp.environment.sms_otp) or off (sms_otp_close) (OP-156 m.3 (f)). */
         put: operations["putSmsOtp"];
         post?: never;
         delete?: never;
@@ -2679,7 +2679,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/spc": {
+    "/admin/v1/envs/{slug}/settings/spc": {
         parameters: {
             query?: never;
             header?: never;
@@ -2687,7 +2687,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Opens Permissions-Policy: payment on the approval surface for Secure Payment Confirmation: idp.realm.spc (OP-156 m.3 (g)). */
+        /** Opens Permissions-Policy: payment on the approval surface for Secure Payment Confirmation: idp.environment.spc (OP-156 m.3 (g)). */
         put: operations["putSpc"];
         post?: never;
         delete?: never;
@@ -2696,7 +2696,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/coordinator": {
+    "/admin/v1/envs/{slug}/settings/coordinator": {
         parameters: {
             query?: never;
             header?: never;
@@ -2704,7 +2704,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Names the coordinator URL the hub links pending approvals to: idp.realm.coordinator (OP-156 m.3 (t)). */
+        /** Names the coordinator URL the hub links pending approvals to: idp.environment.coordinator (OP-156 m.3 (t)). */
         put: operations["putCoordinator"];
         post?: never;
         delete?: never;
@@ -2713,7 +2713,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/iys": {
+    "/admin/v1/envs/{slug}/settings/iys": {
         parameters: {
             query?: never;
             header?: never;
@@ -2721,7 +2721,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns the İYS consent registry events on (idp.realm.iys) or off (iys_close). */
+        /** Turns the İYS consent registry events on (idp.environment.iys) or off (iys_close). */
         put: operations["putIys"];
         post?: never;
         delete?: never;
@@ -2730,7 +2730,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/preference-topics": {
+    "/admin/v1/envs/{slug}/settings/preference-topics": {
         parameters: {
             query?: never;
             header?: never;
@@ -2738,7 +2738,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's own preference topics beside campaign, newsletter and product_news: idp.realm.preference_topics (OP-153 m.3 (ee)). */
+        /** Sets the environment's own preference topics beside campaign, newsletter and product_news: idp.environment.preference_topics (OP-153 m.3 (ee)). */
         put: operations["putPreferenceTopics"];
         post?: never;
         delete?: never;
@@ -2747,7 +2747,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/security-notices": {
+    "/admin/v1/envs/{slug}/settings/security-notices": {
         parameters: {
             query?: never;
             header?: never;
@@ -2755,7 +2755,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Turns the immediate security authority notices on (idp.realm.security_notices) or off (security_notices_close); on by default (OP-156 m.3 (c)). */
+        /** Turns the immediate security authority notices on (idp.environment.security_notices) or off (security_notices_close); on by default (OP-156 m.3 (c)). */
         put: operations["putSecurityNotices"];
         post?: never;
         delete?: never;
@@ -2764,14 +2764,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/relay/undelivered": {
+    "/admin/v1/envs/{slug}/relay/undelivered": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's Relay messages the courier gave up on, without their sealed content (OP-156 m.3 (c)). */
+        /** The environment's Relay messages the courier gave up on, without their sealed content (OP-156 m.3 (c)). */
         get: operations["listUndeliveredRelayMessages"];
         put?: never;
         post?: never;
@@ -2781,7 +2781,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/relay/undelivered/{event_id}/resend": {
+    "/admin/v1/envs/{slug}/relay/undelivered/{event_id}/resend": {
         parameters: {
             query?: never;
             header?: never;
@@ -2798,14 +2798,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/support/case-systems": {
+    "/admin/v1/envs/{slug}/support/case-systems": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's support case systems, each a registered issuer of support_case Claims (OP-157 m.3 (e)). */
+        /** The environment's support case systems, each a registered issuer of support_case Claims (OP-157 m.3 (e)). */
         get: operations["listCaseSystems"];
         put?: never;
         /** Registers a support case system {name, issuer, provider, format} as a Claim issuer: idp.support.case_system_register. */
@@ -2816,7 +2816,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/support/case-systems/{case_system}/retire": {
+    "/admin/v1/envs/{slug}/support/case-systems/{case_system}/retire": {
         parameters: {
             query?: never;
             header?: never;
@@ -2833,14 +2833,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/support/grants": {
+    "/admin/v1/envs/{slug}/support/grants": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's support Grants with operator, subject, case, scope and end, a read of the Grants the caller may see (OP-157 m.3 (c)). */
+        /** The environment's support Grants with operator, subject, case, scope and end, a read of the Grants the caller may see (OP-157 m.3 (c)). */
         get: operations["listSupportGrants"];
         put?: never;
         post?: never;
@@ -2850,7 +2850,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/support-artifacts": {
+    "/admin/v1/envs/{slug}/settings/support-artifacts": {
         parameters: {
             query?: never;
             header?: never;
@@ -2867,14 +2867,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/breakglass/accounts": {
+    "/admin/v1/envs/{slug}/breakglass/accounts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's accounts marked as break-glass accounts, with their last sign-in; the mark carries no authority (INV-28, OP-157 m.3 (h)). */
+        /** The environment's accounts marked as break-glass accounts, with their last sign-in; the mark carries no authority (INV-28, OP-157 m.3 (h)). */
         get: operations["listBreakglassAccounts"];
         put?: never;
         /** Marks an organization member's account as a break-glass account {organization, member}: idp.org.member_breakglass. */
@@ -2885,7 +2885,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/breakglass/accounts/{account}/clear": {
+    "/admin/v1/envs/{slug}/breakglass/accounts/{account}/clear": {
         parameters: {
             query?: never;
             header?: never;
@@ -2902,14 +2902,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/breakglass/drills": {
+    "/admin/v1/envs/{slug}/breakglass/drills": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's break-glass drills, each a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)). */
+        /** The environment's break-glass drills, each a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)). */
         get: operations["listBreakglassDrills"];
         put?: never;
         post?: never;
@@ -2919,7 +2919,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/breakglass/reviews": {
+    "/admin/v1/envs/{slug}/breakglass/reviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -2936,14 +2936,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/reviews": {
+    "/admin/v1/envs/{slug}/reviews": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's access review campaigns: period, scope and next run; a campaign is a view, never a queue (IDP-39 (3), OP-157 m.3 (w)). */
+        /** The environment's access review campaigns: period, scope and next run; a campaign is a view, never a queue (IDP-39 (3), OP-157 m.3 (w)). */
         get: operations["listReviews"];
         put?: never;
         /** Schedules an access review campaign {name, period_days, scope}: idp.review.schedule. */
@@ -2954,7 +2954,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/reviews/{review}": {
+    "/admin/v1/envs/{slug}/reviews/{review}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2971,7 +2971,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/reviews/{review}/close": {
+    "/admin/v1/envs/{slug}/reviews/{review}/close": {
         parameters: {
             query?: never;
             header?: never;
@@ -2988,7 +2988,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/reviews/{review}/items": {
+    "/admin/v1/envs/{slug}/reviews/{review}/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -3005,7 +3005,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/reviews/{review}/items/{item}/keep": {
+    "/admin/v1/envs/{slug}/reviews/{review}/items/{item}/keep": {
         parameters: {
             query?: never;
             header?: never;
@@ -3022,7 +3022,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/offboarding/{party}/preview": {
+    "/admin/v1/envs/{slug}/offboarding/{party}/preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -3039,7 +3039,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/offboarding/{party}/commit": {
+    "/admin/v1/envs/{slug}/offboarding/{party}/commit": {
         parameters: {
             query?: never;
             header?: never;
@@ -3056,7 +3056,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/delegated-admin": {
+    "/admin/v1/envs/{slug}/settings/delegated-admin": {
         parameters: {
             query?: never;
             header?: never;
@@ -3064,7 +3064,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Opens delegated administration through meta-action role Grants (idp.realm.delegated_admin) or closes it for new admin Grants (delegated_admin_close); existing admin Grants stay (OP-157 m.3 (t)). */
+        /** Opens delegated administration through meta-action role Grants (idp.environment.delegated_admin) or closes it for new admin Grants (delegated_admin_close); existing admin Grants stay (OP-157 m.3 (t)). */
         put: operations["putDelegatedAdmin"];
         post?: never;
         delete?: never;
@@ -3073,7 +3073,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/approval-inline": {
+    "/admin/v1/envs/{slug}/settings/approval-inline": {
         parameters: {
             query?: never;
             header?: never;
@@ -3081,7 +3081,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Opens CT1 approval inside the approver notification (idp.realm.approval_inline) or closes it (approval_inline_close) (OP-157 m.3 (m)). */
+        /** Opens CT1 approval inside the approver notification (idp.environment.approval_inline) or closes it (approval_inline_close) (OP-157 m.3 (m)). */
         put: operations["putApprovalInline"];
         post?: never;
         delete?: never;
@@ -3090,7 +3090,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/approval-batch": {
+    "/admin/v1/envs/{slug}/settings/approval-batch": {
         parameters: {
             query?: never;
             header?: never;
@@ -3098,7 +3098,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Opens CT1 batch approval of at most 10 requests (idp.realm.approval_batch) or closes it (approval_batch_close) (OP-157 m.3 (m)). */
+        /** Opens CT1 batch approval of at most 10 requests (idp.environment.approval_batch) or closes it (approval_batch_close) (OP-157 m.3 (m)). */
         put: operations["putApprovalBatch"];
         post?: never;
         delete?: never;
@@ -3107,7 +3107,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/breakglass/reviews/{exercise}": {
+    "/admin/v1/envs/{slug}/breakglass/reviews/{exercise}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3124,14 +3124,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/placement": {
+    "/admin/v1/envs/{slug}/placement": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The cell the realm and its governing domain are placed in, with residency; the placement routes requests and is never a decision input (TI-17, OP-158 m.3 (o)). */
+        /** The cell the environment and its governing domain are placed in, with residency; the placement routes requests and is never a decision input (TI-17, OP-158 m.3 (o)). */
         get: operations["getPlacement"];
         put?: never;
         post?: never;
@@ -3141,14 +3141,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/durability": {
+    "/admin/v1/envs/{slug}/durability": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's durability profile (replicated or single-node), DR class, RPO and the witnesses and replicas its domain declares (HL-40, OP-158 m.3 (n), (p)). */
+        /** The environment's durability profile (replicated or single-node), DR class, RPO and the witnesses and replicas its domain declares (HL-40, OP-158 m.3 (n), (p)). */
         get: operations["getDurability"];
         put?: never;
         post?: never;
@@ -3158,7 +3158,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/residency": {
+    "/admin/v1/envs/{slug}/settings/residency": {
         parameters: {
             query?: never;
             header?: never;
@@ -3166,7 +3166,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Declares the realm's residency {region, class}: idp.realm.residency, reserved; a change is a cell move (OP-158 m.3 (o)). */
+        /** Declares the environment's residency {region, class}: idp.environment.residency, reserved; a change is a cell move (OP-158 m.3 (o)). */
         put: operations["putResidency"];
         post?: never;
         delete?: never;
@@ -3175,7 +3175,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/dr-profile": {
+    "/admin/v1/envs/{slug}/settings/dr-profile": {
         parameters: {
             query?: never;
             header?: never;
@@ -3183,7 +3183,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Declares the async DR profile {rpo_s} (idp.realm.dr_profile, CT3) or returns to the synchronous class with {} (dr_profile_close, CT1) (OP-158 m.3 (r)). */
+        /** Declares the async DR profile {rpo_s} (idp.environment.dr_profile, CT3) or returns to the synchronous class with {} (dr_profile_close, CT1) (OP-158 m.3 (r)). */
         put: operations["putDrProfile"];
         post?: never;
         delete?: never;
@@ -3192,7 +3192,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/rate-limit": {
+    "/admin/v1/envs/{slug}/settings/rate-limit": {
         parameters: {
             query?: never;
             header?: never;
@@ -3200,7 +3200,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's rate limit {rps}: idp.realm.rate_limit (OP-35, OP-158 m.3 (v)). */
+        /** Sets the environment's rate limit {rps}: idp.environment.rate_limit (OP-35, OP-158 m.3 (v)). */
         put: operations["putRateLimit"];
         post?: never;
         delete?: never;
@@ -3209,7 +3209,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/crypto-profile": {
+    "/admin/v1/envs/{slug}/settings/crypto-profile": {
         parameters: {
             query?: never;
             header?: never;
@@ -3217,7 +3217,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's crypto profile {fips}: idp.realm.crypto_profile; the FIPS profile allows only FIPS-approved algorithms (CR-15, OP-158 m.3 (y)). */
+        /** Sets the environment's crypto profile {fips}: idp.environment.crypto_profile; the FIPS profile allows only FIPS-approved algorithms (CR-15, OP-158 m.3 (y)). */
         put: operations["putCryptoProfile"];
         post?: never;
         delete?: never;
@@ -3226,7 +3226,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/hash-profile": {
+    "/admin/v1/envs/{slug}/settings/hash-profile": {
         parameters: {
             query?: never;
             header?: never;
@@ -3234,7 +3234,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Raises the realm's Argon2id hash profile {profile}; it is never lowered, and a lower profile answers 409 hash-profile-downgrade (OP-33, OP-158 m.3 (a)). */
+        /** Raises the environment's Argon2id hash profile {profile}; it is never lowered, and a lower profile answers 409 hash-profile-downgrade (OP-33, OP-158 m.3 (a)). */
         put: operations["putHashProfile"];
         post?: never;
         delete?: never;
@@ -3243,7 +3243,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/audit-tier": {
+    "/admin/v1/envs/{slug}/settings/audit-tier": {
         parameters: {
             query?: never;
             header?: never;
@@ -3251,7 +3251,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the cold audit tier {hot_days, target} (idp.realm.audit_tier) or closes it with {} (audit_tier_close); a hot window under 30 days answers 422 audit-tier-too-short (OP-158 m.3 (w)). */
+        /** Sets the cold audit tier {hot_days, target} (idp.environment.audit_tier) or closes it with {} (audit_tier_close); a hot window under 30 days answers 422 audit-tier-too-short (OP-158 m.3 (w)). */
         put: operations["putAuditTier"];
         post?: never;
         delete?: never;
@@ -3260,14 +3260,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/rate-limits": {
+    "/admin/v1/envs/{slug}/rate-limits": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's rate limits and their use: each bucket's share in use now and over 1 h and 24 h, the 10 heaviest consumers as digests, refusals by type and the warning threshold; never labelled by the request (§12.5.4, TN-127, OP-158 m.3 (v)). */
+        /** The environment's rate limits and their use: each bucket's share in use now and over 1 h and 24 h, the 10 heaviest consumers as digests, refusals by type and the warning threshold; never labelled by the request (§12.5.4, TN-127, OP-158 m.3 (v)). */
         get: operations["getRateLimits"];
         put?: never;
         post?: never;
@@ -3277,14 +3277,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/recovery": {
+    "/admin/v1/envs/{slug}/recovery": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Whether the realm's governing domain can be recovered ("Recovery not available" otherwise), and its handovers and forced recoveries with the record position each took effect at and, for a recovery, the time after which changes may be lost (§8.17.9.7, §13.6, OP-158 m.3 (m)). */
+        /** Whether the environment's governing domain can be recovered ("Recovery not available" otherwise), and its handovers and forced recoveries with the record position each took effect at and, for a recovery, the time after which changes may be lost (§8.17.9.7, §13.6, OP-158 m.3 (m)). */
         get: operations["getRecovery"];
         put?: never;
         post?: never;
@@ -3294,14 +3294,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/signing": {
+    "/admin/v1/envs/{slug}/signing": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The realm's signing profile: its classical and ML-DSA signing keys and algorithms, the key exchange share policy, whether the FIPS module is in use and why FIPS and post-quantum profiles cannot be combined (OP-159 m.3 (o), (r), (t)). */
+        /** The environment's signing profile: its classical and ML-DSA signing keys and algorithms, the key exchange share policy, whether the FIPS module is in use and why FIPS and post-quantum profiles cannot be combined (OP-159 m.3 (o), (r), (t)). */
         get: operations["getSigning"];
         put?: never;
         post?: never;
@@ -3311,7 +3311,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/signing-profile": {
+    "/admin/v1/envs/{slug}/settings/signing-profile": {
         parameters: {
             query?: never;
             header?: never;
@@ -3319,7 +3319,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Adds ML-DSA to the realm's accept and signing set {profile: ml-dsa-65 | ml-dsa-44 | ml-dsa-87} (idp.realm.signing_profile, reserved, CT3) or takes it out with {} (signing_profile_close, CT1); the classical algorithms stay. With the FIPS profile on it answers 409 fips-pq-exclusive; without an HSM ML-DSA mechanism, 409 pq-key-unavailable (CR-41, OP-159 m.3 (a), (d), (o), (r)). */
+        /** Adds ML-DSA to the environment's accept and signing set {profile: ml-dsa-65 | ml-dsa-44 | ml-dsa-87} (idp.environment.signing_profile, reserved, CT3) or takes it out with {} (signing_profile_close, CT1); the classical algorithms stay. With the FIPS profile on it answers 409 fips-pq-exclusive; without an HSM ML-DSA mechanism, 409 pq-key-unavailable (CR-41, OP-159 m.3 (a), (d), (o), (r)). */
         put: operations["putSigningProfile"];
         post?: never;
         delete?: never;
@@ -3328,7 +3328,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/realms/{slug}/settings/kex-share": {
+    "/admin/v1/envs/{slug}/settings/kex-share": {
         parameters: {
             query?: never;
             header?: never;
@@ -3336,7 +3336,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the realm's hybrid key exchange share policy {mode: optimistic | advertise-only}: idp.realm.kex_share, CT2; both offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a), (t)). */
+        /** Sets the environment's hybrid key exchange share policy {mode: optimistic | advertise-only}: idp.environment.kex_share, CT2; both offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a), (t)). */
         put: operations["putKexShare"];
         post?: never;
         delete?: never;
@@ -3397,18 +3397,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/platform/tenants/{tenant_id}/realms": {
+    "/admin/v1/platform/tenants/{tenant_id}/envs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** A tenant's realms; metadata only. */
-        get: operations["listTenantRealms"];
+        /** A tenant's environments; metadata only. */
+        get: operations["listTenantEnvironments"];
         put?: never;
-        /** Creates a realm by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered. */
-        post: operations["createRealm"];
+        /** Creates an environment by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered. */
+        post: operations["createEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3425,7 +3425,7 @@ export interface paths {
         /** A tenant's sandbox domains. */
         get: operations["listSandboxDomains"];
         put?: never;
-        /** Creates a sandbox realm whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget. */
+        /** Creates a sandbox environment whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget. */
         post: operations["createSandboxDomain"];
         delete?: never;
         options?: never;
@@ -3433,15 +3433,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/platform/realms/{realm_slug}": {
+    "/admin/v1/platform/envs/{environment_slug}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** One realm's metadata and the state of its signing keys; never its settings or content. */
-        get: operations["getRealmMetadata"];
+        /** One environment's metadata and the state of its signing keys; never its settings or content. */
+        get: operations["getEnvironmentMetadata"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3575,7 +3575,7 @@ export interface components {
             status_at?: components["schemas"]["Time"];
             created_at?: components["schemas"]["Time"];
         };
-        /** @description An agent of the realm (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19). */
+        /** @description An agent of the environment (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19). */
         Agent: {
             /** @description Opaque id of the agent Party. */
             agent?: string;
@@ -3641,7 +3641,7 @@ export interface components {
             }[];
             readonly connection_drafts?: Record<string, never>[];
         };
-        /** @description A social preset the realm enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox realm may use. Warnings never refuse anything (TN-87, IDP-31 (5)). */
+        /** @description A social preset the environment enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox environment may use. Warnings never refuse anything (TN-87, IDP-31 (5)). */
         SocialProvider: {
             /** @enum {string} */
             preset?: "apple" | "facebook" | "github" | "google" | "linkedin" | "microsoft";
@@ -3697,7 +3697,7 @@ export interface components {
             /** @enum {string} */
             readonly status?: "active" | "retired";
         };
-        /** @description The realm's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows. */
+        /** @description The environment's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows. */
         Signals: {
             transmitters: {
                 /** @description The transmitter's issuer. */
@@ -3739,7 +3739,7 @@ export interface components {
             occurred_at?: components["schemas"]["Time"];
             queued_at?: components["schemas"]["Time"];
         };
-        /** @description The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18), `locale_overrides` by locale and key (X35), and whether push verification (`push.enabled`) and the restricted SMS code (`sms_otp.enabled`) are on (OP-156 m.3 (d), (f)). */
+        /** @description The environment's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18), `locale_overrides` by locale and key (X35), and whether push verification (`push.enabled`) and the restricted SMS code (`sms_otp.enabled`) are on (OP-156 m.3 (d), (f)). */
         Settings: Record<string, never>;
         /** @description What enforcing SSO on the organization would end; nothing changes until idp.org.sso_enforce commits (TN-94, X20, OP-155 m.3 (i)). Each active member with its local sign-in methods, directory app passwords (API keys), open sign-ins and refresh families; the service accounts, members whose API keys enforcement revokes; and the pending invitations, whose fate the enforcement names (cancel or redirect_to_sso). */
         SsoEnforcementPreview: {
@@ -3864,7 +3864,7 @@ export interface components {
             derived: Record<string, never>[];
             ended: Record<string, never>[];
         };
-        /** @description The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it. */
+        /** @description The cell the environment and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it. */
         Placement: {
             /** @description This cell's name, as its configuration declares it. */
             cell: string | null;
@@ -3873,9 +3873,9 @@ export interface components {
             /** @description Whether this cell serves one tenant alone (OP-12, OP-48). */
             dedicated_cell: boolean;
             tenant: components["schemas"]["Placed"];
-            realm: components["schemas"]["Placed"];
+            environment: components["schemas"]["Placed"];
             domain: components["schemas"]["Placed"];
-            /** @description The realm's governing domain, base64url. */
+            /** @description The environment's governing domain, base64url. */
             governing_domain: string;
             residency: {
                 region: string;
@@ -3898,7 +3898,7 @@ export interface components {
             dedicated: boolean;
             version: number;
         } | null;
-        /** @description The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness. */
+        /** @description The environment's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness. */
         Durability: {
             /** @enum {string|null} */
             durability: "replicated" | "single-node" | null;
@@ -3924,14 +3924,14 @@ export interface components {
             operator: string;
             independent: boolean;
         };
-        /** @description The realm's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value. */
+        /** @description The environment's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value. */
         RateLimits: {
-            realm: string;
-            /** @description The realm's identity requests per second (idp.realm.rate_limit). */
+            environment: string;
+            /** @description The environment's identity requests per second (idp.environment.rate_limit). */
             rate_limit_rps: number;
             /** @description Whether the product default is in force. */
             default: boolean;
-            /** @description The tenant's identity requests per second across its realms. */
+            /** @description The tenant's identity requests per second across its environments. */
             tenant_rps: number;
             /** @description Seconds of each rate a burst may take at once. */
             burst_s: number;
@@ -3958,7 +3958,7 @@ export interface components {
         };
         /** @description Whether the governing domain can be recovered, and its handovers and forced recoveries (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)). Read from the authority record; never a decision input. */
         Recovery: {
-            realm: string;
+            environment: string;
             /**
              * @description `not_available`: no rootTerms recovery entry; the console says "Recovery not available".
              * @enum {string}
@@ -3990,7 +3990,7 @@ export interface components {
         };
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
-        /** @description One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113). */
+        /** @description One page; the next is in the `Link` header (OP-65). Only what the environment may see is listed (TN-113). */
         Page: {
             items: Record<string, never>[];
         };
@@ -4003,7 +4003,7 @@ export interface components {
             client_secret?: string;
             /** @description The `whpk_` public key or `whsec_` secret a hook's or webhook's receiver verifies with; shown once, never read back. */
             verification_key?: string;
-            /** @description An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this realm's key, for the peer realm's `bindAccount` (OP-153 m.18 (e)); shown once. */
+            /** @description An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this environment's key, for the peer environment's `bindAccount` (OP-153 m.18 (e)); shown once. */
             offer?: string;
             /** @description A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept. */
             bundle?: string;
@@ -4011,10 +4011,10 @@ export interface components {
             setup_link?: string;
             /** @description A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90). */
             challenge?: string;
-            /** @description Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4). */
+            /** @description Set on an RP ID change: it cannot be undone and the environment's passkeys stop working (IDI-4). */
             irreversible?: boolean;
         };
-        /** @description A tenant's metadata; never its realms' content (INV-29, X31). */
+        /** @description A tenant's metadata; never its environments' content (INV-29, X31). */
         Tenant: {
             /** @description Opaque `tnt_` id (OP-137). */
             tenant_id?: string;
@@ -4029,8 +4029,8 @@ export interface components {
             exercises_per_day?: components["schemas"]["Position"];
             projections_per_day?: components["schemas"]["Position"];
         };
-        /** @description A realm's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119). */
-        RealmMetadata: {
+        /** @description An environment's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119). */
+        EnvironmentMetadata: {
             /** @description The immutable slug (TN-16). */
             slug?: string;
             /** @description Opaque `tnt_` id of its tenant. */
@@ -4074,9 +4074,9 @@ export interface components {
         TenantPage: {
             items: components["schemas"]["Tenant"][];
         };
-        /** @description One page of realms or sandbox domains; the next is in the `Link` header (OP-65). */
-        RealmPage: {
-            items: components["schemas"]["RealmMetadata"][];
+        /** @description One page of environments or sandbox domains; the next is in the `Link` header (OP-65). */
+        EnvironmentPage: {
+            items: components["schemas"]["EnvironmentMetadata"][];
         };
         /** @description The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url. */
         FoundingRoot: {
@@ -4102,7 +4102,7 @@ export interface components {
             ais?: string;
         };
         /**
-         * @description A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).
+         * @description A new environment and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).
          * @example {
          *       "slug": "shop",
          *       "issuer_style": "subdomain",
@@ -4124,7 +4124,7 @@ export interface components {
          *       "acknowledge_no_recovery": true
          *     }
          */
-        RealmCreate: {
+        EnvironmentCreate: {
             /** @description The immutable slug (TN-16). */
             slug: string;
             /**
@@ -4197,21 +4197,21 @@ export interface components {
             /** @description Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`. */
             recovery_reason?: string;
         };
-        /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis. */
+        /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for an environment its Genesis. */
         PlatformWriteResult: {
             exercise_id: string;
             position: components["schemas"]["Position"];
-            resource?: components["schemas"]["Tenant"] | components["schemas"]["RealmMetadata"];
+            resource?: components["schemas"]["Tenant"] | components["schemas"]["EnvironmentMetadata"];
             genesis?: components["schemas"]["Genesis"];
         };
         SurfaceRoot: {
             /** @enum {string} */
-            surface: "realm" | "platform";
-            /** @description The realm's slug (realm surface). */
-            realm?: string;
-            /** @description The token audience: `access-admin:realm:<slug>` or `access-admin:platform` (TN-119). */
+            surface: "environment" | "platform";
+            /** @description The environment's slug (environment surface). */
+            environment?: string;
+            /** @description The token audience: `access-admin:environment:<slug>` or `access-admin:platform` (TN-119). */
             audience: string;
-            /** @description The surface's scope prefix: `realm.` or `platform.`. */
+            /** @description The surface's scope prefix: `environment.` or `platform.`. */
             scope_namespace: string;
             /** @description The scope a read needs at least. */
             read_scope: string;
@@ -4226,21 +4226,21 @@ export interface components {
             /** @enum {string} */
             compute: "shared" | "dedicated";
         };
-        /** @description The realm's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)). */
+        /** @description The environment's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)). */
         Signing: {
             /**
-             * @description The open ML-DSA parameter set; null while the realm signs classically only.
+             * @description The open ML-DSA parameter set; null while the environment signs classically only.
              * @enum {string|null}
              */
             signing_profile: "ml-dsa-65" | "ml-dsa-44" | "ml-dsa-87" | null;
-            /** @description The JWS algorithms the realm signs with: its classical algorithm, then ML-DSA while the profile is open. */
+            /** @description The JWS algorithms the environment signs with: its classical algorithm, then ML-DSA while the profile is open. */
             algorithms: string[];
             /**
              * @description The hybrid key exchange share policy; both offer the post-quantum group.
              * @enum {string}
              */
             kex_share: "optimistic" | "advertise-only";
-            /** @description The realm's FIPS crypto profile is on. */
+            /** @description The environment's FIPS crypto profile is on. */
             fips: boolean;
             /** @description This deployment signs with the validated FIPS module. */
             fips_module: boolean;
@@ -4460,7 +4460,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    getRealmSurface: {
+    getEnvironmentSurface: {
         parameters: {
             query?: never;
             header?: {
@@ -7482,7 +7482,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    rehomeRealm: {
+    rehomeEnvironment: {
         parameters: {
             query?: never;
             header: {
@@ -14782,7 +14782,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    listTenantRealms: {
+    listTenantEnvironments: {
         parameters: {
             query?: {
                 "page[size]"?: components["parameters"]["PageSize"];
@@ -14813,7 +14813,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RealmPage"];
+                    "application/json": components["schemas"]["EnvironmentPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -14824,7 +14824,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    createRealm: {
+    createEnvironment: {
         parameters: {
             query?: never;
             header: {
@@ -14843,7 +14843,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RealmCreate"];
+                "application/json": components["schemas"]["EnvironmentCreate"];
             };
         };
         responses: {
@@ -14900,7 +14900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RealmPage"];
+                    "application/json": components["schemas"]["EnvironmentPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -14930,7 +14930,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RealmCreate"];
+                "application/json": components["schemas"]["EnvironmentCreate"];
             };
         };
         responses: {
@@ -14956,7 +14956,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    getRealmMetadata: {
+    getEnvironmentMetadata: {
         parameters: {
             query?: never;
             header?: {
@@ -14965,7 +14965,7 @@ export interface operations {
             };
             path: {
                 /** @description The resource's natural key. */
-                realm_slug: string;
+                environment_slug: string;
             };
             cookie?: never;
         };
@@ -14980,7 +14980,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RealmMetadata"];
+                    "application/json": components["schemas"]["EnvironmentMetadata"];
                 };
             };
             400: components["responses"]["BadRequest"];

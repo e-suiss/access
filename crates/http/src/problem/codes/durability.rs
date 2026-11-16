@@ -52,20 +52,20 @@ pub const DOMAIN_SEALED: Code = code(
     "The domain is sealed for a cell move; it commits again once the target cell accepts it (OP-158 m.3 (n)).",
 );
 
-/// This cell is not the domain's or realm's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o)).
+/// This cell is not the domain's or environment's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o)).
 pub const PLACEMENT_MISMATCH: Code = code(
     "placement-mismatch",
     421,
     "Misdirected Request",
-    "This cell is not the domain's or realm's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o)).",
+    "This cell is not the domain's or environment's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o)).",
 );
 
-/// A realm rehome needs an Exercise in both the old and the new governing domain; the realm stays where it is (OP-158 m.3 (o)).
+/// An environment rehome needs an Exercise in both the old and the new governing domain; the environment stays where it is (OP-158 m.3 (o)).
 pub const REHOME_INCOMPLETE: Code = code(
     "rehome-incomplete",
     409,
     "Conflict",
-    "A realm rehome needs an Exercise in both the old and the new governing domain; the realm stays where it is (OP-158 m.3 (o)).",
+    "An environment rehome needs an Exercise in both the old and the new governing domain; the environment stays where it is (OP-158 m.3 (o)).",
 );
 
 /// The `as_of` position is outside the 24 hour history window, or its snapshot expired (OP-158 m.3 (u)).
@@ -140,10 +140,10 @@ pub const DEGRADED_IDENTITY: Code = code(
     "Sign-in isn't available right now; tokens already issued keep working within their lifetime (OP-45, OP-158 m.3 (s)).",
 );
 
-/// A tenant, realm or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v)).
+/// A tenant, environment or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v)).
 pub const QUOTA_EXCEEDED: Code = code(
     "quota-exceeded",
     429,
     "Too Many Requests",
-    "A tenant, realm or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v)).",
+    "A tenant, environment or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v)).",
 );

@@ -4,7 +4,7 @@
 //! batch overwrites the same object.
 //!
 //! Key layout, as Security Lake's custom sources partition:
-//! `{prefix}region={region}/accountId={account}/eventDay={YYYYMMDD}/{realm}-{xid}-{id}.parquet`
+//! `{prefix}region={region}/accountId={account}/eventDay={YYYYMMDD}/{environment}-{xid}-{id}.parquet`
 //! (`accountId` only when the sink names one).
 
 use access_identity_oauth::adapters::outbound::Target;
@@ -50,11 +50,11 @@ pub fn encode_key(key: &str) -> String {
 
 /// The object key of the batch whose first row is `(xid, id)`, occurred at `first_ms`.
 #[must_use]
-pub fn key(spec: &SinkSpec, realm: &str, (xid, id): (u64, i64), first_ms: u64) -> String {
+pub fn key(spec: &SinkSpec, environment: &str, (xid, id): (u64, i64), first_ms: u64) -> String {
     let m = &spec.settings;
     let account = text(m, "account_id").map_or_else(String::new, |a| format!("accountId={a}/"));
     format!(
-        "{}region={}/{account}eventDay={}/{realm}-{xid}-{id}.parquet",
+        "{}region={}/{account}eventDay={}/{environment}-{xid}-{id}.parquet",
         text(m, "prefix").unwrap_or(PREFIX),
         text(m, "region").unwrap_or_default(),
         super::syslog::day(first_ms),

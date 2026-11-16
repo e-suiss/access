@@ -8,7 +8,12 @@ use serde_json::json;
 
 use super::*;
 
-fn source_change(at: (TenantId, RealmId), d: Digest, change: SourceChange, nonce: u8) -> Proposal {
+fn source_change(
+    at: (TenantId, EnvironmentId),
+    d: Digest,
+    change: SourceChange,
+    nonce: u8,
+) -> Proposal {
     proposal(
         at,
         Change::Signal(Box::new(change)),
@@ -18,8 +23,13 @@ fn source_change(at: (TenantId, RealmId), d: Digest, change: SourceChange, nonce
     )
 }
 
-async fn sources(w: &World, (tenant, realm): (TenantId, RealmId)) -> Vec<(String, bool)> {
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+async fn sources(
+    w: &World,
+    (tenant, environment): (TenantId, EnvironmentId),
+) -> Vec<(String, bool)> {
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let rows = t.signal_sources().await.unwrap();
     t.commit().await.unwrap();
     rows.into_iter().map(|r| (r.name, r.live)).collect()
@@ -29,8 +39,8 @@ async fn sources(w: &World, (tenant, realm): (TenantId, RealmId)) -> Vec<(String
 #[tokio::test]
 async fn a_signal_source_is_registered_once_and_retired() {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("acme").await;
-    let at = (tenant, realm);
+    let (tenant, environment, d) = w.environment("acme").await;
+    let at = (tenant, environment);
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     assert!(!IdpAction::SignalSourceRegister.schema().reserved);
     let body = json!({"name": "acme-mdm", "kind": "mdm", "provider": "Acme MDM",

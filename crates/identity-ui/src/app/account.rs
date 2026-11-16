@@ -4,7 +4,7 @@
 //! nothing (G57).
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::{SessionStatus, SessionView};
 use access_identity_session::app::{Refusal, Step as Outcome};
 use access_identity_session::domain::recovery::Restricted;
@@ -17,7 +17,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, credential, failed, signin};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// Opaque id prefix of a session (OP-137).
 const SESSION_PREFIX: &str = "ses";
@@ -30,7 +30,7 @@ const NOT_REGISTERED: Problem = Problem {
     retry_after_s: None,
 };
 
-/// The realm's `direct` attestation policy refused the authenticator (§10.2.4, OP-159 m.3 (ll)).
+/// The environment's `direct` attestation policy refused the authenticator (§10.2.4, OP-159 m.3 (ll)).
 const ATTESTATION_FORMAT: Problem = Problem {
     status: 422,
     code: "attestation-format",
@@ -67,7 +67,7 @@ fn rfc3339(ms: u64) -> Value {
         .map_or(Value::Null, Value::String)
 }
 
-fn session_json(kit: &RealmKit, v: &SessionView, current: Option<[u8; 16]>) -> Value {
+fn session_json(kit: &EnvironmentKit, v: &SessionView, current: Option<[u8; 16]>) -> Value {
     let mut out = json!({
         "id": kit.ids.encode(SESSION_PREFIX, v.id).ok(),
         "authenticated_at": rfc3339(v.auth_time_ms),
@@ -122,7 +122,7 @@ where
     M: Messages,
 {
     /// `GET /v1/sessions/current`.
-    pub async fn current_session(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn current_session(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -137,7 +137,7 @@ where
                 if let Some(map) = body.as_object_mut() {
                     map.insert(
                         "subject".to_owned(),
-                        kit.realm().external(v.subject).ok().into(),
+                        kit.environment().external(v.subject).ok().into(),
                     );
                 }
                 Reply::json(200, body)
@@ -153,7 +153,7 @@ where
     }
 
     /// `GET /v1/sessions`: the user's live sessions, newest first ("Signed in until …", S10).
-    pub async fn sessions(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn sessions(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -183,7 +183,7 @@ where
 
     /// `POST /v1/sessions/current/sign-out`: ends this browser's session and clears its
     /// cookie (§12.0.3). Answered the same with or without a live session.
-    pub async fn sign_out(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn sign_out(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -200,7 +200,7 @@ where
 
     /// `POST /v1/sessions/sign-out-everywhere`: one `session_epoch` step ends every session
     /// and refresh family of the user, this one included (TN-50, MD-7).
-    pub async fn sign_out_everywhere(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn sign_out_everywhere(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -214,7 +214,7 @@ where
             Ok(other) => return ended(&other),
             Err(e) => return failed(&e),
         };
-        let actor = match kit.realm().external(me.subject) {
+        let actor = match kit.environment().external(me.subject) {
             Ok(a) => a,
             Err(e) => return failed(&e.into()),
         };
@@ -228,7 +228,12 @@ where
     }
 
     /// `POST /v1/account/totp`: starts a TOTP enrolment; the seed is shown once (§10.2.2).
-    pub async fn begin_totp(&self, entry: &RealmEntry, b: &Browser<'_>, label: &str) -> Reply {
+    pub async fn begin_totp(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        label: &str,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -262,7 +267,7 @@ where
     /// ends (TN-64); recovery codes come back once when the account had none.
     pub async fn confirm_totp(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         enrollment: &str,
         code: &str,
@@ -296,7 +301,7 @@ where
 
     /// `POST /v1/account/recovery-codes`: a new set, shown once; the old set stops working
     /// (TN-59).
-    pub async fn recovery_codes(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn recovery_codes(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -321,7 +326,11 @@ where
 
     /// `POST /v1/account/recovery-codes/acknowledgement`: the owner's "I saved them" for the
     /// newest set (TN-59, OP-153 m.3 (d)); `409` when no set waits for it.
-    pub async fn acknowledge_recovery_codes(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn acknowledge_recovery_codes(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -346,7 +355,7 @@ where
     /// `POST /v1/account/passkeys`: starts a passkey registration (§10.2.4).
     pub async fn begin_passkey(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         name: &str,
         display_name: &str,
@@ -380,7 +389,7 @@ where
     /// `PublicKeyCredential` JSON.
     pub async fn finish_passkey(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         registration: &str,
         credential_json: &str,

@@ -1,4 +1,4 @@
-//! Pushed authority requests on the realm's Approval Surface (OP-150 L6, OP-149 m.9, §9.14.1):
+//! Pushed authority requests on the environment's Approval Surface (OP-150 L6, OP-149 m.9, §9.14.1):
 //! a coordinator's typed request with the approver's pre-signed contribution, bound to the
 //! session that opens it, the statement it signs and the Exercise it becomes. Nothing is
 //! deleted (OP-73).
@@ -9,10 +9,10 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -109,14 +109,14 @@ fn row(r: Raw) -> Result<ApprovalRow, StoreError> {
 /// # Errors
 /// [`StoreError`].
 pub async fn push_approval(t: &mut TenantTx, a: &NewApproval<'_>) -> Result<[u8; 16], StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let id = sqlx::query_scalar!(
         "INSERT INTO access.approval_requests
-           (tenant_id, realm_id, digest, request_uri, request, contribution, expires_ms)
+           (tenant_id, environment_id, digest, request_uri, request, contribution, expires_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING request_id",
         tenant,
-        realm,
+        environment,
         a.digest.as_slice(),
         a.request_uri,
         a.request,
@@ -136,16 +136,16 @@ pub async fn approval_by_uri(
     t: &mut TenantTx,
     request_uri: &str,
 ) -> Result<Option<ApprovalRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query_as!(
         Raw,
         "SELECT request_id, digest, request_uri, request, contribution, expires_ms, session_id,
                 statement, aas, started_ms, finished_ms, exercise
            FROM access.approval_requests
-          WHERE tenant_id = $1 AND realm_id = $2 AND request_uri = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND request_uri = $3
           ORDER BY created_at DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         request_uri,
     )
     .fetch_optional(&mut *t.tx)
@@ -161,16 +161,16 @@ pub async fn approval_by_digest(
     t: &mut TenantTx,
     digest: &[u8; 32],
 ) -> Result<Option<ApprovalRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query_as!(
         Raw,
         "SELECT request_id, digest, request_uri, request, contribution, expires_ms, session_id,
                 statement, aas, started_ms, finished_ms, exercise
            FROM access.approval_requests
-          WHERE tenant_id = $1 AND realm_id = $2 AND digest = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND digest = $3
           ORDER BY created_at DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         digest.as_slice(),
     )
     .fetch_optional(&mut *t.tx)
@@ -183,16 +183,16 @@ pub async fn approval_by_digest(
 /// # Errors
 /// [`StoreError`].
 pub async fn approval(t: &mut TenantTx, id: &[u8; 16]) -> Result<Option<ApprovalRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let r = sqlx::query_as!(
         Raw,
         "SELECT request_id, digest, request_uri, request, contribution, expires_ms, session_id,
                 statement, aas, started_ms, finished_ms, exercise
            FROM access.approval_requests
-          WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3
           ORDER BY created_at DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*id),
     )
     .fetch_optional(&mut *t.tx)
@@ -213,13 +213,13 @@ pub async fn start_approval(
     aas: &[u8],
     now_ms: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.approval_requests
             SET session_id = $4, statement = $5, aas = $6, started_ms = $7
-          WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3 AND started_ms IS NULL",
+          WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3 AND started_ms IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*id),
         Uuid::from_bytes(*session),
         statement.as_slice(),
@@ -242,13 +242,13 @@ pub async fn finish_approval(
     exercise: &[u8; 32],
     now_ms: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.approval_requests SET finished_ms = $4, exercise = $5
-          WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND request_id = $3
             AND started_ms IS NOT NULL AND finished_ms IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*id),
         signed(now_ms)?,
         exercise.as_slice(),
@@ -258,12 +258,12 @@ pub async fn finish_approval(
     Ok(done.rows_affected() == 1)
 }
 
-/// The latest answer to whether the realm opened an approval channel (OP-157 m.3 (m)).
+/// The latest answer to whether the environment opened an approval channel (OP-157 m.3 (m)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApprovalChannel {
-    /// CT1 approval inside the approver notification (`idp.realm.approval_inline`).
+    /// CT1 approval inside the approver notification (`idp.environment.approval_inline`).
     Inline,
-    /// CT1 batch approval (`idp.realm.approval_batch`).
+    /// CT1 batch approval (`idp.environment.approval_batch`).
     Batch,
 }
 
@@ -276,7 +276,7 @@ impl ApprovalChannel {
     }
 }
 
-/// Whether the realm opened the channel; off by default.
+/// Whether the environment opened the channel; off by default.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -284,13 +284,13 @@ pub async fn approval_channel_enabled(
     t: &mut TenantTx,
     channel: ApprovalChannel,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
         "SELECT enabled FROM access.idp_approval_channels
-          WHERE tenant_id = $1 AND realm_id = $2 AND channel = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND channel = $3
           ORDER BY version DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         channel.name(),
     )
     .fetch_optional(&mut *t.tx)
@@ -298,7 +298,7 @@ pub async fn approval_channel_enabled(
     .unwrap_or(false))
 }
 
-/// Writes the channel's next setting under `bound` (`idp.realm.approval_inline`,
+/// Writes the channel's next setting under `bound` (`idp.environment.approval_inline`,
 /// `approval_batch`, and their `_close` pair).
 ///
 /// # Errors
@@ -309,16 +309,16 @@ pub async fn put_approval_channel(
     channel: ApprovalChannel,
     enabled: bool,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_approval_channels
-           (tenant_id, realm_id, channel, version, enabled, domain_id, decision_pos)
+           (tenant_id, environment_id, channel, version, enabled, domain_id, decision_pos)
          SELECT $1, $2, $3,
                 COALESCE((SELECT max(version) FROM access.idp_approval_channels
-                           WHERE tenant_id = $1 AND realm_id = $2 AND channel = $3), 0) + 1,
+                           WHERE tenant_id = $1 AND environment_id = $2 AND channel = $3), 0) + 1,
                 $4, $5, $6",
         tenant,
-        realm,
+        environment,
         channel.name(),
         enabled,
         bound.domain().as_bytes().as_slice(),
@@ -379,14 +379,14 @@ pub async fn invites_since(
     approver: &[u8; 16],
     since_ms: u64,
 ) -> Result<(u32, Option<u64>), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         r#"SELECT count(*) AS "count!", min(created_ms) AS oldest
              FROM access.approval_invites
-            WHERE tenant_id = $1 AND realm_id = $2 AND requester = $3 AND approver = $4
+            WHERE tenant_id = $1 AND environment_id = $2 AND requester = $3 AND approver = $4
               AND created_ms >= $5"#,
         tenant,
-        realm,
+        environment,
         requester.as_slice(),
         Uuid::from_bytes(*approver),
         signed(since_ms)?,
@@ -404,14 +404,14 @@ pub async fn invites_since(
 /// # Errors
 /// [`StoreError`].
 pub async fn insert_invite(t: &mut TenantTx, i: &NewInvite) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "INSERT INTO access.approval_invites
-           (tenant_id, realm_id, request_id, requester, approver, intent, tier, created_ms)
+           (tenant_id, environment_id, request_id, requester, approver, intent, tier, created_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (tenant_id, realm_id, approver, intent) DO NOTHING",
+         ON CONFLICT (tenant_id, environment_id, approver, intent) DO NOTHING",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(i.request),
         i.requester.as_slice(),
         Uuid::from_bytes(i.approver),
@@ -433,15 +433,15 @@ pub async fn invite(
     approver: &[u8; 16],
     intent: &[u8; 32],
 ) -> Result<Option<InviteRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT invite_id, request_id, requester, approver, intent, tier, created_ms,
                 answered_ms, outcome
            FROM access.approval_invites
-          WHERE tenant_id = $1 AND realm_id = $2 AND approver = $3 AND intent = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND approver = $3 AND intent = $4
           FOR UPDATE",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*approver),
         intent.as_slice(),
     )
@@ -474,12 +474,12 @@ pub async fn answer_invite(
     outcome: &str,
     now_ms: u64,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.approval_invites SET answered_ms = $4, outcome = $5
-          WHERE tenant_id = $1 AND realm_id = $2 AND invite_id = $3 AND answered_ms IS NULL",
+          WHERE tenant_id = $1 AND environment_id = $2 AND invite_id = $3 AND answered_ms IS NULL",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*id),
         signed(now_ms)?,
         outcome,

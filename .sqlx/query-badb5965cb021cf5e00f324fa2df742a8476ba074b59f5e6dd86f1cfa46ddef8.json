@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.admin_job_items (tenant_id, environment_id, job_id, item_index,\n                    operation, resource_key)\n             VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "badb5965cb021cf5e00f324fa2df742a8476ba074b59f5e6dd86f1cfa46ddef8"
+}

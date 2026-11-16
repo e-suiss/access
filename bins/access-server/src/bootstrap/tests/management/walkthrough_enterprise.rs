@@ -1,6 +1,6 @@
 //! Enterprise agent (§11.19): a workload Party of the company's domain, registered by REST
 //! with its operator and sponsor, whose runtime presents a JWT-SVID at the token endpoint and
-//! opens its own Instance on the realm issuer's `identity_binding_workload` Claim; a rule-shaped
+//! opens its own Instance on the environment issuer's `identity_binding_workload` Claim; a rule-shaped
 //! Grant whose holder is a predicate over the `operated_by` Claim; the company's PEP asks the
 //! ADP; and deprovisioning the agent withdraws its Claims, after which the same request fails
 //! closed at ingest.
@@ -145,7 +145,7 @@ async fn an_enterprise_workload_acts_on_a_rule_shaped_grant_until_it_is_deprovis
     let retired = c
         .rest_write(
             &Method::POST,
-            &format!("/admin/v1/realms/acme/agents/{agent_id}/retire"),
+            &format!("/admin/v1/envs/acme/agents/{agent_id}/retire"),
             ("retireAgent", Some(&agent_id)),
             serde_json::json!({}),
             None,

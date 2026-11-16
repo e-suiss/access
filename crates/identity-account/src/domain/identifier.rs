@@ -1,4 +1,4 @@
-//! Login identifiers (§17.2.2, MD-5, TN-2): realm-scoped and compared without letter case. An
+//! Login identifiers (§17.2.2, MD-5, TN-2): environment-scoped and compared without letter case. An
 //! e-mail address is one kind of identifier, never a key: nothing is authorized, linked or
 //! merged by it (§12.3.3 m.6, E27).
 
@@ -88,7 +88,7 @@ impl Identifier {
         &self.value
     }
 
-    /// The case-folded form the realm's uniqueness and the login counters use.
+    /// The case-folded form the environment's uniqueness and the login counters use.
     #[must_use]
     pub fn folded(&self) -> String {
         self.value.to_lowercase()

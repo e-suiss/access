@@ -20,8 +20,8 @@ pub(crate) trait Ports: Sync {
     /// Makes the `session_attest` call with `body`; a refusal is its stable code.
     fn attest(&self, body: Vec<u8>) -> impl Future<Output = Result<Vec<u8>, String>> + Send;
 
-    /// The gateway's realm.
-    fn realm(&self) -> &str;
+    /// The gateway's environment.
+    fn environment(&self) -> &str;
 }
 
 fn refused(code: &str) -> Done {
@@ -104,7 +104,7 @@ async fn facts_of<P: Ports>(p: &P, f: &Forward) -> Result<(Facts, bool), Done> {
     let sp = p
         .attest(
             Attest::Sp {
-                realm: String::from(p.realm()),
+                environment: String::from(p.environment()),
                 entity: first.issuer.clone(),
             }
             .encode(),
@@ -134,8 +134,8 @@ async fn facts_of<P: Ports>(p: &P, f: &Forward) -> Result<(Facts, bool), Done> {
 
 /// Handles one forward.
 pub(crate) async fn handle<P: Ports>(p: &P, f: &Forward) -> Done {
-    if f.realm != p.realm() {
-        return refused("edge-realm");
+    if f.environment != p.environment() {
+        return refused("edge-environment");
     }
     let (facts, redirect_signed) = match f.binding {
         Binding::Unsolicited | Binding::Wsfed => (None, false),
@@ -148,7 +148,7 @@ pub(crate) async fn handle<P: Ports>(p: &P, f: &Forward) -> Done {
         },
     };
     let issue = Attest::Issue {
-        realm: String::from(p.realm()),
+        environment: String::from(p.environment()),
         handle: f.handle,
         facts,
         redirect_signed,

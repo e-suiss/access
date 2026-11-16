@@ -6,7 +6,7 @@
 //! ends it too, and every ended permission tells the TEE to destroy its copies.
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_internal_api::idp::Verdict;
 use access_internal_api::one::{CloudKeyAuthority, CloudKeyExercise, WORK_NAMESPACE};
 use access_kernel::codec::Canonical as _;
@@ -27,7 +27,7 @@ use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Body, Browser, Hosted, Reply};
 use crate::domain::cloud_key::{State, Terms, TermsError, grant_terms, revoked_permission, state};
 use crate::domain::frontend::rfc3339;
-use crate::ports::{Clock, Kits, Messages, RealmKit};
+use crate::ports::{Clock, EnvironmentKit, Kits, Messages};
 
 /// The opaque id prefix of a permission.
 pub const PERMISSION_PREFIX: &str = "ckp";
@@ -137,7 +137,7 @@ fn hex(b: &[u8]) -> String {
     })
 }
 
-fn row_json(kit: &RealmKit, id: [u8; 16], g: &NewCloudKey, s: State) -> Value {
+fn row_json(kit: &EnvironmentKit, id: [u8; 16], g: &NewCloudKey, s: State) -> Value {
     json!({
         "id": kit.ids.encode(PERMISSION_PREFIX, id).ok(),
         "purpose": g.purpose,
@@ -159,8 +159,8 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn party_of(&self, kit: &RealmKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn party_of(&self, kit: &EnvironmentKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let p = idp::subject_party(&mut t, &subject)
@@ -205,7 +205,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &SignedExercise,
     ) -> Reply {
@@ -257,7 +257,7 @@ where
         };
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let kept = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let id = t.insert_cloud_key(&row).await?;
             if let Some(id) = id {
                 t.audit(&AuditEvent {
@@ -281,12 +281,12 @@ where
     /// The session subject's Party, the governing domain and trusted now.
     async fn scope(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: [u8; 16],
     ) -> Result<([u8; 16], access_kernel::digest::Digest, u64), Reply> {
         let party = self.party_of(kit, subject).await?;
         let domain = governing(&self.db, kit).await?;
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let now = t.server_time().await.map_err(|_| unavailable())?;
@@ -299,7 +299,7 @@ where
     pub async fn cloud_keys<A: CloudKeyAuthority>(
         &self,
         authority: &A,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -311,7 +311,7 @@ where
             Err(r) => return r,
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let since = i64::try_from(now.saturating_sub(7 * 86_400_000)).unwrap_or(0);
             let rows = t.cloud_keys(subject, since, PAGE).await?;
@@ -351,7 +351,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         permission: &str,
         body: Option<&SignedExercise>,
@@ -390,7 +390,7 @@ where
         };
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let ended = t
                 .end_cloud_key(

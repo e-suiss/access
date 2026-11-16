@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_hostnames (tenant_id, environment_id, hostname, kind) VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8b2859be0c9addfd9cfa985617067bbb1dd74f5237ae0a36217ff23c00aebc1a"
+}

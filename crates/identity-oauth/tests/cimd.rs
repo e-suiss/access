@@ -30,7 +30,7 @@ fn doc(extra: &str) -> String {
     format!(r#"{{"client_id":"{APP}","client_name":"App","redirect_uris":["{CB}"]{extra}}}"#)
 }
 
-async fn mcp_realm(slug: &str) -> Cluster {
+async fn mcp_environment(slug: &str) -> Cluster {
     let c = Cluster::new(&[slug]).await;
     let a = c.at(0);
     a.cimd_policy(true, &["app.example"]).await;
@@ -56,9 +56,13 @@ fn problem(r: &Reply) -> &'static str {
 }
 
 async fn cimd_uuid(a: &At<'_>, url: &str) -> Option<[u8; 16]> {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let row = tx.cimd_client(url).await.unwrap();
     tx.commit().await.unwrap();
     row.map(|r| r.client_uuid)
@@ -68,9 +72,13 @@ async fn cimd_uuid(a: &At<'_>, url: &str) -> Option<[u8; 16]> {
 async fn consent(a: &At<'_>, scopes: &[&str]) -> [u8; 16] {
     let client = cimd_uuid(a, APP).await.unwrap();
     let scopes: Vec<String> = scopes.iter().map(|s| String::from(*s)).collect();
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     tx.put_consent_record(&NewConsentRecord {
         subject: a.f.subject,
         client,
@@ -97,9 +105,13 @@ async fn consent(a: &At<'_>, scopes: &[&str]) -> [u8; 16] {
 }
 
 async fn live_record(a: &At<'_>, client: [u8; 16]) -> bool {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let r = tx.consent_record(a.f.subject, client, MCP).await.unwrap();
     tx.commit().await.unwrap();
     r.is_some()
@@ -115,7 +127,11 @@ async fn a_url_client_id_resolves_only_through_its_document() {
     // IDI-10
     let off = ask(&a, APP, &[]).await;
     assert_eq!(problem(&off), "invalid-client");
-    assert_eq!(docs.fetched(APP), 0, "a realm without CIMD fetches nothing");
+    assert_eq!(
+        docs.fetched(APP),
+        0,
+        "an environment without CIMD fetches nothing"
+    );
     let as_url = format!("https://app.example/{}", a.f.public);
     a.cimd_policy(true, &["app.example"]).await;
     let local_named = ask(&a, &as_url, &[]).await;
@@ -138,7 +154,7 @@ async fn a_url_client_id_resolves_only_through_its_document() {
 // AG-4, §11.3.6, RFC 6890, Ek B 4535, 4171, 4181
 #[tokio::test]
 async fn special_purpose_addresses_cancel_the_request() {
-    let c = mcp_realm("cimd-ssrf").await;
+    let c = mcp_environment("cimd-ssrf").await;
     let a = c.at(0);
     a.cimd_policy(true, &["app.example", "internal.example"])
         .await;
@@ -176,7 +192,7 @@ async fn special_purpose_addresses_cancel_the_request() {
 // §11.3.1, §11.4.5, AG-4, Ek B 4537, 4624, 4169, 4170, 4536
 #[tokio::test]
 async fn refused_documents_and_answers_cancel_and_are_never_cached() {
-    let c = mcp_realm("cimd-bad").await;
+    let c = mcp_environment("cimd-bad").await;
     let a = c.at(0);
     let docs = &c.oauth.env().documents;
     for (status, body) in [
@@ -212,7 +228,7 @@ async fn refused_documents_and_answers_cancel_and_are_never_cached() {
 // §11.6, P58, EI-18, AG-7, AG-8, §11.4.5, Ek B 4246, 4251, 4187, 4425
 #[tokio::test]
 async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
-    let c = mcp_realm("cimd-flow").await;
+    let c = mcp_environment("cimd-flow").await;
     let a = c.at(0);
     let docs = &c.oauth.env().documents;
     docs.serve(APP, 200, Some(3_600), &doc(""));
@@ -273,7 +289,7 @@ async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
 // AG-8, §11.4.3, Ek B 4161
 #[tokio::test]
 async fn a_cimd_client_names_one_registered_resource() {
-    let c = mcp_realm("cimd-res").await;
+    let c = mcp_environment("cimd-res").await;
     let a = c.at(0);
     c.oauth.env().documents.serve(APP, 200, None, &doc(""));
     for resource in [
@@ -296,16 +312,20 @@ async fn a_cimd_client_names_one_registered_resource() {
 // AG-5, Ek B 4175, 4250
 #[tokio::test]
 async fn an_authority_change_asks_again_and_a_visual_one_only_warns() {
-    let c = mcp_realm("cimd-change").await;
+    let c = mcp_environment("cimd-change").await;
     let a = c.at(0);
     let docs = &c.oauth.env().documents;
     docs.serve(APP, 200, Some(0), &doc(""));
     ask(&a, APP, &[]).await;
     let client = consent(&a, &["openid"]).await;
     let expire = || async {
-        let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &a.c.db.app,
+            a.f.environment.tenant,
+            a.f.environment.environment,
+        )
+        .await
+        .unwrap();
         sqlx_expire(&mut tx, client).await;
         tx.commit().await.unwrap();
     };
@@ -347,7 +367,7 @@ async fn sqlx_expire(tx: &mut TenantTx, client: [u8; 16]) {
 // AG-5, §11.3.6 §8.3, HL-36, Ek B 4176
 #[tokio::test]
 async fn a_domain_the_policy_drops_retires_its_clients() {
-    let c = mcp_realm("cimd-retire").await;
+    let c = mcp_environment("cimd-retire").await;
     let a = c.at(0);
     c.oauth.env().documents.serve(APP, 200, None, &doc(""));
     ask(&a, APP, &[]).await;
@@ -426,9 +446,13 @@ async fn claude_codes_published_document_signs_in_on_any_loopback_port() {
 const PARTY: [u8; 16] = [0x50; 16];
 
 async fn bind_party(a: &At<'_>) {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     access_store::idp::bind_subject_party(&mut tx, &a.f.subject, &PARTY)
         .await
         .unwrap();
@@ -442,18 +466,18 @@ fn return_to_of(asked: &str) -> String {
 // EI-18, §11.6, P58, Ek B 4246, 4251, 4541, 4542
 #[tokio::test]
 async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
-    let c = mcp_realm("cimd-approve").await;
+    let c = mcp_environment("cimd-approve").await;
     let a = c.at(0);
     bind_party(&a).await;
     c.oauth.env().documents.serve(APP, 200, None, &doc(""));
     let asked = location(&ask(&a, APP, &[]).await);
     let back = return_to_of(&asked);
-    let realm = a.realm();
+    let environment = a.environment();
     let exercise = [0x33; 32];
     // EI-18
     let none = c
         .oauth
-        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .approve(environment, Some(&a.f.cookie), &back, a.f.domain, exercise)
         .await
         .unwrap();
     assert_eq!(
@@ -474,14 +498,14 @@ async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
     ));
     let other = c
         .oauth
-        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .approve(environment, Some(&a.f.cookie), &back, a.f.domain, exercise)
         .await
         .unwrap();
     assert_eq!(other, Err(NotApproved::NoGrant), "held by someone else");
     // §11.6 rule 5
     let anonymous = c
         .oauth
-        .approve(realm, None, &back, a.f.domain, exercise)
+        .approve(environment, None, &back, a.f.domain, exercise)
         .await
         .unwrap();
     assert_eq!(anonymous, Err(NotApproved::SignIn));
@@ -490,7 +514,7 @@ async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
     assert!(!live_record(&a, client).await);
     let ok = c
         .oauth
-        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .approve(environment, Some(&a.f.cookie), &back, a.f.domain, exercise)
         .await
         .unwrap();
     assert_eq!(ok.as_deref(), Ok(back.as_str()));
@@ -514,7 +538,7 @@ async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
 // AS-M14, AG-6, §11.3, OP-154 m.3 (i), Ek B 4247, 4248, 4249, 4250
 #[tokio::test]
 async fn the_consent_screen_shows_hostnames_and_the_clients_claims_as_claims() {
-    let c = mcp_realm("cimd-view").await;
+    let c = mcp_environment("cimd-view").await;
     let a = c.at(0);
     a.cimd_policy(true, &["app.example", "claude.ai"]).await;
     let url = "https://claude.ai/oauth/claude-code-client-metadata";
@@ -537,7 +561,7 @@ async fn the_consent_screen_shows_hostnames_and_the_clients_claims_as_claims() {
     );
     let v = c
         .oauth
-        .approval_view(a.realm(), Some(&a.f.cookie), &return_to_of(&asked))
+        .approval_view(a.environment(), Some(&a.f.cookie), &return_to_of(&asked))
         .await
         .unwrap()
         .unwrap();
@@ -550,13 +574,13 @@ async fn the_consent_screen_shows_hostnames_and_the_clients_claims_as_claims() {
     assert_eq!(v.resource, MCP);
     let signed_out = c
         .oauth
-        .approval_view(a.realm(), None, &return_to_of(&asked))
+        .approval_view(a.environment(), None, &return_to_of(&asked))
         .await
         .unwrap();
     assert_eq!(signed_out, Err(NotApproved::SignIn));
     let elsewhere = c
         .oauth
-        .approval_view(a.realm(), Some(&a.f.cookie), "/authorize?client_id=x")
+        .approval_view(a.environment(), Some(&a.f.cookie), "/authorize?client_id=x")
         .await
         .unwrap();
     assert_eq!(elsewhere, Err(NotApproved::NoRequest));

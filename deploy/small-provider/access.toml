@@ -33,7 +33,7 @@ migrator = { user = "access_migrator_login", password_file = "/etc/access/secret
 
 # TN-10, CMP-22b, OP-138
 [identity]
-realm_base = "https://id.example.org"
+environment_base = "https://id.example.org"
 signer = "/run/access/identity-signer.sock"
 
 # OP-146 m.12 (f): the hosted login's built app, from the image
@@ -54,8 +54,8 @@ region = "small-provider"
 relay = "https://relay.example.org"
 management_api = "https://manage.example.org"
 products = { work = "https://work.example.org" }
-# OP-151 m.2 M2: the platform realm the bootstrap creates governs the platform-admin surface
-platform_realm = "platform"
+# OP-151 m.2 M2: the platform environment the bootstrap creates governs the platform-admin surface
+platform_environment = "platform"
 # OP-156 m.3 (c): the platform product name Relay's client is registered under; only it reports İYS states
 relay_product = "relay"
 # E42, OP-156 m.3 (c): Access as Relay's platform tenant; init writes the credential

@@ -78,7 +78,7 @@ impl Verb {
 pub enum Access {
     /// A holder-bound read token of the surface's audience with this scope (TN-27, TN-130).
     Read {
-        /// The scope, in the surface's namespace (`realm.*`, `platform.*`).
+        /// The scope, in the surface's namespace (`environment.*`, `platform.*`).
         scope: &'static str,
     },
     /// The caller's AIS, compiled into an Exercise (TN-110); never a token.
@@ -130,7 +130,7 @@ pub struct Route {
 }
 
 /// Route groups for the rate limit's longest-prefix match (TN-127).
-pub const GROUPS: &[&str] = &["/admin/v1/platform", "/admin/v1/realms/{slug}"];
+pub const GROUPS: &[&str] = &["/admin/v1/platform", "/admin/v1/envs/{slug}"];
 
 /// The platform-admin surface root.
 pub const PLATFORM_ROOT: Route = Route {
@@ -148,23 +148,23 @@ pub const PLATFORM_ROOT: Route = Route {
     lifecycle: None,
 };
 
-/// The realm-admin surface root.
-pub const REALM_ROOT: Route = Route {
+/// The environment-admin surface root.
+pub const ENVIRONMENT_ROOT: Route = Route {
     verb: Verb::Get,
-    path: "/admin/v1/realms/{slug}",
-    surface: Surface::Realm,
+    path: "/admin/v1/envs/{slug}",
+    surface: Surface::Environment,
     access: Access::Read {
-        scope: "realm.read",
+        scope: "environment.read",
     },
     visibility: Visibility::Hidden,
-    operation_id: "getRealmSurface",
-    summary: "One realm's admin surface: its audience, scope namespace and rate policies.",
+    operation_id: "getEnvironmentSurface",
+    summary: "One environment's admin surface: its audience, scope namespace and rate policies.",
     query: &[],
     answer: Answer::Replay,
     lifecycle: None,
 };
 
-const ALL_LEN: usize = 2 + super::realm::ROWS.len() + super::platform::ROWS.len();
+const ALL_LEN: usize = 2 + super::environment::ROWS.len() + super::platform::ROWS.len();
 
 #[expect(
     clippy::indexing_slicing,
@@ -176,10 +176,10 @@ const ALL_LEN: usize = 2 + super::realm::ROWS.len() + super::platform::ROWS.len(
 )]
 const ALL: [Route; ALL_LEN] = {
     let mut out = [PLATFORM_ROOT; ALL_LEN];
-    out[1] = REALM_ROOT;
+    out[1] = ENVIRONMENT_ROOT;
     let mut i = 0;
-    while i < super::realm::ROWS.len() {
-        out[i + 2] = super::realm::ROWS[i];
+    while i < super::environment::ROWS.len() {
+        out[i + 2] = super::environment::ROWS[i];
         i += 1;
     }
     let mut j = 0;
@@ -190,7 +190,7 @@ const ALL: [Route; ALL_LEN] = {
     out
 };
 
-/// Every management route: the surface roots, the realm resources ([`super::realm::ROWS`])
+/// Every management route: the surface roots, the environment resources ([`super::environment::ROWS`])
 /// and the platform resources ([`super::platform::ROWS`]).
 pub const MANIFEST: &[Route] = &ALL;
 
@@ -243,7 +243,7 @@ pub fn check(rows: &[Route]) -> Result<(), ManifestError> {
             return Err(ManifestError::Duplicate(r.operation_id));
         }
         let (prefix, namespace) = match r.surface {
-            Surface::Realm => ("/admin/v1/realms/{slug}", "realm."),
+            Surface::Environment => ("/admin/v1/envs/{slug}", "environment."),
             Surface::Platform => ("/admin/v1/platform", "platform."),
         };
         let under = r

@@ -1,7 +1,7 @@
 //! JOSE containers of authority projections (§9.9.1, §9.10, OP-143 m.6 (a), m.11 (c)): the
 //! SD-JWT container of a PAP and the RFC 9068 access token whose authority is in RFC 9396
 //! `authorization_details`. Production only; verification is the Kernel's
-//! (`verify::projection`). The signer is the domain's operational key, never a realm key
+//! (`verify::projection`). The signer is the domain's operational key, never an environment key
 //! (§9.9.3 rule 7, CR-5).
 //!
 //! A `PartyRef` leaves the domain only as a domain-pairwise pseudonym (MD-10, P52): every party

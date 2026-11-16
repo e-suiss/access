@@ -21,9 +21,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use suiss_crypto::signer::{Signer, SoftSigner};
 
-use admin::{Harness, ais, platform_domain, proof, read, realm_domain, send};
+use admin::{Harness, ais, environment_domain, platform_domain, proof, read, send};
 
-const REALM_WRITE: &str = "/admin/v1/realms/acme/groups/staff/retire";
+const ENVIRONMENT_WRITE: &str = "/admin/v1/envs/acme/groups/staff/retire";
 const PLATFORM_WRITE: &str = "/admin/v1/platform/tenants";
 
 fn post(path: &str, key: &str, ais: &str, body: &'static str) -> Request<Body> {
@@ -113,7 +113,7 @@ async fn reads_are_limited_per_token() {
 #[tokio::test]
 async fn writes_are_limited_per_actor_instance() {
     for (path, domain, burst) in [
-        (REALM_WRITE, realm_domain(), 50_u8),
+        (ENVIRONMENT_WRITE, environment_domain(), 50_u8),
         (PLATFORM_WRITE, platform_domain(), 20),
     ] {
         let h = Harness::new();
@@ -146,10 +146,10 @@ async fn writes_are_limited_per_actor_instance() {
 async fn a_write_needs_its_nonce_as_idempotency_key() {
     let h = Harness::new();
     let router = h.router();
-    let actor = h.instance(realm_domain());
+    let actor = h.instance(environment_domain());
     let nonce = [1; 16];
-    let a = ais(&actor, realm_domain(), nonce, h.now());
-    let missing = Request::post(REALM_WRITE)
+    let a = ais(&actor, environment_domain(), nonce, h.now());
+    let missing = Request::post(ENVIRONMENT_WRITE)
         .header("x-access-ais", &a)
         .body(Body::from("{}"))
         .unwrap();
@@ -163,7 +163,7 @@ async fn a_write_needs_its_nonce_as_idempotency_key() {
         ("a b".to_owned(), "idempotency-key-invalid"),
         (b64url_encode(&[2; 16]), "idempotency-key-not-nonce"),
     ] {
-        let (r, body) = send(&router, post(REALM_WRITE, &key, &a, "{}")).await;
+        let (r, body) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{}")).await;
         assert_eq!(
             (r.status(), body["code"].as_str().unwrap()),
             (StatusCode::BAD_REQUEST, code)
@@ -177,17 +177,17 @@ async fn a_write_needs_its_nonce_as_idempotency_key() {
 async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
     let h = Harness::new();
     let router = h.router();
-    let actor = h.instance(realm_domain());
+    let actor = h.instance(environment_domain());
     let nonce = [3; 16];
     let key = b64url_encode(&nonce);
-    let a = ais(&actor, realm_domain(), nonce, h.now());
-    let (first, body1) = send(&router, post(REALM_WRITE, &key, &a, "{\"x\":1}")).await;
+    let a = ais(&actor, environment_domain(), nonce, h.now());
+    let (first, body1) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{\"x\":1}")).await;
     assert_eq!(first.status(), StatusCode::OK);
-    let (again, body2) = send(&router, post(REALM_WRITE, &key, &a, "{\"x\":1}")).await;
+    let (again, body2) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{\"x\":1}")).await;
     assert_eq!(again.status(), StatusCode::OK);
     assert_eq!(body1, body2);
     assert_eq!(h.commits(), 1, "no second Exercise");
-    let (changed, body) = send(&router, post(REALM_WRITE, &key, &a, "{\"x\":2}")).await;
+    let (changed, body) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{\"x\":2}")).await;
     assert_eq!(changed.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["code"], "idempotency-key-reused");
     assert_eq!(h.commits(), 1);
@@ -198,22 +198,22 @@ async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
 async fn failures_are_not_kept() {
     let h = Harness::new();
     let router = h.router();
-    let actor = h.instance(realm_domain());
+    let actor = h.instance(environment_domain());
     for (path, status, n) in [
         (
-            "/admin/v1/realms/acme/groups/refuse/retire",
+            "/admin/v1/envs/acme/groups/refuse/retire",
             StatusCode::BAD_REQUEST,
             6_u8,
         ),
         (
-            "/admin/v1/realms/acme/groups/fail/retire",
+            "/admin/v1/envs/acme/groups/fail/retire",
             StatusCode::SERVICE_UNAVAILABLE,
             4,
         ),
     ] {
         let nonce = [n; 16];
         let key = b64url_encode(&nonce);
-        let a = ais(&actor, realm_domain(), nonce, h.now());
+        let a = ais(&actor, environment_domain(), nonce, h.now());
         let before = h.commits();
         for _ in 0..2 {
             let (r, _) = send(&router, post(path, &key, &a, "{}")).await;
@@ -228,13 +228,17 @@ async fn failures_are_not_kept() {
 async fn a_running_key_is_in_use() {
     let h = Harness::new();
     let router = h.router();
-    let actor = h.instance(realm_domain());
+    let actor = h.instance(environment_domain());
     let nonce = [9; 16];
     let key = b64url_encode(&nonce);
-    let a = ais(&actor, realm_domain(), nonce, h.now());
+    let a = ais(&actor, environment_domain(), nonce, h.now());
     let kid = access_kernel::verify::key_scope::thumbprint(&actor.public_key());
-    let scope = idempotency::scope(&SurfaceScope::Realm("acme".into()), &kid, key.as_bytes());
-    let request = idempotency::request("POST", REALM_WRITE, b"{}");
+    let scope = idempotency::scope(
+        &SurfaceScope::Environment("acme".into()),
+        &kid,
+        key.as_bytes(),
+    );
+    let request = idempotency::request("POST", ENVIRONMENT_WRITE, b"{}");
     assert_eq!(
         h.fake
             .idempotency
@@ -243,7 +247,7 @@ async fn a_running_key_is_in_use() {
             .unwrap(),
         Begun::Run
     );
-    let (r, body) = send(&router, post(REALM_WRITE, &key, &a, "{}")).await;
+    let (r, body) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{}")).await;
     assert_eq!(r.status(), StatusCode::CONFLICT);
     assert_eq!(body["code"], "idempotency-key-in-use");
     assert_eq!(h.commits(), 0);
@@ -257,9 +261,9 @@ async fn keys_are_scoped_to_the_caller() {
     let nonce = [4; 16];
     let key = b64url_encode(&nonce);
     for _ in 0..2 {
-        let actor = h.instance(realm_domain());
-        let a = ais(&actor, realm_domain(), nonce, h.now());
-        let (r, _) = send(&router, post(REALM_WRITE, &key, &a, "{}")).await;
+        let actor = h.instance(environment_domain());
+        let a = ais(&actor, environment_domain(), nonce, h.now());
+        let (r, _) = send(&router, post(ENVIRONMENT_WRITE, &key, &a, "{}")).await;
         assert_eq!(r.status(), StatusCode::OK);
     }
     assert_eq!(h.commits(), 2);
@@ -270,17 +274,17 @@ async fn keys_are_scoped_to_the_caller() {
 async fn the_ais_may_travel_in_the_body() {
     let h = Harness::new();
     let router = h.router();
-    let actor: SoftSigner = h.instance(realm_domain());
+    let actor: SoftSigner = h.instance(environment_domain());
     let nonce = [6; 16];
-    let a = ais(&actor, realm_domain(), nonce, h.now());
+    let a = ais(&actor, environment_domain(), nonce, h.now());
     let body = serde_json::json!({ "ais": a }).to_string();
-    let request = Request::post(REALM_WRITE)
+    let request = Request::post(ENVIRONMENT_WRITE)
         .header("idempotency-key", b64url_encode(&nonce))
         .body(Body::from(body.clone()))
         .unwrap();
     let (r, _) = send(&router, request).await;
     assert_eq!(r.status(), StatusCode::OK);
-    let both = Request::post(REALM_WRITE)
+    let both = Request::post(ENVIRONMENT_WRITE)
         .header("idempotency-key", b64url_encode(&nonce))
         .header("x-access-ais", &a)
         .body(Body::from(body))
@@ -297,13 +301,18 @@ async fn the_ais_may_travel_in_the_body() {
 async fn the_surface_roots_describe_their_surface() {
     let h = Harness::new();
     let router = h.router();
-    let token = h.token("r", "access-admin:realm:acme", &["realm.read"], 600_000);
-    let (r, body) = send(&router, read("/admin/v1/realms/acme", &token)).await;
+    let token = h.token(
+        "r",
+        "access-admin:environment:acme",
+        &["environment.read"],
+        600_000,
+    );
+    let (r, body) = send(&router, read("/admin/v1/envs/acme", &token)).await;
     assert_eq!(r.status(), StatusCode::OK);
-    assert_eq!(body["surface"], "realm");
-    assert_eq!(body["realm"], "acme");
-    assert_eq!(body["audience"], "access-admin:realm:acme");
-    assert_eq!(body["scope_namespace"], "realm.");
+    assert_eq!(body["surface"], "environment");
+    assert_eq!(body["environment"], "acme");
+    assert_eq!(body["audience"], "access-admin:environment:acme");
+    assert_eq!(body["scope_namespace"], "environment.");
     let p = h.token("p", "access-admin:platform", &["platform.read"], 600_000);
     let req = Request::get("/admin/v1/platform")
         .header("authorization", format!("DPoP {p}"))
@@ -313,5 +322,5 @@ async fn the_surface_roots_describe_their_surface() {
     let (r, body) = send(&router, req).await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(body["audience"], "access-admin:platform");
-    assert!(body.get("realm").is_none());
+    assert!(body.get("environment").is_none());
 }

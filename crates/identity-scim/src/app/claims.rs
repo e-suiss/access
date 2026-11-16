@@ -191,7 +191,7 @@ pub enum Issued {
 
 /// The SCIM clients' courier.
 pub struct Courier<I, C> {
-    /// `access_app`, for the realm's rows.
+    /// `access_app`, for the environment's rows.
     pub app: Pool,
     /// `access_outbox_reader`, for the outbox and the cursor.
     pub reader: Pool,
@@ -214,20 +214,20 @@ fn word(v: &ClaimVerdict) -> String {
 }
 
 impl<I: ClaimIngest, C: Clock> Courier<I, C> {
-    /// Issues `order` of `client` in `(tenant, realm)` now.
+    /// Issues `order` of `client` in `(tenant, environment)` now.
     ///
     /// # Errors
     /// [`Unavailable`]; the order can be issued again.
     pub async fn issue(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         client: &str,
         order: &ClaimOrder,
     ) -> Result<Issued, Unavailable> {
-        let mut tx = TenantTx::begin(&self.app, tenant, realm)
+        let mut tx = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         let Some(source) = access_store::scim::client(&mut tx, client)
@@ -238,7 +238,7 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
             return Ok(Issued::Unplaced("client-retired"));
         };
         let Some(g) = idp::governance(&mut tx).await.map_err(down)? else {
-            return Ok(Issued::Unplaced("no-realm"));
+            return Ok(Issued::Unplaced("no-environment"));
         };
         let Some(party) = idp::subject_party(&mut tx, &order.subject)
             .await
@@ -289,7 +289,7 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
             l
         });
         let disposition = word(&verdict);
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         store::record_issued(
@@ -321,7 +321,8 @@ impl<I: ClaimIngest, C: Clock> Courier<I, C> {
             if e.kind.starts_with(OUTBOX_PREFIX) {
                 let issued = match unframe(&e.payload) {
                     Some((client, order)) => {
-                        self.issue((e.tenant, e.realm), &client, &order).await?
+                        self.issue((e.tenant, e.environment), &client, &order)
+                            .await?
                     }
                     None => Issued::Unplaced("unreadable"),
                 };

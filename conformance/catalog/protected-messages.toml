@@ -1,5 +1,5 @@
 # The protected message keys (X35, XI-25, OP-153 m.3 (s)): enumeration-sensitive,
-# guarantee-bearing or owner-attributing texts. No realm override and no render replaces
+# guarantee-bearing or owner-attributing texts. No environment override and no render replaces
 # them, and there is no override-plus-validator escape. Must equal the `protected = true`
 # entries of messages.toml (checked by `cargo xtask check`, fluent-catalog).
 

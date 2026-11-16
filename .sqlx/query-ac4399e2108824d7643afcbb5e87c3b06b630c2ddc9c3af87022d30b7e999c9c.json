@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.platform_pairing (tenant_id, environment_id, challenge, client_id, kid,\n                    party_id, register, valid_from_ms, valid_until_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ac4399e2108824d7643afcbb5e87c3b06b630c2ddc9c3af87022d30b7e999c9c"
+}

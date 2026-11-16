@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.saml_flows (tenant_id, environment_id, flow_hash, binding, kind, params,\n                    created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1414df5fd336a6b6a562bacb67076aef5786c43d4e8fb5e7ddf87dda7e8c1ea4"
+}

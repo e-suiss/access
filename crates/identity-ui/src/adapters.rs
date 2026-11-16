@@ -4,11 +4,11 @@
 use std::future::Future;
 
 use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::domain::ceremony::Signal;
-use access_identity_webauthn::domain::ids::{CredentialId, RealmId};
+use access_identity_webauthn::domain::ids::{CredentialId, EnvironmentId};
 use access_identity_webauthn::ports::SignalSink;
 
 use access_identity_oauth::adapters::SignerKeys;
@@ -17,7 +17,7 @@ use access_identity_oauth::ports::Unavailable;
 use access_identity_account::app::claims::{ClaimSigner, Courier, Issued};
 use access_identity_account::domain::claims::ClaimOrder;
 use access_internal_api::claims::ClaimIngest;
-use access_store::identity::{RealmId as StoreRealm, TenantId};
+use access_store::identity::{EnvironmentId as StoreEnvironment, TenantId};
 
 use crate::ports::{ApprovalClaims, ArtifactSigner, Messages};
 
@@ -30,10 +30,10 @@ where
     fn issue(
         &self,
         tenant: TenantId,
-        realm: StoreRealm,
+        environment: StoreEnvironment,
         order: &ClaimOrder,
     ) -> impl Future<Output = Result<Issued, access_internal_api::idp::Unavailable>> + Send {
-        Self::issue(self, tenant, realm, order)
+        Self::issue(self, tenant, environment, order)
     }
 }
 
@@ -41,22 +41,22 @@ impl<T: ApprovalClaims> ApprovalClaims for std::sync::Arc<T> {
     fn issue(
         &self,
         tenant: TenantId,
-        realm: StoreRealm,
+        environment: StoreEnvironment,
         order: &ClaimOrder,
     ) -> impl Future<Output = Result<Issued, access_internal_api::idp::Unavailable>> + Send {
-        T::issue(self, tenant, realm, order)
+        T::issue(self, tenant, environment, order)
     }
 }
 
 impl ArtifactSigner for SignerKeys {
     fn sign_cose(
         &self,
-        realm: access_store::identity::RealmId,
+        environment: access_store::identity::EnvironmentId,
         content_type: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send {
-        Self::sign_cose(self, realm, content_type, payload, at_ms)
+        Self::sign_cose(self, environment, content_type, payload, at_ms)
     }
 }
 
@@ -67,8 +67,8 @@ pub struct Outbox;
 impl Messages for Outbox {
     type For<'a> = OutboxNotifier<'a>;
 
-    fn notifier<'a>(&'a self, realm: &'a Realm<'a>) -> OutboxNotifier<'a> {
-        OutboxNotifier::new(realm, &SystemEntropy, &SystemClock)
+    fn notifier<'a>(&'a self, environment: &'a Environment<'a>) -> OutboxNotifier<'a> {
+        OutboxNotifier::new(environment, &SystemEntropy, &SystemClock)
     }
 }
 
@@ -79,7 +79,7 @@ pub struct LogSignals;
 impl SignalSink for LogSignals {
     fn emit(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         _: &CredentialId,
         signal: Signal,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
@@ -88,7 +88,7 @@ impl SignalSink for LogSignals {
     }
 }
 
-/// What a realm's `direct` attestation policy verifies against in a server (§10.2.4, OP-159 m.3
+/// What an environment's `direct` attestation policy verifies against in a server (§10.2.4, OP-159 m.3
 /// (ll)): the FIDO metadata the refresh job holds, and each CRL distribution point of an
 /// attestation chain, read from `access.attestation_crl_cache` while its `nextUpdate` has not
 /// passed and otherwise fetched with [`Outbound::get_configured`] and cached. A point that

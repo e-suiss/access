@@ -1,13 +1,13 @@
-//! The bootstrap of a local deployment (OP-69, OP-149 m.21): the platform tenant with its realm,
+//! The bootstrap of a local deployment (OP-69, OP-149 m.21): the platform tenant with its environment,
 //! sample customer tenants, and platform product clients, each through the paths the identity
-//! plane uses in production. Realms are created by `Admin::create_realm` (Genesis through the
+//! plane uses in production. Environments are created by `Admin::create_environment` (Genesis through the
 //! authority plane), their root Party registers its Instance by the self-signed Exercises
 //! (L0-META-7), and a platform client is an `idp.client.register` Exercise that root signs
-//! (MD-14, EI-25). A sample realm can publish a product's catalog in its Genesis, and its root
+//! (MD-14, EI-25). A sample environment can publish a product's catalog in its Genesis, and its root
 //! then grants a sample subject one action by a `grant_issue` Exercise, so a product can run a
-//! real eligibility check (OP-149 m.10). A sample realm can also get a test user with a
+//! real eligibility check (OP-149 m.10). A sample environment can also get a test user with a
 //! password and a public client to sign in with, and a Party whose unsigned `party_compromise`
-//! Claims the realm accepts, for a product's end-to-end tests (OP-149 m.26 (b), (c)). A realm
+//! Claims the environment accepts, for a product's end-to-end tests (OP-149 m.26 (b), (c)). An environment
 //! whose domain was opened with an older `idp.*` catalog gets the current one by a root-signed,
 //! time-locked `acceptance_establish` (OP-151 m.18 (g)). Every step looks for its result first,
 //! so a second run changes nothing.
@@ -32,12 +32,12 @@ use access_crypto::Secret;
 use access_crypto::oauth::ClientKey;
 use access_crypto::opaque_id::IdKey;
 use access_identity_admin::AdminError;
-use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
+use access_identity_admin::app::{Admin, Applied, NewEnvironment, Proposal};
 use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId, Platform, RedirectUri};
-use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
-use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, IssuerStyle};
 use access_identity_oauth::domain::jwt::parse_jwks;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_internal_api::approvals::CONTRIBUTION_NAMESPACE;
@@ -67,7 +67,7 @@ use access_kernel::tier::Tier;
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::authority::{find_nonce, server_time};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::tenancy::{create_tenant, route_by_slug};
 use access_store::{Pool, StoreError, idp};
@@ -79,7 +79,7 @@ use suiss_crypto::signer::{Signer as _, sign_sign1};
 
 use crate::login::id_key_bytes;
 
-/// The token label of the bootstrap root key: the founding root of every realm it creates.
+/// The token label of the bootstrap root key: the founding root of every environment it creates.
 pub(crate) const ROOT_LABEL: &str = "access/bootstrap/root";
 
 /// The token label of the sample subject's key (OP-149 m.10).
@@ -115,7 +115,7 @@ const DEFAULT_RESOURCE_PATH_PREFIX: &str = "led_";
 /// The resource path a sample eligibility check names.
 const SAMPLE_PATH: &str = "sample";
 
-/// The placement new tenants and realms are created in (OP-40).
+/// The placement new tenants and environments are created in (OP-40).
 pub(crate) const PLACEMENT: &str = "pool-default";
 
 /// How long the bootstrap's intents stay valid, ms.
@@ -146,14 +146,14 @@ pub(crate) enum BootstrapError {
     Encode,
 }
 
-/// How realm issuers are formed.
+/// How environment issuers are formed.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Style {
-    /// `https://<slug>.<realm_base>`, the default (TN-10).
+    /// `https://<slug>.<environment_base>`, the default (TN-10).
     #[default]
     Subdomain,
-    /// `https://<realm_base>/realms/<slug>`: one host for every realm.
+    /// `https://<environment_base>/env/<slug>`: one host for every environment.
     Path,
 }
 
@@ -187,7 +187,7 @@ struct PlanFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TestUserFile {
-    realm: String,
+    environment: String,
     identifier: String,
     password: Option<String>,
     password_env: Option<String>,
@@ -200,7 +200,7 @@ struct TestUserFile {
 impl core::fmt::Debug for TestUserFile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TestUserFile")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("identifier", &self.identifier)
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("password_env", &self.password_env)
@@ -213,15 +213,15 @@ impl core::fmt::Debug for TestUserFile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CompromiseFile {
-    realm: String,
+    environment: String,
 }
 
-/// A test user with a password in a sample realm, and the public client (PKCE and DPoP, no
+/// A test user with a password in a sample environment, and the public client (PKCE and DPoP, no
 /// secret) a headless login signs in with (OP-149 m.26 (b)).
 #[derive(Clone)]
 pub(crate) struct TestUserPlan {
     /// The slug of one of the plan's sample tenants.
-    pub(crate) realm: String,
+    pub(crate) environment: String,
     /// The login identifier: an e-mail address or a user name.
     pub(crate) identifier: String,
     /// The password, from the plan or the environment variable it named.
@@ -353,7 +353,7 @@ fn is_seed(text: &str) -> bool {
 impl core::fmt::Debug for TestUserPlan {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TestUserPlan")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("identifier", &self.identifier)
             .field("client_display_name", &self.client_display_name)
             .field("redirect_uri", &self.redirect_uri)
@@ -362,18 +362,18 @@ impl core::fmt::Debug for TestUserPlan {
     }
 }
 
-/// A sample realm that accepts unsigned `party_compromise` Claims from a local declarant
+/// A sample environment that accepts unsigned `party_compromise` Claims from a local declarant
 /// Party, so a product's PEP can produce `party.compromised` (OP-149 m.26 (c)).
 #[derive(Clone, Debug)]
 pub(crate) struct CompromisePlan {
     /// The slug of one of the plan's sample tenants.
-    pub(crate) realm: String,
+    pub(crate) environment: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SampleFile {
-    realm: String,
+    environment: String,
     namespace: String,
     action: String,
     allowed: Option<String>,
@@ -419,7 +419,7 @@ impl StepUp {
     }
 }
 
-/// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the realm's
+/// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the environment's
 /// Genesis publishes `action` in `namespace`, and its root grants it over the whole namespace
 /// to the sample subject. With `allowed`, the Genesis also publishes that exact-intent action
 /// (CT1, a ledger and a declaration digest), and the root grants it to the test user's Party
@@ -430,7 +430,7 @@ impl StepUp {
 #[derive(Clone, Debug)]
 pub(crate) struct SamplePlan {
     /// The slug of one of the plan's sample tenants.
-    pub(crate) realm: String,
+    pub(crate) environment: String,
     /// The catalog's namespace, such as `work`.
     pub(crate) namespace: String,
     /// The action's name.
@@ -511,19 +511,19 @@ fn approval_term() -> RequirementTerm {
 }
 
 impl SamplePlan {
-    /// The plan's `[sample]` section, checked: the realm is one of `tenants`, the catalog entry
+    /// The plan's `[sample]` section, checked: the environment is one of `tenants`, the catalog entry
     /// is valid and outside the planes' namespaces (OP-141 m.35 (a)), the allowed action has a
-    /// test user in the same realm (OP-149 m.29 (b)), and a resource of the allowed shape is a
+    /// test user in the same environment (OP-149 m.29 (b)), and a resource of the allowed shape is a
     /// valid Kernel resource outside the planes' namespaces (OP-149 m.30 (a)).
     fn from_file(
         s: SampleFile,
         tenants: &[String],
         test_user: Option<&TestUserFile>,
     ) -> Result<Self, BootstrapError> {
-        if !tenants.contains(&s.realm) {
+        if !tenants.contains(&s.environment) {
             return Err(BootstrapError::Plan(format!(
-                "sample realm {} is not one of the plan's tenants",
-                s.realm
+                "sample environment {} is not one of the plan's tenants",
+                s.environment
             )));
         }
         let step_up = match s.step_up.as_deref() {
@@ -538,7 +538,7 @@ impl SamplePlan {
             )));
         }
         let sample = Self {
-            realm: s.realm,
+            environment: s.environment,
             namespace: s.namespace,
             action: s.action,
             allowed: s.allowed,
@@ -560,9 +560,10 @@ impl SamplePlan {
                 "the sample namespace or action is not a valid catalog entry",
             )));
         }
-        if sample.allowed.is_some() && test_user.is_none_or(|u| u.realm != sample.realm) {
+        if sample.allowed.is_some() && test_user.is_none_or(|u| u.environment != sample.environment)
+        {
             return Err(BootstrapError::Plan(String::from(
-                "sample.allowed needs a test_user in the sample realm",
+                "sample.allowed needs a test_user in the sample environment",
             )));
         }
         let resource = sample.allowed_resource("x");
@@ -609,7 +610,7 @@ impl SamplePlan {
             .map(|name| Self::schema_of(name, &ALLOWED_PARAMS))
     }
 
-    /// The catalog `publisher` publishes in the realm's Genesis.
+    /// The catalog `publisher` publishes in the environment's Genesis.
     fn catalog(&self, publisher: Id) -> Spp {
         Spp {
             publisher,
@@ -773,7 +774,7 @@ pub(crate) struct ProductPlan {
 /// What the bootstrap creates.
 #[derive(Clone, Debug)]
 pub(crate) struct Plan {
-    /// The platform tenant's realm slug.
+    /// The platform tenant's environment slug.
     pub(crate) platform: String,
     /// One sample customer tenant per slug.
     pub(crate) tenants: Vec<String>,
@@ -794,12 +795,16 @@ pub(crate) struct Plan {
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
-fn sample_tenant(tenants: &[String], section: &str, realm: &str) -> Result<(), BootstrapError> {
-    if tenants.iter().any(|t| t == realm) {
+fn sample_tenant(
+    tenants: &[String],
+    section: &str,
+    environment: &str,
+) -> Result<(), BootstrapError> {
+    if tenants.iter().any(|t| t == environment) {
         Ok(())
     } else {
         Err(BootstrapError::Plan(format!(
-            "{section} realm {realm} is not one of the plan's tenants"
+            "{section} environment {environment} is not one of the plan's tenants"
         )))
     }
 }
@@ -854,6 +859,7 @@ fn jwk(path: &Path) -> Result<PublicKey, BootstrapError> {
 
 impl Plan {
     /// Reads the plan at `path` and the key files it names; before the lockdown.
+    #[expect(clippy::too_many_lines, reason = "one block per section of the plan")]
     pub(crate) fn load(path: &Path) -> Result<Self, BootstrapError> {
         let file: PlanFile = Figment::from(Toml::file_exact(path))
             .extract()
@@ -894,16 +900,16 @@ impl Plan {
         }
         .plans(
             &file.tenants,
-            file.test_user.as_ref().map(|u| u.realm.as_str()),
-            file.sample_agent.as_ref().map(|a| a.realm.as_str()),
+            file.test_user.as_ref().map(|u| u.environment.as_str()),
+            file.sample_agent.as_ref().map(|a| a.environment.as_str()),
         )?;
         // OP-154 m.15 (i)
         let sample_agent = match file.sample_agent {
             None => None,
             Some(a) => Some(agent::SampleAgentPlan::from_file(
                 a,
-                file.sample.as_ref().map(|s| s.realm.as_str()),
-                file.test_user.as_ref().map(|u| u.realm.as_str()),
+                file.sample.as_ref().map(|s| s.environment.as_str()),
+                file.test_user.as_ref().map(|u| u.environment.as_str()),
             )?),
         };
         let sample = match file.sample {
@@ -917,10 +923,10 @@ impl Plan {
         let test_user = match file.test_user {
             None => None,
             Some(u) => {
-                sample_tenant(&file.tenants, "test_user", &u.realm)?;
+                sample_tenant(&file.tenants, "test_user", &u.environment)?;
                 let password = test_password(&u)?;
                 Some(TestUserPlan {
-                    realm: u.realm,
+                    environment: u.environment,
                     identifier: u.identifier,
                     password,
                     client_display_name: u
@@ -940,8 +946,10 @@ impl Plan {
         let compromise = match file.compromise {
             None => None,
             Some(c) => {
-                sample_tenant(&file.tenants, "compromise", &c.realm)?;
-                Some(CompromisePlan { realm: c.realm })
+                sample_tenant(&file.tenants, "compromise", &c.environment)?;
+                Some(CompromisePlan {
+                    environment: c.environment,
+                })
             }
         };
         Ok(Self {
@@ -988,13 +996,13 @@ impl ProductPlan {
     }
 }
 
-/// A realm the bootstrap made sure of.
+/// An environment the bootstrap made sure of.
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct RealmOut {
+pub(crate) struct EnvironmentOut {
     /// The tenant's opaque `tnt_` id (OP-149 m.15 (i)).
     pub(crate) tenant: String,
-    /// The realm, a UUID (OP-149 m.19 (b)).
-    pub(crate) realm: String,
+    /// The environment, a UUID (OP-149 m.19 (b)).
+    pub(crate) environment: String,
     pub(crate) slug: String,
     pub(crate) issuer: String,
     /// The Suiss discovery document (OP-149 m.3).
@@ -1015,10 +1023,10 @@ pub(crate) struct RealmOut {
 pub(crate) struct ClientOut {
     pub(crate) product: String,
     pub(crate) client_id: String,
-    /// The `aud` of its client assertions: the platform realm's issuer (OP-149 m.19 (e)).
+    /// The `aud` of its client assertions: the platform environment's issuer (OP-149 m.19 (e)).
     pub(crate) audience: String,
     /// Its registered return addresses, as the plan names them (OP-149 m.35); the Approval
-    /// Surface of every realm matches a pushed request's `redirect_uri` against them exactly.
+    /// Surface of every environment matches a pushed request's `redirect_uri` against them exactly.
     pub(crate) redirect_uris: Vec<String>,
     /// The first of them, for readers of older summaries.
     pub(crate) redirect_uri: String,
@@ -1026,7 +1034,7 @@ pub(crate) struct ClientOut {
     pub(crate) created: bool,
 }
 
-/// The founding root of the bootstrapped realms.
+/// The founding root of the bootstrapped environments.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct RootOut {
     /// The Party, base64url.
@@ -1039,8 +1047,8 @@ pub(crate) struct RootOut {
 /// ADP JSON encoding (base64url ids and digests).
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SampleOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// Its governing domain: `set.domain`.
     pub(crate) domain: String,
     /// The sample subject's Party: the check's `subject`.
@@ -1056,9 +1064,9 @@ pub(crate) struct SampleOut {
 /// The test user and the public client a headless login uses (OP-149 m.26 (b)).
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct TestUserOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
-    /// The realm's issuer: `/authorize` and `/token` hang under it.
+    /// The environment's slug.
+    pub(crate) environment: String,
+    /// The environment's issuer: `/authorize` and `/token` hang under it.
     pub(crate) issuer: String,
     /// The login identifier.
     pub(crate) identifier: String,
@@ -1071,7 +1079,7 @@ pub(crate) struct TestUserOut {
     /// The Party the user's device Instances belong to, base64url (OP-149 m.28 (b)); what
     /// `subjects:resolve` answers for the user's pairwise `sub`.
     pub(crate) party: String,
-    /// The user's device Instance in the realm's governing domain, base64url.
+    /// The user's device Instance in the environment's governing domain, base64url.
     pub(crate) instance: String,
     /// The credential id of the user's software passkey, base64url (OP-149 m.26 (e)).
     pub(crate) passkey: String,
@@ -1137,12 +1145,12 @@ pub(crate) struct ContributionOut {
     pub(crate) basis: serde_json::Value,
 }
 
-/// What an unsigned `party_compromise` Claim names to be admitted in the sample realm
-/// (OP-149 m.26 (c)): the issuer Party the realm accepts, over the PEP channel.
+/// What an unsigned `party_compromise` Claim names to be admitted in the sample environment
+/// (OP-149 m.26 (c)): the issuer Party the environment accepts, over the PEP channel.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CompromiseOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// Its governing domain, base64url.
     pub(crate) domain: String,
     /// The accepted issuer Party, base64url.
@@ -1159,7 +1167,7 @@ pub(crate) struct Summary {
     /// The version of this summary's shape.
     pub(crate) v: u8,
     pub(crate) root: RootOut,
-    pub(crate) realms: Vec<RealmOut>,
+    pub(crate) environments: Vec<EnvironmentOut>,
     pub(crate) clients: Vec<ClientOut>,
     /// Present when the plan names a sample.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1227,15 +1235,15 @@ pub(crate) struct Bootstrap<'a, P, K> {
     pub(crate) router: &'a Pool,
     /// The authority plane: Genesis, decisions and self-signed registrations.
     pub(crate) plane: &'a P,
-    /// Realms' keys outside the database.
-    pub(crate) realm_keys: &'a K,
-    /// The server's token: the root key, the cell's opaque-id root and the realms' KEKs.
+    /// Environments' keys outside the database.
+    pub(crate) environment_keys: &'a K,
+    /// The server's token: the root key, the cell's opaque-id root and the environments' KEKs.
     pub(crate) hsm: &'a Arc<KeyStore>,
-    /// Where realm issuers are formed.
-    pub(crate) base: &'a RealmBase,
+    /// Where environment issuers are formed.
+    pub(crate) base: &'a EnvironmentBase,
     /// The operator's declared delivery targets (OP-149 m.23).
     pub(crate) declared: &'a DeclaredTargets,
-    /// The management origin, `suiss.management_api`: every realm gets the console's client
+    /// The management origin, `suiss.management_api`: every environment gets the console's client
     /// with its callback there (OP-151 m.12 (b)); `None` registers none.
     pub(crate) console: Option<&'a str>,
 }
@@ -1279,9 +1287,9 @@ const fn issuer_style(style: Style) -> IssuerStyle {
     }
 }
 
-/// What a sample realm's Genesis accepts beyond the catalogs: the local declarant's
+/// What a sample environment's Genesis accepts beyond the catalogs: the local declarant's
 /// `party_compromise` Claims (OP-149 m.26 (c)), the local case system's `support_case` Claims
-/// (OP-157 m.6 (i)) and, with an allowed action, the realm issuer's `authentication` Claims as
+/// (OP-157 m.6 (i)) and, with an allowed action, the environment issuer's `authentication` Claims as
 /// predicate input, which a hosted approval proves with (OP-149 m.29 (b), SI-5).
 fn genesis_acceptances(
     catalog: Option<&SamplePlan>,
@@ -1329,19 +1337,19 @@ fn holding_json(h: &HoldingRef) -> serde_json::Value {
     })
 }
 
-/// The summary's line for a realm.
-fn realm_out(
+/// The summary's line for an environment.
+fn environment_out(
     ids: &IdKey,
-    (tenant, realm, domain): (TenantId, RealmId, Digest),
+    (tenant, environment, domain): (TenantId, EnvironmentId, Digest),
     slug: &str,
     issuer: String,
     (platform, created): (bool, bool),
-) -> Result<RealmOut, BootstrapError> {
-    Ok(RealmOut {
+) -> Result<EnvironmentOut, BootstrapError> {
+    Ok(EnvironmentOut {
         tenant: ids
             .encode(TENANT_PREFIX, *tenant.as_bytes())
             .map_err(AdminError::from)?,
-        realm: uuid(realm.as_bytes()),
+        environment: uuid(environment.as_bytes()),
         slug: String::from(slug),
         discovery: format!("{issuer}/.well-known/suiss-configuration"),
         issuer,
@@ -1433,7 +1441,7 @@ impl Moment {
 impl<P, K> Bootstrap<'_, P, K>
 where
     P: Decider + Governance + Instances + MetaExercises,
-    K: RealmKeys,
+    K: EnvironmentKeys,
 {
     /// Makes sure of everything `plan` names and reports it.
     ///
@@ -1441,7 +1449,7 @@ where
     /// [`BootstrapError`]; what was done stays.
     #[expect(
         clippy::too_many_lines,
-        reason = "one realm loop, its steps in the order they run"
+        reason = "one environment loop, its steps in the order they run"
     )]
     pub(crate) async fn run(&self, plan: &Plan) -> Result<Summary, BootstrapError> {
         let ids = cell_ids(self.app, self.hsm).await?;
@@ -1449,7 +1457,7 @@ where
         let key = root.public_key();
         let party = root_party(&key);
         let style = issuer_style(plan.style);
-        let mut realms = Vec::new();
+        let mut environments = Vec::new();
         let slugs =
             std::iter::once((&plan.platform, true)).chain(plan.tenants.iter().map(|s| (s, false)));
         let mut platform = None;
@@ -1476,14 +1484,14 @@ where
             let catalog = plan
                 .sample
                 .as_ref()
-                .filter(|s| !is_platform && s.realm == *slug);
+                .filter(|s| !is_platform && s.environment == *slug);
             let accepted = plan
                 .compromise
                 .as_ref()
-                .filter(|c| !is_platform && c.realm == *slug)
+                .filter(|c| !is_platform && c.environment == *slug)
                 .zip(declarant.as_ref());
-            let (tenant, realm, domain, created) = self
-                .realm(
+            let (tenant, environment, domain, created) = self
+                .environment(
                     &admin,
                     slug,
                     style,
@@ -1510,49 +1518,50 @@ where
                                     && plan
                                         .support_operator
                                         .as_ref()
-                                        .is_some_and(|s| s.realm == *slug)
+                                        .is_some_and(|s| s.environment == *slug)
                             }),
                         ),
                     ),
                 )
                 .await?;
-            self.onboard(tenant, realm, domain, &root, party).await?;
+            self.onboard(tenant, environment, domain, &root, party)
+                .await?;
             // OP-151 m.18 (g)
             let mut upgraded = self.upgrade_catalog(domain, &root, party).await?;
             // OP-153 m.3 (c), m.13 (e)
             upgraded.extend(
-                self.upgrade_recovery((tenant, realm), domain, &root, party)
+                self.upgrade_recovery((tenant, environment), domain, &root, party)
                     .await?,
             );
             // OP-153 m.17 (c), m.25 (i) (3)
             upgraded.extend(
-                self.upgrade_org_members((tenant, realm), domain, &root, party)
+                self.upgrade_org_members((tenant, environment), domain, &root, party)
                     .await?,
             );
             // OP-154 m.9 (f), m.11 (d)
             upgraded.extend(
-                self.upgrade_agents((tenant, realm), domain, &root, party)
+                self.upgrade_agents((tenant, environment), domain, &root, party)
                     .await?,
             );
             // OP-151 m.12 (b)
             if let Some(origin) = self.console {
-                self.console_client(&admin, (tenant, realm), domain, &root, origin)
+                self.console_client(&admin, (tenant, environment), domain, &root, origin)
                     .await?;
             }
             if let Some(s) = catalog {
-                sample = Some(self.sample(s, (tenant, realm), domain, &root).await?);
+                sample = Some(self.sample(s, (tenant, environment), domain, &root).await?);
             }
             let route = route_by_slug(self.router, slug)
                 .await?
-                .ok_or(AdminError::NoRealm)?;
+                .ok_or(AdminError::NoEnvironment)?;
             if is_platform {
-                platform = Some((tenant, realm, domain, route.issuer.clone()));
+                platform = Some((tenant, environment, domain, route.issuer.clone()));
                 // OP-159 m.41 (a), INV-29
                 if let Some(p) = &plan.platform_admin {
                     platform_admin = Some(
                         self.platform_admin(
                             &ids,
-                            (tenant, realm),
+                            (tenant, environment),
                             (domain, &root, slug, &route.issuer),
                             p,
                         )
@@ -1561,9 +1570,9 @@ where
                 }
             }
             // OP-149 m.26 (b), (c), m.29 (b)
-            if let Some(u) = plan.test_user.as_ref().filter(|u| u.realm == *slug) {
+            if let Some(u) = plan.test_user.as_ref().filter(|u| u.environment == *slug) {
                 let (mut out, party) = self
-                    .test_user(&admin, &ids, (tenant, realm), domain, &root, u)
+                    .test_user(&admin, &ids, (tenant, environment), domain, &root, u)
                     .await?;
                 out.issuer = route.issuer.clone();
                 out.allowed = match catalog.filter(|s| s.allowed.is_some()) {
@@ -1574,20 +1583,33 @@ where
                 // OP-154 m.15 (i)
                 if let (Some(s), Some(a)) = (
                     catalog,
-                    plan.sample_agent.as_ref().filter(|a| a.realm == *slug),
+                    plan.sample_agent
+                        .as_ref()
+                        .filter(|a| a.environment == *slug),
                 ) {
                     sample_agent = Some(
-                        self.sample_agent(&admin, (tenant, realm), domain, &root, (s, a), party)
-                            .await?,
+                        self.sample_agent(
+                            &admin,
+                            (tenant, environment),
+                            domain,
+                            &root,
+                            (s, a),
+                            party,
+                        )
+                        .await?,
                     );
                 }
                 // OP-157 m.6 (i)
-                if let Some(s) = plan.support_operator.as_ref().filter(|s| s.realm == *slug) {
+                if let Some(s) = plan
+                    .support_operator
+                    .as_ref()
+                    .filter(|s| s.environment == *slug)
+                {
                     support_operator = Some(
                         self.support_operator(
                             &admin,
                             &ids,
-                            (tenant, realm),
+                            (tenant, environment),
                             (domain, &root, slug),
                             s,
                             party,
@@ -1598,13 +1620,13 @@ where
                 if let Some(b) = plan
                     .breakglass_account
                     .as_ref()
-                    .filter(|b| b.realm == *slug)
+                    .filter(|b| b.environment == *slug)
                 {
                     breakglass_account = Some(
                         self.breakglass_account(
                             &admin,
                             &ids,
-                            (tenant, realm),
+                            (tenant, environment),
                             (domain, &root, slug),
                             b,
                             party,
@@ -1612,11 +1634,15 @@ where
                         .await?,
                     );
                 }
-                if let Some(r) = plan.review_schedule.as_ref().filter(|r| r.realm == *slug) {
+                if let Some(r) = plan
+                    .review_schedule
+                    .as_ref()
+                    .filter(|r| r.environment == *slug)
+                {
                     review_schedule = Some(
                         self.review_schedule(
                             &admin,
-                            (tenant, realm),
+                            (tenant, environment),
                             (domain, &root, slug),
                             r,
                             party,
@@ -1627,14 +1653,14 @@ where
             }
             if let Some((c, (key, issuer))) = accepted {
                 compromise = Some(
-                    self.compromise(c, (tenant, realm), domain, key, *issuer, created)
+                    self.compromise(c, (tenant, environment), domain, key, *issuer, created)
                         .await?,
                 );
             }
             // OP-159 m.4 (a)
-            if let Some(p) = plan.pq_profile.as_ref().filter(|p| p.realm == *slug) {
+            if let Some(p) = plan.pq_profile.as_ref().filter(|p| p.environment == *slug) {
                 pq_profile = Some(
-                    self.pq_profile(&admin, (tenant, realm), (domain, &root), p)
+                    self.pq_profile(&admin, (tenant, environment), (domain, &root), p)
                         .await?,
                 );
             }
@@ -1642,34 +1668,34 @@ where
             if let Some(p) = plan
                 .platform_admin
                 .as_ref()
-                .filter(|p| !is_platform && p.realms.contains(slug))
+                .filter(|p| !is_platform && p.environments.contains(slug))
             {
                 let redrawn = platform_admin
                     .as_ref()
                     .and_then(|o: &platform_admin::PlatformAdminOut| o.totp.as_ref())
                     .is_some_and(|t| t.created);
                 let out = self
-                    .realm_admin(
+                    .environment_admin(
                         &admin,
                         &ids,
-                        (tenant, realm),
+                        (tenant, environment),
                         (domain, &root, slug, &route.issuer),
                         (p, redrawn),
                     )
                     .await?;
                 if let Some(o) = platform_admin.as_mut() {
-                    o.realms.push(out);
+                    o.environments.push(out);
                 }
             }
-            let mut out = realm_out(
+            let mut out = environment_out(
                 &ids,
-                (tenant, realm, domain),
+                (tenant, environment, domain),
                 slug,
                 route.issuer,
                 (is_platform, created),
             )?;
             out.catalog = upgraded;
-            realms.push(out);
+            environments.push(out);
         }
         let clients = self.clients(plan, &ids, &root, platform).await?;
         Ok(Summary {
@@ -1678,7 +1704,7 @@ where
                 party: b64url_encode(&party.0),
                 kid: b64url_encode(&thumbprint(&key)),
             },
-            realms,
+            environments,
             clients,
             sample,
             test_user,
@@ -1692,20 +1718,20 @@ where
         })
     }
 
-    /// The platform clients of the plan's products in the platform realm (OP-149 m.4).
+    /// The platform clients of the plan's products in the platform environment (OP-149 m.4).
     async fn clients(
         &self,
         plan: &Plan,
         ids: &IdKey,
         root: &HsmSigner,
-        platform: Option<(TenantId, RealmId, Digest, String)>,
+        platform: Option<(TenantId, EnvironmentId, Digest, String)>,
     ) -> Result<Vec<ClientOut>, BootstrapError> {
         let mut clients = Vec::new();
-        if let Some((tenant, realm, domain, issuer)) = platform {
+        if let Some((tenant, environment, domain, issuer)) = platform {
             let admin = self.admin(ids, Some(tenant));
             for p in &plan.products {
                 let (client_id, created) = self
-                    .client(&admin, (tenant, realm), domain, root, p)
+                    .client(&admin, (tenant, environment), domain, root, p)
                     .await?;
                 let redirect_uris: Vec<String> = p
                     .redirect_uris
@@ -1725,18 +1751,18 @@ where
         Ok(clients)
     }
 
-    /// The sample subject in the sample realm and its Grant of the sample action, issued by a
+    /// The sample subject in the sample environment and its Grant of the sample action, issued by a
     /// `grant_issue` Exercise the root signs when its nonce has no ALLOW yet (OP-149 m.10).
     async fn sample(
         &self,
         s: &SamplePlan,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
     ) -> Result<SampleOut, BootstrapError> {
         let subject_key = token_key(self.hsm, SUBJECT_LABEL)?;
         let subject = root_party(&subject_key.public_key());
-        self.onboard(tenant, realm, domain, &subject_key, subject)
+        self.onboard(tenant, environment, domain, &subject_key, subject)
             .await?;
         let action = s.action_ref();
         let mut label = SAMPLE_GRANT_LABEL.to_vec();
@@ -1747,7 +1773,7 @@ where
             .granted(domain, root, &label, s.grant(&domain, subject), subject)
             .await?;
         Ok(SampleOut {
-            realm: s.realm.clone(),
+            environment: s.environment.clone(),
             domain: b64url_encode(&domain.0),
             subject: b64url_encode(&subject.0),
             action: action_json(&action),
@@ -1964,17 +1990,17 @@ where
             governance: self.plane,
             pep: IDENTITY_PEP,
             base: self.base,
-            keys: self.realm_keys,
+            keys: self.environment_keys,
             platform_tenant: platform,
             declared: self.declared.clone(),
             vault: None,
         }
     }
 
-    /// The live realm `slug`, created in a new tenant with `root` as its founding root when
+    /// The live environment `slug`, created in a new tenant with `root` as its founding root when
     /// there is none (TN-111). Its keys outside the database are opened every time: a step
-    /// that failed after the realm was written is repeated (OP-146 m.16 (m)).
-    async fn realm(
+    /// that failed after the environment was written is repeated (OP-146 m.16 (m)).
+    async fn environment(
         &self,
         admin: &Admin<'_, P, P, K>,
         slug: &str,
@@ -1982,22 +2008,24 @@ where
         root: Id,
         schemas: Vec<Spp>,
         (acceptances, issuer_predicate_input): (Vec<suiss_crypto::dcbor::Value>, Vec<String>),
-    ) -> Result<(TenantId, RealmId, Digest, bool), BootstrapError> {
+    ) -> Result<(TenantId, EnvironmentId, Digest, bool), BootstrapError> {
         if let Some(route) = route_by_slug(self.router, slug).await? {
-            let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
-            let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+            let mut t = TenantTx::begin(self.app, route.tenant, route.environment).await?;
+            let g = idp::governance(&mut t)
+                .await?
+                .ok_or(AdminError::NoEnvironment)?;
             t.commit().await?;
-            admin.open_keys(route.tenant, route.realm).await?;
+            admin.open_keys(route.tenant, route.environment).await?;
             return Ok((
                 route.tenant,
-                route.realm,
+                route.environment,
                 Digest(*g.domain.as_bytes()),
                 false,
             ));
         }
         let tenant = create_tenant(self.app, PLACEMENT).await?;
         let created = admin
-            .create_realm(&NewRealm {
+            .create_environment(&NewEnvironment {
                 tenant,
                 slug,
                 style,
@@ -2011,7 +2039,7 @@ where
                 provisioned_by: None,
             })
             .await?;
-        Ok((tenant, created.realm, created.domain, true))
+        Ok((tenant, created.environment, created.domain, true))
     }
 
     /// Whether `nonce` is a recorded ALLOW in `domain`.
@@ -2026,12 +2054,12 @@ where
     async fn onboard(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         domain: Digest,
         root: &HsmSigner,
         party: Id,
     ) -> Result<(), BootstrapError> {
-        self.register(tenant, realm, domain, root, party, [0; 16])
+        self.register(tenant, environment, domain, root, party, [0; 16])
             .await
             .map(|_| ())
     }
@@ -2044,13 +2072,13 @@ where
     async fn register(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         domain: Digest,
         key: &HsmSigner,
         party: Id,
         subject: [u8; 16],
     ) -> Result<Onboarded, BootstrapError> {
-        self.register_in(tenant, realm, domain, (key, party), (subject, None))
+        self.register_in(tenant, environment, domain, (key, party), (subject, None))
             .await
     }
 
@@ -2059,7 +2087,7 @@ where
     async fn register_in(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         domain: Digest,
         (key, party): (&HsmSigner, Id),
         (subject, context): ([u8; 16], Option<access_internal_api::context::RateContext>),
@@ -2070,7 +2098,7 @@ where
             tenant: *tenant.as_bytes(),
             domain,
             registrant: Registrant::Device {
-                realm: *realm.as_bytes(),
+                environment: *environment.as_bytes(),
                 subject,
             },
             party,
@@ -2123,25 +2151,25 @@ where
         }
     }
 
-    /// The active platform client of `p` in the platform realm with its redirect URI and
+    /// The active platform client of `p` in the platform environment with its redirect URI and
     /// client key, registered by an `idp.client.register` Exercise the root signs when there is
     /// none (OP-149 m.4, MD-14, EI-25).
     async fn client(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         p: &ProductPlan,
     ) -> Result<(String, bool), BootstrapError> {
-        if let Some(id) = self.find_product_client((tenant, realm), p).await? {
+        if let Some(id) = self.find_product_client((tenant, environment), p).await? {
             return Ok((id, false));
         }
         let client = p.client(admin.new_client_id().await?);
         let id = String::from(client.id.as_str());
         self.change(
             admin,
-            (tenant, realm),
+            (tenant, environment),
             domain,
             root,
             Change::ClientRegister(client),
@@ -2150,15 +2178,15 @@ where
         Ok((id, true))
     }
 
-    /// The active platform client of `p` in the realm: the one with any of its redirect URIs,
+    /// The active platform client of `p` in the environment: the one with any of its redirect URIs,
     /// its product and its client key.
     async fn find_product_client(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         p: &ProductPlan,
     ) -> Result<Option<String>, BootstrapError> {
         let kid = b64url_encode(&thumbprint(&p.client_key));
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let mut found = None;
         'uris: for uri in &p.redirect_uris {
             for id in idp::clients_with_redirect(&mut t, uri.as_str()).await? {
@@ -2176,17 +2204,17 @@ where
         Ok(found)
     }
 
-    /// Commits the `idp.*` change `change` in the realm as an Exercise the root signs on the
-    /// realm's `idp` Anchor (MD-14, EI-25); a fresh nonce every time.
-    /// The realm's console client (OP-151 m.12 (b), RFC 10017 BFF pattern): a first-party
+    /// Commits the `idp.*` change `change` in the environment as an Exercise the root signs on the
+    /// environment's `idp` Anchor (MD-14, EI-25); a fresh nonce every time.
+    /// The environment's console client (OP-151 m.12 (b), RFC 10017 BFF pattern): a first-party
     /// confidential client whose one redirect URI is the management origin's sign-in callback
     /// and whose `private_key_jwt` key is the server's console key in the HSM; registered by
-    /// the realm's founding root through `idp.client.register` once, when the realm has no
+    /// the environment's founding root through `idp.client.register` once, when the environment has no
     /// active client with that callback and key.
     async fn console_client(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         origin: &str,
@@ -2196,7 +2224,7 @@ where
         let key = client_key(self.hsm)
             .map_err(BootstrapError::Unavailable)?
             .public_key();
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let found = registered(&mut t, &callback, &key).await?;
         t.commit().await?;
         if found.is_some() {
@@ -2225,7 +2253,7 @@ where
         };
         self.change(
             admin,
-            (tenant, realm),
+            (tenant, environment),
             domain,
             root,
             Change::ClientRegister(client),
@@ -2237,13 +2265,13 @@ where
     async fn change(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         change: Change,
     ) -> Result<Applied, BootstrapError> {
         let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
-        self.change_as(admin, (tenant, realm), (root, basis), (change, None))
+        self.change_as(admin, (tenant, environment), (root, basis), (change, None))
             .await
     }
 
@@ -2252,7 +2280,7 @@ where
     async fn change_as(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (root, basis): (&HsmSigner, ExerciseBasis),
         (change, subject): (Change, Option<[u8; 16]>),
     ) -> Result<Applied, BootstrapError> {
@@ -2262,7 +2290,7 @@ where
             .to_vec();
         let proposal = Proposal {
             tenant,
-            realm,
+            environment,
             change,
             nonce,
             validity: w.validity,

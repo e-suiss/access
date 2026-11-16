@@ -55,7 +55,7 @@ fn only(approvers: &[access_store::push::DeviceKeyRow]) -> Option<String> {
 /// Where and for what a push is sent.
 #[derive(Clone, Copy)]
 pub struct PushContext<'a> {
-    /// The realm issuer, which the same-device proof names.
+    /// The environment issuer, which the same-device proof names.
     pub issuer: &'a str,
     /// The application the person signs in to, as the push names it.
     pub application: &'a str,
@@ -183,13 +183,13 @@ where
         }
     }
 
-    /// Sends a push verification for the flow's second step (OP-156 m.3 (d)): only in a realm
+    /// Sends a push verification for the flow's second step (OP-156 m.3 (d)): only in an environment
     /// that offers push, after the first step, to an account with an approver, inside the fatigue
     /// limits. The push names the application, the action and the coarse location, never the
     /// number.
     ///
     /// # Errors
-    /// [`SessionError::Invalid`] when the realm does not offer push; [`SessionError`].
+    /// [`SessionError::Invalid`] when the environment does not offer push; [`SessionError`].
     #[expect(
         clippy::too_many_lines,
         reason = "one suspension: limits, proof, challenge, pushes"

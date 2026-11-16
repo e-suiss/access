@@ -1,10 +1,10 @@
-//! Connected accounts for agents and the token release on the realm's surface (§8.8, §8.9,
+//! Connected accounts for agents and the token release on the environment's surface (§8.8, §8.9,
 //! AS-M15, OP-154 m.3 (t)): the person lists, connects and disconnects accounts with their
 //! session; a registered executor asks for a release with its transport identity. No answer
 //! ever carries a token except a release, and agents have no route here (§11.13).
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::domain::flow::device_digest;
 use access_identity_session::domain::session::{FLOW_COOKIE, set_cookie};
 use access_identity_session::ports::Clock;
@@ -20,7 +20,7 @@ use access_kernel::tier::Tier;
 use serde_json::{Value, json};
 
 use super::{Body, Browser, Hosted, Reply};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// Longest base64url intent a release accepts.
 pub const MAX_INTENT: usize = 16 * 1024;
@@ -72,10 +72,10 @@ fn refusal(r: Refusal) -> Reply {
     problem(r.status(), r.code(), "The token was not released")
 }
 
-fn keys(kit: &RealmKit) -> Keys<'_> {
+fn keys(kit: &EnvironmentKit) -> Keys<'_> {
     Keys {
         tenant: kit.tenant,
-        realm: kit.realm,
+        environment: kit.environment,
         kek: &*kit.kek,
         ids: &kit.ids,
         issuer: &kit.issuer,
@@ -83,7 +83,7 @@ fn keys(kit: &RealmKit) -> Keys<'_> {
 }
 
 /// The callback the upstream redirects to: the connections list with the OAuth answer.
-fn redirect_uri(kit: &RealmKit) -> String {
+fn redirect_uri(kit: &EnvironmentKit) -> String {
     format!("{}/v1/account/vault/connections", kit.issuer)
 }
 
@@ -143,7 +143,10 @@ pub struct StartBody {
 }
 
 impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
-    async fn vault_kit(&self, entry: &RealmEntry) -> Result<std::sync::Arc<RealmKit>, Reply> {
+    async fn vault_kit(
+        &self,
+        entry: &EnvironmentEntry,
+    ) -> Result<std::sync::Arc<EnvironmentKit>, Reply> {
         self.kit(entry).await
     }
 
@@ -153,7 +156,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// browser goes back to the account pages.
     pub async fn vault_connections<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         callback: Option<Callback<'_>>,
         vault: &Vault<H, S, X, R>,
@@ -224,7 +227,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// it and which of the person's accounts it used; never a token, never authority.
     pub async fn agent_connections<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         vault: &Vault<H, S, X, R>,
     ) -> Reply
@@ -268,7 +271,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// `GET /v1/account/vault/connections/{connection}`: one connected account; never a token.
     pub async fn vault_connection<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         connection: &str,
         vault: &Vault<H, S, X, R>,
@@ -303,7 +306,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// account, only after the person's AAS for the client.
     pub async fn start_vault_connection<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         ask: &StartBody,
         vault: &Vault<H, S, X, R>,
@@ -359,7 +362,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// are shredded and revoked upstream where it can be; nothing is deleted (OP-73).
     pub async fn disconnect_vault_connection<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         connection: &str,
         vault: &Vault<H, S, X, R>,
@@ -399,7 +402,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// guaranteed (N-54).
     pub async fn release_vault_token<H, S, X, R>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         pep: Option<&str>,
         body: &Value,
         vault: &Vault<H, S, X, R>,

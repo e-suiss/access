@@ -19,15 +19,15 @@ access-gw-kerberos
 
 | Request | Answer |
 |---|---|
-| `GET /negotiate` without `Authorization` | 401 with `WWW-Authenticate: Negotiate` and a page that continues to the realm's normal sign-in |
-| `GET /negotiate` with an accepted Kerberos ticket of an active account | 303 to the sign-in page, with the `NegTokenResp`; the realm issuer's `authentication` Claim (method `kerberos`, AAL1) is queued |
+| `GET /negotiate` without `Authorization` | 401 with `WWW-Authenticate: Negotiate` and a page that continues to the environment's normal sign-in |
+| `GET /negotiate` with an accepted Kerberos ticket of an active account | 303 to the sign-in page, with the `NegTokenResp`; the environment issuer's `authentication` Claim (method `kerberos`, AAL1) is queued |
 | `GET /negotiate` with anything else | 303 to the sign-in page, never a second 401 |
 | `GET /proxy/...` (with a backend configured) | the same acceptance, then the request is forwarded to the backend with a ticket obtained by S4U2Proxy |
 
 A token is refused, and the browser falls back to normal sign-in, when it is NTLM (raw, or
 offered first in SPNEGO), when its ticket is for another service principal than the configured
 one (compared exactly), when its enctype is not AES256 (`aes256-cts-hmac-sha1-96` or
-`aes256-cts-hmac-sha384-192`; RC4 is never accepted), when its key version is below the realm's
+`aes256-cts-hmac-sha384-192`; RC4 is never accepted), when its key version is below the environment's
 floor, superseded for longer than a ticket lifetime, or overdue for rotation, when libgssapi
 cannot decrypt it, or when its principal (`user@REALM` of the SPN's realm) names no active
 account by user name. The token is read by the parser worker first; the gateway itself never
@@ -54,10 +54,10 @@ libkrb5 as an in-memory keytab. It is never written to disk and never reaches th
 the authority record. Only AES256 keys of the configured SPN are kept; a keytab without one
 stops the gateway.
 
-The realm sets the gateway's keytab policy, the SPN and the rotation period:
+The environment sets the gateway's keytab policy, the SPN and the rotation period:
 
 ```
-PUT /admin/v1/realms/{slug}/gateways/kerberos:{gateway}/keytab-policy
+PUT /admin/v1/envs/{slug}/gateways/kerberos:{gateway}/keytab-policy
 { "spn": "HTTP/access.corp.example@CORP.EXAMPLE", "rotate_days": 30 }
 ```
 
@@ -82,7 +82,7 @@ backend's answer comes back bounded to 1 MiB.
 | `ACCESS_GW_KERBEROS_TLS_CERT`, `ACCESS_GW_KERBEROS_TLS_KEY` | The gateway's certificate chain and key for browsers, PEM files |
 | `ACCESS_GW_KERBEROS_SPN` | The one service principal accepted, `HTTP/host@REALM` |
 | `ACCESS_GW_KERBEROS_KEYTAB` | The keytab file in the secret store |
-| `ACCESS_GW_KERBEROS_LOGIN` | The realm's normal sign-in page, an `https` URL |
+| `ACCESS_GW_KERBEROS_LOGIN` | The environment's normal sign-in page, an `https` URL |
 | `ACCESS_GW_KERBEROS_PARSER_SOCKET`, `ACCESS_GW_KERBEROS_PARSER_UID` | The parser worker supervisor's socket and the user it runs as |
 | `ACCESS_GW_KERBEROS_KRB5_CONF` | libkrb5's configuration, default `/etc/krb5.conf` |
 | `ACCESS_GW_KERBEROS_RCACHE_DIR` | libkrb5's replay cache, on a memory file system |
@@ -92,7 +92,7 @@ backend's answer comes back bounded to 1 MiB.
 | `ACCESS_GW_KERBEROS_RUN_AS` | `uid:gid` to drop to when started as root |
 
 The gateway reads its files, installs its keytab, binds its listener and locks itself down before
-it serves; it refuses to start without the lockdown. The realm registers the gateway first with
+it serves; it refuses to start without the lockdown. The environment registers the gateway first with
 `idp.gateway.register`.
 
 ## License

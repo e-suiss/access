@@ -1,6 +1,6 @@
 ; Access identity-plane Claim classes outside the Kernel table, version 1 (RFC 8610;
 ; OP-153 m.2 N0, m.3 (b), (c), (o), (q)). Deterministic CBOR (RFC 8949 §4.2.1).
-; The realm issuer signs these Claims. A class with a body carries in the Claim's `value` the
+; The environment issuer signs these Claims. A class with a body carries in the Claim's `value` the
 ; digest SHA-256("access/claim-body/v1" || 0x00 || dCBOR([class, body])) (L2-CLB-1); the Kernel
 ; does not check these classes (L2-CLB-2), the identity plane and authority-core do.
 

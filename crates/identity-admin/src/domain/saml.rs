@@ -18,7 +18,7 @@ pub fn sp_name_ok(name: &str) -> bool {
     valid_name(name)
 }
 
-/// The rotation policy of the realm's SAML signing certificate.
+/// The rotation policy of the environment's SAML signing certificate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CertPolicy {
     /// Days between scheduled rotations.
@@ -328,7 +328,7 @@ impl SamlChange {
         }
     }
 
-    /// Its resource path below the realm's slug.
+    /// Its resource path below the environment's slug.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         match self {

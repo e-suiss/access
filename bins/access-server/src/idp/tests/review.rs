@@ -76,7 +76,7 @@ fn meta_write(
     }
 }
 
-/// Creating groups in the realm, passed on `depth` more times.
+/// Creating groups in the environment, passed on `depth` more times.
 fn authority(w: &World, depth: u64) -> CanonicalAuthority {
     let put = compile(
         Op::PutGroup,
@@ -120,7 +120,7 @@ fn authority(w: &World, depth: u64) -> CanonicalAuthority {
 /// `seed`'s Grant to `holder` on `basis`, and the holding it opens.
 async fn issue(
     w: &World,
-    (at, d): ((TenantId, RealmId), Digest),
+    (at, d): ((TenantId, EnvironmentId), Digest),
     nonce: u8,
     (basis, from): (ExerciseBasis, GrantBasis),
     (holder, depth, seed): (Id, u64, u8),
@@ -157,7 +157,7 @@ async fn issue(
     }
 }
 
-async fn items(w: &World, at: (TenantId, RealmId), review: &str, who: Id) -> Vec<Id> {
+async fn items(w: &World, at: (TenantId, EnvironmentId), review: &str, who: Id) -> Vec<Id> {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let out = w
         .admin()
@@ -178,7 +178,7 @@ async fn head(w: &World, d: Digest) -> u64 {
         .pos
 }
 
-async fn kept(w: &World, at: (TenantId, RealmId)) -> Vec<access_store::audit::AuditRow> {
+async fn kept(w: &World, at: (TenantId, EnvironmentId)) -> Vec<access_store::audit::AuditRow> {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let rows = t.list_audit(500).await.unwrap();
     t.commit().await.unwrap();
@@ -191,7 +191,7 @@ async fn kept(w: &World, at: (TenantId, RealmId)) -> Vec<access_store::audit::Au
 #[tokio::test]
 async fn a_campaign_shows_each_manager_its_own_team_and_writes_no_authority() {
     let w = World::new().await;
-    let (t, r, d) = w.realm(SLUG).await;
+    let (t, r, d) = w.environment(SLUG).await;
     let at = (t, r);
     for (party, seed) in [
         (ROOT, ROOT_KEY),

@@ -21,7 +21,7 @@ pub enum Mode {
 /// What one event says.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Facts<'a> {
-    /// The issuer: the realm's SCIM base URL.
+    /// The issuer: the environment's SCIM base URL.
     pub iss: &'a str,
     /// The audience: the stream's receiver.
     pub aud: &'a str,

@@ -1,12 +1,12 @@
 //! A workload's first presentation (OP-154 m.3 (d), §11.21.1 carleton note, U20): the verified
-//! workload and the DPoP key the request proved become the realm issuer's
+//! workload and the DPoP key the request proved become the environment issuer's
 //! `identity_binding_workload` Claim about the registration's agent Party. It is queued with
 //! the token request and issued only if that transaction commits (OP-10); it grants nothing.
 
 use access_identity_account::domain::claims::workload_binding;
 use access_kernel::claim::body::Workload;
 
-use crate::app::oauth::{Env, OAuth, Realm};
+use crate::app::oauth::{Env, Environment, OAuth};
 use crate::domain::client::{Client, ClientAuth};
 use crate::domain::dpop::Jkt;
 use crate::ports::Unavailable;
@@ -20,7 +20,7 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub(crate) async fn first_presentation(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         jkt: Jkt,
         now: u64,
@@ -41,7 +41,7 @@ impl<E: Env> OAuth<E> {
             now,
         );
         let bytes = order.to_bytes().map_err(|_| Unavailable)?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         tx.outbox(&order.kind(), &bytes).await?;
         tx.commit().await
     }

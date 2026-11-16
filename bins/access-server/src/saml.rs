@@ -20,7 +20,7 @@ use access_identity_account::ports::AccountDb as _;
 use access_identity_admin::app::saml::{read_document, sp_id};
 use access_identity_edge::EdgeError;
 use access_identity_edge::domain::{Gateway, Refusal};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_saml::alg::SigAlg;
 use access_identity_saml::assertion::{self, Issue, Random, Released};
 use access_identity_saml::binding;
@@ -34,16 +34,16 @@ use access_identity_saml::wire::{self, Attest, Binding, Done, Forward, SpAnswer}
 use access_identity_saml::wsfed;
 use access_identity_session::app::sessions::SessionView;
 use access_identity_session::domain::assurance::Aal;
-use access_identity_signer::protocol::{Realm, Request, Response};
+use access_identity_signer::protocol::{Environment, Request, Response};
 use access_identity_signer::saml::{SamlAlg, SamlRequest, SamlResponse, SamlSig, Step};
 use access_store::Pool;
 use access_store::audit::AuditEvent;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::saml::{FlowRow, FlowSession};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::KeyStore;
 
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// How long a flow stays open (a sign-in, with a login in between).
 const FLOW_MS: u64 = 10 * 60_000;
@@ -92,8 +92,12 @@ async fn signer_call(socket: &Path, r: SamlRequest) -> Result<SamlResponse, Sign
     }
 }
 
-/// Opens the realm's SAML key of `p256`'s algorithm (MD-6: on the first opt-in).
-pub(crate) async fn open_key(socket: &Path, realm: RealmId, p256: bool) -> Result<(), SignError> {
+/// Opens the environment's SAML key of `p256`'s algorithm (MD-6: on the first opt-in).
+pub(crate) async fn open_key(
+    socket: &Path,
+    environment: EnvironmentId,
+    p256: bool,
+) -> Result<(), SignError> {
     let alg = if p256 {
         SamlAlg::P256
     } else {
@@ -102,7 +106,7 @@ pub(crate) async fn open_key(socket: &Path, realm: RealmId, p256: bool) -> Resul
     signer_call(
         socket,
         SamlRequest::Open {
-            realm: Realm(*realm.as_bytes()),
+            environment: Environment(*environment.as_bytes()),
             alg,
         },
     )
@@ -111,17 +115,21 @@ pub(crate) async fn open_key(socket: &Path, realm: RealmId, p256: bool) -> Resul
 }
 
 /// `idp.saml.cert_emergency`: a new key signs at once.
-pub(crate) async fn emergency(socket: &Path, realm: RealmId, p256: bool) -> Result<(), SignError> {
+pub(crate) async fn emergency(
+    socket: &Path,
+    environment: EnvironmentId,
+    p256: bool,
+) -> Result<(), SignError> {
     let alg = if p256 {
         SamlAlg::P256
     } else {
         SamlAlg::Rsa3072
     };
-    open_key(socket, realm, p256).await?;
+    open_key(socket, environment, p256).await?;
     signer_call(
         socket,
         SamlRequest::Rotate {
-            realm: Realm(*realm.as_bytes()),
+            environment: Environment(*environment.as_bytes()),
             alg,
             step: Step::Emergency,
         },
@@ -130,10 +138,10 @@ pub(crate) async fn emergency(socket: &Path, realm: RealmId, p256: bool) -> Resu
     .map(|_| ())
 }
 
-/// The realm's SAML key behind [`XmlSigner`]; it counts its signatures for the audit log.
-struct RealmSigner<'a> {
+/// The environment's SAML key behind [`XmlSigner`]; it counts its signatures for the audit log.
+struct EnvironmentSigner<'a> {
     socket: &'a Path,
-    realm: RealmId,
+    environment: EnvironmentId,
     signatures: std::sync::atomic::AtomicU32,
 }
 
@@ -146,16 +154,16 @@ fn sig_of(alg: SigAlg) -> SamlSig {
     }
 }
 
-impl XmlSigner for RealmSigner<'_> {
+impl XmlSigner for EnvironmentSigner<'_> {
     async fn sign(&self, signed_info: Vec<u8>, alg: SigAlg) -> Result<Signature, SignError> {
         let ask = |data: Vec<u8>| SamlRequest::Sign {
-            realm: Realm(*self.realm.as_bytes()),
+            environment: Environment(*self.environment.as_bytes()),
             sig: sig_of(alg),
             data,
         };
         let mut answer = signer_call(self.socket, ask(signed_info.clone())).await;
         if matches!(&answer, Err(SignError(c)) if c == "signer-saml-no-key") {
-            open_key(self.socket, self.realm, alg.ecdsa()).await?;
+            open_key(self.socket, self.environment, alg.ecdsa()).await?;
             answer = signer_call(self.socket, ask(signed_info)).await;
         }
         match answer? {
@@ -184,18 +192,18 @@ pub(crate) struct Saml {
     signer: PathBuf,
     gateway: Option<GatewayAddr>,
     hsm: Arc<KeyStore>,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
 }
 
 impl Saml {
     /// The service over the application pool, the identity signer, the gateway's forward
-    /// address, the HSM (for `RelayState` MACs) and the realms' vault keys.
+    /// address, the HSM (for `RelayState` MACs) and the environments' vault keys.
     pub(crate) const fn new(
         app: Pool,
         signer: PathBuf,
         gateway: Option<GatewayAddr>,
         hsm: Arc<KeyStore>,
-        keks: RealmKeks,
+        keks: EnvironmentKeks,
     ) -> Self {
         Self {
             app,
@@ -334,15 +342,19 @@ fn hex(b: &[u8]) -> String {
 /// What a decision needs besides the flow.
 struct Ctx<'a> {
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     slug: &'a str,
     issuer: String,
     now: u64,
 }
 
 impl Saml {
-    async fn tx(&self, tenant: TenantId, realm: RealmId) -> Result<TenantTx, SamlOutcome> {
-        TenantTx::begin(&self.app, tenant, realm)
+    async fn tx(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<TenantTx, SamlOutcome> {
+        TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(|_| error("saml-unavailable"))
     }
@@ -410,9 +422,9 @@ impl Saml {
     }
 
     async fn proven_email(&self, ctx: &Ctx<'_>, subject: [u8; 16]) -> Option<String> {
-        let vault = self.keks.vault(ctx.realm)?;
+        let vault = self.keks.vault(ctx.environment)?;
         let mut tx: PgTx = PgAccounts::sealed(self.app.clone(), vault)
-            .begin(ctx.tenant, ctx.realm)
+            .begin(ctx.tenant, ctx.environment)
             .await
             .ok()?;
         let proven = tx.0.proven_emails(subject).await.ok()?;
@@ -428,10 +440,10 @@ impl Saml {
         Endpoints::of(&ctx.issuer)
     }
 
-    fn signer(&self, realm: RealmId) -> RealmSigner<'_> {
-        RealmSigner {
+    fn signer(&self, environment: EnvironmentId) -> EnvironmentSigner<'_> {
+        EnvironmentSigner {
             socket: &self.signer,
-            realm,
+            environment,
             signatures: std::sync::atomic::AtomicU32::new(0),
         }
     }
@@ -566,7 +578,7 @@ impl Saml {
             name_id,
             format,
         };
-        let signer = self.signer(ctx.realm);
+        let signer = self.signer(ctx.environment);
         let xml = if sp.protocol.wsfed() {
             wsfed::wresult(sp, &i, &signer, &OsRandom).await
         } else {
@@ -707,11 +719,17 @@ impl Saml {
         }
     }
 
-    fn relay_ok(&self, realm: RealmId, sp: &Sp, relay: &str, mac: Option<&str>) -> bool {
+    fn relay_ok(
+        &self,
+        environment: EnvironmentId,
+        sp: &Sp,
+        relay: &str,
+        mac: Option<&str>,
+    ) -> bool {
         let Some(mac) = mac else {
             return false;
         };
-        let label = format!("saml-relay/{}", hex(realm.as_bytes()));
+        let label = format!("saml-relay/{}", hex(environment.as_bytes()));
         let key = match self.hsm.mac(&label) {
             Ok(k) => k,
             Err(_) => match self.hsm.generate_mac(&label) {
@@ -750,7 +768,7 @@ impl Saml {
         }
         // IDP-15
         if let Some(r) = relay
-            && !self.relay_ok(ctx.realm, &sp, r, get(values, "rs_mac"))
+            && !self.relay_ok(ctx.environment, &sp, r, get(values, "rs_mac"))
         {
             return Some(error(Shown::RelayState.code()));
         }
@@ -891,7 +909,7 @@ impl Saml {
         let e = Self::endpoints(ctx);
         let mut response =
             assertion::logout_response(&e.entity_id, &end.url, &facts.id, &id, ctx.now);
-        let signer = self.signer(ctx.realm);
+        let signer = self.signer(ctx.environment);
         let outcome = if end.binding == access_identity_saml::sp::Binding::Redirect {
             let url = binding::redirect(
                 &signer,
@@ -965,7 +983,7 @@ impl Saml {
     async fn rotate_if_due(
         &self,
         t: &mut TenantTx,
-        realm: RealmId,
+        environment: EnvironmentId,
         keys: &[access_identity_signer::saml::KeyInfo],
         now: u64,
     ) {
@@ -999,7 +1017,7 @@ impl Saml {
             let _ = signer_call(
                 &self.signer,
                 SamlRequest::Rotate {
-                    realm: Realm(*realm.as_bytes()),
+                    environment: Environment(*environment.as_bytes()),
                     alg,
                     step,
                 },
@@ -1008,9 +1026,9 @@ impl Saml {
         }
     }
 
-    async fn certificates(&self, entry: &RealmEntry) -> Option<Vec<Vec<u8>>> {
-        let realm = Realm(*entry.realm.as_bytes());
-        let mut keys = match signer_call(&self.signer, SamlRequest::Keys(realm))
+    async fn certificates(&self, entry: &EnvironmentEntry) -> Option<Vec<Vec<u8>>> {
+        let environment = Environment(*entry.environment.as_bytes());
+        let mut keys = match signer_call(&self.signer, SamlRequest::Keys(environment))
             .await
             .ok()?
         {
@@ -1018,16 +1036,18 @@ impl Saml {
             SamlResponse::Signed { .. } => return None,
         };
         if keys.is_empty() {
-            open_key(&self.signer, entry.realm, false).await.ok()?;
-            if let SamlResponse::Keys(k) = signer_call(&self.signer, SamlRequest::Keys(realm))
+            open_key(&self.signer, entry.environment, false)
+                .await
+                .ok()?;
+            if let SamlResponse::Keys(k) = signer_call(&self.signer, SamlRequest::Keys(environment))
                 .await
                 .ok()?
             {
                 keys = k;
             }
         }
-        if let Ok(mut t) = TenantTx::begin(&self.app, entry.tenant, entry.realm).await {
-            self.rotate_if_due(&mut t, entry.realm, &keys, now_ms())
+        if let Ok(mut t) = TenantTx::begin(&self.app, entry.tenant, entry.environment).await {
+            self.rotate_if_due(&mut t, entry.environment, &keys, now_ms())
                 .await;
             let _ = t.commit().await;
         }
@@ -1041,14 +1061,14 @@ impl Saml {
 }
 
 impl SamlFront for Saml {
-    async fn metadata(&self, entry: &RealmEntry) -> Option<String> {
+    async fn metadata(&self, entry: &EnvironmentEntry) -> Option<String> {
         let certs = self.certificates(entry).await?;
         let e = Endpoints::of(entry.issuer.as_str());
-        let signer = self.signer(entry.realm);
+        let signer = self.signer(entry.environment);
         let doc = metadata::signed(&e, &certs, now_ms(), &signer, &OsRandom)
             .await
             .ok()?;
-        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.realm)
+        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.environment)
             .await
             .ok()?;
         // §10.6.1, Ek B 4947
@@ -1059,7 +1079,7 @@ impl SamlFront for Saml {
         Some(doc)
     }
 
-    async fn wsfed_metadata(&self, entry: &RealmEntry) -> Option<String> {
+    async fn wsfed_metadata(&self, entry: &EnvironmentEntry) -> Option<String> {
         let certs = self.certificates(entry).await?;
         Some(metadata::wsfed(
             &Endpoints::of(entry.issuer.as_str()),
@@ -1067,7 +1087,7 @@ impl SamlFront for Saml {
         ))
     }
 
-    async fn open(&self, entry: &RealmEntry, opening: SamlOpening) -> Result<String, String> {
+    async fn open(&self, entry: &EnvironmentEntry, opening: SamlOpening) -> Result<String, String> {
         let unavailable = || String::from("saml-unavailable");
         let key = random32().ok_or_else(unavailable)?;
         let params = dcbor::encode(
@@ -1076,7 +1096,7 @@ impl SamlFront for Saml {
         )
         .map_err(|_| String::from("saml-request-too-large"))?;
         let now = now_ms();
-        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.realm)
+        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.environment)
             .await
             .map_err(|_| unavailable())?;
         t.open_saml_flow(
@@ -1095,7 +1115,7 @@ impl SamlFront for Saml {
 
     async fn run(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         key: &str,
         session: Option<SessionView>,
         correlation: &str,
@@ -1108,7 +1128,7 @@ impl SamlFront for Saml {
         let Some(handle) = random32() else {
             return error("saml-unavailable");
         };
-        let mut t = match self.tx(entry.tenant, entry.realm).await {
+        let mut t = match self.tx(entry.tenant, entry.environment).await {
             Ok(t) => t,
             Err(o) => return o,
         };
@@ -1152,7 +1172,7 @@ impl SamlFront for Saml {
             _ => get(&values, "SAMLRequest").map(String::from),
         };
         let f = Forward {
-            realm: entry.slug.clone(),
+            environment: entry.slug.clone(),
             handle,
             binding,
             message,
@@ -1165,7 +1185,7 @@ impl SamlFront for Saml {
             Ok(Done::Refused(code)) | Err(code) => return SamlOutcome::Error(code),
         }
         let _ = correlation;
-        let Ok(mut t) = TenantTx::begin(&self.app, entry.tenant, entry.realm).await else {
+        let Ok(mut t) = TenantTx::begin(&self.app, entry.tenant, entry.environment).await else {
             return error("saml-unavailable");
         };
         let outcome = match t.saml_flow(&flow_hash).await {
@@ -1187,7 +1207,7 @@ impl Saml {
     ) -> Result<Vec<u8>, EdgeError> {
         let now = now_ms();
         let unavailable = |e: access_store::StoreError| EdgeError::Unavailable(e.to_string());
-        let mut t = TenantTx::begin(&self.app, g.tenant, g.realm)
+        let mut t = TenantTx::begin(&self.app, g.tenant, g.environment)
             .await
             .map_err(unavailable)?;
         // IDI-7
@@ -1206,10 +1226,10 @@ impl Saml {
             .await
             .map_err(unavailable)?
             .and_then(|g| g.issuer)
-            .ok_or_else(|| EdgeError::Unavailable(String::from("realm issuer")))?;
+            .ok_or_else(|| EdgeError::Unavailable(String::from("environment issuer")))?;
         let ctx = Ctx {
             tenant: g.tenant,
-            realm: g.realm,
+            environment: g.environment,
             slug: &g.slug,
             issuer,
             now,
@@ -1228,7 +1248,7 @@ impl Saml {
     }
 
     async fn attest_sp(&self, g: &Gateway, entity: &str) -> Result<Vec<u8>, EdgeError> {
-        let mut t = TenantTx::begin(&self.app, g.tenant, g.realm)
+        let mut t = TenantTx::begin(&self.app, g.tenant, g.environment)
             .await
             .map_err(|e| EdgeError::Unavailable(e.to_string()))?;
         let sp = Self::sp_by_entity(&mut t, entity).await;
@@ -1253,17 +1273,20 @@ impl SessionAttest for Saml {
         Box::pin(async move {
             let a = Attest::decode(body).map_err(|_| EdgeError::Refused(Refusal::Malformed))?;
             match a {
-                Attest::Sp { realm, entity } => {
-                    access_identity_edge::domain::in_scope(g, &realm)?;
+                Attest::Sp {
+                    environment,
+                    entity,
+                } => {
+                    access_identity_edge::domain::in_scope(g, &environment)?;
                     self.attest_sp(g, &entity).await
                 }
                 Attest::Issue {
-                    realm,
+                    environment,
                     handle,
                     facts,
                     redirect_signed,
                 } => {
-                    access_identity_edge::domain::in_scope(g, &realm)?;
+                    access_identity_edge::domain::in_scope(g, &environment)?;
                     self.attest_issue(g, handle, facts, redirect_signed).await
                 }
             }
@@ -1271,22 +1294,22 @@ impl SessionAttest for Saml {
     }
 }
 
-/// The realm's SAML key signs upstream connections' `AuthnRequest`s in the HTTP-Redirect
+/// The environment's SAML key signs upstream connections' `AuthnRequest`s in the HTTP-Redirect
 /// binding (OP-155 m.3 (d), (h)).
 pub(crate) struct UpstreamRequests(pub(crate) PathBuf);
 
 impl access_identity_federation::ports::SamlRequestSigner for UpstreamRequests {
     fn redirect<'a>(
         &'a self,
-        realm: [u8; 16],
+        environment: [u8; 16],
         location: &'a str,
         request: &'a str,
         relay_state: &'a str,
     ) -> access_identity_federation::ports::Signed<'a> {
         Box::pin(async move {
-            let signer = RealmSigner {
+            let signer = EnvironmentSigner {
                 socket: &self.0,
-                realm: RealmId::from_bytes(realm),
+                environment: EnvironmentId::from_bytes(environment),
                 signatures: std::sync::atomic::AtomicU32::new(0),
             };
             access_identity_saml::binding::redirect(

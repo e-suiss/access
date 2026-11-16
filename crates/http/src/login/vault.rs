@@ -28,7 +28,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use serde::Deserialize;
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 use crate::adp::adapters::Pep;
 
@@ -46,7 +46,7 @@ const MAX_CODE: usize = 2048;
 /// Largest request body.
 const MAX_BODY: usize = 32 * 1024;
 
-/// The routes of lane L5, at the realm's host and under `/realms/{slug}`.
+/// The routes of lane L5, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M, H, S, X, R>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -73,7 +73,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes.route(
             &format!("{prefix}/v1/account/vault/connections"),
             post(start::<D, K, KI, C, M, H, S, X, R>),
@@ -145,7 +145,7 @@ macro_rules! handler {
             X: Exercises,
             R: Random,
         {
-            let $entry = match realm(&$s.login, &$p, &$uri, &$headers).await {
+            let $entry = match environment(&$s.login, &$p, &$uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };

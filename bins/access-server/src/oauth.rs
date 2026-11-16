@@ -1,4 +1,4 @@
-//! The realm authorization server's environment in this process (OP-146 I7): the realm rows
+//! The environment authorization server's environment in this process (OP-146 I7): the environment rows
 //! over the application pool, the identity signer, clients' endpoints behind the SSRF guard,
 //! the hosted login's pages, and the DPoP nonce keys in the HSM (OP-146 m.7 (b)).
 
@@ -17,10 +17,10 @@ use access_identity_oauth::domain::dpop::DpopProfile;
 use access_identity_oauth::ports::oauth::{ClaimSource, ClientDocuments, Held, ManagementHolders};
 use access_internal_api::projections::Projections;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use suiss_crypto::pkcs11::KeyStore;
 
-/// The nonce key generation a new realm is provisioned with (OP-146 m.7 (b)); later ones follow
+/// The nonce key generation a new environment is provisioned with (OP-146 m.7 (b)); later ones follow
 /// the clock ([`NONCE_ROTATION_MS`]).
 pub(crate) const NONCE_GENERATION: u32 = 1;
 
@@ -44,9 +44,9 @@ fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// The realms' DPoP nonce keys from the HSM, loaded on a realm's first request and kept. The
+/// The environments' DPoP nonce keys from the HSM, loaded on an environment's first request and kept. The
 /// current generation issues and the previous one is still accepted, so a rotation never
-/// rejects a nonce issued just before it (TN-29); older generations are retired. A realm
+/// rejects a nonce issued just before it (TN-29); older generations are retired. An environment
 /// without its keys answers `503` for DPoP-bound requests; the server still starts.
 pub(crate) struct HsmNonces {
     keys: Arc<KeyStore>,
@@ -63,28 +63,28 @@ impl HsmNonces {
         }
     }
 
-    pub(crate) fn ring(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>> {
-        self.ring_at(realm, role, now_ms())
+    pub(crate) fn ring(&self, environment: EnvironmentId, role: Role) -> Option<Arc<NonceRing>> {
+        self.ring_at(environment, role, now_ms())
     }
 
     /// The ring of the generation in force at `now_ms`, rebuilt when the generation moved.
     pub(crate) fn ring_at(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         role: Role,
         now_ms: u64,
     ) -> Option<Arc<NonceRing>> {
-        let key = (*realm.as_bytes(), role);
+        let key = (*environment.as_bytes(), role);
         let generation = nonce_generation(now_ms);
         if let Some((g, ring)) = self.loaded.lock().ok()?.get(&key)
             && *g == generation
         {
             return Some(ring.clone());
         }
-        let ring = match self.rotated(realm.as_bytes(), role, generation) {
+        let ring = match self.rotated(environment.as_bytes(), role, generation) {
             Ok(ring) => Arc::new(ring),
             Err(error) => {
-                tracing::error!(%error, "realm DPoP nonce key unavailable");
+                tracing::error!(%error, "environment DPoP nonce key unavailable");
                 return None;
             }
         };
@@ -99,28 +99,31 @@ impl HsmNonces {
     /// are retired from the token once no process at a neighbouring generation needs them.
     fn rotated(
         &self,
-        realm: &[u8; 16],
+        environment: &[u8; 16],
         role: Role,
         generation: u32,
     ) -> Result<NonceRing, suiss_crypto::pkcs11::HsmError> {
         // OP-146 m.7 (b)
-        drop(self.keys.mac(&label(realm, role, NONCE_GENERATION))?);
+        drop(self.keys.mac(&label(environment, role, NONCE_GENERATION))?);
         let previous = generation.saturating_sub(1);
         let mut ring = NonceRing::new(
-            *realm,
+            *environment,
             role,
             self.policy,
             previous,
-            NonceKey::token(self.keys.shared_mac(&label(realm, role, previous))?),
+            NonceKey::token(self.keys.shared_mac(&label(environment, role, previous))?),
         );
         ring.rotate(
             generation,
-            NonceKey::token(self.keys.shared_mac(&label(realm, role, generation))?),
+            NonceKey::token(
+                self.keys
+                    .shared_mac(&label(environment, role, generation))?,
+            ),
         );
         if let Some(retired) = generation.checked_sub(3)
             && retired > NONCE_GENERATION
         {
-            let _ = self.keys.retire_secret(&label(realm, role, retired));
+            let _ = self.keys.retire_secret(&label(environment, role, retired));
         }
         Ok(ring)
     }
@@ -138,23 +141,23 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) dpop: DpopProfile,
     pub(crate) projections: P,
     pub(crate) tenant_ids: Arc<crate::ids::CellIds>,
-    /// The realms' inline hooks (TN-135): `token_issuance`.
+    /// The environments' inline hooks (TN-135): `token_issuance`.
     pub(crate) hooks: Arc<dyn HookCaller + Sync>,
     /// The authority plane's live Instance keys, for management read tokens (TN-130).
     pub(crate) management: Arc<dyn ManagementHolders + Sync>,
-    /// What accounts hold to release as identity claims, under the realms' PII vaults.
+    /// What accounts hold to release as identity claims, under the environments' PII vaults.
     pub(crate) claims: Arc<dyn ClaimSource + Sync>,
     /// CIMD documents and logos behind the SSRF guard (OP-154 m.3 (i)).
     pub(crate) documents: HttpClientDocuments,
     /// The authority plane's accepted assertion issuers (OP-154 m.3 (m), (q)).
     pub(crate) issuers: Arc<dyn access_identity_oauth::ports::oauth::AssertionIssuers + Sync>,
-    /// The realms' SPIFFE bundles behind the SSRF guard (OP-154 m.3 (r)).
+    /// The environments' SPIFFE bundles behind the SSRF guard (OP-154 m.3 (r)).
     pub(crate) bundles: Arc<dyn access_identity_attest::ports::Bundles + Sync>,
     /// Which trust domains the authority plane accepts (OP-154 m.3 (r)).
     pub(crate) workload_trust: Arc<dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync>,
     /// Whether a consent record's Grant stands, read from the authority plane (P58, EI-18).
     pub(crate) standing: Arc<dyn access_identity_oauth::ports::oauth::GrantStanding + Sync>,
-    /// Mutual TLS client certificates: the realm's CAs, their Acceptance and revocation
+    /// Mutual TLS client certificates: the environment's CAs, their Acceptance and revocation
     /// (RFC 8705 §2.1, OP-155 m.3 (k), (m)).
     pub(crate) client_certificates:
         Arc<dyn access_identity_oauth::ports::profile::ClientCertificates + Sync>,
@@ -213,12 +216,12 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
         &*self.saml
     }
 
-    fn replay(&self, tenant: TenantId, realm: RealmId) -> PgReplayCache {
-        PgReplayCache::new(self.app.clone(), tenant, realm)
+    fn replay(&self, tenant: TenantId, environment: EnvironmentId) -> PgReplayCache {
+        PgReplayCache::new(self.app.clone(), tenant, environment)
     }
 
-    fn nonces(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>> {
-        self.nonces.ring(realm, role)
+    fn nonces(&self, environment: EnvironmentId, role: Role) -> Option<Arc<NonceRing>> {
+        self.nonces.ring(environment, role)
     }
 
     fn dpop(&self) -> &DpopProfile {
@@ -271,25 +274,25 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
 }
 
-/// The identity claims accounts hold (§10.4.6, OP-153 m.3 (l)), read under each realm's PII
-/// vault; a realm whose vault keys are unavailable releases nothing and the token waits (TI-9).
+/// The identity claims accounts hold (§10.4.6, OP-153 m.3 (l)), read under each environment's PII
+/// vault; an environment whose vault keys are unavailable releases nothing and the token waits (TI-9).
 pub(crate) struct VaultClaims {
     pub(crate) app: Pool,
-    pub(crate) keks: crate::login::RealmKeks,
+    pub(crate) keks: crate::login::EnvironmentKeks,
 }
 
 impl ClaimSource for VaultClaims {
     fn held(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> Held<'_, access_identity_oauth::domain::claims_request::Held> {
         Box::pin(async move {
             use access_identity_oauth::domain::claims_request::{Held as Claims, SUPPORTED};
             use access_identity_oauth::ports::Unavailable;
-            let vault = self.keks.vault(realm).ok_or(Unavailable)?;
-            let mut t = access_store::identity::TenantTx::begin(&self.app, tenant, realm)
+            let vault = self.keks.vault(environment).ok_or(Unavailable)?;
+            let mut t = access_store::identity::TenantTx::begin(&self.app, tenant, environment)
                 .await
                 .map_err(|_| Unavailable)?;
             let (email, fields) =
@@ -314,13 +317,13 @@ impl ClaimSource for VaultClaims {
     }
 }
 
-/// The realms' inline hooks as this process calls them (TN-135, OP-151 m.3 (j)): live hooks
-/// from the realm tables, keys opened under the realm KEKs, calls through the SSRF-guarded
+/// The environments' inline hooks as this process calls them (TN-135, OP-151 m.3 (j)): live hooks
+/// from the environment tables, keys opened under the environment KEKs, calls through the SSRF-guarded
 /// outbound client.
 pub(crate) fn hooks(
     app: Pool,
     outbound: access_identity_oauth::adapters::outbound::Outbound,
-    keks: crate::login::RealmKeks,
+    keks: crate::login::EnvironmentKeks,
 ) -> Arc<dyn HookCaller + Sync> {
     Arc::new(access_identity_hooks::app::Hooks::new(
         access_identity_hooks::adapters::PgRegistry::new(
@@ -355,33 +358,33 @@ mod tests {
             HsmNonces::new(keys.clone()),
             HsmNonces::new(store(&module, &token)),
         );
-        let realm = RealmId::from_bytes([7; 16]);
+        let environment = EnvironmentId::from_bytes([7; 16]);
         let role = Role::AuthorizationServer;
-        assert!(a.ring_at(realm, role, 0).is_none());
-        keys.generate_mac(&label(realm.as_bytes(), role, NONCE_GENERATION))
+        assert!(a.ring_at(environment, role, 0).is_none());
+        keys.generate_mac(&label(environment.as_bytes(), role, NONCE_GENERATION))
             .unwrap();
         let boundary = 20_000 * NONCE_ROTATION_MS;
         let before = boundary - 1_000;
         let after = boundary + 1_000;
 
-        let old = a.ring_at(realm, role, before).unwrap();
+        let old = a.ring_at(environment, role, before).unwrap();
         let issued = old.issue(before).unwrap();
-        b.ring_at(realm, role, before)
+        b.ring_at(environment, role, before)
             .unwrap()
             .check(Some(&issued), before)
             .unwrap();
 
-        let new = b.ring_at(realm, role, after).unwrap();
+        let new = b.ring_at(environment, role, after).unwrap();
         new.check(Some(&issued), after).unwrap();
         let fresh = new.issue(after).unwrap();
         assert_ne!(fresh, issued);
-        a.ring_at(realm, role, after)
+        a.ring_at(environment, role, after)
             .unwrap()
             .check(Some(&fresh), after)
             .unwrap();
 
         let later = boundary + NONCE_ROTATION_MS + 1_000;
-        let ring = a.ring_at(realm, role, later).unwrap();
+        let ring = a.ring_at(environment, role, later).unwrap();
         let stale = ring.check(Some(&issued), later);
         assert!(matches!(
             stale,
@@ -392,9 +395,9 @@ mod tests {
             Err(NonceError::UnknownKey)
         ));
 
-        let retired = label(realm.as_bytes(), role, nonce_generation(before) - 1);
+        let retired = label(environment.as_bytes(), role, nonce_generation(before) - 1);
         let _ = a
-            .ring_at(realm, role, boundary + 2 * NONCE_ROTATION_MS + 1_000)
+            .ring_at(environment, role, boundary + 2 * NONCE_ROTATION_MS + 1_000)
             .unwrap();
         assert_eq!(keys.retire_secret(&retired).unwrap(), 0);
     }

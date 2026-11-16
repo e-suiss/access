@@ -118,7 +118,7 @@ test("a plain sign-in never asks for a step-up", async ({ page, mock }) => {
 });
 
 // TN-104, X41
-test("a completed sign-in returns to the authorization request that sent it, and only to this realm's", async ({
+test("a completed sign-in returns to the authorization request that sent it, and only to this environment's", async ({
   page,
   mock,
 }) => {

@@ -1,5 +1,5 @@
 //! Account recovery on the authority side end to end against the real router, the decision
-//! point, PostgreSQL and the token (OP-153 m.3 (c), (gg), m.13 (e)): the realm issuer's
+//! point, PostgreSQL and the token (OP-153 m.3 (c), (gg), m.13 (e)): the environment issuer's
 //! `recovery_result` names the successor key at `REBIND_OPEN`, the successor's self-signed
 //! `instance_recover` is accepted only with that Claim, the predecessor ends and the successor
 //! inherits nothing, a bind under a weaker recovery path asks to strengthen it (INV-40) and a
@@ -103,7 +103,7 @@ async fn device(c: &super::management::Console, subject: [u8; 16], key: &Browser
         tenant: *c.route.tenant.as_bytes(),
         domain: c.domain,
         registrant: Registrant::Device {
-            realm: *c.route.realm.as_bytes(),
+            environment: *c.route.environment.as_bytes(),
             subject,
         },
         party,
@@ -132,7 +132,7 @@ async fn device(c: &super::management::Console, subject: [u8; 16], key: &Browser
     else {
         panic!("not registered");
     };
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert!(
@@ -189,7 +189,7 @@ async fn drain(c: &super::management::Console, subject: [u8; 16], attempt: [u8; 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
         let r = k.step().await.unwrap();
-        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
             .await
             .unwrap();
         let issued = access_store::issuer::last_in_line(&mut t, &subject, &domain, &line)
@@ -487,7 +487,7 @@ async fn a_recovered_successor_is_bound_by_its_recovery_result() {
     .await
     .unwrap();
     assert!(mandates.iter().all(|r| r.value.is_none()), "{mandates:?}");
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -627,7 +627,7 @@ const DAY_MS: u64 = 86_400_000;
 async fn graced(c: &super::management::Console, subject: [u8; 16]) {
     use access_store::recovery::{NewAttempt, NewTransition};
     let at = i64::try_from(now()).unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let id = t
@@ -712,7 +712,7 @@ async fn the_grace_period_holds_the_remaining_surfaces() {
         &c,
         "deleteAccount",
         Some(&founder),
-        &format!("/admin/realms/acme/accounts/{founder}/delete"),
+        &format!("/admin/envs/acme/accounts/{founder}/delete"),
         serde_json::json!({}),
     )
     .await;
@@ -779,7 +779,7 @@ async fn recovery_is_tightened_after_an_rp_id_change() {
     let app = super::recovery::hosted(&c, Recording::default());
     // TN-55
     assert_eq!(two_channel_cooling(&c, &app, "ann@example.com").await, None);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_rp_id_change(None, "access.test").await.unwrap();
@@ -866,7 +866,7 @@ async fn recovery_starts_only_with_the_nist_classes_and_registered_codes_are_spe
         "regeneration is notified"
     );
     // TN-59
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let stored = t.credentials(cara, "recovery_code").await.unwrap();
@@ -1110,9 +1110,9 @@ async fn delete_now(c: &super::management::Console, subject: [u8; 16]) {
     use access_identity_account::ports::{AccountDb as _, AccountTx as _};
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let v = super::recovery::vault_of(c);
-    let realm = access_identity_account::app::Realm {
+    let environment = access_identity_account::app::Environment {
         tenant: c.route.tenant,
-        realm: c.route.realm,
+        environment: c.route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
@@ -1122,10 +1122,13 @@ async fn delete_now(c: &super::management::Console, subject: [u8; 16]) {
     };
     let db =
         access_identity_account::adapters::pg::PgAccounts::sealed(c.w.db.app.clone(), v.clone());
-    let mut tx = db.begin(realm.tenant, realm.realm).await.unwrap();
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await
+        .unwrap();
     request_deletion(
         &mut tx,
-        &realm,
+        &environment,
         subject,
         DeletionSource::SelfService,
         None,
@@ -1135,7 +1138,7 @@ async fn delete_now(c: &super::management::Console, subject: [u8; 16]) {
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    assert_eq!(tombstone_due(&db, &realm, &who).await.unwrap(), 1);
+    assert_eq!(tombstone_due(&db, &environment, &who).await.unwrap(), 1);
 }
 
 type Start = (StatusCode, Option<u64>, String, Vec<String>);
@@ -1236,9 +1239,9 @@ async fn a_contact_code_is_extended_once_by_a_day_before_it_runs_out() {
     let id = <[u8; 16]>::try_from(b64url_decode(&attempt).unwrap()).unwrap();
     let expiry = |c: &super::management::Console| {
         let db = c.w.db.app.clone();
-        let (tenant, realm) = (c.route.tenant, c.route.realm);
+        let (tenant, environment) = (c.route.tenant, c.route.environment);
         async move {
-            let mut t = TenantTx::begin(&db, tenant, realm).await.unwrap();
+            let mut t = TenantTx::begin(&db, tenant, environment).await.unwrap();
             let e = t.recovery_evidence(id).await.unwrap();
             t.commit().await.unwrap();
             e.into_iter().map(|e| e.expires_ms).collect::<Vec<_>>()

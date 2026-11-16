@@ -47,9 +47,15 @@ fn refused(r: McpRefusal) -> Response {
     // OP-67
     tracing::info!(event = "proxy.check.refused", engine = "mcp", reason = %r, "MCP gateway request refused");
     match r {
-        McpRefusal::Unregistered => codes::realm::PROXY_UNREGISTERED.problem().into_response(),
-        McpRefusal::Malformed(_) => codes::realm::INVALID_MCP_CALL.problem().into_response(),
-        McpRefusal::Blocked(_) => codes::realm::MCP_TOOL_UNPINNED.problem().into_response(),
+        McpRefusal::Unregistered => codes::environment::PROXY_UNREGISTERED
+            .problem()
+            .into_response(),
+        McpRefusal::Malformed(_) => codes::environment::INVALID_MCP_CALL
+            .problem()
+            .into_response(),
+        McpRefusal::Blocked(_) => codes::environment::MCP_TOOL_UNPINNED
+            .problem()
+            .into_response(),
         McpRefusal::Unavailable => {
             let mut res = codes::UNAVAILABLE.problem().into_response();
             res.headers_mut().insert(

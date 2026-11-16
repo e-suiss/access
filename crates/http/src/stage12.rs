@@ -1,5 +1,5 @@
-//! The Stage 12 routes outside the realm-admin and Frontend API manifests, declared before
-//! their lanes serve them (OP-157 m.4 (a)). Every Stage 12 route is a realm-admin or Frontend API
+//! The Stage 12 routes outside the environment-admin and Frontend API manifests, declared before
+//! their lanes serve them (OP-157 m.4 (a)). Every Stage 12 route is an environment-admin or Frontend API
 //! row today; a lane that needs another appends it here and serves it from its own handler.
 
 use axum::Router;

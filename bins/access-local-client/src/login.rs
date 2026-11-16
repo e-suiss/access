@@ -22,7 +22,7 @@ use crate::passkey::Passkey;
 /// What the test user signs in with after the identifier.
 #[derive(Clone, Copy)]
 pub enum Credential<'a> {
-    /// The password (AAL1); with a passkey, it answers the second factor the realm asks for
+    /// The password (AAL1); with a passkey, it answers the second factor the environment asks for
     /// once the account holds one (IDP-8).
     Password(&'a str, Option<&'a Passkey<'a>>),
     /// The software passkey (AAL2, phishing-resistant).
@@ -31,7 +31,7 @@ pub enum Credential<'a> {
 
 /// What a sign-in needs.
 pub struct Login<'a> {
-    /// The realm issuer, e.g. `https://access-server:8443/realms/acme`.
+    /// The environment issuer, e.g. `https://access-server:8443/env/acme`.
     pub issuer: &'a str,
     /// The public client's `client_id`.
     pub client_id: &'a str,
@@ -276,7 +276,7 @@ pub async fn attach_device(
 }
 
 /// RFC 6749 §4.1.1: without a session the browser is sent to the hosted login; the `return_to`
-/// it carries names only this realm's stored request (X41).
+/// it carries names only this environment's stored request (X41).
 async fn authorize(
     http: &Http,
     l: &Login<'_>,
@@ -322,7 +322,7 @@ fn passkey_challenge(step: &Value) -> Option<Vec<u8>> {
 
 /// The hosted login's JSON steps (TN-96, TN-132): start, identify, then the password or a
 /// passkey assertion over the step's challenge; each step's `action` is a path under the
-/// realm, as the login page uses it. The jar comes back with the session cookie.
+/// environment, as the login page uses it. The jar comes back with the session cookie.
 ///
 /// # Errors
 /// [`ClientError`]; a refused factor is [`ClientError::Unexpected`] with what Access said.

@@ -9,7 +9,7 @@ use access_store::audit::AuditEvent;
 use access_store::identity::TenantTx;
 use access_store::relay::Resend;
 
-use crate::app::{Actor, Realm};
+use crate::app::{Actor, Environment};
 use crate::notify::NotifyError;
 use crate::notify::envelope::{EventId, Header, parse, seal};
 use crate::notify::message::KIND_PREFIX;
@@ -22,7 +22,7 @@ pub const AUDIT_EVENT: &str = "relay.resent";
 /// Why a message was not resent.
 #[derive(Debug, thiserror::Error)]
 pub enum ResendError {
-    /// No undeliverable message with that id in the realm.
+    /// No undeliverable message with that id in the environment.
     #[error("no such undeliverable message")]
     NotFound,
     /// The subject's key was shredded; the content is gone (OP-73).
@@ -49,13 +49,13 @@ impl From<access_store::StoreError> for ResendError {
 /// [`ResendError`]; the caller rolls `tx` back.
 pub async fn resend(
     tx: &mut TenantTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     entropy: &(dyn Entropy + Sync),
     clock: &(dyn Clock + Sync),
     original: EventId,
     who: &Actor<'_>,
 ) -> Result<EventId, ResendError> {
-    if tx.tenant() != realm.tenant || tx.realm() != Some(realm.realm) {
+    if tx.tenant() != environment.tenant || tx.environment() != Some(environment.environment) {
         return Err(ResendError::NotFound);
     }
     let recorded = tx
@@ -70,7 +70,7 @@ pub async fn resend(
     }
     let payload = recorded.payload.ok_or(ResendError::NotFound)?;
     let env = parse(&payload).map_err(|_| ResendError::NotFound)?;
-    let dek = match recipient_key(realm, tx, env.header.subject).await {
+    let dek = match recipient_key(environment, tx, env.header.subject).await {
         Ok(d) => d,
         Err(NotifyError::NoSubject) => return Err(ResendError::Shredded),
         Err(e) => return Err(e.into()),

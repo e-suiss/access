@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_transfers SET cancelled_at = clock_timestamp(), cancelled_by = $4\n                WHERE tenant_id = $1 AND environment_id = $2 AND transfer_id = $3\n                  AND cancelled_at IS NULL AND completed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "344aaff8396142aca261c00538f47630cc29b08e549c2fb408952b4d9eda1365"
+}

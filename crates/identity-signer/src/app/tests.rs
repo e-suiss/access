@@ -1,4 +1,4 @@
-//! The realm key set over simulated time, its tokens checked by the Kernel's JWS verifier
+//! The environment key set over simulated time, its tokens checked by the Kernel's JWS verifier
 //! against the JWKS as a relying party reads it.
 
 #![allow(
@@ -22,7 +22,7 @@ const MINUTE: u64 = 60_000;
 const HOUR: u64 = 60 * MINUTE;
 const DAY: u64 = 24 * HOUR;
 const TYP: &str = "at+jwt";
-const LEAD: u64 = Policy::REALM.publish_lead_ms;
+const LEAD: u64 = Policy::ENVIRONMENT.publish_lead_ms;
 
 struct Factory {
     down: bool,
@@ -137,7 +137,7 @@ fn advance(ring: &mut Keyring, factory: &mut Factory, from: u64, to: u64, step: 
 #[test]
 fn tokens_verify_against_the_jwks() {
     for (alg, kty) in [(JwsAlg::Es256, "EC"), (JwsAlg::Ed25519, "OKP")] {
-        let mut ring = Keyring::new(alg, Policy::REALM).unwrap();
+        let mut ring = Keyring::new(alg, Policy::ENVIRONMENT).unwrap();
         let mut factory = Factory { down: false };
         advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
         let signed = ring.sign(TYP, br#"{"sub":"u1"}"#, LEAD).unwrap();
@@ -162,7 +162,7 @@ fn tokens_verify_against_the_jwks() {
 // CR-59, CR-25, SAI-46, CR-23
 #[test]
 fn the_founding_key_signs_before_the_lead_and_the_second_does_not() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     let early = LEAD - MINUTE;
     advance(&mut ring, &mut factory, 0, early, MINUTE);
@@ -202,7 +202,7 @@ fn the_founding_key_signs_before_the_lead_and_the_second_does_not() {
 // CR-25, CR-27, CR-59, SAI-46, MD-6
 #[test]
 fn rotation_runs_without_gaps() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     let mut first_seen: BTreeMap<String, u64> = BTreeMap::new();
     let mut signing_kids = BTreeSet::new();
@@ -246,7 +246,7 @@ fn rotation_runs_without_gaps() {
 // CR-26, CR-27
 #[test]
 fn a_retiring_key_still_verifies() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
     let first = ring.sign(TYP, b"{}", LEAD).unwrap().kid;
@@ -291,7 +291,7 @@ fn a_retiring_key_still_verifies() {
 // CR-23, G42
 #[test]
 fn an_outage_signs_to_the_window_end_then_refuses() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
     factory.down = true;
@@ -342,7 +342,7 @@ fn artifacts_are_cose_signed_with_the_jwks_key() {
     )
     .unwrap();
     for alg in [JwsAlg::Es256, JwsAlg::Ed25519] {
-        let mut ring = Keyring::new(alg, Policy::REALM).unwrap();
+        let mut ring = Keyring::new(alg, Policy::ENVIRONMENT).unwrap();
         let mut factory = Factory { down: false };
         advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
         let (sign1, kid) = ring.sign_cose(CT, &payload, LEAD).unwrap();
@@ -365,7 +365,7 @@ fn artifacts_are_cose_signed_with_the_jwks_key() {
 // TN-118, MD-6, CR-25, CR-59, SAI-46
 #[test]
 fn a_decided_rotation_uses_the_ready_backup() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     let early = LEAD - MINUTE;
     advance(&mut ring, &mut factory, 0, early, MINUTE);
@@ -412,7 +412,7 @@ fn a_decided_rotation_uses_the_ready_backup() {
 // §13.2, CR-23, MD-7, OP-73
 #[test]
 fn an_emergency_drop_ends_a_key_at_once() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     let early = LEAD - MINUTE;
     advance(&mut ring, &mut factory, 0, early, MINUTE);
@@ -446,12 +446,12 @@ fn an_emergency_drop_ends_a_key_at_once() {
 // TN-118, CR-26
 #[test]
 fn a_decided_policy_is_checked() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
-    let mut shorter = Policy::REALM;
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
+    let mut shorter = Policy::ENVIRONMENT;
     shorter.lifetime_ms = TOKEN_MAX_MS;
     assert_eq!(ring.set_policy(shorter), Err(PolicyError::Lifetime));
-    assert_eq!(ring.policy(), Policy::REALM);
-    let mut faster = Policy::REALM;
+    assert_eq!(ring.policy(), Policy::ENVIRONMENT);
+    let mut faster = Policy::ENVIRONMENT;
     faster.lifetime_ms = 30 * DAY;
     faster.window_ms = 60 * DAY;
     assert_eq!(ring.set_policy(faster), Ok(()));
@@ -461,8 +461,8 @@ fn a_decided_policy_is_checked() {
 // §10.4.5, §12.1.2, TI-RT6
 // TNI-2
 #[test]
-fn a_realm_key_refuses_authority_tokens() {
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+fn a_environment_key_refuses_authority_tokens() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut factory = Factory { down: false };
     advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
     let authority =

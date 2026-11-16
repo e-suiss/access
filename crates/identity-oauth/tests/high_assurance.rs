@@ -21,7 +21,7 @@ mod support;
 
 use access_crypto::AwsLcBackend;
 use access_identity_oauth::app::oauth::Reply;
-use access_identity_oauth::domain::jwt::realm_key_set;
+use access_identity_oauth::domain::jwt::environment_key_set;
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::oauth::TokenSigner as _;
 use access_identity_oauth::ports::profile::{CertificateNames, CertificateRefused};
@@ -94,7 +94,7 @@ async fn par(a: &At<'_>, extra: &[(&str, &str)], chain: &[Vec<u8>]) -> Reply {
     pairs.extend_from_slice(extra);
     let proof = a.proof("POST", &format!("{}/par", a.issuer()), None);
     a.oauth()
-        .par_mtls(a.realm(), &params(&pairs), None, &[&proof], chain)
+        .par_mtls(a.environment(), &params(&pairs), None, &[&proof], chain)
         .await
 }
 
@@ -103,7 +103,7 @@ async fn redeem(a: &At<'_>, client: &str, uri: &str) -> String {
     location(
         &a.oauth()
             .authorize(
-                a.realm(),
+                a.environment(),
                 &params(&[("client_id", client), ("request_uri", uri)]),
                 Some(&cookie),
             )
@@ -128,9 +128,15 @@ async fn keyed_exchange(a: &At<'_>, code: &str, dpop: bool) -> Reply {
     }
 }
 
-async fn realm_jws(a: &At<'_>, token: &str, typ: &str) -> Value {
-    let jwks = a.oauth().env().signer.jwks(a.realm().realm).await.unwrap();
-    let keys = realm_key_set(jwks.as_bytes()).unwrap();
+async fn environment_jws(a: &At<'_>, token: &str, typ: &str) -> Value {
+    let jwks = a
+        .oauth()
+        .env()
+        .signer
+        .jwks(a.environment().environment)
+        .await
+        .unwrap();
+    let keys = environment_key_set(jwks.as_bytes()).unwrap();
     let v = verify_compact(&AwsLcBackend, token, &keys, typ, Origin::Native).unwrap();
     serde_json::from_slice(&v.payload).unwrap()
 }
@@ -170,7 +176,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
             .await,
     );
     assert!(query_opt(&to, "error").is_none(), "{to}");
-    let refused = realm_jws(&a, &query(&to, "response"), "JWT").await;
+    let refused = environment_jws(&a, &query(&to, "response"), "JWT").await;
     assert_eq!(refused["error"], "invalid_request", "{refused}");
     assert_eq!(refused["aud"], a.f.keyed.as_str());
 
@@ -192,7 +198,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
     let to = redeem(&a, &a.f.keyed, pushed["request_uri"].as_str().unwrap()).await;
     assert!(query_opt(&to, "code").is_none(), "{to}");
     let response = query(&to, "response");
-    let jarm = realm_jws(&a, &response, "JWT").await;
+    let jarm = environment_jws(&a, &response, "JWT").await;
     assert_eq!(jarm["iss"], a.issuer());
     assert_eq!(jarm["aud"], a.f.keyed.as_str());
     assert_eq!(jarm["state"], "st");
@@ -225,7 +231,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
     // TN-27
     let pushed = body(&par(&a, &[("request", object.as_str())], &[]).await, 201);
     let to = redeem(&a, &a.f.keyed, pushed["request_uri"].as_str().unwrap()).await;
-    let jarm = realm_jws(&a, &query(&to, "response"), "JWT").await;
+    let jarm = environment_jws(&a, &query(&to, "response"), "JWT").await;
     let unbound = keyed_exchange(&a, jarm["code"].as_str().unwrap(), false).await;
     assert_eq!(error(&unbound), "invalid_dpop_proof");
 
@@ -293,13 +299,13 @@ async fn request_objects_follow_the_client_allowlist() {
     body(&par(&a, &[("request", es256.as_str())], &[]).await, 201);
 
     // OP-155 m.3 (k)
-    let realm_key = agreement::PrivateKey::generate(&ECDH_P256).unwrap();
-    let realm_public = realm_key.compute_public_key().unwrap();
-    let to = access_crypto::jwe::RecipientKey::P256(realm_public.as_ref().to_vec());
+    let environment_key = agreement::PrivateKey::generate(&ECDH_P256).unwrap();
+    let environment_public = environment_key.compute_public_key().unwrap();
+    let to = access_crypto::jwe::RecipientKey::P256(environment_public.as_ref().to_vec());
     let encrypted = access_crypto::jwe::encrypt(&to, None, Some("JWT"), es256.as_bytes()).unwrap();
     let refused = par(&a, &[("request", encrypted.as_str())], &[]).await;
     assert_eq!(error(&refused), "invalid_request_object");
-    let der: aws_lc_rs::encoding::EcPrivateKeyRfc5915Der<'_> = realm_key.as_der().unwrap();
+    let der: aws_lc_rs::encoding::EcPrivateKeyRfc5915Der<'_> = environment_key.as_der().unwrap();
     *a.c.oauth.env().request_keys.0.lock().unwrap() = Some(der.as_ref().to_vec());
     body(&par(&a, &[("request", encrypted.as_str())], &[]).await, 201);
 }
@@ -359,11 +365,11 @@ async fn jarm_and_jwe_reach_the_client_only() {
         &a.authorize(&[("response_mode", "jwt")], Some(&cookie))
             .await,
     );
-    let jarm = realm_jws(&a, &open(decrypt(), &query(&to, "response")), "JWT").await;
+    let jarm = environment_jws(&a, &open(decrypt(), &query(&to, "response")), "JWT").await;
     assert_eq!(jarm["aud"], a.f.public.as_str());
     let code = jarm["code"].as_str().unwrap().to_owned();
     let t = body(&a.exchange(&code).await, 200);
-    let id = realm_jws(&a, &open(decrypt(), t["id_token"].as_str().unwrap()), "JWT").await;
+    let id = environment_jws(&a, &open(decrypt(), t["id_token"].as_str().unwrap()), "JWT").await;
     assert_eq!(id["aud"], a.f.public.as_str());
     assert_eq!(id["nonce"], "n-1");
     let (_, other) = enc_key();
@@ -376,7 +382,7 @@ async fn jarm_and_jwe_reach_the_client_only() {
     let Reply::Jwt { body: jwe, .. } = r else {
         panic!("{r:?}");
     };
-    let info = realm_jws(&a, &open(decrypt(), &jwe), "JWT").await;
+    let info = environment_jws(&a, &open(decrypt(), &jwe), "JWT").await;
     assert_eq!(info["aud"], a.f.public.as_str());
     assert_eq!(info["iss"], a.issuer());
 
@@ -417,7 +423,7 @@ async fn rsa_oaep_256_is_a_client_opt_in() {
         .unwrap();
     let t = a.tokens().await;
     let key = access_crypto::jwe::DecryptKey::rsa(pair.as_der().unwrap().as_ref()).unwrap();
-    let id = realm_jws(&a, &open(key, t["id_token"].as_str().unwrap()), "JWT").await;
+    let id = environment_jws(&a, &open(key, t["id_token"].as_str().unwrap()), "JWT").await;
     assert_eq!(id["aud"], a.f.public.as_str());
     let header: Value = serde_json::from_slice(
         &b64url_decode(t["id_token"].as_str().unwrap().split('.').next().unwrap()).unwrap(),
@@ -547,7 +553,7 @@ async fn mutual_tls_clients_bind_their_tokens_to_the_certificate() {
             let proof = a.proof("GET", &uri, Some(&access));
             a.oauth()
                 .userinfo_mtls(
-                    a.realm(),
+                    a.environment(),
                     "GET",
                     Some(&format!("{scheme} {access}")),
                     &[&proof],
@@ -704,7 +710,7 @@ async fn client_secret_jwt_uses_the_sealed_secret() {
     let profile = ClientProfileRow {
         legacy_auth: Some(String::from("client_secret_jwt")),
         jwt_secret: Some(SealedJwtSecret {
-            kek_id: String::from("realm-kek:1"),
+            kek_id: String::from("environment-kek:1"),
             wrapped: access_crypto::random::bytes::<40>().unwrap().to_vec(),
             nonce: access_crypto::random::bytes::<12>().unwrap().to_vec(),
             ciphertext,
@@ -792,7 +798,12 @@ async fn the_legacy_bearer_exception_is_one_clients() {
         let a = a.clone();
         async move {
             a.oauth()
-                .userinfo(a.realm(), "GET", Some(&format!("Bearer {access}")), &[])
+                .userinfo(
+                    a.environment(),
+                    "GET",
+                    Some(&format!("Bearer {access}")),
+                    &[],
+                )
                 .await
         }
     };
@@ -886,7 +897,7 @@ async fn an_unknown_kid_refetches_once_then_refuses() {
 
 // IDP-24, §10.4.6, Ek B 5096
 #[tokio::test]
-async fn front_channel_logout_is_a_realm_and_client_opt_in() {
+async fn front_channel_logout_is_an_environment_and_client_opt_in() {
     let c = Cluster::new(&["ha-fcl"]).await;
     let a = c.at(0);
     let profile = ClientProfileRow {
@@ -929,7 +940,13 @@ async fn front_channel_logout_is_a_realm_and_client_opt_in() {
 async fn rs256_identity_assertions_are_a_client_opt_in() {
     let c = Cluster::new(&["ha-rs"]).await;
     let a = c.at(0);
-    let before = a.oauth().env().signer.jwks(a.realm().realm).await.unwrap();
+    let before = a
+        .oauth()
+        .env()
+        .signer
+        .jwks(a.environment().environment)
+        .await
+        .unwrap();
     assert!(!before.contains(r#""kty":"RSA""#));
     let without_opt_in = ClientProfileRow {
         id_token_alg: Some(String::from("RS256")),
@@ -976,8 +993,15 @@ async fn rs256_identity_assertions_are_a_client_opt_in() {
     )
     .unwrap();
     assert_eq!(access["alg"], "ES256");
-    let jwks: Value =
-        serde_json::from_str(&a.oauth().env().signer.jwks(a.realm().realm).await.unwrap()).unwrap();
+    let jwks: Value = serde_json::from_str(
+        &a.oauth()
+            .env()
+            .signer
+            .jwks(a.environment().environment)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     let rsa = jwks["keys"]
         .as_array()
         .unwrap()
@@ -1001,7 +1025,7 @@ async fn rs256_identity_assertions_are_a_client_opt_in() {
 
 // TN-14, Ek B 5095
 #[tokio::test]
-async fn userinfo_can_be_signed_by_the_realm_key() {
+async fn userinfo_can_be_signed_by_the_environment_key() {
     let c = Cluster::new(&["ha-ui"]).await;
     let a = c.at(0);
     let profile = ClientProfileRow {
@@ -1014,7 +1038,7 @@ async fn userinfo_can_be_signed_by_the_realm_key() {
     let Reply::Jwt { body: jwt, .. } = r else {
         panic!("{r:?}");
     };
-    let info = realm_jws(&a, &jwt, "JWT").await;
+    let info = environment_jws(&a, &jwt, "JWT").await;
     assert_eq!(info["iss"], a.issuer());
     assert_eq!(info["aud"], a.f.public.as_str());
     assert!(info["sub"].is_string());
@@ -1135,7 +1159,7 @@ async fn introspection_answers_as_a_signed_jwt_when_asked() {
             let assertion = a.assertion(a.issuer());
             a.oauth()
                 .introspect_as(
-                    a.realm(),
+                    a.environment(),
                     &params(&[
                         ("token", token.as_str()),
                         ("client_assertion_type", JWT_BEARER),
@@ -1157,7 +1181,7 @@ async fn introspection_answers_as_a_signed_jwt_when_asked() {
         panic!("{r:?}");
     };
     assert_eq!(media, "application/token-introspection+jwt");
-    let answer = realm_jws(&a, &jwt, "token-introspection+jwt").await;
+    let answer = environment_jws(&a, &jwt, "token-introspection+jwt").await;
     assert_eq!(answer["aud"], a.f.keyed.as_str());
     assert_eq!(answer["iss"], a.issuer());
     assert_eq!(answer["token_introspection"]["active"], true);
@@ -1193,7 +1217,7 @@ impl access_identity_x509::ports::CaTrust for Accepts {
 
 // RFC 8705 §2.1, MD-8, OP-155 m.3 (k), (m), Ek B 4692, 4713
 #[tokio::test]
-async fn pki_clients_go_through_the_realm_ca_and_revocation() {
+async fn pki_clients_go_through_the_environment_ca_and_revocation() {
     use access_identity_oauth::adapters::certificates::X509ClientCertificates;
     use access_identity_x509::testing::{Ca, LeafSpec, serial};
     let c = Cluster::new(&["ha-pki"]).await;
@@ -1225,11 +1249,14 @@ async fn pki_clients_go_through_the_realm_ca_and_revocation() {
         ))
     };
     {
-        let mut tx =
-            access_store::identity::TenantTx::begin(&a.c.db.app, a.realm().tenant, a.realm().realm)
-                .await
-                .unwrap();
-        let b = a.bound(&mut tx, "idp.realm.certificate_login").await;
+        let mut tx = access_store::identity::TenantTx::begin(
+            &a.c.db.app,
+            a.environment().tenant,
+            a.environment().environment,
+        )
+        .await
+        .unwrap();
+        let b = a.bound(&mut tx, "idp.environment.certificate_login").await;
         tx.put_certificate_login(
             &b,
             &access_store::certificate::CertificateLoginRow {

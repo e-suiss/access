@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environment_domains\n            SET bound_as = $4, bind_pos = $5, bound_at = clock_timestamp()\n          WHERE tenant_id = $1 AND environment_id = $2 AND domain_uuid = $3 AND domain_id = $6\n            AND status = 'verified' AND reverify_by > clock_timestamp() AND bound_as IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c1e52718f229dbcea29d709e387f09f3cfc225b27df58002e9cdf06161bef0de"
+}

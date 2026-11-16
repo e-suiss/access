@@ -1,7 +1,7 @@
 //! The LDAP gateway's calls (§10.6.3, IDP-16, OP-155 m.3 (n)): `authenticate` and
-//! `directory_read`. Every call stays in the gateway's realm (IDP-26). Only the LDAP credential
-//! class binds, never the primary password; SASL EXTERNAL runs the realm's certificate sign-in
-//! rules (§10.2.5). A bind gets a handle and a search page a cookie, both MAC'd with the realm's
+//! `directory_read`. Every call stays in the gateway's environment (IDP-26). Only the LDAP credential
+//! class binds, never the primary password; SASL EXTERNAL runs the environment's certificate sign-in
+//! rules (§10.2.5). A bind gets a handle and a search page a cookie, both MAC'd with the environment's
 //! index key, so neither can be forged or carried to another gateway or another search.
 
 use std::collections::BTreeMap;
@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::{PgAccounts, PgTx};
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::app::hasher::Hasher;
 use access_identity_account::app::ldap::{self, Context};
 use access_identity_account::app::vault::Vault;
@@ -63,7 +63,7 @@ pub struct Certificates {
     pub trust: Arc<dyn CaTrust>,
 }
 
-/// The LDAP calls over the realms' account tables.
+/// The LDAP calls over the environments' account tables.
 pub struct Ldap<V> {
     vaults: V,
     app: Pool,
@@ -127,13 +127,13 @@ impl<V: Vaults> Ldap<V> {
 
     fn vault(&self, g: &Gateway) -> Result<Vault, EdgeError> {
         self.vaults
-            .vault(g.tenant, g.realm)
+            .vault(g.tenant, g.environment)
             .ok_or_else(|| EdgeError::Unavailable(String::from("vault")))
     }
 
     async fn begin(&self, g: &Gateway) -> Result<PgTx, EdgeError> {
         Ok(PgAccounts::sealed(self.app.clone(), self.vault(g)?)
-            .begin(g.tenant, g.realm)
+            .begin(g.tenant, g.environment)
             .await?)
     }
 
@@ -145,7 +145,7 @@ impl<V: Vaults> Ldap<V> {
         }
         let text = format!("access/ldap/{label}/v1:{}", hex(&m));
         self.vault(g)?
-            .index_of(g.tenant.as_bytes(), g.realm.as_bytes(), &text)
+            .index_of(g.tenant.as_bytes(), g.environment.as_bytes(), &text)
             .map_err(|_| EdgeError::Unavailable(String::from("vault")))
     }
 
@@ -262,7 +262,7 @@ impl<V: Vaults> Ldap<V> {
     }
 
     /// `authenticate`: one LDAP bind (§10.6.3). A simple bind needs an LDAP credential, as
-    /// `dn=token` or under its holder's DN; SASL EXTERNAL needs a client certificate the realm's
+    /// `dn=token` or under its holder's DN; SASL EXTERNAL needs a client certificate the environment's
     /// certificate sign-in accepts. An unknown name and a wrong secret answer the same.
     ///
     /// # Errors
@@ -272,7 +272,7 @@ impl<V: Vaults> Ldap<V> {
         g: &Gateway,
         q: &Authenticate,
     ) -> Result<Authenticated, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         match q.mechanism {
             Mechanism::Simple => self.simple(g, q).await,
             Mechanism::External => self.external(g, q).await,
@@ -311,13 +311,13 @@ impl<V: Vaults> Ldap<V> {
         };
         let now = tx.server_time().await?;
         let secret = if q.rotate {
-            let realm = Realm {
+            let environment = Environment {
                 tenant: g.tenant,
-                realm: g.realm,
+                environment: g.environment,
                 kek: &*self.vault(g)?.kek,
                 ids: &self.ids,
             };
-            let notifier = OutboxNotifier::new(&realm, &*self.entropy, &*self.clock);
+            let notifier = OutboxNotifier::new(&environment, &*self.entropy, &*self.clock);
             let actor = g.uri.uri();
             let cx = Context {
                 actor: &actor,
@@ -441,7 +441,7 @@ impl<V: Vaults> Ldap<V> {
         .await
     }
 
-    /// `directory_read`: one page of a search of the realm's tree on behalf of a live bind
+    /// `directory_read`: one page of a search of the environment's tree on behalf of a live bind
     /// (§10.6.3). A paging cookie belongs to its search and lives 10 minutes; the search returns
     /// at most 5000 entries and takes at most 10 s.
     ///
@@ -453,7 +453,7 @@ impl<V: Vaults> Ldap<V> {
         g: &Gateway,
         q: &DirectoryRead,
     ) -> Result<DirectoryPage, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         match tokio::time::timeout(TIME_LIMIT, self.read(g, q)).await {
             Ok(page) => page,
             Err(_) => Ok(DirectoryPage {
@@ -584,7 +584,7 @@ impl<V: Vaults> Ldap<V> {
                 .await?
                 .into_iter()
                 .map(|r| Group {
-                    uuid: group_uuid(g.tenant.as_bytes(), g.realm.as_bytes(), &r.name),
+                    uuid: group_uuid(g.tenant.as_bytes(), g.environment.as_bytes(), &r.name),
                     members: members
                         .iter()
                         .filter(|(n, _)| *n == r.name)

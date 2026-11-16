@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_certificate_login_settings\n               (tenant_id, environment_id, version, enabled, rule, anchors, piv_policies, domain_id,\n                decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.idp_certificate_login_settings\n                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                    $3, $4, $5, $6, $7, $8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Text",
+        "ByteaArray",
+        "TextArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d4149bd321227d923913caad42b31928bd290f62c4b3c94364cd0d4d977053ae"
+}

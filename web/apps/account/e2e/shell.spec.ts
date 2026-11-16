@@ -7,7 +7,7 @@ test("without a session the shell offers sign-in and shows no data", async ({ pa
   expect(bff.seen.filter((s) => s.path.includes("/v1/account/"))).toEqual([]);
 });
 
-test("the realm's name is the brand; the Account section runs on the cookie alone", async ({
+test("the environment's name is the brand; the Account section runs on the cookie alone", async ({
   page,
   bff,
   context,

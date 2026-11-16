@@ -9,7 +9,7 @@ use serde_json::Value;
 use suiss_crypto::digest::context_digest;
 
 use crate::app::oauth::authority::{Asked, projected_body};
-use crate::app::oauth::{Env, OAuth, Realm, Reply};
+use crate::app::oauth::{Env, Environment, OAuth, Reply};
 use crate::domain::authority::{DETAILS_PARAM, EXERCISE_PARAM};
 use crate::domain::client::Client;
 use crate::domain::dpop::Jkt;
@@ -41,7 +41,7 @@ impl<E: Env> OAuth<E> {
     /// token endpoint, used once.
     pub(crate) async fn saml_subject(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         assertion: &str,
         now: u64,
@@ -49,11 +49,11 @@ impl<E: Env> OAuth<E> {
         let Some(upstream) = client.profile.saml_bearer.as_deref() else {
             return Ok(Err(SamlRefusal::NotAllowed));
         };
-        let audience = realm.issuer.endpoint(Endpoint::Token.path());
+        let audience = environment.issuer.endpoint(Endpoint::Token.path());
         let subject = match self
             .env
             .saml_assertions()
-            .verify(realm.realm, upstream, assertion, &audience, now)
+            .verify(environment.environment, upstream, assertion, &audience, now)
             .await?
         {
             Ok(s) if s.not_on_or_after_ms > now => s,
@@ -70,7 +70,7 @@ impl<E: Env> OAuth<E> {
         let day = u32::try_from(subject.not_on_or_after_ms / DAY_MS).map_err(|_| Unavailable)?;
         match self
             .env
-            .replay(realm.tenant, realm.realm)
+            .replay(environment.tenant, environment.environment)
             .first_use(day, key)
             .await
         {
@@ -85,7 +85,7 @@ impl<E: Env> OAuth<E> {
     /// (MD-18, EI-6), bound to `jkt`.
     pub(crate) async fn saml_bearer(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -98,7 +98,10 @@ impl<E: Env> OAuth<E> {
                 "assertion is required",
             ));
         };
-        match self.saml_subject(realm, client, assertion, now).await? {
+        match self
+            .saml_subject(environment, client, assertion, now)
+            .await?
+        {
             Ok(_) => {}
             Err(SamlRefusal::NotAllowed) => {
                 return Ok(Reply::oauth_error(
@@ -118,15 +121,17 @@ impl<E: Env> OAuth<E> {
             authorized: None,
             family: None,
         };
-        Ok(match self.project(realm, client, &asked, jkt).await? {
-            Ok(p) => {
-                let mut body = projected_body(&p, now);
-                if let Value::Object(m) = &mut body {
-                    m.insert("issued_token_type".into(), ACCESS_TOKEN.into());
+        Ok(
+            match self.project(environment, client, &asked, jkt).await? {
+                Ok(p) => {
+                    let mut body = projected_body(&p, now);
+                    if let Value::Object(m) = &mut body {
+                        m.insert("issued_token_type".into(), ACCESS_TOKEN.into());
+                    }
+                    Reply::json(200, &body)
                 }
-                Reply::json(200, &body)
-            }
-            Err(r) => r,
-        })
+                Err(r) => r,
+            },
+        )
     }
 }

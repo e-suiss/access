@@ -66,7 +66,7 @@ fn phc_round_trip_and_rehash() {
 
 // CR-36, OP-33
 #[test]
-fn realms_only_raise() {
+fn environments_only_raise() {
     assert_eq!(
         Argon2Params::CANONICAL,
         Argon2Params {
@@ -75,9 +75,9 @@ fn realms_only_raise() {
             p: 1
         }
     );
-    assert!(Argon2Params::for_realm(7168, 4, 1).is_err());
-    assert!(Argon2Params::for_realm(4096, 5, 1).is_err());
-    assert!(Argon2Params::for_realm(19 * 1024, 5, 1).is_ok());
+    assert!(Argon2Params::for_environment(7168, 4, 1).is_err());
+    assert!(Argon2Params::for_environment(4096, 5, 1).is_err());
+    assert!(Argon2Params::for_environment(19 * 1024, 5, 1).is_ok());
 }
 
 // CR-36, OP-146
@@ -97,7 +97,7 @@ fn salt() -> [u8; 16] {
 
 // CR-15, CR-36, IDP-3, OP-158
 #[test]
-fn a_fips_realm_hashes_with_pbkdf2_not_argon2() {
+fn a_fips_environment_hashes_with_pbkdf2_not_argon2() {
     let pw = Password::new("correct horse battery").unwrap();
     let fips = HashPolicy::of(HashProfile::Standard, true);
     let phc = hash_with(&fips, &pw, &salt()).unwrap();

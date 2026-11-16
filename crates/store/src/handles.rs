@@ -1,6 +1,6 @@
-//! Handles of a realm (E56, OP-156 m.4 Q20): the claim of each, naming the Party and the DID it
+//! Handles of an environment (E56, OP-156 m.4 Q20): the claim of each, naming the Party and the DID it
 //! must point at, and its verification and retirement as rows of their own. A handle is claimed
-//! once per realm and never handed to anyone else. Nothing is deleted (OP-73).
+//! once per environment and never handed to anyone else. Nothing is deleted (OP-73).
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
@@ -9,14 +9,14 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
-/// A handle as the realm keeps it.
+/// A handle as the environment keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HandleRow {
     /// Its id.
@@ -38,7 +38,7 @@ pub struct HandleRow {
 }
 
 impl TenantTx {
-    /// Claims `handle` for `subject`'s `party`; the id, or `None` when the realm has seen the
+    /// Claims `handle` for `subject`'s `party`; the id, or `None` when the environment has seen the
     /// handle before.
     ///
     /// # Errors
@@ -50,14 +50,14 @@ impl TenantTx {
         did: &str,
         kind: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let id = sqlx::query_scalar!(
-            "INSERT INTO access.handles (tenant_id, realm_id, subject_id, party, handle, did, kind)
+            "INSERT INTO access.handles (tenant_id, environment_id, subject_id, party, handle, did, kind)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT DO NOTHING
              RETURNING handle_id",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             party.as_slice(),
             handle,
@@ -80,16 +80,16 @@ impl TenantTx {
         id: [u8; 16],
         event: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.handle_events (tenant_id, realm_id, handle_id, event, handle, kind)
-             SELECT h.tenant_id, h.realm_id, h.handle_id, $5, h.handle, h.kind
+            "INSERT INTO access.handle_events (tenant_id, environment_id, handle_id, event, handle, kind)
+             SELECT h.tenant_id, h.environment_id, h.handle_id, $5, h.handle, h.kind
                FROM access.handles h
-              WHERE h.tenant_id = $1 AND h.realm_id = $2 AND h.handle_id = $3
+              WHERE h.tenant_id = $1 AND h.environment_id = $2 AND h.handle_id = $3
                 AND h.subject_id = $4
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             Uuid::from_bytes(subject),
             event,
@@ -110,23 +110,23 @@ impl TenantTx {
         subject: Option<[u8; 16]>,
         party: Option<[u8; 16]>,
     ) -> Result<Vec<HandleRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             r#"SELECT h.handle_id, h.subject_id, h.party, h.handle, h.did, h.kind,
                       EXISTS (SELECT 1 FROM access.handle_events e
-                               WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id
+                               WHERE e.tenant_id = h.tenant_id AND e.environment_id = h.environment_id
                                  AND e.handle_id = h.handle_id AND e.event = 'verified') AS "verified!",
                       EXISTS (SELECT 1 FROM access.handle_events e
-                               WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id
+                               WHERE e.tenant_id = h.tenant_id AND e.environment_id = h.environment_id
                                  AND e.handle_id = h.handle_id AND e.event = 'retired') AS "retired!"
                  FROM access.handles h
-                WHERE h.tenant_id = $1 AND h.realm_id = $2
+                WHERE h.tenant_id = $1 AND h.environment_id = $2
                   AND ($3::uuid IS NULL OR h.subject_id = $3)
                   AND ($4::bytea IS NULL OR h.party = $4)
                 ORDER BY h.handle_id
                 LIMIT 32"#,
             tenant,
-            realm,
+            environment,
             subject.map(Uuid::from_bytes),
             party.as_ref().map(<[u8; 16]>::as_slice),
         )
@@ -159,10 +159,10 @@ pub async fn suiss_handle_did(router: &PgPool, host: &str) -> Result<Option<Stri
         "SELECT h.did FROM access.handles h
           WHERE h.handle = $1 AND h.kind = 'suiss'
             AND EXISTS (SELECT 1 FROM access.handle_events e
-                         WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id
+                         WHERE e.tenant_id = h.tenant_id AND e.environment_id = h.environment_id
                            AND e.handle_id = h.handle_id AND e.event = 'verified')
             AND NOT EXISTS (SELECT 1 FROM access.handle_events e
-                             WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id
+                             WHERE e.tenant_id = h.tenant_id AND e.environment_id = h.environment_id
                                AND e.handle_id = h.handle_id AND e.event = 'retired')",
         host,
     )

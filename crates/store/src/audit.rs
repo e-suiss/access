@@ -26,8 +26,8 @@ pub struct AuditEvent<'a> {
 pub struct AuditRow {
     /// Tenant.
     pub tenant: [u8; 16],
-    /// Realm.
-    pub realm: [u8; 16],
+    /// Environment.
+    pub environment: [u8; 16],
     /// Unix milliseconds.
     pub at_ms: i64,
     /// Row id.
@@ -66,12 +66,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`]; the business change fails with it.
     pub async fn audit(&mut self, event: &AuditEvent<'_>) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.identity_audit (tenant_id, realm_id, event_type, actor, target, correlation)
+            "INSERT INTO access.identity_audit (tenant_id, environment_id, event_type, actor, target, correlation)
              VALUES ($1, $2, $3, $4, $5, $6)",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             event.event_type,
             event.actor,
             event.target,
@@ -84,14 +84,14 @@ impl TenantTx {
 }
 
 impl TenantTx {
-    /// The realm's newest audit rows (OP-43), up to `limit`; the scope decides what is
+    /// The environment's newest audit rows (OP-43), up to `limit`; the scope decides what is
     /// visible, so a tenant-only scope sees none.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn list_audit(&mut self, limit: u32) -> Result<Vec<AuditRow>, StoreError> {
         let rows = sqlx::query!(
-            r#"SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+            r#"SELECT tenant_id, environment_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
                       xid::text::bigint AS "xid!", event_type, actor, target, correlation
                  FROM access.identity_audit ORDER BY at DESC, id DESC LIMIT $1"#,
             i64::from(limit),
@@ -102,7 +102,7 @@ impl TenantTx {
             .map(|r| {
                 Ok(AuditRow {
                     tenant: *r.tenant_id.as_bytes(),
-                    realm: *r.realm_id.as_bytes(),
+                    environment: *r.environment_id.as_bytes(),
                     at_ms: r.at_ms,
                     id: r.id,
                     xid: unsigned(r.xid)?,
@@ -117,7 +117,7 @@ impl TenantTx {
 }
 
 impl TenantTx {
-    /// The realm's audit rows after row `after`, oldest first, up to `limit` (OP-41: the
+    /// The environment's audit rows after row `after`, oldest first, up to `limit` (OP-41: the
     /// full-taxonomy stream); the scope decides what is visible.
     ///
     /// # Errors
@@ -128,7 +128,7 @@ impl TenantTx {
         limit: u32,
     ) -> Result<Vec<AuditRow>, StoreError> {
         let rows = sqlx::query!(
-            r#"SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+            r#"SELECT tenant_id, environment_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
                       xid::text::bigint AS "xid!", event_type, actor, target, correlation
                  FROM access.identity_audit WHERE id > $1 ORDER BY id LIMIT $2"#,
             after.unwrap_or(0),
@@ -140,7 +140,7 @@ impl TenantTx {
             .map(|r| {
                 Ok(AuditRow {
                     tenant: *r.tenant_id.as_bytes(),
-                    realm: *r.realm_id.as_bytes(),
+                    environment: *r.environment_id.as_bytes(),
                     at_ms: r.at_ms,
                     id: r.id,
                     xid: unsigned(r.xid)?,
@@ -207,7 +207,7 @@ pub async fn pending(
     limit: u32,
 ) -> Result<Vec<AuditRow>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+        r#"SELECT tenant_id, environment_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
                   xid::text::bigint AS "xid!", event_type, actor, target, correlation
              FROM access.identity_audit
             WHERE xid < pg_snapshot_xmin(pg_current_snapshot())
@@ -224,7 +224,7 @@ pub async fn pending(
         .map(|r| {
             Ok(AuditRow {
                 tenant: *r.tenant_id.as_bytes(),
-                realm: *r.realm_id.as_bytes(),
+                environment: *r.environment_id.as_bytes(),
                 at_ms: r.at_ms,
                 id: r.id,
                 xid: unsigned(r.xid)?,

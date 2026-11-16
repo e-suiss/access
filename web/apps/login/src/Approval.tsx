@@ -1,4 +1,4 @@
-// §11.6, P58, EI-18, OP-154 m.3 (k), AS-M14, AG-6, AG-5: the consent screen of a client the realm
+// §11.6, P58, EI-18, OP-154 m.3 (k), AS-M14, AG-6, AG-5: the consent screen of a client the environment
 // did not register is the hosted Approval Surface. It shows the hostnames always and the client's
 // name only as its own claim; approving is the person's own `grant.issue`, signed by their device
 // Instance after the screen showed the Kernel's decoding. It never says Allow and never grants by

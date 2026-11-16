@@ -21,7 +21,7 @@ use axum::routing::post;
 use serde::Deserialize;
 use serde_json::json;
 
-use super::approval::{CSRF_HEADER, json_reply, realm_of, refused, same_origin_json};
+use super::approval::{CSRF_HEADER, environment_of, json_reply, refused, same_origin_json};
 use super::session_cookie;
 use crate::login::Peer;
 
@@ -40,10 +40,10 @@ struct Decide {
     approve: bool,
 }
 
-/// The verification routes, at the host root and under `/realms/{slug}`.
+/// The verification routes, at the host root and under `/env/{slug}`.
 pub(super) fn routes<E: Env>() -> Router<Arc<OAuth<E>>> {
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r
             .route(&format!("{prefix}/v1/device/preview"), post(preview::<E>))
             .route(&format!("{prefix}/v1/device/approval"), post(decide::<E>));
@@ -89,7 +89,8 @@ async fn preview<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await
+    {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -102,7 +103,7 @@ async fn preview<E: Env>(
     let cookie = session_cookie(&headers);
     let ip = peer.map(|Extension(Peer(ip))| ip);
     match s
-        .device_preview(&realm, cookie.as_deref(), &ask.user_code, ip)
+        .device_preview(&environment, cookie.as_deref(), &ask.user_code, ip)
         .await
     {
         Ok(Ok(v)) => {
@@ -138,7 +139,8 @@ async fn decide<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await
+    {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -160,7 +162,7 @@ async fn decide<E: Env>(
     }
     let ip = peer.map(|Extension(Peer(ip))| ip);
     match s
-        .device_decide(&realm, cookie.as_deref(), &d.user_code, d.approve, ip)
+        .device_decide(&environment, cookie.as_deref(), &d.user_code, d.approve, ip)
         .await
     {
         Ok(Ok(())) => json_reply(

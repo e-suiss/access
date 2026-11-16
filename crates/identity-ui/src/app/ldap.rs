@@ -9,14 +9,14 @@ use access_identity_account::app::ldap::{self, Context, Refused};
 use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::ports::Clock;
 use serde_json::{Value, json};
 
 use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Body, Browser, Hosted, Reply};
 use crate::domain::frontend::rfc3339;
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 /// Prefix of an LDAP credential's external id.
 pub const LDAP_CREDENTIAL_PREFIX: &str = "ldc";
@@ -71,10 +71,10 @@ where
 {
     async fn ldap_subject(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         fresh: bool,
-    ) -> Result<(std::sync::Arc<RealmKit>, [u8; 16]), Reply> {
+    ) -> Result<(std::sync::Arc<EnvironmentKit>, [u8; 16]), Reply> {
         let kit = self.kit(entry).await?;
         let (subject, _) = self
             .fresh(&kit, b, fresh.then_some(STEP_UP_MAX_AGE_MS))
@@ -83,14 +83,14 @@ where
     }
 
     /// `GET /v1/account/ldap-credentials`: the person's app passwords; never a password.
-    pub async fn ldap_credentials(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn ldap_credentials(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, subject) = match self.ldap_subject(entry, b, false).await {
             Ok(s) => s,
             Err(r) => return r,
         };
         let read = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let rows = ldap::list(&mut tx, subject).await?;
             tx.commit().await?;
@@ -119,7 +119,7 @@ where
     /// the person's own entry.
     pub async fn create_ldap_credential(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         application: &str,
     ) -> Reply {
@@ -127,12 +127,12 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let realm = kit.realm();
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        let environment = kit.environment();
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let made = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let cx = Context {
                 actor: &actor,
@@ -182,7 +182,7 @@ where
     /// `POST /v1/account/ldap-credentials/{credential}/revoke`: after a recent sign-in.
     pub async fn revoke_ldap_credential(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         credential: &str,
     ) -> Reply {
@@ -193,12 +193,12 @@ where
         let Ok(id) = kit.ids.decode(LDAP_CREDENTIAL_PREFIX, credential) else {
             return Reply::problem(NO_CREDENTIAL);
         };
-        let realm = kit.realm();
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        let environment = kit.environment();
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
         let actor = kit.ids.encode("usr", subject).unwrap_or_default();
         let done = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let cx = Context {
                 actor: &actor,

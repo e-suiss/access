@@ -1,5 +1,5 @@
 // OP-159 m.41, TN-119, OP-151 m.2 M2: platform administration through the admin proxy. Reads are
-// metadata the platform surface names, never a realm's content (INV-29, X31). Every write is drafted
+// metadata the platform surface names, never an environment's content (INV-29, X31). Every write is drafted
 // first (`POST platform/intents`, a read), checked, shown on the signature screen as the Kernel
 // decoded it, and only then signed on the viewer's own basis for the action and sent as one
 // `idp.platform.*` Exercise.
@@ -13,13 +13,13 @@ import { draft } from "./intents.js";
 import { type Basis, basisCbor, type HoldingRef } from "./meta.js";
 
 /** The platform actions (`idp.platform.*`). */
-export type PlatformAction = "tenant_create" | "realm_create" | "sandbox_create";
+export type PlatformAction = "tenant_create" | "environment_create" | "sandbox_create";
 
 /** One platform write the console sends. */
 export interface PlatformChange {
-  readonly operation: "createTenant" | "createRealm" | "createSandboxDomain";
+  readonly operation: "createTenant" | "createEnvironment" | "createSandboxDomain";
   readonly action: PlatformAction;
-  /** The tenant a realm or sandbox domain is created in. */
+  /** The tenant an environment or sandbox domain is created in. */
   readonly tenant?: string;
   readonly path: string;
   readonly body: Readonly<Record<string, unknown>>;
@@ -37,13 +37,13 @@ async function eligibleOn(subject: string, set: unknown): Promise<boolean> {
 }
 
 /**
- * OP-159 m.41 (a), INV-29, IA-5: the basis a platform write is signed on. The realm's root Anchor
+ * OP-159 m.41 (a), INV-29, IA-5: the basis a platform write is signed on. The environment's root Anchor
  * when the viewer is eligible on it; otherwise the first of the viewer's own holdings that names
  * the action and is eligible; otherwise none, and nothing is signed.
  */
 export async function platformBasis(
   instance: Instance,
-  realm: string,
+  environment: string,
   action: PlatformAction,
 ): Promise<Basis | undefined> {
   const subject = instance.party;
@@ -53,7 +53,7 @@ export async function platformBasis(
       instance,
       {
         action: { namespace: "idp.platform", name: action, major: 1 },
-        resources: [{ namespace: "idp", path: [realm] }],
+        resources: [{ namespace: "idp", path: [environment] }],
       },
       "check",
     );
@@ -95,14 +95,14 @@ async function draftPlatform(instance: Instance, c: PlatformChange): Promise<Int
 export async function platformChange(
   instance: Instance,
   confirm: Confirm,
-  realm: string,
+  environment: string,
   c: PlatformChange,
 ): Promise<WriteResult> {
   const d = await draftPlatform(instance, c);
   const asked = { operation: c.operation, method: "POST" as const, path: c.path, body: c.body };
   const keyed = c.tenant === undefined ? asked : { ...asked, key: c.tenant };
   if (!(await draftHolds(instance, keyed, d))) throw new NotSigned("mismatch");
-  const basis = await platformBasis(instance, realm, c.action);
+  const basis = await platformBasis(instance, environment, c.action);
   if (basis === undefined) throw new Problem(403, "exercise-not-allowed", undefined);
   const k = await loadKernel();
   const r = await adminWrite(

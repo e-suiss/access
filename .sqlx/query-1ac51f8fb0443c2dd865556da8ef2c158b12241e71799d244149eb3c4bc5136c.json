@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT refused, used FROM access.environment_quota($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "refused",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "used",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "1ac51f8fb0443c2dd865556da8ef2c158b12241e71799d244149eb3c4bc5136c"
+}

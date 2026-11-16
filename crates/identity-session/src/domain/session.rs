@@ -7,7 +7,7 @@ use core::fmt::Write as _;
 
 use suiss_crypto::digest::sha256;
 
-/// The session cookie: host-only, so it never leaves the realm's own host (TN-17).
+/// The session cookie: host-only, so it never leaves the environment's own host (TN-17).
 pub const SESSION_COOKIE: &str = "__Host-access-session";
 
 /// The device marker cookie (X33).
@@ -31,7 +31,7 @@ pub fn marker_digest(value: &[u8; 32]) -> [u8; 32] {
     sha256(&[MARKER_CONTEXT, value.as_slice()].concat())
 }
 
-/// A realm's session lifetimes (TN-36, PD).
+/// An environment's session lifetimes (TN-36, PD).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SessionPolicy {
     /// Idle timeout: 1 hour to 30 days.

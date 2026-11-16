@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.hr_record_claims (tenant_id, environment_id, source, person, version,\n                    outcome, issued_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df714d9486ca2506dff5234e91a4637ce8051f60569cf235b4c6497a997c6df6"
+}

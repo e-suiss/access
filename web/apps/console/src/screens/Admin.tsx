@@ -110,7 +110,7 @@ function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
     const exact = options(v, own).filter((a) => chosen.has(key(a)));
     const resource = v?.authority.resource ?? {
       namespace: "idp",
-      prefix: [ctx.session.realm],
+      prefix: [ctx.session.environment],
     };
     write(() =>
       metaWrite(ctx.instance, ctx.confirm, ctx.instance.party ?? "", {
@@ -389,12 +389,12 @@ function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
-/** TN-114, OP-157 m.3 (t): the realm's staged opening of meta-action role Grants. */
+/** TN-114, OP-157 m.3 (t): the environment's staged opening of meta-action role Grants. */
 function DelegatedAdmin({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, write] = useRun<WriteResult>();
   const set = (enabled: boolean) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation: "putDelegatedAdmin",
         method: "PUT",
         path: "settings/delegated-admin",
@@ -448,12 +448,12 @@ interface Account {
 }
 
 function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const slug = ctx.session.realm;
+  const slug = ctx.session.environment;
   const [version, setVersion] = useState(0);
   const [l, load] = useRun<{ items: Account[] }>();
   useEffect(() => {
     load(() =>
-      adminGet<{ items: Account[] }>(ctx.instance, `realms/${encodeURIComponent(slug)}/accounts`),
+      adminGet<{ items: Account[] }>(ctx.instance, `envs/${encodeURIComponent(slug)}/accounts`),
     );
   }, [load, ctx.instance, slug, version]);
   const [w, write] = useRun<WriteResult>();
@@ -546,7 +546,7 @@ function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
           run(() =>
             search(ctx.instance, "action", {
               party: who,
-              resource: { namespace: "access.domain", path: [ctx.session.realm] },
+              resource: { namespace: "access.domain", path: [ctx.session.environment] },
             }),
           );
         }}
@@ -802,15 +802,15 @@ interface Surface {
 /** §8.17.9.7, INV-29, §5.13: the domain page; the host holds no authority. */
 export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(() =>
-    adminGet<Surface>(ctx.instance, `realms/${encodeURIComponent(ctx.session.realm)}`),
+    adminGet<Surface>(ctx.instance, `envs/${encodeURIComponent(ctx.session.environment)}`),
   );
   const partners = useLoad(() => sourcesReport(ctx).then((r) => r?.partners ?? []));
   return (
     <>
       <p>{t("domainIntro")}</p>
       <dl className={FACTS}>
-        <dt>{t("domainRealm")}</dt>
-        <dd className={MONO}>{ctx.session.realm}</dd>
+        <dt>{t("domainEnvironment")}</dt>
+        <dd className={MONO}>{ctx.session.environment}</dd>
         <dt>{t("domainId")}</dt>
         <dd className={MONO}>{ctx.session.domain}</dd>
         <dt>{t("domainProvider")}</dt>

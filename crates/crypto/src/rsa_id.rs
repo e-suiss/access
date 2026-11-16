@@ -1,4 +1,4 @@
-//! RS256 in the identity plane only (CR-2, MD-3, MD-6, OP-155 m.3 (k)): the realm's RSA-3072
+//! RS256 in the identity plane only (CR-2, MD-3, MD-6, OP-155 m.3 (k)): the environment's RSA-3072
 //! `rsa-id` key that signs identity assertions for clients that opted in, made on the first
 //! opt-in, and the strict RS256 check of a client's signature. Authority artefacts are never
 //! RSA (G46).
@@ -14,7 +14,7 @@ use zeroize::Zeroizing;
 
 use crate::webauthn::{VerifyError, rsa_key_valid, sha256};
 
-/// The only size of a realm's `rsa-id` key (MD-6).
+/// The only size of an environment's `rsa-id` key (MD-6).
 pub const BITS: usize = 3072;
 
 /// The JOSE `alg` of the key.
@@ -47,7 +47,7 @@ impl RsaIdError {
     }
 }
 
-/// A realm's RSA-3072 identity assertion key.
+/// An environment's RSA-3072 identity assertion key.
 pub struct RsaIdKey {
     pair: KeyPair,
     n: Vec<u8>,

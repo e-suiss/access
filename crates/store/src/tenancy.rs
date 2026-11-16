@@ -1,4 +1,4 @@
-//! Tenants, realms and their hostnames (TN-1, TN-6, MD-5, OP-132): the identity plane's
+//! Tenants, environments and their hostnames (TN-1, TN-6, MD-5, OP-132): the identity plane's
 //! scope rows. Internal ids are `UUIDv7` from the server (MD-18); nothing is deleted, deleted
 //! rows keep their identifiers so they are never reused (INV-32, OP-73).
 
@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::scope::DomainId;
 
 /// Hostname kind (§12.3.8).
@@ -49,19 +49,19 @@ pub async fn create_tenant(app: &PgPool, placement: &str) -> Result<TenantId, St
     Ok(tenant)
 }
 
-/// Creates a realm governed by `domain`, which must belong to the same tenant (MD-5a).
+/// Creates an environment governed by `domain`, which must belong to the same tenant (MD-5a).
 ///
 /// # Errors
-/// [`StoreError`]; a slug already taken, now or by a deleted realm, fails (TN-16, INV-32).
-pub async fn create_realm(
+/// [`StoreError`]; a slug already taken, now or by a deleted environment, fails (TN-16, INV-32).
+pub async fn create_environment(
     t: &mut TenantTx,
     domain: &DomainId,
     slug: &str,
     placement: &str,
-) -> Result<RealmId, StoreError> {
+) -> Result<EnvironmentId, StoreError> {
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO access.realms (tenant_id, governing_domain_id, slug, placement_id)
-           VALUES ($1, $2, $3, $4) RETURNING realm_id AS "id!""#,
+        r#"INSERT INTO access.environments (tenant_id, governing_domain_id, slug, placement_id)
+           VALUES ($1, $2, $3, $4) RETURNING environment_id AS "id!""#,
         Uuid::from_bytes(*t.tenant.as_bytes()),
         domain.as_bytes().as_slice(),
         slug,
@@ -69,20 +69,20 @@ pub async fn create_realm(
     )
     .fetch_one(&mut *t.tx)
     .await?;
-    Ok(RealmId::from_bytes(*id.as_bytes()))
+    Ok(EnvironmentId::from_bytes(*id.as_bytes()))
 }
 
-/// Records that the `idp.platform.*` Exercise `exercise` opened the transaction's realm (TN-110,
+/// Records that the `idp.platform.*` Exercise `exercise` opened the transaction's environment (TN-110,
 /// EI-25), in the transaction that creates it.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn record_provision(t: &mut TenantTx, exercise: &[u8; 32]) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
-        "INSERT INTO access.realm_provisions (tenant_id, realm_id, exercise_id) VALUES ($1, $2, $3)",
+        "INSERT INTO access.environment_provisions (tenant_id, environment_id, exercise_id) VALUES ($1, $2, $3)",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         exercise.as_slice(),
     )
     .execute(&mut *t.tx)
@@ -90,17 +90,17 @@ pub async fn record_provision(t: &mut TenantTx, exercise: &[u8; 32]) -> Result<(
     Ok(())
 }
 
-/// The `idp.platform.*` Exercise that opened the transaction's realm; `None` for a realm no
+/// The `idp.platform.*` Exercise that opened the transaction's environment; `None` for an environment no
 /// provisioning Exercise opened.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn provisioned_by(t: &mut TenantTx) -> Result<Option<[u8; 32]>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let row = sqlx::query_scalar!(
-        "SELECT exercise_id FROM access.realm_provisions WHERE tenant_id = $1 AND realm_id = $2",
+        "SELECT exercise_id FROM access.environment_provisions WHERE tenant_id = $1 AND environment_id = $2",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(&mut *t.tx)
     .await?;
@@ -108,13 +108,13 @@ pub async fn provisioned_by(t: &mut TenantTx) -> Result<Option<[u8; 32]>, StoreE
         .transpose()
 }
 
-/// How many realms the tenant has ever had, deleted ones included.
+/// How many environments the tenant has ever had, deleted ones included.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_count(t: &mut TenantTx) -> Result<u64, StoreError> {
+pub async fn environment_count(t: &mut TenantTx) -> Result<u64, StoreError> {
     let n = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM access.realms WHERE tenant_id = $1"#,
+        r#"SELECT count(*) AS "n!" FROM access.environments WHERE tenant_id = $1"#,
         Uuid::from_bytes(*t.tenant.as_bytes()),
     )
     .fetch_one(&mut *t.tx)
@@ -122,18 +122,21 @@ pub async fn realm_count(t: &mut TenantTx) -> Result<u64, StoreError> {
     u64::try_from(n).map_err(|_| StoreError::Corrupt)
 }
 
-/// Soft-deletes a realm and its hostnames; the realm id and slug stay taken (INV-32).
+/// Soft-deletes an environment and its hostnames; the environment id and slug stay taken (INV-32).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn delete_realm(t: &mut TenantTx, realm: RealmId) -> Result<bool, StoreError> {
+pub async fn delete_environment(
+    t: &mut TenantTx,
+    environment: EnvironmentId,
+) -> Result<bool, StoreError> {
     let tenant = Uuid::from_bytes(*t.tenant.as_bytes());
-    let realm = Uuid::from_bytes(*realm.as_bytes());
+    let environment = Uuid::from_bytes(*environment.as_bytes());
     let done = sqlx::query!(
-        "UPDATE access.realms SET status = 'deleted', deleted_at = now()
-          WHERE tenant_id = $1 AND realm_id = $2 AND status <> 'deleted'",
+        "UPDATE access.environments SET status = 'deleted', deleted_at = now()
+          WHERE tenant_id = $1 AND environment_id = $2 AND status <> 'deleted'",
         tenant,
-        realm,
+        environment,
     )
     .execute(&mut *t.tx)
     .await?
@@ -141,7 +144,7 @@ pub async fn delete_realm(t: &mut TenantTx, realm: RealmId) -> Result<bool, Stor
     Ok(done == 1)
 }
 
-/// Adds a hostname to the transaction's realm.
+/// Adds a hostname to the transaction's environment.
 ///
 /// # Errors
 /// [`StoreError`]; a hostname live elsewhere fails (TN-20).
@@ -150,11 +153,11 @@ pub async fn add_hostname(
     hostname: &str,
     kind: HostKind,
 ) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
-        "INSERT INTO access.realm_hostnames (tenant_id, realm_id, hostname, kind) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO access.environment_hostnames (tenant_id, environment_id, hostname, kind) VALUES ($1, $2, $3, $4)",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         hostname,
         kind.name(),
     )
@@ -163,18 +166,18 @@ pub async fn add_hostname(
     Ok(())
 }
 
-/// Soft-deletes the transaction realm's hostname, freeing it for others (DNS is a lease,
+/// Soft-deletes the transaction environment's hostname, freeing it for others (DNS is a lease,
 /// §12.3.8).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn remove_hostname(t: &mut TenantTx, hostname: &str) -> Result<bool, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let done = sqlx::query!(
-        "UPDATE access.realm_hostnames SET status = 'deleted', deleted_at = now()
-          WHERE tenant_id = $1 AND realm_id = $2 AND hostname = $3 AND status = 'active'",
+        "UPDATE access.environment_hostnames SET status = 'deleted', deleted_at = now()
+          WHERE tenant_id = $1 AND environment_id = $2 AND hostname = $3 AND status = 'active'",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         hostname,
     )
     .execute(&mut *t.tx)
@@ -183,18 +186,18 @@ pub async fn remove_hostname(t: &mut TenantTx, hostname: &str) -> Result<bool, S
     Ok(done == 1)
 }
 
-/// Sets the issuer of the transaction's realm, once: an issuer already set never changes
+/// Sets the issuer of the transaction's environment, once: an issuer already set never changes
 /// (TN-16, §17.9.6). Returns whether this call set it.
 ///
 /// # Errors
 /// [`StoreError`]; a malformed issuer, or a different one than already set, fails.
 pub async fn set_issuer(t: &mut TenantTx, issuer: &str) -> Result<bool, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let done = sqlx::query!(
-        "UPDATE access.realms SET issuer = $3
-          WHERE tenant_id = $1 AND realm_id = $2 AND issuer IS NULL",
+        "UPDATE access.environments SET issuer = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND issuer IS NULL",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         issuer,
     )
     .execute(&mut *t.tx)
@@ -203,20 +206,20 @@ pub async fn set_issuer(t: &mut TenantTx, issuer: &str) -> Result<bool, StoreErr
     Ok(done == 1)
 }
 
-/// A live realm as the router serves it: its slug and the issuer stored on its row.
+/// A live environment as the router serves it: its slug and the issuer stored on its row.
 #[derive(Clone)]
-pub struct RealmRoute {
+pub struct EnvironmentRoute {
     /// The tenant that owns it.
     pub tenant: TenantId,
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// Its slug.
     pub slug: String,
     /// Its issuer.
     pub issuer: String,
 }
 
-/// The live realm with an issuer whose live hostname is `hostname`, read by the router role
+/// The live environment with an issuer whose live hostname is `hostname`, read by the router role
 /// (OP-132 m.3). The hostname is compared in lower case.
 ///
 /// # Errors
@@ -224,82 +227,85 @@ pub struct RealmRoute {
 pub async fn route_by_host(
     router: &PgPool,
     hostname: &str,
-) -> Result<Option<RealmRoute>, StoreError> {
+) -> Result<Option<EnvironmentRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT r.tenant_id, r.realm_id, r.slug, r.issuer AS "issuer!" FROM access.realm_hostnames h
-             JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id
+        r#"SELECT r.tenant_id, r.environment_id, r.slug, r.issuer AS "issuer!" FROM access.environment_hostnames h
+             JOIN access.environments r ON r.tenant_id = h.tenant_id AND r.environment_id = h.environment_id
             WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'
               AND r.issuer IS NOT NULL"#,
         hostname,
     )
     .fetch_optional(router)
     .await?;
-    Ok(row.map(|r| RealmRoute {
+    Ok(row.map(|r| EnvironmentRoute {
         tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-        realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+        environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
         slug: r.slug,
         issuer: r.issuer,
     }))
 }
 
-/// The live realm with an issuer whose slug is `slug`, read by the router role (path
+/// The live environment with an issuer whose slug is `slug`, read by the router role (path
 /// issuers, TN-10).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn route_by_slug(router: &PgPool, slug: &str) -> Result<Option<RealmRoute>, StoreError> {
+pub async fn route_by_slug(
+    router: &PgPool,
+    slug: &str,
+) -> Result<Option<EnvironmentRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
+        r#"SELECT tenant_id, environment_id, slug, issuer AS "issuer!" FROM access.environments
             WHERE slug = $1 AND status = 'active' AND issuer IS NOT NULL"#,
         slug,
     )
     .fetch_optional(router)
     .await?;
-    Ok(row.map(|r| RealmRoute {
+    Ok(row.map(|r| EnvironmentRoute {
         tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-        realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+        environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
         slug: r.slug,
         issuer: r.issuer,
     }))
 }
 
-/// Every live realm with an issuer, read by the router role (start-up checks, §17.9.7).
+/// Every live environment with an issuer, read by the router role (start-up checks, §17.9.7).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
+pub async fn routes(router: &PgPool) -> Result<Vec<EnvironmentRoute>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
+        r#"SELECT tenant_id, environment_id, slug, issuer AS "issuer!" FROM access.environments
             WHERE status = 'active' AND issuer IS NOT NULL ORDER BY slug"#,
     )
     .fetch_all(router)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| RealmRoute {
+        .map(|r| EnvironmentRoute {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             issuer: r.issuer,
         })
         .collect())
 }
 
-/// The live realms with an issuer of `tenants`, by tenant and slug, read by the router role
-/// (OP-149 m.4: the realms of a tenant snapshot).
+/// The live environments with an issuer of `tenants`, by tenant and slug, read by the router role
+/// (OP-149 m.4: the environments of a tenant snapshot).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn tenant_routes(
     router: &PgPool,
     tenants: &[TenantId],
-) -> Result<Vec<RealmRoute>, StoreError> {
+) -> Result<Vec<EnvironmentRoute>, StoreError> {
     let ids: Vec<Uuid> = tenants
         .iter()
         .map(|t| Uuid::from_bytes(*t.as_bytes()))
         .collect();
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
+        r#"SELECT tenant_id, environment_id, slug, issuer AS "issuer!" FROM access.environments
             WHERE tenant_id = ANY($1) AND status = 'active' AND issuer IS NOT NULL
             ORDER BY tenant_id, slug"#,
         &ids,
@@ -308,31 +314,34 @@ pub async fn tenant_routes(
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| RealmRoute {
+        .map(|r| EnvironmentRoute {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             issuer: r.issuer,
         })
         .collect())
 }
 
-/// The tenant of the live realm `realm`, read by the router role (OP-132 m.3): the identity
-/// plane loads a realm's keys after the router has resolved it.
+/// The tenant of the live environment `environment`, read by the router role (OP-132 m.3): the identity
+/// plane loads an environment's keys after the router has resolved it.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_tenant(router: &PgPool, realm: RealmId) -> Result<Option<TenantId>, StoreError> {
+pub async fn environment_tenant(
+    router: &PgPool,
+    environment: EnvironmentId,
+) -> Result<Option<TenantId>, StoreError> {
     let row = sqlx::query_scalar!(
-        "SELECT tenant_id FROM access.realms WHERE realm_id = $1 AND status = 'active'",
-        Uuid::from_bytes(*realm.as_bytes()),
+        "SELECT tenant_id FROM access.environments WHERE environment_id = $1 AND status = 'active'",
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(router)
     .await?;
     Ok(row.map(|t| TenantId::from_bytes(*t.as_bytes())))
 }
 
-/// The live realm a request's `Host` names, read by the router role (OP-132 m.3). The
+/// The live environment a request's `Host` names, read by the router role (OP-132 m.3). The
 /// hostname is compared in lower case.
 ///
 /// # Errors
@@ -340,10 +349,10 @@ pub async fn realm_tenant(router: &PgPool, realm: RealmId) -> Result<Option<Tena
 pub async fn resolve_host(
     router: &PgPool,
     hostname: &str,
-) -> Result<Option<(TenantId, RealmId)>, StoreError> {
+) -> Result<Option<(TenantId, EnvironmentId)>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT h.tenant_id, h.realm_id FROM access.realm_hostnames h
-             JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id
+        r#"SELECT h.tenant_id, h.environment_id FROM access.environment_hostnames h
+             JOIN access.environments r ON r.tenant_id = h.tenant_id AND r.environment_id = h.environment_id
             WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'"#,
         hostname,
     )
@@ -352,7 +361,7 @@ pub async fn resolve_host(
     Ok(row.map(|r| {
         (
             TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            RealmId::from_bytes(*r.realm_id.as_bytes()),
+            EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
         )
     }))
 }

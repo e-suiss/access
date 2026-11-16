@@ -39,7 +39,7 @@ data:
 
     # TN-10, CMP-22b, OP-138
     [identity]
-    realm_base = {{ .Values.realmBase | quote }}
+    environment_base = {{ .Values.environmentBase | quote }}
     signer = "/run/access/identity-signer.sock"
 
     # OP-146 m.12 (f), TN-128: the built hosted login and console in the image
@@ -58,8 +58,8 @@ data:
     relay = "https://relay.access.example"
     management_api = "https://api.access.example"
     products = { work = "https://work.access.example" }
-    # OP-151 m.2 M2: the platform tenant realm governs the platform-admin surface
-    platform_realm = "platform"
+    # OP-151 m.2 M2: the platform tenant environment governs the platform-admin surface
+    platform_environment = "platform"
     # OP-156 m.3 (c): the platform product name Relay's client is registered under
     relay_product = "relay"
     # E42, OP-156 m.3 (c): Access as Relay's platform tenant

@@ -4,7 +4,7 @@
 [[declared]]
 service = "access-product-twin"
 dependency = "Platform client"
-why = "the platform realm's root registers its client with `idp.client.register` (OP-149 m.4); a third-party product is registered the same way"
+why = "the platform environment's root registers its client with `idp.client.register` (OP-149 m.4); a third-party product is registered the same way"
 
 [[declared]]
 service = "access-product-twin"

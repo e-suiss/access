@@ -10,7 +10,7 @@
 //! - A client that does not answer is tried again with backoff; the other clients of the
 //!   notice are not held back. After [`MAX_ATTEMPTS`] the grant is recorded as
 //!   `unreachable` and the courier goes on, so one dead endpoint cannot stop logout for every
-//!   realm.
+//!   environment.
 //! - A refusal that will not change (`4xx`, `501`, an endpoint the SSRF guard refuses, a grant
 //!   or client that is gone) is recorded once and passed; the outbox row stays (OP-73).
 
@@ -219,7 +219,7 @@ where
                         client_status: status,
                     };
                     self.queue
-                        .undelivered(event.tenant, event.realm, &record)
+                        .undelivered(event.tenant, event.environment, &record)
                         .await?;
                     step.undelivered = step.undelivered.saturating_add(1);
                 }
@@ -236,7 +236,7 @@ where
     /// Signs a fresh logout token for `grant` and posts it to its client.
     async fn send(&self, event: &OutboxEvent, grant: [u8; 16]) -> Result<Sent, Unavailable> {
         let now = self.clock.now().map_err(|_| Unavailable)?;
-        let mut tx = self.db.begin(event.tenant, event.realm).await?;
+        let mut tx = self.db.begin(event.tenant, event.environment).await?;
         let Some(g) = tx.grant(grant).await? else {
             tx.commit().await?;
             return Ok(Sent::Passed("missing", None));
@@ -273,7 +273,7 @@ where
         );
         let token = self
             .signer
-            .sign(event.realm, alg, LOGOUT_TYP, &claims, now)
+            .sign(event.environment, alg, LOGOUT_TYP, &claims, now)
             .await?;
         Ok(match self.delivery.post(&uri, &token).await {
             Ok(()) => Sent::Delivered,

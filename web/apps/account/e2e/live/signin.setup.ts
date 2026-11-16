@@ -14,7 +14,7 @@ setup("the bootstrap test user signs in once", async ({ request, baseURL }) => {
   setup.setTimeout(150_000);
   await signIn(request, baseURL ?? "");
   await request.storageState({ path: SESSION });
-  // the realm accepts each TOTP step once: the second sign-in waits for the next one
+  // the environment accepts each TOTP step once: the second sign-in waits for the next one
   const own = await http.newContext({ baseURL: baseURL ?? "", ignoreHTTPSErrors: true });
   await signIn(own, baseURL ?? "");
   await own.storageState({ path: OWN_DEVICE_SESSION });

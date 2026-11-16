@@ -1,5 +1,5 @@
 //! İYS consent records on the real plane and store (IDP-37 (4), B23, E42, OP-156 m.3 (c)): the
-//! realm's `idp.realm.iys` and `idp.realm.preference_topics` through commit, a preference change
+//! environment's `idp.environment.iys` and `idp.environment.preference_topics` through commit, a preference change
 //! that hands Relay one sealed consent record per commercial channel, carried by the courier
 //! into the Relay twin, the event that names the channels and never the address, and Relay's
 //! reports through `POST /relay/v1/iys-status` under its platform client's RFC 7523 assertion,
@@ -13,7 +13,7 @@ use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
 use access_identity_account::app::accounts::{change_status, create};
 use access_identity_account::app::privacy::{self, PreferenceChange};
 use access_identity_account::app::sealing::subject_key;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::notify::courier::Courier;
@@ -23,7 +23,7 @@ use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEnd
 use access_identity_account::notify::message::{Address, Body, IysChannel, IysRecipient};
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
-use access_identity_account::notify::ports::RealmKeys;
+use access_identity_account::notify::ports::EnvironmentKeys;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
 use access_identity_account::testing::relay::RelayTwin;
 use access_identity_admin::domain::Change;
@@ -38,14 +38,14 @@ use core::fmt::Write as _;
 
 use super::*;
 
-/// The realm KEK the test sealed with, for the courier.
+/// The environment KEK the test sealed with, for the courier.
 struct SoftKeys(Arc<SoftKek>);
 
-impl RealmKeys for SoftKeys {
+impl EnvironmentKeys for SoftKeys {
     fn kek(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         kek_id: &str,
     ) -> Option<Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
         use suiss_crypto::envelope::Kek as _;
@@ -101,24 +101,28 @@ async fn post(app: &axum::Router, bearer: &str, body: &Json) -> (StatusCode, Jso
 async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     let w = World::new().await;
     let (ps, _, _) = Box::pin(products(&w, &[("relay", 61), ("work", 62)])).await;
-    let (tenant, realm_id, d) = w.realm("shop").await;
+    let (tenant, environment_id, d) = w.environment("shop").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    let kek = Arc::new(SoftKek::new("realm-kek", [5; 32]));
+    let kek = Arc::new(SoftKek::new("environment-kek", [5; 32]));
     let vault = access_identity_account::app::vault::Vault::in_memory(kek.clone(), [9; 32]);
-    let realm = Realm {
+    let environment = Environment {
         tenant,
-        realm: realm_id,
+        environment: environment_id,
         kek: &*kek,
         ids: &w.ids,
     };
     let db = PgAccounts::sealed(w.db.app.clone(), vault);
     let email = Identifier::new(IdentifierKind::Email, "Ece@Example.com").unwrap();
     let phone = Identifier::new(IdentifierKind::Phone, "+905551112233").unwrap();
-    let ece = create(&db, &realm, &[email, phone], &WHO).await.unwrap();
+    let ece = create(&db, &environment, &[email, phone], &WHO)
+        .await
+        .unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, ece, to, &WHO).await.unwrap();
+        change_status(&db, &environment, ece, to, &WHO)
+            .await
+            .unwrap();
     }
-    let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+    let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
     let change = |channel, topic, granted| PreferenceChange {
         channel,
         topic,
@@ -128,14 +132,23 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     // OP-153 m.3 (ee)
     let loyalty = [change("email", "loyalty", true)];
     assert!(matches!(
-        privacy::set_preferences(&db, &realm, ece, &loyalty, "self_service", &WHO, &notifier).await,
+        privacy::set_preferences(
+            &db,
+            &environment,
+            ece,
+            &loyalty,
+            "self_service",
+            &WHO,
+            &notifier
+        )
+        .await,
         Err(access_identity_account::AccountError::Invalid)
     ));
     written(
         &exercise(
             &w,
             &proposal(
-                (tenant, realm_id),
+                (tenant, environment_id),
                 Change::PreferenceTopics(vec![String::from("loyalty")]),
                 3,
                 idp_anchor(d),
@@ -146,9 +159,17 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         .await
         .unwrap(),
     );
-    privacy::set_preferences(&db, &realm, ece, &loyalty, "self_service", &WHO, &notifier)
-        .await
-        .unwrap();
+    privacy::set_preferences(
+        &db,
+        &environment,
+        ece,
+        &loyalty,
+        "self_service",
+        &WHO,
+        &notifier,
+    )
+    .await
+    .unwrap();
     // OP-156 m.3 (c)
     let first = identity_events(&w.db, "event.preference.changed", 1).await;
     let payload = |e: &access_store::identity::OutboxEvent| {
@@ -162,7 +183,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
 
     // OP-156 m.3 (c)
     let on = proposal(
-        (tenant, realm_id),
+        (tenant, environment_id),
         Change::Iys {
             enabled: true,
             recipient_type: String::from("individual"),
@@ -173,7 +194,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     );
     assert_eq!(
         on.change.action(),
-        access_internal_api::idp::IdpAction::RealmIys
+        access_internal_api::idp::IdpAction::EnvironmentIys
     );
     written(&exercise(&w, &on, ROOT_KEY).await.unwrap());
     let head = w.plane.domains.head(d).await.unwrap();
@@ -183,9 +204,17 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         change("email", "loyalty", false),
         change("push", "product_news", true),
     ];
-    privacy::set_preferences(&db, &realm, ece, &changes, "self_service", &WHO, &notifier)
-        .await
-        .unwrap();
+    privacy::set_preferences(
+        &db,
+        &environment,
+        ece,
+        &changes,
+        "self_service",
+        &WHO,
+        &notifier,
+    )
+    .await
+    .unwrap();
     // IDP-37 (3)
     assert_eq!(w.plane.domains.head(d).await.unwrap(), head);
 
@@ -215,10 +244,10 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     // B23
     let records = identity_events(&w.db, "relay.message.iys_consent", 2).await;
     assert_eq!(records.len(), 2, "push is no İYS channel");
-    let mut tx = db.begin(tenant, realm_id).await.unwrap();
+    let mut tx = db.begin(tenant, environment_id).await.unwrap();
     let row = tx.subject(ece, false).await.unwrap().unwrap();
     tx.commit().await.unwrap();
-    let dek = subject_key(&realm, &row).unwrap();
+    let dek = subject_key(&environment, &row).unwrap();
     let mut ids = Vec::new();
     for e in &records {
         let env = parse(&e.payload).unwrap();
@@ -333,7 +362,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         assert_eq!(p.id, uuid(&id), "Relay reports under the message id");
     }
 
-    let prefs = privacy::preferences(&db, &realm, ece).await.unwrap();
+    let prefs = privacy::preferences(&db, &environment, ece).await.unwrap();
     assert_eq!(prefs["current"]["email:loyalty"], false);
     assert_eq!(
         prefs["iys"]["channels"]["sms"]["status"], "pending",
@@ -356,7 +385,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     let report = |record: &[u8; 16], status: &str| {
         let mut r = json!({
             "tenant": tnt,
-            "realm": uuid(realm_id.as_bytes()),
+            "environment": uuid(environment_id.as_bytes()),
             "record": uuid(record),
             "status": status,
             "at": 1_793_750_400_000_u64,
@@ -388,7 +417,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     let (s, v) = post(&app, &relay.assertion(ISSUER), &report(&mail, "failed")).await;
     assert_eq!(s, StatusCode::NO_CONTENT, "{v}");
 
-    let prefs = privacy::preferences(&db, &realm, ece).await.unwrap();
+    let prefs = privacy::preferences(&db, &environment, ece).await.unwrap();
     assert_eq!(
         prefs["iys"]["channels"]["sms"]["status"], "recorded",
         "{prefs}"
@@ -400,7 +429,9 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         "a report changes no preference"
     );
     assert_eq!(w.plane.domains.head(d).await.unwrap(), head);
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm_id).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment_id)
+        .await
+        .unwrap();
     let audit = t.list_audit(100).await.unwrap();
     t.commit().await.unwrap();
     for (event, n) in [("iys.recorded", 1), ("iys.failed", 1)] {
@@ -409,7 +440,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
 
     // OP-156 m.3 (c)
     let off = proposal(
-        (tenant, realm_id),
+        (tenant, environment_id),
         Change::Iys {
             enabled: false,
             recipient_type: String::from("individual"),
@@ -420,12 +451,12 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     );
     assert_eq!(
         off.change.action(),
-        access_internal_api::idp::IdpAction::RealmIysClose
+        access_internal_api::idp::IdpAction::EnvironmentIysClose
     );
     written(&exercise(&w, &off, ROOT_KEY).await.unwrap());
     privacy::set_preferences(
         &db,
-        &realm,
+        &environment,
         ece,
         &[change("sms", "campaign", false)],
         "self_service",

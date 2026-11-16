@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_domains\n                 (tenant_id, environment_id, org_id, domain, method, challenge_hash, created_exercise)\n               VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING claim_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "claim_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "149bc3c9cda6869138418d5c1859c4d37631d68487b3654b9e8c37874c29b036"
+}

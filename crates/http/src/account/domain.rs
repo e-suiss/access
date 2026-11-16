@@ -8,7 +8,7 @@ use suiss_crypto::secret::Secret;
 
 /// `Content-Security-Policy` of the account pages (OP-153 m.3 (t), (w), TN-106): its own
 /// scripts, styles and API only; `'wasm-unsafe-eval'` lets the Kernel's WebAssembly compile,
-/// nothing else is evaluated. A realm logo is an `<img>` from the page's own origin.
+/// nothing else is evaluated. An environment logo is an `<img>` from the page's own origin.
 pub const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'";
 
 /// The headers every account page, asset and API answer carries (§14.5, OP-153 m.3 (t): the
@@ -126,13 +126,13 @@ pub fn read_intent(method: &Method, path: &str) -> Digest {
     Digest(context_digest(READ_CONTEXT, &canonical).0)
 }
 
-/// The API base of a page path: `/realms/{slug}/account/api` for a path issuer, else
+/// The API base of a page path: `/env/{slug}/account/api` for a path issuer, else
 /// `/account/api`.
 #[must_use]
 pub fn api_base(slug: Option<&str>) -> String {
     slug.map_or_else(
         || String::from("/account/api"),
-        |s| format!("/realms/{s}/account/api"),
+        |s| format!("/env/{s}/account/api"),
     )
 }
 
@@ -193,7 +193,7 @@ mod tests {
             a,
             crate::console::domain::read_intent(&Method::POST, "/account/api/intents")
         );
-        assert_eq!(api_base(Some("acme")), "/realms/acme/account/api");
+        assert_eq!(api_base(Some("acme")), "/env/acme/account/api");
         assert_eq!(api_base(None), "/account/api");
     }
 }

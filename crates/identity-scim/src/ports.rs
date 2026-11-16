@@ -1,12 +1,12 @@
-//! What the SCIM service needs from outside: the realms' PII vault keys and time.
+//! What the SCIM service needs from outside: the environments' PII vault keys and time.
 
 use access_identity_account::app::vault::Vault;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
-/// The realms' PII vault keys (OP-153 m.3 (aa)): a User is read and written only through them.
+/// The environments' PII vault keys (OP-153 m.3 (aa)): a User is read and written only through them.
 pub trait Vaults: Send + Sync {
-    /// The realm's vault keys; `None` when the token refuses them (fail closed, TI-9).
-    fn vault(&self, tenant: TenantId, realm: RealmId) -> Option<Vault>;
+    /// The environment's vault keys; `None` when the token refuses them (fail closed, TI-9).
+    fn vault(&self, tenant: TenantId, environment: EnvironmentId) -> Option<Vault>;
 }
 
 /// Trusted time, Unix milliseconds.

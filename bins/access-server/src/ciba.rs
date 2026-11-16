@@ -1,6 +1,6 @@
-//! CIBA's reach beyond the realm rows in this process (OP-155 m.3 (l), E42): whether the
+//! CIBA's reach beyond the environment rows in this process (OP-155 m.3 (l), E42): whether the
 //! authority plane still asks for an approval of an intent, the person's Relay `CibaInvite`
-//! sealed under their DEK, a free `login_hint` looked up by the realm's blind index, and the ping
+//! sealed under their DEK, a free `login_hint` looked up by the environment's blind index, and the ping
 //! to the client behind the SSRF guard. Also the operator's IP-range → country list for the
 //! device verification page (§10.4.1), parsed in-house.
 
@@ -19,11 +19,11 @@ use access_identity_oauth::ports::oauth::{CibaInvite, CibaOpening, CibaServices,
 use access_identity_ui::ports::Approvals;
 use access_kernel::digest::Digest;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use suiss_crypto::secret::Secret;
 
 use crate::ids::CellIds;
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The validity window an intent's render names, `from..until` in Unix ms (§9.13.3).
 fn valid_until(render: &[u8]) -> Option<u64> {
@@ -35,11 +35,11 @@ fn valid_until(render: &[u8]) -> Option<u64> {
     f.text.split_once("..")?.1.parse().ok()
 }
 
-/// CIBA's services over the authority plane `A`, the realm keys and the guarded outbound client.
+/// CIBA's services over the authority plane `A`, the environment keys and the guarded outbound client.
 pub(crate) struct ServerCiba<A> {
     pub(crate) plane: A,
     pub(crate) app: Pool,
-    pub(crate) keks: RealmKeks,
+    pub(crate) keks: EnvironmentKeks,
     pub(crate) ids: Arc<CellIds>,
     pub(crate) outbound: Outbound,
 }
@@ -62,15 +62,15 @@ impl<A: Approvals + Send + Sync> CibaServices for ServerCiba<A> {
 
     fn invite(&self, invite: CibaInvite) -> Held<'_, ()> {
         Box::pin(async move {
-            let kek = self.keks.vault(invite.realm).ok_or(Unavailable)?.kek;
+            let kek = self.keks.vault(invite.environment).ok_or(Unavailable)?.kek;
             let ids = self.ids.key().ok_or(Unavailable)?;
-            let realm = access_identity_account::app::Realm {
+            let environment = access_identity_account::app::Environment {
                 tenant: invite.tenant,
-                realm: invite.realm,
+                environment: invite.environment,
                 kek: &*kek,
                 ids: &ids,
             };
-            let mut t = TenantTx::begin(&self.app, invite.tenant, invite.realm)
+            let mut t = TenantTx::begin(&self.app, invite.tenant, invite.environment)
                 .await
                 .map_err(|_| Unavailable)?;
             let Some((kind, stored)) = t.contact(invite.subject).await.map_err(|_| Unavailable)?
@@ -101,7 +101,7 @@ impl<A: Approvals + Send + Sync> CibaServices for ServerCiba<A> {
                 (Address::Email(value), Some(since))
             };
             // E42, OP-155 m.3 (l)
-            OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+            OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock)
                 .notify(
                     &mut t,
                     &Message {
@@ -129,12 +129,12 @@ impl<A: Approvals + Send + Sync> CibaServices for ServerCiba<A> {
     fn login_hint(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         hint: String,
     ) -> Held<'_, Option<[u8; 16]>> {
         Box::pin(async move {
-            let vault = self.keks.vault(realm).ok_or(Unavailable)?;
-            let t = TenantTx::begin(&self.app, tenant, realm)
+            let vault = self.keks.vault(environment).ok_or(Unavailable)?;
+            let t = TenantTx::begin(&self.app, tenant, environment)
                 .await
                 .map_err(|_| Unavailable)?;
             let mut tx = PgTx(t, Some(vault));

@@ -25,7 +25,7 @@ pub enum Carrier {
     /// An unsigned Claim over an authenticated channel (L2-CLM-5); a PEP fact when the
     /// channel is a PEP.
     Unsigned(Channel),
-    /// Mapped from a WebAuthn ceremony of the realm's RP.
+    /// Mapped from a WebAuthn ceremony of the environment's RP.
     Webauthn,
     /// Mapped from an upstream OpenID provider's ID token.
     Oidc,

@@ -1,10 +1,10 @@
 # Account pages
 
-The realm's own account pages, served by Access at `/account` on the realm's public address (or `/realms/<slug>/account` for a path issuer). They carry the realm's name, not a Suiss shell, and they reuse the hosted sign-in session.
+The environment's own account pages, served by Access at `/account` on the environment's public address (or `/env/<slug>/account` for a path issuer). They carry the environment's name, not a Suiss shell, and they reuse the hosted sign-in session.
 
 ## Sections
 
-- **Account** — privacy (what the realm may contact you about, the documents you accepted, your security history, a scheduled deletion and your data requests). These screens use the session cookie only and never touch authority. Sign-in methods and sessions live in `src/account` and `src/signins`.
+- **Account** — privacy (what the environment may contact you about, the documents you accepted, your security history, a scheduled deletion and your data requests). These screens use the session cookie only and never touch authority. Sign-in methods and sessions live in `src/account` and `src/signins`.
 - **Authority** — _Your authority_, _Acting for you_, _Shared from you_, _Activity_ and _Changes_, with **Why?** and **Revoke** on every row you can act on. A role your HR source selects you for says "Sync from HR".
 - **Merchants that can charge you** — every merchant holding a payment delegation from you, a merchant's agent shown as "AI agent · acting for _M_", the limit as Access recorded it, and **Stop charges**, which revokes the delegation. Payment agreements are Pay's and are cancelled in Pay, as a separate step.
 - **Save my card** (`/account/save-card`) — opened from a merchant's request: "Let _M_ charge your card: up to 500 TRY per order, until …, only for orders you place", read from the exact Grant the request asks for. Saving it is your own delegation to the merchant from your own account, never passed on; a request without a per-order limit or an end is refused.
@@ -21,7 +21,7 @@ The realm's own account pages, served by Access at `/account` on the realm's pub
 - **Two limits, two rows.** A limit Access records and a limit your bank or Pay sets are separate rows, each with its owner; neither is worked out from the other.
 - **Degraded states are said plainly.** When notifications are delayed the page says so and what you changed still reads as done; when Access can't be reached it says authority can't be changed right now and that the runtime can still be asked to stop.
 
-Texts come from Access's Fluent catalogs in `locales/`, with the realm's overrides where allowed.
+Texts come from Access's Fluent catalogs in `locales/`, with the environment's overrides where allowed.
 
 ## Develop
 

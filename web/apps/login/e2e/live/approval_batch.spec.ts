@@ -2,14 +2,14 @@
 // running local deployment through its real router; nothing is mocked.
 import { expect, test } from "@playwright/test";
 
-const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
+const ENVIRONMENT = process.env["ACCESS_LIVE_ENVIRONMENT"] ?? "/env/acme";
 
 test.describe("@live batch approval", () => {
   test("@live a batch without a session is refused and the route is served", async ({ page }) => {
-    const login = await page.goto(`${REALM}/login`);
+    const login = await page.goto(`${ENVIRONMENT}/login`);
     expect(login?.status()).toBe(200);
     const origin = new URL(page.url()).origin;
-    const started = await page.request.post(`${REALM}/v1/approve/batch`, {
+    const started = await page.request.post(`${ENVIRONMENT}/v1/approve/batch`, {
       data: {
         requests: ["urn:ietf:params:oauth:request_uri:unknown"],
         redirect_uri: "https://shop.example/a",
@@ -23,7 +23,7 @@ test.describe("@live batch approval", () => {
     });
     expect(started.status()).not.toBe(501);
     expect([401, 403, 422]).toContain(started.status());
-    const eleven = await page.request.post(`${REALM}/v1/approve/batch`, {
+    const eleven = await page.request.post(`${ENVIRONMENT}/v1/approve/batch`, {
       data: {
         requests: Array.from({ length: 11 }, (_, n) => `urn:x:${String(n)}`),
         redirect_uri: "https://shop.example/a",

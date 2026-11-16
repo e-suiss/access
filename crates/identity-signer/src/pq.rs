@@ -1,21 +1,21 @@
-//! A realm's post-quantum signing key set (CR-41, OP-159 m.3 (o), (d)): opened by
-//! `idp.realm.signing_profile`, an ML-DSA key set beside the realm's classical one. It rotates on
-//! the realm's schedule, is published as `AKP` in the realm's JWKS and signs only the tokens of
+//! An environment's post-quantum signing key set (CR-41, OP-159 m.3 (o), (d)): opened by
+//! `idp.environment.signing_profile`, an ML-DSA key set beside the environment's classical one. It rotates on
+//! the environment's schedule, is published as `AKP` in the environment's JWKS and signs only the tokens of
 //! clients that registered its algorithm. `signing_profile_close` drops every key in it.
 
 use access_crypto::jose::JwsAlg;
 use suiss_crypto::dcbor::Value;
 
-use crate::protocol::{FrameError, Realm};
+use crate::protocol::{Environment, FrameError};
 
 /// The refusal when no ML-DSA key can be held: the HSM lacks the mechanism, or the build is the
 /// FIPS one (OP-159 m.3 (d), (r), HL-27). There is no classical key in its place.
 pub const PQ_KEY_UNAVAILABLE: &str = "pq-key-unavailable";
 
-/// The refusal for a realm without an open post-quantum key set.
+/// The refusal for an environment without an open post-quantum key set.
 pub const NO_PQ: &str = "signer-no-pq";
 
-/// A request about a realm's post-quantum key set.
+/// A request about an environment's post-quantum key set.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PqRequest {
     /// Whether this signer can hold an ML-DSA key of `alg` (OP-159 m.3 (d)).
@@ -23,23 +23,23 @@ pub enum PqRequest {
         /// The parameter set.
         alg: JwsAlg,
     },
-    /// Opens the realm's key set with `alg`; repeating it changes nothing, another `alg`
+    /// Opens the environment's key set with `alg`; repeating it changes nothing, another `alg`
     /// replaces the set.
     Open {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// The parameter set.
         alg: JwsAlg,
     },
-    /// Drops every key of the realm's set; repeating it changes nothing.
+    /// Drops every key of the environment's set; repeating it changes nothing.
     Close {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
     },
     /// Signs a JSON object as a compact ML-DSA JWS of type `typ` at `at`.
     Sign {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// JWS `typ`.
         typ: String,
         /// JSON payload.
@@ -56,9 +56,9 @@ fn pq_alg(v: Option<&Value>) -> Result<JwsAlg, FrameError> {
     }
 }
 
-fn realm_of(v: Option<&Value>) -> Result<Realm, FrameError> {
+fn environment_of(v: Option<&Value>) -> Result<Environment, FrameError> {
     match v {
-        Some(Value::Bytes(b)) => Ok(Realm(
+        Some(Value::Bytes(b)) => Ok(Environment(
             b.as_slice().try_into().map_err(|_| FrameError::Malformed)?,
         )),
         _ => Err(FrameError::Malformed),
@@ -70,14 +70,14 @@ fn entries(e: Vec<(&str, Value)>) -> Value {
 }
 
 impl PqRequest {
-    /// The realm the request is about, if any.
+    /// The environment the request is about, if any.
     #[must_use]
-    pub const fn realm(&self) -> Option<Realm> {
+    pub const fn environment(&self) -> Option<Environment> {
         match self {
             Self::Ready { .. } => None,
-            Self::Open { realm, .. } | Self::Close { realm } | Self::Sign { realm, .. } => {
-                Some(*realm)
-            }
+            Self::Open { environment, .. }
+            | Self::Close { environment }
+            | Self::Sign { environment, .. } => Some(*environment),
         }
     }
 
@@ -87,26 +87,26 @@ impl PqRequest {
                 "ready",
                 entries(vec![("alg", Value::text(alg.name()))]),
             )]),
-            Self::Open { realm, alg } => entries(vec![(
+            Self::Open { environment, alg } => entries(vec![(
                 "open",
                 entries(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("alg", Value::text(alg.name())),
                 ]),
             )]),
-            Self::Close { realm } => entries(vec![(
+            Self::Close { environment } => entries(vec![(
                 "close",
-                entries(vec![("realm", Value::Bytes(realm.0.to_vec()))]),
+                entries(vec![("environment", Value::Bytes(environment.0.to_vec()))]),
             )]),
             Self::Sign {
-                realm,
+                environment,
                 typ,
                 payload,
                 at,
             } => entries(vec![(
                 "sign",
                 entries(vec![
-                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("environment", Value::Bytes(environment.0.to_vec())),
                     ("typ", Value::text(typ)),
                     ("payload", Value::Bytes(payload.clone())),
                     ("at", Value::Unsigned(*at)),
@@ -123,13 +123,13 @@ impl PqRequest {
         }
         if let Some(o) = v.get("open") {
             return Ok(Self::Open {
-                realm: realm_of(o.get("realm"))?,
+                environment: environment_of(o.get("environment"))?,
                 alg: pq_alg(o.get("alg"))?,
             });
         }
         if let Some(c) = v.get("close") {
             return Ok(Self::Close {
-                realm: realm_of(c.get("realm"))?,
+                environment: environment_of(c.get("environment"))?,
             });
         }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
@@ -146,7 +146,7 @@ impl PqRequest {
             _ => return Err(FrameError::Malformed),
         };
         Ok(Self::Sign {
-            realm: realm_of(s.get("realm"))?,
+            environment: environment_of(s.get("environment"))?,
             typ: text,
             payload,
             at,
@@ -154,13 +154,13 @@ impl PqRequest {
     }
 }
 
-/// The vault slot of `realm`'s post-quantum key set, apart from its JOSE key set.
+/// The vault slot of `environment`'s post-quantum key set, apart from its JOSE key set.
 #[must_use]
-pub fn slot(realm: Realm) -> Realm {
-    let d = suiss_crypto::digest::context_digest("access/identity-signer/pq/v1", &realm.0);
+pub fn slot(environment: Environment) -> Environment {
+    let d = suiss_crypto::digest::context_digest("access/identity-signer/pq/v1", &environment.0);
     let mut out = [0; 16];
     out.copy_from_slice(&d.0[..16]);
-    Realm(out)
+    Environment(out)
 }
 
 /// The JWKS `a` with the keys of `b` appended (OP-159 m.3 (o)).

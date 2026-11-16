@@ -1,4 +1,4 @@
-//! Authority token projections between the planes (§9.9, §11.4.5, OP-150 m.2): the realm's
+//! Authority token projections between the planes (§9.9, §11.4.5, OP-150 m.2): the environment's
 //! authorization server asks the authority plane to decide a `projection.issue` Exercise, and
 //! the answer is either the signed token or the decision that refused it. Every issuance, and
 //! every refresh, is its own decision (§9.9.3); the identity plane never mints an authority

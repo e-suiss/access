@@ -1,6 +1,6 @@
 ; In-notification approval answer, version 1 (RFC 8610; OP-157 m.3 (m), m.17, §13.7.3, SEC26).
-; Deterministic CBOR (RFC 8949 §4.2.1). Only for CT1 and only where the realm turned on
-; `idp.realm.approval_inline`. The `approval_inline` Relay body carries the whole canonical
+; Deterministic CBOR (RFC 8949 §4.2.1). Only for CT1 and only where the environment turned on
+; `idp.environment.approval_inline`. The `approval_inline` Relay body carries the whole canonical
 ; render to the registered approver device; the approver SDK renders again with the Kernel,
 ; compares `render_digest`, and signs this map with its device key (ES256 over its dCBOR bytes).
 ; The names this file does not define are those of kernel.cddl.
@@ -15,8 +15,8 @@ approval-inline-answer = {
 
 ; The JSON body of `POST /v1/approve/inline`. A device key's signature is never a contribution
 ; by itself (§10.2, §10.3.1): an approval carries the WebAuthn assertion the app's platform
-; passkey API returned for the approver's registered passkey in the realm, whose challenge is
-; H(AAS) of `aas` and whose RP ID is the realm's (verifier name binding). Access verifies it as
+; passkey API returned for the approver's registered passkey in the environment, whose challenge is
+; H(AAS) of `aas` and whose RP ID is the environment's (verifier name binding). Access verifies it as
 ; it verifies a sign-in: user presence always, user verification when an open term asks for it.
 ; Without it an approval is refused with `approval-inline-assertion-required`.
 

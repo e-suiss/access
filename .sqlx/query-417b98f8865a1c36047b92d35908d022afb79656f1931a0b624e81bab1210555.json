@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claim, source AS \"source!\" FROM access.idp_claim_mappers\n            WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active' ORDER BY claim",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_claim_mappers",
+            "name": "claim"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_claim_mappers",
+            "name": "source"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "417b98f8865a1c36047b92d35908d022afb79656f1931a0b624e81bab1210555"
+}

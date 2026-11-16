@@ -22,16 +22,16 @@ pub enum Rejection {
     /// The ceremony state has expired.
     #[error("ceremony expired")]
     Expired,
-    /// The origin is not the realm's RP ID, a subdomain of it or a declared related origin.
+    /// The origin is not the environment's RP ID, a subdomain of it or a declared related origin.
     #[error("origin not allowed")]
     Origin,
     /// The ceremony ran in a cross-origin frame.
     #[error("cross-origin ceremony")]
     CrossOrigin,
-    /// `rpIdHash` is not SHA-256 of the realm's RP ID.
+    /// `rpIdHash` is not SHA-256 of the environment's RP ID.
     #[error("RP ID hash mismatch")]
     RpIdHash,
-    /// The realm's RP ID is not pinned yet (IDP-5, TN-17).
+    /// The environment's RP ID is not pinned yet (IDP-5, TN-17).
     #[error("RP ID not pinned")]
     RpIdNotPinned,
     /// User presence was not asserted.
@@ -49,13 +49,13 @@ pub enum Rejection {
     /// The credential public key is malformed or unsupported.
     #[error("unacceptable credential public key")]
     CoseKey,
-    /// The key's algorithm is not allowed for this realm.
+    /// The key's algorithm is not allowed for this environment.
     #[error("algorithm not allowed")]
     Algorithm,
     /// The signature does not verify.
     #[error("invalid signature")]
     Signature,
-    /// The attestation format is malformed or not supported by the realm's policy.
+    /// The attestation format is malformed or not supported by the environment's policy.
     #[error("attestation format not accepted")]
     AttestationFormat,
     /// The attestation statement does not verify.
@@ -71,16 +71,16 @@ pub enum Rejection {
     /// current or does not cover it (fail-closed, OP-159 m.3 (ll)).
     #[error("attestation revocation unknown")]
     AttestationRevocationUnknown,
-    /// The realm requires `direct` attestation and no fresh metadata is available (fail-closed).
+    /// The environment requires `direct` attestation and no fresh metadata is available (fail-closed).
     #[error("metadata unavailable")]
     MetadataUnavailable,
-    /// The AAGUID is not on the realm's allowlist.
+    /// The AAGUID is not on the environment's allowlist.
     #[error("authenticator model not allowed")]
     AaguidNotAllowed,
     /// The metadata service reports the authenticator model as compromised or revoked.
     #[error("authenticator model compromised")]
     AuthenticatorStatus,
-    /// The realm requires device-bound credentials (BE = 0).
+    /// The environment requires device-bound credentials (BE = 0).
     #[error("device-bound credential required")]
     DeviceBoundRequired,
     /// BE changed since registration (IDI-5).
@@ -89,7 +89,7 @@ pub enum Rejection {
     /// BE = 0 with BS = 1 (IDI-5).
     #[error("invalid backup state")]
     BackupState,
-    /// The signature counter did not advance and the realm rejects that (§10.2.4).
+    /// The signature counter did not advance and the environment rejects that (§10.2.4).
     #[error("signature counter regressed")]
     SignCount,
     /// The credential is unknown, deleted or not on the allow list.
@@ -144,7 +144,7 @@ impl Rejection {
 }
 
 impl Rejection {
-    /// Whether the realm's `direct` attestation policy refused the registration (§10.2.4,
+    /// Whether the environment's `direct` attestation policy refused the registration (§10.2.4,
     /// OP-159 m.3 (ll)).
     #[must_use]
     pub const fn is_attestation(self) -> bool {

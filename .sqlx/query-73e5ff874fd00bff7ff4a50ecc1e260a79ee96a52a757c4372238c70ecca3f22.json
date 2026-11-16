@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT action FROM access.idp_config_log\n              WHERE tenant_id = $1 AND environment_id = $2 AND decision_pos = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_config_log",
+            "name": "action"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "73e5ff874fd00bff7ff4a50ecc1e260a79ee96a52a757c4372238c70ecca3f22"
+}

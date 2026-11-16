@@ -1,4 +1,4 @@
-//! What the authorization server needs from outside (OP-63): one transaction over the realm's
+//! What the authorization server needs from outside (OP-63): one transaction over the environment's
 //! clients, requests, codes, grants and sessions; the identity signer; the clients' published
 //! keys; the hosted login; and fresh randomness. Any failure of these is [`Unavailable`]: the
 //! caller answers `503 + Retry-After`, never `invalid_grant` (G50, EP-2).
@@ -11,7 +11,7 @@ use access_store::backchannel::LogoutUndelivered;
 use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
 use access_store::dcr::{DcrClientRow, DcrPolicyRow, NewDcrClient};
 use access_store::device::{DeviceCodeRow, NewDeviceCode};
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
+use access_store::identity::{Cursor, EnvironmentId, OutboxEvent, TenantId};
 use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -22,7 +22,7 @@ use crate::domain::issuer::Issuer;
 use crate::domain::tokens::LoginReason;
 use crate::ports::Unavailable;
 
-/// One transaction in one realm.
+/// One transaction in one environment.
 pub trait OAuthTx: Send {
     /// The client with `client_id`, active or retired.
     fn client(
@@ -39,16 +39,16 @@ pub trait OAuthTx: Send {
         &mut self,
         uuid: [u8; 16],
     ) -> impl Future<Output = Result<Option<ClientRow>, Unavailable>> + Send;
-    /// The realm's JOSE algorithm (OP-146 m.8 (e)).
+    /// The environment's JOSE algorithm (OP-146 m.8 (e)).
     fn jose_alg(&mut self) -> impl Future<Output = Result<JwsAlg, Unavailable>> + Send;
-    /// The ML-DSA parameter set of the realm's open post-quantum signing profile (OP-159 m.3
+    /// The ML-DSA parameter set of the environment's open post-quantum signing profile (OP-159 m.3
     /// (o)); `None` without one.
     fn signing_profile(
         &mut self,
     ) -> impl Future<Output = Result<Option<JwsAlg>, Unavailable>> + Send {
         std::future::ready(Ok(None))
     }
-    /// The issuer stored on the realm's row (§17.9.6); `None` for a realm without one.
+    /// The issuer stored on the environment's row (§17.9.6); `None` for an environment without one.
     fn issuer(&mut self) -> impl Future<Output = Result<Option<Issuer>, Unavailable>> + Send;
     /// Stores a pending request.
     fn insert_request(
@@ -181,9 +181,9 @@ pub trait OAuthTx: Send {
         kind: &str,
         payload: &[u8],
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
-    /// The realm's governing authority domain (TN-4, OP-149 m.22 (g)).
+    /// The environment's governing authority domain (TN-4, OP-149 m.22 (g)).
     fn governing(&mut self) -> impl Future<Output = Result<Option<[u8; 32]>, Unavailable>> + Send;
-    /// The service Party the platform client `client_id` holds in this realm, once it paired
+    /// The service Party the platform client `client_id` holds in this environment, once it paired
     /// (OP-149 m.4, m.16 (a)).
     fn platform_party(
         &mut self,
@@ -197,7 +197,7 @@ pub trait OAuthTx: Send {
         sector: [u8; 16],
         candidate: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
-    /// The pairwise value the client `sector` reads of this realm's client `client`, stored on
+    /// The pairwise value the client `sector` reads of this environment's client `client`, stored on
     /// first use (OP-149 m.34 (b), MD-10); `None` when `client` is not a client here.
     fn client_pairwise(
         &mut self,
@@ -220,7 +220,7 @@ pub trait OAuthTx: Send {
         target: &str,
         correlation: &str,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
-    /// The realm's CIMD acceptance policy (`idp.client.cimd_policy`): whether CIMD clients are
+    /// The environment's CIMD acceptance policy (`idp.client.cimd_policy`): whether CIMD clients are
     /// accepted, and from which domains.
     fn cimd_policy(
         &mut self,
@@ -250,13 +250,13 @@ pub trait OAuthTx: Send {
         reason: &str,
         now_ms: u64,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
-    /// Whether `resource` is a registered protected resource of the realm (AG-8).
+    /// Whether `resource` is a registered protected resource of the environment (AG-8).
     fn protected_resource(
         &mut self,
         resource: &str,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
     /// The algorithm the registered protected resource `resource` takes its access tokens in;
-    /// `None` for the realm's (OP-159 m.21 (g)).
+    /// `None` for the environment's (OP-159 m.21 (g)).
     fn resource_alg(
         &mut self,
         resource: &str,
@@ -278,7 +278,7 @@ pub trait OAuthTx: Send {
         reason: &str,
         now_ms: u64,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
-    /// The realm's active workload clients (OP-154 m.3 (r)); none unless the store serves them.
+    /// The environment's active workload clients (OP-154 m.3 (r)); none unless the store serves them.
     fn workload_clients(
         &mut self,
     ) -> impl Future<Output = Result<Vec<access_store::workloads::WorkloadClient>, Unavailable>> + Send
@@ -295,7 +295,7 @@ pub trait OAuthTx: Send {
         &mut self,
         uuid: [u8; 16],
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
-    /// Whether the realm offers the device authorization grant (`idp.realm.device_code`).
+    /// Whether the environment offers the device authorization grant (`idp.environment.device_code`).
     fn device_code_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
     /// Keeps a device authorization; `false` when its user code is already waiting.
     fn insert_device_code(
@@ -347,16 +347,16 @@ pub trait OAuthTx: Send {
         subject: [u8; 16],
         subject_since_ms: u64,
     ) -> impl Future<Output = Result<(u64, u64), Unavailable>> + Send;
-    /// The realm's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
+    /// The environment's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
     fn dcr_policy(&mut self) -> impl Future<Output = Result<DcrPolicyRow, Unavailable>> + Send;
-    /// The realm's OpenID Federation settings (OP-155 m.3 (j)); off when never decided.
+    /// The environment's OpenID Federation settings (OP-155 m.3 (j)); off when never decided.
     fn federation(
         &mut self,
     ) -> impl Future<Output = Result<access_store::oidf::FederationSettingsRow, Unavailable>> + Send
     {
         async { Ok(access_store::oidf::FederationSettingsRow::default()) }
     }
-    /// The trust anchors the realm ever named, each at its newest version.
+    /// The trust anchors the environment ever named, each at its newest version.
     fn trust_anchors(
         &mut self,
     ) -> impl Future<Output = Result<Vec<access_store::oidf::TrustAnchorRow>, Unavailable>> + Send
@@ -419,7 +419,7 @@ pub trait OAuthTx: Send {
         &mut self,
         uuid: [u8; 16],
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
-    /// Registrations from `ip_prefix` since `since_ms`, the realm's since `day_ms`, and its live
+    /// Registrations from `ip_prefix` since `since_ms`, the environment's since `day_ms`, and its live
     /// DCR clients.
     fn dcr_counts(
         &mut self,
@@ -464,11 +464,11 @@ pub trait OAuthTx: Send {
     ) -> impl Future<
         Output = Result<Option<access_store::client_profiles::ClientProfileRow>, Unavailable>,
     > + Send;
-    /// Whether the realm lets its clients opt in to front-channel logout (IDP-24).
+    /// Whether the environment lets its clients opt in to front-channel logout (IDP-24).
     fn frontchannel_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
-    /// The legacy token endpoint methods some active client of the realm opted in to.
+    /// The legacy token endpoint methods some active client of the environment opted in to.
     fn legacy_methods(&mut self) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
-    /// The realm's CIBA setting (`idp.realm.ciba`, OP-155 m.3 (l)); off unless the store serves
+    /// The environment's CIBA setting (`idp.environment.ciba`, OP-155 m.3 (l)); off unless the store serves
     /// it.
     fn ciba_settings(
         &mut self,
@@ -549,7 +549,7 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send {
         async { Err(Unavailable) }
     }
-    /// The request pushed to the realm's Approval Surface under `request_uri`.
+    /// The request pushed to the environment's Approval Surface under `request_uri`.
     fn approval_by_uri(
         &mut self,
         _request_uri: &str,
@@ -561,7 +561,7 @@ pub trait OAuthTx: Send {
     fn commit(self) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
 
-/// Opens transactions in a realm.
+/// Opens transactions in an environment.
 pub trait OAuthDb: Send + Sync {
     /// The transaction type.
     type Tx: OAuthTx;
@@ -569,7 +569,7 @@ pub trait OAuthDb: Send + Sync {
     fn begin(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> impl Future<Output = Result<Self::Tx, Unavailable>> + Send;
     /// The active platform product client `client_id`, in whichever tenant it is registered
     /// (OP-149 m.26 (a), m.34 (b)); `None` for any other client id.
@@ -612,44 +612,47 @@ impl<T: TenantIds + ?Sized> TenantIds for std::sync::Arc<T> {
     }
 }
 
-/// The identity signer, for the realm's identity assertions (CMP-22b, TN-14).
+/// The identity signer, for the environment's identity assertions (CMP-22b, TN-14).
 pub trait TokenSigner: Send + Sync {
-    /// Signs a JSON `payload` as a compact JWS of `typ` at `at_ms` with the realm's key,
-    /// opening the realm's key set with `alg` on first use.
+    /// Signs a JSON `payload` as a compact JWS of `typ` at `at_ms` with the environment's key,
+    /// opening the environment's key set with `alg` on first use.
     fn sign(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> impl Future<Output = Result<String, Unavailable>> + Send;
-    /// The realm's JWKS, to read back its own tokens.
-    fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
-    /// Signs a JSON `payload` as a compact ML-DSA JWS of `typ` with the realm's post-quantum
+    /// The environment's JWKS, to read back its own tokens.
+    fn jwks(
+        &self,
+        environment: EnvironmentId,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send;
+    /// Signs a JSON `payload` as a compact ML-DSA JWS of `typ` with the environment's post-quantum
     /// key set of `alg`, opening it when the signer has none (CR-41, OP-159 m.3 (o)); a signer
     /// without one refuses, and nothing is signed classically in its place.
     fn sign_pq(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> impl Future<Output = Result<String, Unavailable>> + Send {
-        let _ = (realm, alg, typ, payload, at_ms);
+        let _ = (environment, alg, typ, payload, at_ms);
         std::future::ready(Err(Unavailable))
     }
-    /// Signs a JSON `payload` as an RS256 compact JWS of `typ` with the realm's `rsa-id` key,
+    /// Signs a JSON `payload` as an RS256 compact JWS of `typ` with the environment's `rsa-id` key,
     /// made on first use (MD-6, OP-155 m.3 (k)); identity assertions only, never authority.
     fn sign_rs256(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> impl Future<Output = Result<String, Unavailable>> + Send {
-        let _ = (realm, typ, payload, at_ms);
+        let _ = (environment, typ, payload, at_ms);
         std::future::ready(Err(Unavailable))
     }
 }
@@ -730,7 +733,7 @@ pub trait LogoutQueue: Send + Sync {
     fn undelivered(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         record: &LogoutUndelivered,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
@@ -749,19 +752,19 @@ pub trait ManagementHolders: Send + Sync {
         kid: [u8; 32],
     ) -> Held<'_, Option<access_kernel::verify::cose::PublicKey>>;
 
-    /// Whether `realm` is the platform's own realm, whose Instances may read the platform
+    /// Whether `environment` is the platform's own environment, whose Instances may read the platform
     /// surface (OP-151 m.3 (a)).
-    fn platform(&self, realm: &crate::ports::RealmEntry) -> Held<'_, bool>;
+    fn platform(&self, environment: &crate::ports::EnvironmentEntry) -> Held<'_, bool>;
 }
 
 /// What an account holds to release as identity claims (§10.4.6, OP-153 m.3 (l)): its proven
-/// address and profile fields, read under the realm's PII vault.
+/// address and profile fields, read under the environment's PII vault.
 pub trait ClaimSource: Send + Sync {
-    /// What `subject` of `realm` holds.
+    /// What `subject` of `environment` holds.
     fn held(
         &self,
         tenant: access_store::identity::TenantId,
-        realm: access_store::identity::RealmId,
+        environment: access_store::identity::EnvironmentId,
         subject: [u8; 16],
     ) -> Held<'_, crate::domain::claims_request::Held>;
 }
@@ -774,14 +777,14 @@ impl ClaimSource for NoClaims {
     fn held(
         &self,
         _: access_store::identity::TenantId,
-        _: access_store::identity::RealmId,
+        _: access_store::identity::EnvironmentId,
         _: [u8; 16],
     ) -> Held<'_, crate::domain::claims_request::Held> {
         Box::pin(async { Ok(crate::domain::claims_request::Held::default()) })
     }
 }
 
-/// No management holder: no key is live and no realm is the platform's; every exchange is
+/// No management holder: no key is live and no environment is the platform's; every exchange is
 /// refused (MD-8).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoManagement;
@@ -795,7 +798,7 @@ impl ManagementHolders for NoManagement {
         Box::pin(async { Ok(None) })
     }
 
-    fn platform(&self, _: &crate::ports::RealmEntry) -> Held<'_, bool> {
+    fn platform(&self, _: &crate::ports::EnvironmentEntry) -> Held<'_, bool> {
         Box::pin(async { Ok(false) })
     }
 }
@@ -823,7 +826,7 @@ pub enum FetchRefused {
     /// The host resolves to a special-purpose address (RFC 6890, §11.3.6).
     #[error("address refused")]
     Blocked,
-    /// The per-URL or per-realm fetch rate is spent (OP-154 m.3 (i)).
+    /// The per-URL or per-environment fetch rate is spent (OP-154 m.3 (i)).
     #[error("rate limited")]
     Limited,
     /// No answer in time.
@@ -845,10 +848,10 @@ pub trait ClientDocuments: Send + Sync {
     /// public, without connecting.
     fn vet<'a>(&'a self, url: &'a str) -> Fetch<'a, ()>;
 
-    /// `GET url` for `realm` with `accept`, the body read up to `max_body` bytes.
+    /// `GET url` for `environment` with `accept`, the body read up to `max_body` bytes.
     fn fetch<'a>(
         &'a self,
-        realm: RealmId,
+        environment: EnvironmentId,
         url: &'a str,
         accept: &'a str,
         max_body: usize,
@@ -864,7 +867,13 @@ impl ClientDocuments for NoDocuments {
         Box::pin(async { Err(FetchRefused::Unreachable) })
     }
 
-    fn fetch<'a>(&'a self, _: RealmId, _: &'a str, _: &'a str, _: usize) -> Fetch<'a, Fetched> {
+    fn fetch<'a>(
+        &'a self,
+        _: EnvironmentId,
+        _: &'a str,
+        _: &'a str,
+        _: usize,
+    ) -> Fetch<'a, Fetched> {
         Box::pin(async { Err(FetchRefused::Unreachable) })
     }
 }
@@ -964,8 +973,8 @@ impl GrantStanding for NoStanding {
 pub struct CibaInvite {
     /// The tenant.
     pub tenant: TenantId,
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// The person.
     pub subject: [u8; 16],
     /// The `https` link to the Approval Surface.
@@ -995,7 +1004,7 @@ pub struct CibaOpening {
     pub valid_until: Option<u64>,
 }
 
-/// What CIBA needs beyond the realm's rows (OP-155 m.3 (l)): whether the decision point still
+/// What CIBA needs beyond the environment's rows (OP-155 m.3 (l)): whether the decision point still
 /// asks for an approval of an intent, the Relay invitation, the free `login_hint` lookup, and
 /// the ping to the client.
 pub trait CibaServices: Send + Sync {
@@ -1006,11 +1015,11 @@ pub trait CibaServices: Send + Sync {
     /// Queues the person's Relay `CibaInvite`.
     fn invite(&self, invite: CibaInvite) -> Held<'_, ()>;
 
-    /// The person a free `login_hint` names in the realm, if one does.
+    /// The person a free `login_hint` names in the environment, if one does.
     fn login_hint(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         hint: String,
     ) -> Held<'_, Option<[u8; 16]>>;
 
@@ -1032,7 +1041,7 @@ impl CibaServices for NoCiba {
         Box::pin(async { Err(Unavailable) })
     }
 
-    fn login_hint(&self, _: TenantId, _: RealmId, _: String) -> Held<'_, Option<[u8; 16]>> {
+    fn login_hint(&self, _: TenantId, _: EnvironmentId, _: String) -> Held<'_, Option<[u8; 16]>> {
         Box::pin(async { Ok(None) })
     }
 

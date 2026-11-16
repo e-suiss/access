@@ -162,8 +162,8 @@ impl HashMetrics {
     }
 }
 
-/// The password hashing service. [`Hasher::for_policy`] gives a realm's view of it: the same
-/// semaphore and counters, hashing under that realm's policy.
+/// The password hashing service. [`Hasher::for_policy`] gives an environment's view of it: the same
+/// semaphore and counters, hashing under that environment's policy.
 pub struct Hasher {
     config: HasherConfig,
     semaphore: Arc<Semaphore>,
@@ -185,7 +185,7 @@ impl Hasher {
         }
     }
 
-    /// This service hashing under a realm's `policy` (§10.2.1, CR-15, CR-36, OP-158 m.3 (y)):
+    /// This service hashing under an environment's `policy` (§10.2.1, CR-15, CR-36, OP-158 m.3 (y)):
     /// [`Hasher::hash`] and [`Hasher::verify`] then follow it, on the shared semaphore.
     #[must_use]
     pub fn for_policy(&self, policy: HashPolicy) -> Self {
@@ -323,7 +323,7 @@ impl Hasher {
             .await
     }
 
-    /// The PHC string of `password` under a realm's `policy`: Argon2id at its profile or, under
+    /// The PHC string of `password` under an environment's `policy`: Argon2id at its profile or, under
     /// the FIPS crypto profile, PBKDF2-HMAC-SHA-256 (§10.2.1, CR-15, CR-36, OP-158 m.3 (y)).
     ///
     /// # Errors
@@ -341,7 +341,7 @@ impl Hasher {
         .await
     }
 
-    /// Checks `password` against a stored Argon2id or PBKDF2 PHC string under a realm's
+    /// Checks `password` against a stored Argon2id or PBKDF2 PHC string under an environment's
     /// `policy`; a hash of the other algorithm or below the policy is to be rehashed (CR-37).
     ///
     /// # Errors
@@ -440,7 +440,7 @@ mod tests {
 
     // CR-15, CR-37, OP-158
     #[tokio::test]
-    async fn a_fips_realm_hashes_and_verifies_on_the_same_pool() {
+    async fn a_fips_environment_hashes_and_verifies_on_the_same_pool() {
         let h = hasher(2);
         let pw = Password::new("correct horse battery").unwrap();
         let fips = HashPolicy::of(HashProfile::Standard, true);
@@ -488,7 +488,7 @@ mod tests {
 
     // CR-15, OP-158
     #[tokio::test]
-    async fn a_realm_view_hashes_under_its_policy_on_the_shared_pool() {
+    async fn a_environment_view_hashes_under_its_policy_on_the_shared_pool() {
         let h = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 2, None));
         let fips = h.for_policy(HashPolicy::of(HashProfile::Standard, true));
         let pw = Password::new("correct horse battery").unwrap();

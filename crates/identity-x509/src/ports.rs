@@ -56,7 +56,7 @@ pub type Held<'a> = Pin<Box<dyn Future<Output = Result<bool, Unavailable>> + Sen
 
 /// Whether the governing domain trusts a CA (§10.2.5, OP-155 m.3 (m)): a live actor-binding
 /// Acceptance of the CA's issuer id ([`crate::domain::login::ca_issuer`]) for
-/// `identity_binding_person`. A CA the realm names without one signs nobody in.
+/// `identity_binding_person`. A CA the environment names without one signs nobody in.
 pub trait CaTrust: Send + Sync {
     /// Whether `domain` accepts the CA whose issuer id is `issuer`.
     fn accepted(&self, domain: [u8; 32], issuer: [u8; 16]) -> Held<'_>;

@@ -1,13 +1,13 @@
 //! Platform product pairing (OP-149 m.4, m.16 (a), L0-META-7): the challenges Access hands a
-//! platform client for one realm, the Instance each one opened, and the client's one Party per
-//! realm (the identity plane's actor binding). Realm-scoped; nothing is deleted (OP-73).
+//! platform client for one environment, the Instance each one opened, and the client's one Party per
+//! environment (the identity plane's actor binding). Environment-scoped; nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::identity::TenantTx;
 
-/// One pairing challenge of a platform client in a realm.
+/// One pairing challenge of a platform client in an environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PairingRow {
     /// The challenge: the `instance_create` nonce.
@@ -29,10 +29,10 @@ pub struct PairingRow {
 }
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -69,18 +69,18 @@ impl Raw {
 }
 
 impl TenantTx {
-    /// Stores a new pairing challenge in this realm.
+    /// Stores a new pairing challenge in this environment.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_pairing(&mut self, p: &PairingRow) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.platform_pairing (tenant_id, realm_id, challenge, client_id, kid,
+            "INSERT INTO access.platform_pairing (tenant_id, environment_id, challenge, client_id, kid,
                     party_id, register, valid_from_ms, valid_until_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             p.challenge.as_slice(),
             p.client_id,
             p.kid.as_slice(),
@@ -102,15 +102,15 @@ impl TenantTx {
         &mut self,
         challenge: &[u8; 32],
     ) -> Result<Option<PairingRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let raw = sqlx::query_as!(
             Raw,
             "SELECT challenge, client_id, kid, party_id, register, valid_from_ms, valid_until_ms,
                     instance_id
                FROM access.platform_pairing
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge = $3",
             tenant,
-            realm,
+            environment,
             challenge.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -129,18 +129,18 @@ impl TenantTx {
         kid: &[u8; 32],
         now_ms: u64,
     ) -> Result<Option<PairingRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let raw = sqlx::query_as!(
             Raw,
             "SELECT challenge, client_id, kid, party_id, register, valid_from_ms, valid_until_ms,
                     instance_id
                FROM access.platform_pairing
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND kid = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND kid = $4
                 AND (instance_id IS NOT NULL OR valid_until_ms >= $5)
               ORDER BY instance_id IS NULL, valid_until_ms DESC
               LIMIT 1",
             tenant,
-            realm,
+            environment,
             client_id,
             kid.as_slice(),
             ms(now_ms)?,
@@ -159,12 +159,12 @@ impl TenantTx {
         challenge: &[u8; 32],
         instance: &[u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.platform_pairing SET instance_id = $4, paired_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge = $3 AND instance_id IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge = $3 AND instance_id IS NULL",
             tenant,
-            realm,
+            environment,
             challenge.as_slice(),
             instance.as_slice(),
         )
@@ -174,7 +174,7 @@ impl TenantTx {
         Ok(done == 1)
     }
 
-    /// The Party the platform client `client_id` holds in this realm (OP-149 m.16 (a)).
+    /// The Party the platform client `client_id` holds in this environment (OP-149 m.16 (a)).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -182,12 +182,12 @@ impl TenantTx {
         &mut self,
         client_id: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let party = sqlx::query_scalar!(
             "SELECT party_id FROM access.platform_party
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3",
             tenant,
-            realm,
+            environment,
             client_id,
         )
         .fetch_optional(&mut *self.tx)
@@ -197,7 +197,7 @@ impl TenantTx {
             .transpose()
     }
 
-    /// Binds the platform client's Party in this realm once its `party_register` committed;
+    /// Binds the platform client's Party in this environment once its `party_register` committed;
     /// `false` when a Party was bound before.
     ///
     /// # Errors
@@ -207,12 +207,12 @@ impl TenantTx {
         client_id: &str,
         party: &[u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
-            "INSERT INTO access.platform_party (tenant_id, realm_id, client_id, party_id)
+            "INSERT INTO access.platform_party (tenant_id, environment_id, client_id, party_id)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             client_id,
             party.as_slice(),
         )
@@ -222,7 +222,7 @@ impl TenantTx {
         Ok(done == 1)
     }
 
-    /// The pairwise `sub` the client `sector` reads of the platform Party `party` in this realm
+    /// The pairwise `sub` the client `sector` reads of the platform Party `party` in this environment
     /// (OP-149 m.31 (a), MD-10): the stored one, else `candidate`, stored now; `None` when
     /// `party` is not a platform client's Party here.
     ///
@@ -234,15 +234,15 @@ impl TenantTx {
         sector: [u8; 16],
         candidate: &str,
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.platform_party_subjects (tenant_id, realm_id, party_id, sector, value)
+            "INSERT INTO access.platform_party_subjects (tenant_id, environment_id, party_id, sector, value)
              SELECT $1, $2, $3, $4, $5
               WHERE EXISTS (SELECT 1 FROM access.platform_party
-                             WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3)
-             ON CONFLICT (tenant_id, realm_id, party_id, sector) DO NOTHING",
+                             WHERE tenant_id = $1 AND environment_id = $2 AND party_id = $3)
+             ON CONFLICT (tenant_id, environment_id, party_id, sector) DO NOTHING",
             tenant,
-            realm,
+            environment,
             party.as_slice(),
             Uuid::from_bytes(sector),
             candidate,
@@ -251,9 +251,9 @@ impl TenantTx {
         .await?;
         Ok(sqlx::query_scalar!(
             "SELECT value FROM access.platform_party_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3 AND sector = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND party_id = $3 AND sector = $4",
             tenant,
-            realm,
+            environment,
             party.as_slice(),
             Uuid::from_bytes(sector),
         )
@@ -261,9 +261,9 @@ impl TenantTx {
         .await?)
     }
 
-    /// The pairwise `sub` the client `sector` reads of the realm's client `client` (OP-149
+    /// The pairwise `sub` the client `sector` reads of the environment's client `client` (OP-149
     /// m.34 (b), MD-10): the stored one, else `candidate`, stored now; `None` when `client` is not
-    /// a client of this realm.
+    /// a client of this environment.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -273,15 +273,15 @@ impl TenantTx {
         sector: [u8; 16],
         candidate: &str,
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.client_subjects (tenant_id, realm_id, client_uuid, sector, value)
+            "INSERT INTO access.client_subjects (tenant_id, environment_id, client_uuid, sector, value)
              SELECT $1, $2, $3, $4, $5
               WHERE EXISTS (SELECT 1 FROM access.idp_clients
-                             WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3)
-             ON CONFLICT (tenant_id, realm_id, client_uuid, sector) DO NOTHING",
+                             WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3)
+             ON CONFLICT (tenant_id, environment_id, client_uuid, sector) DO NOTHING",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             Uuid::from_bytes(sector),
             candidate,
@@ -290,9 +290,9 @@ impl TenantTx {
         .await?;
         Ok(sqlx::query_scalar!(
             "SELECT value FROM access.client_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND sector = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3 AND sector = $4",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(client),
             Uuid::from_bytes(sector),
         )
@@ -300,7 +300,7 @@ impl TenantTx {
         .await?)
     }
 
-    /// The realm's client whose pairwise `sub` for `sector` is `value` (OP-149 m.34 (b), A11).
+    /// The environment's client whose pairwise `sub` for `sector` is `value` (OP-149 m.34 (b), A11).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -309,12 +309,12 @@ impl TenantTx {
         sector: [u8; 16],
         value: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT client_uuid FROM access.client_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND sector = $3 AND value = $4",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(sector),
             value,
         )
@@ -332,12 +332,12 @@ impl TenantTx {
         sector: [u8; 16],
         value: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let party = sqlx::query_scalar!(
             "SELECT party_id FROM access.platform_party_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND sector = $3 AND value = $4",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(sector),
             value,
         )

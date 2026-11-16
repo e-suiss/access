@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id, cell_size, note\n             FROM access_ops.audit_environment_checkpoint\n            WHERE tenant_id = $1 AND environment_id = $2 ORDER BY size DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "frontier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cell_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "cell_size"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_environment_checkpoint",
+            "name": "note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3c4be7ce8659d4c57a32004d45637e698693fa28cfd9b2b793810c740df6eb40"
+}

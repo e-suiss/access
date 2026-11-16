@@ -1,8 +1,8 @@
 //! Cross-tenant isolation over the HTTP API (§12.1.3 test 3, TN-23, OP-138): property tests
-//! over the composed realm, authorization server and hosted login routes of two realms in two
+//! over the composed environment, authorization server and hosted login routes of two environments in two
 //! tenants on a real PostgreSQL. Whatever a request carries, the answer is never a server
-//! error, never names or returns the other realm's data, never redirects anywhere but a
-//! registered URI or the realm itself, and every authorization server answer is `no-store`.
+//! error, never names or returns the other environment's data, never redirects anywhere but a
+//! registered URI or the environment itself, and every authorization server answer is `no-store`.
 
 #![allow(
     clippy::unwrap_used,
@@ -27,9 +27,9 @@ use access_crypto::Secret;
 use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::webauthn::DecoyKey;
+use access_http::environment::router as environment_router;
 use access_http::login::{Peer, router as login_router};
 use access_http::oauth::router as oauth_router;
-use access_http::realm::router as realm_router;
 use access_http::{Limits, harden};
 use access_identity_account::adapters::system::SystemClock;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
@@ -40,17 +40,17 @@ use access_identity_account::domain::throttle::ThrottlePolicy;
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::app::oauth::OAuth;
-use access_identity_oauth::ports::{RealmEntry, Unavailable};
+use access_identity_oauth::ports::{EnvironmentEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::adapters::Outbox;
 use access_identity_ui::app::Hosted;
-use access_identity_ui::ports::{Kits, RealmKit};
-use access_identity_webauthn::adapters::RealmDecoyKeys;
-use access_identity_webauthn::domain::ids::RealmId as WaRealm;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_ui::ports::{EnvironmentKit, Kits};
+use access_identity_webauthn::adapters::EnvironmentDecoyKeys;
+use access_identity_webauthn::domain::ids::EnvironmentId as WaEnvironment;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
-use access_store::identity::RealmId;
+use access_store::identity::EnvironmentId;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, header};
@@ -61,39 +61,39 @@ use serde_json::Value;
 use support::{BYE, CB, CHALLENGE, Cluster, NATIVE, VERIFIER, basic, claims};
 use tower::ServiceExt;
 
-struct Kit(HashMap<RealmId, Arc<RealmKit>>);
+struct Kit(HashMap<EnvironmentId, Arc<EnvironmentKit>>);
 
 impl Kits for Kit {
-    async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Unavailable> {
-        self.0.get(&entry.realm).cloned().ok_or(Unavailable)
+    async fn kit(&self, entry: &EnvironmentEntry) -> Result<Arc<EnvironmentKit>, Unavailable> {
+        self.0.get(&entry.environment).cloned().ok_or(Unavailable)
     }
 }
 
-fn kit(f: &support::Fixture, seed: u8) -> RealmKit {
-    let wa = WaRealm::from_bytes(*f.realm.realm.as_bytes());
-    RealmKit {
-        tenant: f.realm.tenant,
-        realm: f.realm.realm,
+fn kit(f: &support::Fixture, seed: u8) -> EnvironmentKit {
+    let wa = WaEnvironment::from_bytes(*f.environment.environment.as_bytes());
+    EnvironmentKit {
+        tenant: f.environment.tenant,
+        environment: f.environment.environment,
         issuer: f.issuer.clone(),
         name: f.slug.clone(),
-        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
-        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
-            [seed; 32],
-        ))),
+        kek: std::sync::Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
+        index: std::sync::Arc::new(access_crypto::environment_index::EnvironmentIndexKey::new(
+            Secret::new([seed; 32]),
+        )),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
-        decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([seed; 32]))),
+        decoys: EnvironmentDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([seed; 32]))),
         rp: RelyingParty {
-            realm: wa,
+            environment: wa,
             rp_id: RpId::parse(&f.host).unwrap(),
             name: f.slug.clone(),
             pinned: true,
             related: Vec::new(),
         },
-        webauthn: RealmPolicy::default(),
+        webauthn: EnvironmentPolicy::default(),
         attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
-        signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
+        signin: access_identity_session::domain::environment_policy::EnvironmentSignin::default(),
         hash: access_identity_account::domain::password::HashPolicy::Argon2(
             access_identity_account::domain::password::Argon2Params::CANONICAL,
         ),
@@ -110,12 +110,12 @@ fn app(c: &Cluster) -> Router {
         )
     };
     let kits = Kit(c
-        .realms
+        .environments
         .iter()
         .enumerate()
         .map(|(i, f)| {
             (
-                f.realm.realm,
+                f.environment.environment,
                 Arc::new(kit(f, 60 + u8::try_from(i).unwrap())),
             )
         })
@@ -133,13 +133,13 @@ fn app(c: &Cluster) -> Router {
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     };
-    let routes = realm_router(discovery())
+    let routes = environment_router(discovery())
         .merge(oauth_router(OAuth::new(env.clone())))
         .merge(login_router(discovery(), hosted, None));
     harden(routes, Limits::default())
 }
 
-/// What the other realm minted, and what must never appear in this realm's answers unless
+/// What the other environment minted, and what must never appear in this environment's answers unless
 /// the request carried it.
 struct Secrets {
     issuer: String,
@@ -257,8 +257,8 @@ const KEYS: [&str; 22] = [
     "token_type_hint",
 ];
 
-/// Values a request can carry: the realm's own and the other realm's identifiers and tokens,
-/// protocol words and junk. Indexes 0..`OWN` are filled per realm at run time.
+/// Values a request can carry: the environment's own and the other environment's identifiers and tokens,
+/// protocol words and junk. Indexes 0..`OWN` are filled per environment at run time.
 const OWN: usize = 7;
 const WORDS: [&str; 20] = [
     CB,
@@ -370,7 +370,7 @@ fn form_encode(s: &str) -> String {
 }
 
 impl World {
-    /// The value at `i`: the target realm's own values, then the other realm's, then words.
+    /// The value at `i`: the target environment's own values, then the other environment's, then words.
     fn value(&self, own: usize, i: usize) -> String {
         let pick = |s: &Secrets, k: usize| match k {
             0 => s.clients[0].clone(),
@@ -414,7 +414,7 @@ impl World {
             Some("nope"),
         ][g.slug];
         let path = match slug {
-            Some(s) => format!("/realms/{s}{}", PATHS[path_index]),
+            Some(s) => format!("/env/{s}{}", PATHS[path_index]),
             None => String::from(PATHS[path_index]),
         };
         let mut chosen = base;
@@ -563,7 +563,7 @@ impl World {
 
 // TN-23, §12.1.3, OP-138, MD-5, TN-2, TN-7, G50, IDP-7, TN-104, X41, MUST-NEVER-16
 #[test]
-fn http_api_never_crosses_realms_or_fails() {
+fn http_api_never_crosses_environments_or_fails() {
     // K05
     let rt = tokio::runtime::Runtime::new().unwrap();
     let world = rt.block_on(async {
@@ -600,13 +600,13 @@ fn no_session_management_iframe() {
     rt.block_on(async {
         let c = Cluster::new(&["nsm-a"]).await;
         let app = app(&c);
-        let host = c.realms[0].host.clone();
+        let host = c.environments[0].host.clone();
         for path in [
             "/check_session_iframe",
             "/check-session",
             "/session/check",
             "/op/check_session",
-            "/realms/nsm-a/check_session_iframe",
+            "/env/nsm-a/check_session_iframe",
         ] {
             let mut req = Request::get(path)
                 .header(header::HOST, &host)

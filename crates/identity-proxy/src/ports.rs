@@ -1,5 +1,5 @@
 //! What forward-auth needs from the rest of the server (OP-63): the registry, the proxy
-//! sessions, the realm's authorization server, the authority plane's decision, time and
+//! sessions, the environment's authorization server, the authority plane's decision, time and
 //! randomness. Every port answers [`Unavailable`] rather than guess; the check then refuses.
 
 use std::future::Future;
@@ -19,8 +19,8 @@ pub struct Unavailable;
 /// A live registration as the check reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Registered<R> {
-    /// The realm it is registered in.
-    pub realm: R,
+    /// The environment it is registered in.
+    pub environment: R,
     /// The registration.
     pub registration: Registration,
     /// Whether `idp.proxy.plain_headers` is in force.
@@ -60,7 +60,7 @@ pub struct Holder {
     pub subject: [u8; 16],
     /// The Party the account is bound to, once bound.
     pub party: Option<Id>,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// When the login session ends, ms.
     pub expires_ms: u64,
@@ -106,20 +106,20 @@ pub struct Asked<'a> {
 
 /// The ports of forward-auth.
 pub trait Ports: Send + Sync {
-    /// The realm a registration lives in.
-    type Realm: Clone + Send + Sync;
+    /// The environment a registration lives in.
+    type Environment: Clone + Send + Sync;
 
     /// The live registration of transport identity `pep` for application host `host`.
     fn registered(
         &self,
         pep: &str,
         host: &str,
-    ) -> impl Future<Output = Result<Option<Registered<Self::Realm>>, Unavailable>> + Send;
+    ) -> impl Future<Output = Result<Option<Registered<Self::Environment>>, Unavailable>> + Send;
 
     /// Keeps a sign-in under the digest of its `state` until `expires_ms`.
     fn begin(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         proxy: &str,
         state: &[u8; 32],
         pending: &Pending,
@@ -129,7 +129,7 @@ pub trait Ports: Send + Sync {
     /// Takes the sign-in of `state` once, before it expires.
     fn take(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         proxy: &str,
         state: &[u8; 32],
     ) -> impl Future<Output = Result<Option<Pending>, Unavailable>> + Send;
@@ -137,7 +137,7 @@ pub trait Ports: Send + Sync {
     /// Opens a proxy session under the digest of its cookie.
     fn open(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         proxy: &str,
         cookie: &[u8; 32],
         redeemed: &Redeemed,
@@ -146,16 +146,16 @@ pub trait Ports: Send + Sync {
     /// The grant behind a live proxy session.
     fn session(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         proxy: &str,
         cookie: &[u8; 32],
     ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
 
-    /// The realm's authorization endpoint URL for a code + PKCE sign-in of `client_id`, with
+    /// The environment's authorization endpoint URL for a code + PKCE sign-in of `client_id`, with
     /// `sign_in` its `(state, nonce, code_challenge)`.
     fn authorize_url(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         client_id: &str,
         redirect_uri: &str,
         sign_in: (&str, &str, &str),
@@ -165,7 +165,7 @@ pub trait Ports: Send + Sync {
     /// live code of this client and redirect URI.
     fn redeem(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         client_id: &str,
         redirect_uri: &str,
         code: (&str, &str),
@@ -174,7 +174,7 @@ pub trait Ports: Send + Sync {
     /// Who the grant `sid` of `client_id` is now; `None` once it or its session ended.
     fn holder(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         client_id: &str,
         sid: &[u8; 16],
     ) -> impl Future<Output = Result<Option<Holder>, Unavailable>> + Send;
@@ -183,7 +183,7 @@ pub trait Ports: Send + Sync {
     /// m.3 (l)).
     fn app_token(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         client_id: &str,
         holder: &Holder,
         token: (&str, &str),

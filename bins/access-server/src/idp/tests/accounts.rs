@@ -1,6 +1,6 @@
 //! The account actions of catalog 3 against the real plane (OP-153 m.25 (b), (i)): a migration
 //! export sealed to the receiving deployment's key and imported there from the opened bundle,
-//! and an administrator's binding across two realms of one tenant.
+//! and an administrator's binding across two environments of one tenant.
 
 use access_identity_admin::domain::Change;
 use access_identity_admin::domain::accounts::{AccountBind, AccountImport, MigrationExport};
@@ -16,10 +16,10 @@ async fn signed(w: &World, p: &Proposal, seed: u8) -> Vec<u8> {
     )
 }
 
-/// Imports `content` into the realm `at` under `idp.account.import`.
+/// Imports `content` into the environment `at` under `idp.account.import`.
 async fn import(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     content: &str,
     nonce: u8,
@@ -47,7 +47,7 @@ async fn import(
 #[tokio::test]
 async fn a_migration_export_opens_only_for_its_recipient_and_imports_there() {
     let w = World::new().await;
-    let (ta, ra, da) = w.realm_with("export-from", Some(0)).await;
+    let (ta, ra, da) = w.environment_with("export-from", Some(0)).await;
     onboard(&w.plane, da, ROOT, ROOT_KEY).await;
     let content = [
         r#"{"email":"exp.one@example.com","password_hash":"$2a$05$CCCCCCCCCCCCCCCCCCCCC.E5YPO9kmyuRGyh0XouQYb4YMJKvyOeW"}"#,
@@ -89,7 +89,7 @@ async fn a_migration_export_opens_only_for_its_recipient_and_imports_there() {
     assert!(lines.contains("exp.one@example.com") && lines.contains("ref-2"));
     assert!(lines.contains("$2a$05$CCCCCCCCCCCCCCCCCCCCC.E5YPO9kmyuRGyh0XouQYb4YMJKvyOeW"));
 
-    let (tb, rb, db) = w.realm_with("export-to", Some(0)).await;
+    let (tb, rb, db) = w.environment_with("export-to", Some(0)).await;
     onboard(&w.plane, db, ROOT, ROOT_KEY).await;
     let landed = import(&w, (tb, rb), db, &lines, 0xe2).await;
     assert_eq!(landed.created, 2, "{landed:?}");
@@ -97,11 +97,13 @@ async fn a_migration_export_opens_only_for_its_recipient_and_imports_there() {
     assert_eq!(landed.skipped, Vec::new());
 }
 
-/// A subject of the realm `at`.
-async fn subject_in(w: &World, (tenant, realm): (TenantId, RealmId)) -> [u8; 16] {
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+/// A subject of the environment `at`.
+async fn subject_in(w: &World, (tenant, environment): (TenantId, EnvironmentId)) -> [u8; 16] {
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let s = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     t.commit().await.unwrap();
@@ -110,15 +112,15 @@ async fn subject_in(w: &World, (tenant, realm): (TenantId, RealmId)) -> [u8; 16]
 
 // OP-153 m.18 (e), m.25 (b), §12.1.1, TN-2, TN-65, C7, MD-5, (gg), Ek B 3459
 #[tokio::test]
-async fn an_administrator_binds_two_realms_of_one_tenant_with_a_realm_signed_offer() {
+async fn an_administrator_binds_two_environments_of_one_tenant_with_an_environment_signed_offer() {
     use access_identity_account::domain::binding_offer::pair_digest;
     use access_identity_admin::app::accounts::BINDING_OFFER_REFUSED;
     let w = World::new().await;
-    let (tenant, ra, da) = w.realm_with("bind-a", Some(0)).await;
+    let (tenant, ra, da) = w.environment_with("bind-a", Some(0)).await;
     onboard(&w.plane, da, ROOT, ROOT_KEY).await;
     let rb = w
         .admin()
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant,
             slug: "bind-b",
             style: IssuerStyle::Subdomain,
@@ -134,7 +136,7 @@ async fn an_administrator_binds_two_realms_of_one_tenant_with_a_realm_signed_off
         .await
         .unwrap();
     let db = rb.domain;
-    let rb = rb.realm;
+    let rb = rb.environment;
     onboard(&w.plane, db, ROOT, ROOT_KEY).await;
     let alice = subject_in(&w, (tenant, ra)).await;
     let bob = subject_in(&w, (tenant, rb)).await;
@@ -146,7 +148,7 @@ async fn an_administrator_binds_two_realms_of_one_tenant_with_a_realm_signed_off
         da,
         AccountBind {
             subject: alice,
-            peer_realm: *rb.as_bytes(),
+            peer_environment: *rb.as_bytes(),
             peer_subject: bob,
             offer: None,
         },
@@ -172,7 +174,7 @@ async fn an_administrator_binds_two_realms_of_one_tenant_with_a_realm_signed_off
             db,
             AccountBind {
                 subject: bob,
-                peer_realm: *ra.as_bytes(),
+                peer_environment: *ra.as_bytes(),
                 peer_subject,
                 offer: Some(suiss_crypto::digest::sha256(token.as_bytes())),
             },
@@ -206,8 +208,10 @@ async fn an_administrator_binds_two_realms_of_one_tenant_with_a_realm_signed_off
     );
 
     let pair = pair_digest((*ra.as_bytes(), alice), (*rb.as_bytes(), bob));
-    for (realm, subject, role) in [(ra, alice, "offer"), (rb, bob, "accept")] {
-        let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    for (environment, subject, role) in [(ra, alice, "offer"), (rb, bob, "accept")] {
+        let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+            .await
+            .unwrap();
         let halves = t.binding_halves_of(subject).await.unwrap();
         t.commit().await.unwrap();
         assert_eq!(halves.len(), 1, "{halves:?}");

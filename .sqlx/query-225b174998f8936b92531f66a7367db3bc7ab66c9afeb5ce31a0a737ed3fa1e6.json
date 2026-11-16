@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.issued_claims\n           (tenant_id, environment_id, subject_id, class, line, domain_id, claim_id, disposition)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "225b174998f8936b92531f66a7367db3bc7ab66c9afeb5ce31a0a737ed3fa1e6"
+}

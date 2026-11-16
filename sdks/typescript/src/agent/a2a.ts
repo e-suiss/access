@@ -212,7 +212,7 @@ function https(v: unknown): string | undefined {
   return typeof v === "string" && v.startsWith("https://") ? v : undefined;
 }
 
-/** The identity plane's `securitySchemes` entries from the realm's OpenID discovery document. */
+/** The identity plane's `securitySchemes` entries from the environment's OpenID discovery document. */
 export function securitySchemes(
   discovery: Record<string, unknown>,
 ): Record<string, unknown> | undefined {

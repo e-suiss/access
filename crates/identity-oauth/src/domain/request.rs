@@ -75,7 +75,7 @@ pub struct AuthRequest {
     #[serde(default)]
     pub authority: Option<AuthorityAsk>,
     /// The RFC 8707 resource of the protocol-scope access token: the `client_id` of a
-    /// registered platform product client (OP-149 m.26 (a)); the realm itself when absent.
+    /// registered platform product client (OP-149 m.26 (a)); the environment itself when absent.
     #[serde(default)]
     pub resource: Option<String>,
     /// The OIDC `claims` request (OIDC Core §5.5, §10.4.6).
@@ -231,7 +231,7 @@ impl AuthError {
         "the person has not shared these claims with this app",
     );
 
-    /// `invalid_target`: a client the realm did not register names no registered protected
+    /// `invalid_target`: a client the environment did not register names no registered protected
     /// resource (AG-8, §11.4.3).
     pub const RESOURCE_REQUIRED: Self =
         Self::new("invalid_target", "one protected resource is required");
@@ -324,7 +324,7 @@ pub fn stage_one<'a>(
     Ok(redirect)
 }
 
-/// The requested scopes: protocol scopes this realm serves. A resource scope is refused first
+/// The requested scopes: protocol scopes this environment serves. A resource scope is refused first
 /// (§2.2.2 #2, L24, S-1): resource access is asked for as `authorization_details`.
 fn scopes(params: &Params) -> Result<Vec<String>, AuthError> {
     let scope: Vec<String> = params
@@ -467,7 +467,7 @@ pub fn stage_two(
 }
 
 /// The authority an authorization request asks for (RFC 9396, §9.9, AG-8): one resource server,
-/// never a default one, and valid details. Without details the resource is the realm, or a
+/// never a default one, and valid details. Without details the resource is the environment, or a
 /// registered platform product client (`product`) the protocol-scope token is then addressed
 /// to (RFC 8707, OP-149 m.26 (a)); anything else is `invalid_target`.
 fn authority_ask(

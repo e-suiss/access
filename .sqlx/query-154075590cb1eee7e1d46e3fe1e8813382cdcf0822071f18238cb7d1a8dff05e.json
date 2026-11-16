@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.client_subjects (tenant_id, environment_id, client_uuid, sector, value)\n             SELECT $1, $2, $3, $4, $5\n              WHERE EXISTS (SELECT 1 FROM access.idp_clients\n                             WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3)\n             ON CONFLICT (tenant_id, environment_id, client_uuid, sector) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "154075590cb1eee7e1d46e3fe1e8813382cdcf0822071f18238cb7d1a8dff05e"
+}

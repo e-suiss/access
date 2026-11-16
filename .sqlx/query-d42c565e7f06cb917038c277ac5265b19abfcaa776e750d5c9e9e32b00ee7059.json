@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT blocked FROM access.support_blocks\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n              ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blocked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.support_blocks",
+            "name": "blocked"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d42c565e7f06cb917038c277ac5265b19abfcaa776e750d5c9e9e32b00ee7059"
+}

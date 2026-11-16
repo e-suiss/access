@@ -15,7 +15,7 @@ use super::*;
 #[tokio::test]
 async fn a_ca_is_trusted_by_the_roots_actor_binding_acceptance_alone() {
     let w = World::new().await;
-    let (_, _, d) = w.realm_with("certs", Some(0)).await;
+    let (_, _, d) = w.environment_with("certs", Some(0)).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let acme = Ca::root("Acme Issuing CA").der;
     let beta = Ca::root("Beta Issuing CA").der;

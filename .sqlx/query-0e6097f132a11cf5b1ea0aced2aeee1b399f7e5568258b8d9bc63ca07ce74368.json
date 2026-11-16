@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.approval_invites SET answered_ms = $4, outcome = $5\n          WHERE tenant_id = $1 AND environment_id = $2 AND invite_id = $3 AND answered_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e6097f132a11cf5b1ea0aced2aeee1b399f7e5568258b8d9bc63ca07ce74368"
+}

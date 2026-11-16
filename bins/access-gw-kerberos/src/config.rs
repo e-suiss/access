@@ -42,7 +42,7 @@ pub struct Config {
     pub spn: String,
     /// The keytab file in the operator's secret store; read once, never written.
     pub keytab: PathBuf,
-    /// The realm's normal sign-in page: every failure and every success ends there.
+    /// The environment's normal sign-in page: every failure and every success ends there.
     pub login: String,
     /// The parser worker supervisor's socket.
     pub parser: PathBuf,
@@ -177,7 +177,7 @@ mod tests {
     // §10.6.4
     #[test]
     fn the_login_page_is_an_https_url() {
-        assert!(valid_login("https://corp.example/realms/corp/login"));
+        assert!(valid_login("https://corp.example/env/corp/login"));
         assert!(!valid_login("http://corp.example/login"));
         assert!(!valid_login("https://user@corp.example/login"));
         assert!(!valid_login("https://corp.example/login#x"));

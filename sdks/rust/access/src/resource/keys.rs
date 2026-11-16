@@ -1,7 +1,7 @@
 //! The keys that verify authority tokens at the resource server (§10.4.5, §9.10 step 1, §9.11.2,
 //! §13.11 EP-4, EP-8, MD-6, MD-7, TI-RT6): the domain's operational keys declared for usage `token`
 //! in its binding-signed Domain Metadata, verified against the binding keys the resource server
-//! pins, read within the `key_epoch` window when it was fetched earlier. A realm JWKS key, or
+//! pins, read within the `key_epoch` window when it was fetched earlier. An environment JWKS key, or
 //! any key the metadata does not declare for `token` at the token's `iat`, verifies nothing.
 //! The algorithm allowlist is the intersection of the metadata's and the resource server's
 //! configuration, never the token header's (MD-3).
@@ -183,8 +183,8 @@ fn public_key(jwk: &Json) -> Option<PublicKey> {
     }
 }
 
-/// Reads a realm JWKS into the key set identity assertions (ID tokens) verify under: every
-/// Ed25519 or P-256 key whose `kid` is its RFC 7638 thumbprint (CR-24). A realm key never
+/// Reads an environment JWKS into the key set identity assertions (ID tokens) verify under: every
+/// Ed25519 or P-256 key whose `kid` is its RFC 7638 thumbprint (CR-24). An environment key never
 /// verifies an authority token (§10.4.5); those resolve through [`usage_keys`]. A document
 /// without such a key is refused.
 ///

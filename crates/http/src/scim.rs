@@ -1,6 +1,6 @@
-//! The SCIM 2.0 server on axum (RFC 7644; OP-155 m.3 (g), IDP-23): `/scim/v2/` at the realm's
-//! host and under `/realms/{slug}`. Every endpoint, discovery included, needs the bearer secret
-//! of a live client of that realm; anything else is `401`. Bodies are `application/scim+json`
+//! The SCIM 2.0 server on axum (RFC 7644; OP-155 m.3 (g), IDP-23): `/scim/v2/` at the environment's
+//! host and under `/env/{slug}`. Every endpoint, discovery included, needs the bearer secret
+//! of a live client of that environment; anything else is `401`. Bodies are `application/scim+json`
 //! (plain JSON only for a client whose tolerance profile allows it), at most [`MAX_BODY`] bytes.
 //! `/Bulk` answers `501` and `/Me` is not served (Ek B 4928, 5037).
 
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use access_identity_oauth::ports::Directory;
-use access_identity_scim::app::{Answer, Clock, ListQuery, RealmRef, Scim, Vaults};
+use access_identity_scim::app::{Answer, Clock, EnvironmentRef, ListQuery, Scim, Vaults};
 use access_identity_scim::domain::schema::Kind;
 use access_identity_scim::domain::tolerance::Rule;
 use access_identity_scim::domain::{MEDIA_TYPE, ScimError, ScimType, discovery};
@@ -94,7 +94,7 @@ where
 {
     let shared = Arc::new(Shared { directory, scim });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         let base = format!("{prefix}/scim/v2");
         for endpoint in ["Users", "Groups", "Devices"] {
             r = r
@@ -164,9 +164,9 @@ async fn admit<D: Directory, V: Vaults, C: Clock>(
     }
     .map_err(|_| ScimError::UNAVAILABLE)?
     .ok_or(ScimError::NOT_FOUND)?;
-    let realm = RealmRef {
+    let environment = EnvironmentRef {
         tenant: entry.tenant,
-        realm: entry.realm,
+        environment: entry.environment,
         base: format!("{}/scim/v2", entry.issuer.as_str().trim_end_matches('/')),
     };
     let bearer = headers
@@ -178,7 +178,7 @@ async fn admit<D: Directory, V: Vaults, C: Clock>(
                 .map(|(_, t)| t.trim())
         })
         .ok_or(ScimError::UNAUTHORIZED)?;
-    let client = s.scim.authenticate(&realm, bearer).await?;
+    let client = s.scim.authenticate(&environment, bearer).await?;
     let mut query = HashMap::new();
     if let Some(q) = uri.query() {
         if q.len() > 8192 {
@@ -325,7 +325,7 @@ async fn discover<D: Directory, V: Vaults, C: Clock>(
 ) -> Response {
     let run = async {
         let r = admit(&s, &p, &uri, &headers).await?;
-        let base = &r.client.realm.base;
+        let base = &r.client.environment.base;
         let path = uri.path();
         let id = p.get("id").map(String::as_str);
         let body = if path.ends_with("/ServiceProviderConfig") {

@@ -1,11 +1,11 @@
-//! Agents of a realm (OP-154 m.3 (c), (e), (g); AG-19, AG-20, AG-21, AG-41, E23).
+//! Agents of an environment (OP-154 m.3 (c), (e), (g); AG-19, AG-20, AG-21, AG-41, E23).
 //!
 //! An agent is an actor-capable Party of its own (`actor_kind = agent`) whose root is its
 //! operator Party, an organization or a person, with Instances its runtime keys create. There is
 //! no agent-only authority primitive (F15, AG-19): an agent acts only through a Grant, within
 //! its Instance's Mandate and the Grant's budget, and what makes it an agent's Grant is the
 //! template it is issued from. The identity record below is the identity plane's own
-//! (`IdentitySubject`, AG-20); it reaches the authority plane only as the realm issuer's Claims
+//! (`IdentitySubject`, AG-20); it reaches the authority plane only as the environment issuer's Claims
 //! `operated_by`, `agent_kind` and `sponsored_by`.
 //!
 //! How an `AgentIdentity` record of other products maps onto Access (AG-20, Ek B 4321):
@@ -15,7 +15,7 @@
 //! | workload URI | the `identity_binding_workload` Claim of an Instance (OP-154 m.3 (d)) |
 //! | blueprint | an [`AgentTemplate`] |
 //! | owner, sponsor | the `operated_by` and `sponsored_by` Claims |
-//! | tenant | the realm's governing `AuthorityDomain` |
+//! | tenant | the environment's governing `AuthorityDomain` |
 //! | status | the agent's status and its Instances' lifecycle |
 //! | trusted issuers | Acceptances of the domain |
 //! | `default_token_ttl` | the template's horizon, [`AgentTemplate::ttl_ms`] |
@@ -256,7 +256,7 @@ pub struct Spend {
     pub daily: u64,
 }
 
-/// An agent Grant template (OP-154 m.3 (g), §11.9.1, §13.7.6): what agents of the realm may be
+/// An agent Grant template (OP-154 m.3 (g), §11.9.1, §13.7.6): what agents of the environment may be
 /// granted, with the budget and delegation terms no agent Grant goes without.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentTemplate {
@@ -427,7 +427,7 @@ impl AgentTemplate {
 
     /// The Grant content an agent gets from this template (OP-154 m.3 (e), (g)): held by the
     /// agent Party, bounded by the template's budget, delegable at most one hop and only to
-    /// agents the same operator runs, and requiring a live `sponsored_by` Claim of the realm
+    /// agents the same operator runs, and requiring a live `sponsored_by` Claim of the environment
     /// issuer on every exercise, so an agent whose last sponsor left answers `REQUIRE_ACTION`
     /// [`SPONSOR_REQUIRED`]. Issuing it is the user's own `grant_issue` (RR-12): nothing here
     /// signs or commits.
@@ -512,7 +512,7 @@ impl AgentTemplate {
     }
 }
 
-/// Where a Grant from a template lands: its basis, the agent, its operator, the realm issuer
+/// Where a Grant from a template lands: its basis, the agent, its operator, the environment issuer
 /// whose `sponsored_by` Claims it requires, and when it starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Placement {
@@ -522,7 +522,7 @@ pub struct Placement {
     pub agent: Id,
     /// The operator Party.
     pub operator: Id,
-    /// The realm's Claim issuer Party.
+    /// The environment's Claim issuer Party.
     pub issuer: Id,
     /// Start of validity, Unix milliseconds.
     pub from: u64,
@@ -590,7 +590,7 @@ impl AgentChange {
         }
     }
 
-    /// Its resource path under the realm's slug: `agent/<party>` or `agent-template/<name>`.
+    /// Its resource path under the environment's slug: `agent/<party>` or `agent-template/<name>`.
     #[must_use]
     pub fn path(&self) -> [String; 2] {
         match (self, self.agent()) {

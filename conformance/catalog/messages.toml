@@ -1,6 +1,6 @@
 # The message catalog (OP-153 m.3 (s), X35, X41, §8.15.2): every text Access shows, by its
 # Fluent key. `class` and `owner` follow §8.15.2; `protected` keys (enumeration-sensitive,
-# guarantee-bearing or owner-attributing) are never overridden by a realm (X35, XI-25); a
+# guarantee-bearing or owner-attributing) are never overridden by an environment (X35, XI-25); a
 # guarantee-bearing text names exactly one §3.3 class (SEC2). `text_id` is the login node
 # contract's wire id when the text is a TextId. Checked by `cargo xtask check` (fluent-catalog).
 
@@ -484,7 +484,7 @@ key = "signed_out-admin_ended"
 text_id = "signed_out.admin_ended"
 surface = "account"
 class = "sign_out"
-owner = "realm_admin"
+owner = "environment_admin"
 protected = true
 
 [[message]]
@@ -517,7 +517,7 @@ key = "account-sign_in_turned_off"
 text_id = "account.sign_in_turned_off"
 surface = "account"
 class = "account_state"
-owner = "realm_admin"
+owner = "environment_admin"
 protected = true
 
 [[message]]

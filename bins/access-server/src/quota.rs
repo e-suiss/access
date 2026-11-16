@@ -1,5 +1,5 @@
-//! The realm request quota over PostgreSQL (OP-35, OP-158 m.3 (v), TN-24): `Host` (and the path
-//! issuer's slug) selects the realm as the routes do, and the request draws from the realm's
+//! The environment request quota over PostgreSQL (OP-35, OP-158 m.3 (v), TN-24): `Host` (and the path
+//! issuer's slug) selects the environment as the routes do, and the request draws from the environment's
 //! `rate_limit_rps` and its tenant's request quota in layer B.
 
 use access_http::quota::{
@@ -9,7 +9,7 @@ use access_identity_oauth::adapters::PgDirectory;
 use access_store::Pool;
 use access_store::quota::{RequestRefusal, take_request};
 
-/// The request counters of the realms this process serves.
+/// The request counters of the environments this process serves.
 pub(crate) struct PgRequestQuotas {
     directory: PgDirectory,
     app: Pool,
@@ -17,7 +17,7 @@ pub(crate) struct PgRequestQuotas {
 }
 
 impl PgRequestQuotas {
-    /// Counters resolving realms through `router` and drawing through `app` at `clock`.
+    /// Counters resolving environments through `router` and drawing through `app` at `clock`.
     pub(crate) fn new(router: Pool, app: Pool, clock: fn() -> u64) -> Self {
         Self {
             directory: PgDirectory::new(router),
@@ -29,16 +29,17 @@ impl PgRequestQuotas {
 
 impl RequestQuotas for PgRequestQuotas {
     async fn take(&self, authority: &str, slug: Option<&str>) -> Result<Taken, Unavailable> {
-        let realm = access_identity_oauth::app::resolve_hosted(&self.directory, authority, slug)
-            .await
-            .map_err(|_| Unavailable)?;
-        let Some(realm) = realm else {
-            return Ok(Taken::NoRealm);
+        let environment =
+            access_identity_oauth::app::resolve_hosted(&self.directory, authority, slug)
+                .await
+                .map_err(|_| Unavailable)?;
+        let Some(environment) = environment else {
+            return Ok(Taken::NoEnvironment);
         };
         // MD-8
         let taken = take_request(
             &self.app,
-            (realm.tenant, realm.realm),
+            (environment.tenant, environment.environment),
             (self.clock)(),
             (DEFAULT_RPS, TENANT_RPS),
             BURST_S,
@@ -46,12 +47,12 @@ impl RequestQuotas for PgRequestQuotas {
         .await
         .map_err(|_| Unavailable)?;
         let drawn = Drawn {
-            realm: realm.slug,
+            environment: environment.slug,
             used_percent: taken.used_percent,
         };
         Ok(match taken.refused {
             None => Taken::Admitted(drawn),
-            Some(RequestRefusal::Realm) => Taken::Refused("realm", drawn),
+            Some(RequestRefusal::Environment) => Taken::Refused("environment", drawn),
             Some(RequestRefusal::Tenant) => Taken::Refused("tenant", drawn),
         })
     }

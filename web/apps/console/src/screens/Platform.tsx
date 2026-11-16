@@ -1,8 +1,8 @@
 // OP-159 m.41 (b), (c), TN-119, OP-151 m.2 M2, INV-29, X31: the Platform section. Tenants, the
-// realms and sandbox domains in them, a realm's metadata with the state of its signing keys, and
-// the deployment's readiness. Nothing here shows or changes a realm's accounts, apps, authority,
-// records or settings: managing a realm means signing in to it. Each creation is one signed
-// `idp.platform.*` Exercise on the viewer's own Grant. OP-159 m.42 (d): each realm shows its
+// environments and sandbox domains in them, an environment's metadata with the state of its signing keys, and
+// the deployment's readiness. Nothing here shows or changes an environment's accounts, apps, authority,
+// records or settings: managing an environment means signing in to it. Each creation is one signed
+// `idp.platform.*` Exercise on the viewer's own Grant. OP-159 m.42 (d): each environment shows its
 // console link.
 import { useEffect, useState, type ReactElement } from "react";
 
@@ -34,7 +34,7 @@ interface Tenant {
   readonly created_at?: string;
 }
 
-interface RealmMeta {
+interface EnvironmentMeta {
   readonly slug: string;
   readonly tenant_id?: string;
   readonly issuer?: string | null;
@@ -61,7 +61,7 @@ interface Items<T> {
   readonly items: readonly T[];
 }
 
-function keyState(s: RealmMeta["key_state"]): string {
+function keyState(s: EnvironmentMeta["key_state"]): string {
   if (s === "pending") return t("platformKeyPending");
   if (s === "published") return t("platformKeyPublished");
   if (s === "signing") return t("platformKeySigning");
@@ -77,12 +77,12 @@ function Recorded({ w }: { readonly w: Loaded<WriteResult> }): ReactElement {
   );
 }
 
-/** OP-159 m.42 (d): the console link of realm `slug`. */
+/** OP-159 m.42 (d): the console link of environment `slug`. */
 function ConsoleLink({ slug }: { readonly slug: string }): ReactElement {
   return (
     <a
       href={consoleHref(slug)}
-      data-testid="realm-console-link"
+      data-testid="environment-console-link"
       className={`${MONO} break-all text-primary underline underline-offset-2 hover:text-foreground`}
     >
       {consoleLink(slug)}
@@ -99,7 +99,7 @@ function useTenants(ctx: Ctx, version: number): Loaded<Items<Tenant>> {
   return list;
 }
 
-/** The tenant a realm list and a creation are in. */
+/** The tenant an environment list and a creation are in. */
 function TenantPicker({
   id,
   tenants,
@@ -181,7 +181,7 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
             e.preventDefault();
             const body: Record<string, unknown> = placement === "" ? {} : { placement };
             write(async () => {
-              const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.realm, {
+              const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "createTenant",
                 action: "tenant_create",
                 path: "platform/tenants",
@@ -212,8 +212,8 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 type RootKind = "sole" | "joint";
 
-/** A new realm or sandbox domain in `tenant`, its founding root the viewer's choice (TN-111). */
-function CreateRealm({
+/** A new environment or sandbox domain in `tenant`, its founding root the viewer's choice (TN-111). */
+function CreateEnvironment({
   ctx,
   tenant,
   sandbox,
@@ -225,7 +225,7 @@ function CreateRealm({
   readonly onCreated: () => void;
 }): ReactElement {
   const own = ctx.instance.party ?? "";
-  const prefix = sandbox ? "sandbox" : "realm";
+  const prefix = sandbox ? "sandbox" : "environment";
   const [slug, setSlug] = useState("");
   const [style, setStyle] = useState<"subdomain" | "path">("subdomain");
   const [kind, setKind] = useState<RootKind>("joint");
@@ -261,15 +261,15 @@ function CreateRealm({
           body,
         }
       : {
-          operation: "createRealm",
-          action: "realm_create",
+          operation: "createEnvironment",
+          action: "environment_create",
           tenant,
-          path: `platform/tenants/${encodeURIComponent(tenant)}/realms`,
+          path: `platform/tenants/${encodeURIComponent(tenant)}/envs`,
           body,
         };
     const wanted = slug;
     write(async () => {
-      const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.realm, c);
+      const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.environment, c);
       setMade(wanted);
       onCreated();
       return r;
@@ -278,10 +278,10 @@ function CreateRealm({
   return (
     <Panel
       id={`${prefix}-create`}
-      title={sandbox ? t("platformSandboxCreate") : t("platformRealmCreate")}
+      title={sandbox ? t("platformSandboxCreate") : t("platformEnvironmentCreate")}
     >
       <p className={HINT}>
-        {sandbox ? t("platformSandboxCreateHint") : t("platformRealmCreateHint")}
+        {sandbox ? t("platformSandboxCreateHint") : t("platformEnvironmentCreateHint")}
       </p>
       <form
         className={FORM}
@@ -378,13 +378,13 @@ function CreateRealm({
         )}
         <div className={ACTIONS}>
           <Button type="submit" disabled={!ready}>
-            {sandbox ? t("platformSandboxCreateSend") : t("platformRealmCreateSend")}
+            {sandbox ? t("platformSandboxCreateSend") : t("platformEnvironmentCreateSend")}
           </Button>
         </div>
       </form>
       <Recorded w={w} />
       {!sandbox && w.status === "done" && made !== "" && (
-        <p data-testid="realm-console-created">
+        <p data-testid="environment-console-created">
           {t("platformConsoleLinkCreated")} <ConsoleLink slug={made} />
         </p>
       )}
@@ -392,16 +392,24 @@ function CreateRealm({
   );
 }
 
-/** One realm's metadata and the state of its signing keys. */
-function RealmDetails({ ctx, slug }: { readonly ctx: Ctx; readonly slug: string }): ReactElement {
-  const [m, load] = useRun<RealmMeta>();
+/** One environment's metadata and the state of its signing keys. */
+function EnvironmentDetails({
+  ctx,
+  slug,
+}: {
+  readonly ctx: Ctx;
+  readonly slug: string;
+}): ReactElement {
+  const [m, load] = useRun<EnvironmentMeta>();
   useEffect(() => {
-    load(() => adminGet<RealmMeta>(ctx.instance, `platform/realms/${encodeURIComponent(slug)}`));
+    load(() =>
+      adminGet<EnvironmentMeta>(ctx.instance, `platform/envs/${encodeURIComponent(slug)}`),
+    );
   }, [load, ctx.instance, slug]);
   return (
     <Show l={m}>
       {(r) => (
-        <dl className={ROWS} data-testid="realm-meta">
+        <dl className={ROWS} data-testid="environment-meta">
           <div>
             <dt>{t("platformSlug")}</dt>
             <dd className={MONO}>{r.slug}</dd>
@@ -412,7 +420,7 @@ function RealmDetails({ ctx, slug }: { readonly ctx: Ctx; readonly slug: string 
           </div>
           <div>
             <dt>{t("platformKeys")}</dt>
-            <dd data-testid="realm-key-state" data-state={r.key_state ?? "unavailable"}>
+            <dd data-testid="environment-key-state" data-state={r.key_state ?? "unavailable"}>
               {keyState(r.key_state)}
             </dd>
           </div>
@@ -463,8 +471,8 @@ function RealmDetails({ ctx, slug }: { readonly ctx: Ctx; readonly slug: string 
   );
 }
 
-/** The realms or sandbox domains of the chosen tenant, and a new one. */
-function TenantRealms({
+/** The environments or sandbox domains of the chosen tenant, and a new one. */
+function TenantEnvironments({
   ctx,
   sandbox,
 }: {
@@ -475,12 +483,12 @@ function TenantRealms({
   const tenants = useTenants(ctx, 0);
   const [tenant, setTenant] = useState("");
   const [open, setOpen] = useState<string | undefined>(undefined);
-  const [list, load] = useRun<Items<RealmMeta>>();
-  const kind = sandbox ? "sandbox-domains" : "realms";
+  const [list, load] = useRun<Items<EnvironmentMeta>>();
+  const kind = sandbox ? "sandbox-domains" : "envs";
   useEffect(() => {
     if (tenant === "") return;
     load(() =>
-      adminGet<Items<RealmMeta>>(
+      adminGet<Items<EnvironmentMeta>>(
         ctx.instance,
         `platform/tenants/${encodeURIComponent(tenant)}/${kind}`,
       ),
@@ -491,11 +499,11 @@ function TenantRealms({
   };
   return (
     <div
-      data-testid={sandbox ? "platform-sandboxes" : "platform-realms"}
+      data-testid={sandbox ? "platform-sandboxes" : "platform-environments"}
       className="flex flex-col gap-4"
     >
       <p className="text-muted-foreground">
-        {sandbox ? t("platformSandboxesIntro") : t("platformRealmsIntro")}
+        {sandbox ? t("platformSandboxesIntro") : t("platformEnvironmentsIntro")}
       </p>
       <p className={HINT}>{t("platformBoundary")}</p>
       <Show l={tenants}>
@@ -519,7 +527,7 @@ function TenantRealms({
             ) : (
               <Table data-testid={`${kind}-list`} className="caption-top">
                 <TableCaption className="sr-only">
-                  {sandbox ? t("screenSandboxes") : t("screenRealms")}
+                  {sandbox ? t("screenSandboxes") : t("screenEnvironments")}
                 </TableCaption>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -565,23 +573,23 @@ function TenantRealms({
         </Show>
       )}
       {open !== undefined && (
-        <Panel id={`${kind}-details`} title={t("platformRealmDetails", { slug: open })}>
-          <RealmDetails ctx={ctx} slug={open} />
+        <Panel id={`${kind}-details`} title={t("platformEnvironmentDetails", { slug: open })}>
+          <EnvironmentDetails ctx={ctx} slug={open} />
         </Panel>
       )}
-      <CreateRealm ctx={ctx} tenant={tenant} sandbox={sandbox} onCreated={created} />
+      <CreateEnvironment ctx={ctx} tenant={tenant} sandbox={sandbox} onCreated={created} />
     </div>
   );
 }
 
-/** Platform ▸ Realms. */
-export function Realms({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  return <TenantRealms ctx={ctx} sandbox={false} />;
+/** Platform ▸ Environments. */
+export function Environments({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  return <TenantEnvironments ctx={ctx} sandbox={false} />;
 }
 
 /** Platform ▸ Sandbox domains (OP-151 m.3 (m), X21). */
 export function Sandboxes({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  return <TenantRealms ctx={ctx} sandbox />;
+  return <TenantEnvironments ctx={ctx} sandbox />;
 }
 
 /** Platform ▸ Operator health: the deployment's readiness checks, by name. */

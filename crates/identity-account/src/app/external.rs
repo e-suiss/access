@@ -14,7 +14,7 @@ use access_store::identity::TenantTx;
 use crate::AccountError;
 use crate::adapters::pg::PgTx;
 use crate::app::vault::{self, Vault};
-use crate::app::{Actor, Realm, events};
+use crate::app::{Actor, Environment, events};
 use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::status::AccountStatus;
 use crate::ports::AccountTx;
@@ -112,13 +112,13 @@ pub enum Combined {
     Refused,
 }
 
-/// External identities of one realm.
+/// External identities of one environment.
 pub struct Externals<'a> {
     /// The `access_app` pool.
     pub pool: &'a Pool,
-    /// The realm.
-    pub realm: &'a Realm<'a>,
-    /// The realm's vault keys.
+    /// The environment.
+    pub environment: &'a Environment<'a>,
+    /// The environment's vault keys.
     pub vault: &'a Vault,
 }
 
@@ -141,7 +141,12 @@ async fn audit(
 impl Externals<'_> {
     pub(crate) async fn begin(&self) -> Result<PgTx, AccountError> {
         Ok(PgTx(
-            TenantTx::begin(self.pool, self.realm.tenant, self.realm.realm).await?,
+            TenantTx::begin(
+                self.pool,
+                self.environment.tenant,
+                self.environment.environment,
+            )
+            .await?,
             Some(self.vault.clone()),
         ))
     }
@@ -202,14 +207,14 @@ impl Externals<'_> {
             tx.0.federated_verified(row.link, now_ms).await?;
             return Ok(Resolved::Existing(row.subject));
         }
-        let wrapped = crate::app::sealing::new_subject_key(self.realm)?;
+        let wrapped = crate::app::sealing::new_subject_key(self.environment)?;
         let subject = tx
-            .insert_subject(AccountStatus::Active, self.realm.kek.id(), &wrapped)
+            .insert_subject(AccountStatus::Active, self.environment.kek.id(), &wrapped)
             .await?;
-        let external = self.realm.external(subject)?;
+        let external = self.environment.external(subject)?;
         audit(tx, "account.created", who.actor, &external, who.correlation).await?;
         // OP-151 m.3 (i)
-        events::created(tx, self.realm, subject).await?;
+        events::created(tx, self.environment, subject).await?;
         crate::app::accounts::status_claim(tx, subject, AccountStatus::Active).await?;
         // IDP-31 (3), MD-5
         if let Some((value, true)) = a.address
@@ -217,8 +222,8 @@ impl Externals<'_> {
             && tx.add_identifier(subject, &id).await?
         {
             let index = self.vault.index_of(
-                self.realm.tenant.as_bytes(),
-                self.realm.realm.as_bytes(),
+                self.environment.tenant.as_bytes(),
+                self.environment.environment.as_bytes(),
                 value,
             )?;
             if let Some(identifier) = tx.0.identifier_id(subject, &index).await? {
@@ -279,8 +284,8 @@ impl Externals<'_> {
             && let Some((value, _)) = a.address
         {
             let index = self.vault.index_of(
-                self.realm.tenant.as_bytes(),
-                self.realm.realm.as_bytes(),
+                self.environment.tenant.as_bytes(),
+                self.environment.environment.as_bytes(),
                 value,
             )?;
             if let Some(holder) = tx.0.federated_by_address(a.provider, &index).await? {
@@ -289,7 +294,7 @@ impl Externals<'_> {
                     tx.0.insert_subject_conflict(a.provider, holder, a.key, now_ms)
                         .await?;
                 if fresh {
-                    let target = self.realm.external(holder)?;
+                    let target = self.environment.external(holder)?;
                     audit(
                         &mut tx,
                         "upstream.subject_conflict",
@@ -386,8 +391,8 @@ impl Externals<'_> {
             .national
             .map(|n| {
                 self.vault.index_of(
-                    self.realm.tenant.as_bytes(),
-                    self.realm.realm.as_bytes(),
+                    self.environment.tenant.as_bytes(),
+                    self.environment.environment.as_bytes(),
                     &format!("national-id:{n}"),
                 )
             })
@@ -441,7 +446,7 @@ impl Externals<'_> {
         }
         // TN-65 (5)
         tx.end_sessions(subject).await?;
-        let external = self.realm.external(subject)?;
+        let external = self.environment.external(subject)?;
         audit(
             &mut tx,
             "account.linked",
@@ -489,7 +494,7 @@ impl Externals<'_> {
         {
             return Err(AccountError::Corrupt);
         }
-        let external = self.realm.external(subject)?;
+        let external = self.environment.external(subject)?;
         audit(
             &mut tx,
             "account.unlinked",
@@ -531,7 +536,7 @@ impl Externals<'_> {
     /// authenticated within five minutes, irreversible. The snapshot and its audit event are
     /// written before anything moves; the absorbed account's identifiers and links move to the
     /// survivor and it becomes a tombstone. Nothing of the authority plane moves: no lineage,
-    /// holding, Mandate, budget or Grant (TNI-11); the realm issuer's `identity_binding_person`
+    /// holding, Mandate, budget or Grant (TNI-11); the environment issuer's `identity_binding_person`
     /// Claim records the binding.
     ///
     /// # Errors
@@ -591,7 +596,7 @@ impl Externals<'_> {
                     links: &[access_store::federation::FederatedRow],
                     subject: [u8; 16]| {
             serde_json::json!({
-                "subject": self.realm.external(subject).unwrap_or_default(),
+                "subject": self.environment.external(subject).unwrap_or_default(),
                 "identifiers": ids.iter().filter(|i| i.live).map(|i| serde_json::json!({
                     "id": access_kernel::json::b64url_encode(&i.id), "kind": i.kind,
                 })).collect::<Vec<_>>(),
@@ -616,7 +621,7 @@ impl Externals<'_> {
             tx.commit().await?;
             return Ok(Combined::Refused);
         }
-        let target = self.realm.external(survivor)?;
+        let target = self.environment.external(survivor)?;
         audit(
             &mut tx,
             "account.combined",
@@ -630,8 +635,8 @@ impl Externals<'_> {
                 continue;
             };
             let index = self.vault.index_of(
-                self.realm.tenant.as_bytes(),
-                self.realm.realm.as_bytes(),
+                self.environment.tenant.as_bytes(),
+                self.environment.environment.as_bytes(),
                 &value,
             )?;
             tx.0.release_identifier(absorbed, &index, &vault::folded(&value))
@@ -659,8 +664,14 @@ impl Externals<'_> {
             if !tx.set_status(absorbed, from, to).await? {
                 return Err(AccountError::Corrupt);
             }
-            crate::app::accounts::status_moved(&mut tx, self.realm, absorbed, (from, to), who)
-                .await?;
+            crate::app::accounts::status_moved(
+                &mut tx,
+                self.environment,
+                absorbed,
+                (from, to),
+                who,
+            )
+            .await?;
         }
         let mut proof = digest.to_vec();
         proof.extend_from_slice(&absorbed);

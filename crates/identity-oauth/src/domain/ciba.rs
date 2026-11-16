@@ -1,6 +1,6 @@
 //! CIBA as an invitation (OpenID CIBA Core 1.0 PROFILE, IDP-14, §10.5.3, §9.14.5 k.2, OP-155 m.3
 //! (l)): a backchannel request names a `REQUIRE_ACTION` the client already received, by its
-//! `exercise_ref` and the RAR `kind=intent` detail of the intent it is about, and asks the realm
+//! `exercise_ref` and the RAR `kind=intent` detail of the intent it is about, and asks the environment
 //! to call the person to their Approval Surface. The answer is the person's AAS; the CIBA answer
 //! is neither a contribution nor authority (PI-3). Poll is the default, ping optional, push never.
 
@@ -42,7 +42,7 @@ pub enum CibaError {
     /// The binding message is too long or not text.
     #[error("invalid_binding_message")]
     BindingMessage,
-    /// A free `login_hint` the realm does not accept, or a hint that names no one this client
+    /// A free `login_hint` the environment does not accept, or a hint that names no one this client
     /// may name.
     #[error("unknown_user_id")]
     UnknownUser,
@@ -87,9 +87,9 @@ impl CibaError {
 pub enum Hint {
     /// A client-signed JWT naming the pairwise `sub` the client knows.
     LoginHintToken(String),
-    /// An ID token this realm issued to the client.
+    /// An ID token this environment issued to the client.
     IdTokenHint(String),
-    /// A free identifier, only with the realm's flag, enumeration-safe.
+    /// A free identifier, only with the environment's flag, enumeration-safe.
     LoginHint(String),
 }
 
@@ -132,7 +132,7 @@ pub fn binding_message_ok(m: &str) -> bool {
     (1..=BINDING_MESSAGE_MAX).contains(&n) && !m.chars().any(char::is_control)
 }
 
-/// The digest of an `auth_req_id` the realm keeps (CR-38).
+/// The digest of an `auth_req_id` the environment keeps (CR-38).
 #[must_use]
 pub fn handle_hash(handle: &[u8]) -> [u8; 32] {
     access_crypto::oauth::opaque_digest(HANDLE_CONTEXT, handle)
@@ -171,7 +171,7 @@ pub fn exercise_ref(raw: &str) -> Result<ExerciseRef, CibaError> {
 }
 
 /// Reads a backchannel request (CIBA Core §7.1, OP-155 m.3 (l)). `login_hint` is taken only
-/// when `free_hint` (the realm's flag); `user_code` is not supported; a `request_context` or
+/// when `free_hint` (the environment's flag); `user_code` is not supported; a `request_context` or
 /// any push parameter is refused.
 ///
 /// # Errors
@@ -396,7 +396,7 @@ mod tests {
 
     // §10.2.1, §10.5.3
     #[test]
-    fn a_free_login_hint_needs_the_realm_flag() {
+    fn a_free_login_hint_needs_the_environment_flag() {
         let p = params(&[("login_hint_token", ""), ("login_hint", "ada@example.com")]);
         assert_eq!(read(&p, false), Err(CibaError::UnknownUser));
         assert!(matches!(read(&p, true).unwrap().hint, Hint::LoginHint(_)));

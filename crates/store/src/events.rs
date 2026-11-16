@@ -1,5 +1,5 @@
 //! Event subscriptions and their delivery queue (OP-149 m.4, m.7, §9.16, OP-73): streams of a
-//! realm, one channel each, and one delivery per event and subscription, deduplicated by the
+//! environment, one channel each, and one delivery per event and subscription, deduplicated by the
 //! event id. Nothing is deleted: a subscription ends with `disabled_at`, a delivery ends in a
 //! final state.
 
@@ -7,10 +7,10 @@ use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::scope::{DomainId, DomainTx};
 
-/// A subscription's webhook secret, sealed under its own DEK wrapped by the realm KEK.
+/// A subscription's webhook secret, sealed under its own DEK wrapped by the environment KEK.
 #[derive(Clone, PartialEq, Eq)]
 pub struct SealedKey {
     /// Id of the wrapping KEK.
@@ -34,8 +34,8 @@ impl core::fmt::Debug for SealedKey {
 /// One subscription as stored.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubscriptionRow {
-    /// Its realm.
-    pub realm: [u8; 16],
+    /// Its environment.
+    pub environment: [u8; 16],
     /// Its id.
     pub id: [u8; 16],
     /// `webhook`, `ssf_push` or `ssf_poll`.
@@ -67,8 +67,8 @@ pub struct SubscriptionRow {
 pub struct PlatformSubscription {
     /// Its tenant, the platform tenant.
     pub tenant: TenantId,
-    /// Its realm.
-    pub realm: RealmId,
+    /// Its environment.
+    pub environment: EnvironmentId,
     /// Its id.
     pub id: [u8; 16],
     /// Event type URNs it receives.
@@ -80,8 +80,8 @@ pub struct PlatformSubscription {
 pub struct DeliveryRow {
     /// Tenant.
     pub tenant: [u8; 16],
-    /// Realm.
-    pub realm: [u8; 16],
+    /// Environment.
+    pub environment: [u8; 16],
     /// Subscription.
     pub subscription: [u8; 16],
     /// Channel.
@@ -139,7 +139,7 @@ fn status(s: Option<u16>) -> Option<i32> {
 }
 
 struct Raw {
-    realm_id: Uuid,
+    environment_id: Uuid,
     subscription_id: Uuid,
     channel: String,
     endpoint: Option<String>,
@@ -175,7 +175,7 @@ impl Raw {
             _ => return Err(StoreError::Corrupt),
         };
         Ok(SubscriptionRow {
-            realm: *self.realm_id.as_bytes(),
+            environment: *self.environment_id.as_bytes(),
             id: *self.subscription_id.as_bytes(),
             channel: self.channel,
             endpoint: self.endpoint,
@@ -196,19 +196,19 @@ impl Raw {
 }
 
 impl TenantTx {
-    /// Stores a new subscription of `realm` in this tenant.
+    /// Stores a new subscription of `environment` in this tenant.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_subscription(&mut self, s: &SubscriptionRow) -> Result<(), StoreError> {
         sqlx::query!(
             "INSERT INTO access.event_subscription
-                (tenant_id, realm_id, subscription_id, channel, endpoint, audience, events,
+                (tenant_id, environment_id, subscription_id, channel, endpoint, audience, events,
                  description, secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                  token_digest, status, owner_client_id, platform_product)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
             uuid(self.tenant.as_bytes()),
-            uuid(&s.realm),
+            uuid(&s.environment),
             uuid(&s.id),
             s.channel,
             s.endpoint,
@@ -240,14 +240,14 @@ impl TenantTx {
     ) -> Result<bool, StoreError> {
         let done = sqlx::query!(
             "INSERT INTO access.event_subscription
-                (tenant_id, realm_id, subscription_id, channel, endpoint, audience, events,
+                (tenant_id, environment_id, subscription_id, channel, endpoint, audience, events,
                  description, token_digest, status, owner_client_id, platform_product)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             ON CONFLICT (tenant_id, realm_id, owner_client_id, channel, endpoint)
+             ON CONFLICT (tenant_id, environment_id, owner_client_id, channel, endpoint)
                WHERE owner_client_id IS NOT NULL AND disabled_at IS NULL AND endpoint IS NOT NULL
              DO NOTHING",
             uuid(self.tenant.as_bytes()),
-            uuid(&s.realm),
+            uuid(&s.environment),
             uuid(&s.id),
             s.channel,
             s.endpoint,
@@ -265,26 +265,26 @@ impl TenantTx {
         Ok(done == 1)
     }
 
-    /// The streams of `realm` the client `client_id` owns, live first, newest first.
+    /// The streams of `environment` the client `client_id` owns, live first, newest first.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn owned_subscriptions(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         client_id: &str,
     ) -> Result<Vec<SubscriptionRow>, StoreError> {
         let raws = sqlx::query_as!(
             Raw,
-            r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
+            r#"SELECT environment_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                       token_digest, status, disabled_at IS NOT NULL AS "disabled!",
                       owner_client_id, platform_product
                  FROM access.event_subscription
-                WHERE tenant_id = $1 AND realm_id = $2 AND owner_client_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND owner_client_id = $3
                 ORDER BY disabled_at IS NOT NULL, created_at DESC, subscription_id"#,
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             client_id
         )
         .fetch_all(&mut *self.tx)
@@ -292,24 +292,24 @@ impl TenantTx {
         raws.into_iter().map(Raw::row).collect()
     }
 
-    /// The subscription `id` of `realm`, ended or not.
+    /// The subscription `id` of `environment`, ended or not.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn subscription(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
     ) -> Result<Option<SubscriptionRow>, StoreError> {
         let raw = sqlx::query_as!(
             Raw,
-            r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
+            r#"SELECT environment_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                       token_digest, status, disabled_at IS NOT NULL AS "disabled!",
                       owner_client_id, platform_product
-                 FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3"#,
+                 FROM access.event_subscription WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3"#,
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&id)
         )
         .fetch_optional(&mut *self.tx)
@@ -317,24 +317,24 @@ impl TenantTx {
         raw.map(Raw::row).transpose()
     }
 
-    /// The live poll subscription of `realm` whose bearer credential has `digest`.
+    /// The live poll subscription of `environment` whose bearer credential has `digest`.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn subscription_by_token(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         digest: &[u8; 32],
     ) -> Result<Option<SubscriptionRow>, StoreError> {
         let raw = sqlx::query_as!(
             Raw,
-            r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
+            r#"SELECT environment_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                       token_digest, status, disabled_at IS NOT NULL AS "disabled!",
                       owner_client_id, platform_product
-                 FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND token_digest = $3 AND disabled_at IS NULL"#,
+                 FROM access.event_subscription WHERE tenant_id = $1 AND environment_id = $2 AND token_digest = $3 AND disabled_at IS NULL"#,
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             digest.as_slice()
         )
         .fetch_optional(&mut *self.tx)
@@ -342,18 +342,18 @@ impl TenantTx {
         raw.map(Raw::row).transpose()
     }
 
-    /// The live subscriptions of every realm of this tenant.
+    /// The live subscriptions of every environment of this tenant.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn live_subscriptions(&mut self) -> Result<Vec<SubscriptionRow>, StoreError> {
         let raws = sqlx::query_as!(
             Raw,
-            r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
+            r#"SELECT environment_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                       token_digest, status, disabled_at IS NOT NULL AS "disabled!",
                       owner_client_id, platform_product
-                 FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY realm_id, subscription_id"#,
+                 FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY environment_id, subscription_id"#,
             uuid(self.tenant.as_bytes())
         )
         .fetch_all(&mut *self.tx)
@@ -367,7 +367,7 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn update_subscription(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
         events: &[String],
         status: &str,
@@ -376,10 +376,10 @@ impl TenantTx {
         let done = sqlx::query!(
             "UPDATE access.event_subscription
                 SET events = $4, status = $5, description = $6, updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3
                 AND disabled_at IS NULL",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&id),
             events,
             status,
@@ -396,15 +396,15 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn disable_subscription(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: [u8; 16],
     ) -> Result<bool, StoreError> {
         let done = sqlx::query!(
             "UPDATE access.event_subscription SET disabled_at = now(), updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3
                 AND disabled_at IS NULL",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&id),
         )
         .execute(&mut *self.tx)
@@ -412,10 +412,10 @@ impl TenantTx {
         sqlx::query!(
             "UPDATE access.event_delivery SET state = 'failed', last_reason = 'receiver',
                     updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3
                 AND state = 'pending'",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&id),
         )
         .execute(&mut *self.tx)
@@ -435,13 +435,13 @@ impl TenantTx {
     ) -> Result<bool, StoreError> {
         let done = sqlx::query!(
             "INSERT INTO access.event_delivery
-                (tenant_id, realm_id, subscription_id, channel, event_id, event_type, payload,
+                (tenant_id, environment_id, subscription_id, channel, event_id, event_type, payload,
                  occurred_at, next_attempt_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::bigint / 1000.0),
                      to_timestamp($9::bigint / 1000.0))
-             ON CONFLICT (tenant_id, realm_id, subscription_id, event_id) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, subscription_id, event_id) DO NOTHING",
             uuid(self.tenant.as_bytes()),
-            uuid(&d.realm),
+            uuid(&d.environment),
             uuid(&d.subscription),
             d.channel,
             d.event_id,
@@ -461,7 +461,7 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn delivery(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         subscription: [u8; 16],
         event_id: &str,
     ) -> Result<Option<DeliveryRow>, StoreError> {
@@ -469,9 +469,9 @@ impl TenantTx {
             r#"SELECT channel, event_type, payload, attempts, state, last_reason,
                       (extract(epoch FROM occurred_at) * 1000)::bigint AS "occurred_ms!"
                  FROM access.event_delivery
-                WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3 AND event_id = $4"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3 AND event_id = $4"#,
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&subscription),
             event_id,
         )
@@ -479,7 +479,7 @@ impl TenantTx {
         .await?;
         Ok(row.map(|r| DeliveryRow {
             tenant: *self.tenant.as_bytes(),
-            realm: *realm.as_bytes(),
+            environment: *environment.as_bytes(),
             subscription,
             channel: r.channel,
             event_id: String::from(event_id),
@@ -498,7 +498,7 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn mark_delivery(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         subscription: [u8; 16],
         event_id: &str,
         mark: Mark<'_>,
@@ -516,10 +516,10 @@ impl TenantTx {
                 SET state = $5, attempts = attempts + 1, last_status = $6, last_reason = $7,
                     next_attempt_at = coalesce(to_timestamp($8::bigint / 1000.0), next_attempt_at),
                     updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3 AND event_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3 AND event_id = $4
                 AND state = 'pending'",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&subscription),
             event_id,
             state,
@@ -538,7 +538,7 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn pollable(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         subscription: [u8; 16],
         limit: u32,
     ) -> Result<Vec<DeliveryRow>, StoreError> {
@@ -546,11 +546,11 @@ impl TenantTx {
             r#"SELECT event_id, event_type, payload, attempts, state, last_reason,
                       (extract(epoch FROM occurred_at) * 1000)::bigint AS "occurred_ms!"
                  FROM access.event_delivery
-                WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3
                   AND channel = 'ssf_poll' AND state = 'pending'
                 ORDER BY created_at, event_id LIMIT $4"#,
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&subscription),
             i64::from(limit),
         )
@@ -560,7 +560,7 @@ impl TenantTx {
             .into_iter()
             .map(|r| DeliveryRow {
                 tenant: *self.tenant.as_bytes(),
-                realm: *realm.as_bytes(),
+                environment: *environment.as_bytes(),
                 subscription,
                 channel: String::from("ssf_poll"),
                 event_id: r.event_id,
@@ -581,7 +581,7 @@ impl TenantTx {
     /// [`StoreError`].
     pub async fn settle_polled(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
         subscription: [u8; 16],
         acked: &[String],
         errors: &[String],
@@ -591,11 +591,11 @@ impl TenantTx {
                 SET state = CASE WHEN event_id = ANY($4) THEN 'acknowledged' ELSE 'failed' END,
                     last_reason = CASE WHEN event_id = ANY($4) THEN NULL ELSE 'receiver' END,
                     attempts = attempts + 1, updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3
                 AND channel = 'ssf_poll' AND state = 'pending'
                 AND (event_id = ANY($4) OR event_id = ANY($5))",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
             uuid(&subscription),
             acked,
             errors,
@@ -615,9 +615,9 @@ pub async fn platform_subscriptions(
     reader: &PgPool,
 ) -> Result<Vec<PlatformSubscription>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT tenant_id, realm_id, subscription_id, events FROM access.event_subscription
+        "SELECT tenant_id, environment_id, subscription_id, events FROM access.event_subscription
           WHERE platform_product IS NOT NULL AND disabled_at IS NULL
-          ORDER BY tenant_id, realm_id, subscription_id",
+          ORDER BY tenant_id, environment_id, subscription_id",
     )
     .fetch_all(reader)
     .await?;
@@ -625,7 +625,7 @@ pub async fn platform_subscriptions(
         .into_iter()
         .map(|r| PlatformSubscription {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             id: *r.subscription_id.as_bytes(),
             events: r.events,
         })
@@ -637,14 +637,14 @@ pub async fn platform_subscriptions(
 pub struct Due {
     /// Tenant.
     pub tenant: TenantId,
-    /// Realm.
-    pub realm: RealmId,
+    /// Environment.
+    pub environment: EnvironmentId,
     /// Subscription.
     pub subscription: [u8; 16],
 }
 
 /// Pending push deliveries whose next attempt is at or before `now_ms`, oldest first: their
-/// tenant, realm, subscription and event id. Read as `access_outbox_reader`.
+/// tenant, environment, subscription and event id. Read as `access_outbox_reader`.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -654,7 +654,7 @@ pub async fn due(
     limit: u32,
 ) -> Result<Vec<(Due, String)>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT tenant_id, realm_id, subscription_id, event_id FROM access.event_delivery
+        "SELECT tenant_id, environment_id, subscription_id, event_id FROM access.event_delivery
           WHERE state = 'pending' AND channel <> 'ssf_poll'
             AND next_attempt_at <= to_timestamp($1::bigint / 1000.0)
           ORDER BY next_attempt_at, created_at LIMIT $2",
@@ -669,7 +669,7 @@ pub async fn due(
             (
                 Due {
                     tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-                    realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+                    environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
                     subscription: *r.subscription_id.as_bytes(),
                 },
                 r.event_id,

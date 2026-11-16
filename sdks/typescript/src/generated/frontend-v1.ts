@@ -580,7 +580,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Home realm discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the realm's sign-in policy still decides. */
+        /** Home environment discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the environment's sign-in policy still decides. */
         get: operations["getOrganizationSignIn"];
         put?: never;
         post?: never;
@@ -855,10 +855,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** This realm's halves of the account's cross-realm bindings (§12.1.3). */
+        /** This environment's halves of the account's cross-environment bindings (§12.1.3). */
         get: operations["listBindings"];
         put?: never;
-        /** Offers to bind the account to one in another realm, after re-authentication (§12.1.3, TN-65). */
+        /** Offers to bind the account to one in another environment, after re-authentication (§12.1.3, TN-65). */
         post: operations["offerBinding"];
         delete?: never;
         options?: never;
@@ -875,7 +875,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Commits this realm's half with the other realm's offer token (§12.1.3). */
+        /** Commits this environment's half with the other environment's offer token (§12.1.3). */
         post: operations["acceptBinding"];
         delete?: never;
         options?: never;
@@ -892,7 +892,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Commits the offering realm's half with the accepting realm's token (§12.1.3). */
+        /** Commits the offering environment's half with the accepting environment's token (§12.1.3). */
         post: operations["completeBinding"];
         delete?: never;
         options?: never;
@@ -960,7 +960,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)). */
+        /** Receives CSP reports, 100 a minute per environment (OP-153 m.3 (t)). */
         post: operations["reportCsp"];
         delete?: never;
         options?: never;
@@ -975,7 +975,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)). */
+        /** The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)). */
         get: operations["getBranding"];
         put?: never;
         post?: never;
@@ -992,7 +992,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)). */
+        /** The environment's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)). */
         get: operations["getMessageOverrides"];
         put?: never;
         post?: never;
@@ -1217,7 +1217,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)). */
+        /** What the consent screen of a client the environment did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)). */
         post: operations["previewApproval"];
         delete?: never;
         options?: never;
@@ -1285,7 +1285,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the realm issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)). */
+        /** A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the environment issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)). */
         post: operations["openWorkloadInstance"];
         delete?: never;
         options?: never;
@@ -1302,7 +1302,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the realm issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)). */
+        /** Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the environment issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)). */
         post: operations["attestWorkload"];
         delete?: never;
         options?: never;
@@ -1499,7 +1499,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)). */
+        /** The SAML IdP metadata, signed with the environment's saml key (OP-155 m.3 (e)). */
         get: operations["samlMetadata"];
         put?: never;
         post?: never;
@@ -1621,7 +1621,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)). */
+        /** Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home environment discovery confirms the organization first when it is on (OP-155 m.3 (h)). */
         get: operations["startUpstreamSignIn"];
         put?: never;
         post?: never;
@@ -1707,7 +1707,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)). */
+        /** The environment issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)). */
         get: operations["oidfEntityConfiguration"];
         put?: never;
         post?: never;
@@ -1794,7 +1794,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Explicit OIDF client registration, when the realm opened it. */
+        /** Explicit OIDF client registration, when the environment opened it. */
         post: operations["oidfRegister"];
         delete?: never;
         options?: never;
@@ -2067,7 +2067,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)). */
+        /** The environment's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)). */
         get: operations["getFirstContactKeys"];
         put?: never;
         post?: never;
@@ -2118,7 +2118,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's OpenSSH key revocation list. */
+        /** The environment's OpenSSH key revocation list. */
         get: operations["getSshKrl"];
         put?: never;
         post?: never;
@@ -2135,7 +2135,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys. */
+        /** The environment's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys. */
         get: operations["getSshCaKey"];
         put?: never;
         post?: never;
@@ -2327,7 +2327,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the realm's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)). */
+        /** Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the environment's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)). */
         post: operations["uploadSupportArtifact"];
         delete?: never;
         options?: never;
@@ -2412,7 +2412,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)). */
+        /** Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m)). */
         post: operations["startBatchApproval"];
         delete?: never;
         options?: never;
@@ -2446,7 +2446,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17). */
+        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17). */
         post: operations["answerInlineApproval"];
         delete?: never;
         options?: never;

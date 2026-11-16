@@ -619,9 +619,15 @@ fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
         Denied::KeysMalformed
     );
     let m = support::Memory::healthy();
-    let realm_signed = jws(OTHER_SEED, "at+jwt", &spec.claims());
+    let environment_signed = jws(OTHER_SEED, "at+jwt", &spec.claims());
     assert!(matches!(
-        verify(&s, &realm_signed, &proof(&realm_signed, "k-2"), &m).unwrap_err(),
+        verify(
+            &s,
+            &environment_signed,
+            &proof(&environment_signed, "k-2"),
+            &m
+        )
+        .unwrap_err(),
         Denied::Projection(ProjectionError::Jws(_))
     ));
     for (i, seed) in [support::RECEIPT_SEED, support::LIST_SEED]

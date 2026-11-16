@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, version, content, defined_exercise FROM access.agent_templates\n               WHERE tenant_id = $1 AND environment_id = $2 AND name = $3\n               ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agent_templates",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.agent_templates",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "content",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agent_templates",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "defined_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agent_templates",
+            "name": "defined_exercise"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1dbfaadfe273b791e4ab21cc0654825c71e250fcce26e09424c5f435ffd1a103"
+}

@@ -1,4 +1,4 @@
-//! CIBA of a realm (`idp.realm.ciba`, CT2; `ciba_close`, CT1; OP-155 m.3 (l), IDP-14, §10.5.3):
+//! CIBA of an environment (`idp.environment.ciba`, CT2; `ciba_close`, CT1; OP-155 m.3 (l), IDP-14, §10.5.3):
 //! whether the backchannel endpoint is on, whether a free `login_hint` is accepted, and which
 //! clients are told by ping at which `https` endpoint. Push is never offered.
 
@@ -14,10 +14,10 @@ pub const MAX_PING_CLIENTS: usize = 64;
 /// Longest notification endpoint, in bytes.
 pub const MAX_ENDPOINT: usize = 2048;
 
-/// A realm's CIBA setting.
+/// An environment's CIBA setting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CibaSetting {
-    /// Whether the realm offers CIBA; `false` is `ciba_close`.
+    /// Whether the environment offers CIBA; `false` is `ciba_close`.
     pub enabled: bool,
     /// Whether a free `login_hint` is accepted (enumeration-safe; §10.2.1).
     pub login_hint: bool,
@@ -56,7 +56,7 @@ impl CibaSetting {
     /// Checks the setting on its own.
     ///
     /// # Errors
-    /// [`Invalid::Body`]: a closed realm that keeps a flag or a ping client, too many ping
+    /// [`Invalid::Body`]: a closed environment that keeps a flag or a ping client, too many ping
     /// clients, the same client twice, or an endpoint that is not `https`.
     pub fn check(&self) -> Result<(), Invalid> {
         let clients: BTreeSet<&str> = self.ping.iter().map(|(c, _)| c.as_str()).collect();
@@ -96,7 +96,7 @@ mod tests {
 
     // OP-155 m.3 (l)
     #[test]
-    fn a_closed_realm_keeps_no_flag_and_ping_needs_https() {
+    fn a_closed_environment_keeps_no_flag_and_ping_needs_https() {
         let client = ClientId::parse("cli_aaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
         let on = CibaSetting {
             enabled: true,

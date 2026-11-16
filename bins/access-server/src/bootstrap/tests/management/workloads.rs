@@ -1,6 +1,6 @@
 //! A workload's first presentation on the real server (OP-154 m.3 (d), (r), U20, AG-30, L25,
-//! OP-153 m.3 (gg)): a workload client registered by REST authenticates at the realm's token
-//! endpoint with a JWT-SVID and a DPoP proof; the realm issuer's `identity_binding_workload`
+//! OP-153 m.3 (gg)): a workload client registered by REST authenticates at the environment's token
+//! endpoint with a JWT-SVID and a DPoP proof; the environment issuer's `identity_binding_workload`
 //! Claim about its agent follows through the courier, and the key's own `instance_create`
 //! stands on that Claim alone, while the Instance still has no authority without a Grant. A
 //! trust domain the domain does not accept gets nothing.
@@ -23,8 +23,8 @@ pub(super) const AGENT: Id = Id([0x0e; 16]);
 pub(super) const BUNDLE: &str = "https://bundle.acme.example/bundle.json";
 const OTHER_BUNDLE: &str = "https://bundle.beta.example/bundle.json";
 pub(super) const WORKLOAD: &str = "spiffe://acme.example/agent/mail/w1";
-const ISSUER: &str = "https://access.test/realms/acme";
-const TOKEN: &str = "https://access.test/realms/acme/token";
+const ISSUER: &str = "https://access.test/env/acme";
+const TOKEN: &str = "https://access.test/env/acme/token";
 
 pub(super) fn signer() -> Browser {
     Browser {
@@ -105,7 +105,7 @@ fn dpop(by: &SoftSigner, nonce: Option<&str>) -> String {
     )
 }
 
-/// One `client_credentials` request at the realm's token endpoint with the JWT-SVID
+/// One `client_credentials` request at the environment's token endpoint with the JWT-SVID
 /// `assertion` and a DPoP proof by `key` carrying `nonce`.
 async fn token(
     c: &Console,
@@ -119,7 +119,7 @@ async fn token(
     );
     let (r, body) = send(
         &c.oauth,
-        Request::post("/realms/acme/token")
+        Request::post("/env/acme/token")
             .header(header::HOST, HOST)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .header("dpop", dpop(key, nonce))
@@ -195,12 +195,12 @@ pub(super) async fn agent(c: &Console) {
         ),
         "{registered:?}"
     );
-    let accounts = c.admin_get("/admin/v1/realms/acme/accounts").await;
+    let accounts = c.admin_get("/admin/v1/envs/acme/accounts").await;
     let sponsor = accounts.body["items"][0]["account_id"].clone();
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/agents",
+            "/admin/v1/envs/acme/agents",
             ("registerAgent", None),
             serde_json::json!({
                 "agent": b64url_encode(&AGENT.0),
@@ -219,7 +219,7 @@ pub(super) async fn agent(c: &Console) {
 pub(super) async fn workload_client(c: &Console, spiffe_id: &str, endpoint: &str) -> Written {
     c.rest_write(
         &Method::POST,
-        "/admin/v1/realms/acme/clients",
+        "/admin/v1/envs/acme/clients",
         ("createClient", None),
         serde_json::json!({
             "display_name": "Mail worker",
@@ -234,9 +234,9 @@ pub(super) async fn workload_client(c: &Console, spiffe_id: &str, endpoint: &str
     .await
 }
 
-/// Whether the realm issuer issued AGENT's workload binding of `key`.
+/// Whether the environment issuer issued AGENT's workload binding of `key`.
 async fn bound(c: &Console, key: &PublicKey) -> bool {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let issued = access_store::issuer::last_in_line(
@@ -251,7 +251,7 @@ async fn bound(c: &Console, key: &PublicKey) -> bool {
     issued.is_some()
 }
 
-/// Steps the realm issuer's courier until AGENT's workload binding of `key` is issued.
+/// Steps the environment issuer's courier until AGENT's workload binding of `key` is issued.
 pub(super) async fn issued(c: &Console, key: &PublicKey) {
     let k = super::super::recovery::courier(c);
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
@@ -309,7 +309,7 @@ pub(super) async fn open(
     });
     let (resp, bytes) = send(
         &router,
-        Request::post("/realms/acme/v1/workloads/instances")
+        Request::post("/env/acme/v1/workloads/instances")
             .header(header::HOST, HOST)
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
@@ -409,7 +409,7 @@ async fn a_workload_presents_once_and_its_key_opens_an_instance_that_still_needs
     // U20
     let view = c
         .admin_get(&format!(
-            "/admin/v1/realms/acme/agents/{}",
+            "/admin/v1/envs/acme/agents/{}",
             b64url_encode(&AGENT.0)
         ))
         .await;
@@ -458,7 +458,7 @@ async fn a_bundle_older_than_twice_its_refresh_interval_refuses_jwt_svids() {
     let td = signer();
     let w = workload_client(&c, "spiffe://acme.example/agent/mail/*", BUNDLE).await;
     assert_eq!(w.status, StatusCode::CREATED, "{}", w.body);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     access_store::workloads::keep_bundle(
@@ -526,7 +526,7 @@ async fn an_x509_svid_over_mutual_tls_presents_the_workload() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/clients",
+            "/admin/v1/envs/acme/clients",
             ("createClient", None),
             serde_json::json!({
                 "display_name": "Mail worker",
@@ -558,7 +558,7 @@ async fn an_x509_svid_over_mutual_tls_presents_the_workload() {
             "grant_type=client_credentials&client_id={}",
             client_id.replace(':', "%3A").replace('/', "%2F")
         );
-        Request::post("/realms/acme/token")
+        Request::post("/env/acme/token")
             .header(header::HOST, HOST)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .header("dpop", dpop(&runtime.key, nonce.as_deref()))

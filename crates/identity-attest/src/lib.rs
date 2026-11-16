@@ -2,7 +2,7 @@
 //! AG-31, L21, L25, OP-154 m.3 (r), (s)), free of I/O (OP-63).
 //!
 //! What a workload or a device proves enters Access only as a Claim (U20): a verified SPIFFE
-//! or WIMSE credential becomes the realm issuer's `identity_binding_workload` Claim and a
+//! or WIMSE credential becomes the environment issuer's `identity_binding_workload` Claim and a
 //! verified hardware attestation its `attestation_runtime` Claim. Nothing here decides
 //! authority; a Grant is always needed as well.
 //!

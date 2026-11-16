@@ -17,7 +17,7 @@ use access_sdk::resource::app_token::{
 };
 use suiss_crypto::signer::{Signer as _, SoftSigner};
 
-const ISS: &str = "https://access.test/realms/acme";
+const ISS: &str = "https://access.test/env/acme";
 const AUD: &str = "https://wiki.example.com";
 const NOW_S: u64 = 1_800_000_000;
 
@@ -67,33 +67,33 @@ fn rules(aud: &str, now_s: u64) -> AppTokenRules<'_> {
 // IDP-30 (3), OP-156 m.3 (l), MD-10
 #[test]
 fn an_application_token_verifies_only_for_its_application_within_sixty_seconds() {
-    let realm = SoftSigner::generate_p256().unwrap().0;
-    let t = token(&realm, APP_TYP, &claims(&one(AUD), 60));
-    let id = verify_app_token(&t, &keys(&realm), &rules(AUD, NOW_S)).unwrap();
+    let environment = SoftSigner::generate_p256().unwrap().0;
+    let t = token(&environment, APP_TYP, &claims(&one(AUD), 60));
+    let id = verify_app_token(&t, &keys(&environment), &rules(AUD, NOW_S)).unwrap();
     assert_eq!(id.sub, "pairwise-sub-of-wiki");
     assert_eq!(id.decision, "decision-1");
     assert_eq!(
         verify_app_token(
             &t,
-            &keys(&realm),
+            &keys(&environment),
             &rules("https://other.example.com", NOW_S)
         ),
         Err(AppTokenError::Claims),
         "another application refuses it"
     );
     assert_eq!(
-        verify_app_token(&t, &keys(&realm), &rules(AUD, NOW_S + 66)),
+        verify_app_token(&t, &keys(&environment), &rules(AUD, NOW_S + 66)),
         Err(AppTokenError::Claims),
         "expired"
     );
-    let long = token(&realm, APP_TYP, &claims(&one(AUD), 61));
+    let long = token(&environment, APP_TYP, &claims(&one(AUD), 61));
     assert_eq!(
-        verify_app_token(&long, &keys(&realm), &rules(AUD, NOW_S)),
+        verify_app_token(&long, &keys(&environment), &rules(AUD, NOW_S)),
         Err(AppTokenError::Lifetime)
     );
-    let id_token = token(&realm, "JWT", &claims(&one(AUD), 60));
+    let id_token = token(&environment, "JWT", &claims(&one(AUD), 60));
     assert_eq!(
-        verify_app_token(&id_token, &keys(&realm), &rules(AUD, NOW_S)),
+        verify_app_token(&id_token, &keys(&environment), &rules(AUD, NOW_S)),
         Err(AppTokenError::Signature),
         "an ID token is not an application token"
     );
@@ -105,15 +105,15 @@ fn an_application_token_verifies_only_for_its_application_within_sixty_seconds()
     let list = claims(&format!(r#"["{AUD}","https://other.example.com"]"#), 60);
     assert_eq!(
         verify_app_token(
-            &token(&realm, APP_TYP, &list),
-            &keys(&realm),
+            &token(&environment, APP_TYP, &list),
+            &keys(&environment),
             &rules(AUD, NOW_S)
         ),
         Err(AppTokenError::Claims),
         "one audience only"
     );
     assert_eq!(
-        verify_app_token(&"a".repeat(9000), &keys(&realm), &rules(AUD, NOW_S)),
+        verify_app_token(&"a".repeat(9000), &keys(&environment), &rules(AUD, NOW_S)),
         Err(AppTokenError::Size)
     );
 }

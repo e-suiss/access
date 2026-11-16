@@ -1,5 +1,5 @@
 //! The agent SDK against the real server (OP-154 m.3 (w), (y), OP-153 m.3 (gg)): a bootstrapped
-//! realm with an agent Party its operator registered and an Instance its runtime key opened;
+//! environment with an agent Party its operator registered and an Instance its runtime key opened;
 //! Grants the root issues to the agent; every request the agent SDK builds, signs and reads
 //! goes through the real ADP router on the real sequencer, store and `SoftHSM`, with the agent
 //! as its own transport-authenticated PEP.
@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use access_http::adp::adapters::{Discovery, Pep as PepId, router as adp_router};
 use access_identity_admin::ports::AgentRegistration;
 use access_identity_oauth::adapters::PgDirectory;
-use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
 use access_internal_api::instances::{
     Registrant, Registration, RegistrationVerdict, SelfSigned, bootstrap_basis, register_nonce,
     self_signed_intent,
@@ -116,7 +116,7 @@ impl Adp for Recorded<'_> {
     }
 }
 
-/// A bootstrapped realm with the agent registered by its operator, the root, and one Instance.
+/// A bootstrapped environment with the agent registered by its operator, the root, and one Instance.
 struct Agents {
     w: World,
     domain: Digest,
@@ -203,11 +203,11 @@ async fn enrol_for_with(
     let subject = if let Some(s) = subject {
         s
     } else {
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let subject = t
-            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .insert_subject("active", "environment-kek:1", &[9; 40])
             .await
             .unwrap();
         assert!(
@@ -256,7 +256,7 @@ async fn enrol_for_with(
         tenant: *route.tenant.as_bytes(),
         domain,
         registrant: Registrant::Device {
-            realm: *route.realm.as_bytes(),
+            environment: *route.environment.as_bytes(),
             subject,
         },
         party: AGENT,
@@ -316,7 +316,7 @@ impl Agents {
             ),
             asked: AtomicUsize::new(0),
         };
-        let discovery = access_http::realm::router(RealmDiscovery::new(
+        let discovery = access_http::environment::router(EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             access_identity_oauth::adapters::SignerKeys::new(w.identity_signer.clone()),
         ));
@@ -446,7 +446,7 @@ impl Agents {
     }
 
     /// The identity plane's `operated_by` Claim naming the root as the agent's operator, as
-    /// `idp.agent.register` emits it, carried to the domain by the realm issuer's courier.
+    /// `idp.agent.register` emits it, carried to the domain by the environment issuer's courier.
     async fn operated_by(&self) {
         let order = access_identity_account::domain::claims::agent_claim(
             AGENT.0,
@@ -461,14 +461,14 @@ impl Agents {
         self.issue(&order).await;
     }
 
-    /// The realm issuer's Claim `order`, emitted by the identity plane and carried to the
-    /// domain by the realm issuer's courier; the recorded Claim's id.
+    /// The environment issuer's Claim `order`, emitted by the identity plane and carried to the
+    /// domain by the environment issuer's courier; the recorded Claim's id.
     async fn issue(&self, order: &access_identity_account::domain::claims::ClaimOrder) -> Id {
         let route = route_by_slug(&self.w.db.router, "acme")
             .await
             .unwrap()
             .unwrap();
-        let t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let mut pg = access_identity_account::adapters::pg::PgTx(t, None);
@@ -479,7 +479,7 @@ impl Agents {
         self.delivered(order).await
     }
 
-    /// Steps the realm issuer's courier until `order` is answered; the recorded Claim's id.
+    /// Steps the environment issuer's courier until `order` is answered; the recorded Claim's id.
     async fn delivered(&self, order: &access_identity_account::domain::claims::ClaimOrder) -> Id {
         let route = route_by_slug(&self.w.db.router, "acme")
             .await
@@ -508,7 +508,7 @@ impl Agents {
         loop {
             let r = courier.step().await.unwrap();
             if r.answered > 0 {
-                let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+                let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
                     .await
                     .unwrap();
                 let id = access_store::issuer::last_in_line(
@@ -887,7 +887,7 @@ async fn an_agent_reads_its_own_status_and_takes_no_authority_from_a_task() {
         .discovery
         .clone()
         .oneshot(
-            HttpRequest::get("/realms/acme/.well-known/openid-configuration")
+            HttpRequest::get("/env/acme/.well-known/openid-configuration")
                 .header(header::HOST, "access.test")
                 .body(Body::empty())
                 .unwrap(),
@@ -1140,7 +1140,7 @@ async fn hardware_evidence_of_an_instance_key_becomes_its_runtime_attestation() 
         .unwrap()
         .unwrap();
     let router = access_http::login::workloads_router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(a.w.db.router.clone()),
             access_identity_oauth::adapters::SignerKeys::new(a.w.identity_signer.clone()),
         ),
@@ -1156,7 +1156,7 @@ async fn hardware_evidence_of_an_instance_key_becomes_its_runtime_attestation() 
         async move {
             let r = router
                 .oneshot(
-                    HttpRequest::post("/realms/acme/v1/workloads/attestations")
+                    HttpRequest::post("/env/acme/v1/workloads/attestations")
                         .header(header::HOST, "access.test")
                         .header(header::CONTENT_TYPE, "application/json")
                         .body(Body::from(body.to_string()))

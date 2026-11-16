@@ -1,6 +1,6 @@
 //! The LDAP credential class and the reads behind the read-only LDAP directory (§10.6.3, IDP-16,
 //! OP-155 m.3 (n)). Credentials are revoked, never deleted (OP-73); the directory reads only
-//! active accounts, live identifiers and active group memberships of the transaction's realm.
+//! active accounts, live identifiers and active group memberships of the transaction's environment.
 
 use sqlx::types::Uuid;
 
@@ -9,10 +9,10 @@ use crate::accounts::{StoredValue, stored};
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -61,7 +61,7 @@ pub struct DirectoryIdentifier {
     pub stored: StoredValue,
 }
 
-/// An active group of the realm.
+/// An active group of the environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DirectoryGroup {
     /// Its name.
@@ -82,13 +82,13 @@ impl TenantTx {
         application: &str,
         phc: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.ldap_credentials
-                    (tenant_id, realm_id, credential_id, subject_id, application, phc)
+                    (tenant_id, environment_id, credential_id, subject_id, application, phc)
              VALUES ($1, $2, $3, $4, $5, $6)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             Uuid::from_bytes(subject),
             application,
@@ -107,17 +107,17 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<LdapCredentialRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT credential_id, application,
                       (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
                       (extract(epoch FROM last_used_at) * 1000)::bigint AS last_used_ms,
                       (extract(epoch FROM rotated_at) * 1000)::bigint AS rotated_ms
                  FROM access.ldap_credentials
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 ORDER BY created_at, credential_id"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -143,13 +143,13 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<LdapVerifier>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT subject_id, application, phc FROM access.ldap_credentials
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -170,15 +170,15 @@ impl TenantTx {
         subject: [u8; 16],
         id: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "UPDATE access.ldap_credentials
                 SET status = 'revoked', revoked_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND subject_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND subject_id = $4
                 AND status = 'active'
              RETURNING application",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             Uuid::from_bytes(subject),
         )
@@ -196,12 +196,12 @@ impl TenantTx {
         id: [u8; 16],
         phc: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.ldap_credentials SET phc = $4, rotated_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             phc,
         )
@@ -216,12 +216,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ldap_credential_used(&mut self, id: [u8; 16]) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.ldap_credentials SET last_used_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
         )
         .execute(&mut *self.tx)
@@ -238,13 +238,13 @@ impl TenantTx {
         subject: [u8; 16],
         id: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM access.ldap_credentials
-                  WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3
+                  WHERE tenant_id = $1 AND environment_id = $2 AND credential_id = $3
                     AND subject_id = $4 AND status = 'active') AS "active!""#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             Uuid::from_bytes(subject),
         )
@@ -252,7 +252,7 @@ impl TenantTx {
         .await?)
     }
 
-    /// The live username and e-mail identifiers of the realm's active accounts, at most `limit`
+    /// The live username and e-mail identifiers of the environment's active accounts, at most `limit`
     /// accounts, by subject; `only` narrows them to one subject.
     ///
     /// # Errors
@@ -262,20 +262,20 @@ impl TenantTx {
         only: Option<[u8; 16]>,
         limit: i64,
     ) -> Result<Vec<DirectoryIdentifier>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "WITH people AS (
                SELECT subject_id FROM access.identity_subjects
-                WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+                WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'
                   AND ($3::uuid IS NULL OR subject_id = $3)
                 ORDER BY subject_id LIMIT $4)
              SELECT i.subject_id, i.kind, i.value, i.value_index, i.pii_class, i.nonce, i.ciphertext
                FROM access.identity_identifiers i JOIN people p ON p.subject_id = i.subject_id
-              WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.status = 'active'
+              WHERE i.tenant_id = $1 AND i.environment_id = $2 AND i.status = 'active'
                 AND i.kind IN ('username', 'email')
               ORDER BY i.subject_id, i.identifier_id",
             tenant,
-            realm,
+            environment,
             only.map(Uuid::from_bytes),
             limit,
         )
@@ -292,17 +292,17 @@ impl TenantTx {
             .collect()
     }
 
-    /// The realm's active groups by name.
+    /// The environment's active groups by name.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn directory_groups(&mut self) -> Result<Vec<DirectoryGroup>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT name, display_name FROM access.idp_groups
-              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active' ORDER BY name",
+              WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active' ORDER BY name",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -315,21 +315,21 @@ impl TenantTx {
             .collect())
     }
 
-    /// The active memberships of the realm's active groups: (group, subject).
+    /// The active memberships of the environment's active groups: (group, subject).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn directory_members(&mut self) -> Result<Vec<(String, [u8; 16])>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT m.group_name, m.subject_id FROM access.idp_group_members m
-               JOIN access.idp_groups g ON g.tenant_id = m.tenant_id AND g.realm_id = m.realm_id
+               JOIN access.idp_groups g ON g.tenant_id = m.tenant_id AND g.environment_id = m.environment_id
                 AND g.name = m.group_name
-              WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.status = 'active'
+              WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.status = 'active'
                 AND g.status = 'active'
               ORDER BY m.group_name, m.subject_id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;

@@ -16,7 +16,7 @@ test.beforeEach(async ({ context, bff }) => {
 
 // IA-5, XI-11: each screen appears only for an action the viewer can exercise; no stubs
 test("only the screens the viewer can exercise are listed", async ({ page, bff }) => {
-  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.environment/branding"]);
   const nav = page.getByRole("navigation", { name: "Console sections" });
   await expect(nav.getByRole("link", { name: "Developer" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "Audit" })).toHaveCount(0);
@@ -30,7 +30,7 @@ test("each screen's probe is asked once however often the page sets the device",
   page,
   bff,
 }) => {
-  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.environment/branding"]);
   await expect(page.getByRole("heading", { level: 2, name: "Sign-in settings" })).toBeVisible();
   await page.getByRole("link", { name: "Your profile" }).click();
   await page.getByRole("link", { name: "Admin" }).click();
@@ -155,7 +155,7 @@ test("an admin delegation lists its meta-actions with protected ones apart", asy
 // IA-5, OP-152 m.7 (b): a delegated admin sees a section through its own holding
 test("a delegated admin sees the roles screen through its own holding", async ({ page, bff }) => {
   bff.heldActions.add("access/grant_amend");
-  await open(page, bff, "/console/acme/admin/roles", ["idp.realm/branding"]);
+  await open(page, bff, "/console/acme/admin/roles", ["idp.environment/branding"]);
   const screens = page.getByRole("navigation", { name: "Screens in this section" });
   await expect(screens.getByRole("link", { name: "Roles & templates" })).toBeVisible();
   expect(bff.queries.some((q) => q.kind === "holdings" && q.ais)).toBe(true);
@@ -166,7 +166,7 @@ test("offboarding asks for a choice on every channel and labels only a committed
   page,
   bff,
 }) => {
-  bff.admin.set("realms/acme/offboarding/cGFydHk/preview", {
+  bff.admin.set("envs/acme/offboarding/cGFydHk/preview", {
     party: "cGFydHk",
     status: "active",
     survive: 2,
@@ -219,7 +219,7 @@ test("offboarding asks for a choice on every channel and labels only a committed
   await depart.click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.getByTestId("offboarded")).toHaveText("Offboarded");
-  const commit = bff.writes.find((w) => w.path === "realms/acme/offboarding/cGFydHk/commit");
+  const commit = bff.writes.find((w) => w.path === "envs/acme/offboarding/cGFydHk/commit");
   expect(commit?.body["choices"]).toEqual({
     grants: { Z3JhbnQx: "keep", Z3JhbnQy: "revoke" },
     instances: { aW5zdDE: "terminate" },
@@ -278,12 +278,12 @@ test("suspending an account is one signed change", async ({ page, bff }) => {
   await row.getByRole("button", { name: "Suspend" }).click();
   const dialog = page.getByRole("dialog", { name: "Review and sign" });
   await expect(dialog).toContainText("idp.account.suspend v1");
-  await expect(dialog).toContainText("idp.realm:[acme]");
+  await expect(dialog).toContainText("idp.environment:[acme]");
   expect(bff.writes).toEqual([]);
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect(page.getByRole("status")).toContainText("Recorded as change");
   expect(bff.writes).toEqual([
-    { method: "POST", path: "realms/acme/accounts/usr_active/suspend", body: expect.anything() },
+    { method: "POST", path: "envs/acme/accounts/usr_active/suspend", body: expect.anything() },
   ]);
 });
 
@@ -439,19 +439,19 @@ test("sign-in settings recommend Sign in with Apple next to another social provi
 test("an RP ID change needs the passkey count", async ({ page, bff }) => {
   await open(page, bff, "/console/acme/admin/sign-in");
   await page.getByLabel("New sign-in domain").fill("login.acme.example");
-  await page.getByLabel("Number of passkeys registered in this realm").fill("2");
+  await page.getByLabel("Number of passkeys registered in this environment").fill("2");
   await page.getByRole("region", { name: /RP ID/ }).getByRole("button").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.getByRole("alert")).toHaveText(
-    "The count does not match this realm's passkeys. Nothing was changed.",
+    "The count does not match this environment's passkeys. Nothing was changed.",
   );
-  await page.getByLabel("Number of passkeys registered in this realm").fill("3");
+  await page.getByLabel("Number of passkeys registered in this environment").fill("3");
   await page.getByRole("region", { name: /RP ID/ }).getByRole("button").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.getByRole("region", { name: /RP ID/ }).getByRole("status")).toHaveText(
     "Recorded. This change can't be reversed for passkeys.",
   );
-  expect(bff.writes.map((w) => w.path)).toEqual(["realms/acme/settings/rp-id"]);
+  expect(bff.writes.map((w) => w.path)).toEqual(["envs/acme/settings/rp-id"]);
 });
 
 // OP-153 m.22 (g), m.25 (b): report-only loosens the page and is said so before signing
@@ -471,7 +471,7 @@ test("the CSP mode is changed with the settings' ETag and says when it loosens",
   expect(bff.writes).toEqual([
     {
       method: "PUT",
-      path: "realms/acme/settings/csp-mode",
+      path: "envs/acme/settings/csp-mode",
       body: expect.objectContaining({ csp_mode: "report_only" }) as unknown,
       ifMatch: '"settings-1"',
     },
@@ -488,7 +488,7 @@ test("the device key offer is turned off by a sign-in policy patch", async ({ pa
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(panel.getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.method, w.path, w.body["dbsc"], w.ifMatch])).toEqual([
-    ["PATCH", "realms/acme/settings/signin-policy", false, '"settings-1"'],
+    ["PATCH", "envs/acme/settings/signin-policy", false, '"settings-1"'],
   ]);
 });
 
@@ -504,7 +504,7 @@ test("the related origins are set as one list", async ({ page, bff }) => {
   await expect(related.getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.path, w.body["origins"]])).toEqual([
     [
-      "realms/acme/settings/related-origins",
+      "envs/acme/settings/related-origins",
       ["https://shop.acme.example", "https://acme-brand.example"],
     ],
   ]);
@@ -513,7 +513,7 @@ test("the related origins are set as one list", async ({ page, bff }) => {
 // OP-151 m.3, GitOps: a section the repository manages is read-only
 test("a GitOps-managed section is read-only", async ({ page, bff }) => {
   await open(page, bff, "/console/acme/admin/sign-in");
-  bff.admin.set("realms/acme/settings", {
+  bff.admin.set("envs/acme/settings", {
     rp_id: "acme.example",
     branding: { display_name: "Acme" },
     managed: ["branding", "rp_id"],
@@ -746,7 +746,7 @@ test("SSO enforcement shows its preview and needs the invitations' fate", async 
   expect(bff.writes).toEqual([
     {
       method: "POST",
-      path: `realms/acme/organizations/${Buffer.alloc(16, 10).toString("base64url")}/sso-enforcement`,
+      path: `envs/acme/organizations/${Buffer.alloc(16, 10).toString("base64url")}/sso-enforcement`,
       body: expect.objectContaining({ invitations: "cancel" }) as unknown,
     },
   ]);

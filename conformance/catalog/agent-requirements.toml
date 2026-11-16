@@ -30,7 +30,7 @@ tests = [
 [[requirement]]
 id = "AG-35-3"
 requirement = "A trusted agent registry and verifiable credentials"
-mechanism = "Party and Instance registration plus an accepted actor-binding Claim (§11.17); a workload key opens its Instance only on the realm issuer's binding"
+mechanism = "Party and Instance registration plus an accepted actor-binding Claim (§11.17); a workload key opens its Instance only on the environment issuer's binding"
 classes = ["BS"]
 guarantees = ["G7", "G45"]
 tests = [

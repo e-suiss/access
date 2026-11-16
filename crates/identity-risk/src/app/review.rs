@@ -1,6 +1,6 @@
 //! The human review queue (TN-46, GDPR art. 22, SCHUFA C-634/21): SL2 never locks an account; a
 //! person reads the item and marks it. A false positive feeds the FP budget (OP-151 m.3 (o)).
-//! Marking is an operational record, not authority or realm configuration; any containment is a
+//! Marking is an operational record, not authority or environment configuration; any containment is a
 //! separate narrowing Exercise (SI-4, TN-48).
 
 use access_store::identity::TenantTx;
@@ -52,7 +52,7 @@ pub async fn decide(
     Ok(done)
 }
 
-/// The realm's open items, oldest first.
+/// The environment's open items, oldest first.
 ///
 /// # Errors
 /// [`RiskError`].

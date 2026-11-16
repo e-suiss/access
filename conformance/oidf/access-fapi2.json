@@ -1,6 +1,6 @@
 {
   "alias": "access-fapi2",
-  "description": "Access realm acme, nightly OIDF FAPI 2.0 Security Profile run: PAR, PKCE S256, DPoP, private_key_jwt (OP-152 m.5 (j)); the keys are CI-only test keys",
+  "description": "Access environment acme, nightly OIDF FAPI 2.0 Security Profile run: PAR, PKCE S256, DPoP, private_key_jwt (OP-152 m.5 (j)); the keys are CI-only test keys",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

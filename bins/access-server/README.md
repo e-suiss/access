@@ -2,7 +2,7 @@
 
 The Access server: the authority plane and the identity plane in one process. It reads its
 configuration, opens its database pools and its PKCS#11 token, locks itself down (Landlock and
-seccomp) and serves three listeners: the public one (ADP, the realms' OAuth and OpenID endpoints,
+seccomp) and serves three listeners: the public one (ADP, the environments' OAuth and OpenID endpoints,
 the hosted login, the Frontend and product APIs, and the protocol gateways' edge channel on
 `/edge/v1/*`, open only to a registered gateway's client certificate), the management one (`/admin/v1/*` and the
 console) and the internal one (`/livez`, `/readyz`, `/healthz`, `/metrics`).
@@ -13,13 +13,13 @@ access-server migrate                           # apply the schema migrations an
 access-server bootstrap <plan.toml>             # a local deployment's tenants and fixtures
 access-server client-update <plan.toml> <product> <display name>
 access-server client-retire <plan.toml> <product>
-access-server import-accounts <realm> <file.jsonl>   # accounts from another identity provider
+access-server import-accounts <environment> <file.jsonl>   # accounts from another identity provider
 access-server reshred                           # apply the shred journal again after a restore
 ```
 
 There is no other mode and no flag that relaxes a check. Two signer processes run beside it and
 are reached over Unix sockets only: `access-signer` (authority keys) and `access-identity-signer`
-(realm JWKS and the cell's audit checkpoint key).
+(environment JWKS and the cell's audit checkpoint key).
 
 ## Configuration
 
@@ -65,7 +65,7 @@ the start. Unknown keys are refused.
 | `sequencer` | yes | Login of `access_sequencer`: authority log commits. |
 | `app` | yes | Login of `access_app`: the application. |
 | `deriver` | yes | Login of `access_deriver`: the derived index. |
-| `router` | yes | Login of `access_router`: `Host` to realm resolution. |
+| `router` | yes | Login of `access_router`: `Host` to environment resolution. |
 | `archive` | yes | Login of `access_archive`: opens the day and month partitions. |
 | `outbox_reader` | yes | Login of `access_outbox_reader`: the couriers' outbox reads. |
 | `checkpointer` | yes | Login of `access_checkpointer`: integrates and signs the audit chains. |
@@ -88,13 +88,13 @@ Each login is `{ user = "...", password_file = "...", pool = N }` with `pool` at
 
 | Key | Required | Meaning |
 |---|---|---|
-| `realm_base` | yes | The `https` origin realm issuers are formed under, without a path. |
+| `environment_base` | yes | The `https` origin environment issuers are formed under, without a path. |
 | `signer` | yes | The identity signer's Unix socket. |
 | `outbound_ca_file` | no | PEM trust anchors for clients' own endpoints (`jwks_uri`, back-channel logout); the system bundle otherwise. |
 
 ### `[identity.org_domains]`
 
-Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX and registrar watch. Without this section no domain is verified, so autojoin and home realm discovery stay off.
+Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX and registrar watch. Without this section no domain is verified, so autojoin and home environment discovery stay off.
 
 | Key | Required | Meaning |
 |---|---|---|
@@ -106,7 +106,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 | Key | Default | Meaning |
 |---|---|---|
 | `dist_dir` | none | The built `web/apps/login/dist`. Without it only the login API is served. |
-| `redirect_to` | `/` | Where a completed sign-in goes: a path on the realm's origin. |
+| `redirect_to` | `/` | Where a completed sign-in goes: a path on the environment's origin. |
 | `session_idle_s` | `604800` | Session idle lifetime. |
 | `session_absolute_s` | `2592000` | Session absolute lifetime. |
 | `hash_mean_ms` | `0` | The calibrated password hash time refusals are padded to. |
@@ -125,7 +125,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 | `relay` | yes | Relay's base URL. |
 | `management_api` | yes | The management API's base URL. |
 | `products` | no | Product name to base URL. |
-| `platform_realm` | no | The platform tenant's realm slug; without it the platform surface refuses every request. |
+| `platform_environment` | no | The platform tenant's environment slug; without it the platform surface refuses every request. |
 | `relay_product` | no | The product name Relay's platform product client is registered under. Only that client may report İYS registration states to `POST /relay/v1/iys-status`; without it every report is refused. |
 
 ### `[suiss.relay_platform]` (required)
@@ -157,7 +157,7 @@ published as `null`.
 ### `[hosting]`
 
 Whether the signers' hardware is shared with other tenants. Every domain led here publishes it in
-its Domain Metadata, and the durability read, the realm metadata and the console show it. What is
+its Domain Metadata, and the durability read, the environment metadata and the console show it. What is
 not stated is `shared`, and on shared hardware the co-tenant side-channel risk applies.
 
 | Key | Default | Meaning |
@@ -309,7 +309,7 @@ While serving, the process also runs, each stopping with the server:
   before verifiers would find it stale;
 - the back-channel logout courier, the event and webhook fan-outs and couriers, and the SSF
   receiver;
-- the export pass: every 10 seconds one node sends each realm's export sinks the audit rows they
+- the export pass: every 10 seconds one node sends each environment's export sinks the audit rows they
   have not accepted yet, as a copy, never the record. Syslog sinks are reached over TLS on port
   6514, or at a declared delivery target's host and port.
 
@@ -318,12 +318,12 @@ the database still holds a key the shred journal says was destroyed; `access-ser
 destroys those keys again and lets it start.
 
 `/readyz` answers ready only when every pool answers, both signers accept a connection, every
-realm's JWKS loaded at start-up and every courier and consumer is running.
+environment's JWKS loaded at start-up and every courier and consumer is running.
 
 ## Limits
 
-- Every request to a realm's sign-in, account, authorization server and SCIM routes draws from
-  the realm's rate (`putRateLimit`, 200 a second until set) and its tenant's (1 000 a second),
+- Every request to an environment's sign-in, account, authorization server and SCIM routes draws from
+  the environment's rate (`putRateLimit`, 200 a second until set) and its tenant's (1 000 a second),
   with two seconds of burst. Over either it is `429 quota-exceeded` with `Retry-After`.
 - Every authority commit that widens draws from its domain's quota (200 a second, 1 000 at once)
   and its tenant's (500 a second, 2 500 at once). Over either, or while the tenant is on billing

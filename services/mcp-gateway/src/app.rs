@@ -58,7 +58,7 @@ pub struct Config {
     pub origins: Vec<String>,
     /// The PEP name Access derives from this gateway's client certificate.
     pub pep: String,
-    /// The domain the realm governs, the only one decided in.
+    /// The domain the environment governs, the only one decided in.
     pub domain: Digest,
     /// The proxy registration this gateway is.
     pub profile: Profile,

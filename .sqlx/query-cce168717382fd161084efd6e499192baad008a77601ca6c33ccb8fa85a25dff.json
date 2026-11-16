@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT exercise_id FROM access.environment_provisions WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.environment_provisions",
+            "name": "exercise_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cce168717382fd161084efd6e499192baad008a77601ca6c33ccb8fa85a25dff"
+}

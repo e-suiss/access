@@ -13,7 +13,7 @@ actor.
 
 Each tool is pinned by the SHA-256 of its canonical definition: the RFC 8785 form of its `name`,
 `description`, `inputSchema` and `annotations`. An administrator pins a proxy's tool list with
-`idp.proxy.mcp_pin` (`POST /admin/v1/realms/{slug}/proxies/{proxy}/mcp-pins`).
+`idp.proxy.mcp_pin` (`POST /admin/v1/envs/{slug}/proxies/{proxy}/mcp-pins`).
 
 Pinning is strict. When a server changes a tool's description, schema or annotations, or adds a
 tool, the gateway hides it from `tools/list` and refuses to call it until it is pinned again. A
@@ -48,7 +48,7 @@ other method are not served.
 `access-mcp-gateway` reads its configuration from the environment; see `src/main.rs` for the
 variables: the listen address and MCP path behind the engine, the MCP server's host and allowed
 origins, Access's origin with the trust roots, client certificate and key, the MCP server's
-endpoint and its trust roots, the realm's governing domain, and the proxy registration's name,
+endpoint and its trust roots, the environment's governing domain, and the proxy registration's name,
 namespace and action. It keeps no state.
 
 The Access Proxy images (`access-proxy-envoy`, `access-proxy-caddy`) carry it as

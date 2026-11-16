@@ -4,7 +4,7 @@
 
 use access_identity_account::domain::invitation::{code_hash, token_hash};
 use access_identity_events::domain::catalog::{IdentityEvent, IdentityKind};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::StoreError;
@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{Browser, Hosted, Reply};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 use access_identity_account::domain::login::Problem;
 
 /// The invitation does not exist, was accepted or revoked, or expired.
@@ -115,15 +115,15 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn org_tx(&self, kit: &RealmKit) -> Result<TenantTx, Reply> {
-        TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn org_tx(&self, kit: &EnvironmentKit) -> Result<TenantTx, Reply> {
+        TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|e| store_failed(&e))
     }
 
     /// `GET /v1/invitations/{code}` (TN-89 (9)): the organization's name and the role, as text.
     /// A browser's or mail scanner's fetch never consumes the invitation; it is counted.
-    pub async fn invitation(&self, entry: &RealmEntry, secret: &str) -> Reply {
+    pub async fn invitation(&self, entry: &EnvironmentEntry, secret: &str) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -162,7 +162,7 @@ where
     }
 
     /// `POST /v1/invitations/{code}` (TN-89, OP-153 m.3 (o)): accepts with the signed-in
-    /// person's verified identifier (the realm's blind index of its NFKC fold); never as
+    /// person's verified identifier (the environment's blind index of its NFKC fold); never as
     /// owner; the inviter must still stand in the organization; an invitee domain the
     /// organization has not verified needs the person's confirmation first. Opens the
     /// membership with the invitation's role pending: its Grant is the `grant_issue` the
@@ -174,7 +174,7 @@ where
     )]
     pub async fn accept_invitation(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         secret: &str,
         body: &AcceptBody,
@@ -346,7 +346,7 @@ where
     /// the hub's organization lens reads them (§8.17.7.6): whom the person acts for, whether it
     /// is one of the organization's roots and how many roots it has, and its role with the
     /// state of the role's Grant.
-    pub async fn organizations(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn organizations(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -383,12 +383,12 @@ where
         Reply::json(200, json!({ "items": items }))
     }
 
-    /// `GET /v1/organizations/{organization}/sign-in` (TN-3, TN-98, §10.2.6): home realm
+    /// `GET /v1/organizations/{organization}/sign-in` (TN-3, TN-98, §10.2.6): home environment
     /// discovery routes by organization id only, never by an e-mail domain. It answers the
     /// target for the person to confirm ("You're signing in to Acme (acme.example)") only when
     /// the organization turned it on and holds a verified domain no other organization claims;
-    /// otherwise there is no such route. A hint never changes the realm's sign-in policy.
-    pub async fn organization_sign_in(&self, entry: &RealmEntry, org: &str) -> Reply {
+    /// otherwise there is no such route. A hint never changes the environment's sign-in policy.
+    pub async fn organization_sign_in(&self, entry: &EnvironmentEntry, org: &str) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -404,7 +404,7 @@ where
             Err(r) => return r,
         };
         // TN-98, OP-155 m.3 (h)
-        match super::hrd::realm_on(&mut t).await {
+        match super::hrd::environment_on(&mut t).await {
             Ok(true) => {}
             Ok(false) => return Reply::problem(NO_ORGANIZATION),
             Err(e) => return store_failed(&e),
@@ -451,7 +451,12 @@ where
     /// e-mail is on a domain the organization verified, claims alone and turned autojoin on
     /// joins at once instead, never on a consumer domain; the membership's Claim, and with it
     /// any rule-shaped Grant's new holding episode, waits [`AUTOJOIN_COOLING_S`] (TN-109).
-    pub async fn request_access(&self, entry: &RealmEntry, b: &Browser<'_>, org: &str) -> Reply {
+    pub async fn request_access(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        org: &str,
+    ) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -544,16 +549,16 @@ pub const AUTOJOIN_COOLING_S: i64 = 86_400;
 /// about you is told to you).
 async fn cooling_notice(
     t: &mut TenantTx,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     address: String,
 ) -> Result<(), StoreError> {
     use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
     use access_identity_account::notify::message::{Address, Body, Message, Notice};
     use access_identity_account::notify::ports::Notifier as _;
-    let realm = kit.realm();
+    let environment = kit.environment();
     let notifier = access_identity_account::notify::notifier::OutboxNotifier::new(
-        &realm,
+        &environment,
         &SystemEntropy,
         &SystemClock,
     );
@@ -591,7 +596,7 @@ async fn cooling_notice(
 /// rule: verified, claimed by no other organization, not a consumer domain (TN-90).
 async fn autojoin_domain(
     t: &mut TenantTx,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     org: [u8; 16],
 ) -> Result<Option<String>, StoreError> {
@@ -636,12 +641,12 @@ async fn autojoin_domain(
 /// Queues `membership.added` (OP-153 m.4).
 async fn membership_added(
     t: &mut TenantTx,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     org: [u8; 16],
 ) -> Result<(), StoreError> {
     let account = kit
-        .realm()
+        .environment()
         .external(subject)
         .map_err(|_| StoreError::Range)?;
     let id = access_crypto::random::bytes::<32>().map_err(|_| StoreError::Range)?;
@@ -649,7 +654,7 @@ async fn membership_added(
     let event = IdentityEvent::membership(
         IdentityKind::MembershipAdded,
         id,
-        kit.realm.as_bytes(),
+        kit.environment.as_bytes(),
         &account,
         &org,
         at,

@@ -2,7 +2,7 @@
 //! over mTLS with their own client certificate, whose single SAN URI is
 //! `urn:suiss:access:gw:<kind>:<name>`. A gateway certificate opens the edge calls under
 //! [`PREFIX`] and nothing else: any other route answers 403 (IDI-11), so a gateway never reaches
-//! ADP, the management API or a browser flow. The gateway signs nothing; the realm issuer makes
+//! ADP, the management API or a browser flow. The gateway signs nothing; the environment issuer makes
 //! the Claim (P-ID-5).
 
 use std::sync::Arc;

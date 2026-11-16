@@ -1,6 +1,6 @@
 //! Organization domains outside the request path (TN-90, OP-153 m.3 (o)): the DNS-over-HTTPS,
 //! HTTPS and RDAP probe a domain verification reads, and the watch that runs over every live
-//! realm through the jobs table, one node per ten-minute slot (OP-129 m.2); the same pass ends
+//! environment through the jobs table, one node per ten-minute slot (OP-129 m.2); the same pass ends
 //! the guardianships of wards who reached majority (E53). Without a
 //! configured resolver or RDAP service the probe answers nothing and no domain is verified or
 //! lapsed by it (TI-9).
@@ -131,10 +131,10 @@ impl DomainProbe for WebProbe {
     }
 }
 
-/// Schedules this slot's watch pass and runs it over every live realm when this node claims it.
+/// Schedules this slot's watch pass and runs it over every live environment when this node claims it.
 ///
 /// # Errors
-/// [`StoreError`] when the jobs table or the realm list cannot be read.
+/// [`StoreError`] when the jobs table or the environment list cannot be read.
 pub(crate) async fn tick<P: DomainProbe>(
     (app, router): (&Pool, &Pool),
     probe: &P,
@@ -158,14 +158,16 @@ pub(crate) async fn tick<P: DomainProbe>(
         let mut done = true;
         for route in routes(router).await? {
             // E53, OP-153 m.3 (q)
-            if let Err(error) =
-                access_identity_admin::app::household::majorities(app, (route.tenant, route.realm))
-                    .await
+            if let Err(error) = access_identity_admin::app::household::majorities(
+                app,
+                (route.tenant, route.environment),
+            )
+            .await
             {
                 done = false;
-                tracing::warn!(%error, job = DOMAINS, "realm majority pass failed; retried");
+                tracing::warn!(%error, job = DOMAINS, "environment majority pass failed; retried");
             }
-            match watch.realm((route.tenant, route.realm)).await {
+            match watch.environment((route.tenant, route.environment)).await {
                 Ok(p) => {
                     out.verified = out.verified.saturating_add(p.verified);
                     out.changed = out.changed.saturating_add(p.changed);
@@ -175,7 +177,7 @@ pub(crate) async fn tick<P: DomainProbe>(
                 }
                 Err(error) => {
                     done = false;
-                    tracing::warn!(%error, job = DOMAINS, "realm domain watch failed; retried");
+                    tracing::warn!(%error, job = DOMAINS, "environment domain watch failed; retried");
                 }
             }
         }

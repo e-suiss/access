@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT signin_policy, session_policy, extension_policy, decision_pos\n           FROM access.idp_environment_policies\n          WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "signin_policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_policies",
+            "name": "signin_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_policies",
+            "name": "session_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "extension_policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_policies",
+            "name": "extension_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_environment_policies",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "da50ac5d0f429494f725d22e4e60aa5a0e0bcae18600f74b72872de50c6b1712"
+}

@@ -43,8 +43,8 @@ impl Mechanism {
 /// [`super::Call::Authenticate`] of a RADIUS gateway.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Authenticate {
-    /// The realm; it must be the gateway's own.
-    pub realm: String,
+    /// The environment; it must be the gateway's own.
+    pub environment: String,
     /// What is asked.
     pub mechanism: Mechanism,
     /// SHA-256 of the `RadSec` client's TLS certificate.
@@ -58,7 +58,7 @@ pub struct Authenticate {
 impl core::fmt::Debug for Authenticate {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Authenticate")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("mechanism", &self.mechanism)
             .finish_non_exhaustive()
     }
@@ -77,7 +77,7 @@ impl Authenticate {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut entries = vec![
-            ("realm", Value::text(&self.realm)),
+            ("environment", Value::text(&self.environment)),
             ("mechanism", Value::text(self.mechanism.name())),
             ("client", Value::Bytes(self.client.to_vec())),
         ];
@@ -96,7 +96,10 @@ impl Authenticate {
     /// [`WireError`].
     pub fn decode(body: &[u8]) -> Result<Self, WireError> {
         let v = decode_map(body)?;
-        only(&v, &["realm", "mechanism", "client", "name", "secret"])?;
+        only(
+            &v,
+            &["environment", "mechanism", "client", "name", "secret"],
+        )?;
         let mechanism =
             Mechanism::parse(&text(&v, "mechanism", 16)?).ok_or(WireError::Malformed)?;
         let name = match v.get("name") {
@@ -117,7 +120,7 @@ impl Authenticate {
             return Err(WireError::Malformed);
         }
         Ok(Self {
-            realm: text(&v, "realm", 64)?,
+            environment: text(&v, "environment", 64)?,
             mechanism,
             client: required::<32>(&v, "client")?,
             name,
@@ -158,7 +161,7 @@ mod tests {
     #[test]
     fn pap_carries_a_name_and_a_secret_and_a_probe_carries_neither() {
         let pap = Authenticate {
-            realm: String::from("corp"),
+            environment: String::from("corp"),
             mechanism: Mechanism::Pap,
             client: [3; 32],
             name: Some(String::from("ada")),
@@ -182,7 +185,7 @@ mod tests {
             Err(WireError::Malformed)
         );
         let chap = encode(vec![
-            ("realm", Value::text("corp")),
+            ("environment", Value::text("corp")),
             ("mechanism", Value::text("mschapv2")),
             ("client", Value::Bytes(vec![3; 32])),
         ]);

@@ -1,4 +1,4 @@
-//! Attestation objects and the realm's attestation policy (§10.2.4, OP-146 m.4 (d), OP-159 m.3
+//! Attestation objects and the environment's attestation policy (§10.2.4, OP-146 m.4 (d), OP-159 m.3
 //! (ll)). Under `none` attestation is never a trust input. Under `direct`, a `packed`, `tpm`,
 //! `android-key`, `apple` or `fido-u2f` statement (WebAuthn L3 §8) is verified, its chain must
 //! end in a root fresh FIDO metadata lists for the model, and every certificate that names CRL
@@ -33,7 +33,7 @@ pub(crate) const MAX_CHAIN: usize = 8;
 /// read as unrevoked.
 pub const MAX_FETCHES: usize = 8;
 
-/// The formats a `direct` realm verifies (WebAuthn L3 §8). `android-safetynet` was withdrawn
+/// The formats a `direct` environment verifies (WebAuthn L3 §8). `android-safetynet` was withdrawn
 /// and is not among them.
 pub const FORMATS: [&str; 5] = ["packed", "tpm", "android-key", "apple", "fido-u2f"];
 
@@ -75,7 +75,7 @@ impl<'a> AttestationObject<'a> {
     }
 }
 
-/// What a `direct` realm verifies a registration against: the metadata held now and what each
+/// What a `direct` environment verifies a registration against: the metadata held now and what each
 /// CRL distribution point of the statement's chain gave.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Evidence {
@@ -285,7 +285,7 @@ fn chain_rejection(error: &webpki::Error) -> Rejection {
     }
 }
 
-/// Applies the realm's attestation policy. `client_data_hash` completes the signed message;
+/// Applies the environment's attestation policy. `client_data_hash` completes the signed message;
 /// the metadata in `evidence` must be fresh at `now` for `direct`.
 ///
 /// # Errors

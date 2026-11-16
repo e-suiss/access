@@ -8,4 +8,4 @@ path = "/page?x=1"
 [expect]
 status = [302]
 upstream = false
-location = "https://access.test/realms/acme/authorize?"
+location = "https://access.test/env/acme/authorize?"

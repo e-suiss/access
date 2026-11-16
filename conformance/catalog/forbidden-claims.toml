@@ -472,7 +472,7 @@ phrases = [
   "per mau", "per-mau", "per monthly active user", "per active user", "per login", "per-login",
   "per sso connection", "per-sso-connection", "per connection pricing", "per decision", "per exercise",
   "per grant", "per agent pricing", "per-agent pricing", "per approver", "per authentication", "per mfa user",
-  "per realm pricing", "per token",
+  "per environment pricing", "per token",
 ]
 negation = true
 sources = ["B5", "B17"]
@@ -842,7 +842,7 @@ honest = "The async DR profile has RPO > 0; recent writes can be lost."
 [[claim]]
 id = "n58-per-tenant-restore"
 scope = "all"
-phrases = ["per-tenant restore", "per-realm restore", "restore a single tenant"]
+phrases = ["per-tenant restore", "per-environment restore", "restore a single tenant"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
 rows = ["N-58"]
@@ -1266,7 +1266,7 @@ phrases = [
 ]
 negation = true
 sources = ["CMP-26", "OP-30", "T28", "§17.1"]
-honest = "Residency is the cell region the domain and realm declare; it is published with the DR class and the RPO."
+honest = "Residency is the cell region the domain and environment declare; it is published with the DR class and the RPO."
 
 [[claim]]
 id = "w10-unmeasured-throughput"
@@ -1286,7 +1286,7 @@ phrases = [
 ]
 negation = true
 sources = ["T27", "OP-35", "OP-36", "§13.7.4"]
-honest = "Limits and quotas reject widening requests per tenant, realm and domain; narrowing actions, export, handover and recovery are never counted against them."
+honest = "Limits and quotas reject widening requests per tenant, environment and domain; narrowing actions, export, handover and recovery are never counted against them."
 
 [[claim]]
 id = "w12-audit-kept-forever"
@@ -1306,7 +1306,7 @@ phrases = [
 ]
 negation = true
 sources = ["CR-15", "CR-34", "CR-36", "§10.1"]
-honest = "The FIPS profile is chosen per realm or domain; operational keys live in protected memory where the kernel supports it, and user-keyed data is sealed with keys on the user's devices."
+honest = "The FIPS profile is chosen per environment or domain; operational keys live in protected memory where the kernel supports it, and user-keyed data is sealed with keys on the user's devices."
 
 # OP-159 m.3 (qq), m.4 (a)
 
@@ -1373,7 +1373,7 @@ scope = "all"
 phrases = ["post-quantum tls only", "classical key exchange is disabled", "pq-only tls"]
 negation = true
 sources = ["CR-12", "OP-159 m.3 (t)"]
-honest = "TLS offers the hybrid X25519MLKEM768 group and keeps the classical groups; the realm's share policy decides only their order."
+honest = "TLS offers the hybrid X25519MLKEM768 group and keeps the classical groups; the environment's share policy decides only their order."
 
 [[claim]]
 id = "j5-proven-kernel"
@@ -1507,7 +1507,7 @@ phrases = ["fips and post-quantum together", "fips-validated post-quantum", "fip
 negation = true
 sources = ["HL-27", "§15.6", "OP-159 m.3 (gg)"]
 rows = ["HL-27"]
-honest = "FIPS and post-quantum profiles can't be combined; a realm or domain picks one of them."
+honest = "FIPS and post-quantum profiles can't be combined; an environment or domain picks one of them."
 
 [[claim]]
 id = "j8-hl29-whole-system-proven"
@@ -1534,7 +1534,7 @@ phrases = ["golden saml proof", "immune to golden saml", "forged assertions are 
 negation = true
 sources = ["HL-35", "§13.2", "OP-159 m.3 (gg)"]
 rows = ["HL-35"]
-honest = "Whoever holds a leaked realm signing key can forge ID tokens and SAML assertions for that realm until the key is rotated out of the JWKS and the metadata."
+honest = "Whoever holds a leaked environment signing key can forge ID tokens and SAML assertions for that environment until the key is rotated out of the JWKS and the metadata."
 
 [[claim]]
 id = "j8-hl36-cimd-permanent"
@@ -1543,7 +1543,7 @@ phrases = ["cimd clients can't be taken over", "a client id url always belongs t
 negation = true
 sources = ["HL-36", "§11", "OP-159 m.3 (gg)"]
 rows = ["HL-36"]
-honest = "A CIMD client is whoever controls its domain; an expired or resold domain hands the client identity to the new owner until the realm policy drops that domain."
+honest = "A CIMD client is whoever controls its domain; an expired or resold domain hands the client identity to the new owner until the environment policy drops that domain."
 
 [[claim]]
 id = "j8-endorsed-by-suiss"

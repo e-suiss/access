@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_ciba_requests (tenant_id, environment_id, handle_hash, client_uuid,\n                    subject_id, domain_id, nonce, intent, details, scope, binding_message, mode,\n                    notification_token, ping_handle, created_ms, expires_ms, interval_s)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)\n             RETURNING ciba_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ciba_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "ciba_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f40869819ff5f11f7e464be9ea31727d1531ed0deee9a2f982d5177ce5deebe4"
+}

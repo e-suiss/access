@@ -10,13 +10,13 @@ const id = (n: number) => Buffer.alloc(16, n).toString("base64url");
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/hr-sources", {
+  bff.admin.set("envs/acme/hr-sources", {
     items: [
       { name: "workday", issuer: id(34), status: "live", people: 42, version: 1 },
       { name: "legacy", issuer: "aXNzdWVyLWxlZ2FjeQ", status: "live", people: 3, version: 1 },
     ],
   });
-  bff.admin.set("realms/acme/hr-connectors", {
+  bff.admin.set("envs/acme/hr-connectors", {
     items: [
       { name: "workday-1", source: "workday", vendor: "workday", status: "live", version: 1 },
     ],
@@ -79,10 +79,10 @@ test("sources, imports and connectors change only through signed changes", async
   await sign();
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", "realms/acme/hr-sources"],
-    ["POST", "realms/acme/hr-sources/workday/records:csv"],
-    ["POST", "realms/acme/hr-connectors"],
-    ["POST", "realms/acme/hr-sources/legacy/retire"],
+    ["POST", "envs/acme/hr-sources"],
+    ["POST", "envs/acme/hr-sources/workday/records:csv"],
+    ["POST", "envs/acme/hr-connectors"],
+    ["POST", "envs/acme/hr-sources/legacy/retire"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({ name: "personio-hr" });
   expect(bff.writes[1]?.body).toMatchObject({ records: 2 });

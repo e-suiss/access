@@ -20,10 +20,10 @@ pub trait Upstream: Send + Sync {
         body: Vec<u8>,
     ) -> impl Future<Output = Answer> + Send;
 
-    /// `GET /.well-known/suiss-configuration/realms/{realm}` at Access (OP-149 m.3); none by
+    /// `GET /.well-known/suiss-configuration/env/{environment}` at Access (OP-149 m.3); none by
     /// default.
-    fn discovery(&self, realm: &str) -> impl Future<Output = Answer> + Send {
-        let _ = realm;
+    fn discovery(&self, environment: &str) -> impl Future<Output = Answer> + Send {
+        let _ = environment;
         async { Answer::Unanswered(access_sdk::transport::Fault::Unreachable) }
     }
 

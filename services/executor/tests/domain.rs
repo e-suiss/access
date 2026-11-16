@@ -69,7 +69,7 @@ fn started(kind: Kind, steps: Vec<StepSpec>) -> Event {
         exercise: [3; 32],
         intent: envelope().to_bytes().unwrap(),
         ais: vec![0xd2],
-        realm: String::from("acme"),
+        environment: String::from("acme"),
         connection: String::from("c"),
         steps,
         commit_window_ms: access_executor::domain::COMMIT_WINDOW_MS,

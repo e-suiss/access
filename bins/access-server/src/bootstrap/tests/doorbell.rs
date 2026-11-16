@@ -16,7 +16,11 @@ use super::*;
 use crate::doorbell::Doorbell;
 
 fn acme_domain(summary: &Summary) -> DomainId {
-    let acme = summary.realms.iter().find(|r| r.slug == "acme").unwrap();
+    let acme = summary
+        .environments
+        .iter()
+        .find(|r| r.slug == "acme")
+        .unwrap();
     DomainId::from_bytes(
         <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&acme.domain).unwrap()).unwrap(),
     )

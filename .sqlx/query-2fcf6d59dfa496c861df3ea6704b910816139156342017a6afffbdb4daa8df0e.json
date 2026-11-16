@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_tokens\n               (tenant_id, environment_id, subject_id, kind, token_hash, attempt_id, exercise_id,\n                address_id, entropy_bits, one_time, issued_at, expires_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11::float8),\n                     to_timestamp($12::float8))\n             RETURNING token_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "token_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int2",
+        "Bool",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2fcf6d59dfa496c861df3ea6704b910816139156342017a6afffbdb4daa8df0e"
+}

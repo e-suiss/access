@@ -24,7 +24,7 @@ pub const MAX_HEAD: usize = 16 * 1024;
 /// Why a call has no answer the gateway can use.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ChannelError {
-    /// access-server refused the call with a problem code (e.g. `edge-realm`).
+    /// access-server refused the call with a problem code (e.g. `edge-environment`).
     #[error("refused ({status}): {code}")]
     Refused {
         /// HTTP status.
@@ -236,12 +236,12 @@ mod tests {
         let ok = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n\xa0\x00";
         assert_eq!(parse(ok), Ok(vec![0xa0, 0]));
         let refused =
-            b"HTTP/1.1 403 Forbidden\r\nContent-Length: 22\r\n\r\n{\"code\":\"edge-realm\"}  ";
+            b"HTTP/1.1 403 Forbidden\r\nContent-Length: 28\r\n\r\n{\"code\":\"edge-environment\"}  ";
         assert_eq!(
             parse(refused),
             Err(ChannelError::Refused {
                 status: 403,
-                code: String::from("edge-realm")
+                code: String::from("edge-environment")
             })
         );
         assert_eq!(

@@ -24,7 +24,7 @@ use suiss_crypto::rotation::Policy;
 use tokio::net::UnixListener;
 
 use super::*;
-use crate::idp::{ActorBindings, Plane, RealmKeyring};
+use crate::idp::{ActorBindings, EnvironmentKeyring, Plane};
 use crate::login::kek_label;
 use crate::testing::hsm;
 
@@ -81,8 +81,8 @@ fn schedule(signer: &AuthoritySigner) {
     assert_eq!(signer.lock().unwrap().tick(now, now), Vec::<Digest>::new());
 }
 
-/// The prefix of a world whose identity signer keeps the realm's post-quantum keys in the
-/// HSM (OP-159 m.3 (d)); every other world seals them under the realm KEK.
+/// The prefix of a world whose identity signer keeps the environment's post-quantum keys in the
+/// HSM (OP-159 m.3 (d)); every other world seals them under the environment KEK.
 pub(super) const PQ_IN_TOKEN: &str = "pq-token-";
 
 /// A real identity signer on a Unix socket in a fresh directory.
@@ -90,7 +90,7 @@ fn identity_signer(name: &str, keys: &Arc<KeyStore>) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("abs-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let sealed = SealedFactory::new(SoftKek::new("realm-kek", [7; 32]));
+    let sealed = SealedFactory::new(SoftKek::new("environment-kek", [7; 32]));
     let factory: Box<dyn access_identity_signer::ports::KeyFactory + Send> =
         if name.starts_with(PQ_IN_TOKEN) {
             Box::new(access_identity_signer::adapters::token::TokenPq::new(
@@ -100,7 +100,7 @@ fn identity_signer(name: &str, keys: &Arc<KeyStore>) -> PathBuf {
         } else {
             Box::new(sealed)
         };
-    let service = Service::start(factory, DirVault::new(&dir), Policy::REALM).unwrap();
+    let service = Service::start(factory, DirVault::new(&dir), Policy::ENVIRONMENT).unwrap();
     let path = dir.join("s.sock");
     let listener = UnixListener::bind(&path).unwrap();
     let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
@@ -121,8 +121,8 @@ struct World {
     plane: TestPlane,
     domains: Arc<TestDomains>,
     keys: Arc<KeyStore>,
-    keyring: RealmKeyring,
-    base: RealmBase,
+    keyring: EnvironmentKeyring,
+    base: EnvironmentBase,
     module: PathBuf,
     label: String,
     identity_signer: PathBuf,
@@ -253,14 +253,15 @@ impl World {
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let identity_signer = identity_signer(name, &keys);
-        let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
+        let keyring =
+            EnvironmentKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
         let world = Self {
             db,
             plane,
             domains,
             keys,
             keyring,
-            base: RealmBase::parse("https://access.test").unwrap(),
+            base: EnvironmentBase::parse("https://access.test").unwrap(),
             module,
             label,
             identity_signer,
@@ -281,14 +282,15 @@ impl World {
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let identity_signer = identity_signer(name, &keys);
-        let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
+        let keyring =
+            EnvironmentKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
         let world = Self {
             db,
             plane,
             domains,
             keys,
             keyring,
-            base: RealmBase::parse("https://access.test").unwrap(),
+            base: EnvironmentBase::parse("https://access.test").unwrap(),
             module,
             label,
             identity_signer,
@@ -303,38 +305,38 @@ impl World {
         process(&self.db, keys, holder, None)
     }
 
-    /// A new tenant's realm `slug` with the bootstrap root as founder, created through the
+    /// A new tenant's environment `slug` with the bootstrap root as founder, created through the
     /// admin path alone.
-    async fn admin_realm(
+    async fn admin_environment(
         &self,
         slug: &str,
-    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
-        self.admin_realm_timed(slug, None).await
+    ) -> (TenantId, access_identity_admin::app::CreatedEnvironment) {
+        self.admin_environment_timed(slug, None).await
     }
 
-    /// [`World::admin_realm`] with the CT3 time-lock `ct3_delay_s` (OP-141 m.34 (d)).
-    async fn admin_realm_timed(
+    /// [`World::admin_environment`] with the CT3 time-lock `ct3_delay_s` (OP-141 m.34 (d)).
+    async fn admin_environment_timed(
         &self,
         slug: &str,
         ct3_delay_s: Option<u64>,
-    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
-        self.admin_realm_with(slug, ct3_delay_s, None).await
+    ) -> (TenantId, access_identity_admin::app::CreatedEnvironment) {
+        self.admin_environment_with(slug, ct3_delay_s, None).await
     }
 
-    /// [`World::admin_realm_timed`] whose meta-anchor carries `recovery` (OP-158 m.3 (m)).
-    async fn admin_realm_with(
+    /// [`World::admin_environment_timed`] whose meta-anchor carries `recovery` (OP-158 m.3 (m)).
+    async fn admin_environment_with(
         &self,
         slug: &str,
         ct3_delay_s: Option<u64>,
         recovery: Option<access_kernel::recovery::RecoveryEntry>,
-    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
+    ) -> (TenantId, access_identity_admin::app::CreatedEnvironment) {
         let ids = cell_ids(&self.db.app, &self.keys).await.unwrap();
         let declared = DeclaredTargets::default();
         let bootstrap = Bootstrap {
             app: &self.db.app,
             router: &self.db.router,
             plane: &self.plane,
-            realm_keys: &self.keyring,
+            environment_keys: &self.keyring,
             hsm: &self.keys,
             base: &self.base,
             declared: &declared,
@@ -344,8 +346,8 @@ impl World {
         let tenant = create_tenant(&self.db.app, PLACEMENT).await.unwrap();
         let root = root_party(&root_key(&self.keys).unwrap().public_key());
         let created = admin
-            .create_realm_with(
-                &NewRealm {
+            .create_environment_with(
+                &NewEnvironment {
                     tenant,
                     slug,
                     style: IssuerStyle::Path,
@@ -370,7 +372,7 @@ impl World {
             app: &self.db.app,
             router: &self.db.router,
             plane: &self.plane,
-            realm_keys: &self.keyring,
+            environment_keys: &self.keyring,
             hsm: &self.keys,
             base: &self.base,
             declared: &DeclaredTargets::default(),
@@ -426,7 +428,7 @@ fn plan() -> Plan {
 fn local_plan() -> Plan {
     Plan {
         test_user: Some(TestUserPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             identifier: String::from("Test.User@acme.example"),
             password: Secret::new(String::from("correct horse battery staple")),
             client_display_name: String::from("Local test client"),
@@ -435,7 +437,7 @@ fn local_plan() -> Plan {
             totp: None,
         }),
         compromise: Some(CompromisePlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
         }),
         ..plan()
     }
@@ -502,7 +504,11 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     let plan = local_plan();
     let first = w.run(&plan).await;
     let user = first.test_user.clone().unwrap();
-    let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+    let acme = first
+        .environments
+        .iter()
+        .find(|r| r.slug == "acme")
+        .unwrap();
     assert!(user.created);
     assert_eq!(user.identifier, "Test.User@acme.example");
     assert_eq!(user.issuer, acme.issuer);
@@ -515,11 +521,14 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     let accounts = PgAccounts::sealed(
         w.db.app.clone(),
-        crate::login::RealmKeks::new(w.keys.clone())
-            .vault(route.realm)
+        crate::login::EnvironmentKeks::new(w.keys.clone())
+            .vault(route.environment)
             .unwrap(),
     );
-    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = accounts
+        .begin(route.tenant, route.environment)
+        .await
+        .unwrap();
     let subject = tx
         .subject_by_identifier("Test.User@acme.example")
         .await
@@ -529,7 +538,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     assert_eq!(row.status, "active");
     assert_eq!(tx.credentials(subject, PASSWORD).await.unwrap().len(), 1);
     tx.commit().await.unwrap();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let client = idp::client(&mut t, &user.client_id).await.unwrap().unwrap();
@@ -551,7 +560,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         let instance =
             <[u8; 16]>::try_from(access_kernel::json::b64url_decode(&user.instance).unwrap())
                 .unwrap();
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         assert_eq!(
@@ -594,8 +603,8 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         let resolved = subjects
             .resolve(
                 *route.tenant.as_bytes(),
-                *route.realm.as_bytes(),
-                Sector::RealmClient(&user.client_id),
+                *route.environment.as_bytes(),
+                Sector::EnvironmentClient(&user.client_id),
                 SubjectQuery::Subs(vec![sub.clone()]),
             )
             .await
@@ -605,8 +614,8 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         let back = subjects
             .resolve(
                 *route.tenant.as_bytes(),
-                *route.realm.as_bytes(),
-                Sector::RealmClient(&user.client_id),
+                *route.environment.as_bytes(),
+                Sector::EnvironmentClient(&user.client_id),
                 SubjectQuery::Parties(vec![party]),
             )
             .await
@@ -723,7 +732,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &DeclaredTargets::default(),
@@ -746,7 +755,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         .await
         .unwrap()
         .unwrap();
-    let mut t = TenantTx::begin(&w.db.app, platform.tenant, platform.realm)
+    let mut t = TenantTx::begin(&w.db.app, platform.tenant, platform.environment)
         .await
         .unwrap();
     let row = idp::client(&mut t, &updated.client_id)
@@ -769,7 +778,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         .await
         .unwrap();
     assert_eq!(retired.event, "api_client.disabled");
-    let mut t = TenantTx::begin(&w.db.app, platform.tenant, platform.realm)
+    let mut t = TenantTx::begin(&w.db.app, platform.tenant, platform.environment)
         .await
         .unwrap();
     assert!(
@@ -809,7 +818,7 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
     let w = World::new("bootstrap-handoff").await;
     let plan = plan();
     let first = w.run(&plan).await;
-    let platform = first.realms.iter().find(|r| r.platform).unwrap();
+    let platform = first.environments.iter().find(|r| r.platform).unwrap();
     let domain = Digest(
         <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&platform.domain).unwrap())
             .unwrap(),
@@ -855,7 +864,7 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &DeclaredTargets::default(),
@@ -889,27 +898,30 @@ async fn totp_seeds(w: &World, identifier: &str) -> Vec<String> {
     totp_seeds_in(w, "acme", identifier).await
 }
 
-/// [`totp_seeds`] of an account in realm `slug`.
+/// [`totp_seeds`] of an account in environment `slug`.
 async fn totp_seeds_in(w: &World, slug: &str, identifier: &str) -> Vec<String> {
     use access_identity_account::adapters::pg::PgAccounts;
-    use access_identity_account::app::Realm;
+    use access_identity_account::app::Environment;
     use access_identity_account::app::sealing::{open, subject_key};
     use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-    use access_identity_events::adapters::RealmKek as _;
+    use access_identity_events::adapters::EnvironmentKek as _;
     use access_identity_session::app::TOTP;
 
     let route = route_by_slug(&w.db.router, slug).await.unwrap().unwrap();
-    let keks = crate::login::RealmKeks::new(w.keys.clone());
-    let kek = keks.kek(route.tenant, route.realm).unwrap();
+    let keks = crate::login::EnvironmentKeks::new(w.keys.clone());
+    let kek = keks.kek(route.tenant, route.environment).unwrap();
     let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-    let scope = Realm {
+    let scope = Environment {
         tenant: route.tenant,
-        realm: route.realm,
+        environment: route.environment,
         kek: &*kek,
         ids: &ids,
     };
-    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.realm).unwrap());
-    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.environment).unwrap());
+    let mut tx = accounts
+        .begin(route.tenant, route.environment)
+        .await
+        .unwrap();
     let subject = tx.subject_by_identifier(identifier).await.unwrap().unwrap();
     let row = tx.subject(subject, false).await.unwrap().unwrap();
     let dek = subject_key(&scope, &row).unwrap();
@@ -998,12 +1010,12 @@ async fn the_bootstrap_is_idempotent() {
     let w = World::new("bootstrap").await;
     let plan = plan();
     let first = w.run(&plan).await;
-    assert_eq!(first.realms.len(), 2);
+    assert_eq!(first.environments.len(), 2);
     let json = serde_json::to_value(&first).unwrap();
     assert_eq!(json["v"], 1);
     for key in [
         "tenant",
-        "realm",
+        "environment",
         "slug",
         "issuer",
         "discovery",
@@ -1011,18 +1023,18 @@ async fn the_bootstrap_is_idempotent() {
         "platform",
         "created",
     ] {
-        assert!(json["realms"][0].get(key).is_some(), "{key}");
+        assert!(json["environments"][0].get(key).is_some(), "{key}");
     }
-    assert!(first.realms.iter().all(|r| r.created));
-    let platform = &first.realms[0];
-    assert!(platform.platform && !first.realms[1].platform);
-    assert_eq!(platform.issuer, "https://access.test/realms/platform");
+    assert!(first.environments.iter().all(|r| r.created));
+    let platform = &first.environments[0];
+    assert!(platform.platform && !first.environments[1].platform);
+    assert_eq!(platform.issuer, "https://access.test/env/platform");
     assert_eq!(
         platform.discovery,
-        "https://access.test/realms/platform/.well-known/suiss-configuration"
+        "https://access.test/env/platform/.well-known/suiss-configuration"
     );
     assert!(platform.tenant.starts_with("tnt_"));
-    assert_eq!(platform.realm.len(), 36);
+    assert_eq!(platform.environment.len(), 36);
     assert_eq!(first.clients.len(), 1);
     assert!(first.clients[0].created);
     assert_eq!(first.clients[0].audience, platform.issuer);
@@ -1037,14 +1049,14 @@ async fn the_bootstrap_is_idempotent() {
     assert_eq!(first.clients[0].redirect_uri, "https://work.test/cb");
 
     let second = w.run(&plan).await;
-    assert!(second.realms.iter().all(|r| !r.created));
+    assert!(second.environments.iter().all(|r| !r.created));
     assert!(second.clients.iter().all(|c| !c.created));
     assert_eq!(second.root.party, first.root.party);
     assert_eq!(second.clients[0].client_id, first.clients[0].client_id);
-    for (a, b) in first.realms.iter().zip(&second.realms) {
+    for (a, b) in first.environments.iter().zip(&second.environments) {
         assert_eq!(
-            (&a.tenant, &a.realm, &a.domain, &a.issuer),
-            (&b.tenant, &b.realm, &b.domain, &b.issuer)
+            (&a.tenant, &a.environment, &a.domain, &a.issuer),
+            (&b.tenant, &b.environment, &b.domain, &b.issuer)
         );
     }
     assert_eq!(
@@ -1052,9 +1064,9 @@ async fn the_bootstrap_is_idempotent() {
         2
     );
 
-    for r in &second.realms {
+    for r in &second.environments {
         let route = route_by_slug(&w.db.router, &r.slug).await.unwrap().unwrap();
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let g = idp::governance(&mut t).await.unwrap().unwrap();
@@ -1070,14 +1082,14 @@ async fn the_bootstrap_is_idempotent() {
             assert_eq!(row.outcome, "allow");
         }
         // OP-146 m.16 (m)
-        assert!(w.keys.kek(&kek_label(route.realm.as_bytes())).is_ok());
+        assert!(w.keys.kek(&kek_label(route.environment.as_bytes())).is_ok());
     }
 
     let route = route_by_slug(&w.db.router, "platform")
         .await
         .unwrap()
         .unwrap();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let row = idp::client(&mut t, &second.clients[0].client_id)
@@ -1101,11 +1113,11 @@ async fn the_bootstrap_is_idempotent() {
 
 // OP-149 m.4
 #[tokio::test]
-async fn product_clients_live_in_the_platform_realm() {
+async fn product_clients_live_in_the_platform_environment() {
     let w = World::new("bootstrap-platform").await;
     let summary = w.run(&plan()).await;
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let there = idp::client(&mut t, &summary.clients[0].client_id)
@@ -1256,15 +1268,15 @@ fn a_plan_registers_any_product_name() {
 
 // OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111
 #[tokio::test]
-async fn admin_realm_creation_opens_the_domain_keys() {
-    let w = World::new("bootstrap-admin-realm").await;
+async fn admin_environment_creation_opens_the_domain_keys() {
+    let w = World::new("boot-admin-environment").await;
     let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
     let declared = DeclaredTargets::default();
     let bootstrap = Bootstrap {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -1273,7 +1285,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
     let admin = bootstrap.admin(&ids, None);
     let tenant = create_tenant(&w.db.app, PLACEMENT).await.unwrap();
     let created = admin
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant,
             slug: "keys",
             style: IssuerStyle::Path,
@@ -1297,9 +1309,9 @@ async fn admin_realm_creation_opens_the_domain_keys() {
 
 // OP-152 m.5 (i), OP-149 m.29 (b), SI-5, §10.1.4 rule 3
 #[tokio::test]
-async fn admin_realms_accept_issuer_authentication_by_default() {
+async fn admin_environments_accept_issuer_authentication_by_default() {
     let (w, _) = World::open("bs-predicate", false).await;
-    let (_, created) = w.admin_realm("defaults").await;
+    let (_, created) = w.admin_environment("defaults").await;
     let gates: Vec<access_kernel::claim::Gate> =
         access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(created.domain.0))
             .await
@@ -1325,11 +1337,11 @@ async fn admin_realms_accept_issuer_authentication_by_default() {
 
 // OP-149 m.5, SAI-46, CR-25, CR-59, OP-146 m.16 (m)
 #[tokio::test]
-async fn admin_realms_sign_key_lookups_from_genesis() {
+async fn admin_environments_sign_key_lookups_from_genesis() {
     use access_authority_core::keys::AsOf;
     let (w, signer) = World::open("bootstrap-key-lookup", true).await;
     let signer = signer.unwrap();
-    let (tenant, created) = w.admin_realm("lookups").await;
+    let (tenant, created) = w.admin_environment("lookups").await;
     let root = root_key(&w.keys).unwrap();
     let party = root_party(&root.public_key());
     let kid = thumbprint(&root.public_key());
@@ -1338,7 +1350,7 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -1348,7 +1360,7 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
     schedule(&signer);
     schedule(&signer);
     bootstrap
-        .onboard(tenant, created.realm, created.domain, &root, party)
+        .onboard(tenant, created.environment, created.domain, &root, party)
         .await
         .unwrap();
     let answer = w
@@ -1360,9 +1372,9 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
     assert!(!sign1.is_empty() && !excerpt.is_empty());
     assert_eq!(answer.lookup.keys.len(), 1);
 
-    let (fresh_tenant, fresh) = w.admin_realm("fresh").await;
+    let (fresh_tenant, fresh) = w.admin_environment("fresh").await;
     bootstrap
-        .onboard(fresh_tenant, fresh.realm, fresh.domain, &root, party)
+        .onboard(fresh_tenant, fresh.environment, fresh.domain, &root, party)
         .await
         .unwrap();
     let at_once = w
@@ -1377,12 +1389,12 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
 
 // OP-149 m.28 (c), m.8, L0-META-7
 #[tokio::test]
-async fn admin_realms_answer_party_lookups() {
+async fn admin_environments_answer_party_lookups() {
     use access_authority_core::keys::AsOf;
     use access_kernel::meta::ActorKind;
     let (w, signer) = World::open("bootstrap-party-lookup", true).await;
     let signer = signer.unwrap();
-    let (tenant, created) = w.admin_realm("parties").await;
+    let (tenant, created) = w.admin_environment("parties").await;
     let root = root_key(&w.keys).unwrap();
     let party = root_party(&root.public_key());
     let declared = DeclaredTargets::default();
@@ -1390,7 +1402,7 @@ async fn admin_realms_answer_party_lookups() {
         app: &w.db.app,
         router: &w.db.router,
         plane: &w.plane,
-        realm_keys: &w.keyring,
+        environment_keys: &w.keyring,
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
@@ -1405,7 +1417,7 @@ async fn admin_realms_answer_party_lookups() {
     assert_eq!(before.lookup.parties, Vec::new());
     assert_eq!(before.lookup.unknown, vec![party]);
     bootstrap
-        .onboard(tenant, created.realm, created.domain, &root, party)
+        .onboard(tenant, created.environment, created.domain, &root, party)
         .await
         .unwrap();
     let answer = w
@@ -1464,7 +1476,7 @@ async fn admin_realms_answer_party_lookups() {
 fn sample_plan() -> Plan {
     Plan {
         sample: Some(SamplePlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             namespace: String::from("work"),
             action: String::from("approve"),
             allowed: None,
@@ -1504,9 +1516,13 @@ async fn the_bootstrapped_sample_is_eligible() {
     let first = w.run(&plan).await;
     let json = serde_json::to_value(&first).unwrap();
     let sample = &json["sample"];
-    assert_eq!(sample["realm"], "acme");
+    assert_eq!(sample["environment"], "acme");
     assert_eq!(sample["action"]["namespace"], "work");
-    let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+    let acme = first
+        .environments
+        .iter()
+        .find(|r| r.slug == "acme")
+        .unwrap();
     assert_eq!(sample["domain"], acme.domain.as_str());
 
     let adp = Service::new(w.domains.clone(), 64 * 1024);
@@ -1604,18 +1620,25 @@ fn every_shipped_plan_is_valid() {
         assert_eq!(plan.platform, "platform", "{name}");
         // OP-149 m.26 (b), (c)
         let user = plan.test_user.as_ref().unwrap();
-        assert_eq!(user.realm, "acme", "{name}");
+        assert_eq!(user.environment, "acme", "{name}");
         assert_eq!(
             user.totp.as_ref().map(|t| t.path.clone()),
             Some(keys.join("test-user-totp")),
             "{name}"
         );
-        assert_eq!(plan.compromise.as_ref().unwrap().realm, "acme", "{name}");
+        assert_eq!(
+            plan.compromise.as_ref().unwrap().environment,
+            "acme",
+            "{name}"
+        );
         // OP-157 m.6 (i)
         if name == "bootstrap.toml" {
-            assert_eq!(plan.support_operator.as_ref().unwrap().realm, "acme");
-            assert_eq!(plan.breakglass_account.as_ref().unwrap().realm, "acme");
-            assert_eq!(plan.review_schedule.as_ref().unwrap().realm, "acme");
+            assert_eq!(plan.support_operator.as_ref().unwrap().environment, "acme");
+            assert_eq!(
+                plan.breakglass_account.as_ref().unwrap().environment,
+                "acme"
+            );
+            assert_eq!(plan.review_schedule.as_ref().unwrap().environment, "acme");
         }
         for p in &plan.products {
             let id = ClientId::parse("cli_0123456789abcdefghjkmnpqrs").unwrap();
@@ -1634,12 +1657,12 @@ fn every_shipped_plan_is_valid() {
 fn a_sample_names_a_tenant_and_a_valid_action() {
     let dir = std::env::temp_dir().join(format!("abs-sample-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let plan = |name: &str, realm: &str, namespace: &str| {
+    let plan = |name: &str, environment: &str, namespace: &str| {
         let path = dir.join(format!("{name}.toml"));
         std::fs::write(
             &path,
             format!(
-                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = '{realm}'\nnamespace = '{namespace}'\naction = 'approve'\n"
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nenvironment = '{environment}'\nnamespace = '{namespace}'\naction = 'approve'\n"
             ),
         )
         .unwrap();
@@ -1658,7 +1681,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
         std::fs::write(
             &path,
             format!(
-                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\nresource_namespace = '{namespace}'\nresource_path_prefix = '{prefix}'\n"
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nenvironment = 'acme'\nnamespace = 'work'\naction = 'approve'\nresource_namespace = '{namespace}'\nresource_path_prefix = '{prefix}'\n"
             ),
         )
         .unwrap();
@@ -1681,7 +1704,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
         std::fs::write(
             &path,
             format!(
-                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\n{allowed}step_up = '{step_up}'\n[test_user]\nrealm = 'acme'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\npassword = 'correct horse battery staple'\n"
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nenvironment = 'acme'\nnamespace = 'work'\naction = 'approve'\n{allowed}step_up = '{step_up}'\n[test_user]\nenvironment = 'acme'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\npassword = 'correct horse battery staple'\n"
             ),
         )
         .unwrap();
@@ -1704,12 +1727,12 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
 fn a_test_user_takes_its_password_from_one_named_place() {
     let dir = std::env::temp_dir().join(format!("abs-test-user-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let plan = |name: &str, realm: &str, password: &str| {
+    let plan = |name: &str, environment: &str, password: &str| {
         let path = dir.join(format!("{name}.toml"));
         std::fs::write(
             &path,
             format!(
-                "platform = 'platform'\ntenants = ['acme']\n[test_user]\nrealm = '{realm}'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\n{password}\n[compromise]\nrealm = '{realm}'\n"
+                "platform = 'platform'\ntenants = ['acme']\n[test_user]\nenvironment = '{environment}'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\n{password}\n[compromise]\nenvironment = '{environment}'\n"
             ),
         )
         .unwrap();
@@ -1720,7 +1743,7 @@ fn a_test_user_takes_its_password_from_one_named_place() {
         ok.test_user.as_ref().unwrap().identifier,
         "test@acme.example"
     );
-    assert_eq!(ok.compromise.as_ref().unwrap().realm, "acme");
+    assert_eq!(ok.compromise.as_ref().unwrap().environment, "acme");
     assert!(plan("other", "other", "password = 'x'").is_err());
     assert!(plan("none", "acme", "").is_err());
     assert!(plan("empty", "acme", "password = ''").is_err());
@@ -1748,7 +1771,7 @@ fn a_test_user_takes_its_password_from_one_named_place() {
 fn approve_plan(step_up: Option<StepUp>) -> Plan {
     Plan {
         sample: Some(SamplePlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             namespace: String::from("work"),
             action: String::from("approve"),
             allowed: Some(String::from("commit")),
@@ -1871,7 +1894,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::Devices;
@@ -1883,7 +1906,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     use access_local_client::passkey::{Passkey, relying_party};
     use suiss_crypto::signer::SoftSigner;
 
-    use crate::login::{HsmKits, RealmKeks};
+    use crate::login::{EnvironmentKeks, HsmKits};
     use crate::product::{PgSubjects, PgTenants};
 
     let (w, signer) = World::open(world, true).await;
@@ -1922,11 +1945,15 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
             .len(),
         32
     );
-    let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+    let acme = first
+        .environments
+        .iter()
+        .find(|r| r.slug == "acme")
+        .unwrap();
     assert_eq!(allowed["domain"], acme.domain.as_str());
 
     let tls = test_tls("access.test");
-    let keks = RealmKeks::new(Arc::clone(&w.keys));
+    let keks = EnvironmentKeks::new(Arc::clone(&w.keys));
     let hosted = Arc::new(Hosted {
         kits: HsmKits::new(
             keks,
@@ -1950,7 +1977,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let discovery = || {
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         )
@@ -2262,17 +2289,17 @@ mod provision {
         Created, Order, Platform, ProvisionError, Provisioned,
     };
     use access_identity_admin::domain::provision::{
-        NotAvailable, PlatformChange, ProvisionInvalid, RealmOrder, Recovery, RecoveryKey,
+        EnvironmentOrder, NotAvailable, PlatformChange, ProvisionInvalid, Recovery, RecoveryKey,
         RecoveryKeys, SANDBOX_BUDGET,
     };
     use access_store::sandbox;
 
     use super::*;
 
-    /// Signs `change` as the platform root and has the platform realm's domain commit it.
+    /// Signs `change` as the platform root and has the platform environment's domain commit it.
     async fn provision(
         w: &World,
-        admin: &Admin<'_, TestPlane, TestPlane, RealmKeyring>,
+        admin: &Admin<'_, TestPlane, TestPlane, EnvironmentKeyring>,
         platform: &Platform<'_>,
         change: &PlatformChange,
         nonce: [u8; 16],
@@ -2302,8 +2329,8 @@ mod provision {
         Box::pin(admin.provision(platform, order, ais)).await
     }
 
-    fn realm(tenant: TenantId, slug: &str, root: Root, ack: bool) -> RealmOrder {
-        RealmOrder {
+    fn environment(tenant: TenantId, slug: &str, root: Root, ack: bool) -> EnvironmentOrder {
+        EnvironmentOrder {
             tenant: *tenant.as_bytes(),
             slug: String::from(slug),
             style: IssuerStyle::Path,
@@ -2327,7 +2354,7 @@ mod provision {
             app: &w.db.app,
             router: &w.db.router,
             plane: &w.plane,
-            realm_keys: &w.keyring,
+            environment_keys: &w.keyring,
             hsm: &w.keys,
             base: &w.base,
             declared: &declared,
@@ -2340,7 +2367,7 @@ mod provision {
             .unwrap();
         let platform = Platform {
             tenant: route.tenant,
-            realm: route.realm,
+            environment: route.environment,
             router: &w.db.router,
         };
         let founder = root_party(&root_key(&w.keys).unwrap().public_key());
@@ -2365,7 +2392,8 @@ mod provision {
         );
 
         // TN-111, §13.7.7
-        let sole = PlatformChange::Realm(realm(tenant, "solo", Root::Sole(founder), false));
+        let sole =
+            PlatformChange::Environment(environment(tenant, "solo", Root::Sole(founder), false));
         assert!(matches!(
             provision(&w, &admin, &platform, &sole, [2; 16]).await,
             Err(ProvisionError::Invalid(
@@ -2378,7 +2406,7 @@ mod provision {
             k: 2,
         };
         // §13.6, SEC20, OP-158 m.3 (m), Ek B 6030
-        let mut with_keys = realm(tenant, "shop", joint.clone(), false);
+        let mut with_keys = environment(tenant, "shop", joint.clone(), false);
         with_keys.recovery = Some(RecoveryKeys {
             held_on: access_kernel::recovery::KeyHolding::Device,
             keys: [
@@ -2393,24 +2421,24 @@ mod provision {
             })
             .collect(),
         });
-        let shop = PlatformChange::Realm(with_keys);
+        let shop = PlatformChange::Environment(with_keys);
         let Provisioned::Done {
             exercise, created, ..
         } = provision(&w, &admin, &platform, &shop, [3; 16])
             .await
             .unwrap()
         else {
-            panic!("realm creation not allowed");
+            panic!("environment creation not allowed");
         };
-        let Created::Realm {
-            realm: shop_realm,
+        let Created::Environment {
+            environment: shop_environment,
             domain,
             recovery,
             sandbox: None,
             ..
         } = created
         else {
-            panic!("not a production realm");
+            panic!("not a production environment");
         };
         assert_eq!(
             recovery,
@@ -2463,7 +2491,7 @@ mod provision {
             && g.use_ == access_kernel::claim::PREDICATE_INPUT
             && g.classes == [String::from("authentication")]));
         let shop_route = route_by_slug(&w.db.router, "shop").await.unwrap().unwrap();
-        assert!(shop_route.tenant == tenant && shop_route.realm == shop_realm);
+        assert!(shop_route.tenant == tenant && shop_route.environment == shop_environment);
         assert_ne!(domain.0, [0; 32]);
         assert!(
             sandbox::budget(&w.db.router, &domain.0)
@@ -2480,7 +2508,7 @@ mod provision {
         ));
 
         // OP-151 m.3 (m)
-        let play = PlatformChange::Sandbox(realm(tenant, "shop-sandbox", joint, false));
+        let play = PlatformChange::Sandbox(environment(tenant, "shop-sandbox", joint, false));
         let Provisioned::Done {
             exercise: sandbox_exercise,
             created,
@@ -2491,7 +2519,7 @@ mod provision {
         else {
             panic!("sandbox creation not allowed");
         };
-        let Created::Realm {
+        let Created::Environment {
             domain: sandbox_domain,
             sandbox: Some(budget),
             ..
@@ -2508,7 +2536,7 @@ mod provision {
                 .unwrap(),
             Some(budget)
         );
-        let listed = sandbox::realms(
+        let listed = sandbox::environments(
             (&w.db.router, &w.db.app),
             None,
             Some(tenant),
@@ -2522,9 +2550,9 @@ mod provision {
         w.domains.release().await;
     }
 
-    /// The platform-admin surface of this process, governed by the platform realm.
-    fn surface(w: &World) -> crate::admin::realm::Realms<TestPlane> {
-        crate::admin::realm::Realms {
+    /// The platform-admin surface of this process, governed by the platform environment.
+    fn surface(w: &World) -> crate::admin::environment::Environments<TestPlane> {
+        crate::admin::environment::Environments {
             app: w.db.app.clone(),
             reads: access_store::replica_reads::ReplicaReads::primary_only(w.db.app.clone()),
             checkpointer: w.db.checkpointer.clone(),
@@ -2532,7 +2560,7 @@ mod provision {
             ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),
             plane: w.plane.clone(),
             base: w.base.clone(),
-            keys: Arc::new(RealmKeyring::new(
+            keys: Arc::new(EnvironmentKeyring::new(
                 SignerKeys::new(w.identity_signer.clone()),
                 w.keys.clone(),
             )),
@@ -2541,7 +2569,7 @@ mod provision {
             outbound: access_identity_oauth::adapters::outbound::Outbound::disabled(
                 std::time::Duration::from_secs(5),
             ),
-            vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
+            vault: access_identity_events::adapters::KekSealer(crate::login::EnvironmentKeks::new(
                 w.keys.clone(),
             )),
             geo: Arc::new(access_identity_risk::adapters::NoGeoSource),
@@ -2569,7 +2597,7 @@ mod provision {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let g = idp::governance(&mut t).await.unwrap().unwrap();
@@ -2591,7 +2619,7 @@ mod provision {
             k: 2,
         };
         let slug = body["slug"].as_str().unwrap().to_owned();
-        let change = PlatformChange::Sandbox(realm(tenant, &slug, joint, false));
+        let change = PlatformChange::Sandbox(environment(tenant, &slug, joint, false));
         let intent = change.intent(&g.slug, validity).unwrap();
         let digest = access_kernel::intent::intent_digest(&intent).unwrap();
         MetaExercises::lead(&w.plane, domain).await.unwrap();
@@ -2620,7 +2648,7 @@ mod provision {
     }
 
     async fn commit_write(
-        surface: &crate::admin::realm::Realms<TestPlane>,
+        surface: &crate::admin::environment::Environments<TestPlane>,
         (write, caller): (
             access_http::api::ports::PlatformWrite,
             access_http::api::domain::caller::WriteCaller,
@@ -2642,7 +2670,7 @@ mod provision {
             app: &w.db.app,
             router: &w.db.router,
             plane: &w.plane,
-            realm_keys: &w.keyring,
+            environment_keys: &w.keyring,
             hsm: &w.keys,
             base: &w.base,
             declared: &declared,
@@ -2655,7 +2683,7 @@ mod provision {
             .unwrap();
         let platform = Platform {
             tenant: route.tenant,
-            realm: route.realm,
+            environment: route.environment,
             router: &w.db.router,
         };
         let founder = root_party(&root_key(&w.keys).unwrap().public_key());
@@ -2672,13 +2700,13 @@ mod provision {
             parties: [founder, Id([0x42; 16])].into_iter().collect(),
             k: 2,
         };
-        let shop = PlatformChange::Realm(realm(tenant, "shop", joint, false));
+        let shop = PlatformChange::Environment(environment(tenant, "shop", joint, false));
         let Ok(Provisioned::Done {
-            created: Created::Realm { domain, .. },
+            created: Created::Environment { domain, .. },
             ..
         }) = provision(&w, &admin, &platform, &shop, [2; 16]).await
         else {
-            panic!("realm creation not allowed");
+            panic!("environment creation not allowed");
         };
 
         let surface = surface(&w);
@@ -2767,7 +2795,7 @@ mod reshred;
 // OP-158 m.4 (b)
 mod kek_rotation;
 // OP-158 m.4 (b)
-mod realm_crypto;
+mod environment_crypto;
 // OP-158 m.4 (b)
 mod read_path;
 // OP-158 m.4 (b) (W9)

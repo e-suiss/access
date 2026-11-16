@@ -11,7 +11,7 @@ issuer_style = "path"
 # approval requirement, with the Grant to contribute that approval; the bootstrap prints what
 # an Exercise of it names as `test_user.allowed`, and `access-local-client approve` runs one
 # through the hosted Approval Surface. The catalog is a Genesis fact: changing `allowed` on an
-# existing realm needs a fresh volume.
+# existing environment needs a fresh volume.
 # OP-149 m.30 (a): the allowed Grant covers the resources of `resource_namespace` whose first
 # path element starts with `resource_path_prefix` (Work E-45 item 5); the summary reports both
 # as `test_user.allowed.resource`, and an intent names `{namespace, path: ["led_…"]}`.
@@ -21,9 +21,9 @@ issuer_style = "path"
 # (Work's `next: step_up`) and the one passkey assertion on the Approval Surface meets both;
 # the summary says `test_user.allowed.step_up`, and the approval's redirect carries the Claim
 # the product passes back as `claim_ref`. The only level is "aal2". The Grant is derived from
-# its bounds, so an existing realm gets a second Grant when this changes (OP-73).
+# its bounds, so an existing environment gets a second Grant when this changes (OP-73).
 [sample]
-realm = "acme"
+environment = "acme"
 namespace = "work"
 action = "approve"
 allowed = "commit"
@@ -43,11 +43,11 @@ step_up = "aal2"
 # Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
 # against one; the bootstrap says so.
 # With `totp_seed_file` the user also has an authenticator app (RFC 6238: SHA-1, 6 digits, 30 s),
-# enrolled through the realm's own TOTP enrollment with a seed the realm draws at random; the
+# enrolled through the environment's own TOTP enrollment with a seed the environment draws at random; the
 # seed is written to that file in base32, owner-only, and never printed. The summary says
 # `test_user.totp` (seed_file, algorithm, digits, period).
 [test_user]
-realm = "acme"
+environment = "acme"
 identifier = "test@acme.example"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 client_display_name = "Local test client"
@@ -64,7 +64,7 @@ totp_seed_file = "/var/lib/access/bootstrap/test-user-totp"
 #   access-local-client stream-status ... --status paused                 -> the stream's status
 # A retired client is gone for good; the next bootstrap run registers a new one.
 [compromise]
-realm = "acme"
+environment = "acme"
 
 [[products]]
 product = "work"
@@ -80,9 +80,9 @@ service_key = "/etc/access/products/work-service.jwk"
 #   ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
 # Without the declaration the bootstrap refuses it (invalid-event-receiver).
 # event_receiver = "https://work-server:8443/v1/inbound/events"
-# OP-149 m.33 (d), m.35: the product's return addresses. The Approval Surface of every realm
+# OP-149 m.33 (d), m.35: the product's return addresses. The Approval Surface of every environment
 # accepts a pushed request's redirect_uri exactly when it is one of these (RFC 6749 §3.1.2);
-# the product is registered once, here in the platform realm, and tenant realms need no
+# the product is registered once, here in the platform environment, and tenant environments need no
 # registration of their own. Each address is https, or http on the loopback host (RFC 8252).
 # An older plan's single `redirect_uri = "..."` is still read as a list of one; a plan names
 # one of the two keys. The summary lists them as `clients[].redirect_uris`.

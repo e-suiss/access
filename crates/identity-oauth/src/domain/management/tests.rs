@@ -8,7 +8,7 @@ use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
 use super::*;
 
 const NOW: u64 = 1_800_000_000_000;
-const ISSUER: &str = "https://id.example/realms/acme";
+const ISSUER: &str = "https://id.example/env/acme";
 
 fn signer() -> SoftSigner {
     SoftSigner::generate_p256().unwrap().0
@@ -52,28 +52,31 @@ fn facts(surface: &Surface, sid: Option<[u8; 16]>) -> ReadFacts<'_> {
 // TN-130, OP-151 m.3 (a)
 #[test]
 fn surfaces_have_one_audience_and_one_read_scope() {
-    let realm = Surface::Realm(String::from("acme"));
-    assert_eq!(realm.audience(), "access-admin:realm:acme");
-    assert_eq!(realm.scope(), "realm.read");
+    let environment = Surface::Environment(String::from("acme"));
+    assert_eq!(environment.audience(), "access-admin:environment:acme");
+    assert_eq!(environment.scope(), "environment.read");
     assert_eq!(Surface::Platform.audience(), "access-admin:platform");
     assert_eq!(Surface::Platform.scope(), "platform.read");
-    assert_eq!(Surface::of("access-admin:realm:acme"), Some(realm));
+    assert_eq!(
+        Surface::of("access-admin:environment:acme"),
+        Some(environment)
+    );
     assert_eq!(
         Surface::of("access-admin:platform"),
         Some(Surface::Platform)
     );
     for bad in [
-        "access-admin:realm:",
-        "access-admin:realm:Acme",
-        "access-admin:realm:a/b",
+        "access-admin:environment:",
+        "access-admin:environment:Acme",
+        "access-admin:environment:a/b",
         "access-admin:platformx",
-        "https://id.example/realms/acme",
+        "https://id.example/env/acme",
     ] {
         assert_eq!(Surface::of(bad), None, "{bad}");
     }
     assert_ne!(
-        exchange_intent("access-admin:realm:acme", REALM_READ),
-        exchange_intent("access-admin:realm:acm", "erealm.read")
+        exchange_intent("access-admin:environment:acme", ENVIRONMENT_READ),
+        exchange_intent("access-admin:environment:acm", "eenvironment.read")
     );
 }
 
@@ -81,13 +84,13 @@ fn surfaces_have_one_audience_and_one_read_scope() {
 #[test]
 fn read_tokens_round_trip_and_never_outlive_an_hour() {
     let s = signer();
-    let surface = Surface::Realm(String::from("acme"));
+    let surface = Surface::Environment(String::from("acme"));
     let mut f = facts(&surface, Some([4; 16]));
     f.ttl_ms = 10 * MAX_READ_TTL_MS;
     let token = jws(&s, ACCESS_TYP, &read_token_claims(&f, "j1"));
     let c = read_claims(&token, &keys(&s), ISSUER).unwrap();
-    assert_eq!(c.aud, "access-admin:realm:acme");
-    assert_eq!(c.scopes, ["realm.read"]);
+    assert_eq!(c.aud, "access-admin:environment:acme");
+    assert_eq!(c.scopes, ["environment.read"]);
     assert_eq!(c.jkt, [9; 32]);
     assert_eq!(c.instance, [7; 32]);
     assert_eq!(c.console_session, Some([4; 16]));
@@ -97,13 +100,13 @@ fn read_tokens_round_trip_and_never_outlive_an_hour() {
     assert!(!live(&c, c.exp_ms));
     assert_eq!(
         unverified_audience(&token).as_deref(),
-        Some("access-admin:realm:acme")
+        Some("access-admin:environment:acme")
     );
 }
 
 // TN-130
 #[test]
-fn read_tokens_refuse_what_the_realm_did_not_issue() {
+fn read_tokens_refuse_what_the_environment_did_not_issue() {
     let s = signer();
     let surface = Surface::Platform;
     let claims = read_token_claims(&facts(&surface, None), "j1");
@@ -163,7 +166,7 @@ fn ais(s: &SoftSigner, st: &Statement) -> String {
 fn the_exchange_subject_is_a_fresh_check_statement_by_the_instance() {
     let s = signer();
     let domain = Digest([3; 32]);
-    let intent = exchange_intent("access-admin:realm:acme", REALM_READ);
+    let intent = exchange_intent("access-admin:environment:acme", ENVIRONMENT_READ);
     let ok = ais(&s, &statement(domain, intent, Mode::Check, NOW));
     let (bytes, kid) = subject_token(&ok).unwrap();
     assert_eq!(kid, thumbprint(&s.public_key()));

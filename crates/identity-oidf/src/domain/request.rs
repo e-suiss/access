@@ -1,6 +1,6 @@
 //! Registration checks (OpenID Federation 1.0 §12, §10.7.1 item 7): the request object of
 //! automatic registration with its `jti` and `exp` for the replay table, and the entity
-//! configuration an RP posts for explicit registration. Both are off per realm by default.
+//! configuration an RP posts for explicit registration. Both are off per environment by default.
 
 use access_kernel::json::Json;
 

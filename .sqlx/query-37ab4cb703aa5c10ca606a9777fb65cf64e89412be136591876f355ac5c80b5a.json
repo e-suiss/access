@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environments SET issuer = $4\n          WHERE tenant_id = $1 AND environment_id = $2 AND issuer = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "37ab4cb703aa5c10ca606a9777fb65cf64e89412be136591876f355ac5c80b5a"
+}

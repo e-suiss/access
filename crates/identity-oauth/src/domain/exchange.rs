@@ -46,12 +46,12 @@ pub const CLIENT_ATTESTATION_POP_TYP: &str = "oauth-client-attestation-pop+jwt";
 /// `typ` a cloud workload identity token or another accepted issuer's JWT carries.
 pub const JWT_TYP: &str = "JWT";
 
-/// What the realm does with a JOSE `typ` (§11.21.3, Ek B 4653).
+/// What the environment does with a JOSE `typ` (§11.21.3, Ek B 4653).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TypRole {
     /// An access token projection (`at+jwt`).
     Projection,
-    /// An identity assertion the realm issues and accepts as Claim input (ID-JAG, ID token,
+    /// An identity assertion the environment issues and accepts as Claim input (ID-JAG, ID token,
     /// another accepted issuer's JWT).
     Assertion,
     /// Audit context only: never a subject token, never a basis (Txn-Token, OP-154 m.3 (o)).
@@ -61,7 +61,7 @@ pub enum TypRole {
     Interface,
 }
 
-/// The role of `typ`; `None` for a `typ` the realm does not know.
+/// The role of `typ`; `None` for a `typ` the environment does not know.
 #[must_use]
 pub fn typ_role(typ: &str) -> Option<TypRole> {
     match typ {
@@ -78,10 +78,10 @@ pub fn typ_role(typ: &str) -> Option<TypRole> {
 /// The kind of a `subject_token_type` the agent exchange reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubjectKind {
-    /// An access token: an Access projection of this realm's domain or an accepted issuer's
+    /// An access token: an Access projection of this environment's domain or an accepted issuer's
     /// JWT.
     Access,
-    /// An ID token of this realm or of an accepted issuer.
+    /// An ID token of this environment or of an accepted issuer.
     IdToken,
     /// A SAML assertion: not read before Stage 10 (OP-154 m.3 (m)).
     Saml,
@@ -171,7 +171,7 @@ pub fn act_depth(claims: &serde_json::Value) -> Result<usize, ActError> {
 /// Longest life of an inbound assertion (OP-154 m.3 (q)).
 pub const MAX_ASSERTION_MS: u64 = 300_000;
 
-/// Life of an ID-JAG the realm issues (OP-154 m.3 (n)).
+/// Life of an ID-JAG the environment issues (OP-154 m.3 (n)).
 pub const ID_JAG_TTL_MS: u64 = 300_000;
 
 /// Life of a Transaction Token (OP-154 m.3 (o)).
@@ -189,7 +189,7 @@ pub enum AssertionError {
     /// Not a JWS of the accepted issuer with the expected `typ` (AG-29 steps 1, 2).
     #[error("signature")]
     Signature,
-    /// `iss` or `aud` is not this realm's (AG-29 step 3).
+    /// `iss` or `aud` is not this environment's (AG-29 step 3).
     #[error("audience")]
     Audience,
     /// The assertion was issued to another client (AG-29 step 4).
@@ -228,7 +228,7 @@ pub struct AssertionRules<'a> {
     pub iss: &'a str,
     /// The expected `typ`.
     pub typ: &'a str,
-    /// The realm's issuer: the only audience.
+    /// The environment's issuer: the only audience.
     pub audience: &'a str,
     /// The authenticated client, for the continuity check.
     pub client_id: Option<&'a str>,
@@ -349,7 +349,7 @@ pub fn jti_slot(a: &Assertion) -> Option<(u32, [u8; 32])> {
 /// What an ID-JAG names (§11.11.1, §11.11.2, OP-154 m.3 (n)).
 #[derive(Clone, Copy, Debug)]
 pub struct IdJagFacts<'a> {
-    /// This realm's issuer.
+    /// This environment's issuer.
     pub issuer: &'a str,
     /// The subject: the domain-pairwise reference the decided projection names (MD-10, P52).
     pub sub: &'a str,
@@ -392,9 +392,9 @@ pub fn id_jag_claims(f: &IdJagFacts<'_>) -> Vec<u8> {
 /// What a Transaction Token names (§11.12.3, OP-154 m.3 (o)).
 #[derive(Clone, Copy, Debug)]
 pub struct TxnFacts<'a> {
-    /// This realm's issuer.
+    /// This environment's issuer.
     pub issuer: &'a str,
-    /// The trust domain it may travel in: this realm.
+    /// The trust domain it may travel in: this environment.
     pub audience: &'a str,
     /// The subject token's subject.
     pub sub: &'a str,

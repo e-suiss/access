@@ -28,7 +28,7 @@ const item = (grant: string, holder: string) => ({
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/reviews", {
+  bff.admin.set("envs/acme/reviews", {
     items: [
       {
         name: "q4",
@@ -41,7 +41,7 @@ test.beforeEach(async ({ context, bff }) => {
       },
     ],
   });
-  bff.admin.set("realms/acme/reviews/q4/items", {
+  bff.admin.set("envs/acme/reviews/q4/items", {
     items: [item(KEEP, "WGF2aVhhdmlYYXZpWGF2aQ"), item(DROP, "WWFyYVlhcmFZYXJhWWFyYQ")],
   });
 });
@@ -68,7 +68,7 @@ test("keep records a check and remove is the reviewer's own revoke of one Grant"
     .click();
   await expect(items.first()).toContainText("Checked: kept");
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", `realms/acme/reviews/q4/items/${KEEP}/keep`],
+    ["POST", `envs/acme/reviews/q4/items/${KEEP}/keep`],
   ]);
   expect(bff.metaCommits).toEqual([]);
 
@@ -101,7 +101,7 @@ test("scheduling names a period and the manager's team", async ({ page, bff }) =
   await expect(page.getByRole("status")).toContainText("Recorded as change");
   expect(bff.writes[0]).toMatchObject({
     method: "POST",
-    path: "realms/acme/reviews",
+    path: "envs/acme/reviews",
     body: { name: "q1", period_days: 30, scope: "manager_team" },
   });
 });

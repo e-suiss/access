@@ -86,19 +86,21 @@ async function tx<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequ
   });
 }
 
-function recordId(realm: string, account: string, kid: string): string {
-  return `${realm}/${account}/${kid}`;
+function recordId(environment: string, account: string, kid: string): string {
+  return `${environment}/${account}/${kid}`;
 }
 
 /** This browser's key for the session's Instance `kid`, if it has it. */
 export async function find(
-  realm: string,
+  environment: string,
   account: string,
   kid: string | null,
 ): Promise<Instance | undefined> {
   if (kid === null) return undefined;
   try {
-    return await tx<Instance | undefined>("readonly", (s) => s.get(recordId(realm, account, kid)));
+    return await tx<Instance | undefined>("readonly", (s) =>
+      s.get(recordId(environment, account, kid)),
+    );
   } catch {
     return undefined;
   }
@@ -158,7 +160,7 @@ interface Challenge {
  * screen showed the Kernel's decoding, the key kept in IndexedDB.
  */
 export async function register(
-  realm: string,
+  environment: string,
   account: string,
   pep: string,
   confirm: Confirm,
@@ -212,7 +214,7 @@ export async function register(
   if (signed[1] !== undefined) body["register_ais"] = signed[1];
   await json(call("/instances", { method: "POST", body }));
   const instance: Instance = {
-    id: recordId(realm, account, b64url(kid)),
+    id: recordId(environment, account, b64url(kid)),
     key: pair.privateKey,
     kid,
     domain,

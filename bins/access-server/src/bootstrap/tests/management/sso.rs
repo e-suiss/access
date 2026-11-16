@@ -17,11 +17,11 @@ const ORG: [u8; 16] = [0x5a; 16];
 
 const OWNER: [u8; 16] = [0x77; 16];
 
-/// Organization Contoso, founded by its own owner account: the realm administrator driving the
+/// Organization Contoso, founded by its own owner account: the environment administrator driving the
 /// console is not a member, so enforcement does not end the console's own session.
 async fn org(c: &Console) -> [u8; 16] {
     let owner = account(c, "owner@contoso.example", false).await;
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert!(
@@ -40,9 +40,13 @@ async fn org(c: &Console) -> [u8; 16] {
 async fn invite(c: &Console, org: [u8; 16], email: &str, token: &str) -> [u8; 16] {
     let v = vault_of(c);
     let index = v
-        .index_of(c.route.tenant.as_bytes(), c.route.realm.as_bytes(), email)
+        .index_of(
+            c.route.tenant.as_bytes(),
+            c.route.environment.as_bytes(),
+            email,
+        )
         .unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let id = t
@@ -64,7 +68,7 @@ async fn invite(c: &Console, org: [u8; 16], email: &str, token: &str) -> [u8; 16
 }
 
 async fn invitation_open(c: &Console, org: [u8; 16], id: [u8; 16]) -> bool {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let open = t.open_invitations(org).await.unwrap().contains(&id);
@@ -78,7 +82,7 @@ async fn sign_in(app: &axum::Router, identifier: &str) -> (StatusCode, serde_jso
     assert_eq!(flow.status, StatusCode::CREATED, "{}", flow.json);
     let action = |g: &serde_json::Value| {
         let a = g["action"].as_str().unwrap();
-        a.strip_prefix("/realms/acme").unwrap_or(a).to_owned()
+        a.strip_prefix("/env/acme").unwrap_or(a).to_owned()
     };
     let id = p
         .call(
@@ -108,7 +112,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     let party = b64url_encode(&ORG);
     let mia = account(&c, "mia@contoso.example", true).await;
     let bot = account(&c, "build-bot@contoso.example", true).await;
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_membership(org, mia, Source::Invite, false, None)
@@ -122,7 +126,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
         .unwrap();
     t.commit().await.unwrap();
     let cookie = session(&c, mia).await;
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let live = t
@@ -132,7 +136,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
         .await
         .unwrap()
         .unwrap();
-    let (clients, _) = access_store::idp::realm::clients(&mut t, "", 1)
+    let (clients, _) = access_store::idp::environment::clients(&mut t, "", 1)
         .await
         .unwrap()
         .into_iter()
@@ -160,7 +164,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     // X20, TN-94
     let preview = c
         .admin_get(&format!(
-            "/admin/v1/realms/acme/organizations/{party}/sso-enforcement/preview"
+            "/admin/v1/envs/acme/organizations/{party}/sso-enforcement/preview"
         ))
         .await;
     assert_eq!(preview.status, StatusCode::OK, "{}", preview.body);
@@ -180,7 +184,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     assert!(preview.body["totals"]["refresh_families"].as_u64().unwrap() >= 1);
 
     // C10
-    let target = format!("/admin/v1/realms/acme/organizations/{party}/sso-enforcement");
+    let target = format!("/admin/v1/envs/acme/organizations/{party}/sso-enforcement");
     let no_fate = c
         .rest_write(
             &Method::POST,
@@ -203,7 +207,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
 
     // TN-94
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert!(t.subject(mia, false).await.unwrap().unwrap().session_epoch > epoch);
@@ -229,7 +233,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     assert_eq!(again.status, StatusCode::CONFLICT, "{}", again.body);
     let after = c
         .admin_get(&format!(
-            "/admin/v1/realms/acme/organizations/{party}/sso-enforcement/preview"
+            "/admin/v1/envs/acme/organizations/{party}/sso-enforcement/preview"
         ))
         .await;
     assert_eq!(after.body["enforced"], true);
@@ -260,7 +264,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
     let bad = c
         .rest_write(
             &Method::POST,
-            &format!("/admin/v1/realms/acme/organizations/{party}/setup-links"),
+            &format!("/admin/v1/envs/acme/organizations/{party}/setup-links"),
             ("createOrganizationSetupLink", Some(&party)),
             serde_json::json!({ "email": "not an address" }),
             None,
@@ -270,7 +274,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
     let w = c
         .rest_write(
             &Method::POST,
-            &format!("/admin/v1/realms/acme/organizations/{party}/setup-links"),
+            &format!("/admin/v1/envs/acme/organizations/{party}/setup-links"),
             ("createOrganizationSetupLink", Some(&party)),
             serde_json::json!({ "email": "it@contoso.example" }),
             None,
@@ -351,7 +355,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
         .await;
     assert_eq!(test.status, StatusCode::CONFLICT, "{}", test.json);
     let view = c
-        .admin_get(&format!("/admin/v1/realms/acme/organizations/{party}"))
+        .admin_get(&format!("/admin/v1/envs/acme/organizations/{party}"))
         .await;
     let drafts = view.body["connection_drafts"].as_array().unwrap();
     assert_eq!(drafts.len(), 1);
@@ -374,7 +378,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
 
     // TN-134
     let old = "expired-setup-link-token-0000000000000000000";
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_setup_link_ago(
@@ -409,7 +413,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients",
+            "/admin/v1/envs/acme/scim-clients",
             ("registerScimClient", None),
             serde_json::json!({ "name": "hr", "organization": party }),
             None,
@@ -422,7 +426,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     let refused = c
         .rest_write(
             &Method::POST,
-            &format!("/admin/v1/realms/acme/organizations/{party}/invitations"),
+            &format!("/admin/v1/envs/acme/organizations/{party}/invitations"),
             ("createInvitation", Some(&party)),
             serde_json::json!({ "email": "eve@contoso.example", "inviter_name": "Root",
                                 "role": "member", "role_version": 1 }),
@@ -455,7 +459,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
         .await;
     assert_eq!(accepted.status, StatusCode::ACCEPTED, "{}", accepted.json);
     assert_eq!(accepted.json["status"], "requested");
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert!(t.access_requested(org, bob).await.unwrap());
@@ -492,14 +496,14 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     let retired = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients/hr/retire",
+            "/admin/v1/envs/acme/scim-clients/hr/retire",
             ("retireScimClient", Some("hr")),
             serde_json::json!({}),
             None,
         )
         .await;
     assert_eq!(retired.status, StatusCode::OK, "{}", retired.body);
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     assert_eq!(t.scim_sources(org).await.unwrap().len(), 0);
@@ -509,7 +513,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
 
 async fn action_at(c: &Console, written: &serde_json::Value) -> String {
     let position: i64 = written["position"].as_str().unwrap().parse().unwrap();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let action = t.idp_decision_action(position).await.unwrap().unwrap();
@@ -534,7 +538,7 @@ async fn a_catalog_template_that_maps_authority_is_the_reserved_sp_mapping() {
     let notion = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/saml-sps",
+            "/admin/v1/envs/acme/saml-sps",
             ("registerSamlSp", None),
             body("notion", "notion"),
             None,
@@ -545,7 +549,7 @@ async fn a_catalog_template_that_maps_authority_is_the_reserved_sp_mapping() {
     let unknown = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/saml-sps",
+            "/admin/v1/envs/acme/saml-sps",
             ("registerSamlSp", None),
             body("nobody", "not-in-the-catalog"),
             None,
@@ -560,7 +564,7 @@ async fn a_catalog_template_that_maps_authority_is_the_reserved_sp_mapping() {
     let mapped = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/saml-sps",
+            "/admin/v1/envs/acme/saml-sps",
             ("registerSamlSp", None),
             aws,
             None,

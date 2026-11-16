@@ -1,5 +1,5 @@
 //! The social sign-in rules that do not need a provider: shared development clients only in a
-//! sandbox realm (IDP-31 (4)), client id reuse and the Apple transfer window (TN-87), the App
+//! sandbox environment (IDP-31 (4)), client id reuse and the Apple transfer window (TN-87), the App
 //! Store warning (IDP-31 (5)), and the freshness of linking (TN-65).
 
 /// How long Apple's transfer identifiers stay usable after a client id change (TN-87).
@@ -17,7 +17,7 @@ pub const APPLE: &str = "apple";
 /// A refusal of a social client, as a decision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClientRefusal {
-    /// A shared development client named in a realm that is not a sandbox (IDP-31 (4)).
+    /// A shared development client named in an environment that is not a sandbox (IDP-31 (4)).
     SharedKeyInProduction,
     /// A shared development client named for a preset the operator configured none for.
     NoSharedKey,
@@ -34,8 +34,8 @@ impl ClientRefusal {
     }
 }
 
-/// Whether a realm may use a social client: a shared development client only in a sandbox
-/// realm, at `enable` and at every sign-in (OP-153 m.3 (l)).
+/// Whether an environment may use a social client: a shared development client only in a sandbox
+/// environment, at `enable` and at every sign-in (OP-153 m.3 (l)).
 ///
 /// # Errors
 /// [`ClientRefusal`].
@@ -94,7 +94,7 @@ pub fn client_change(preset: &str, old: Option<&str>, new: &str, now_ms: u64) ->
     }
 }
 
-/// IDP-31 (5): a realm with a native app client that offers a social provider other than Apple
+/// IDP-31 (5): an environment with a native app client that offers a social provider other than Apple
 /// and not Apple is warned.
 #[must_use]
 pub fn apple_recommended<'a>(

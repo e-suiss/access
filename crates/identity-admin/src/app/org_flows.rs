@@ -147,7 +147,7 @@ impl<D, G, K> super::Admin<'_, D, G, K>
 where
     D: crate::ports::Decider,
     G: crate::ports::Governance + crate::ports::Instances,
-    K: crate::ports::RealmKeys,
+    K: crate::ports::EnvironmentKeys,
 {
     /// Issues the role Grant of an accepted invitation (TN-89 (3), OP-153 m.3 (o)): `w` is the
     /// `grant_issue` the inviter's own client signed, holding the member's Party to the
@@ -159,9 +159,9 @@ where
     /// [`AdminError`]; a pending decision leaves the role pending.
     pub async fn issue_role_grant(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         (org, subject): ([u8; 16], [u8; 16]),
         w: access_internal_api::idp::Submission,
@@ -169,7 +169,7 @@ where
         use access_kernel::meta::Payload;
         use access_kernel::model::{Id, SubjectSelector};
 
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let org = live_org(&mut t, org).await?;
         let member = t
             .member(org.id, subject)
@@ -216,7 +216,7 @@ where
         }
         let origin = access_kernel::meta::exercise_id(&w.domain, &w.nonce)
             .map_err(|_| AdminError::Encode)?;
-        let applied = Box::pin(self.meta((tenant, realm), w)).await?;
+        let applied = Box::pin(self.meta((tenant, environment), w)).await?;
         let settled = match &applied {
             super::Applied::Written { exercise, .. }
             | super::Applied::AlreadyWritten { exercise, .. } => Some(Some((
@@ -231,7 +231,7 @@ where
             super::Applied::NotAllowed { .. } => None,
         };
         if let Some(issued) = settled {
-            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            let mut t = TenantTx::begin(self.app, tenant, environment).await?;
             t.settle_role_grant(member.id, issued).await?;
             t.commit().await?;
         }
@@ -241,7 +241,7 @@ where
     /// Issues an organization's autojoin role Grant (TN-90, C13, OP-153 m.17 (c), m.25 (i)
     /// (3)): `w` is the `grant_issue` an owner's own client signed on the organization's
     /// Anchor, held by every Party with a live `org_member` Claim naming the organization
-    /// ([`crate::domain::org::org_members`]), which the realm issuer's subject-selection
+    /// ([`crate::domain::org::org_members`]), which the environment issuer's subject-selection
     /// Acceptance admits. Only an organization with a domain whose autojoin is on takes one, and
     /// like a first acceptance it never grants an `anchor_*` meta-action or a reserved action.
     ///
@@ -249,9 +249,9 @@ where
     /// [`AdminError`]; the domain's DENY or pending decision is [`super::Applied::NotAllowed`].
     pub async fn issue_autojoin_grant(
         &self,
-        (tenant, realm): (
+        (tenant, environment): (
             access_store::identity::TenantId,
-            access_store::identity::RealmId,
+            access_store::identity::EnvironmentId,
         ),
         org: [u8; 16],
         w: access_internal_api::idp::Submission,
@@ -259,7 +259,7 @@ where
         use access_kernel::meta::{ExerciseBasis, GrantBasis, Payload};
         use access_kernel::model::Id;
 
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let found = live_org(&mut t, org).await?;
         let anchor = t.party_anchor(found.party).await?.ok_or(Invalid::NoOrg)?;
         let autojoin = t
@@ -309,6 +309,6 @@ where
                 super::transfers::OWNER_ONLY,
             )));
         }
-        Box::pin(self.meta((tenant, realm), w)).await
+        Box::pin(self.meta((tenant, environment), w)).await
     }
 }

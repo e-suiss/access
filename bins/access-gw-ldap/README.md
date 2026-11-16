@@ -13,9 +13,9 @@ access-gw-ldap
 
 | Operation | Answer |
 |---|---|
-| Bind (simple) | An app password, as `dn=token` or under the holder's own DN `uid=<uid>,ou=people,o=<realm>` |
-| Bind (SASL `EXTERNAL`) | The client certificate of the TLS session, under the realm's certificate sign-in rules |
-| Search | The realm's tree, root DSE and `cn=Subschema`; simple paged results |
+| Bind (simple) | An app password, as `dn=token` or under the holder's own DN `uid=<uid>,ou=people,o=<environment>` |
+| Bind (SASL `EXTERNAL`) | The client certificate of the TLS session, under the environment's certificate sign-in rules |
+| Search | The environment's tree, root DSE and `cn=Subschema`; simple paged results |
 | WhoAmI | `dn:<bound DN>`, or empty when anonymous |
 | Password modify (RFC 3062) | Replaces the app password that was just presented; the new one is chosen by the directory and shown once |
 | StartTLS | Only on the cleartext listener, which is off unless configured |
@@ -31,7 +31,7 @@ offered. A simple bind without TLS on the cleartext listener answers `confidenti
 ## Tree
 
 ```
-o=<realm>
+o=<environment>
 ├── ou=people   uid=<username or e-mail>   inetOrgPerson, posixAccount
 └── ou=groups   cn=<group>                 groupOfNames, posixGroup
 ```
@@ -66,7 +66,7 @@ start.
 | `ACCESS_GW_LDAP_CHANNEL_CERT`, `ACCESS_GW_LDAP_CHANNEL_KEY` | The gateway's client certificate (one SAN URI `urn:suiss:access:gw:ldap:<name>`) and key, PEM |
 | `ACCESS_GW_LDAP_RUN_AS` | `uid:gid` to switch to when started as root |
 
-The gateway must be registered in its realm before it can connect; it serves that realm only.
+The gateway must be registered in its environment before it can connect; it serves that environment only.
 
 ## License
 

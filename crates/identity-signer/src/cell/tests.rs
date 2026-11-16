@@ -69,13 +69,13 @@ fn the_cell_key_signs_its_two_chains_only() {
 
 // OP-152 m.7 (d)
 #[test]
-fn the_cell_key_signs_realm_trees_under_its_own_log_only() {
+fn the_cell_key_signs_environment_trees_under_its_own_log_only() {
     let mut f = factory();
     let key = CellKey::generate("cell-a", &mut f).unwrap();
-    let realm = realm_origin(key.origin(), &[0xab; 16]);
+    let environment = environment_origin(key.origin(), &[0xab; 16]);
     assert_eq!(
-        realm,
-        "cell-a/identity-audit/realm/abababababababababababababababab"
+        environment,
+        "cell-a/identity-audit/environment/abababababababababababababababab"
     );
     let body = |origin: &str| {
         Checkpoint {
@@ -87,13 +87,22 @@ fn the_cell_key_signs_realm_trees_under_its_own_log_only() {
         .to_body()
         .unwrap()
     };
-    assert!(key.sign(&body(&realm)).is_ok());
+    assert!(key.sign(&body(&environment)).is_ok());
     for other in [
-        String::from("cell-b/identity-audit/realm/abababababababababababababababab"),
-        format!("{}/realm/ABABABABABABABABABABABABABABABAB", key.origin()),
-        format!("{}/realm/abab", key.origin()),
-        format!("{}/realms/abababababababababababababababab", key.origin()),
-        format!("{}/realm/abababababababababababababababab/x", key.origin()),
+        String::from("cell-b/identity-audit/environment/abababababababababababababababab"),
+        format!(
+            "{}/environment/ABABABABABABABABABABABABABABABAB",
+            key.origin()
+        ),
+        format!("{}/environment/abab", key.origin()),
+        format!(
+            "{}/environments/abababababababababababababababab",
+            key.origin()
+        ),
+        format!(
+            "{}/environment/abababababababababababababababab/x",
+            key.origin()
+        ),
     ] {
         assert_eq!(
             key.sign(&body(&other)).err(),

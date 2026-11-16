@@ -1,5 +1,5 @@
 //! The hosted consent of a CIMD client on the real server path (§11.6, P58, EI-18, OP-154 m.3
-//! (k), OP-153 m.3 (gg)): the realm's CIMD policy and protected resource are REST writes, the
+//! (k), OP-153 m.3 (gg)): the environment's CIMD policy and protected resource are REST writes, the
 //! person's own `grant.issue` is committed through the real ADP router with their device
 //! Instance's AIS, and the consent record is kept only for that allowed Exercise, read back from
 //! the authority plane. Revoking the Grant above it asks for consent again.
@@ -115,11 +115,11 @@ async fn root_commit(c: &Console, payload: Payload, party: Id) -> Digest {
     done.exercise
 }
 
-/// A live realm session of the console's person.
+/// A live environment session of the console's person.
 async fn session(c: &Console) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_session(&NewSession {
@@ -142,7 +142,7 @@ async fn session(c: &Console) -> String {
 async fn authorize(c: &Console, query: &str, cookie: &str) -> (Response<Body>, Vec<u8>) {
     send(
         &c.oauth,
-        Request::get(format!("/realms/acme/authorize?{query}"))
+        Request::get(format!("/env/acme/authorize?{query}"))
             .header(header::HOST, HOST)
             .header(header::COOKIE, format!("{SESSION}={cookie}"))
             .body(Body::empty())
@@ -158,7 +158,7 @@ async fn page(
     csrf: Option<&str>,
     body: &serde_json::Value,
 ) -> (Response<Body>, serde_json::Value) {
-    let mut b = Request::post(format!("/realms/acme{path}"))
+    let mut b = Request::post(format!("/env/acme{path}"))
         .header(header::HOST, HOST)
         .header(header::ORIGIN, format!("https://{HOST}"))
         .header("sec-fetch-site", "same-origin")
@@ -196,7 +196,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/resources",
+            "/admin/v1/envs/acme/resources",
             ("registerProtectedResource", None),
             serde_json::json!({ "resource": MCP, "display_name": "Example MCP" }),
             None,
@@ -206,7 +206,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     let document =
         format!(r#"{{"client_id":"{APP}","client_name":"Example App","redirect_uris":["{CB}"]}}"#);
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     t.insert_cimd_client(

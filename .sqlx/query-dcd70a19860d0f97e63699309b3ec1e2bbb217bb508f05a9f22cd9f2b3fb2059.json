@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claims FROM access.identity_claim_consents\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4\n                AND ended_ms IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claims",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.identity_claim_consents",
+            "name": "claims"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dcd70a19860d0f97e63699309b3ec1e2bbb217bb508f05a9f22cd9f2b3fb2059"
+}

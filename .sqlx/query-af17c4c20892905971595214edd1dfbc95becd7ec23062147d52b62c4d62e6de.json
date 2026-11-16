@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_environment_related_origins (tenant_id, environment_id, origins, domain_id,\n                decision_pos)\n         VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (tenant_id, environment_id) DO UPDATE\n            SET origins = EXCLUDED.origins, domain_id = EXCLUDED.domain_id,\n                decision_pos = EXCLUDED.decision_pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "af17c4c20892905971595214edd1dfbc95becd7ec23062147d52b62c4d62e6de"
+}

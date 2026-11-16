@@ -1,12 +1,12 @@
 //! The management API's ports in this process (OP-151 m.3 (b)-(d)): system time and randomness,
 //! the in-process rate limiter, cursors under a key derived in the HSM, `Idempotency-Key` answers
-//! in PostgreSQL, the realm surfaces and resources over the identity plane ([`realm`]), and the
-//! read tokens the realms issue ([`tokens`], TN-130); the platform surface is [`platform`].
+//! in PostgreSQL, the environment surfaces and resources over the identity plane ([`environment`]), and the
+//! read tokens the environments issue ([`tokens`], TN-130); the platform surface is [`platform`].
 
 // OP-157 m.3 (v)
+pub(crate) mod environment;
 pub(crate) mod offboarding;
 pub(crate) mod platform;
-pub(crate) mod realm;
 pub(crate) mod tokens;
 
 use std::sync::Arc;
@@ -18,8 +18,8 @@ use access_http::api::Api;
 use access_http::api::adapters::{MemoryLimiter, SivCursors};
 use access_http::api::domain::idempotency::{LEASE_MS, RETENTION_MS};
 use access_http::api::ports::{
-    Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, PlatformResources, RateLimiter,
-    RealmResources, Unavailable,
+    Begun, Clock, CursorSeal, Entropy, Env, EnvironmentResources, IdempotencyStore,
+    PlatformResources, RateLimiter, Unavailable,
 };
 use access_http::console::Console;
 use access_http::login::Assets;
@@ -121,19 +121,19 @@ pub(crate) struct ServerApi<P> {
     cursors: SivCursors,
     idempotency: PgIdempotency,
     origin: String,
-    realms: realm::Realms<P>,
+    environments: environment::Environments<P>,
     tokens: Arc<tokens::ManagementTokens<P>>,
 }
 
 impl<P> ServerApi<P> {
     /// The ports over the app pool, with the cursor key derived in `keys`, the management
-    /// origin from configuration (§17.9.6: never from a request), the realms behind it and the
+    /// origin from configuration (§17.9.6: never from a request), the environments behind it and the
     /// read token verifier.
     pub(crate) fn new(
         app: Pool,
         keys: &KeyStore,
         origin: String,
-        realms: realm::Realms<P>,
+        environments: environment::Environments<P>,
         tokens: Arc<tokens::ManagementTokens<P>>,
     ) -> Result<Self, String> {
         let key = keys
@@ -145,18 +145,18 @@ impl<P> ServerApi<P> {
             cursors: SivCursors::new(Secret::new(key)),
             idempotency: PgIdempotency(app),
             origin,
-            realms,
+            environments,
             tokens,
         })
     }
 }
 
-/// What the realm surface and the console need of the identity plane.
-pub(crate) trait RealmPlane:
+/// What the environment surface and the console need of the identity plane.
+pub(crate) trait EnvironmentPlane:
     Decider
     + Governance
     + Instances
-    + realm::LiveKeys
+    + environment::LiveKeys
     + access_identity_ui::ports::DeviceInstances
     + access_http::console::ports::AcceptedActions
     + Clone
@@ -166,11 +166,11 @@ pub(crate) trait RealmPlane:
 {
 }
 
-impl<P> RealmPlane for P where
+impl<P> EnvironmentPlane for P where
     P: Decider
         + Governance
         + Instances
-        + realm::LiveKeys
+        + environment::LiveKeys
         + access_identity_ui::ports::DeviceInstances
         + access_http::console::ports::AcceptedActions
         + Clone
@@ -180,10 +180,10 @@ impl<P> RealmPlane for P where
 {
 }
 
-/// The public listener's routes the management process calls in process: the realms'
+/// The public listener's routes the management process calls in process: the environments'
 /// authorization servers for the console's sign-in, and ADP for its forwarded reads.
 pub(crate) struct InProcessRoutes {
-    /// The realm authorization servers.
+    /// The environment authorization servers.
     pub(crate) oauth: axum::Router,
     /// ADP.
     pub(crate) adp: axum::Router,
@@ -192,34 +192,38 @@ pub(crate) struct InProcessRoutes {
 /// The management router over this process's ports, with the console's BFF under
 /// `/console/*` (TN-128); its origin is the configured `suiss.management_api` (§17.9.6: never
 /// derived from `Host`).
-pub(crate) fn router<P: RealmPlane>(
+pub(crate) fn router<P: EnvironmentPlane>(
     (origin, identity_signer): (String, std::path::PathBuf),
     keys: &Arc<KeyStore>,
-    realms: realm::Realms<P>,
+    environments: environment::Environments<P>,
     routes: InProcessRoutes,
     console_assets: Option<Assets>,
 ) -> Result<axum::Router, String> {
     let signer = || SignerKeys::new(identity_signer.clone());
-    let router_pool = realms.router.clone();
+    let router_pool = environments.router.clone();
     let directory = || PgDirectory::new(router_pool.clone());
     // OP-151 m.12 (b)
     crate::console::sign_in::client_key(keys)?;
     let tokens = Arc::new(tokens::ManagementTokens {
         directory: directory(),
         signer: signer(),
-        app: realms.app.clone(),
-        plane: realms.plane.clone(),
+        app: environments.app.clone(),
+        plane: environments.plane.clone(),
         dpop: DpopProfile::default(),
-        platform: realms.platform.clone(),
+        platform: environments.platform.clone(),
     });
-    let (app, ids, plane) = (realms.app.clone(), realms.ids.clone(), realms.plane.clone());
-    let ips = Arc::clone(&realms.ips);
+    let (app, ids, plane) = (
+        environments.app.clone(),
+        environments.ids.clone(),
+        environments.plane.clone(),
+    );
+    let ips = Arc::clone(&environments.ips);
     let api = Api::new(
         ServerApi::new(
             app.clone(),
             keys,
             origin.clone(),
-            realms,
+            environments,
             Arc::clone(&tokens),
         )?,
         Limits::default(),
@@ -233,11 +237,11 @@ pub(crate) fn router<P: RealmPlane>(
             directory: directory(),
             ids: Arc::clone(&ids),
         },
-        network: crate::console::sessions::RealmBinding {
+        network: crate::console::sessions::EnvironmentBinding {
             app: app.clone(),
             directory: directory(),
         },
-        sign_in: crate::console::sign_in::RealmSignIn {
+        sign_in: crate::console::sign_in::EnvironmentSignIn {
             public: routes.oauth,
             directory: directory(),
             app: app.clone(),
@@ -262,9 +266,9 @@ pub(crate) fn router<P: RealmPlane>(
     Ok(access_http::console::router(&console).merge(admin))
 }
 
-impl<P: RealmPlane> Env for ServerApi<P> {
+impl<P: EnvironmentPlane> Env for ServerApi<P> {
     type Tokens = tokens::ManagementTokens<P>;
-    type Surfaces = realm::Realms<P>;
+    type Surfaces = environment::Environments<P>;
     type Idempotency = PgIdempotency;
 
     fn clock(&self) -> &dyn Clock {
@@ -287,8 +291,8 @@ impl<P: RealmPlane> Env for ServerApi<P> {
         &self.tokens
     }
 
-    fn surfaces(&self) -> &realm::Realms<P> {
-        &self.realms
+    fn surfaces(&self) -> &environment::Environments<P> {
+        &self.environments
     }
 
     fn idempotency(&self) -> &PgIdempotency {
@@ -299,15 +303,15 @@ impl<P: RealmPlane> Env for ServerApi<P> {
         &self.origin
     }
 
-    fn realm(&self) -> &dyn RealmResources {
-        &self.realms
+    fn environment(&self) -> &dyn EnvironmentResources {
+        &self.environments
     }
 
     fn platform(&self) -> &dyn PlatformResources {
-        &self.realms
+        &self.environments
     }
 
     fn jobs(&self) -> &dyn access_http::api::ports::Jobs {
-        &self.realms
+        &self.environments
     }
 }

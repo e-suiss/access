@@ -36,7 +36,7 @@ pub(crate) const ALL: &[Scenario] = &[
     },
     Scenario {
         name: "login",
-        summary: "hosted sign-in with the realm's Argon2 cost: logins/s and total/Argon2 CPU < 1.10 (MKT-8, OP-32)",
+        summary: "hosted sign-in with the environment's Argon2 cost: logins/s and total/Argon2 CPU < 1.10 (MKT-8, OP-32)",
         path: "/login",
         budget_p99_us: None,
     },

@@ -7,7 +7,7 @@ status cannot be established is refused.
 ## Path validation
 
 The presented chain (leaf first, at most 8 certificates of at most 8 KB each) must lead to one of
-the realm's accepted CAs with [rustls-webpki](https://github.com/rustls/webpki). Every certificate
+the environment's accepted CAs with [rustls-webpki](https://github.com/rustls/webpki). Every certificate
 must be valid now, and a leaf with an extended key usage must name `id-kp-clientAuth`.
 
 ## Revocation
@@ -29,8 +29,8 @@ documents are signed; the fetch still goes through the SSRF-guarded outbound cli
 
 | | Rule |
 |---|---|
-| Identifier | the realm's rule maps exactly one subjectAltName `rfc822Name` (`san_email`) or user principal name (`san_upn`) to the account |
-| Assurance | an issuer policy OID the realm mapped as hardware-bound PIV makes the certificate a device-bound key with the card's PIN (AAL3, CT3); any other certificate is a software key and never reaches CT3 |
+| Identifier | the environment's rule maps exactly one subjectAltName `rfc822Name` (`san_email`) or user principal name (`san_upn`) to the account |
+| Assurance | an issuer policy OID the environment mapped as hardware-bound PIV makes the certificate a device-bound key with the card's PIN (AAL3, CT3); any other certificate is a software key and never reaches CT3 |
 | CA trust | a CA is trusted only through the governing domain's actor-binding Acceptance of its issuer id, derived from its subject and public key |
 | Thumbprint | SHA-256 of the leaf (`x5t#S256`) |
 

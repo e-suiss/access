@@ -8,7 +8,7 @@ test.describe("@live console hosting", () => {
   test("@live the durability read with its hosting answers nothing without a session", async ({
     page,
   }) => {
-    const read = await page.request.get("/console/api/proxy/admin/realms/acme/durability");
+    const read = await page.request.get("/console/api/proxy/admin/envs/acme/durability");
     expect([401, 403]).toContain(read.status());
   });
 

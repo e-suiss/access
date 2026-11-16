@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_webhook_deliveries\n                SET state = $5, attempts = attempts + 1, last_status = $6, last_latency_ms = $7,\n                    last_reason = $8,\n                    next_attempt_at = coalesce(to_timestamp($9::bigint / 1000.0), next_attempt_at),\n                    updated_at = now()\n              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND event_id = $4\n                AND state = 'pending'\n          RETURNING attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "attempts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cba195599d336262d17b41271a5d6496db0eea9e37f60582abd226030764e57e"
+}

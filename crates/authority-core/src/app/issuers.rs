@@ -1,4 +1,4 @@
-//! The issuers whose assertions the realm's authorization server may take as Claim input
+//! The issuers whose assertions the environment's authorization server may take as Claim input
 //! (§9.13, §11.11.3 step 1, AG-29, OP-154 m.3 (m), (q)): an issuer the domain accepted for
 //! `actor-binding` with a pinned key set. The assertion stays a carrier: it binds an actor, it
 //! never grants (L25, MD-18).

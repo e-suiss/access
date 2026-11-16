@@ -101,7 +101,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    const CATALOG_TEXT: &str = "    pub const fn reserved(self) -> bool {\n        matches!(self, Self::AccountDelete | Self::AccountMfaChange | Self::RealmRpId)\n    }\n";
+    const CATALOG_TEXT: &str = "    pub const fn reserved(self) -> bool {\n        matches!(self, Self::AccountDelete | Self::AccountMfaChange | Self::EnvironmentRpId)\n    }\n";
 
     // MD-9, TN-71, OP-157 m.3 (c)
     #[test]

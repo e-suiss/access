@@ -1,6 +1,6 @@
-//! The realm SSF routes the contract names beside the transmitter metadata (OP-151 m.3 (l), E30):
+//! The environment SSF routes the contract names beside the transmitter metadata (OP-151 m.3 (l), E30):
 //! the RFC 8935 receiver of a declared upstream transmitter and the receivers' semantic
-//! acknowledgement. Both also live under `/realms/{slug}` for a path issuer.
+//! acknowledgement. Both also live under `/env/{slug}` for a path issuer.
 
 use serde_json::{Map, Value, json};
 
@@ -48,7 +48,7 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
                     "description": "Refused (RFC 8935 §2.3).",
                     "content": { "application/json": { "schema": r("SsfError") } },
                 },
-                "404": { "description": "No live push transmitter with this id in the realm." },
+                "404": { "description": "No live push transmitter with this id in the environment." },
                 "413": { "description": "The SET is larger than 64 KiB." },
                 "503": { "description": "Temporarily unavailable; the transmitter retries." },
             },

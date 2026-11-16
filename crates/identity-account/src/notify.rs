@@ -34,11 +34,11 @@ pub enum NotifyError {
     /// The message breaks the contract.
     #[error(transparent)]
     Invalid(#[from] Invalid),
-    /// The subject is not in the realm, or its key is gone.
+    /// The subject is not in the environment, or its key is gone.
     #[error("no such subject")]
     NoSubject,
-    /// The realm KEK is not held by this process.
-    #[error("realm key unavailable")]
+    /// The environment KEK is not held by this process.
+    #[error("environment key unavailable")]
     KeyUnavailable,
     /// Key wrapping or sealing failed.
     #[error("sealing failed")]

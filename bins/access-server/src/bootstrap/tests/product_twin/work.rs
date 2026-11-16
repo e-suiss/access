@@ -107,7 +107,7 @@ impl Coordinator {
             .unwrap()
             .to_owned();
         schedule(&signer);
-        let (tenant, created_realm, domain) = Box::pin(realm(&w, SLUG)).await;
+        let (tenant, created_environment, domain) = Box::pin(environment(&w, SLUG)).await;
         let root = root_key(&w.keys).unwrap();
         let root_party = root_party(&root.public_key());
         let declared = DeclaredTargets::default();
@@ -116,13 +116,13 @@ impl Coordinator {
                 app: &w.db.app,
                 router: &w.db.router,
                 plane: &w.plane,
-                realm_keys: &w.keyring,
+                environment_keys: &w.keyring,
                 hsm: &w.keys,
                 base: &w.base,
                 declared: &declared,
                 console: None,
             }
-            .onboard(tenant, created_realm, domain, &root, root_party),
+            .onboard(tenant, created_environment, domain, &root, root_party),
         )
         .await
         .unwrap();
@@ -146,7 +146,7 @@ impl Coordinator {
         let (platform, _) = crate::platform::routes(
             &pools,
             Outbound::disabled(Duration::from_secs(5)),
-            crate::login::RealmKeks::new(w.keys.clone()),
+            crate::login::EnvironmentKeks::new(w.keys.clone()),
             w.plane.clone(),
             String::from("https://access.test"),
         );
@@ -858,7 +858,7 @@ async fn project(
                 capacity: Capacity::Own,
                 ais,
                 pep: String::from(IDENTITY_PEP),
-                issuer: format!("https://access.test/realms/{SLUG}"),
+                issuer: format!("https://access.test/env/{SLUG}"),
                 client_id: String::from("deliver-console"),
                 kind: TokenKind::Bounds,
                 target: None,

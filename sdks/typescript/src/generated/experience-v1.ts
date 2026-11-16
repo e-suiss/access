@@ -165,7 +165,7 @@ export interface components {
             attention?: {
                 /** @description How many approvals the coordinator says wait; Access keeps no queue (IA-1, X6). */
                 count: number;
-                /** @description The coordinator's Needs Attention URL (`idp.realm.coordinator`), https. */
+                /** @description The coordinator's Needs Attention URL (`idp.environment.coordinator`), https. */
                 href: string;
                 /** @constant */
                 text: "attention.approvals_waiting";
@@ -204,12 +204,12 @@ export interface components {
              * @enum {string}
              */
             depth: "default" | "expert" | "audit";
+            /** @description The reader's environment slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)). */
+            environment?: string;
             /** @description Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14). */
             financial?: components["schemas"]["Financial"][];
             /** @description The signed reads. */
             reads: components["schemas"]["SignedRead"][];
-            /** @description The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)). */
-            realm?: string;
             /** @description The reader's Party. */
             viewer: string;
         };

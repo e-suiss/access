@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.analytics_alert (tenant_id, environment_id, day, kind, observed, baseline)\n             VALUES ($1, $2, $3, 'failed_login_surge', $4, $5) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "757b89955dd5f9f6fd5d839dcaabfa6cd06d10ea97a51b2b1e311f890e2dca7e"
+}

@@ -41,7 +41,7 @@ use gungraun::{library_benchmark, library_benchmark_group, main};
 #[cfg(target_os = "linux")]
 const NOW: u64 = 1_800_000_000_000;
 #[cfg(target_os = "linux")]
-const TOKEN_URI: &str = "https://access.example/realms/acme/token";
+const TOKEN_URI: &str = "https://access.example/env/acme/token";
 #[cfg(target_os = "linux")]
 const MCP_URI: &str = "https://mcp.example/mcp";
 #[cfg(target_os = "linux")]

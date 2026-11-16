@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.environment_wide', 'on', true) AS wide",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "wide",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "6213e9bf8d3ae971aa281bcc40b0e08cd725cb85d2747b9237aff6e139f3cec7"
+}

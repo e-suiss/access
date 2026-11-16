@@ -1,6 +1,6 @@
 //! The account owner's own credential export (§12.3.7, §18.1, TN-86, B19, MKT-D9): the stored
 //! password hash and the authenticator app seeds, free and without a commercial cap, after a
-//! fresh step-up. The password hash leaves without the realm's pepper, in the form another
+//! fresh step-up. The password hash leaves without the environment's pepper, in the form another
 //! provider imports; a seed leaves as base32 with its RFC 6238 parameters. Passkeys stay bound
 //! to their relying party ID and are not part of it.
 
@@ -19,7 +19,7 @@ use crate::ports::{Clock, Random, SessionDb};
 pub struct PasswordExport {
     /// The scheme: `argon2id`, or the imported `legacy-<scheme>` not yet migrated.
     pub algorithm: String,
-    /// The hash as stored, without the realm's pepper.
+    /// The hash as stored, without the environment's pepper.
     pub hash: Secret<String>,
     /// An imported hash's pepper and pre-hash, as it was imported.
     pub transform: Option<Secret<String>>,
@@ -57,13 +57,13 @@ where
             .subject(subject, false)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let mut out = CredentialExport::default();
         for c in tx.credentials(subject, "password").await? {
             if c.algorithm == legacy::IDP {
                 continue;
             }
-            let (stored, _) = open_password(&self.realm, &dek, &subject, &c.sealed)?;
+            let (stored, _) = open_password(&self.environment, &dek, &subject, &c.sealed)?;
             out.password = Some(
                 if legacy::is_legacy(&c.algorithm) && c.algorithm != legacy::ARGON2 {
                     let (spec, hash) = stored
@@ -85,7 +85,7 @@ where
             );
         }
         for c in tx.credentials(subject, TOTP).await? {
-            let seed = open(&self.realm, &dek, &subject, TOTP, &c.sealed)?;
+            let seed = open(&self.environment, &dek, &subject, TOTP, &c.sealed)?;
             let bytes = hex_decode(seed.expose()).ok_or(SessionError::Corrupt)?;
             out.totp.push(Secret::new(base32(&bytes)));
         }

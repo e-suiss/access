@@ -40,8 +40,11 @@ impl access_authority_ingest::ports::Clock for Moving {
 pub(super) struct TestVaults<'a>(pub(super) &'a Opened);
 
 impl Vaults for TestVaults<'_> {
-    fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
-        self.0.vault(realm)
+    fn vault(
+        &self,
+        environment: EnvironmentId,
+    ) -> Option<access_identity_account::app::vault::Vault> {
+        self.0.vault(environment)
     }
 }
 
@@ -133,7 +136,7 @@ pub(super) fn import_body(content: &str, records: u64) -> serde_json::Value {
 
 pub(super) async fn import(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     content: &str,
     nonce: u8,
@@ -154,7 +157,7 @@ pub(super) async fn import(
 
 pub(super) async fn status_of(
     w: &World,
-    (t, r): (TenantId, RealmId),
+    (t, r): (TenantId, EnvironmentId),
     subject: [u8; 16],
 ) -> (String, i64) {
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
@@ -167,7 +170,7 @@ pub(super) async fn status_of(
 /// domain: the Claim was admitted, not quarantined.
 async fn admitted(
     w: &World,
-    (t, r, d): (TenantId, RealmId, Digest),
+    (t, r, d): (TenantId, EnvironmentId, Digest),
     (subject, party): ([u8; 16], Id),
     class: &str,
 ) -> bool {
@@ -227,7 +230,7 @@ pub(super) async fn kinds(w: &World, want: &str) -> Vec<String> {
 #[tokio::test]
 async fn an_hr_source_selects_only_when_accepted_and_its_dates_start_and_end_the_account() {
     let w = World::new().await;
-    let (t, r, d) = w.realm_with("hr-life", Some(0)).await;
+    let (t, r, d) = w.environment_with("hr-life", Some(0)).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let register = HrChange::register_source(&serde_json::json!({"name": "workday"})).unwrap();
     written(

@@ -19,7 +19,7 @@ use access_identity_export::app::{NOTIFY_AFTER, Pass};
 use access_identity_export::domain::secret::seal;
 use access_identity_export::domain::sink::SinkSecret;
 use access_identity_export::domain::syslog;
-use access_identity_export::ports::RealmKek;
+use access_identity_export::ports::EnvironmentKek;
 use access_identity_export::testing::{SinkTwin, SyslogTwin};
 use access_identity_oauth::adapters::outbound::{DeclaredTarget, Outbound};
 use access_store::audit::AuditEvent;
@@ -27,10 +27,10 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
 use access_store::export::{NewSink, cursor, write};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use bytes::Bytes;
 use parquet::file::reader::{FileReader as _, SerializedFileReader};
@@ -41,8 +41,8 @@ const INTENT: [u8; 32] = [9; 32];
 
 struct Keys(Arc<SoftKek>);
 
-impl RealmKek for Keys {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for Keys {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
@@ -107,12 +107,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, "acme", "pool-default")
+    let r = create_environment(&mut tx, d, "acme", "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     tx.commit().await.unwrap();
     r
@@ -131,7 +131,7 @@ struct Sink<'a> {
 
 async fn register(
     db: &TestDb,
-    (tenant, r, d): (TenantId, RealmId, &DomainId),
+    (tenant, r, d): (TenantId, EnvironmentId, &DomainId),
     pos: u64,
     kek: &SoftKek,
     s: &Sink<'_>,
@@ -175,7 +175,7 @@ async fn register(
     tx.commit().await.unwrap();
 }
 
-async fn audit(db: &TestDb, tenant: TenantId, r: RealmId, n: usize) {
+async fn audit(db: &TestDb, tenant: TenantId, r: EnvironmentId, n: usize) {
     let mut tx = TenantTx::begin(&db.app, tenant, r).await.unwrap();
     for i in 0..n {
         tx.audit(&AuditEvent {
@@ -210,7 +210,7 @@ const MAX_PASSES: usize = 600;
 /// Runs passes until every sink has sent `want` rows, at most [`MAX_PASSES`].
 async fn drain<W: access_identity_export::ports::Wire>(
     pass: &Pass<'_, W, Keys>,
-    scope: (TenantId, RealmId),
+    scope: (TenantId, EnvironmentId),
     sent: &mut u64,
     want: u64,
 ) {
@@ -218,7 +218,7 @@ async fn drain<W: access_identity_export::ports::Wire>(
         if *sent >= want {
             return;
         }
-        *sent += pass.realm(scope, now_ms()).await.unwrap().sent;
+        *sent += pass.environment(scope, now_ms()).await.unwrap().sent;
         if *sent < want {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -231,7 +231,7 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, tenant, 51, 6).await;
-    let r = realm(&db, tenant, &d).await;
+    let r = environment(&db, tenant, &d).await;
     let kek = Arc::new(SoftKek::new(
         "kek-1",
         access_crypto::random::bytes::<32>().unwrap(),
@@ -337,7 +337,7 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
         if logins(&http, &syslog_twin, 7).await == [7; 6] {
             break;
         }
-        pass.realm((tenant, r), now_ms()).await.unwrap();
+        pass.environment((tenant, r), now_ms()).await.unwrap();
     }
     assert_eq!(logins(&http, &syslog_twin, 7).await, [7; 6]);
 
@@ -424,7 +424,7 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
         if notified >= 6 {
             break;
         }
-        let o = pass.realm((tenant, r), now_ms()).await.unwrap();
+        let o = pass.environment((tenant, r), now_ms()).await.unwrap();
         assert_eq!(o.sent, 0);
         notified += o.notified;
         if o.refused == 0 {
@@ -455,7 +455,7 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
     syslog_twin.set_down(false);
     let mut counts = [0; 6];
     for _ in 0..MAX_PASSES {
-        pass.realm((tenant, r), now_ms()).await.unwrap();
+        pass.environment((tenant, r), now_ms()).await.unwrap();
         counts = logins(&http, &syslog_twin, 0).await;
         if counts == [10; 6] {
             break;

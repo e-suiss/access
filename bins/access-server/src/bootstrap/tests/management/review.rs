@@ -10,7 +10,7 @@ use access_kernel::meta::{self as kmeta, kind};
 use super::writes::{canonical, exercise_of, role};
 use super::*;
 
-const REVIEWS: &str = "/admin/v1/realms/acme/reviews";
+const REVIEWS: &str = "/admin/v1/envs/acme/reviews";
 
 async fn keep(c: &Console, grant: &str, digest: Digest) -> (StatusCode, serde_json::Value) {
     let n = access_crypto::random::bytes::<16>().unwrap();
@@ -22,7 +22,7 @@ async fn keep(c: &Console, grant: &str, digest: Digest) -> (StatusCode, serde_js
         c.browser
             .request(
                 &Method::POST,
-                &format!("/console/api/proxy/admin/realms/acme/reviews/q4/items/{grant}/keep"),
+                &format!("/console/api/proxy/admin/envs/acme/reviews/q4/items/{grant}/keep"),
                 "x",
             )
             .header("x-access-ais", ais)
@@ -38,7 +38,7 @@ async fn keep(c: &Console, grant: &str, digest: Digest) -> (StatusCode, serde_js
 }
 
 async fn kept(c: &Console) -> usize {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let rows = t.list_audit(500).await.unwrap();

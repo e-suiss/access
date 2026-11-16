@@ -1,6 +1,6 @@
-//! Certificate, PIV and CAC sign-in and the published mTLS aliases of a realm (OP-155 m.3 (m),
+//! Certificate, PIV and CAC sign-in and the published mTLS aliases of an environment (OP-155 m.3 (m),
 //! §10.2.5, §10.4.3): the decided settings, newest version first. Scoped to the transaction's
-//! realm by row-level security; nothing is deleted (OP-73).
+//! environment by row-level security; nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
 
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -20,7 +20,7 @@ fn i64_of(v: u64) -> Result<i64, StoreError> {
     i64::try_from(v).map_err(|_| StoreError::Range)
 }
 
-/// A realm's certificate sign-in setting.
+/// An environment's certificate sign-in setting.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CertificateLoginRow {
     /// Whether certificate sign-in is on.
@@ -34,17 +34,17 @@ pub struct CertificateLoginRow {
 }
 
 impl TenantTx {
-    /// The realm's certificate sign-in setting; `None` until one was decided (off).
+    /// The environment's certificate sign-in setting; `None` until one was decided (off).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn certificate_login(&mut self) -> Result<Option<CertificateLoginRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT enabled, rule, anchors, piv_policies FROM access.idp_certificate_login_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -56,7 +56,7 @@ impl TenantTx {
         }))
     }
 
-    /// Writes the next certificate sign-in setting under `bound` (`idp.realm.certificate_login`).
+    /// Writes the next certificate sign-in setting under `bound` (`idp.environment.certificate_login`).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -65,17 +65,17 @@ impl TenantTx {
         bound: &Bound,
         row: &CertificateLoginRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_certificate_login_settings
-               (tenant_id, realm_id, version, enabled, rule, anchors, piv_policies, domain_id,
+               (tenant_id, environment_id, version, enabled, rule, anchors, piv_policies, domain_id,
                 decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_certificate_login_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5, $6, $7, $8",
             tenant,
-            realm,
+            environment,
             row.enabled,
             row.rule,
             &row.anchors,
@@ -88,43 +88,43 @@ impl TenantTx {
         Ok(())
     }
 
-    /// This realm's identity outbox payloads of `kind`, oldest first; for tests that read the
+    /// This environment's identity outbox payloads of `kind`, oldest first; for tests that read the
     /// Claims a sign-in queued.
     ///
     /// # Errors
     /// [`StoreError`].
     #[cfg(feature = "testing")]
     pub async fn outbox_payloads(&mut self, kind: &str) -> Result<Vec<Vec<u8>>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT payload FROM access.identity_outbox
-              WHERE tenant_id = $1 AND realm_id = $2 AND kind = $3 ORDER BY id",
+              WHERE tenant_id = $1 AND environment_id = $2 AND kind = $3 ORDER BY id",
             tenant,
-            realm,
+            environment,
             kind,
         )
         .fetch_all(&mut *self.tx)
         .await?)
     }
 
-    /// Whether the realm publishes `mtls_endpoint_aliases`; off until decided.
+    /// Whether the environment publishes `mtls_endpoint_aliases`; off until decided.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn mtls_aliases(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT published FROM access.idp_mtls_alias_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next alias setting under `bound` (`idp.realm.mtls_aliases`).
+    /// Writes the next alias setting under `bound` (`idp.environment.mtls_aliases`).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -133,16 +133,16 @@ impl TenantTx {
         bound: &Bound,
         published: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_mtls_alias_settings
-               (tenant_id, realm_id, version, published, domain_id, decision_pos)
+               (tenant_id, environment_id, version, published, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_mtls_alias_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             published,
             bound.domain().as_bytes().as_slice(),
             i64_of(bound.position())?,

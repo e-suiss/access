@@ -56,26 +56,26 @@ pub struct Evaluated {
 
 /// What MCP mode needs from the rest of the server (OP-63).
 pub trait McpPorts: Send + Sync {
-    /// A realm as the ports name it.
-    type Realm: Send + Sync;
+    /// An environment as the ports name it.
+    type Environment: Send + Sync;
 
     /// The live registration of the proxy `pep` names for `host`.
     fn registered(
         &self,
         pep: &str,
         host: &str,
-    ) -> impl Future<Output = Result<Option<(Self::Realm, Registration)>, Unavailable>> + Send;
+    ) -> impl Future<Output = Result<Option<(Self::Environment, Registration)>, Unavailable>> + Send;
 
-    /// The realm's governing domain, while the realm is active.
+    /// The environment's governing domain, while the environment is active.
     fn governing(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
     ) -> impl Future<Output = Result<Option<Digest>, Unavailable>> + Send;
 
     /// The newest pinned list of `proxy`; empty when none was pinned.
     fn pins(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         proxy: &str,
     ) -> impl Future<Output = Result<Vec<PinnedTool>, Unavailable>> + Send;
 
@@ -93,10 +93,10 @@ pub trait McpPorts: Send + Sync {
         exercise: Digest,
     ) -> impl Future<Output = Result<Option<Id>, Unavailable>> + Send;
 
-    /// Writes one audit row in `realm`.
+    /// Writes one audit row in `environment`.
     fn audit(
         &self,
-        realm: &Self::Realm,
+        environment: &Self::Environment,
         row: &Audit<'_>,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
@@ -197,7 +197,7 @@ impl<P: McpPorts> Gateway<P> {
         &self,
         pep: Option<&str>,
         host: &str,
-    ) -> Result<(P::Realm, Registration), McpRefusal> {
+    ) -> Result<(P::Environment, Registration), McpRefusal> {
         let pep = pep.ok_or(McpRefusal::Unregistered)?;
         self.ports
             .registered(pep, &host.to_ascii_lowercase())
@@ -216,11 +216,11 @@ impl<P: McpPorts> Gateway<P> {
         host: &str,
         observed: &[Observed],
     ) -> Result<Vec<String>, McpRefusal> {
-        let (realm, r) = self.registered(pep, host).await?;
+        let (environment, r) = self.registered(pep, host).await?;
         if observed.len() > MAX_LISTED || observed.iter().any(|o| !tool_name_ok(&o.name)) {
             return Err(McpRefusal::Malformed("tools"));
         }
-        let pinned = self.ports.pins(&realm, &r.name).await?;
+        let pinned = self.ports.pins(&environment, &r.name).await?;
         let mut out = Vec::new();
         let mut unpinned = 0_usize;
         for o in observed {
@@ -249,7 +249,7 @@ impl<P: McpPorts> Gateway<P> {
     /// # Errors
     /// [`McpRefusal`].
     pub async fn call(&self, c: &ToolCall<'_>) -> Result<Evaluated, McpRefusal> {
-        let (realm, r) = self.registered(c.pep, c.host).await?;
+        let (environment, r) = self.registered(c.pep, c.host).await?;
         let pep = c.pep.ok_or(McpRefusal::Unregistered)?;
         if !tool_name_ok(c.tool) {
             return Err(McpRefusal::Malformed("tool"));
@@ -261,11 +261,11 @@ impl<P: McpPorts> Gateway<P> {
         if c.intent.action != r.action || c.intent.resources != [tool_resource(&r, c.tool)] {
             return Err(McpRefusal::Malformed("intent"));
         }
-        if self.ports.governing(&realm).await? != Some(c.domain) {
+        if self.ports.governing(&environment).await? != Some(c.domain) {
             return Err(McpRefusal::Malformed("domain"));
         }
         let target = format!("{}:{}", r.name, c.tool);
-        let pinned = self.ports.pins(&realm, &r.name).await?;
+        let pinned = self.ports.pins(&environment, &r.name).await?;
         let s = standing(&pinned, c.tool, c.pin);
         // AG-42
         if s != Standing::Pinned {
@@ -273,7 +273,7 @@ impl<P: McpPorts> Gateway<P> {
             let correlation = format!("{}:{}", s.word(), b64url_encode(c.pin));
             self.ports
                 .audit(
-                    &realm,
+                    &environment,
                     &Audit {
                         event: "mcp_gateway.tool_blocked",
                         actor: &actor,
@@ -311,7 +311,7 @@ impl<P: McpPorts> Gateway<P> {
         );
         self.ports
             .audit(
-                &realm,
+                &environment,
                 &Audit {
                     event: "mcp_gateway.call",
                     actor: &actor,

@@ -1,20 +1,20 @@
-//! The realm's protocol gateways (OP-155 m.3 (c), IDP-26, IDI-11). A gateway is registered and
+//! The environment's protocol gateways (OP-155 m.3 (c), IDP-26, IDI-11). A gateway is registered and
 //! retired by `idp.gateway.*` decisions only; the newest version is the gateway. The router role
-//! names the realm of a gateway that connects with its client certificate. Nothing is deleted
+//! names the environment of a gateway that connects with its client certificate. Nothing is deleted
 //! (OP-73).
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -23,9 +23,9 @@ fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
 pub struct GatewayRoute {
     /// The tenant that owns it.
     pub tenant: TenantId,
-    /// Its realm.
-    pub realm: RealmId,
-    /// The realm's slug.
+    /// Its environment.
+    pub environment: EnvironmentId,
+    /// The environment's slug.
     pub slug: String,
     /// `saml`, `ldap`, `kerberos` or `radius`.
     pub kind: String,
@@ -46,16 +46,16 @@ pub async fn put_gateway(
     cert_sha256: &[u8; 32],
     live: bool,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.edge_gateways (tenant_id, realm_id, kind, name, version, state,
+        r#"INSERT INTO access.edge_gateways (tenant_id, environment_id, kind, name, version, state,
                 cert_sha256, domain_id, decision_pos)
          SELECT $1, $2, $3, $4, COALESCE(MAX(version), 0) + 1, $5, $6, $7, $8
            FROM access.edge_gateways
-          WHERE tenant_id = $1 AND realm_id = $2 AND kind = $3 AND name = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND kind = $3 AND name = $4
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         kind,
         name,
         if live { "live" } else { "retired" },
@@ -68,7 +68,7 @@ pub async fn put_gateway(
     u64::try_from(version).map_err(|_| StoreError::Corrupt)
 }
 
-/// The certificate digest of the live gateway `kind`/`name` of the realm; `None` when it was never
+/// The certificate digest of the live gateway `kind`/`name` of the environment; `None` when it was never
 /// registered or is retired.
 ///
 /// # Errors
@@ -78,13 +78,13 @@ pub async fn live_gateway(
     kind: &str,
     name: &str,
 ) -> Result<Option<[u8; 32]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT state, cert_sha256 FROM access.edge_gateways
-          WHERE tenant_id = $1 AND realm_id = $2 AND kind = $3 AND name = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND kind = $3 AND name = $4
           ORDER BY version DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         kind,
         name,
     )
@@ -101,7 +101,7 @@ pub async fn live_gateway(
 /// Most gateways one certificate may name before the lookup fails closed.
 const MAX_MATCHES: i64 = 2;
 
-/// The live gateways `kind`/`name` whose newest version holds `cert_sha256`, in a live realm,
+/// The live gateways `kind`/`name` whose newest version holds `cert_sha256`, in a live environment,
 /// read by the router role. The caller accepts exactly one.
 ///
 /// # Errors
@@ -113,13 +113,13 @@ pub async fn gateway_routes(
     cert_sha256: &[u8; 32],
 ) -> Result<Vec<GatewayRoute>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT g.tenant_id, g.realm_id, r.slug, g.kind, g.name
+        "SELECT g.tenant_id, g.environment_id, r.slug, g.kind, g.name
            FROM access.edge_gateways g
-           JOIN access.realms r ON r.tenant_id = g.tenant_id AND r.realm_id = g.realm_id
+           JOIN access.environments r ON r.tenant_id = g.tenant_id AND r.environment_id = g.environment_id
           WHERE g.kind = $1 AND g.name = $2 AND g.cert_sha256 = $3 AND g.state = 'live'
             AND r.status = 'active'
             AND g.version = (SELECT MAX(n.version) FROM access.edge_gateways n
-                              WHERE n.tenant_id = g.tenant_id AND n.realm_id = g.realm_id
+                              WHERE n.tenant_id = g.tenant_id AND n.environment_id = g.environment_id
                                 AND n.kind = g.kind AND n.name = g.name)
           LIMIT $4",
         kind,
@@ -133,7 +133,7 @@ pub async fn gateway_routes(
         .into_iter()
         .map(|r| GatewayRoute {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             kind: r.kind,
             name: r.name,
@@ -153,16 +153,16 @@ pub async fn put_radius_client(
     client: &str,
     cert_sha256: &[u8; 32],
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.edge_radius_clients (tenant_id, realm_id, gateway, client, version,
+        r#"INSERT INTO access.edge_radius_clients (tenant_id, environment_id, gateway, client, version,
                 cert_sha256, domain_id, decision_pos)
          SELECT $1, $2, $3, $4, COALESCE(MAX(version), 0) + 1, $5, $6, $7
            FROM access.edge_radius_clients
-          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3 AND client = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND gateway = $3 AND client = $4
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         gateway,
         client,
         cert_sha256.as_slice(),
@@ -184,17 +184,17 @@ pub async fn radius_client_registered(
     gateway: &str,
     cert_sha256: &[u8; 32],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let found = sqlx::query_scalar!(
         r#"SELECT EXISTS (
              SELECT 1 FROM access.edge_radius_clients c
-              WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.gateway = $3 AND c.cert_sha256 = $4
+              WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.gateway = $3 AND c.cert_sha256 = $4
                 AND c.version = (SELECT MAX(n.version) FROM access.edge_radius_clients n
-                                  WHERE n.tenant_id = c.tenant_id AND n.realm_id = c.realm_id
+                                  WHERE n.tenant_id = c.tenant_id AND n.environment_id = c.environment_id
                                     AND n.gateway = c.gateway AND n.client = c.client)
            ) AS "found!""#,
         tenant,
-        realm,
+        environment,
         gateway,
         cert_sha256.as_slice(),
     )
@@ -224,16 +224,16 @@ pub async fn put_keytab_policy(
     gateway: &str,
     p: &KeytabPolicy,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.edge_keytab_policies (tenant_id, realm_id, gateway, version, spn,
+        r#"INSERT INTO access.edge_keytab_policies (tenant_id, environment_id, gateway, version, spn,
                 rotate_days, kvno_floor, domain_id, decision_pos)
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8
            FROM access.edge_keytab_policies
-          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND gateway = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         gateway,
         p.spn,
         i32::from(p.rotate_days),
@@ -254,13 +254,13 @@ pub async fn keytab_policy(
     t: &mut TenantTx,
     gateway: &str,
 ) -> Result<Option<KeytabPolicy>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT spn, rotate_days, kvno_floor FROM access.edge_keytab_policies
-          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND gateway = $3
           ORDER BY version DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         gateway,
     )
     .fetch_optional(&mut *t.tx)
@@ -286,13 +286,13 @@ pub async fn seen_kvno(
     kvno: u32,
     at_ms: u64,
 ) -> Result<Vec<(u32, u64)>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.edge_keytab_kvnos (tenant_id, realm_id, gateway, kvno, first_seen_ms)
+        "INSERT INTO access.edge_keytab_kvnos (tenant_id, environment_id, gateway, kvno, first_seen_ms)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, realm_id, gateway, kvno) DO NOTHING",
+         ON CONFLICT (tenant_id, environment_id, gateway, kvno) DO NOTHING",
         tenant,
-        realm,
+        environment,
         gateway,
         i64::from(kvno),
         i64::try_from(at_ms).map_err(|_| StoreError::Range)?,
@@ -301,10 +301,10 @@ pub async fn seen_kvno(
     .await?;
     let rows = sqlx::query!(
         "SELECT kvno, first_seen_ms FROM access.edge_keytab_kvnos
-          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND gateway = $3
           ORDER BY kvno",
         tenant,
-        realm,
+        environment,
         gateway,
     )
     .fetch_all(&mut *t.tx)

@@ -18,7 +18,7 @@ const REAL_HOST: &str = "access.test";
 const PHISH_HOST: &str = "access-login.test";
 const SESSION: &str = "__Host-access-session";
 
-/// The test realm's hosted login and account routes served over TLS, and the deployment's
+/// The test environment's hosted login and account routes served over TLS, and the deployment's
 /// summary.
 struct Lab {
     w: World,
@@ -40,12 +40,12 @@ async fn lab(name: &str) -> Lab {
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::{Devices, Hosted};
 
-    use crate::login::{HsmKits, RealmKeks};
+    use crate::login::{EnvironmentKeks, HsmKits};
 
     let (w, signer) = World::open(name, true).await;
     let signer = signer.unwrap();
@@ -64,7 +64,7 @@ async fn lab(name: &str) -> Lab {
     let tls = test_tls(REAL_HOST);
     let hosted = Arc::new(Hosted {
         kits: HsmKits::new(
-            RealmKeks::new(Arc::clone(&w.keys)),
+            EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -85,7 +85,7 @@ async fn lab(name: &str) -> Lab {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let discovery = || {
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         )
@@ -325,7 +325,7 @@ async fn password_and_totp_through_a_reverse_proxy_hand_over_the_session() {
         .unwrap_or_default()
         .to_owned();
     assert!(
-        to.starts_with("https://") && to.ends_with("/realms/acme/account"),
+        to.starts_with("https://") && to.ends_with("/env/acme/account"),
         "{to}"
     );
 

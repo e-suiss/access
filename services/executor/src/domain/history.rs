@@ -97,8 +97,8 @@ pub struct Started {
     /// The actor's commit statement the Exercise was allowed under.
     #[serde(with = "b64::bytes")]
     pub ais: Vec<u8>,
-    /// The realm whose vault holds the connection.
-    pub realm: String,
+    /// The environment whose vault holds the connection.
+    pub environment: String,
     /// The vault connection.
     pub connection: String,
     /// The steps.

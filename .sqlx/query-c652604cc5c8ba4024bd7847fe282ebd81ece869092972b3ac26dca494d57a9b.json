@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.proxy_sessions SET ended_ms = $4\n          WHERE tenant_id = $1 AND environment_id = $2 AND proxy = $3 AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c652604cc5c8ba4024bd7847fe282ebd81ece869092972b3ac26dca494d57a9b"
+}

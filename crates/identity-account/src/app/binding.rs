@@ -1,14 +1,14 @@
-//! Cross-realm `IdentityBinding` in two halves (§12.1.1, §12.1.3, TN-2, TN-65, MD-5, OP-153 m.3
+//! Cross-environment `IdentityBinding` in two halves (§12.1.1, §12.1.3, TN-2, TN-65, MD-5, OP-153 m.3
 //! (m)).
 //!
-//! - The person, freshly signed in to realm A, makes an offer and carries its token to realm B.
+//! - The person, freshly signed in to environment A, makes an offer and carries its token to environment B.
 //! - Signed in to B, the person accepts it: B's half is committed in B with the digest of A's
 //!   token as evidence, and B's issuer states its `identity_binding_person` Claim. B answers
 //!   with its own token.
 //! - Back in A, the person completes: A's half is committed in A with the digest of B's token,
 //!   and A's issuer states its Claim.
 //!
-//! No row names the other realm's account and nothing is read across realms (rule 6); the
+//! No row names the other environment's account and nothing is read across environments (rule 6); the
 //! halves share only a random binding id and digests of the secrets the person carried. One
 //! half alone binds nothing and no half produces an actor binding. The proof of both halves is
 //! `invite_token`; `admin_exercise` and `verified_idp_subject` are not offered yet.
@@ -22,10 +22,10 @@ use crate::app::external::Externals;
 use crate::app::{Actor, claims};
 use crate::ports::AccountTx as _;
 
-/// How long an offer waits for the other realm (PD, as a social attempt).
+/// How long an offer waits for the other environment (PD, as a social attempt).
 pub const OFFER_TTL_MS: u64 = 10 * 60_000;
 
-/// The proof a person gives by carrying a token between the realms.
+/// The proof a person gives by carrying a token between the environments.
 pub const INVITE_TOKEN: &str = "invite_token";
 
 const TOKEN_CONTEXT: &[u8] = b"access/binding-token/v1\0";
@@ -52,8 +52,8 @@ pub fn binding_of(token: &str) -> Option<[u8; 16]> {
     <[u8; 16]>::try_from(raw.get(..16)?).ok()
 }
 
-/// The Claim's evidence: the binding id, the proof and the digest of what the other realm
-/// handed over, so each realm's Claim names the same binding and neither names the other
+/// The Claim's evidence: the binding id, the proof and the digest of what the other environment
+/// handed over, so each environment's Claim names the same binding and neither names the other
 /// account.
 fn evidence(binding: [u8; 16], peer: &[u8; 32]) -> Vec<u8> {
     let mut e = binding.to_vec();
@@ -65,14 +65,14 @@ fn evidence(binding: [u8; 16], peer: &[u8; 32]) -> Vec<u8> {
 /// What an acceptance or a completion did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Bound {
-    /// This realm's half is committed; for an acceptance, the token to carry back.
+    /// This environment's half is committed; for an acceptance, the token to carry back.
     Committed(Option<String>),
-    /// No such offer, a lapsed one, or this realm already keeps a half of the binding.
+    /// No such offer, a lapsed one, or this environment already keeps a half of the binding.
     Refused,
 }
 
 impl Externals<'_> {
-    /// Makes an offer of `subject` and returns the token the person carries to the other realm.
+    /// Makes an offer of `subject` and returns the token the person carries to the other environment.
     ///
     /// # Errors
     /// [`AccountError`].
@@ -104,7 +104,7 @@ impl Externals<'_> {
         Ok(t)
     }
 
-    /// Accepts the other realm's offer `offer` for `subject`: this realm's half is committed
+    /// Accepts the other environment's offer `offer` for `subject`: this environment's half is committed
     /// and its Claim stated; returns the token to carry back.
     ///
     /// # Errors
@@ -145,7 +145,7 @@ impl Externals<'_> {
         Ok(Bound::Committed(Some(back)))
     }
 
-    /// Completes `subject`'s offer with the other realm's token `back`: this realm's half is
+    /// Completes `subject`'s offer with the other environment's token `back`: this environment's half is
     /// committed and its Claim stated.
     ///
     /// # Errors
@@ -190,7 +190,7 @@ impl Externals<'_> {
         peer: &[u8; 32],
         who: &Actor<'_>,
     ) -> Result<(), AccountError> {
-        let target = self.realm.external(subject)?;
+        let target = self.environment.external(subject)?;
         tx.audit(&access_store::audit::AuditEvent {
             event_type: "account.linked",
             actor: who.actor,

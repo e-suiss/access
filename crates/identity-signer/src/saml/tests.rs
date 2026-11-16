@@ -9,10 +9,10 @@ use crate::adapters::SealedFactory;
 fn factory() -> SealedFactory<SoftKek> {
     let mut k = [0_u8; 32];
     aws_lc_rs::rand::fill(&mut k).unwrap();
-    SealedFactory::new(SoftKek::new("realm-kek", k))
+    SealedFactory::new(SoftKek::new("environment-kek", k))
 }
 
-const REALM: Realm = Realm([3; 16]);
+const ENVIRONMENT: Environment = Environment([3; 16]);
 
 /// The `subjectPublicKeyInfo` and signature fields of a certificate this module wrote.
 fn spki_and_tbs(cert: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
@@ -40,9 +40,9 @@ fn spki_and_tbs(cert: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
 // OP-155 m.3 (d), HL-35, RSA-3072
 // SHA-256, SHA-1
 #[test]
-fn a_realm_rsa_key_signs_saml_octets_and_certifies_itself() {
+fn a_environment_rsa_key_signs_saml_octets_and_certifies_itself() {
     let mut f = factory();
-    let mut ring = Ring::new(REALM);
+    let mut ring = Ring::new(ENVIRONMENT);
     assert!(ring.open(SamlAlg::Rsa3072, 1_000, &mut f).unwrap());
     assert!(!ring.open(SamlAlg::Rsa3072, 2_000, &mut f).unwrap());
     let keys = ring.keys();
@@ -78,7 +78,7 @@ fn a_realm_rsa_key_signs_saml_octets_and_certifies_itself() {
 #[test]
 fn two_phase_rotation_publishes_switches_and_removes() {
     let mut f = factory();
-    let mut ring = Ring::new(REALM);
+    let mut ring = Ring::new(ENVIRONMENT);
     ring.open(SamlAlg::Rsa3072, 0, &mut f).unwrap();
     assert_eq!(
         ring.rotate(SamlAlg::Rsa3072, Step::Switch, 1, &mut f),
@@ -94,7 +94,7 @@ fn two_phase_rotation_publishes_switches_and_removes() {
         Err(SamlKeyError::Order)
     );
     let stored = ring.stored().unwrap();
-    let mut back = Ring::restore(REALM, &stored, &mut f).unwrap();
+    let mut back = Ring::restore(ENVIRONMENT, &stored, &mut f).unwrap();
     back.rotate(SamlAlg::Rsa3072, Step::Switch, 3, &mut f)
         .unwrap();
     assert_eq!(phases(&back), [Phase::Retiring, Phase::Active]);
@@ -103,14 +103,14 @@ fn two_phase_rotation_publishes_switches_and_removes() {
         .unwrap();
     assert_eq!(back.keys().len(), 1);
     assert!(back.keys().iter().all(|k| k.kid != old));
-    assert!(Ring::restore(Realm([4; 16]), &stored, &mut f).is_err());
+    assert!(Ring::restore(Environment([4; 16]), &stored, &mut f).is_err());
 }
 
 // OP-155 m.3 (e)
 #[test]
 fn a_p256_key_signs_ecdsa_and_an_emergency_replaces_it() {
     let mut f = factory();
-    let mut ring = Ring::new(REALM);
+    let mut ring = Ring::new(ENVIRONMENT);
     ring.open(SamlAlg::P256, 0, &mut f).unwrap();
     let k = ring.keys()[0].clone();
     let (pk, tbs, sig) = spki_and_tbs(&k.cert);
@@ -131,7 +131,7 @@ fn a_p256_key_signs_ecdsa_and_an_emergency_replaces_it() {
     assert_eq!(ring.keys().len(), 1);
     assert_ne!(ring.keys()[0].kid, k.kid);
     let r = SamlRequest::Sign {
-        realm: REALM,
+        environment: ENVIRONMENT,
         sig: SamlSig::RsaSha384,
         data: vec![1],
     };

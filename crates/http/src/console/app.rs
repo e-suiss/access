@@ -44,7 +44,7 @@ use crate::problem::codes;
 use crate::product::domain::rfc3339;
 use crate::{Limits, Problem};
 
-/// The sign-in hand-off cookie: the realm and the state a sign-in started with. `Lax`, since
+/// The sign-in hand-off cookie: the environment and the state a sign-in started with. `Lax`, since
 /// the hosted login sends the browser back with a top-level navigation from another site.
 pub const SIGN_IN_COOKIE: &str = "__Host-access-console-signin";
 
@@ -52,9 +52,9 @@ pub const SIGN_IN_COOKIE: &str = "__Host-access-console-signin";
 pub const SIGN_IN_TTL_S: u64 = 600;
 
 /// The console's page (TN-113: a path has one spelling, and a trailing slash is an empty
-/// segment, so the console is `/console`, a realm's console `/console/{realm}` and its screens
-/// `/console/{realm}/<route>/<screen>`, OP-159 m.42). The sign-in returns here and the page
-/// moves on to the session's realm.
+/// segment, so the console is `/console`, an environment's console `/console/{environment}` and its screens
+/// `/console/{environment}/<route>/<screen>`, OP-159 m.42). The sign-in returns here and the page
+/// moves on to the session's environment.
 pub const HOME_PATH: &str = "/console";
 
 /// Where the browser returns from the hosted login.
@@ -285,7 +285,7 @@ async fn live<E: ConsoleEnv>(
         Ok(None) => return Err(refused(None)),
         Err(Unavailable) => return Err(unavailable()),
     };
-    let Ok(binding) = env.network().policy(&session.who.realm).await else {
+    let Ok(binding) = env.network().policy(&session.who.environment).await else {
         return Err(unavailable());
     };
     let found = policy::check(&session.facts, ip, env.network().asn(ip), binding, now);
@@ -390,7 +390,7 @@ async fn session_info<E: ConsoleEnv>(
         &json!({
             "account": s.who.account,
             "display_name": s.who.display_name,
-            "realm": s.who.realm,
+            "environment": s.who.environment,
             "domain": b64url_encode(&s.who.domain.0),
             "expires_at": rfc3339(absolute),
             "idle_timeout_s": (policy::IDLE_MS / 1000).to_string(),
@@ -525,10 +525,12 @@ fn query_value<'a>(query: Option<&'a str>, name: &str) -> Option<&'a str> {
         .find_map(|(k, v)| (k == name).then_some(v))
 }
 
-/// `GET /console/api/sign-in?realm=<slug>`: to the realm's hosted login, which returns to
+/// `GET /console/api/sign-in?environment=<slug>`: to the environment's hosted login, which returns to
 /// [`CALLBACK_PATH`].
 async fn sign_in<E: ConsoleEnv>(State(c): St<E>, uri: Uri) -> Response {
-    let Some(realm) = query_value(uri.query(), "realm").filter(|r| check_slug(r).is_ok()) else {
+    let Some(environment) =
+        query_value(uri.query(), "environment").filter(|r| check_slug(r).is_ok())
+    else {
         return problems::sign_in_failed().into_response();
     };
     let Ok(state) = random32(&c.env) else {
@@ -536,7 +538,7 @@ async fn sign_in<E: ConsoleEnv>(State(c): St<E>, uri: Uri) -> Response {
     };
     let state = b64url_encode(state.expose());
     let callback = format!("{}{CALLBACK_PATH}", c.env.origin());
-    let url = match c.env.sign_in().start(realm, &state, &callback).await {
+    let url = match c.env.sign_in().start(environment, &state, &callback).await {
         Ok(Some(u)) => u,
         Ok(None) => return not_found(),
         Err(Unavailable) => return unavailable(),
@@ -549,7 +551,7 @@ async fn sign_in<E: ConsoleEnv>(State(c): St<E>, uri: Uri) -> Response {
     set_cookies(
         r,
         [format!(
-            "{SIGN_IN_COOKIE}={realm}.{state}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age={SIGN_IN_TTL_S}"
+            "{SIGN_IN_COOKIE}={environment}.{state}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age={SIGN_IN_TTL_S}"
         )],
     )
 }
@@ -575,7 +577,7 @@ async fn callback<E: ConsoleEnv>(
     let Ok(Some(started)) = cookie(&headers, SIGN_IN_COOKIE) else {
         return failed();
     };
-    let Some((realm, state)) = started.split_once('.') else {
+    let Some((environment, state)) = started.split_once('.') else {
         return failed();
     };
     let Some(ip) = peer_ip(peer.as_ref()) else {
@@ -584,16 +586,16 @@ async fn callback<E: ConsoleEnv>(
     let env = &c.env;
     let who = match env
         .sign_in()
-        .finish(realm, state, uri.query().unwrap_or_default())
+        .finish(environment, state, uri.query().unwrap_or_default())
         .await
     {
-        Ok(Some(w)) if w.realm == realm => w,
+        Ok(Some(w)) if w.environment == environment => w,
         Ok(_) => return failed(),
         Err(Unavailable) => return unavailable(),
     };
     let (Ok(now), Ok(binding), Ok(value)) = (
         env.clock().now_ms(),
-        env.network().policy(realm).await,
+        env.network().policy(environment).await,
         random32(env),
     ) else {
         return unavailable();
@@ -808,7 +810,7 @@ async fn admin_proxy<E: ConsoleEnv>(
     };
     // OP-156 m.3 (q)
     let limit = if rest.ends_with("/records:batch") || rest.ends_with("/records:csv") {
-        crate::api::realm::HR_IMPORT_BODY.max(c.limits.max_body_bytes)
+        crate::api::environment::HR_IMPORT_BODY.max(c.limits.max_body_bytes)
     } else {
         c.limits.max_body_bytes
     };
@@ -851,7 +853,7 @@ async fn admin_proxy<E: ConsoleEnv>(
         let surface = if rest == "platform" || rest.starts_with("platform/") {
             Surface::Platform
         } else {
-            Surface::Realm
+            Surface::Environment
         };
         let token = match read_token(&c, &live.session, &instance, surface, now).await {
             Ok(Some(t)) => t,
@@ -988,7 +990,7 @@ async fn adp_proxy<E: ConsoleEnv>(
 pub const INTENTS_PATH: &str = "/console/api/intents";
 
 /// `POST /console/api/intents` (OP-151 m.19 (a), PI-7): drafts the intent a screen asks for,
-/// `{action, resources, params?, mode}` → `{intent, envelope}`, for the session's realm. A read
+/// `{action, resources, params?, mode}` → `{intent, envelope}`, for the session's environment. A read
 /// that changes nothing, so it is gated like one: the live session, the CSRF token and a read
 /// proof by the session's device Instance over this very request (OP-151 m.12 (c)).
 async fn intents<E: ConsoleEnv>(
@@ -1034,7 +1036,7 @@ async fn intents<E: ConsoleEnv>(
         },
         None => None,
     };
-    match super::drafts::draft_with(&body, &live.session.who.realm, now, tenant.as_ref()) {
+    match super::drafts::draft_with(&body, &live.session.who.environment, now, tenant.as_ref()) {
         Ok(d) => json_reply(StatusCode::OK, &d.answer(&live.session.who.domain)),
         Err(e) => problems::draft(e).into_response(),
     }

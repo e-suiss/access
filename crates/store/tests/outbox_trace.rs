@@ -10,11 +10,11 @@
 
 use std::time::{Duration, Instant};
 
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx, poll};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx, poll};
 use access_store::testing::fresh;
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 const TP: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
 // OP-67 m.1, §17.8.2

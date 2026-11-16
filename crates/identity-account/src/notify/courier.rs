@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use access_crypto::opaque_id::IdKey;
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
+use access_store::identity::{Cursor, EnvironmentId, OutboxEvent, TenantId};
 use access_store::relay::Undelivered;
 use suiss_crypto::envelope::Dek;
 
@@ -26,7 +26,7 @@ use crate::notify::delivery::{Backoff, SendFailure, Undeliverable, cloud_event};
 use crate::notify::envelope::{EventId, parse};
 use crate::notify::lease::{RETRY, TTL, Term};
 use crate::notify::message::KIND_PREFIX;
-use crate::notify::ports::{CourierStore, RealmKeys, RelayPort, SubjectKey};
+use crate::notify::ports::{CourierStore, EnvironmentKeys, RelayPort, SubjectKey};
 use crate::ports::Clock;
 
 /// The courier's cursor name in `access_ops.outbox_cursor`.
@@ -75,7 +75,7 @@ impl<S, R, K, C> Courier<S, R, K, C>
 where
     S: CourierStore,
     R: RelayPort,
-    K: RealmKeys,
+    K: EnvironmentKeys,
     C: Clock,
 {
     /// A courier; `ids` forms external subject ids (OP-137).
@@ -142,8 +142,8 @@ where
             match tracing::Instrument::instrument(self.deliver(event), span).await? {
                 Outcome::Delivered => step.delivered = step.delivered.saturating_add(1),
                 Outcome::Skipped => step.skipped = step.skipped.saturating_add(1),
-                Outcome::Undeliverable(id, tenant, realm, why) => {
-                    self.record(event, id, tenant, realm, why).await?;
+                Outcome::Undeliverable(id, tenant, environment, why) => {
+                    self.record(event, id, tenant, environment, why).await?;
                     step.undelivered = step.undelivered.saturating_add(1);
                 }
                 Outcome::Retry(retry_after_ms) => {
@@ -242,7 +242,7 @@ where
         event: &OutboxEvent,
         id: Option<EventId>,
         tenant: [u8; 16],
-        realm: [u8; 16],
+        environment: [u8; 16],
         why: Undeliverable,
     ) -> Result<(), NotifyError> {
         tracing::warn!(
@@ -258,7 +258,7 @@ where
         self.store
             .undelivered(
                 TenantId::from_bytes(tenant),
-                RealmId::from_bytes(realm),
+                EnvironmentId::from_bytes(environment),
                 &Undelivered {
                     event_id: id.0,
                     at: event.cursor(),
@@ -287,19 +287,23 @@ where
             Ok(Outcome::Undeliverable(
                 Some(h.event),
                 h.tenant,
-                h.realm,
+                h.environment,
                 why,
             ))
         };
         let tenant = TenantId::from_bytes(h.tenant);
-        let realm = RealmId::from_bytes(h.realm);
-        let (kek_id, wrapped) = match self.store.subject_key(tenant, realm, h.subject).await? {
+        let environment = EnvironmentId::from_bytes(h.environment);
+        let (kek_id, wrapped) = match self
+            .store
+            .subject_key(tenant, environment, h.subject)
+            .await?
+        {
             SubjectKey::Missing => return gone(Undeliverable::NoSubject),
             SubjectKey::Shredded => return gone(Undeliverable::Shredded),
             SubjectKey::Wrapped { kek_id, wrapped } => (kek_id, wrapped),
         };
-        let Some(kek) = self.keys.kek(tenant, realm, &kek_id) else {
-            tracing::warn!("relay courier: realm key unavailable; the message waits");
+        let Some(kek) = self.keys.kek(tenant, environment, &kek_id) else {
+            tracing::warn!("relay courier: environment key unavailable; the message waits");
             return Ok(Outcome::Retry(None));
         };
         let dek: Dek = match kek.unwrap(&wrapped) {

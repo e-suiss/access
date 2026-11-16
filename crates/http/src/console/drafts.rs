@@ -1,7 +1,7 @@
 //! The intents the console asks the BFF to draft (OP-151 m.19 (a), PI-7, TN-110): the console
 //! never encodes CBOR, so `POST /console/api/intents` turns `{action, resources, params?, mode}`
 //! into a canonical intent envelope and its ADP wire JSON. Only a catalogued action of this build
-//! is drafted, with its pinned schema digest, on the session's own realm, for the validity the
+//! is drafted, with its pinned schema digest, on the session's own environment, for the validity the
 //! write path takes; anything else is refused (fail closed). Pure: the caller gives the clock.
 //!
 //! A meta-action write carries its payload in the JSON form of L1-ADP-17 (OP-151 m.20 (b),
@@ -94,7 +94,7 @@ pub enum DraftError {
     /// The action is not a catalogued action this console may draft.
     #[error("action not catalogued")]
     Action,
-    /// A resource outside the session's realm or not the action's.
+    /// A resource outside the session's environment or not the action's.
     #[error("resource not allowed")]
     Resource,
     /// A parameter the action does not take, or a value outside its type.
@@ -129,7 +129,7 @@ impl DraftError {
 pub enum ProbeRoot {
     /// The domain's meta-anchor: core meta-actions, the audit read and the export.
     Meta,
-    /// The realm's identity plane Anchor: `idp.*` actions.
+    /// The environment's identity plane Anchor: `idp.*` actions.
     Idp,
 }
 
@@ -273,8 +273,8 @@ fn resources(v: &Value) -> Result<Vec<ResourceRef>, DraftError> {
         .collect()
 }
 
-/// Whether `r` is a resource `family` may name in `realm`.
-fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
+/// Whether `r` is a resource `family` may name in `environment`.
+fn allowed(family: Family, r: &[ResourceRef], environment: &str) -> bool {
     let [one] = r else {
         return false;
     };
@@ -285,11 +285,11 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
     let first = one.path.first().map(String::as_str);
     match family {
         Family::Idp | Family::Platform => {
-            one.namespace == RESOURCE_NAMESPACE && first == Some(realm)
+            one.namespace == RESOURCE_NAMESPACE && first == Some(environment)
         }
-        Family::Export => one.namespace == AUDIT_NAMESPACE && one.path == [realm],
+        Family::Export => one.namespace == AUDIT_NAMESPACE && one.path == [environment],
         Family::Read => {
-            (one.namespace == AUDIT_NAMESPACE && one.path == [realm])
+            (one.namespace == AUDIT_NAMESPACE && one.path == [environment])
                 || (one.namespace == SEARCH_NAMESPACE
                     && one.path.len() == 1
                     && first.is_some_and(|k| SEARCH_KINDS.contains(&k)))
@@ -299,7 +299,7 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
         Family::Publish => one.namespace == PUBLICATION_NAMESPACE && one.path.len() == 1,
         Family::Meta => one.namespace.starts_with("access.") && one.namespace.len() <= MAX_SEGMENT,
         // OP-151 m.20 (a)
-        Family::Tenant => tenant_resource(&one.namespace, realm),
+        Family::Tenant => tenant_resource(&one.namespace, environment),
     }
 }
 
@@ -341,7 +341,7 @@ fn mode(v: Option<&Value>) -> Result<Mode, DraftError> {
     }
 }
 
-/// Drafts the intent `body` asks for in the session's realm `realm` at trusted time `now_ms`.
+/// Drafts the intent `body` asks for in the session's environment `environment` at trusted time `now_ms`.
 ///
 /// A core meta-action carries its payload's digest: without `payload` it is drafted for `check`
 /// only (an eligibility probe), with one of [`META_WRITES`] it may be committed; the read is
@@ -350,8 +350,8 @@ fn mode(v: Option<&Value>) -> Result<Mode, DraftError> {
 ///
 /// # Errors
 /// [`DraftError`].
-pub fn draft(body: &[u8], realm: &str, now_ms: u64) -> Result<Drafted, DraftError> {
-    draft_with(body, realm, now_ms, None)
+pub fn draft(body: &[u8], environment: &str, now_ms: u64) -> Result<Drafted, DraftError> {
+    draft_with(body, environment, now_ms, None)
 }
 
 /// The action `body` asks for, `(namespace, name, major)`; `None` when the body names none.
@@ -368,7 +368,7 @@ pub fn asked_action(body: &[u8]) -> Option<(String, String, u64)> {
 
 /// Whether `namespace` is a tenant action's own resource namespace: the action's namespace or
 /// one below it, never the core's or the identity plane's.
-fn tenant_resource(namespace: &str, _realm: &str) -> bool {
+fn tenant_resource(namespace: &str, _environment: &str) -> bool {
     namespace.len() <= MAX_SEGMENT
         && namespace != meta::NAMESPACE
         && !namespace.starts_with("access.")
@@ -382,7 +382,7 @@ fn payload_and_resources(
     o: &Map<String, Value>,
     family: Family,
     action: &ActionRef,
-    realm: &str,
+    environment: &str,
 ) -> Result<(Option<Payload>, Vec<ResourceRef>), DraftError> {
     let payload = match o.get("payload") {
         None => None,
@@ -396,10 +396,10 @@ fn payload_and_resources(
         Some(_) => return Err(DraftError::Payload),
     };
     let resources = match (o.get("resources"), &payload) {
-        (None, Some(p)) => vec![object_resource(p, realm)],
+        (None, Some(p)) => vec![object_resource(p, environment)],
         (Some(r), Some(p)) => {
             let r = resources(r)?;
-            if r != [object_resource(p, realm)] {
+            if r != [object_resource(p, environment)] {
                 return Err(DraftError::Resource);
             }
             r
@@ -447,7 +447,7 @@ fn opaque_of(
 /// [`DraftError`].
 pub fn draft_with(
     body: &[u8],
-    realm: &str,
+    environment: &str,
     now_ms: u64,
     tenant: Option<&ActionRef>,
 ) -> Result<Drafted, DraftError> {
@@ -482,12 +482,12 @@ pub fn draft_with(
         .or_else(|| {
             tenant
                 .filter(|t| t.namespace == namespace && t.name == name && t.major == major)
-                .filter(|t| tenant_resource(&t.namespace, realm))
+                .filter(|t| tenant_resource(&t.namespace, environment))
                 .map(|t| (t.clone(), Family::Tenant))
         })
         .ok_or(DraftError::Action)?;
-    let (payload, resources) = payload_and_resources(o, family, &action, realm)?;
-    if !allowed(family, &resources, realm)
+    let (payload, resources) = payload_and_resources(o, family, &action, environment)?;
+    if !allowed(family, &resources, environment)
         || (family == Family::Tenant
             && !resources.iter().all(|r| {
                 r.namespace == action.namespace
@@ -549,10 +549,10 @@ fn hex(id: &Id) -> String {
 }
 
 /// The object a console meta write is about, as its intent's one resource: the Grant, role,
-/// Acceptance, Instance, Party or policy it names, or the session's realm in `access.domain`
+/// Acceptance, Instance, Party or policy it names, or the session's environment in `access.domain`
 /// for a new Grant or policy.
 #[must_use]
-pub fn object_resource(p: &Payload, realm: &str) -> ResourceRef {
+pub fn object_resource(p: &Payload, environment: &str) -> ResourceRef {
     let (namespace, segment) = match p {
         Payload::AuthoritySetDefine { name, .. } => ("access.role", name.clone()),
         Payload::GrantAmend { grant, .. }
@@ -568,7 +568,7 @@ pub fn object_resource(p: &Payload, realm: &str) -> ResourceRef {
             ..
         }
         | Payload::PolicyRetire { policy } => ("access.policy", hex(policy)),
-        _ => ("access.domain", realm.to_owned()),
+        _ => ("access.domain", environment.to_owned()),
     };
     ResourceRef {
         namespace: String::from(namespace),

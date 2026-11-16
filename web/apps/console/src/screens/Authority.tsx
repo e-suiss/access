@@ -28,7 +28,7 @@ export function Authority({
   const start = () => {
     setBusy(true);
     setFailed(false);
-    register(session.realm, session.account, confirm).then(
+    register(session.environment, session.account, confirm).then(
       (i) => {
         setBusy(false);
         onRegistered(i);

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.preference_topics\n               (tenant_id, environment_id, version, topics, domain_id, decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.preference_topics\n                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                    $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26171e74764fd26042609c04078fb7f2c1b3029066c7b2f5099b31c6328fd760"
+}

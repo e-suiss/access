@@ -173,11 +173,11 @@ fn throttled(surface: Surface, layer: &'static str, quota: Option<Quota>, wait_s
 async fn scope_of(row: &Route, parts: &mut Parts) -> Option<SurfaceScope> {
     match row.surface {
         Surface::Platform => Some(SurfaceScope::Platform),
-        Surface::Realm => {
+        Surface::Environment => {
             let params = RawPathParams::from_request_parts(parts, &()).await.ok()?;
             let slug = params.iter().find(|(k, _)| *k == "slug")?.1;
             check_slug(slug).ok()?;
-            Some(SurfaceScope::Realm(slug.to_owned()))
+            Some(SurfaceScope::Environment(slug.to_owned()))
         }
     }
 }
@@ -272,7 +272,7 @@ async fn run<E: Env>(
         key: surface_slot,
     };
     // OP-156 m.3 (q)
-    let limit = crate::api::realm::body_limit(row.operation_id)
+    let limit = crate::api::environment::body_limit(row.operation_id)
         .map_or(g.api.limits.max_body_bytes, |l| {
             l.max(g.api.limits.max_body_bytes)
         });

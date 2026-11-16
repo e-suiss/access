@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:scim.provisioned`. A notification, never an authority source: provisioning is not a Grant (IDP-23).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "scim_client",
     "resource_type",
     "resource",
@@ -14,7 +14,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "scim_client": {

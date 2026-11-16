@@ -7,7 +7,7 @@ use std::sync::Arc;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
 use access_identity_account::app::accounts::create;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::notify::envelope::EventId;
 use access_identity_account::notify::message::{Address, Body, Message, SignInMethod};
@@ -26,25 +26,25 @@ const ADMIN: Actor<'static> = Actor {
     correlation: "req_test",
 };
 
-/// A fresh account of the realm with the e-mail address `who`.
-pub(super) async fn account(w: &World, at: (TenantId, RealmId), who: &str) -> [u8; 16] {
-    let kek = SoftKek::new("realm-kek", [9; 32]);
-    let realm = Realm {
+/// A fresh account of the environment with the e-mail address `who`.
+pub(super) async fn account(w: &World, at: (TenantId, EnvironmentId), who: &str) -> [u8; 16] {
+    let kek = SoftKek::new("environment-kek", [9; 32]);
+    let environment = Environment {
         tenant: at.0,
-        realm: at.1,
+        environment: at.1,
         kek: &kek,
         ids: &w.ids,
     };
     let pg = PgAccounts::sealed(
         w.db.app.clone(),
         access_identity_account::app::vault::Vault::in_memory(
-            Arc::new(SoftKek::new("realm-kek", [9; 32])),
+            Arc::new(SoftKek::new("environment-kek", [9; 32])),
             [9; 32],
         ),
     );
     create(
         &pg,
-        &realm,
+        &environment,
         &[Identifier::new(IdentifierKind::Email, who).unwrap()],
         &ADMIN,
     )
@@ -52,19 +52,19 @@ pub(super) async fn account(w: &World, at: (TenantId, RealmId), who: &str) -> [u
     .unwrap()
 }
 
-/// A message to a fresh account of the realm, recorded as undeliverable for `reason`.
-async fn undelivered(w: &World, at: (TenantId, RealmId), reason: &str) -> EventId {
-    let kek = SoftKek::new("realm-kek", [9; 32]);
-    let realm = Realm {
+/// A message to a fresh account of the environment, recorded as undeliverable for `reason`.
+async fn undelivered(w: &World, at: (TenantId, EnvironmentId), reason: &str) -> EventId {
+    let kek = SoftKek::new("environment-kek", [9; 32]);
+    let environment = Environment {
         tenant: at.0,
-        realm: at.1,
+        environment: at.1,
         kek: &kek,
         ids: &w.ids,
     };
     let who = format!("{}@example.com", reason.replace('_', "-"));
     let s = account(w, at, &who).await;
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
-    let id = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+    let id = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock)
         .notify(
             &mut t,
             &Message {
@@ -88,7 +88,7 @@ async fn undelivered(w: &World, at: (TenantId, RealmId), reason: &str) -> EventI
             .unwrap();
         if let Some(r) = rows
             .into_iter()
-            .find(|r| r.kind == "relay.message.new_sign_in.v1" && r.realm == at.1)
+            .find(|r| r.kind == "relay.message.new_sign_in.v1" && r.environment == at.1)
         {
             break r;
         }
@@ -111,7 +111,7 @@ async fn undelivered(w: &World, at: (TenantId, RealmId), reason: &str) -> EventI
 
 async fn refused(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -131,9 +131,9 @@ async fn refused(
 #[tokio::test]
 async fn an_undelivered_message_is_resent_through_commit() {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("relay").await;
+    let (tenant, environment, d) = w.environment("relay").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    let at = (tenant, realm);
+    let at = (tenant, environment);
     let original = undelivered(&w, at, "rejected").await;
     let change = compile(
         Op::ResendRelay,
@@ -148,7 +148,9 @@ async fn an_undelivered_message_is_resent_through_commit() {
             .await
             .unwrap(),
     );
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let again = t.relay_resends_of(original.0).await.unwrap();
     assert_eq!(again.len(), 1);
     assert_ne!(again[0], original.0, "a new CloudEvents id");
@@ -225,14 +227,16 @@ pub(super) async fn authority_event(
         .unwrap();
 }
 
-/// A realm with one account bound to a fresh Party; returns the realm, its domain and the Party.
-async fn notified(w: &World, slug: &str) -> ((TenantId, RealmId), Digest, [u8; 16]) {
-    let (tenant, realm, d) = w.realm(slug).await;
+/// An environment with one account bound to a fresh Party; returns the environment, its domain and the Party.
+async fn notified(w: &World, slug: &str) -> ((TenantId, EnvironmentId), Digest, [u8; 16]) {
+    let (tenant, environment, d) = w.environment(slug).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    let at = (tenant, realm);
+    let at = (tenant, environment);
     let s = account(w, at, &format!("{slug}@example.com")).await;
     let party = access_crypto::random::bytes::<16>().unwrap();
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(t.security_notices_enabled().await.unwrap(), "on by default");
     assert!(
         access_store::idp::bind_subject_party(&mut t, &s, &party)
@@ -255,7 +259,7 @@ fn ended(d: Digest, party: [u8; 16]) -> access_internal_api::events::Event {
     }
 }
 
-async fn switch(w: &World, at: (TenantId, RealmId), d: Digest, on: bool, nonce: u8) {
+async fn switch(w: &World, at: (TenantId, EnvironmentId), d: Digest, on: bool, nonce: u8) {
     let c = compile(
         Op::PutSecurityNotices,
         None,
@@ -297,16 +301,18 @@ async fn closing_security_notices_stops_them_and_reopening_sends_them_again() {
             .await
             .unwrap(),
         1,
-        "only the reopened realm sends"
+        "only the reopened environment sends"
     );
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     loop {
         let rows = access_store::identity::poll(&w.db.reader, Cursor::default(), 1000)
             .await
             .unwrap();
-        let sent = |r: RealmId| {
+        let sent = |r: EnvironmentId| {
             rows.iter()
-                .filter(|o| o.realm == r && o.kind == "relay.message.security_authority_notice.v1")
+                .filter(|o| {
+                    o.environment == r && o.kind == "relay.message.security_authority_notice.v1"
+                })
                 .count()
         };
         if sent(reopened.1) == 1 {

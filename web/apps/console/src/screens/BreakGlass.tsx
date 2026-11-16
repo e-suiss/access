@@ -46,12 +46,12 @@ const classOf = (c: (typeof CLASSES)[number]): string =>
 
 /** The break-glass screen. */
 export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const accounts = useLoad(() =>
-    adminGet<Page<Account>>(ctx.instance, `realms/${realm}/breakglass/accounts`),
+    adminGet<Page<Account>>(ctx.instance, `envs/${environment}/breakglass/accounts`),
   );
   const reviews = useLoad(() =>
-    adminGet<Page<Use>>(ctx.instance, `realms/${realm}/breakglass/reviews`),
+    adminGet<Page<Use>>(ctx.instance, `envs/${environment}/breakglass/reviews`),
   );
   const [organization, setOrganization] = useState("");
   const [member, setMember] = useState("");
@@ -59,7 +59,7 @@ export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [now] = useState(() => Date.now());
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method: "POST",
         path,

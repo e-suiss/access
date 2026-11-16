@@ -6,11 +6,11 @@
 //! - **Refuse**: [`deny_to_be_signed`] is what the device key signs, [`answer_body`] sends it.
 //! - **Approve**: build the statement with [`statement`], then ask the platform passkey API
 //!   (`ASAuthorizationPlatformPublicKeyCredentialProvider`, Android Credential Manager,
-//!   `navigator.credentials.get`) for an assertion with the realm's RP ID and
+//!   `navigator.credentials.get`) for an assertion with the environment's RP ID and
 //!   [`passkey_challenge`] as its challenge. This module never makes the assertion: it carries
 //!   what the platform returned as a [`PasskeyAssertion`]. The device key signs
 //!   [`approve_to_be_signed`], and [`approve_body`] sends both. Access verifies the assertion
-//!   against the approver's registered passkey in the realm as it verifies a sign-in (user
+//!   against the approver's registered passkey in the environment as it verifies a sign-in (user
 //!   presence always, user verification when an open term asks for it), and only that makes the
 //!   approval phishing resistant; a device key's signature alone is never a contribution.
 //!
@@ -167,7 +167,7 @@ pub fn statement_digest(act: &ApprovalAct) -> Result<Digest, NotInline> {
 }
 
 /// The challenge to ask the platform passkey API for: the 32 bytes of H(AAS) (verifier name
-/// binding, §10.3.1). Use the realm's RP ID with it.
+/// binding, §10.3.1). Use the environment's RP ID with it.
 ///
 /// # Errors
 /// [`NotInline`]: the statement can't be encoded.

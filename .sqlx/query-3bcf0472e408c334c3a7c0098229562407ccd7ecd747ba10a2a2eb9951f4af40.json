@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.sms_codes SET attempts = attempts + 1, used_ms = $4\n              WHERE tenant_id = $1 AND environment_id = $2 AND code_id = $3\n                AND used_ms IS NULL AND attempts < 3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3bcf0472e408c334c3a7c0098229562407ccd7ecd747ba10a2a2eb9951f4af40"
+}

@@ -1,5 +1,5 @@
 //! Combining two accounts (OP-153 m.3 (m), TN-67): irreversible, so linking is preferred; both
-//! accounts of one realm authenticated within five minutes.
+//! accounts of one environment authenticated within five minutes.
 
 /// How fresh each account's last authentication must be to combine them.
 pub const COMBINE_FRESHNESS_MS: u64 = 5 * 60_000;

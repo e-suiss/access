@@ -113,15 +113,15 @@ impl TenantTx {
         &mut self,
         u: &LogoutUndelivered,
     ) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let xid = i64::try_from(u.at.xid).map_err(|_| StoreError::Range)?;
         sqlx::query!(
             "INSERT INTO access.backchannel_undelivered
-                (tenant_id, realm_id, grant_id, outbox_xid, outbox_id, reason, client_status)
+                (tenant_id, environment_id, grant_id, outbox_xid, outbox_id, reason, client_status)
              VALUES ($1, $2, $3, $4::bigint::text::xid8, $5, $6, $7)
-             ON CONFLICT (tenant_id, realm_id, grant_id) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, grant_id) DO NOTHING",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(u.grant),
             xid,
             u.at.id,
@@ -133,7 +133,7 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The realm's undelivered notices, oldest first.
+    /// The environment's undelivered notices, oldest first.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -141,13 +141,13 @@ impl TenantTx {
         &mut self,
         limit: u32,
     ) -> Result<Vec<LogoutUndeliveredRow>, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let rows = sqlx::query!(
             "SELECT grant_id, reason, client_status FROM access.backchannel_undelivered
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY outbox_xid, outbox_id, grant_id LIMIT $3",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             i64::from(limit),
         )
         .fetch_all(&mut *self.tx)

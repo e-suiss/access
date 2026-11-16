@@ -118,7 +118,7 @@ reason = "OP-152 m.5 (e): Ek B line 6355, stage 14 item 'Test katmanları SA-T1�
 [[rule_overrides]]
 id = "RAUTHY-001"
 stage = 1
-reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya realm JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'; the `rsa` crate is a banned provider in the built graph"
+reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya environment JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'; the `rsa` crate is a banned provider in the built graph"
 
 [[rule_overrides]]
 id = "RAUTHY-004"
@@ -278,7 +278,7 @@ reason = "OP-152 m.5 (e): Ek B line 2002, stage 5 item 'Config değerinin commit
 [[rule_overrides]]
 id = "EI-27"
 stage = 3
-reason = "OP-152 m.5 (e): Ek B line 772, stage 3 item 'Tenant / Realm / Cell authority girdisi değildir'"
+reason = "OP-152 m.5 (e): Ek B line 772, stage 3 item 'Tenant / Environment / Cell authority girdisi değildir'"
 
 [[rule_overrides]]
 id = "EI-3"
@@ -438,7 +438,7 @@ reason = "OP-152 m.5 (e): Ek B line 1552, stage 4 item 'Kesinti modları: signer
 [[rule_overrides]]
 id = "G46"
 stage = 1
-reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya realm JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'"
+reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya environment JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'"
 
 [[rule_overrides]]
 id = "G47"
@@ -583,7 +583,7 @@ reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edil
 [[rule_overrides]]
 id = "HL-33"
 stage = 2
-reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/realm kapsamı)'"
+reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/environment kapsamı)'"
 
 [[rule_overrides]]
 id = "HL-34"
@@ -638,7 +638,7 @@ reason = "OP-152 m.5 (e): Ek B line 5845, stage 13 item 'Equivocation tespiti'; 
 [[rule_overrides]]
 id = "IDI-2"
 stage = 5
-reason = "OP-152 m.5 (e): Ek B line 1924, stage 5 item 'Realm-yerel kullanıcı, credential ve benzersizlik'"
+reason = "OP-152 m.5 (e): Ek B line 1924, stage 5 item 'Environment-yerel kullanıcı, credential ve benzersizlik'"
 
 [[rule_overrides]]
 id = "IDI-5"
@@ -648,7 +648,7 @@ reason = "OP-152 m.5 (e): Ek B line 1667, stage 5 item 'BE/BS bayrak politikası
 [[rule_overrides]]
 id = "IDI-6"
 stage = 1
-reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Realm metadata'dan'"
+reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Environment metadata'dan'"
 
 [[rule_overrides]]
 id = "IDI-7"
@@ -923,7 +923,7 @@ reason = "OP-152 m.5 (e): Ek B line 1851, stage 5 item '\"Önbellek bu kullanıc
 [[rule_overrides]]
 id = "SAI-40"
 stage = 1
-reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Realm metadata'dan'"
+reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Environment metadata'dan'"
 
 [[rule_overrides]]
 id = "SAI-41"
@@ -1188,7 +1188,7 @@ reason = "OP-152 m.5 (e): Ek B line 545, stage 2 item 'Ack edilmiş security eve
 [[rule_overrides]]
 id = "U59"
 stage = 2
-reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/realm kapsamı)'"
+reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/environment kapsamı)'"
 
 [[rule_overrides]]
 id = "U69"

@@ -25,13 +25,13 @@ pub struct AuthorityPosition {
     pub recorded_at: u64,
 }
 
-/// An identity plane session epoch: monotonic per realm subject; a token's `rev` claim carries
+/// An identity plane session epoch: monotonic per environment subject; a token's `rev` claim carries
 /// the value it was issued under (OP-21).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SessionEpoch {
-    /// The realm.
-    pub realm: [u8; 16],
-    /// The realm subject.
+    /// The environment.
+    pub environment: [u8; 16],
+    /// The environment subject.
     pub subject: [u8; 16],
     /// The epoch.
     pub epoch: u64,
@@ -42,8 +42,8 @@ pub struct SessionEpoch {
 pub enum KeyOwner {
     /// A domain operational key (Domain Metadata).
     Domain(Digest),
-    /// A realm JOSE key (realm JWKS).
-    Realm([u8; 16]),
+    /// An environment JOSE key (environment JWKS).
+    Environment([u8; 16]),
 }
 
 /// A key window: the signing times a key's signatures are accepted for (MD-7, T20).

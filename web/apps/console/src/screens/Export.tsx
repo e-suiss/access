@@ -1,4 +1,4 @@
-// OP-156 m.3 (s), X22: the realm's export sinks of the read-only SIEM projection. Registering and
+// OP-156 m.3 (s), X22: the environment's export sinks of the read-only SIEM projection. Registering and
 // retiring a sink are each one signed change; the secret is write-only and never shown again.
 // What a sink holds is a copy, never the record: the audit records answer every question.
 import { useState, type ReactElement } from "react";
@@ -69,8 +69,10 @@ function status(s: Sink): string {
 
 /** The SIEM export screen. */
 export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const sinks = useLoad(() => adminGet<Page<Sink>>(ctx.instance, `realms/${realm}/export-sinks`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const sinks = useLoad(() =>
+    adminGet<Page<Sink>>(ctx.instance, `envs/${environment}/export-sinks`),
+  );
   const [name, setName] = useState("");
   const [kind, setKind] = useState<KindValue>("collector:splunk");
   const [endpoint, setEndpoint] = useState("");
@@ -79,7 +81,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, write] = useRun<WriteResult>();
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method: "POST",
         path,
@@ -114,7 +116,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Notice role="note" data-testid="export-copy-note">
           {t("exportCopyNote")}{" "}
           <a
-            href={consoleHref(ctx.session.realm, "audit/records")}
+            href={consoleHref(ctx.session.environment, "audit/records")}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("exportRecordsLink")}

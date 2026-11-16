@@ -1,6 +1,6 @@
 # SA-53, OP-159 m.3 (ii), §10.3.4
-# OMB M-22-09 (Federal zero trust strategy), the identity actions. `access-cli realm check
-# --profile m-22-09` reports a realm's settings against them.
+# OMB M-22-09 (Federal zero trust strategy), the identity actions. `access-cli environment check
+# --profile m-22-09` reports an environment's settings against them.
 
 version = 1
 framework = "OMB M-22-09"
@@ -11,27 +11,27 @@ control = "Identity 1 centralized identity management"
 status = "met"
 rules = ["IDI-2", "TNI-1"]
 tests = ["crates/identity-oauth/tests/oauth.rs::code_flow_with_pkce_and_dpop"]
-note = "One realm signs users into its applications through OpenID Connect and SAML."
+note = "One environment signs users into its applications through OpenID Connect and SAML."
 
 [[control]]
 control = "Identity 2 phishing-resistant MFA"
 status = "met"
 rules = ["SEC10", "HL-23"]
 tests = [
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
   "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
 ]
-note = "A passkey-only realm with MFA required and no SMS, voice or push factor is a realm setting the realm check reports."
+note = "A passkey-only environment with MFA required and no SMS, voice or push factor is an environment setting the environment check reports."
 
 [[control]]
 control = "Identity 2 no SMS or voice"
 status = "met"
 rules = ["N-45"]
 tests = [
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
   "crates/http/tests/login/payment.rs::the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation",
 ]
-note = "SMS codes are off by default and there is no voice factor; the realm check fails a realm that turns SMS on."
+note = "SMS codes are off by default and there is no voice factor; the environment check fails an environment that turns SMS on."
 
 [[control]]
 control = "Identity 3 password policies"

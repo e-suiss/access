@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rpo_s FROM access.environment_dr_profiles\n          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rpo_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.environment_dr_profiles",
+            "name": "rpo_s"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f5ddca010a67fc014d707c09c726a1bd2a451621573e94898b84fe4cfdb04261"
+}

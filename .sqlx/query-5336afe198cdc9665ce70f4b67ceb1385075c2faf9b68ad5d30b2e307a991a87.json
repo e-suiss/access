@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_setup_links\n                 (tenant_id, environment_id, org_id, token_hash, created_exercise, created_at, expires_at)\n               SELECT $1, $2, $3, $4, $5, n, n + make_interval(secs => $6)\n                 FROM (SELECT clock_timestamp() AS n) t\n               RETURNING link_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_setup_links",
+            "name": "link_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5336afe198cdc9665ce70f4b67ceb1385075c2faf9b68ad5d30b2e307a991a87"
+}

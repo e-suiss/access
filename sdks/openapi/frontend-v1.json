@@ -3,7 +3,7 @@
   "info": {
     "title": "Access hosted Frontend API",
     "version": "1.0.0",
-    "description": "The realm-scoped routes of the hosted pages and embedded components (TN-133), served under the realm's host and under /realms/{slug}. A planned route answers 501 not-yet-served."
+    "description": "The environment-scoped routes of the hosted pages and embedded components (TN-133), served under the environment's host and under /env/{slug}. A planned route answers 501 not-yet-served."
   },
   "paths": {
     "/v1/login/flows": {
@@ -1198,7 +1198,7 @@
     "/v1/organizations/{organization}/sign-in": {
       "get": {
         "operationId": "getOrganizationSignIn",
-        "summary": "Home realm discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the realm's sign-in policy still decides.",
+        "summary": "Home environment discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the environment's sign-in policy still decides.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1788,7 +1788,7 @@
     "/v1/account/bindings": {
       "get": {
         "operationId": "listBindings",
-        "summary": "This realm's halves of the account's cross-realm bindings (§12.1.3).",
+        "summary": "This environment's halves of the account's cross-environment bindings (§12.1.3).",
         "responses": {
           "200": {
             "description": "OK",
@@ -1807,7 +1807,7 @@
       },
       "post": {
         "operationId": "offerBinding",
-        "summary": "Offers to bind the account to one in another realm, after re-authentication (§12.1.3, TN-65).",
+        "summary": "Offers to bind the account to one in another environment, after re-authentication (§12.1.3, TN-65).",
         "responses": {
           "200": {
             "description": "OK",
@@ -1837,7 +1837,7 @@
     "/v1/account/bindings/accept": {
       "post": {
         "operationId": "acceptBinding",
-        "summary": "Commits this realm's half with the other realm's offer token (§12.1.3).",
+        "summary": "Commits this environment's half with the other environment's offer token (§12.1.3).",
         "responses": {
           "200": {
             "description": "OK",
@@ -1867,7 +1867,7 @@
     "/v1/account/bindings/complete": {
       "post": {
         "operationId": "completeBinding",
-        "summary": "Commits the offering realm's half with the accepting realm's token (§12.1.3).",
+        "summary": "Commits the offering environment's half with the accepting environment's token (§12.1.3).",
         "responses": {
           "200": {
             "description": "OK",
@@ -1997,7 +1997,7 @@
     "/csp-reports": {
       "post": {
         "operationId": "reportCsp",
-        "summary": "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
+        "summary": "Receives CSP reports, 100 a minute per environment (OP-153 m.3 (t)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2027,7 +2027,7 @@
     "/v1/login/branding": {
       "get": {
         "operationId": "getBranding",
-        "summary": "The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
+        "summary": "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2048,7 +2048,7 @@
     "/v1/login/messages": {
       "get": {
         "operationId": "getMessageOverrides",
-        "summary": "The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
+        "summary": "The environment's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2437,7 +2437,7 @@
     "/v1/login/approval/preview": {
       "post": {
         "operationId": "previewApproval",
-        "summary": "What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
+        "summary": "What the consent screen of a client the environment did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2558,7 +2558,7 @@
     "/v1/workloads/instances": {
       "post": {
         "operationId": "openWorkloadInstance",
-        "summary": "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the realm issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
+        "summary": "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the environment issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2588,7 +2588,7 @@
     "/v1/workloads/attestations": {
       "post": {
         "operationId": "attestWorkload",
-        "summary": "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the realm issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
+        "summary": "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the environment issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -3239,7 +3239,7 @@
     "/saml/metadata": {
       "get": {
         "operationId": "samlMetadata",
-        "summary": "The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)).",
+        "summary": "The SAML IdP metadata, signed with the environment's saml key (OP-155 m.3 (e)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -3489,7 +3489,7 @@
     "/v1/login/upstream/{connection}": {
       "get": {
         "operationId": "startUpstreamSignIn",
-        "summary": "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
+        "summary": "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home environment discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -3691,7 +3691,7 @@
     "/.well-known/openid-federation": {
       "get": {
         "operationId": "oidfEntityConfiguration",
-        "summary": "The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
+        "summary": "The environment issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -3793,7 +3793,7 @@
     "/federation/register": {
       "post": {
         "operationId": "oidfRegister",
-        "summary": "Explicit OIDF client registration, when the realm opened it.",
+        "summary": "Explicit OIDF client registration, when the environment opened it.",
         "responses": {
           "501": {
             "$ref": "#/components/responses/NotYetServed"
@@ -4306,7 +4306,7 @@
     "/v1/first-contact/keys": {
       "get": {
         "operationId": "getFirstContactKeys",
-        "summary": "The realm's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)).",
+        "summary": "The environment's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -4387,7 +4387,7 @@
     "/ssh/krl": {
       "get": {
         "operationId": "getSshKrl",
-        "summary": "The realm's OpenSSH key revocation list.",
+        "summary": "The environment's OpenSSH key revocation list.",
         "responses": {
           "200": {
             "description": "OK",
@@ -4408,7 +4408,7 @@
     "/ssh/ca.pub": {
       "get": {
         "operationId": "getSshCaKey",
-        "summary": "The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
+        "summary": "The environment's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
         "responses": {
           "200": {
             "description": "OK",
@@ -4826,7 +4826,7 @@
     "/v1/support/artifacts": {
       "post": {
         "operationId": "uploadSupportArtifact",
-        "summary": "Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the realm's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)).",
+        "summary": "Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the environment's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -4978,7 +4978,7 @@
     "/v1/approve/batch": {
       "post": {
         "operationId": "startBatchApproval",
-        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
+        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -5048,7 +5048,7 @@
     "/v1/approve/inline": {
       "post": {
         "operationId": "answerInlineApproval",
-        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17).",
+        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17).",
         "responses": {
           "200": {
             "description": "OK",

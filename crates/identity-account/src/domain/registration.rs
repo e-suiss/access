@@ -281,7 +281,7 @@ impl Assessment {
     }
 }
 
-/// A profile field the realm may require at registration (TN-132; the console's
+/// A profile field the environment may require at registration (TN-132; the console's
 /// `REQUIRED_FIELDS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProfileField {
@@ -305,11 +305,11 @@ impl ProfileField {
 
 /// The counter key of the registration gate: a digest, so the counters keep no personal data.
 #[must_use]
-pub fn gate_key(tag: u8, tenant: &[u8; 16], realm: &[u8; 16], part: &[u8]) -> [u8; 32] {
+pub fn gate_key(tag: u8, tenant: &[u8; 16], environment: &[u8; 16], part: &[u8]) -> [u8; 32] {
     let mut m = b"access/registration-gate/v1\0".to_vec();
     m.push(tag);
     m.extend_from_slice(tenant);
-    m.extend_from_slice(realm);
+    m.extend_from_slice(environment);
     m.extend_from_slice(&u32::try_from(part.len()).unwrap_or(u32::MAX).to_be_bytes());
     m.extend_from_slice(part);
     sha256(&m)

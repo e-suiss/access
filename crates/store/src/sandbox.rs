@@ -1,14 +1,14 @@
 //! Sandbox domains and the platform's metadata reads (OP-151 m.2 M2, m.3 (m), X21): which
-//! governing domains are sandboxes with their template's fixed budget, and the tenant and realm
+//! governing domains are sandboxes with their template's fixed budget, and the tenant and environment
 //! metadata the platform-admin surface reads. The router role pages through the mapping only
 //! (OP-132 m.3); each tenant's metadata is read by the app role in that tenant's scope. Nothing
-//! here reads realm content (INV-29, X31).
+//! here reads environment content (INV-29, X31).
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::scope::DomainId;
 
 /// A sandbox domain's fixed budget (OP-151 m.3 (m)).
@@ -28,20 +28,20 @@ fn unsigned(n: i64) -> Result<u64, StoreError> {
     u64::try_from(n).map_err(|_| StoreError::Corrupt)
 }
 
-/// Marks the transaction realm's governing domain `domain` as a sandbox with `budget`; once
+/// Marks the transaction environment's governing domain `domain` as a sandbox with `budget`; once
 /// marked it stays so (OP-73).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn mark(t: &mut TenantTx, domain: &DomainId, budget: Budget) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
         "INSERT INTO access.sandbox_domains
-           (domain_id, tenant_id, realm_id, exercises_per_day, projections_per_day)
+           (domain_id, tenant_id, environment_id, exercises_per_day, projections_per_day)
          VALUES ($1, $2, $3, $4, $5) ON CONFLICT (domain_id) DO NOTHING",
         domain.as_bytes().as_slice(),
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         signed(budget.exercises_per_day)?,
         signed(budget.projections_per_day)?,
     )
@@ -131,13 +131,13 @@ pub async fn tenants(
     Ok(out)
 }
 
-/// A realm's metadata (INV-29, X31: no settings, no accounts, no clients).
+/// An environment's metadata (INV-29, X31: no settings, no accounts, no clients).
 #[derive(Clone)]
-pub struct RealmMeta {
+pub struct EnvironmentMeta {
     /// The tenant.
     pub tenant: TenantId,
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// Its slug.
     pub slug: String,
     /// Its issuer, once set.
@@ -148,31 +148,31 @@ pub struct RealmMeta {
     pub domain: [u8; 32],
     /// When it was created, Unix milliseconds.
     pub created_ms: u64,
-    /// Its sandbox budget, for a sandbox realm.
+    /// Its sandbox budget, for a sandbox environment.
     pub sandbox: Option<Budget>,
     /// Its hybrid key share policy, `optimistic` or `advertise-only` (CR-12 m.3, OP-159 m.3 (t)).
     pub kex_share: String,
 }
 
-/// The live realms: the one with slug `slug`, or those of `tenant` after the slug `after`, at
+/// The live environments: the one with slug `slug`, or those of `tenant` after the slug `after`, at
 /// most `limit`, in slug order; with `sandbox_only`, only the tenant's sandboxes. The router role
-/// reads the mapping (OP-132 m.3); the app role reads each realm's metadata in its tenant's
+/// reads the mapping (OP-132 m.3); the app role reads each environment's metadata in its tenant's
 /// scope.
 ///
 /// # Errors
 /// [`StoreError`]; [`StoreError::Range`] for `sandbox_only` without a tenant.
-pub async fn realms(
+pub async fn environments(
     (router, app): (&PgPool, &PgPool),
     slug: Option<&str>,
     tenant: Option<TenantId>,
     after: Option<&str>,
     (limit, sandbox_only): (u32, bool),
-) -> Result<Vec<RealmMeta>, StoreError> {
+) -> Result<Vec<EnvironmentMeta>, StoreError> {
     let only: Option<Vec<Uuid>> = if sandbox_only {
         let tenant = tenant.ok_or(StoreError::Range)?;
         let mut t = TenantTx::begin_tenant(app, tenant).await?;
         let ids = sqlx::query_scalar!(
-            "SELECT realm_id FROM access.sandbox_domains WHERE tenant_id = $1",
+            "SELECT environment_id FROM access.sandbox_domains WHERE tenant_id = $1",
             Uuid::from_bytes(*tenant.as_bytes()),
         )
         .fetch_all(&mut *t.tx)
@@ -183,12 +183,12 @@ pub async fn realms(
         None
     };
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, slug, issuer FROM access.realms
+        r#"SELECT tenant_id, environment_id, slug, issuer FROM access.environments
             WHERE status = 'active'
               AND ($1::text IS NULL OR slug = $1)
               AND ($2::uuid IS NULL OR tenant_id = $2)
               AND slug > coalesce($3, '')
-              AND ($4::uuid[] IS NULL OR realm_id = ANY($4))
+              AND ($4::uuid[] IS NULL OR environment_id = ANY($4))
             ORDER BY slug LIMIT $5"#,
         slug,
         tenant.map(|t| Uuid::from_bytes(*t.as_bytes())),
@@ -207,11 +207,11 @@ pub async fn realms(
                       (extract(epoch FROM r.created_at) * 1000)::bigint AS "created_ms!",
                       s.exercises_per_day AS "exercises_per_day?",
                       s.projections_per_day AS "projections_per_day?"
-                 FROM access.realms r
+                 FROM access.environments r
                  LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id
-                WHERE r.tenant_id = $1 AND r.realm_id = $2"#,
+                WHERE r.tenant_id = $1 AND r.environment_id = $2"#,
             r.tenant_id,
-            r.realm_id,
+            r.environment_id,
         )
         .fetch_one(&mut *t.tx)
         .await?;
@@ -223,9 +223,9 @@ pub async fn realms(
             }),
             _ => None,
         };
-        out.push(RealmMeta {
+        out.push(EnvironmentMeta {
             tenant,
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             slug: r.slug,
             issuer: r.issuer,
             placement: own.placement_id,

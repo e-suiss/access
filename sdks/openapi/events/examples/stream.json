@@ -1,6 +1,6 @@
 {
   "stream_id": "6f1c2a4e-9b0d-4c3e-8a71-2d5f0e9b4c11",
-  "iss": "https://id.example/realms/shop",
+  "iss": "https://id.example/env/shop",
   "aud": "work",
   "events_supported": [
     "urn:suiss:access:event:authority-revoked",
@@ -29,7 +29,7 @@
   ],
   "delivery": {
     "method": "urn:ietf:rfc:8936",
-    "endpoint_url": "https://id.example/realms/shop/ssf/poll"
+    "endpoint_url": "https://id.example/env/shop/ssf/poll"
   },
   "status": "enabled"
 }

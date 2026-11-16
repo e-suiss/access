@@ -59,7 +59,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::a_passkey_signs_in_phishing_resistant_and_steps_up",
   "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
 ]
-note = "Phishing-resistant passkeys, MFA as the realm requires, and throttled failures."
+note = "Phishing-resistant passkeys, MFA as the environment requires, and throttled failures."
 
 [[control]]
 control = "A.8.15 logging"
@@ -86,7 +86,7 @@ tests = [
   "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
   "bins/access-verify/tests/artefacts.rs::receipt_evidence_vectors",
 ]
-note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3."
+note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; environment post-quantum keys and the FIPS profile wait on lane J3."
 
 [[control]]
 control = "A.8.25 to A.8.29 secure development"

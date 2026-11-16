@@ -1,6 +1,6 @@
 [package]
 name = "access-edge-core"
-description = "The edge core of Access protocol gateways (OP-155 m.3 (c), MD-1): realm, subject, Claim, keys, audit, governor and health layers, the mTLS edge channel, and the parser worker pool."
+description = "The edge core of Access protocol gateways (OP-155 m.3 (c), MD-1): environment, subject, Claim, keys, audit, governor and health layers, the mTLS edge channel, and the parser worker pool."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

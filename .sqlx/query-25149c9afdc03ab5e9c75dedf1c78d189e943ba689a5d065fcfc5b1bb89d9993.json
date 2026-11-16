@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_rp_id_changes (tenant_id, environment_id, previous, rp_id)\n             VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25149c9afdc03ab5e9c75dedf1c78d189e943ba689a5d065fcfc5b1bb89d9993"
+}

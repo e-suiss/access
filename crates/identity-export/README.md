@@ -1,6 +1,6 @@
 # access-identity-export
 
-Sends a realm's audit log to the tenant's SIEM, data lake or log pipeline. What leaves is a
+Sends an environment's audit log to the tenant's SIEM, data lake or log pipeline. What leaves is a
 **copy, not the record**: every exported event carries the label, and every audit question is
 answered from Access's own record, which a changed or lost copy cannot affect.
 
@@ -10,11 +10,11 @@ batch, so a sink that is down or refusing loses nothing and gets the backlog whe
 
 ## Sinks
 
-A realm administrator registers a sink with `POST /admin/v1/realms/{slug}/export-sinks`
+An environment administrator registers a sink with `POST /admin/v1/envs/{slug}/export-sinks`
 (`idp.export.sink_register`, CT2), replaces it with `PUT …/export-sinks/{sink}`
 (`idp.export.sink_update`, CT2) and retires it with `POST …/export-sinks/{sink}/retire`
 (`idp.export.sink_retire`, CT1). Each change is a new version; nothing is deleted. The sink's
-secret is write-only: it is sealed under the realm's key and never shown, logged or echoed in an
+secret is write-only: it is sealed under the environment's key and never shown, logged or echoed in an
 error.
 
 | Adapter | `endpoint` | Settings | Secret |
@@ -48,7 +48,7 @@ The presets are data presets of the HTTP collector, not separate integrations.
   for is under `unmapped`, where `access_record` is `copy`.
 - **Parquet on S3 / Amazon Security Lake.** One Snappy-compressed Parquet file per batch, with
   OCSF column names and nesting, at
-  `{prefix}region={region}/accountId={account}/eventDay={YYYYMMDD}/{realm}-{xid}-{id}.parquet`
+  `{prefix}region={region}/accountId={account}/eventDay={YYYYMMDD}/{environment}-{xid}-{id}.parquet`
   (`prefix` defaults to `ext/access/`). The `PUT` is signed with AWS Signature Version 4 over the
   body's SHA-256. A retried batch writes the same key.
 - **OTLP logs.** One log record per event under the `access.audit` scope, the OCSF event as its
@@ -66,7 +66,7 @@ Every HTTP request carries `x-access-record: copy`.
 HTTPS goes through Access's guarded outbound client: public addresses on port 443 only, no
 redirects, one deadline per exchange. A private or non-standard target, including a syslog
 receiver on another port, must be one the operator declared. A refused batch is retried on the
-next pass from the same cursor; after three refusals in a row the realm gets one
+next pass from the same cursor; after three refusals in a row the environment gets one
 `export.sink_failed` event and audit entry until the sink accepts again. An accepted batch is
 recorded as `export.batch_sent`.
 

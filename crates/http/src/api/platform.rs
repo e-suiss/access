@@ -1,11 +1,11 @@
-//! The platform-admin resources under `/admin/v1/platform/…` (OP-151 m.2 M2): tenants, realm
-//! creation (a Genesis of the realm's governing domain, TN-111), realm metadata with the state
+//! The platform-admin resources under `/admin/v1/platform/…` (OP-151 m.2 M2): tenants, environment
+//! creation (a Genesis of the environment's governing domain, TN-111), environment metadata with the state
 //! of its keys (CR-25, CR-59), sandbox domains (OP-151 m.3 (m), X21) and the operator's health.
 //!
 //! Every read is metadata: no route returns account, client, grant, record or claim content, and
-//! no route reads a realm's settings or authority state (INV-29, X31, TN-119). The handler keeps
+//! no route reads an environment's settings or authority state (INV-29, X31, TN-119). The handler keeps
 //! only each kind's listed members of what the port returns. Every write compiles to exactly
-//! one `idp.platform.*` Exercise in the platform realm's governing domain through
+//! one `idp.platform.*` Exercise in the platform environment's governing domain through
 //! [`PlatformResources`] (TN-110, PI-4, INV-2): a caller drafts it (`POST …/intents`, a read) and
 //! sends the drafted body with its AIS. There is no route that acts as a user (TN-130).
 
@@ -60,7 +60,7 @@ const fn create(path: &'static str, operation_id: &'static str, summary: &'stati
 }
 
 const T: &str = "/admin/v1/platform/tenants";
-const TR: &str = "/admin/v1/platform/tenants/{tenant_id}/realms";
+const TR: &str = "/admin/v1/platform/tenants/{tenant_id}/envs";
 const TS: &str = "/admin/v1/platform/tenants/{tenant_id}/sandbox-domains";
 
 /// Every platform resource route, in contract order.
@@ -80,22 +80,26 @@ pub const ROWS: &[Route] = &[
         "getTenant",
         "One tenant's metadata.",
     ),
-    list(TR, "listTenantRealms", "A tenant's realms; metadata only."),
+    list(
+        TR,
+        "listTenantEnvironments",
+        "A tenant's environments; metadata only.",
+    ),
     create(
         TR,
-        "createRealm",
-        "Creates a realm by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered.",
+        "createEnvironment",
+        "Creates an environment by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered.",
     ),
     list(TS, "listSandboxDomains", "A tenant's sandbox domains."),
     create(
         TS,
         "createSandboxDomain",
-        "Creates a sandbox realm whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget.",
+        "Creates a sandbox environment whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget.",
     ),
     read(
-        "/admin/v1/platform/realms/{realm_slug}",
-        "getRealmMetadata",
-        "One realm's metadata and the state of its signing keys; never its settings or content.",
+        "/admin/v1/platform/envs/{environment_slug}",
+        "getEnvironmentMetadata",
+        "One environment's metadata and the state of its signing keys; never its settings or content.",
     ),
     read(
         "/admin/v1/platform/operator/health",
@@ -120,9 +124,9 @@ pub enum Shape {
 /// The members a platform tenant may show (INV-29: metadata only).
 pub const TENANT_FIELDS: &[&str] = &["tenant_id", "status", "placement", "created_at"];
 
-/// The members a platform realm or sandbox domain may show (INV-29, X31: no settings, no
+/// The members a platform environment or sandbox domain may show (INV-29, X31: no settings, no
 /// content).
-pub const REALM_FIELDS: &[&str] = &[
+pub const ENVIRONMENT_FIELDS: &[&str] = &[
     "slug",
     "tenant_id",
     "issuer",
@@ -141,7 +145,7 @@ pub const REALM_FIELDS: &[&str] = &[
 /// The members the health summary may show.
 pub const HEALTH_FIELDS: &[&str] = &["status", "checks"];
 
-/// The members a realm creation's `genesis` may show (TN-111).
+/// The members an environment creation's `genesis` may show (TN-111).
 pub const GENESIS_FIELDS: &[&str] = &["digest", "root", "recovery", "recovery_reason"];
 
 /// Members no platform answer carries, at any depth (INV-29, X31): account, client, grant,
@@ -162,7 +166,7 @@ impl PlatformKind {
     pub const fn fields(self) -> &'static [&'static str] {
         match self {
             Self::Tenants => TENANT_FIELDS,
-            Self::Realms | Self::SandboxDomains => REALM_FIELDS,
+            Self::Environments | Self::SandboxDomains => ENVIRONMENT_FIELDS,
             Self::Health => HEALTH_FIELDS,
         }
     }
@@ -171,17 +175,17 @@ impl PlatformKind {
 /// The resource kind and shape of a platform row.
 #[must_use]
 pub fn spec(operation_id: &str) -> Option<(PlatformKind, Shape)> {
-    use PlatformKind::{Health, Realms, SandboxDomains, Tenants};
+    use PlatformKind::{Environments, Health, SandboxDomains, Tenants};
     Some(match operation_id {
         "draftPlatformIntent" => (Tenants, Shape::Draft),
         "listTenants" => (Tenants, Shape::List(&["tenant_id", "status", "placement"])),
         "createTenant" => (Tenants, Shape::Create),
         "getTenant" => (Tenants, Shape::Get),
-        "listTenantRealms" => (Realms, Shape::List(&["slug", "status", "sandbox"])),
-        "createRealm" => (Realms, Shape::Create),
+        "listTenantEnvironments" => (Environments, Shape::List(&["slug", "status", "sandbox"])),
+        "createEnvironment" => (Environments, Shape::Create),
         "listSandboxDomains" => (SandboxDomains, Shape::List(&["slug", "status"])),
         "createSandboxDomain" => (SandboxDomains, Shape::Create),
-        "getRealmMetadata" => (Realms, Shape::Get),
+        "getEnvironmentMetadata" => (Environments, Shape::Get),
         "getOperatorHealth" => (Health, Shape::Get),
         _ => return None,
     })

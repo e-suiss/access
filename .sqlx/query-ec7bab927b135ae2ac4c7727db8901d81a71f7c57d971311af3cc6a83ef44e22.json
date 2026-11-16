@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM access.org_memberships\n                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND source = 'founder'\n                  AND joined_at > clock_timestamp() - make_interval(secs => $4)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ec7bab927b135ae2ac4c7727db8901d81a71f7c57d971311af3cc6a83ef44e22"
+}

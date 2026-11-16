@@ -1,4 +1,4 @@
-//! What a connector needs from outside (OP-63): the HR system's pages, Access's realm-admin
+//! What a connector needs from outside (OP-63): the HR system's pages, Access's environment-admin
 //! surface, the Instance key that signs its Actor Intent Statements, time and randomness.
 
 use serde_json::Value;
@@ -26,10 +26,10 @@ pub trait Pull: Send + Sync {
     fn pages(&self) -> impl Future<Output = Result<Vec<Value>, Fault>> + Send;
 }
 
-/// Access's realm-admin surface (`admin-v1.json`), the public contract any administrator's tool
+/// Access's environment-admin surface (`admin-v1.json`), the public contract any administrator's tool
 /// uses (OP-62): a write is drafted, then committed with the actor's AIS.
 pub trait Access: Send + Sync {
-    /// `POST /admin/v1/realms/{slug}/intents`: the draft of `ask`.
+    /// `POST /admin/v1/envs/{slug}/intents`: the draft of `ask`.
     fn draft(&self, slug: &str, ask: Value) -> impl Future<Output = Result<Value, Fault>> + Send;
 
     /// `POST {path}` with `body`, the AIS and an `Idempotency-Key`: the answer's status and

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_provisions (tenant_id, environment_id, exercise_id) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "964db749f7f8044ce2059ac355721eb7cd7a2e652818b6d64686de9b66dfb39f"
+}

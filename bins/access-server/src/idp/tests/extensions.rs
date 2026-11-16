@@ -1,4 +1,4 @@
-//! Inline hooks, webhooks and the realm's extension policy through the realm-admin resources
+//! Inline hooks, webhooks and the environment's extension policy through the environment-admin resources
 //! and commit against real PostgreSQL and the authority plane (TN-135, TN-136, MD-14, TN-110,
 //! OP-151 m.10, m.11): each registration is an `idp.*` Exercise, its key is shown once, and the
 //! registered hook and webhook then fire, signed with that key.
@@ -21,16 +21,16 @@ use serde_json::{Value as Json, json};
 
 use super::*;
 
-async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest) {
+async fn ready(slug: &str) -> (World, (TenantId, EnvironmentId), Digest) {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm(slug).await;
+    let (tenant, environment, d) = w.environment(slug).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    (w, (tenant, realm), d)
+    (w, (tenant, environment), d)
 }
 
 async fn run(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -38,10 +38,10 @@ async fn run(
     exercise(w, &proposal(at, change, nonce, idp_anchor(d), 1), ROOT_KEY).await
 }
 
-/// Why the realm refuses `change` before anything is signed.
+/// Why the environment refuses `change` before anything is signed.
 async fn refused(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -350,7 +350,7 @@ async fn private_targets_and_disclosure_need_the_extension_policy() {
     .unwrap();
     assert_eq!(
         policy.action(),
-        access_internal_api::idp::IdpAction::RealmExtensionPolicy
+        access_internal_api::idp::IdpAction::EnvironmentExtensionPolicy
     );
     written(&run(&w, at, d, policy, 3).await.unwrap());
     let settings = w

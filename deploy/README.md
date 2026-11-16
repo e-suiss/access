@@ -9,7 +9,7 @@ below, the smallest included.
 
 | Form | What runs | Who operates it |
 |---|---|---|
-| Suiss-hosted, shared cell | Many tenants, realms and domains in one cell | Suiss |
+| Suiss-hosted, shared cell | Many tenants, environments and domains in one cell | Suiss |
 | Suiss-hosted, dedicated cell | One large tenant or organization in a cell of its own | Suiss |
 | Self-hosted | Your own provider from these binaries: the single-node small-provider profile or a full cell | You |
 | Third-party provider | Another implementation built on the open Kernel and spec, checked by the conformance suite and test vectors | That provider |
@@ -35,7 +35,7 @@ sudo deploy/small-provider/install.sh /etc/access/access.toml
 ```
 
 It declares `durability = "single-node"`. Every domain it leads publishes `durability:
-single-node` in its Domain Metadata and every realm's durability read says so. An acknowledged
+single-node` in its Domain Metadata and every environment's durability read says so. An acknowledged
 write can be lost with the node, and the profile says so instead of hiding it. Revocations and
 other SEC23 writes still wait for a declared replica and an independent witness before they are
 acknowledged; without them they stay pending.
@@ -72,7 +72,7 @@ dedicated cell holds its one tenant and refuses every other.
 
 ### Placement Directory
 
-The directory maps a tenant, a realm and a domain to the cell that serves it, one version per
+The directory maps a tenant, an environment and a domain to the cell that serves it, one version per
 move, never edited. It is routing only:
 
 - A request for a domain placed in another cell is answered `421 placement-mismatch` with the
@@ -93,21 +93,21 @@ transfer, never by row-level restore into a live cell.
 ### Residency
 
 A domain's residency is the region of the cell that leads it, published in its Domain Metadata
-with the cell's class (`regional` or `multi-region-sync`). A realm declares its residency with
-`PUT /admin/v1/realms/{slug}/settings/residency` (`idp.realm.residency`, CT3); a realm can only
-declare the region its cell is in, so changing it means moving the realm's domain first. A
+with the cell's class (`regional` or `multi-region-sync`). An environment declares its residency with
+`PUT /admin/v1/envs/{slug}/settings/residency` (`idp.environment.residency`, CT3); an environment can only
+declare the region its cell is in, so changing it means moving the environment's domain first. A
 regional cell's RPO is 0 inside the region; an async DR profile (`settings/dr-profile`) declares
-its own RPO. `GET /admin/v1/realms/{slug}/durability` reads all of it back, with the witnesses and
+its own RPO. `GET /admin/v1/envs/{slug}/durability` reads all of it back, with the witnesses and
 replicas the governing domain declares.
 
-### Rehoming a realm
+### Rehoming an environment
 
-`POST /admin/v1/realms/{slug}/rehome` with `{"domain": "<new domain>", "target_ais": "<AIS>"}`
-moves a realm to another governing domain. It is two-ended: one Exercise of `idp.realm.rehome` is
+`POST /admin/v1/envs/{slug}/rehome` with `{"domain": "<new domain>", "target_ais": "<AIS>"}`
+moves an environment to another governing domain. It is two-ended: one Exercise of `idp.environment.rehome` is
 committed in the current governing domain (the request's AIS) and one in the new domain (the
-`target_ais`, signed for the new domain on an Anchor of its own that covers the realm). The realm
+`target_ais`, signed for the new domain on an Anchor of its own that covers the environment). The environment
 moves only in the transaction that records the second end; with one end the answer is `409
-rehome-incomplete` and the realm stays.
+rehome-incomplete` and the environment stays.
 
 ### A local AuthorityDomain
 
@@ -147,7 +147,7 @@ promote across cells without a fence proof.
   hosts;
 - startup, liveness and readiness on the internal port. Liveness never waits on readiness, and
   schema migrations run as their own Job, so a long migration never restarts the server;
-- readiness only after every realm's issuer and JWKS loaded (the server does not start
+- readiness only after every environment's issuer and JWKS loaded (the server does not start
   otherwise) and a random start jitter of up to 5 s.
 
 `values-small-provider.yaml` is the single-node profile on Kubernetes and
@@ -160,7 +160,7 @@ An operator is optional and is not part of the chart.
 ## OpenTofu
 
 `tofu/` provisions infrastructure only: the namespace, the database cluster's place, the secret
-store roles and the chart release. Realm and domain configuration is never infrastructure: it is
+store roles and the chart release. Environment and domain configuration is never infrastructure: it is
 an Exercise through the management API, so no `.tf` file in `tofu/` calls an `idp.*` action or the
 decision API. `cargo xtask check` enforces this.
 

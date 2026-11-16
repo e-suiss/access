@@ -190,7 +190,7 @@ Vectors: [`core/1/pap-sd-jwt.json`](../../conformance/vectors/core/1/pap-sd-jwt.
 
 <a id="L2-SIG-1"></a>**L2-SIG-1.** Every L2 artefact is a COSE_Sign1 whose protected header carries exactly `alg`, the content type and `kid`, as [L0-SIG-10](../l0/signatures.md#L0-SIG-10) requires. The payload is the deterministic CBOR encoding of the artefact.
 
-<a id="L2-SIG-2"></a>**L2-SIG-2.** The default algorithm is Ed25519 (COSE `-19`). ESP256 (`-9`) is also produced on request. A producer never signs an L2 artefact with RSA or with a realm JOSE key.
+<a id="L2-SIG-2"></a>**L2-SIG-2.** The default algorithm is Ed25519 (COSE `-19`). ESP256 (`-9`) is also produced on request. A producer never signs an L2 artefact with RSA or with an environment JOSE key.
 
 <a id="L2-SIG-3"></a>**L2-SIG-3.** A producer only signs with an operational key inside its excerpt window, and only for usages the excerpt names.
 

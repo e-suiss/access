@@ -45,8 +45,10 @@ fn refused(engine: Engine, r: Refusal) -> Response {
         "forward-auth check refused"
     );
     match r {
-        Refusal::Unregistered => codes::realm::PROXY_UNREGISTERED.problem().into_response(),
-        Refusal::Malformed(_) => codes::realm::INVALID_FORWARDED_REQUEST
+        Refusal::Unregistered => codes::environment::PROXY_UNREGISTERED
+            .problem()
+            .into_response(),
+        Refusal::Malformed(_) => codes::environment::INVALID_FORWARDED_REQUEST
             .problem()
             .into_response(),
         Refusal::Unavailable => {

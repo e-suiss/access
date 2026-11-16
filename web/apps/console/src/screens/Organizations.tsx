@@ -204,13 +204,13 @@ function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
   );
 }
 
-/** §8.5 S7, Ek B 3735, 3808, 3819, 3821: the realm's organizations, one opened at a time. */
+/** §8.5 S7, Ek B 3735, 3808, 3819, 3821: the environment's organizations, one opened at a time. */
 export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const list = useLoad(() =>
     adminGet<{ readonly items: readonly OrgSummary[] }>(
       ctx.instance,
-      `realms/${realm}/organizations`,
+      `envs/${environment}/organizations`,
     ),
   );
   const [open, setOpen] = useState<string | undefined>(undefined);
@@ -234,7 +234,7 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                       run(() =>
                         adminGet<Organization>(
                           ctx.instance,
-                          `realms/${realm}/organizations/${encodeURIComponent(o.organization)}`,
+                          `envs/${environment}/organizations/${encodeURIComponent(o.organization)}`,
                         ),
                       );
                     }}

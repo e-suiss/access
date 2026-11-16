@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.device_markers SET revoked_ms = $4\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND revoked_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3950bb41d1fb7ba14f20541fd7450c7dc96614e20c85ed134221273538b24ff"
+}

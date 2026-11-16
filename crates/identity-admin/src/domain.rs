@@ -41,7 +41,7 @@ pub mod profile_check;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
-pub mod realm;
+pub mod environment;
 pub mod resilience;
 pub mod review;
 pub mod saml;
@@ -50,7 +50,7 @@ pub mod sso;
 pub mod support;
 
 pub use ciba::CibaSetting;
-pub use realm::{
+pub use environment::{
     Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
     Social, SocialClient, Upstream, UpstreamLink,
 };
@@ -70,7 +70,7 @@ pub const HOOK_PREFIX: &str = "hok";
 /// Type prefix of a webhook's external id (OP-65, OP-137).
 pub const WEBHOOK_PREFIX: &str = "whk";
 
-/// The realm-admin error of an extension point registration that M6's contract refuses.
+/// The environment-admin error of an extension point registration that M6's contract refuses.
 #[must_use]
 pub fn extension_invalid(e: access_identity_hooks::domain::Invalid) -> Invalid {
     match e.0 {
@@ -87,7 +87,7 @@ pub const MAX_REDIRECT_URIS: usize = 32;
 /// Longest redirect URI, in bytes.
 pub const MAX_URI: usize = 2048;
 
-/// Most CIMD domains of a realm.
+/// Most CIMD domains of an environment.
 pub const MAX_CIMD_DOMAINS: usize = 64;
 
 /// Claims a tenant cannot define (must-never #18, §9.9.4 k.1, P55) with the OIDC protocol claims
@@ -156,7 +156,7 @@ pub const PROFILE_ATTRIBUTES: [&str; 18] = [
     "updated_at",
 ];
 
-/// Most CSP origins a realm's branding names (TN-106, PD).
+/// Most CSP origins an environment's branding names (TN-106, PD).
 pub const MAX_CSP_ORIGINS: usize = 16;
 
 /// Longest branding display name, in characters.
@@ -169,9 +169,9 @@ pub const CUTOFF_MARGIN_MS: u64 = 24 * 3_600_000;
 /// (§13.7.7, PD).
 pub const CUTOFF_UNKNOWN_MS: u64 = 7 * 24 * 3_600_000;
 
-/// The issuer cutoff of a compromised realm key (§13.7.7, SEC9): `t_c − 24 h`, or `t_d − 7 d`
+/// The issuer cutoff of a compromised environment key (§13.7.7, SEC9): `t_c − 24 h`, or `t_d − 7 d`
 /// when the compromise time `t_c` is unknown or later than the declaration `t_d`. Claims and
-/// tokens of the realm issued at or after it are not relied on.
+/// tokens of the environment issued at or after it are not relied on.
 #[must_use]
 pub const fn issuer_cutoff(compromised_at: Option<u64>, declared_at: u64) -> u64 {
     match compromised_at {
@@ -231,7 +231,7 @@ pub enum Invalid {
     #[error("invalid dcr policy")]
     DcrPolicy,
     /// A client profile outside OP-155 m.3 (k): FAPI 2.0 for a client that cannot hold it, a
-    /// legacy method without a registered secret, an algorithm or encryption key the realm
+    /// legacy method without a registered secret, an algorithm or encryption key the environment
     /// cannot serve, or an upstream name out of shape.
     #[error("invalid client profile")]
     ClientProfile,
@@ -262,10 +262,10 @@ pub enum Invalid {
     /// Branding outside its fields' shapes, or a logo outside its CSP origins (TN-106).
     #[error("bad branding")]
     Branding,
-    /// A key rotation policy the realm may not take (CR-26, TN-118).
+    /// A key rotation policy the environment may not take (CR-26, TN-118).
     #[error("bad key policy")]
     KeyPolicy,
-    /// A rotation or drop of a key the realm does not publish.
+    /// A rotation or drop of a key the environment does not publish.
     #[error("no such key")]
     NoKey,
     /// A group or upstream name outside `^[a-z][a-z0-9_-]{0,63}$`.
@@ -310,7 +310,7 @@ pub enum Invalid {
     /// The client does not authenticate with a secret.
     #[error("client has no secret")]
     NoSecret,
-    /// An RP ID change without acknowledging the realm's registered passkeys (IDI-4).
+    /// An RP ID change without acknowledging the environment's registered passkeys (IDI-4).
     #[error("passkeys would be lost")]
     PasskeyLoss,
     /// A request body that is not the operation's JSON object.
@@ -335,21 +335,21 @@ pub enum Invalid {
     /// is not a readable certificate, or a policy that is not a dotted OID (OP-155 m.3 (m)).
     #[error("bad certificate sign-in setting")]
     CertificateLogin,
-    /// A JOSE algorithm the realm cannot take: `ES256` or `Ed25519` (MD-3, CR-5).
+    /// A JOSE algorithm the environment cannot take: `ES256` or `Ed25519` (MD-3, CR-5).
     #[error("bad JOSE algorithm")]
     JoseAlg,
     /// A protection mode outside its model; brute-force protection is always enforced
     /// (OP-151 m.3 (o), TI-9).
     #[error("bad protection mode")]
     ProtectionMode,
-    /// A hook or webhook URL that is not `https` on a DNS name, or a private target the realm
+    /// A hook or webhook URL that is not `https` on a DNS name, or a private target the environment
     /// does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23).
     #[error("bad extension target")]
     ExtensionTarget,
     /// A hook registration outside its call point's contract (TN-135).
     #[error("bad hook")]
     Hook,
-    /// A hook asking for personal data the realm's extension policy does not permit
+    /// A hook asking for personal data the environment's extension policy does not permit
     /// (OP-151 m.10 (e)).
     #[error("disclosure not permitted")]
     Disclosure,
@@ -374,7 +374,7 @@ pub enum Invalid {
     /// The upstream subject is linked to another account already.
     #[error("upstream subject linked")]
     UpstreamSubjectLinked,
-    /// The realm's governing domain does not accept the catalog that declares the action yet
+    /// The environment's governing domain does not accept the catalog that declares the action yet
     /// (OP-153 m.3 (a)).
     #[error("catalog upgrade required")]
     CatalogUpgradeRequired,
@@ -397,8 +397,8 @@ pub enum Invalid {
     /// A recovery policy outside its ranges or below the floor of OP-153 m.3 (e) (TN-55).
     #[error("bad recovery policy")]
     RecoveryPolicy,
-    /// The realm or the account has turned this recovery option off: temporary access passes
-    /// exist only when the realm opts in (TN-62); an account without assisted recovery takes no
+    /// The environment or the account has turned this recovery option off: temporary access passes
+    /// exist only when the environment opts in (TN-62); an account without assisted recovery takes no
     /// reset intent or pass (TN-60).
     #[error("recovery option off")]
     RecoveryOption,
@@ -420,20 +420,20 @@ pub enum Invalid {
     /// The invitation does not exist, was accepted or revoked, or expired.
     #[error("no such invitation")]
     NoInvitation,
-    /// Home realm discovery needs a verified domain no other organization claims (§10.2.6,
+    /// Home environment discovery needs a verified domain no other organization claims (§10.2.6,
     /// TN-98).
-    #[error("home realm discovery needs a verified domain")]
+    #[error("home environment discovery needs a verified domain")]
     HrdUnverified,
     /// An unknown preset or a malformed client (IDP-31).
     #[error("bad social provider")]
     Social,
-    /// The realm has not enabled the preset, or disabled it.
+    /// The environment has not enabled the preset, or disabled it.
     #[error("no such social provider")]
     NoSocial,
-    /// The realm offers the preset already.
+    /// The environment offers the preset already.
     #[error("social provider exists")]
     SocialExists,
-    /// The shared development client named in a realm that is not a sandbox (IDP-31 (4)).
+    /// The shared development client named in an environment that is not a sandbox (IDP-31 (4)).
     #[error("shared social key in production")]
     SharedSocialKey,
     /// A domain that is not a lower-case DNS name, or a verification method Access does not
@@ -594,7 +594,7 @@ pub enum Invalid {
     #[error("invalid gateway")]
     Gateway,
     /// N5: a Related Origins list that is not `https` origins, names more than five
-    /// registrable labels with the RP ID, or an origin outside the realm's verified domains
+    /// registrable labels with the RP ID, or an origin outside the environment's verified domains
     /// (TN-18, OP-153 m.3 (u)).
     #[error("bad related origins")]
     RelatedOrigins,
@@ -615,11 +615,11 @@ pub enum Invalid {
     /// base, or a retirement of one bound as issuer or RP ID (OP-156 m.3 (i)).
     #[error("invalid custom domain")]
     CustomDomain,
-    /// The issuer stays fixed: the realm was activated, or its issuer is path-based (TN-16,
+    /// The issuer stays fixed: the environment was activated, or its issuer is path-based (TN-16,
     /// OP-156 m.3 (i)).
     #[error("issuer fixed")]
     IssuerFixed,
-    /// No undelivered Relay message with that id in the realm (OP-156 m.3 (c)).
+    /// No undelivered Relay message with that id in the environment (OP-156 m.3 (c)).
     #[error("no such relay message")]
     NoRelayMessage,
     /// The message's sealed content was crypto-shredded (OP-156 m.3 (c), OP-73).
@@ -635,7 +635,7 @@ pub enum Invalid {
     /// No live support case system by that name (OP-157 m.3 (e)).
     #[error("no such case system")]
     CaseSystemUnknown,
-    /// The realm has not opened delegated administration, so no new admin Grant is issued
+    /// The environment has not opened delegated administration, so no new admin Grant is issued
     /// (OP-157 m.3 (t)).
     #[error("delegated administration off")]
     DelegatedAdminOff,
@@ -645,7 +645,7 @@ pub enum Invalid {
     /// A hot audit window shorter than 30 days (OP-158 m.3 (a)).
     #[error("audit tier too short")]
     AuditTierTooShort,
-    /// A hash profile lower than the realm's (OP-33, OP-158 m.3 (a)).
+    /// A hash profile lower than the environment's (OP-33, OP-158 m.3 (a)).
     #[error("hash profile downgrade")]
     HashProfileDowngrade,
     /// A rehome without an Exercise in both governing domains (OP-158 m.3 (o)).
@@ -655,15 +655,15 @@ pub enum Invalid {
     /// m.4 (b) (W9)).
     #[error("placement mismatch")]
     PlacementMismatch,
-    /// The realm's FIPS crypto profile and its post-quantum signing profile together, in
+    /// The environment's FIPS crypto profile and its post-quantum signing profile together, in
     /// either order (CR-44, HL-27, OP-159 m.3 (r)).
     #[error("fips and post-quantum profiles are exclusive")]
     FipsPqExclusive,
     /// No HSM ML-DSA mechanism for the post-quantum profile (CR-18, OP-159 m.3 (d)).
     #[error("post-quantum key unavailable")]
     PqKeyUnavailable,
-    /// J3: a FIPS realm signing with anything but ES256/ESP256, or a client's ML-DSA algorithm
-    /// the realm's signing profile does not hold (CR-15, OP-158 m.9, OP-159 m.3 (o), (r)).
+    /// J3: a FIPS environment signing with anything but ES256/ESP256, or a client's ML-DSA algorithm
+    /// the environment's signing profile does not hold (CR-15, OP-158 m.9, OP-159 m.3 (o), (r)).
     #[error("algorithm and profile conflict")]
     AlgorithmProfileConflict,
 }
@@ -1129,11 +1129,11 @@ impl AuthMethod {
     }
 }
 
-/// Which `sub` a client reads (MD-10): pairwise by default; the realm's public `sub` only by
+/// Which `sub` a client reads (MD-10): pairwise by default; the environment's public `sub` only by
 /// explicit opt-in.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Subject {
-    /// Whether the client opted in to the realm's public `sub`.
+    /// Whether the client opted in to the environment's public `sub`.
     pub public: bool,
     /// The sector identifier URI the client registered, `https` (OIDC Core §8.1). Its document
     /// is checked when the registration is drafted and committed; the pairwise sector stays the
@@ -1405,7 +1405,7 @@ impl Attribute {
     }
 }
 
-/// The realm's JOSE signing algorithm (OP-146 m.8 (d), (e)).
+/// The environment's JOSE signing algorithm (OP-146 m.8 (d), (e)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JoseAlg {
     /// ECDSA P-256, the default.
@@ -1452,7 +1452,7 @@ impl RpId {
         }
     }
 
-    /// Whether it may serve a realm whose issuer host is `issuer_host`: that host or a parent
+    /// Whether it may serve an environment whose issuer host is `issuer_host`: that host or a parent
     /// domain of it (WebAuthn §5.1.4).
     #[must_use]
     pub fn covers(&self, issuer_host: &str) -> bool {
@@ -1469,7 +1469,7 @@ impl RpId {
     }
 }
 
-/// A protected resource or MCP server the realm's tokens may name as audience (AG-8, §11.4.3),
+/// A protected resource or MCP server the environment's tokens may name as audience (AG-8, §11.4.3),
 /// by its canonical URI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProtectedResource {
@@ -1477,7 +1477,7 @@ pub struct ProtectedResource {
     pub resource: String,
     /// What administrators and the consent screen call it.
     pub display_name: String,
-    /// The algorithm its access tokens are signed with; `None` is the realm's (CR-41, OP-159
+    /// The algorithm its access tokens are signed with; `None` is the environment's (CR-41, OP-159
     /// m.21 (b), (g)). RS256 signs identity assertions only (MD-6).
     pub access_token_alg: Option<access_identity_oauth::domain::fapi::IdAlg>,
 }
@@ -1510,7 +1510,7 @@ impl ProtectedResource {
 /// The scopes are a hint only; the subject is the decided projection's pairwise `sub`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrossAppConnection {
-    /// Its name in the realm.
+    /// Its name in the environment.
     pub name: String,
     /// The requesting client.
     pub client_id: String,
@@ -1563,7 +1563,7 @@ fn slug(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
 }
 
-/// The realm's client and CIMD acceptance policy (§11.3, AG-4): off by default.
+/// The environment's client and CIMD acceptance policy (§11.3, AG-4): off by default.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CimdPolicy {
     /// Whether CIMD clients are accepted.
@@ -1621,7 +1621,7 @@ fn origin(u: &str) -> Option<&str> {
     u.get(..end.checked_add(8)?)
 }
 
-/// A realm's login branding (TN-106, §12.4.2): data only. There is no template, script or
+/// An environment's login branding (TN-106, §12.4.2): data only. There is no template, script or
 /// style sheet a tenant writes; the hosted page draws these values itself, and the only
 /// outside content it loads comes from the CSP origins listed here.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1704,9 +1704,9 @@ pub fn registrable_label(host: &str) -> Option<&str> {
     access_identity_webauthn::domain::psl::Psl::label(host)
 }
 
-/// N5: a realm's Related Origins (`idp.realm.related_origins`, TN-18, IDP-5, OP-153 m.3 (u)):
+/// N5: an environment's Related Origins (`idp.environment.related_origins`, TN-18, IDP-5, OP-153 m.3 (u)):
 /// `https` origins of the tenant's own brands, at most [`MAX_RELATED_LABELS`] registrable
-/// labels with the RP ID's; each must sit under one of the realm's verified domains, which the
+/// labels with the RP ID's; each must sit under one of the environment's verified domains, which the
 /// commit path checks.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RelatedOrigins {
@@ -1758,11 +1758,11 @@ impl RelatedOrigins {
     }
 }
 
-/// N5: the protected message keys (X35, XI-25): no realm override replaces them.
+/// N5: the protected message keys (X35, XI-25): no environment override replaces them.
 const PROTECTED_MESSAGES: &str =
     include_str!("../../../conformance/catalog/protected-messages.toml");
 
-/// N5: the English catalogs, whose keys are every key a realm may override.
+/// N5: the English catalogs, whose keys are every key an environment may override.
 const EN_CATALOGS: [&str; 4] = [
     include_str!("../../../locales/en/login.ftl"),
     include_str!("../../../locales/en/account.ftl"),
@@ -1798,7 +1798,7 @@ fn locale_tag(tag: &str) -> bool {
         && tag.bytes().next().is_some_and(|c| c.is_ascii_alphabetic())
 }
 
-/// N5: a realm's message overrides (`idp.realm.locale_overrides`, OP-153 m.3 (s), X35, XI-25):
+/// N5: an environment's message overrides (`idp.environment.locale_overrides`, OP-153 m.3 (s), X35, XI-25):
 /// texts by locale and Fluent key, plain text only. A protected key, an unknown key, a
 /// placeholder or markup is refused.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1903,26 +1903,26 @@ pub enum Change {
         /// Its source, `None` to remove.
         source: Option<Attribute>,
     },
-    /// `idp.realm.jose_alg`.
+    /// `idp.environment.jose_alg`.
     JoseAlg(JoseAlg),
-    /// `idp.realm.argon2`.
+    /// `idp.environment.argon2`.
     Argon2(Argon2Params),
-    /// `idp.realm.rp_id`.
+    /// `idp.environment.rp_id`.
     RpId(RpId),
-    /// `idp.realm.branding`.
+    /// `idp.environment.branding`.
     Branding(Branding),
-    /// N5: `idp.realm.related_origins` (TN-18, OP-153 m.3 (u)).
+    /// N5: `idp.environment.related_origins` (TN-18, OP-153 m.3 (u)).
     RelatedOrigins(RelatedOrigins),
-    /// N5: `idp.realm.locale_overrides` (OP-153 m.3 (s), X35).
+    /// N5: `idp.environment.locale_overrides` (OP-153 m.3 (s), X35).
     LocaleOverrides(LocaleOverrides),
-    /// `idp.realm.key_policy`.
+    /// `idp.environment.key_policy`.
     KeyPolicy(Policy),
-    /// `idp.realm.key_rotate`: rotates out the active key `retire`.
+    /// `idp.environment.key_rotate`: rotates out the active key `retire`.
     KeyRotate {
         /// The active key's `kid`.
         retire: [u8; 32],
     },
-    /// `idp.realm.key_drop`: drops `kid` at once.
+    /// `idp.environment.key_drop`: drops `kid` at once.
     KeyDrop {
         /// The key's `kid`.
         kid: [u8; 32],
@@ -1951,12 +1951,12 @@ pub enum Change {
     UpstreamUpdate(Upstream),
     /// `idp.upstream.retire`.
     UpstreamRetire(Name),
-    /// `idp.realm.signin_policy`.
+    /// `idp.environment.signin_policy`.
     SigninPolicy(SigninPolicy),
-    /// `idp.realm.session_policy`.
+    /// `idp.environment.session_policy`.
     SessionPolicy(SessionPolicy),
-    /// `idp.realm.protection_mode` when it only tightens, `idp.realm.protection_mode_loosen`
-    /// when anything loosens (OP-151 m.14 (f)); `loosens` is resolved against the realm's
+    /// `idp.environment.protection_mode` when it only tightens, `idp.environment.protection_mode_loosen`
+    /// when anything loosens (OP-151 m.14 (f)); `loosens` is resolved against the environment's
     /// current mode before the intent is drawn.
     ProtectionMode {
         /// The new mode.
@@ -1976,10 +1976,10 @@ pub enum Change {
         /// Its lifetime: one hour by default, at most 24.
         ttl_ms: u64,
     },
-    /// `idp.account.tap_issue`: a temporary access pass (TN-62); CT2, only in a realm that opts in.
+    /// `idp.account.tap_issue`: a temporary access pass (TN-62); CT2, only in an environment that opts in.
     AccountTapIssue(TapIssue),
     /// `idp.account.recovery_policy` when it only tightens, `idp.account.recovery_policy_loosen`
-    /// when anything loosens (TN-55, OP-153 m.3 (a)); `loosens` is resolved against the realm's
+    /// when anything loosens (TN-55, OP-153 m.3 (a)); `loosens` is resolved against the environment's
     /// current policy before the intent is drawn.
     RecoveryPolicy {
         /// The new policy.
@@ -1987,7 +1987,7 @@ pub enum Change {
         /// Whether it loosens anything the current policy enforces.
         loosens: bool,
     },
-    /// `idp.realm.extension_policy`.
+    /// `idp.environment.extension_policy`.
     ExtensionPolicy(ExtensionPolicy),
     /// `idp.hook.register` or `idp.hook.retire` (TN-135).
     Hook(HookChange),
@@ -2029,25 +2029,25 @@ pub enum Change {
     CrossAppConnection(CrossAppConnection),
     /// `idp.client.cross_app_connection_retire` (CT1): the connection by name.
     CrossAppConnectionRetire(String),
-    /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
+    /// `idp.environment.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
     /// (OP-154 m.3 (a), (p)).
     DeviceCode(bool),
-    /// `idp.realm.push` (`true`, CT2) or `push_close` (`false`, CT1): push verification with
+    /// `idp.environment.push` (`true`, CT2) or `push_close` (`false`, CT1): push verification with
     /// number matching as a second step (OP-156 m.3 (d)).
     Push(bool),
-    /// `idp.realm.sms_otp` (`true`, CT2) or `sms_otp_close` (`false`, CT1): the restricted SMS
+    /// `idp.environment.sms_otp` (`true`, CT2) or `sms_otp_close` (`false`, CT1): the restricted SMS
     /// one-time code (OP-156 m.3 (f)).
     SmsOtp(bool),
-    /// `idp.realm.spc` (CT2 either way, there is no narrowing action): Secure Payment
+    /// `idp.environment.spc` (CT2 either way, there is no narrowing action): Secure Payment
     /// Confirmation on the approval surface (OP-156 m.3 (g)).
     Spc(bool),
-    /// `idp.realm.ciba` (CT2) or `ciba_close` (CT1): CIBA as an invitation, poll and ping
+    /// `idp.environment.ciba` (CT2) or `ciba_close` (CT1): CIBA as an invitation, poll and ping
     /// (OP-155 m.3 (l), IDP-14).
     Ciba(CibaSetting),
-    /// `idp.realm.coordinator` (CT2): the coordinator's public Needs Attention endpoint the hub
+    /// `idp.environment.coordinator` (CT2): the coordinator's public Needs Attention endpoint the hub
     /// links pending approvals to, or none (OP-156 m.3 (t), §8.17.6.5).
     Coordinator(Option<String>),
-    /// `idp.realm.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
+    /// `idp.environment.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
     /// or off (OP-155 m.3 (m)).
     CertificateLogin(certificate::CertificateLogin),
     /// `idp.gateway.radius_client_register` (CT2): a `RadSec` client of a RADIUS gateway
@@ -2064,21 +2064,21 @@ pub enum Change {
         /// The replacement keytab's key version.
         kvno: u32,
     },
-    /// `idp.realm.mtls_aliases` (CT2): whether the realm publishes `mtls_endpoint_aliases`
+    /// `idp.environment.mtls_aliases` (CT2): whether the environment publishes `mtls_endpoint_aliases`
     /// (OP-155 m.3 (m), §10.4.3).
     MtlsAliases(bool),
-    /// `idp.realm.hrd` (`true`, CT2) or `hrd_close` (`false`, CT1): home realm discovery
+    /// `idp.environment.hrd` (`true`, CT2) or `hrd_close` (`false`, CT1): home environment discovery
     /// (TN-98, OP-155 m.3 (h)).
     Hrd(bool),
-    /// `idp.realm.iys` (on, CT2) or `iys_close` (off, CT1): İYS consent records go to Relay with
-    /// the realm's recipient type, `individual` or `merchant` (OP-156 m.3 (c), IDP-37 (4)).
+    /// `idp.environment.iys` (on, CT2) or `iys_close` (off, CT1): İYS consent records go to Relay with
+    /// the environment's recipient type, `individual` or `merchant` (OP-156 m.3 (c), IDP-37 (4)).
     Iys {
         /// On or off.
         enabled: bool,
         /// `individual` or `merchant`.
         recipient_type: String,
     },
-    /// `idp.realm.preference_topics` (CT2): the realm's own preference topics beside the
+    /// `idp.environment.preference_topics` (CT2): the environment's own preference topics beside the
     /// built-in ones (OP-153 m.3 (ee)).
     PreferenceTopics(Vec<String>),
     /// `idp.upstream.assurance_map` (reserved, CT3): how a connection's `acr`, `amr` or
@@ -2091,7 +2091,7 @@ pub enum Change {
         map: Box<access_identity_federation::domain::connection::AssuranceMap>,
     },
     /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
-    /// `loosens` is resolved against the realm's current policy before the decision.
+    /// `loosens` is resolved against the environment's current policy before the decision.
     DcrPolicy {
         /// The policy.
         policy: access_identity_oauth::domain::dcr::DcrPolicy,
@@ -2107,12 +2107,12 @@ pub enum Change {
         /// What changes.
         delta: ProfileDelta,
     },
-    /// `idp.realm.frontchannel_logout` (CT2): the realm's clients may opt in to front-channel
+    /// `idp.environment.frontchannel_logout` (CT2): the environment's clients may opt in to front-channel
     /// logout (IDP-24, OP-155 m.3 (k)).
     FrontchannelLogout,
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
     OrgInvite(OrgInvite),
-    /// `idp.org.update`: the organization's name or home realm discovery (TN-98).
+    /// `idp.org.update`: the organization's name or home environment discovery (TN-98).
     OrgUpdate(OrgUpdate),
     /// `idp.org.invite_revoke` (OP-153 m.3 (o)).
     OrgInviteRevoke {
@@ -2150,9 +2150,9 @@ pub enum Change {
     MigrationExport(accounts::MigrationExport),
     /// `idp.account.guardianship_record` (E53, OP-153 m.20 (g), m.25 (b)).
     GuardianshipRecord(accounts::GuardianshipRecord),
-    /// `idp.realm.csp_mode` when it only tightens, `idp.realm.csp_mode_loosen` when it moves the
+    /// `idp.environment.csp_mode` when it only tightens, `idp.environment.csp_mode_loosen` when it moves the
     /// page to report-only (OP-153 m.22 (g), m.25 (b)); `loosens` is resolved against the
-    /// realm's current mode before the intent is drawn.
+    /// environment's current mode before the intent is drawn.
     CspMode {
         /// The new mode.
         mode: accounts::CspMode,
@@ -2161,7 +2161,7 @@ pub enum Change {
     },
     /// `idp.relay.resend`: the undelivered message's `CloudEvents` id (OP-156 m.3 (c)).
     RelayResend([u8; 16]),
-    /// `idp.realm.security_notices` (`true`, CT2) or `security_notices_close` (`false`, CT1):
+    /// `idp.environment.security_notices` (`true`, CT2) or `security_notices_close` (`false`, CT1):
     /// the immediate security authority notices, on by default (OP-156 m.3 (c)).
     SecurityNotices(bool),
     /// `idp.support.case_system_register` or `case_system_retire` (OP-157 m.3 (e)).
@@ -2173,40 +2173,40 @@ pub enum Change {
     Breakglass(breakglass::BreakglassMark),
     /// `idp.review.schedule` (CT2) or `schedule_close` (CT1) (OP-157 m.3 (w)).
     Review(review::ReviewChange),
-    /// `idp.realm.delegated_admin` (`true`, CT2) or `delegated_admin_close` (`false`, CT1)
+    /// `idp.environment.delegated_admin` (`true`, CT2) or `delegated_admin_close` (`false`, CT1)
     /// (OP-157 m.3 (t)).
     DelegatedAdmin(bool),
-    /// `idp.realm.approval_inline` (`true`, CT2) or `approval_inline_close` (`false`, CT1)
+    /// `idp.environment.approval_inline` (`true`, CT2) or `approval_inline_close` (`false`, CT1)
     /// (OP-157 m.3 (m)).
     ApprovalInline(bool),
-    /// `idp.realm.approval_batch` (`true`, CT2) or `approval_batch_close` (`false`, CT1)
+    /// `idp.environment.approval_batch` (`true`, CT2) or `approval_batch_close` (`false`, CT1)
     /// (OP-157 m.3 (m)).
     ApprovalBatch(bool),
     /// `idp.org.breakglass_review` (CT1): another Party classifies one break-glass use
     /// (OP-157 m.3 (h), m.4 (b)).
     BreakglassReview(breakglass::BreakglassReview),
-    /// `idp.realm.rehome` (reserved, CT3, OP-158 m.3 (o)).
+    /// `idp.environment.rehome` (reserved, CT3, OP-158 m.3 (o)).
     Rehome(resilience::Rehome),
-    /// `idp.realm.residency` (reserved, CT3, OP-158 m.3 (o)).
+    /// `idp.environment.residency` (reserved, CT3, OP-158 m.3 (o)).
     Residency(resilience::Residency),
-    /// `idp.realm.dr_profile` (`Some`, CT3) or `dr_profile_close` (`None`, CT1) (OP-158 m.3 (r)).
+    /// `idp.environment.dr_profile` (`Some`, CT3) or `dr_profile_close` (`None`, CT1) (OP-158 m.3 (r)).
     DrProfile(Option<resilience::DrProfile>),
-    /// `idp.realm.rate_limit` (CT2, OP-158 m.3 (v)).
+    /// `idp.environment.rate_limit` (CT2, OP-158 m.3 (v)).
     RateLimit(resilience::RateLimit),
-    /// `idp.realm.crypto_profile` (CT2, OP-158 m.3 (y)).
+    /// `idp.environment.crypto_profile` (CT2, OP-158 m.3 (y)).
     CryptoProfile(resilience::CryptoProfile),
-    /// `idp.realm.hash_profile` (CT1, raise only, OP-158 m.3 (a)).
+    /// `idp.environment.hash_profile` (CT1, raise only, OP-158 m.3 (a)).
     HashProfileSet(resilience::HashProfileSet),
-    /// `idp.realm.audit_tier` (`Some`, CT2) or `audit_tier_close` (`None`, CT1) (OP-158 m.3 (w)).
+    /// `idp.environment.audit_tier` (`Some`, CT2) or `audit_tier_close` (`None`, CT1) (OP-158 m.3 (w)).
     AuditTier(Option<resilience::AuditTier>),
-    /// `idp.realm.signing_profile` (`Some`, reserved, CT3) or `signing_profile_close` (`None`,
+    /// `idp.environment.signing_profile` (`Some`, reserved, CT3) or `signing_profile_close` (`None`,
     /// CT1) (OP-159 m.3 (a), (o)).
     SigningProfile(Option<assurance::SigningProfile>),
-    /// `idp.realm.kex_share` (CT2, OP-159 m.3 (a), (t)).
+    /// `idp.environment.kex_share` (CT2, OP-159 m.3 (a), (t)).
     KexShare(assurance::KexShare),
 }
 
-/// A change to an organization's profile (TN-98): its name, and whether home realm discovery
+/// A change to an organization's profile (TN-98): its name, and whether home environment discovery
 /// routes to it, off by default.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrgUpdate {
@@ -2214,7 +2214,7 @@ pub struct OrgUpdate {
     pub org: [u8; 16],
     /// A new display name, attacker-controlled text (OP-153 m.3 (o)).
     pub display_name: Option<String>,
-    /// Home realm discovery on or off.
+    /// Home environment discovery on or off.
     pub hrd: Option<bool>,
     /// A verified domain's autojoin rule on or off, off by default (TN-90).
     pub autojoin: Option<(String, bool)>,
@@ -2266,7 +2266,7 @@ pub const INVITATION_DEFAULT_DAYS: u32 = 7;
 
 /// An invitation into an organization (TN-89, OP-153 m.3 (o)). The invitee's address is folded
 /// (NFKC, lower case) and never enters the intent or the ledger: the change names it by its
-/// SHA-256 only, and the identity plane keeps the realm's blind index of it. The inviter's name
+/// SHA-256 only, and the identity plane keeps the environment's blind index of it. The inviter's name
 /// and the organization's name are attacker input, sent as text.
 #[derive(Clone, PartialEq, Eq)]
 pub struct OrgInvite {
@@ -2346,7 +2346,7 @@ impl OrgInvite {
 /// An organization bound to the Party its founder's client registered (TN-5, OP-153 m.3 (b)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrgCreate {
-    /// The organization's Party in the realm's governing domain.
+    /// The organization's Party in the environment's governing domain.
     pub party: [u8; 16],
     /// Its display name, attacker-controlled text (OP-153 m.3 (o)).
     pub display_name: String,
@@ -2435,7 +2435,7 @@ fn uint(v: u32) -> Value {
     Value::Unsigned(u64::from(v))
 }
 
-/// The built-in preference topics, which a realm list may not repeat (OP-153 m.3 (ee)).
+/// The built-in preference topics, which an environment list may not repeat (OP-153 m.3 (ee)).
 const BUILT_IN_TOPICS: [&str; 3] = ["campaign", "newsletter", "product_news"];
 
 /// IDP-37 (4): `individual` or `merchant`.
@@ -2480,45 +2480,45 @@ impl Change {
         match self {
             // OP-156 m.3 (c)
             Self::RelayResend(_) => IdpAction::RelayResend,
-            Self::SecurityNotices(true) => IdpAction::RealmSecurityNotices,
-            Self::SecurityNotices(false) => IdpAction::RealmSecurityNoticesClose,
+            Self::SecurityNotices(true) => IdpAction::EnvironmentSecurityNotices,
+            Self::SecurityNotices(false) => IdpAction::EnvironmentSecurityNoticesClose,
             // OP-157 m.3 (a)
             Self::CaseSystem(c) => c.action(),
             Self::SupportArtifactPolicy(p) => support::artifact_policy_action(p.as_ref()),
             Self::Breakglass(b) => b.action(),
             Self::BreakglassReview(_) => IdpAction::OrgBreakglassReview,
             Self::Review(r) => r.action(),
-            Self::DelegatedAdmin(true) => IdpAction::RealmDelegatedAdmin,
-            Self::DelegatedAdmin(false) => IdpAction::RealmDelegatedAdminClose,
-            Self::ApprovalInline(true) => IdpAction::RealmApprovalInline,
-            Self::ApprovalInline(false) => IdpAction::RealmApprovalInlineClose,
-            Self::ApprovalBatch(true) => IdpAction::RealmApprovalBatch,
-            Self::ApprovalBatch(false) => IdpAction::RealmApprovalBatchClose,
+            Self::DelegatedAdmin(true) => IdpAction::EnvironmentDelegatedAdmin,
+            Self::DelegatedAdmin(false) => IdpAction::EnvironmentDelegatedAdminClose,
+            Self::ApprovalInline(true) => IdpAction::EnvironmentApprovalInline,
+            Self::ApprovalInline(false) => IdpAction::EnvironmentApprovalInlineClose,
+            Self::ApprovalBatch(true) => IdpAction::EnvironmentApprovalBatch,
+            Self::ApprovalBatch(false) => IdpAction::EnvironmentApprovalBatchClose,
             // OP-158 m.3 (a)
-            Self::Rehome(_) => IdpAction::RealmRehome,
-            Self::Residency(_) => IdpAction::RealmResidency,
+            Self::Rehome(_) => IdpAction::EnvironmentRehome,
+            Self::Residency(_) => IdpAction::EnvironmentResidency,
             Self::DrProfile(p) => resilience::DrProfile::action(p.as_ref()),
-            Self::RateLimit(_) => IdpAction::RealmRateLimit,
-            Self::CryptoProfile(_) => IdpAction::RealmCryptoProfile,
-            Self::HashProfileSet(_) => IdpAction::RealmHashProfile,
+            Self::RateLimit(_) => IdpAction::EnvironmentRateLimit,
+            Self::CryptoProfile(_) => IdpAction::EnvironmentCryptoProfile,
+            Self::HashProfileSet(_) => IdpAction::EnvironmentHashProfile,
             Self::AuditTier(t) => resilience::AuditTier::action(t.as_ref()),
             // OP-159 m.3 (a)
             Self::SigningProfile(p) => assurance::SigningProfile::action(p.as_ref()),
-            Self::KexShare(_) => IdpAction::RealmKexShare,
+            Self::KexShare(_) => IdpAction::EnvironmentKexShare,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
             Self::CimdPolicy(_) => IdpAction::CimdPolicy,
             Self::MapperSet { .. } => IdpAction::MapperSet,
-            Self::JoseAlg(_) => IdpAction::RealmJoseAlg,
-            Self::Argon2(_) => IdpAction::RealmArgon2,
-            Self::RpId(_) => IdpAction::RealmRpId,
-            Self::Branding(_) => IdpAction::RealmBranding,
-            Self::RelatedOrigins(_) => IdpAction::RealmRelatedOrigins,
-            Self::LocaleOverrides(_) => IdpAction::RealmLocaleOverrides,
-            Self::KeyPolicy(_) => IdpAction::RealmKeyPolicy,
-            Self::KeyRotate { .. } => IdpAction::RealmKeyRotate,
-            Self::KeyDrop { .. } => IdpAction::RealmKeyDrop,
+            Self::JoseAlg(_) => IdpAction::EnvironmentJoseAlg,
+            Self::Argon2(_) => IdpAction::EnvironmentArgon2,
+            Self::RpId(_) => IdpAction::EnvironmentRpId,
+            Self::Branding(_) => IdpAction::EnvironmentBranding,
+            Self::RelatedOrigins(_) => IdpAction::EnvironmentRelatedOrigins,
+            Self::LocaleOverrides(_) => IdpAction::EnvironmentLocaleOverrides,
+            Self::KeyPolicy(_) => IdpAction::EnvironmentKeyPolicy,
+            Self::KeyRotate { .. } => IdpAction::EnvironmentKeyRotate,
+            Self::KeyDrop { .. } => IdpAction::EnvironmentKeyDrop,
             Self::ClientSecretRotate(_) => IdpAction::ClientSecretRotate,
             // L6 (ii), TN-117, OP-148 m.4 (b), Ek B 4907, 5097
             Self::GroupCreate(g) if matches!(g.issuer, MembershipIssuer::Upstream(_)) => {
@@ -2534,17 +2534,19 @@ impl Change {
             Self::UpstreamRegister(_) => IdpAction::UpstreamRegister,
             Self::UpstreamUpdate(_) => IdpAction::UpstreamUpdate,
             Self::UpstreamRetire(_) => IdpAction::UpstreamRetire,
-            Self::SigninPolicy(_) => IdpAction::RealmSigninPolicy,
-            Self::SessionPolicy(_) => IdpAction::RealmSessionPolicy,
-            Self::ProtectionMode { loosens: false, .. } => IdpAction::RealmProtectionMode,
-            Self::ProtectionMode { loosens: true, .. } => IdpAction::RealmProtectionModeLoosen,
+            Self::SigninPolicy(_) => IdpAction::EnvironmentSigninPolicy,
+            Self::SessionPolicy(_) => IdpAction::EnvironmentSessionPolicy,
+            Self::ProtectionMode { loosens: false, .. } => IdpAction::EnvironmentProtectionMode,
+            Self::ProtectionMode { loosens: true, .. } => {
+                IdpAction::EnvironmentProtectionModeLoosen
+            }
             Self::AccountCanary(_) => IdpAction::AccountCanary,
             Self::AccountDelete(_) => IdpAction::AccountDelete,
             Self::AccountResetIntent { .. } => IdpAction::AccountResetIntent,
             Self::AccountTapIssue(_) => IdpAction::AccountTapIssue,
             Self::RecoveryPolicy { loosens: false, .. } => IdpAction::AccountRecoveryPolicy,
             Self::RecoveryPolicy { loosens: true, .. } => IdpAction::AccountRecoveryPolicyLoosen,
-            Self::ExtensionPolicy(_) => IdpAction::RealmExtensionPolicy,
+            Self::ExtensionPolicy(_) => IdpAction::EnvironmentExtensionPolicy,
             Self::Hook(h) => h.action().idp(),
             Self::Webhook(w) => w.action().idp(),
             Self::UpstreamLink(_) => IdpAction::UpstreamLink,
@@ -2582,34 +2584,34 @@ impl Change {
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
-            Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
-            Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
-            Self::Push(true) => IdpAction::RealmPush,
-            Self::Push(false) => IdpAction::RealmPushClose,
-            Self::SmsOtp(true) => IdpAction::RealmSmsOtp,
-            Self::SmsOtp(false) => IdpAction::RealmSmsOtpClose,
-            Self::Spc(_) => IdpAction::RealmSpc,
-            Self::Ciba(c) if c.enabled => IdpAction::RealmCiba,
-            Self::Ciba(_) => IdpAction::RealmCibaClose,
-            Self::Coordinator(_) => IdpAction::RealmCoordinator,
-            Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
+            Self::DeviceCode(true) => IdpAction::EnvironmentDeviceCode,
+            Self::DeviceCode(false) => IdpAction::EnvironmentDeviceCodeClose,
+            Self::Push(true) => IdpAction::EnvironmentPush,
+            Self::Push(false) => IdpAction::EnvironmentPushClose,
+            Self::SmsOtp(true) => IdpAction::EnvironmentSmsOtp,
+            Self::SmsOtp(false) => IdpAction::EnvironmentSmsOtpClose,
+            Self::Spc(_) => IdpAction::EnvironmentSpc,
+            Self::Ciba(c) if c.enabled => IdpAction::EnvironmentCiba,
+            Self::Ciba(_) => IdpAction::EnvironmentCibaClose,
+            Self::Coordinator(_) => IdpAction::EnvironmentCoordinator,
+            Self::CertificateLogin(_) => IdpAction::EnvironmentCertificateLogin,
             Self::GatewayRadiusClientRegister(_) => IdpAction::GatewayRadiusClientRegister,
             Self::GatewayKeytabPolicy(_) => IdpAction::GatewayKeytabPolicy,
             Self::GatewayKeytabEmergency { .. } => IdpAction::GatewayKeytabEmergency,
-            Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
-            Self::Hrd(true) => IdpAction::RealmHrd,
-            Self::Hrd(false) => IdpAction::RealmHrdClose,
+            Self::MtlsAliases(_) => IdpAction::EnvironmentMtlsAliases,
+            Self::Hrd(true) => IdpAction::EnvironmentHrd,
+            Self::Hrd(false) => IdpAction::EnvironmentHrdClose,
             // OP-156 m.3 (c), OP-153 m.3 (ee)
-            Self::Iys { enabled: true, .. } => IdpAction::RealmIys,
-            Self::Iys { enabled: false, .. } => IdpAction::RealmIysClose,
-            Self::PreferenceTopics(_) => IdpAction::RealmPreferenceTopics,
+            Self::Iys { enabled: true, .. } => IdpAction::EnvironmentIys,
+            Self::Iys { enabled: false, .. } => IdpAction::EnvironmentIysClose,
+            Self::PreferenceTopics(_) => IdpAction::EnvironmentPreferenceTopics,
             Self::UpstreamAssuranceMap { .. } => IdpAction::UpstreamAssuranceMap,
             Self::ClientProfile { delta, .. } => delta.action(),
-            Self::FrontchannelLogout => IdpAction::RealmFrontchannelLogout,
+            Self::FrontchannelLogout => IdpAction::EnvironmentFrontchannelLogout,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
             Self::DcrPolicy { loosens: false, .. } => IdpAction::ClientDcrPolicyTighten,
-            Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
-            Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
+            Self::CspMode { loosens: false, .. } => IdpAction::EnvironmentCspMode,
+            Self::CspMode { loosens: true, .. } => IdpAction::EnvironmentCspModeLoosen,
         }
     }
 
@@ -2623,7 +2625,7 @@ impl Change {
         match self {
             Self::ClientRegister(c) | Self::ClientUpdate(c) => c.check(declared),
             Self::CimdPolicy(p) => p.check(),
-            Self::Argon2(p) => Argon2Params::for_realm(p.m_kib, p.t, p.p)
+            Self::Argon2(p) => Argon2Params::for_environment(p.m_kib, p.t, p.p)
                 .map(drop)
                 .map_err(|_| Invalid::Argon2),
             Self::Branding(b) => b.check(),
@@ -3067,7 +3069,7 @@ impl Change {
             | Self::RecoveryPolicy { .. }
             | Self::ExtensionPolicy(_)
             | Self::CspMode { .. } => {
-                path.push(String::from("realm"));
+                path.push(String::from("environment"));
             }
             Self::Hook(HookChange::Register { id, .. } | HookChange::Retire { id }) => {
                 path.extend([String::from("hook"), uuid(id)]);
@@ -3141,7 +3143,7 @@ impl Change {
             | Self::HashProfileSet(_)
             | Self::AuditTier(_)
             | Self::SigningProfile(_)
-            | Self::KexShare(_) => path.push(String::from("realm")),
+            | Self::KexShare(_) => path.push(String::from("environment")),
             // OP-157 m.3 (a)
             Self::CaseSystem(c) => path.extend(c.path()),
             Self::Review(r) => path.extend(r.path()),
@@ -3172,7 +3174,7 @@ impl Change {
         }
     }
 
-    /// The intent that authorizes it in the realm `slug`, valid over `validity` (EI-25: its
+    /// The intent that authorizes it in the environment `slug`, valid over `validity` (EI-25: its
     /// `opaque["change"]` is [`Change::digest`]).
     ///
     /// # Errors
@@ -3215,7 +3217,7 @@ pub enum ProfileDelta {
     /// `client_secret_post` (`idp.client.auth_method_legacy`, CT2).
     SecretPost,
     /// RS256 identity assertions opted in and the ID token algorithm (`idp.client.alg_rs256`,
-    /// CT2); `None` keeps the realm's algorithm.
+    /// CT2); `None` keeps the environment's algorithm.
     SigningAlg(Option<access_identity_oauth::domain::fapi::IdAlg>),
     /// JWE towards the client (`idp.client.encryption`, CT1).
     Encryption(access_identity_oauth::domain::fapi::Encryption),
@@ -3241,7 +3243,7 @@ impl ProfileDelta {
         }
     }
 
-    /// Checks the change on its own: an encryption key the realm can use for the chosen
+    /// Checks the change on its own: an encryption key the environment can use for the chosen
     /// algorithm and at least one thing to encrypt (CR-4), an upstream name in shape.
     ///
     /// # Errors
@@ -3303,7 +3305,7 @@ impl ProfileDelta {
             ),
             Self::SigningAlg(alg) => one(
                 "id_token_signed_response_alg",
-                Value::text(alg.map_or("realm", |a| a.name())),
+                Value::text(alg.map_or("environment", |a| a.name())),
             ),
             Self::Encryption(e) => Value::Map(vec![
                 (Value::text("alg"), Value::text(e.alg.name())),

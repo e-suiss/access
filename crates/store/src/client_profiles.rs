@@ -1,5 +1,5 @@
 //! Each client's high-assurance and legacy settings (OP-155 m.3 (k), IDP-12, IDP-24, MD-6,
-//! CR-4): one version per `idp.client.*` decision, the newest is the profile; and the realm's
+//! CR-4): one version per `idp.client.*` decision, the newest is the profile; and the environment's
 //! front-channel logout opt-in. Nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -9,14 +9,14 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
-/// A `client_secret_jwt` secret sealed under the realm KEK (OP-148 m.16 (l)).
+/// A `client_secret_jwt` secret sealed under the environment KEK (OP-148 m.16 (l)).
 #[derive(Clone, PartialEq, Eq)]
 pub struct SealedJwtSecret {
     /// The KEK version that wrapped the data key.
@@ -58,7 +58,7 @@ pub struct ClientProfileRow {
     pub tls_jwks: Option<String>,
     /// RS256 identity assertions opted in (`idp.client.alg_rs256`).
     pub rs256: bool,
-    /// `id_token_signed_response_alg`; the realm's algorithm when absent.
+    /// `id_token_signed_response_alg`; the environment's algorithm when absent.
     pub id_token_alg: Option<String>,
     /// The JWE key management algorithm.
     pub enc_alg: Option<String>,
@@ -70,7 +70,7 @@ pub struct ClientProfileRow {
     pub enc_userinfo: bool,
     /// Encrypt JARM responses.
     pub enc_jarm: bool,
-    /// Answer userinfo as a JWT signed by the realm key.
+    /// Answer userinfo as a JWT signed by the environment key.
     pub userinfo_signed: bool,
     /// The accepted SAML upstream whose assertions the bearer grant takes.
     pub saml_bearer_upstream: Option<String>,
@@ -92,10 +92,10 @@ pub async fn put_profile(
     client: [u8; 16],
     p: &ClientProfileRow,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let jwt = p.jwt_secret.as_ref();
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.oauth_client_profiles (tenant_id, realm_id, client_uuid, version,
+        r#"INSERT INTO access.oauth_client_profiles (tenant_id, environment_id, client_uuid, version,
                 fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed, tls_auth,
                 tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,
                 enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,
@@ -103,10 +103,10 @@ pub async fn put_profile(
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                 $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
            FROM access.oauth_client_profiles
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(client),
         p.fapi2,
         p.legacy_auth,
@@ -145,17 +145,17 @@ pub async fn profile(
     t: &mut TenantTx,
     client: [u8; 16],
 ) -> Result<Option<ClientProfileRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed, tls_auth,
                 tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,
                 enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,
                 legacy_bearer, frontchannel_logout_uri
            FROM access.oauth_client_profiles
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3
           ORDER BY version DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(client),
     )
     .fetch_optional(&mut *t.tx)
@@ -199,19 +199,19 @@ pub async fn profile(
     }))
 }
 
-/// Records that the realm lets its clients opt in to front-channel logout (IDP-24); a second
+/// Records that the environment lets its clients opt in to front-channel logout (IDP-24); a second
 /// opt-in changes nothing. Returns whether this call recorded it.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn enable_frontchannel(t: &mut TenantTx, bound: &Bound) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "INSERT INTO access.oauth_realm_frontchannel (tenant_id, realm_id, domain_id, decision_pos)
+        "INSERT INTO access.oauth_environment_frontchannel (tenant_id, environment_id, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tenant_id, realm_id) DO NOTHING",
+         ON CONFLICT (tenant_id, environment_id) DO NOTHING",
         tenant,
-        realm,
+        environment,
         bound.domain().as_bytes().as_slice(),
         bound.raw_position(),
     )
@@ -220,42 +220,42 @@ pub async fn enable_frontchannel(t: &mut TenantTx, bound: &Bound) -> Result<bool
     Ok(done.rows_affected() == 1)
 }
 
-/// Whether the realm lets its clients opt in to front-channel logout (IDP-24).
+/// Whether the environment lets its clients opt in to front-channel logout (IDP-24).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn frontchannel_enabled(t: &mut TenantTx) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM access.oauth_realm_frontchannel
-                           WHERE tenant_id = $1 AND realm_id = $2) AS "on!""#,
+        r#"SELECT EXISTS (SELECT 1 FROM access.oauth_environment_frontchannel
+                           WHERE tenant_id = $1 AND environment_id = $2) AS "on!""#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_one(&mut *t.tx)
     .await?)
 }
 
-/// Whether any active client of the realm opted in to a legacy token endpoint method, so the
+/// Whether any active client of the environment opted in to a legacy token endpoint method, so the
 /// metadata names it (OP-155 m.3 (k)).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn legacy_methods(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
         r#"SELECT DISTINCT p.legacy_auth AS "m!"
              FROM access.oauth_client_profiles p
              JOIN access.idp_clients c
-               ON c.tenant_id = p.tenant_id AND c.realm_id = p.realm_id
+               ON c.tenant_id = p.tenant_id AND c.environment_id = p.environment_id
               AND c.client_uuid = p.client_uuid AND c.status = 'active'
-            WHERE p.tenant_id = $1 AND p.realm_id = $2 AND p.legacy_auth IS NOT NULL
+            WHERE p.tenant_id = $1 AND p.environment_id = $2 AND p.legacy_auth IS NOT NULL
               AND p.version = (SELECT MAX(n.version) FROM access.oauth_client_profiles n
-                                WHERE n.tenant_id = p.tenant_id AND n.realm_id = p.realm_id
+                                WHERE n.tenant_id = p.tenant_id AND n.environment_id = p.environment_id
                                   AND n.client_uuid = p.client_uuid)
             ORDER BY 1"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?)

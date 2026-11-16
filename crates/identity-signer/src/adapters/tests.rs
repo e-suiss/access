@@ -7,12 +7,12 @@ use crate::app::Keyring;
 // CR-21 m.3
 #[test]
 fn sealed_keys_open_only_under_their_kek() {
-    let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32]));
+    let mut factory = SealedFactory::new(SoftKek::new("environment-kek-1", [1; 32]));
     for alg in [JwsAlg::Es256, JwsAlg::Ed25519] {
         let g = factory.generate(alg).unwrap();
         let loaded = factory.load(alg, &g.sealed).unwrap();
         assert_eq!(loaded.public_key(), g.signer.public_key());
-        let mut other = SealedFactory::new(SoftKek::new("realm-kek-2", [2; 32]));
+        let mut other = SealedFactory::new(SoftKek::new("environment-kek-2", [2; 32]));
         assert!(other.load(alg, &g.sealed).is_err());
     }
 }
@@ -20,16 +20,21 @@ fn sealed_keys_open_only_under_their_kek() {
 // CR-23
 #[test]
 fn a_restart_signs_with_the_same_key() {
-    let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32]));
-    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = SealedFactory::new(SoftKek::new("environment-kek-1", [1; 32]));
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::ENVIRONMENT).unwrap();
     let mut now = 0;
-    while now <= Policy::REALM.publish_lead_ms + 60_000 {
+    while now <= Policy::ENVIRONMENT.publish_lead_ms + 60_000 {
         let _ = ring.tick(&mut factory, now, now);
         now += 60_000;
     }
     let before = ring.sign("at+jwt", b"{}", now).unwrap();
-    let mut restored =
-        Keyring::restore(JwsAlg::Es256, Policy::REALM, ring.saved(), &mut factory).unwrap();
+    let mut restored = Keyring::restore(
+        JwsAlg::Es256,
+        Policy::ENVIRONMENT,
+        ring.saved(),
+        &mut factory,
+    )
+    .unwrap();
     assert_eq!(restored.jwks(), ring.jwks());
     let after = restored.sign("at+jwt", b"{}", now).unwrap();
     assert_eq!(after.kid, before.kid);
@@ -46,9 +51,9 @@ type Shared = Arc<Mutex<Service<SealedFactory<SoftKek>, DirVault>>>;
 
 fn listening(dir: &Path, offset: u32) -> (PathBuf, Shared) {
     let service = Service::start(
-        SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32])),
+        SealedFactory::new(SoftKek::new("environment-kek-1", [1; 32])),
         DirVault::new(dir),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     )
     .unwrap();
     let service = Arc::new(Mutex::new(service));
@@ -66,17 +71,17 @@ fn listening(dir: &Path, offset: u32) -> (PathBuf, Shared) {
 
 // CMP-22b, OP-143 m.9 (e)
 #[tokio::test]
-async fn the_socket_serves_realm_keys() {
+async fn the_socket_serves_environment_keys() {
     let dir = temp("serve");
     let (path, _) = listening(&dir, 0);
-    let realm = Realm([4; 16]);
+    let environment = Environment([4; 16]);
     assert_eq!(call(&path, &Request::Ping).await.unwrap(), Response::Pong);
     let open = Request::Open {
-        realm,
+        environment,
         alg: JwsAlg::Es256,
     };
     assert_eq!(call(&path, &open).await.unwrap(), Response::Opened);
-    let Response::Jwks(doc) = call(&path, &Request::Jwks(realm)).await.unwrap() else {
+    let Response::Jwks(doc) = call(&path, &Request::Jwks(environment)).await.unwrap() else {
         panic!("jwks");
     };
     assert!(doc.contains(r#""use":"sig""#), "{doc}");
@@ -111,9 +116,9 @@ async fn the_socket_serves_the_cell_key() {
 async fn a_silent_caller_times_out() {
     let dir = temp("silent");
     let service = Service::start(
-        SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32])),
+        SealedFactory::new(SoftKek::new("environment-kek-1", [1; 32])),
         DirVault::new(&dir),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     )
     .unwrap();
     let service = Arc::new(Mutex::new(service));
@@ -162,8 +167,12 @@ async fn a_stopped_signer_closes_its_token_in_order() {
     let dir = temp("shutdown");
     let store = hsm_store();
     let kek = store.generate_kek("access/identity/kek").unwrap();
-    let service =
-        Service::start(SealedFactory::new(kek), DirVault::new(&dir), Policy::REALM).unwrap();
+    let service = Service::start(
+        SealedFactory::new(kek),
+        DirVault::new(&dir),
+        Policy::ENVIRONMENT,
+    )
+    .unwrap();
     let service = Arc::new(Mutex::new(service));
     let path = dir.join("s.sock");
     let listener = UnixListener::bind(&path).unwrap();
@@ -179,7 +188,7 @@ async fn a_stopped_signer_closes_its_token_in_order() {
         },
     ));
     let open = Request::Open {
-        realm: Realm([6; 16]),
+        environment: Environment([6; 16]),
         alg: JwsAlg::Es256,
     };
     assert_eq!(call(&path, &open).await.unwrap(), Response::Opened);
@@ -221,7 +230,8 @@ fn a_paged_factory_signs_from_protected_pages_and_fails_closed_when_full() {
             Box::new(HeapPages(doc.to_vec())) as Box<dyn suiss_crypto::signer::KeyPages>
         })
     });
-    let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32])).with_pager(pager);
+    let mut factory =
+        SealedFactory::new(SoftKek::new("environment-kek-1", [1; 32])).with_pager(pager);
     let g = factory.generate(JwsAlg::Es256).unwrap();
     let loaded = factory.load(JwsAlg::Es256, &g.sealed).unwrap();
     assert_eq!(loaded.public_key(), g.signer.public_key());

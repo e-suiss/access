@@ -1,4 +1,4 @@
-//! The realm's DPoP profile (§10.4.3, §12.2.1, MD-18, IDP-11): which algorithms and time
+//! The environment's DPoP profile (§10.4.3, §12.2.1, MD-18, IDP-11): which algorithms and time
 //! windows proofs are checked with, how a failure is answered, and how codes, refresh tokens
 //! and access tokens are bound to the proof key (TN-27, TN-31).
 
@@ -45,7 +45,7 @@ pub enum ProfileError {
     Window,
 }
 
-/// Algorithms and time windows of a realm's proof checks; values PD (TN-29, TN-30).
+/// Algorithms and time windows of an environment's proof checks; values PD (TN-29, TN-30).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DpopProfile {
     allowed: BTreeSet<Algorithm>,
@@ -59,7 +59,7 @@ impl DpopProfile {
     /// Default clock skew; the server nonce, not the client clock, bounds freshness.
     pub const DEFAULT_SKEW_MS: u64 = 60_000;
 
-    /// A profile over `allowed` algorithms, from the client or realm metadata (MD-3).
+    /// A profile over `allowed` algorithms, from the client or environment metadata (MD-3).
     ///
     /// # Errors
     /// [`ProfileError`].

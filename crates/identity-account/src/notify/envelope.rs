@@ -4,7 +4,7 @@
 //! it unreadable; nothing linkable stays beside the ciphertext but internal ids.
 //!
 //! Layout, version 1:
-//! `0x01 ‖ tenant(16) ‖ realm(16) ‖ event id(16) ‖ subject(16) ‖ occurred ms(8, BE) ‖
+//! `0x01 ‖ tenant(16) ‖ environment(16) ‖ event id(16) ‖ subject(16) ‖ occurred ms(8, BE) ‖
 //! wrapped DEK length(2, BE) ‖ wrapped DEK ‖ nonce(12) ‖ ciphertext`.
 //! The AEAD context binds every header field and the kind.
 
@@ -62,8 +62,8 @@ impl fmt::Debug for EventId {
 pub struct Header {
     /// Tenant.
     pub tenant: [u8; 16],
-    /// Realm.
-    pub realm: [u8; 16],
+    /// Environment.
+    pub environment: [u8; 16],
     /// Event id.
     pub event: EventId,
     /// Subject.
@@ -80,7 +80,7 @@ pub struct Malformed;
 fn context(kind: &str, h: &Header) -> Vec<u8> {
     let mut c = CONTEXT.to_vec();
     c.extend_from_slice(&h.tenant);
-    c.extend_from_slice(&h.realm);
+    c.extend_from_slice(&h.environment);
     c.extend_from_slice(&h.event.0);
     c.extend_from_slice(&h.subject);
     c.extend_from_slice(&h.occurred_ms.to_be_bytes());
@@ -106,7 +106,7 @@ pub fn seal(header: &Header, subject_dek: &Dek, message: &Message) -> Result<Vec
     let mut out = Vec::with_capacity(HEADER);
     out.push(VERSION);
     out.extend_from_slice(&header.tenant);
-    out.extend_from_slice(&header.realm);
+    out.extend_from_slice(&header.environment);
     out.extend_from_slice(&header.event.0);
     out.extend_from_slice(&header.subject);
     out.extend_from_slice(&header.occurred_ms.to_be_bytes());
@@ -152,7 +152,7 @@ pub fn parse(payload: &[u8]) -> Result<Envelope<'_>, Malformed> {
     }
     let header = Header {
         tenant: take(payload, &mut at)?,
-        realm: take(payload, &mut at)?,
+        environment: take(payload, &mut at)?,
         event: EventId(take(payload, &mut at)?),
         subject: take(payload, &mut at)?,
         occurred_ms: u64::from_be_bytes(take(payload, &mut at)?),

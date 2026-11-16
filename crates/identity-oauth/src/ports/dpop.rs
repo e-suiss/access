@@ -12,7 +12,7 @@ pub struct CacheUnavailable;
 #[error("clock unavailable")]
 pub struct ClockUnavailable;
 
-/// The realm's replay cache of proof keys (TN-30): shared by every node of the cell and
+/// The environment's replay cache of proof keys (TN-30): shared by every node of the cell and
 /// synchronous within it.
 pub trait ReplayCache {
     /// Records `key` for a proof whose `iat` falls on `day` (days since the Unix epoch);

@@ -1,4 +1,4 @@
-//! The realm's access review campaigns (OP-157 m.3 (w), IDP-39 (3)): each names a period and a
+//! The environment's access review campaigns (OP-157 m.3 (w), IDP-39 (3)): each names a period and a
 //! scope, written under its `idp.review.*` decision. A campaign is a view and never a queue; a
 //! closed name is never reused and nothing is deleted (OP-73).
 
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -62,16 +62,16 @@ impl TenantTx {
         bound: &Bound,
         r: &NewReviewSchedule<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let period = i32::try_from(r.period_days).map_err(|_| StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.review_schedules (tenant_id, realm_id, name, version, state,
+            "INSERT INTO access.review_schedules (tenant_id, environment_id, name, version, state,
                     period_days, scope, domain_id, decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8
                FROM access.review_schedules
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             r.name,
             if r.live { "live" } else { "closed" },
             period,
@@ -89,19 +89,19 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn review_schedules(&mut self) -> Result<Vec<ReviewScheduleRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT DISTINCT ON (s.name) s.name, s.state, s.period_days, s.scope, s.version,
                       s.decision_pos,
                       (SELECT (EXTRACT(EPOCH FROM f.created_at) * 1000)::bigint
                          FROM access.review_schedules f
-                        WHERE f.tenant_id = s.tenant_id AND f.realm_id = s.realm_id
+                        WHERE f.tenant_id = s.tenant_id AND f.environment_id = s.environment_id
                           AND f.name = s.name AND f.version = 1) AS "first_ms!"
                  FROM access.review_schedules s
-                WHERE s.tenant_id = $1 AND s.realm_id = $2
+                WHERE s.tenant_id = $1 AND s.environment_id = $2
                 ORDER BY s.name, s.version DESC"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;

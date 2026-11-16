@@ -28,7 +28,7 @@ pub const REVOKE: &str = "revoke";
 /// A device Instance's Exercise of a cloud key action.
 #[derive(Clone, Debug)]
 pub struct CloudKeyExercise {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The Exercise nonce.
     pub nonce: Vec<u8>,

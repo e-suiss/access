@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_subjects\n                SET session_epoch = session_epoch + 1,\n                    session_epoch_at = greatest(clock_timestamp(), to_timestamp($3::bigint / 1000.0))\n              WHERE tenant_id = $1 AND environment_id = $2\n                AND session_epoch_at < to_timestamp($3::bigint / 1000.0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52b4e973ed22d4d394d0eb379b7380ffffd6acc94c4a8d9f8ccdcbdd3040251b"
+}

@@ -5,8 +5,8 @@
 //! Configuration (environment; secrets and keys are files the operator provides):
 //! - `ACCESS_HR_LISTEN`: the address to serve `/hr-connector/v1/*` on.
 //! - `ACCESS_HR_DATABASE_URL`: the connector's own PostgreSQL database.
-//! - `ACCESS_HR_CONNECTOR`, `ACCESS_HR_VENDOR`, `ACCESS_HR_REALM`, `ACCESS_HR_SOURCE`: the
-//!   connector's registered name, its vendor, the realm's slug and the HR source it pushes to.
+//! - `ACCESS_HR_CONNECTOR`, `ACCESS_HR_VENDOR`, `ACCESS_HR_ENVIRONMENT`, `ACCESS_HR_SOURCE`: the
+//!   connector's registered name, its vendor, the environment's slug and the HR source it pushes to.
 //! - `ACCESS_HR_ACCESS`: Access's public origin; `ACCESS_HR_CA`: PEM roots of Access's and the
 //!   HR system's certificates.
 //! - `ACCESS_HR_TOKEN`: file of the DPoP-bound read token that drafts each write.
@@ -92,7 +92,7 @@ async fn run() -> Result<(), Startup> {
     let connector = Connector {
         name: var("ACCESS_HR_CONNECTOR")?,
         vendor,
-        realm: var("ACCESS_HR_REALM")?,
+        environment: var("ACCESS_HR_ENVIRONMENT")?,
         source: var("ACCESS_HR_SOURCE")?,
     };
     let tls = client(roots("ACCESS_HR_CA")?)?;

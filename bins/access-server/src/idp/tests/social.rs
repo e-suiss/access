@@ -9,16 +9,16 @@ use serde_json::json;
 
 use super::*;
 
-async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest) {
+async fn ready(slug: &str) -> (World, (TenantId, EnvironmentId), Digest) {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm(slug).await;
+    let (tenant, environment, d) = w.environment(slug).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    (w, (tenant, realm), d)
+    (w, (tenant, environment), d)
 }
 
 async fn run(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -27,7 +27,7 @@ async fn run(
     exercise(w, &proposal(at, change, nonce, idp_anchor(d), 1), ROOT_KEY).await
 }
 
-async fn refused(w: &World, at: (TenantId, RealmId), d: Digest, change: Change) -> Invalid {
+async fn refused(w: &World, at: (TenantId, EnvironmentId), d: Digest, change: Change) -> Invalid {
     match w
         .admin()
         .prepare(&proposal(at, change, 99, idp_anchor(d), 1))
@@ -45,7 +45,7 @@ fn put(w: &World, preset: &str, body: &serde_json::Value) -> Change {
 
 // IDP-31 (4), OP-153 m.3 (l)
 #[tokio::test]
-async fn a_shared_development_client_is_refused_at_enable_in_a_production_realm() {
+async fn a_shared_development_client_is_refused_at_enable_in_a_production_environment() {
     let (w, at, d) = ready("social-prod").await;
     assert_eq!(
         refused(&w, at, d, put(&w, "google", &json!({}))).await,
@@ -99,7 +99,7 @@ async fn a_shared_development_client_is_refused_at_enable_in_a_production_realm(
 
 // TN-87, IDP-31 (4)
 #[tokio::test]
-async fn a_sandbox_realm_uses_the_shared_client_and_a_changed_client_id_warns() {
+async fn a_sandbox_environment_uses_the_shared_client_and_a_changed_client_id_warns() {
     let (w, at, d) = ready("social-sandbox").await;
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     mark(

@@ -8,13 +8,13 @@
 )]
 
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::orgs::{NewInvitation, Source, last_owner};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
-async fn realm(db: &TestDb) -> (TenantId, RealmId) {
+async fn environment(db: &TestDb) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([3; 32]);
     let g = LogRecord {
@@ -28,7 +28,7 @@ async fn realm(db: &TestDb) -> (TenantId, RealmId) {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, "acme", "pool-default")
+    let r = create_environment(&mut tx, &d, "acme", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -36,7 +36,7 @@ async fn realm(db: &TestDb) -> (TenantId, RealmId) {
 }
 
 async fn subject(tx: &mut TenantTx) -> [u8; 16] {
-    tx.insert_subject("active", "realm-kek:1", &[9; 40])
+    tx.insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap()
 }
@@ -45,7 +45,7 @@ async fn subject(tx: &mut TenantTx) -> [u8; 16] {
 #[tokio::test]
 async fn the_last_owner_cannot_be_removed_on_any_path() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let alice = subject(&mut tx).await;
     let bob = subject(&mut tx).await;
@@ -111,7 +111,7 @@ fn invitation(org: [u8; 16], token: &[u8; 32], ttl_s: i64) -> NewInvitation<'_> 
 #[tokio::test]
 async fn an_invitation_is_accepted_once_and_a_click_consumes_nothing() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let alice = subject(&mut tx).await;
     let org = tx.insert_org([1; 16], "Acme", &[2; 32]).await.unwrap();
@@ -145,7 +145,7 @@ async fn an_invitation_is_accepted_once_and_a_click_consumes_nothing() {
 #[tokio::test]
 async fn domain_claims_verify_lapse_and_show_contest() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let acme = tx.insert_org([1; 16], "Acme", &[2; 32]).await.unwrap();
     let other = tx.insert_org([9; 16], "Other", &[3; 32]).await.unwrap();

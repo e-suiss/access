@@ -14,12 +14,12 @@
 //!   (must-never #18) nor an authority claim (OP-150 m.11 (e)); a hook's claim is identity
 //!   data, it never carries authority (INV-12). One bad name drops the whole answer.
 //! - The request carries pseudonymous ids only; an e-mail address only when the registration
-//!   declares `disclose: ["email"]` and the realm allows it.
+//!   declares `disclose: ["email"]` and the environment allows it.
 //! - Fail-closed (MD-8): a timeout (3 s), an unreachable endpoint, a non-`2xx` answer or an
 //!   answer outside its schema refuses. Only a `token_issuance` hook registered with
 //!   `on_no_answer = "continue_without_claims"` lets a missing answer through, without claims;
 //!   a schema violation refuses even then.
-//! - Registration is realm configuration: `idp.hook.register` and `idp.hook.retire` (CT2,
+//! - Registration is environment configuration: `idp.hook.register` and `idp.hook.retire` (CT2,
 //!   MD-14). A URL change is a new registration. When no hook is registered nothing changes.
 
 pub mod actions;

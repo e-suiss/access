@@ -12,16 +12,16 @@ use super::authenticator_data::{AuthenticatorData, Flags};
 use super::client_data::{CeremonyType, check_client_data};
 use super::cose::{CoseAlgorithm, CoseKey};
 use super::credential::{CredentialRecord, bounded_transports};
-use super::ids::{CredentialId, RealmId, UserHandle};
-use super::policy::{RealmPolicy, SignCountAction, UserVerification};
+use super::ids::{CredentialId, EnvironmentId, UserHandle};
+use super::policy::{EnvironmentPolicy, SignCountAction, UserVerification};
 use super::prf::{PrfConfig, PrfSalt};
 use super::rp::RelyingParty;
 
 /// Server-side state of a registration, kept by the caller and used once.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RegistrationState {
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// The account.
     pub user: UserHandle,
     /// The issued challenge.
@@ -37,15 +37,15 @@ pub struct RegistrationState {
 /// Server-side state of an authentication, kept by the caller and used once.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthenticationState {
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// The issued challenge.
     pub challenge: [u8; 32],
     /// The account when the identifier was known; `None` on the discoverable path.
     pub user: Option<UserHandle>,
     /// The `allowCredentials` IDs sent; empty on the discoverable path.
     pub allowed: Vec<CredentialId>,
-    /// UV demanded by the step (CT2+/AAL2+ need it), on top of the realm policy.
+    /// UV demanded by the step (CT2+/AAL2+ need it), on top of the environment policy.
     pub require_user_verification: bool,
     /// Unix seconds after which the state is void.
     pub expires_at: u64,
@@ -127,11 +127,11 @@ pub struct AssertionResponse<'a> {
     pub user_handle: Option<&'a [u8]>,
 }
 
-fn uv_needed(policy: &RealmPolicy, extra: bool) -> bool {
+fn uv_needed(policy: &EnvironmentPolicy, extra: bool) -> bool {
     extra || policy.user_verification == UserVerification::Required
 }
 
-fn algorithm_allowed(policy: &RealmPolicy, alg: CoseAlgorithm) -> bool {
+fn algorithm_allowed(policy: &EnvironmentPolicy, alg: CoseAlgorithm) -> bool {
     policy.allow_rs256 || alg != CoseAlgorithm::Rs256
 }
 
@@ -141,7 +141,7 @@ fn algorithm_allowed(policy: &RealmPolicy, alg: CoseAlgorithm) -> bool {
 /// [`Rejection`].
 pub fn verify_registration(
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     state: &RegistrationState,
     response: &RegistrationResponse<'_>,
     evidence: &Evidence,
@@ -195,7 +195,7 @@ pub fn verify_registration(
         _ => None,
     };
     Ok(CredentialRecord {
-        realm: state.realm,
+        environment: state.environment,
         id: credential.credential_id.clone(),
         user: state.user,
         public_key: credential.public_key_raw.to_vec(),
@@ -216,7 +216,7 @@ pub fn verify_registration(
     })
 }
 
-fn check_backup_flags(flags: Flags, policy: &RealmPolicy) -> Result<(), Rejection> {
+fn check_backup_flags(flags: Flags, policy: &EnvironmentPolicy) -> Result<(), Rejection> {
     // IDI-5
     if !flags.backup_consistent() {
         return Err(Rejection::BackupState);
@@ -266,10 +266,10 @@ pub fn sign_count_regressed(backup_eligible: bool, stored: u32, presented: u32) 
 /// Verifies an assertion against the stored credential.
 ///
 /// # Errors
-/// [`Rejection`]; [`Rejection::SignCount`] only when the realm rejects regressions.
+/// [`Rejection`]; [`Rejection::SignCount`] only when the environment rejects regressions.
 pub fn verify_assertion(
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     state: &AuthenticationState,
     response: &AssertionResponse<'_>,
     stored: &CredentialRecord,
@@ -286,7 +286,7 @@ pub fn verify_assertion(
 /// [`Rejection`].
 pub fn verify_payment_assertion(
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     state: &AuthenticationState,
     response: &AssertionResponse<'_>,
     stored: &CredentialRecord,
@@ -306,7 +306,7 @@ pub fn verify_payment_assertion(
 fn verify_as(
     kind: CeremonyType,
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     state: &AuthenticationState,
     response: &AssertionResponse<'_>,
     stored: &CredentialRecord,
@@ -316,7 +316,7 @@ fn verify_as(
         return Err(Rejection::Expired);
     }
     if stored.deleted_at.is_some()
-        || stored.realm != state.realm
+        || stored.environment != state.environment
         || stored.id.as_bytes() != response.raw_id
     {
         return Err(Rejection::UnknownCredential);

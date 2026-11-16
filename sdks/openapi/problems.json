@@ -309,7 +309,7 @@
       "type": "urn:suiss:access:problem:platform-fields-read-only",
       "status": 400,
       "title": "Bad Request",
-      "description": "Platform product fields are not written on the realm-admin surface (OP-149 m.4)."
+      "description": "Platform product fields are not written on the environment-admin surface (OP-149 m.4)."
     },
     {
       "code": "invalid-public-key",
@@ -337,7 +337,7 @@
       "type": "urn:suiss:access:problem:invalid-related-origins",
       "status": 400,
       "title": "Bad Request",
-      "description": "A Related Origins list that is not https origins, names more than five registrable labels with the RP ID, or an origin outside the realm's verified domains (TN-18, OP-153 m.3 (u))."
+      "description": "A Related Origins list that is not https origins, names more than five registrable labels with the RP ID, or an origin outside the environment's verified domains (TN-18, OP-153 m.3 (u))."
     },
     {
       "code": "invalid-locale-overrides",
@@ -351,7 +351,7 @@
       "type": "urn:suiss:access:problem:invalid-key-policy",
       "status": 400,
       "title": "Bad Request",
-      "description": "A key rotation policy the realm may not take (CR-26, TN-118)."
+      "description": "A key rotation policy the environment may not take (CR-26, TN-118)."
     },
     {
       "code": "invalid-name",
@@ -442,7 +442,7 @@
       "type": "urn:suiss:access:problem:passkey-loss-not-acknowledged",
       "status": 409,
       "title": "Conflict",
-      "description": "An RP ID change makes the realm's registered passkeys unusable; acknowledge_passkey_loss must equal their count (IDI-4)."
+      "description": "An RP ID change makes the environment's registered passkeys unusable; acknowledge_passkey_loss must equal their count (IDI-4)."
     },
     {
       "code": "conflict",
@@ -456,7 +456,7 @@
       "type": "urn:suiss:access:problem:unknown-operation",
       "status": 400,
       "title": "Bad Request",
-      "description": "The operation named is not a realm write operation."
+      "description": "The operation named is not an environment write operation."
     },
     {
       "code": "invalid-slug",
@@ -498,7 +498,7 @@
       "type": "urn:suiss:access:problem:slug-taken",
       "status": 409,
       "title": "Conflict",
-      "description": "The slug is taken, now or by a deleted realm; slugs are never reused (TN-16, INV-32)."
+      "description": "The slug is taken, now or by a deleted environment; slugs are never reused (TN-16, INV-32)."
     },
     {
       "code": "public-sub-not-opted-in",
@@ -526,7 +526,7 @@
       "type": "urn:suiss:access:problem:invalid-jose-alg",
       "status": 400,
       "title": "Bad Request",
-      "description": "The realm signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5)."
+      "description": "The environment signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5)."
     },
     {
       "code": "invalid-certificate-login",
@@ -554,7 +554,7 @@
       "type": "urn:suiss:access:problem:job-operation-not-allowed",
       "status": 400,
       "title": "Bad Request",
-      "description": "A job item is a realm write whose answer may be kept; a write that shows a secret once is sent on its own (TN-125, CR-38)."
+      "description": "A job item is an environment write whose answer may be kept; a write that shows a secret once is sent on its own (TN-125, CR-38)."
     },
     {
       "code": "job-intent-mismatch",
@@ -575,7 +575,7 @@
       "type": "urn:suiss:access:problem:invalid-extension-target",
       "status": 400,
       "title": "Bad Request",
-      "description": "A hook or webhook URL that is not https on a DNS name, or a private target the realm does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23)."
+      "description": "A hook or webhook URL that is not https on a DNS name, or a private target the environment does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23)."
     },
     {
       "code": "invalid-hook",
@@ -589,7 +589,7 @@
       "type": "urn:suiss:access:problem:disclosure-not-permitted",
       "status": 400,
       "title": "Bad Request",
-      "description": "A hook asks for personal data the realm's extension policy does not permit (OP-151 m.10 (e))."
+      "description": "A hook asks for personal data the environment's extension policy does not permit (OP-151 m.10 (e))."
     },
     {
       "code": "invalid-webhook-events",
@@ -617,7 +617,7 @@
       "type": "urn:suiss:access:problem:catalog-upgrade-required",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a))."
+      "description": "The environment does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a))."
     },
     {
       "code": "last-owner",
@@ -708,7 +708,7 @@
       "type": "urn:suiss:access:problem:issuer-fixed",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm's issuer moves to a custom domain only before its first client or service provider is registered, and only from a subdomain issuer (TN-16, OP-156 m.3 (i))."
+      "description": "The environment's issuer moves to a custom domain only before its first client or service provider is registered, and only from a subdomain issuer (TN-16, OP-156 m.3 (i))."
     },
     {
       "code": "invitations-closed-by-scim",
@@ -743,7 +743,7 @@
       "type": "urn:suiss:access:problem:invalid-client-profile",
       "status": 400,
       "title": "Bad Request",
-      "description": "A client profile names FAPI 2.0 only for a confidential private_key_jwt or mutual TLS client without RS256 or the bearer exception, client_secret_post only over a registered secret, an ID token algorithm the realm serves, an encryption key for ECDH-ES+A256KW or RSA-OAEP-256 and something to encrypt, or an upstream by name (OP-155 m.3 (k))."
+      "description": "A client profile names FAPI 2.0 only for a confidential private_key_jwt or mutual TLS client without RS256 or the bearer exception, client_secret_post only over a registered secret, an ID token algorithm the environment serves, an encryption key for ECDH-ES+A256KW or RSA-OAEP-256 and something to encrypt, or an upstream by name (OP-155 m.3 (k))."
     },
     {
       "code": "invalid-cross-app-connection",
@@ -757,14 +757,14 @@
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,
       "title": "Bad Request",
-      "description": "A recovery policy outside its ranges, or a cooling entry below the floor of the realm default (TN-55, OP-153 m.3 (e))."
+      "description": "A recovery policy outside its ranges, or a cooling entry below the floor of the environment default (TN-55, OP-153 m.3 (e))."
     },
     {
       "code": "recovery-option-off",
       "type": "urn:suiss:access:problem:recovery-option-off",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm does not allow temporary access passes, or the account turned assisted recovery off (TN-60, TN-62)."
+      "description": "The environment does not allow temporary access passes, or the account turned assisted recovery off (TN-60, TN-62)."
     },
     {
       "code": "self-issue-refused",
@@ -778,7 +778,7 @@
       "type": "urn:suiss:access:problem:not-an-organization",
       "status": 409,
       "title": "Conflict",
-      "description": "The Party is not a live organization Party of the realm's governing domain (OP-153 m.3 (b))."
+      "description": "The Party is not a live organization Party of the environment's governing domain (OP-153 m.3 (b))."
     },
     {
       "code": "invalid-invitation",
@@ -792,7 +792,7 @@
       "type": "urn:suiss:access:problem:hrd-needs-verified-domain",
       "status": 409,
       "title": "Conflict",
-      "description": "Home realm discovery goes on only with a verified domain no other organization claims (TN-98)."
+      "description": "Home environment discovery goes on only with a verified domain no other organization claims (TN-98)."
     },
     {
       "code": "invalid-social-provider",
@@ -806,7 +806,7 @@
       "type": "urn:suiss:access:problem:shared-social-key-in-production",
       "status": 409,
       "title": "Conflict",
-      "description": "Only a sandbox realm may use the shared development client; give the realm its own client id and secret reference (IDP-31)."
+      "description": "Only a sandbox environment may use the shared development client; give the environment its own client id and secret reference (IDP-31)."
     },
     {
       "code": "recovery-grace",
@@ -932,7 +932,7 @@
       "type": "urn:suiss:access:problem:ssh-ca-off",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm's SSH certificate authority is off, so no certificate is issued and no CA key is published; an administrator turns it on with idp.ssh.ca_enable (OP-156 m.3 (o))."
+      "description": "The environment's SSH certificate authority is off, so no certificate is issued and no CA key is published; an administrator turns it on with idp.ssh.ca_enable (OP-156 m.3 (o))."
     },
     {
       "code": "ssh-not-granted",
@@ -981,7 +981,7 @@
       "type": "urn:suiss:access:problem:invalid-proxy-client",
       "status": 400,
       "title": "Bad Request",
-      "description": "The proxy's client_id names no live client of the realm that lists https://{host}/access-proxy/v1/callback as a redirect URI (OP-156 m.3 (l))."
+      "description": "The proxy's client_id names no live client of the environment that lists https://{host}/access-proxy/v1/callback as a redirect URI (OP-156 m.3 (l))."
     },
     {
       "code": "proxy-reachable-directly",
@@ -1023,7 +1023,7 @@
       "type": "urn:suiss:access:problem:linux-host-unknown",
       "status": 403,
       "title": "Forbidden",
-      "description": "The request did not come with the client certificate of a live Linux host of this realm, registered with idp.linux.host_register (OP-156 m.3 (p))."
+      "description": "The request did not come with the client certificate of a live Linux host of this environment, registered with idp.linux.host_register (OP-156 m.3 (p))."
     },
     {
       "code": "invalid-linux-request",
@@ -1086,7 +1086,7 @@
       "type": "urn:suiss:access:problem:invalid-mcp-call",
       "status": 400,
       "title": "Bad Request",
-      "description": "The MCP gateway's request is not one commit of the agent's own statement on a tool of this proxy: the tool name, its pin, the evaluation's intent (the proxy's action on namespace:[proxy, tool]) or the realm's domain does not match; nothing was decided (AG-42, OP-156 m.3 (n))."
+      "description": "The MCP gateway's request is not one commit of the agent's own statement on a tool of this proxy: the tool name, its pin, the evaluation's intent (the proxy's action on namespace:[proxy, tool]) or the environment's domain does not match; nothing was decided (AG-42, OP-156 m.3 (n))."
     },
     {
       "code": "mcp-tool-unpinned",
@@ -1135,7 +1135,7 @@
       "type": "urn:suiss:access:problem:artifact-too-large",
       "status": 413,
       "title": "Content Too Large",
-      "description": "The support artifact is larger than the realm's artifact policy allows (OP-157 m.3 (g))."
+      "description": "The support artifact is larger than the environment's artifact policy allows (OP-157 m.3 (g))."
     },
     {
       "code": "breakglass-minimum-two",
@@ -1156,7 +1156,7 @@
       "type": "urn:suiss:access:problem:breakglass-account-sso-refused",
       "status": 403,
       "title": "Forbidden",
-      "description": "A break-glass account signs in only with the realm's own phishing-resistant method, never through SSO or an upstream provider (OP-157 m.3 (h))."
+      "description": "A break-glass account signs in only with the environment's own phishing-resistant method, never through SSO or an upstream provider (OP-157 m.3 (h))."
     },
     {
       "code": "approval-not-eligible",
@@ -1191,7 +1191,7 @@
       "type": "urn:suiss:access:problem:approval-inline-off",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm has not opened in-notification approval, or the request is not CT1 (OP-157 m.3 (m))."
+      "description": "The environment has not opened in-notification approval, or the request is not CT1 (OP-157 m.3 (m))."
     },
     {
       "code": "approval-invite-limit",
@@ -1219,7 +1219,7 @@
       "type": "urn:suiss:access:problem:delegated-admin-off",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm has not opened delegated administration, so no new admin Grant is issued; existing ones stay (OP-157 m.3 (t))."
+      "description": "The environment has not opened delegated administration, so no new admin Grant is issued; existing ones stay (OP-157 m.3 (t))."
     },
     {
       "code": "offboarding-disposition-missing",
@@ -1240,7 +1240,7 @@
       "type": "urn:suiss:access:problem:case-system-unknown",
       "status": 404,
       "title": "Not Found",
-      "description": "No live support case system by that name in the realm (OP-157 m.3 (e))."
+      "description": "No live support case system by that name in the environment (OP-157 m.3 (e))."
     },
     {
       "code": "approval-inline-assertion-required",
@@ -1296,14 +1296,14 @@
       "type": "urn:suiss:access:problem:placement-mismatch",
       "status": 421,
       "title": "Misdirected Request",
-      "description": "This cell is not the domain's or realm's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o))."
+      "description": "This cell is not the domain's or environment's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o))."
     },
     {
       "code": "rehome-incomplete",
       "type": "urn:suiss:access:problem:rehome-incomplete",
       "status": 409,
       "title": "Conflict",
-      "description": "A realm rehome needs an Exercise in both the old and the new governing domain; the realm stays where it is (OP-158 m.3 (o))."
+      "description": "An environment rehome needs an Exercise in both the old and the new governing domain; the environment stays where it is (OP-158 m.3 (o))."
     },
     {
       "code": "as-of-expired",
@@ -1373,7 +1373,7 @@
       "type": "urn:suiss:access:problem:quota-exceeded",
       "status": 429,
       "title": "Too Many Requests",
-      "description": "A tenant, realm or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v))."
+      "description": "A tenant, environment or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v))."
     },
     {
       "code": "pq-key-unavailable",
@@ -1408,7 +1408,7 @@
       "type": "urn:suiss:access:problem:fips-pq-exclusive",
       "status": 409,
       "title": "Conflict",
-      "description": "The realm's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r))."
+      "description": "The environment's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r))."
     },
     {
       "code": "projection-over-budget",
@@ -1429,7 +1429,7 @@
       "type": "urn:suiss:access:problem:attestation-format",
       "status": 422,
       "title": "Unprocessable Content",
-      "description": "The attestation statement's format is not supported or does not verify under the realm's direct attestation policy (§10.2.4, OP-159 m.3 (ll))."
+      "description": "The attestation statement's format is not supported or does not verify under the environment's direct attestation policy (§10.2.4, OP-159 m.3 (ll))."
     },
     {
       "code": "attestation-revocation-unknown",

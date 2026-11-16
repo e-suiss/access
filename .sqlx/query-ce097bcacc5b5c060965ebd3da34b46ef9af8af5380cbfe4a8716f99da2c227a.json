@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environment_domain_binding SET retired_at = now()\n          WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3 AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ce097bcacc5b5c060965ebd3da34b46ef9af8af5380cbfe4a8716f99da2c227a"
+}

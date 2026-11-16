@@ -58,7 +58,7 @@ async fn instance(c: &Console, by: &Browser) -> Id {
         tenant: *c.route.tenant.as_bytes(),
         domain: c.domain,
         registrant: Registrant::Device {
-            realm: *c.route.realm.as_bytes(),
+            environment: *c.route.environment.as_bytes(),
             subject: c.subject,
         },
         party: AGENT,
@@ -121,13 +121,13 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
         ),
         "{registered:?}"
     );
-    let accounts = c.admin_get("/admin/v1/realms/acme/accounts").await;
+    let accounts = c.admin_get("/admin/v1/envs/acme/accounts").await;
     let sponsor = accounts.body["items"][0]["account_id"].clone();
     let agent = b64url_encode(&AGENT.0);
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/agents",
+            "/admin/v1/envs/acme/agents",
             ("registerAgent", None),
             serde_json::json!({
                 "agent": agent,
@@ -147,11 +147,11 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
     for k in &runtimes {
         instances.push(instance(&c, k).await);
     }
-    let list = c.admin_get("/admin/v1/realms/acme/agents").await;
+    let list = c.admin_get("/admin/v1/envs/acme/agents").await;
     assert_eq!(list.status, StatusCode::OK, "{}", list.body);
     assert_eq!(list.body["items"][0]["agent"], agent);
     let one = c
-        .admin_get(&format!("/admin/v1/realms/acme/agents/{agent}"))
+        .admin_get(&format!("/admin/v1/envs/acme/agents/{agent}"))
         .await;
     assert_eq!(one.status, StatusCode::OK, "{}", one.body);
     assert_eq!(one.body["status"], "active");
@@ -159,7 +159,7 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
     assert_eq!(one.body["connections"], serde_json::json!([]));
     assert_eq!(one.body["instances"].as_array().unwrap().len(), 2);
     let sponsors = c
-        .admin_get(&format!("/admin/v1/realms/acme/agents/{agent}/sponsors"))
+        .admin_get(&format!("/admin/v1/envs/acme/agents/{agent}/sponsors"))
         .await;
     assert_eq!(sponsors.body["items"][0]["account_id"], sponsor);
 
@@ -204,7 +204,7 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
         let proof = c.browser.ais(
             c.domain,
             &access_crypto::random::bytes::<16>().unwrap(),
-            read_intent(&Method::POST, "/admin/v1/realms/acme/intents"),
+            read_intent(&Method::POST, "/admin/v1/envs/acme/intents"),
             Mode::Check,
             c.idp_anchor(),
         );
@@ -213,7 +213,7 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
             c.browser
                 .request(
                     &Method::POST,
-                    "/console/api/proxy/admin/realms/acme/intents",
+                    "/console/api/proxy/admin/envs/acme/intents",
                     "x",
                 )
                 .header("x-access-ais", proof)
@@ -250,7 +250,7 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
             c.browser
                 .request(
                     &Method::POST,
-                    &format!("/console/api/proxy/admin/realms/acme/agents/{agent}/revoke-all"),
+                    &format!("/console/api/proxy/admin/envs/acme/agents/{agent}/revoke-all"),
                     "x",
                 )
                 .header("x-access-ais", envelope)
@@ -281,7 +281,7 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
         let mut done = serde_json::Value::Null;
         for _ in 0..2_000 {
             done = c
-                .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}"))
+                .admin_get(&format!("/admin/v1/envs/acme/jobs/{id}"))
                 .await
                 .body;
             if done["status"] != "running" {
@@ -290,14 +290,14 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
             tokio::task::yield_now().await;
         }
         let items = c
-            .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}/items"))
+            .admin_get(&format!("/admin/v1/envs/acme/jobs/{id}/items"))
             .await
             .body;
         assert_eq!(done["status"], "succeeded", "{done} {items}");
         assert_eq!(done["committed"], 2, "{done}");
     }
     let after = c
-        .admin_get(&format!("/admin/v1/realms/acme/agents/{agent}"))
+        .admin_get(&format!("/admin/v1/envs/acme/agents/{agent}"))
         .await;
     assert_eq!(
         after.body["instances"],

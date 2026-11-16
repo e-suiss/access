@@ -1,5 +1,5 @@
 //! Apple's client secret (IDP-31, OP-153 m.3 (l)): not a stored string but a short ES256 JWT
-//! signed with the realm's Sign in with Apple key (`.p8`). The secret store holds the key
+//! signed with the environment's Sign in with Apple key (`.p8`). The secret store holds the key
 //! material; Access signs a fresh assertion for every code exchange.
 //!
 //! The secret a reference names is the `.p8` file as Apple issues it (a PEM PKCS#8 block),

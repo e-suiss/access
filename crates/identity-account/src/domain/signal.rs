@@ -122,7 +122,7 @@ pub enum Initiator {
     Admin,
     /// The account holder.
     User,
-    /// A policy of the realm or the authority plane.
+    /// A policy of the environment or the authority plane.
     Policy,
     /// The system itself.
     System,
@@ -150,7 +150,7 @@ pub enum CredentialType {
     App,
     /// A passkey; CAEP has no synced-passkey value, a passkey is reported as roaming.
     Fido2,
-    /// An asymmetric signing key, as the realm's JOSE key (CR-27).
+    /// An asymmetric signing key, as the environment's JOSE key (CR-27).
     Key,
 }
 
@@ -228,7 +228,7 @@ pub struct Signal {
     pub kind: SignalKind,
     /// 32 random bytes, the dedup key; never derived from the subject (TI-RT10).
     pub id: [u8; 32],
-    /// The identity subject; `None` for a realm-wide signal (CR-27).
+    /// The identity subject; `None` for an environment-wide signal (CR-27).
     pub subject: Option<[u8; 16]>,
     /// When it happened, Unix ms.
     pub at: u64,
@@ -377,7 +377,7 @@ impl Signal {
         Self::new(SignalKind::IdentifierRecycled, id, Some(previous), at)
     }
 
-    /// `credential-compromise`; `subject` `None` is the realm's own key (CR-27).
+    /// `credential-compromise`; `subject` `None` is the environment's own key (CR-27).
     #[must_use]
     pub fn credential_compromise(
         id: [u8; 32],
@@ -439,9 +439,9 @@ impl Signal {
     }
 }
 
-/// `{"credential_type"}` of a compromise of the realm's signing key (CR-27).
+/// `{"credential_type"}` of a compromise of the environment's signing key (CR-27).
 #[must_use]
-pub fn realm_key_compromise(id: [u8; 32], at: u64) -> Signal {
+pub fn environment_key_compromise(id: [u8; 32], at: u64) -> Signal {
     Signal::credential_compromise(id, None, CredentialType::Key, at)
 }
 
@@ -475,9 +475,12 @@ mod tests {
         let back = Signal::from_outbox(&s.kind.outbox_kind(), &s.to_outbox().unwrap()).unwrap();
         assert_eq!(back, s);
         assert_eq!(back.event_body()["event_timestamp"], 5);
-        let realm = realm_key_compromise([8; 32], 1);
-        let back = Signal::from_outbox("signal.credential_compromise", &realm.to_outbox().unwrap())
-            .unwrap();
+        let environment = environment_key_compromise([8; 32], 1);
+        let back = Signal::from_outbox(
+            "signal.credential_compromise",
+            &environment.to_outbox().unwrap(),
+        )
+        .unwrap();
         assert_eq!(back.subject, None);
         assert!(Signal::from_outbox("signal.other", b"{}").is_err());
     }

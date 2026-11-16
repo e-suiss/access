@@ -24,7 +24,7 @@ The `-linux-client` image is the package root: copy its files onto the computer.
 
 Then:
 
-1. Put the realm's CA, the computer's client certificate and key under `/etc/access-linuxd/` (root, mode 0600) and fill in `/etc/access-linuxd/access-linuxd.env` from `deploy/linux-client/access-linuxd.env`.
+1. Put the environment's CA, the computer's client certificate and key under `/etc/access-linuxd/` (root, mode 0600) and fill in `/etc/access-linuxd/access-linuxd.env` from `deploy/linux-client/access-linuxd.env`.
 2. Add `access` after `files` for `passwd` and `group` in `/etc/nsswitch.conf` (`deploy/linux-client/nsswitch.conf`).
 3. Add `auth required /usr/lib/access/pam_access.so` to `/etc/pam.d/login` and `/etc/pam.d/sudo` (`deploy/linux-client/pam.d/`).
 4. `systemctl enable --now access-linuxd`.

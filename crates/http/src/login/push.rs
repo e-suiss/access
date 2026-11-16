@@ -1,5 +1,5 @@
 //! Push verification and approvers on axum (OP-156 m.3 (d), §10.2.3): the `frontend-v1` push and
-//! approver routes, at the realm's host and under `/realms/{slug}`. Sending a push and the approver
+//! approver routes, at the environment's host and under `/env/{slug}`. Sending a push and the approver
 //! routes ride on the login surface's cookies and same-origin rule; an approver's answer carries
 //! its own signature and no cookie. Writes take an `Idempotency-Key`.
 
@@ -19,7 +19,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use serde::Deserialize;
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 type St<D, K, KI, C, M> = State<Arc<Shared<D, K, KI, C, M>>>;
@@ -47,7 +47,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/push/challenge"),
@@ -143,7 +143,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -182,7 +182,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -213,7 +213,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -238,7 +238,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -273,7 +273,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

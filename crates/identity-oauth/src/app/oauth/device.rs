@@ -1,5 +1,5 @@
-//! The device authorization grant (RFC 8628, OP-154 m.3 (p), TN-35): off unless the realm
-//! decided `idp.realm.device_code`. A registered client asks at `/device_authorization`; the
+//! The device authorization grant (RFC 8628, OP-154 m.3 (p), TN-35): off unless the environment
+//! decided `idp.environment.device_code`. A registered client asks at `/device_authorization`; the
 //! person enters the user code on the verification page, a trusted surface of its own that
 //! shows the client, the scope and the IP prefix and country the request came from (the country
 //! only when the operator supplied an IP-range list, never a placeholder), and
@@ -15,7 +15,7 @@ use access_store::sessions::SessionRow;
 use serde_json::json;
 
 use super::dcr::ip_prefix;
-use super::{Env, OAuth, Realm, Reply, TokenHttp, bound_live, decode32, session_live};
+use super::{Env, Environment, OAuth, Reply, TokenHttp, bound_live, decode32, session_live};
 use crate::domain::client::TrustLevel;
 use crate::domain::device::{
     self, INTERVAL_S, LIFETIME_MS, PERSON_MISSES, PERSON_WAIT_MS, PREFIX_MISSES_PER_HOUR,
@@ -50,7 +50,7 @@ pub enum DeviceRefused {
     Wait,
     /// No waiting device asks with that code; the same for every wrong code.
     NoCode,
-    /// The realm does not offer the grant.
+    /// The environment does not offer the grant.
     Off,
 }
 
@@ -91,12 +91,12 @@ impl<E: Env> OAuth<E> {
     /// `POST /device_authorization` (RFC 8628 §3.1) by a registered client from `peer`.
     pub async fn device_authorization(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &crate::domain::request::Params,
         http: TokenHttp<'_>,
         peer: Option<IpAddr>,
     ) -> Reply {
-        match self.device_inner(realm, params, http, peer).await {
+        match self.device_inner(environment, params, http, peer).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -104,20 +104,20 @@ impl<E: Env> OAuth<E> {
 
     async fn device_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &crate::domain::request::Params,
         http: TokenHttp<'_>,
         peer: Option<IpAddr>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         // TN-35, OP-154 m.3 (p)
         if !tx.device_code_enabled().await? {
             return Ok(Reply::NotFound);
         }
         let mut req = http.client_request(params);
         req.endpoint = Endpoint::DeviceAuthorization.path();
-        let client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c) if c.trust == TrustLevel::Registered => c,
             _ => {
                 return Ok(Reply::oauth_error(
@@ -169,7 +169,7 @@ impl<E: Env> OAuth<E> {
             return Err(Unavailable);
         };
         tx.commit().await?;
-        let page = realm.issuer.endpoint(VERIFICATION_PATH);
+        let page = environment.issuer.endpoint(VERIFICATION_PATH);
         Ok(Reply::Json {
             status: 200,
             body: json!({
@@ -235,13 +235,13 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn device_preview(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         entered: &str,
         peer: Option<IpAddr>,
     ) -> Result<Result<DeviceView, DeviceRefused>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let (_, d) = match self
             .waiting_device(&mut tx, cookie, entered, peer, now)
             .await?
@@ -273,14 +273,14 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn device_decide(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         entered: &str,
         approve: bool,
         peer: Option<IpAddr>,
     ) -> Result<Result<(), DeviceRefused>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let (session, d) = match self
             .waiting_device(&mut tx, cookie, entered, peer, now)
             .await?

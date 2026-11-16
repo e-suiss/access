@@ -39,13 +39,13 @@ function Frame({
   );
 }
 
-/** TN-128, OP-159 m.42 (a): the sign-in of `realm`, offered when it does not start on its own. */
+/** TN-128, OP-159 m.42 (a): the sign-in of `environment`, offered when it does not start on its own. */
 export function SignIn({
-  realm,
+  environment,
   reason,
   signedOut,
 }: {
-  readonly realm: string;
+  readonly environment: string;
   readonly reason: string | undefined;
   readonly signedOut: boolean;
 }): ReactElement {
@@ -54,45 +54,45 @@ export function SignIn({
     <Frame title={t("signInTitle")}>
       {why !== undefined && <Notice role="status">{t("signInEnded", { reason: t(why) })}</Notice>}
       {signedOut && <Notice role="status">{t("signedOutNote")}</Notice>}
-      <p className="text-muted-foreground">{t("signInIntro", { realm })}</p>
+      <p className="text-muted-foreground">{t("signInIntro", { environment })}</p>
       <Button
         size="lg"
         block
         onClick={() => {
-          startSignIn(realm);
+          startSignIn(environment);
         }}
       >
-        {t("signInAction", { realm })}
+        {t("signInAction", { environment })}
       </Button>
     </Frame>
   );
 }
 
-/** OP-159 m.42 (a): on the way to the realm's hosted login. */
-export function SigningIn({ realm }: { readonly realm: string }): ReactElement {
+/** OP-159 m.42 (a): on the way to the environment's hosted login. */
+export function SigningIn({ environment }: { readonly environment: string }): ReactElement {
   return (
     <Frame title={t("signInTitle")}>
       <p role="status" className="text-muted-foreground">
-        {t("signInOpening", { realm })}
+        {t("signInOpening", { environment })}
       </p>
     </Frame>
   );
 }
 
-/** OP-159 m.42 (b): no realm in the address and none remembered, so nothing to sign in to. */
-export function NoRealm(): ReactElement {
+/** OP-159 m.42 (b): no environment in the address and none remembered, so nothing to sign in to. */
+export function NoEnvironment(): ReactElement {
   return (
-    <Frame title={t("noRealmTitle")}>
-      <p className="text-muted-foreground">{t("noRealmText")}</p>
+    <Frame title={t("noEnvironmentTitle")}>
+      <p className="text-muted-foreground">{t("noEnvironmentText")}</p>
       <p className={`${MONO} break-all`} data-testid="console-link-shape">
-        {`${location.origin}${HOME}/<realm>`}
+        {`${location.origin}${HOME}/<environment>`}
       </p>
     </Frame>
   );
 }
 
 /** OP-159 m.42 (c): signed in to `current` at the console address of `wanted`. */
-export function OtherRealm({
+export function OtherEnvironment({
   current,
   wanted,
   onGo,
@@ -104,14 +104,14 @@ export function OtherRealm({
   readonly onSwitch: () => void;
 }): ReactElement {
   return (
-    <Frame title={t("otherRealmTitle")}>
-      <Notice role="status">{t("otherRealmNote", { current, wanted })}</Notice>
+    <Frame title={t("otherEnvironmentTitle")}>
+      <Notice role="status">{t("otherEnvironmentNote", { current, wanted })}</Notice>
       <div className="flex flex-col gap-3">
         <Button size="lg" block onClick={onGo}>
-          {t("otherRealmGo", { current })}
+          {t("otherEnvironmentGo", { current })}
         </Button>
         <Button size="lg" variant="outline" block onClick={onSwitch}>
-          {t("otherRealmSwitch", { wanted })}
+          {t("otherEnvironmentSwitch", { wanted })}
         </Button>
       </div>
     </Frame>

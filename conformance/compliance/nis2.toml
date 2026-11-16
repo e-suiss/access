@@ -85,7 +85,7 @@ tests = [
   "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
   "bins/access-verify/tests/artefacts.rs::receipt_evidence_vectors",
 ]
-note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3."
+note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; environment post-quantum keys and the FIPS profile wait on lane J3."
 
 [[control]]
 control = "Art. 21(2)(i) access control and asset management"
@@ -102,7 +102,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
   "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
 ]
-note = "MFA as the realm requires, with phishing-resistant passkeys."
+note = "MFA as the environment requires, with phishing-resistant passkeys."
 
 [[control]]
 control = "Art. 23 reporting obligations"

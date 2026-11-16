@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_rate_limits (tenant_id, environment_id, version, rps, domain_id, decision_pos)\n         SELECT $1, $2,\n                COALESCE((SELECT max(version) FROM access.environment_rate_limits\n                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a890374d0d487f9c79a725d70a87081695932f42307ddd60f7d89d9654eaf57"
+}

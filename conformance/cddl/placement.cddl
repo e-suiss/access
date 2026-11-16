@@ -3,7 +3,7 @@
 ; protocol path; a cell refuses a domain it is not the leader for. Times are Unix milliseconds.
 
 placement-entry = {
-  subject: { domain: bstr .size 32 } / { realm: bstr .size 16 } / { tenant: tstr .size (1..64) },
+  subject: { domain: bstr .size 32 } / { environment: bstr .size 16 } / { tenant: tstr .size (1..64) },
   cell: cell-name,
   since: uint,
   ? dedicated: true,

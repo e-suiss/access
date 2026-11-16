@@ -30,7 +30,7 @@ pub const MAX_CHAIN: usize = 4;
 const NONCE_RETRIES: u32 = 3;
 
 /// What an issuance hands back: the chain, its leaf's fields, and the key made for it, which
-/// the caller seals under the realm KEK before it is stored.
+/// the caller seals under the environment KEK before it is stored.
 pub struct Issued {
     /// The chain as PEM, leaf first.
     pub chain_pem: String,

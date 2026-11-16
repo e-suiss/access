@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:hr.record_due`. At a start the account is activated and a passkey setup invitation goes out; at an end it is suspended and its sign-ins end. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "source",
     "account",
     "change",
@@ -15,14 +15,14 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "source": {
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
-      "description": "The HR source's name in the realm."
+      "description": "The HR source's name in the environment."
     },
     "account": {
       "type": "string",

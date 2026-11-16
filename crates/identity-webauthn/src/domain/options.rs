@@ -5,7 +5,7 @@ use access_kernel::json::b64url_encode;
 use serde_json::{Value, json};
 
 use super::ids::{CredentialId, UserHandle};
-use super::policy::RealmPolicy;
+use super::policy::EnvironmentPolicy;
 use super::prf::PrfConfig;
 use super::rp::RelyingParty;
 
@@ -47,7 +47,7 @@ pub struct UserEntity<'a> {
 #[must_use]
 pub fn creation_options(
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     user: &UserEntity<'_>,
     challenge: &[u8],
     exclude: &[CredentialDescriptor],
@@ -101,7 +101,7 @@ pub fn creation_options(
 #[must_use]
 pub fn request_options(
     rp: &RelyingParty,
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     challenge: &[u8],
     allow: &[CredentialDescriptor],
 ) -> Value {

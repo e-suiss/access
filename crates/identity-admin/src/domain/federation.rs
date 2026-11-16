@@ -1,5 +1,5 @@
-//! `idp.federation.*` changes (OP-155 m.3 (a), (j), IDP-19): the realm issuer as an OpenID
-//! Federation leaf, the trust anchors whose keys the realm pins, the optional intermediate or
+//! `idp.federation.*` changes (OP-155 m.3 (a), (j), IDP-19): the environment issuer as an OpenID
+//! Federation leaf, the trust anchors whose keys the environment pins, the optional intermediate or
 //! trust anchor role and its subordinates, and OIDF client registration. Every one is off by
 //! default; narrowing changes are CT1, the others CT2, adding a trust anchor is reserved (CT3).
 
@@ -19,21 +19,21 @@ pub const MAX_ENTITY_ID: usize = 2048;
 
 const PRIVATE_MEMBERS: [&str; 8] = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
 
-/// A subordinate the realm's intermediate or trust anchor role issues statements about.
+/// A subordinate the environment's intermediate or trust anchor role issues statements about.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subordinate {
     /// Its entity identifier.
     pub entity_id: String,
-    /// The federation keys the realm vouches for, a JWKS object.
+    /// The federation keys the environment vouches for, a JWKS object.
     pub jwks: String,
-    /// The metadata policy the realm sets on it, an object per entity type.
+    /// The metadata policy the environment sets on it, an object per entity type.
     pub metadata_policy: Option<String>,
 }
 
 /// One `idp.federation.*` change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FederationChange {
-    /// `enable` (CT2): the realm issuer becomes a leaf under these superiors.
+    /// `enable` (CT2): the environment issuer becomes a leaf under these superiors.
     Enable {
         /// The superiors its entity configuration names.
         authority_hints: Vec<String>,
@@ -280,7 +280,7 @@ impl FederationChange {
         }
     }
 
-    /// The resource path below the realm.
+    /// The resource path below the environment.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         match self {

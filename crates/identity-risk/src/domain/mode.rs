@@ -1,17 +1,17 @@
-//! The realm's protection mode, `idp.realm.protection_mode` (TN-46, TN-108, OP-151 m.3 (o)):
+//! The environment's protection mode, `idp.environment.protection_mode` (TN-46, TN-108, OP-151 m.3 (o)):
 //! per attack protection `monitor` or `enforce`, and the SL2 stage `shadow`, `stepup` or
-//! `stepup_caep`. A new realm learns for 14 days, during which SL2 stays in `shadow` whatever is
+//! `stepup_caep`. A new environment learns for 14 days, during which SL2 stays in `shadow` whatever is
 //! set. Tightening is CT1, loosening CT2.
 
 use std::collections::BTreeSet;
 
 /// The `idp.*` label of the setting.
-pub const PROTECTION_MODE_ACTION: &str = "idp.realm.protection_mode";
+pub const PROTECTION_MODE_ACTION: &str = "idp.environment.protection_mode";
 
-/// The learning window from realm creation (OP-151 m.3 (o)).
+/// The learning window from environment creation (OP-151 m.3 (o)).
 pub const LEARNING_WINDOW_MS: u64 = 14 * 86_400_000;
 
-/// Most ASNs a realm can deny.
+/// Most ASNs an environment can deny.
 pub const MAX_DENIED_ASNS: usize = 1024;
 
 /// An attack protection with a mode.
@@ -107,7 +107,7 @@ impl Sl2Mode {
     }
 }
 
-/// The realm's setting.
+/// The environment's setting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProtectionMode {
     /// Bot detection.
@@ -204,7 +204,7 @@ impl ProtectionMode {
         Ok(m)
     }
 
-    /// The SL2 stage in force at `now_ms` for a realm created at `created_ms`: `shadow` in the
+    /// The SL2 stage in force at `now_ms` for an environment created at `created_ms`: `shadow` in the
     /// learning window, and when the creation time is unknown.
     #[must_use]
     pub const fn effective_sl2(&self, created_ms: Option<u64>, now_ms: u64) -> Sl2Mode {

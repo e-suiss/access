@@ -596,7 +596,7 @@ async fn commit_meta(p: &Pdp, nonce: &[u8], payload: meta::Payload) -> Result<u6
         app: &p.w.db.app,
         router: &p.w.db.router,
         plane: &p.w.plane,
-        realm_keys: &p.w.keyring,
+        environment_keys: &p.w.keyring,
         hsm: &p.w.keys,
         base: &p.w.base,
         declared: &declared,

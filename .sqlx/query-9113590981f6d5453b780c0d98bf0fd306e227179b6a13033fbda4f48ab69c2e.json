@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT party_id FROM access.subject_party\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.subject_party",
+            "name": "party_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9113590981f6d5453b780c0d98bf0fd306e227179b6a13033fbda4f48ab69c2e"
+}

@@ -1,5 +1,5 @@
-//! Use cases over the domain and its ports (OP-63): a request's `Host` selects the realm, the
-//! documents carry the issuer stored on the realm's row, never one built from the request
+//! Use cases over the domain and its ports (OP-63): a request's `Host` selects the environment, the
+//! documents carry the issuer stored on the environment's row, never one built from the request
 //! (§17.9.6, TN-10), and the start-up checks of the identity plane (OP-138).
 
 pub mod backchannel;
@@ -7,12 +7,12 @@ pub mod dpop;
 pub mod oauth;
 pub mod oidf;
 
-use crate::domain::issuer::{IssuerStyle, PATH_PREFIX, RealmBase, check_slug};
+use crate::domain::issuer::{EnvironmentBase, IssuerStyle, PATH_PREFIX, check_slug};
 use crate::domain::metadata::{self, Document, SERVED, Served};
 use crate::domain::suiss;
-use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
+use crate::ports::{Directory, EnvironmentEntry, Keys, Unavailable};
 
-/// A key set that publishes nothing (CR-27: a realm always publishes a key).
+/// A key set that publishes nothing (CR-27: an environment always publishes a key).
 const EMPTY_JWKS: &str = r#"{"keys":[]}"#;
 
 /// What the surface answers.
@@ -20,11 +20,11 @@ const EMPTY_JWKS: &str = r#"{"keys":[]}"#;
 pub enum Reply {
     /// A JSON metadata document.
     Metadata(String),
-    /// The realm's JWKS (CR-25).
+    /// The environment's JWKS (CR-25).
     Jwks(String),
-    /// The realm's Suiss discovery document (OP-149 m.3).
+    /// The environment's Suiss discovery document (OP-149 m.3).
     Suiss(String),
-    /// No realm here; the answer names none (§17.9.6).
+    /// No environment here; the answer names none (§17.9.6).
     NotFound,
     /// The directory or the signer did not answer (fail-closed).
     Unavailable,
@@ -37,18 +37,18 @@ pub enum StartupError {
     /// The identity signer did not answer (CMP-22b).
     #[error("identity signer unreachable")]
     Signer,
-    /// The realm directory could not be read.
-    #[error("realm directory unreadable")]
+    /// The environment directory could not be read.
+    #[error("environment directory unreadable")]
     Directory,
-    /// A realm's stored issuer is not one the configured realm base forms (§17.9.6).
-    #[error("issuer of realm {0} does not match the configured realm base")]
+    /// An environment's stored issuer is not one the configured environment base forms (§17.9.6).
+    #[error("issuer of environment {0} does not match the configured environment base")]
     Issuer(String),
-    /// A realm's JWKS could not be loaded.
-    #[error("JWKS of realm {0} could not be loaded")]
+    /// An environment's JWKS could not be loaded.
+    #[error("JWKS of environment {0} could not be loaded")]
     Jwks(String),
 }
 
-/// The realm discovery and key publication service.
+/// The environment discovery and key publication service.
 pub struct Discovery<D, K> {
     directory: D,
     keys: K,
@@ -58,7 +58,7 @@ pub struct Discovery<D, K> {
 }
 
 /// The lower-case host of a request authority, without its port; `None` for anything that
-/// cannot be a realm hostname.
+/// cannot be an environment hostname.
 fn host_of(authority: &str) -> Option<String> {
     let host = match authority.rsplit_once(':') {
         Some((h, port)) if !port.is_empty() && port.bytes().all(|c| c.is_ascii_digit()) => h,
@@ -73,9 +73,9 @@ fn host_of(authority: &str) -> Option<String> {
     ok.then(|| host.to_ascii_lowercase())
 }
 
-/// The realm a request reached: `Host` selects it, through its hostname or, for a path
-/// issuer, its slug; the realm's stored issuer must name the origin and path the request
-/// used, or there is no realm here (§17.9.6).
+/// The environment a request reached: `Host` selects it, through its hostname or, for a path
+/// issuer, its slug; the environment's stored issuer must name the origin and path the request
+/// used, or there is no environment here (§17.9.6).
 ///
 /// # Errors
 /// [`Unavailable`].
@@ -83,7 +83,7 @@ pub async fn resolve<D: Directory>(
     directory: &D,
     authority: &str,
     slug: Option<&str>,
-) -> Result<Option<RealmEntry>, Unavailable> {
+) -> Result<Option<EnvironmentEntry>, Unavailable> {
     let Some(host) = host_of(authority) else {
         return Ok(None);
     };
@@ -105,9 +105,9 @@ pub async fn resolve<D: Directory>(
     }))
 }
 
-/// The realm a hosted surface reached (the Frontend API, hosted sign-in and the account pages,
-/// OP-156 m.3 (i)): the realm [`resolve`] finds, or the realm a verified custom domain serves
-/// at its root. `Host` still only selects the realm; the issuer stays the one on its row
+/// The environment a hosted surface reached (the Frontend API, hosted sign-in and the account pages,
+/// OP-156 m.3 (i)): the environment [`resolve`] finds, or the environment a verified custom domain serves
+/// at its root. `Host` still only selects the environment; the issuer stays the one on its row
 /// (§17.9.6, TN-16).
 ///
 /// # Errors
@@ -116,7 +116,7 @@ pub async fn resolve_hosted<D: Directory>(
     directory: &D,
     authority: &str,
     slug: Option<&str>,
-) -> Result<Option<RealmEntry>, Unavailable> {
+) -> Result<Option<EnvironmentEntry>, Unavailable> {
     if let Some(e) = resolve(directory, authority, slug).await? {
         return Ok(Some(e));
     }
@@ -146,9 +146,9 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         self
     }
 
-    /// The realm a request reached: `Host` selects it, through its hostname or, for a path
-    /// issuer, its slug; the realm's stored issuer must name the origin and path the request
-    /// used, or there is no realm here.
+    /// The environment a request reached: `Host` selects it, through its hostname or, for a path
+    /// issuer, its slug; the environment's stored issuer must name the origin and path the request
+    /// used, or there is no environment here.
     ///
     /// # Errors
     /// [`Unavailable`].
@@ -156,11 +156,11 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         &self,
         authority: &str,
         slug: Option<&str>,
-    ) -> Result<Option<RealmEntry>, Unavailable> {
+    ) -> Result<Option<EnvironmentEntry>, Unavailable> {
         resolve(&self.directory, authority, slug).await
     }
 
-    /// The realm a hosted surface reached: as [`Self::resolve`], or through a verified custom
+    /// The environment a hosted surface reached: as [`Self::resolve`], or through a verified custom
     /// domain (OP-156 m.3 (i)).
     ///
     /// # Errors
@@ -169,11 +169,11 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         &self,
         authority: &str,
         slug: Option<&str>,
-    ) -> Result<Option<RealmEntry>, Unavailable> {
+    ) -> Result<Option<EnvironmentEntry>, Unavailable> {
         resolve_hosted(&self.directory, authority, slug).await
     }
 
-    /// Also names the mTLS listener reached on `port` in the metadata of the realms that
+    /// Also names the mTLS listener reached on `port` in the metadata of the environments that
     /// publish their aliases (RFC 8705 §5, OP-155 m.3 (m)).
     #[must_use]
     pub const fn with_mtls(mut self, port: u16) -> Self {
@@ -183,14 +183,14 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
 
     /// Serves `doc` for a request to `authority`, with `slug` from a path-issuer route.
     pub async fn serve(&self, doc: Document, authority: &str, slug: Option<&str>) -> Reply {
-        let realm = match self.resolve(authority, slug).await {
-            Ok(Some(realm)) => realm,
+        let environment = match self.resolve(authority, slug).await {
+            Ok(Some(environment)) => environment,
             Ok(None) => return Reply::NotFound,
             Err(Unavailable) => return Reply::Unavailable,
         };
         match doc {
             Document::OpenIdConfiguration | Document::AuthorizationServer => {
-                let Ok(facts) = self.directory.facts(&realm).await else {
+                let Ok(facts) = self.directory.facts(&environment).await else {
                     return Reply::Unavailable;
                 };
                 // §9.15.1 k.2, P60
@@ -201,7 +201,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                         access_kernel::json::b64url_encode(&d)
                     )
                 });
-                let facts = metadata::RealmFacts {
+                let facts = metadata::EnvironmentFacts {
                     public_sub: facts.public_sub_clients > 0,
                     domain_metadata,
                     cimd: facts.cimd,
@@ -215,17 +215,18 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     pq_alg: facts.signing_profile.map(access_crypto::jose::JwsAlg::name),
                 };
                 Reply::Metadata(metadata::authorization_server_of(
-                    &realm.issuer,
+                    &environment.issuer,
                     &self.served,
                     &facts,
                 ))
             }
-            Document::ProtectedResource => {
-                Reply::Metadata(metadata::protected_resource(&realm.issuer, &self.served))
-            }
+            Document::ProtectedResource => Reply::Metadata(metadata::protected_resource(
+                &environment.issuer,
+                &self.served,
+            )),
             Document::Jwks => self
                 .keys
-                .jwks(realm.realm)
+                .jwks(environment.environment)
                 .await
                 .map_or(Reply::Unavailable, Reply::Jwks),
             Document::SuissConfiguration => {
@@ -233,11 +234,11 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     return Reply::NotFound;
                 };
                 // OP-156 m.3 (t)
-                let Ok(coordinator) = self.directory.coordinator(&realm).await else {
+                let Ok(coordinator) = self.directory.coordinator(&environment).await else {
                     return Reply::Unavailable;
                 };
                 Reply::Suiss(suiss::document_with(
-                    &realm.issuer,
+                    &environment.issuer,
                     s,
                     suiss::SERVED,
                     coordinator.as_deref(),
@@ -246,20 +247,20 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         }
     }
 
-    /// The start-up checks: the signer answers, every live realm's stored issuer is one the
-    /// configured `base` forms for its slug, and every live realm's JWKS loads; returns the
-    /// number of realms checked (OP-138, §17.9.6, §17.9.7).
+    /// The start-up checks: the signer answers, every live environment's stored issuer is one the
+    /// configured `base` forms for its slug, and every live environment's JWKS loads; returns the
+    /// number of environments checked (OP-138, §17.9.6, §17.9.7).
     ///
     /// # Errors
     /// [`StartupError`].
-    pub async fn check(&self, base: &RealmBase) -> Result<usize, StartupError> {
+    pub async fn check(&self, base: &EnvironmentBase) -> Result<usize, StartupError> {
         self.keys.ping().await.map_err(|_| StartupError::Signer)?;
-        let realms = self
+        let environments = self
             .directory
             .all()
             .await
             .map_err(|_| StartupError::Directory)?;
-        for r in &realms {
+        for r in &environments {
             let fixed = [IssuerStyle::Subdomain, IssuerStyle::Path]
                 .into_iter()
                 .any(|style| base.issuer(&r.slug, style).is_ok_and(|i| i == r.issuer));
@@ -268,14 +269,14 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
             }
             let jwks = self
                 .keys
-                .jwks(r.realm)
+                .jwks(r.environment)
                 .await
                 .map_err(|_| StartupError::Jwks(r.slug.clone()))?;
             if jwks == EMPTY_JWKS {
                 return Err(StartupError::Jwks(r.slug.clone()));
             }
         }
-        Ok(realms.len())
+        Ok(environments.len())
     }
 }
 

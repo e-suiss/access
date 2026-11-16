@@ -11,7 +11,7 @@ use crate::app::events;
 use crate::app::hasher::Hasher;
 use crate::app::sealing::{new_subject_key, seal_password, subject_key};
 use crate::app::signal::{emit as signal, fresh_id};
-use crate::app::{Actor, Naming, Realm, breach};
+use crate::app::{Actor, Environment, Naming, breach};
 use crate::domain::events::CredentialChange;
 use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::password::{ALGORITHM, Password};
@@ -79,7 +79,7 @@ async fn credential_signal<T: AccountTx>(
     signal(tx, &s).await
 }
 
-/// Queues the realm issuer's `account_status` Claim of a status change in the same transaction
+/// Queues the environment issuer's `account_status` Claim of a status change in the same transaction
 /// (TN-49, §12.3.1, OP-150 L2): authority narrowing comes from this Claim, never from the
 /// identity plane writing authority state.
 ///
@@ -101,41 +101,49 @@ pub async fn status_claim<T: AccountTx>(
     .await
 }
 
-/// Creates a `staged` account with its identifiers and its own DEK under the realm KEK.
+/// Creates a `staged` account with its identifiers and its own DEK under the environment KEK.
 ///
 /// # Errors
 /// [`AccountError::IdentifierTaken`] (nothing is created); [`AccountError`].
 pub async fn create<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     identifiers: &[Identifier],
     who: &Actor<'_>,
 ) -> Result<[u8; 16], AccountError> {
-    let wrapped = new_subject_key(realm)?;
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let wrapped = new_subject_key(environment)?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let subject = tx
-        .insert_subject(AccountStatus::Staged, realm.kek.id(), &wrapped)
+        .insert_subject(AccountStatus::Staged, environment.kek.id(), &wrapped)
         .await?;
     for id in identifiers {
         if !tx.add_identifier(subject, id).await? {
             return Err(AccountError::IdentifierTaken);
         }
     }
-    audit(&mut tx, "account.created", who, &realm.external(subject)?).await?;
+    audit(
+        &mut tx,
+        "account.created",
+        who,
+        &environment.external(subject)?,
+    )
+    .await?;
     // OP-151 m.3 (i)
-    events::created(&mut tx, realm, subject).await?;
+    events::created(&mut tx, environment, subject).await?;
     tx.commit().await?;
     Ok(subject)
 }
 
-/// Self-service registration (TN-135, OP-151 m.3 (j)): the realm's `pre_registration` hook is
+/// Self-service registration (TN-135, OP-151 m.3 (j)): the environment's `pre_registration` hook is
 /// asked first and may only refuse; any failure to answer refuses (MD-8). Then [`create`].
 ///
 /// # Errors
 /// [`AccountError`]; a refusal is [`Registered::Refused`], not an error.
 pub async fn register<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     identifiers: &[Identifier],
     who: &Actor<'_>,
     hooks: &(dyn access_identity_hooks::ports::HookCaller + Sync),
@@ -149,9 +157,12 @@ pub async fn register<D: AccountDb>(
         identifier_kinds: identifiers.iter().map(|i| i.kind().name()).collect(),
         email,
     });
-    match hooks.call(realm.tenant, realm.realm, call).await {
+    match hooks
+        .call(environment.tenant, environment.environment, call)
+        .await
+    {
         Outcome::Proceed { .. } => Ok(Registered::Created(
-            create(db, realm, identifiers, who).await?,
+            create(db, environment, identifiers, who).await?,
         )),
         Outcome::Refused(reason) => Ok(Registered::Refused(reason)),
     }
@@ -173,15 +184,17 @@ pub enum Registered {
 /// [`AccountError::Transition`], [`AccountError::NotFound`], [`AccountError`].
 pub async fn change_status<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     to: AccountStatus,
     who: &Actor<'_>,
 ) -> Result<(), AccountError> {
     if to == AccountStatus::Deactivated {
-        return deactivate(db, realm, subject, who).await.map(drop);
+        return deactivate(db, environment, subject, who).await.map(drop);
     }
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let row = tx
         .subject(subject, true)
         .await?
@@ -191,13 +204,13 @@ pub async fn change_status<D: AccountDb>(
     if !tx.set_status(subject, from, to).await? {
         return Err(AccountError::Corrupt);
     }
-    status_moved(&mut tx, realm, subject, (from, to), who).await?;
+    status_moved(&mut tx, environment, subject, (from, to), who).await?;
     tx.commit().await
 }
 
 /// What follows a status move of `subject` in its transaction, once the status is written
 /// (TN-49, TN-41, OP-150 L2, OP-151 m.3 (i)): leaving the states that sign in ends the
-/// subject's sessions with their signals and event, and every move queues the realm issuer's
+/// subject's sessions with their signals and event, and every move queues the environment issuer's
 /// `account_status` Claim, its event and its audit row. An `idp.account.*` decision writes the
 /// status bound to the decision and then this (TN-110).
 ///
@@ -205,7 +218,7 @@ pub async fn change_status<D: AccountDb>(
 /// [`AccountError`]; the caller rolls its transaction back.
 pub async fn status_moved<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
     (from, to): (AccountStatus, AccountStatus),
     who: &Actor<'_>,
@@ -215,13 +228,13 @@ pub async fn status_moved<T: AccountTx>(
         ended_signals(tx, subject, true).await?;
         // OP-151 m.3 (i)
         if let Some(rev) = rev {
-            events::sessions_ended(tx, realm, subject, rev).await?;
+            events::sessions_ended(tx, environment, subject, rev).await?;
         }
     }
     status_claim(tx, subject, to).await?;
-    events::status(tx, realm, subject, from, to).await?;
+    events::status(tx, environment, subject, from, to).await?;
     let event = format!("account.{}", to.name());
-    audit(tx, &event, who, &realm.external(subject)?).await
+    audit(tx, &event, who, &environment.external(subject)?).await
 }
 
 /// Ends `subject`'s identity sessions and refresh families at a new `session_epoch` because its
@@ -233,7 +246,7 @@ pub async fn status_moved<T: AccountTx>(
 /// [`AccountError`].
 pub async fn end_for_sso<T: AccountTx>(
     tx: &mut T,
-    realm: &impl Naming,
+    environment: &impl Naming,
     subject: [u8; 16],
     who: &Actor<'_>,
 ) -> Result<Option<i64>, AccountError> {
@@ -241,8 +254,14 @@ pub async fn end_for_sso<T: AccountTx>(
         return Ok(None);
     };
     ended_signals(tx, subject, false).await?;
-    events::sessions_ended(tx, realm, subject, rev).await?;
-    audit(tx, "session.ended_by_sso", who, &realm.external(subject)?).await?;
+    events::sessions_ended(tx, environment, subject, rev).await?;
+    audit(
+        tx,
+        "session.ended_by_sso",
+        who,
+        &environment.external(subject)?,
+    )
+    .await?;
     Ok(Some(rev))
 }
 
@@ -267,11 +286,13 @@ pub enum Deactivated {
 /// [`AccountError::NotFound`], [`AccountError`].
 pub async fn deactivate<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     who: &Actor<'_>,
 ) -> Result<Deactivated, AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let row = tx
         .subject(subject, true)
         .await?
@@ -294,13 +315,20 @@ pub async fn deactivate<D: AccountDb>(
     ended_signals(&mut tx, subject, true).await?;
     status_claim(&mut tx, subject, AccountStatus::Deactivated).await?;
     // OP-151 m.3 (i)
-    events::sessions_ended(&mut tx, realm, subject, session_epoch).await?;
-    events::status(&mut tx, realm, subject, from, AccountStatus::Deactivated).await?;
+    events::sessions_ended(&mut tx, environment, subject, session_epoch).await?;
+    events::status(
+        &mut tx,
+        environment,
+        subject,
+        from,
+        AccountStatus::Deactivated,
+    )
+    .await?;
     audit(
         &mut tx,
         "account.deactivated",
         who,
-        &realm.external(subject)?,
+        &environment.external(subject)?,
     )
     .await?;
     tx.commit().await?;
@@ -326,7 +354,7 @@ pub struct PasswordServices<'a, B, E> {
 /// [`AccountError::Busy`] (`503 + Retry-After`); [`AccountError`].
 pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     services: &PasswordServices<'_, B, E>,
     subject: [u8; 16],
     raw: &str,
@@ -338,8 +366,10 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         .hasher
         .hash(&password, services.entropy.salt()?)
         .await?;
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
-    let id = store_password(&mut tx, realm, subject, phc.expose(), who).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
+    let id = store_password(&mut tx, environment, subject, phc.expose(), who).await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -353,12 +383,12 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
 /// [`AccountError::NotFound`] for a deleted account; [`AccountError`].
 pub async fn store_password<T: AccountTx>(
     tx: &mut T,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     phc: &str,
     who: &Actor<'_>,
 ) -> Result<[u8; 16], AccountError> {
-    store_password_as(tx, realm, subject, phc, ALGORITHM, who).await
+    store_password_as(tx, environment, subject, phc, ALGORITHM, who).await
 }
 
 /// [`store_password`] for a secret of `algorithm`: an imported hash is `legacy-<scheme>` until
@@ -368,7 +398,7 @@ pub async fn store_password<T: AccountTx>(
 /// [`AccountError::NotFound`] for a deleted account; [`AccountError`].
 pub async fn store_password_as<T: AccountTx>(
     tx: &mut T,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     phc: &str,
     algorithm: &str,
@@ -384,8 +414,8 @@ pub async fn store_password_as<T: AccountTx>(
     ) {
         return Err(AccountError::NotFound);
     }
-    let dek = subject_key(realm, &row)?;
-    let sealed = seal_password(realm, &dek, &subject, phc.as_bytes())?;
+    let dek = subject_key(environment, &row)?;
+    let sealed = seal_password(environment, &dek, &subject, phc.as_bytes())?;
     let old = tx.credentials(subject, PASSWORD).await?;
     let replaced = if old.is_empty() {
         CredentialChange::Added
@@ -430,12 +460,12 @@ pub async fn store_password_as<T: AccountTx>(
     .await?;
     credential_signal(tx, subject, CredentialType::Password, change).await?;
     // OP-151 m.3 (i)
-    events::credential(tx, realm, subject, PASSWORD, replaced).await?;
+    events::credential(tx, environment, subject, PASSWORD, replaced).await?;
     audit(
         tx,
         "credential.password.set",
         who,
-        &realm.external(subject)?,
+        &environment.external(subject)?,
     )
     .await?;
     Ok(id)
@@ -447,12 +477,14 @@ pub async fn store_password_as<T: AccountTx>(
 /// [`AccountError::LastMethod`], [`AccountError::NotFound`], [`AccountError`].
 pub async fn remove_credential<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     credential: [u8; 16],
     who: &Actor<'_>,
 ) -> Result<(), AccountError> {
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     let passkey = tx
         .credentials(subject, PASSKEY)
         .await?
@@ -490,12 +522,19 @@ pub async fn remove_credential<D: AccountDb>(
         .await?;
     }
     // OP-151 m.3 (i)
-    events::credential(&mut tx, realm, subject, kind, CredentialChange::Removed).await?;
+    events::credential(
+        &mut tx,
+        environment,
+        subject,
+        kind,
+        CredentialChange::Removed,
+    )
+    .await?;
     audit(
         &mut tx,
         "credential.removed",
         who,
-        &realm.external(subject)?,
+        &environment.external(subject)?,
     )
     .await?;
     tx.commit().await

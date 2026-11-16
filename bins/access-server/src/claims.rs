@@ -1,5 +1,5 @@
-//! The realm issuer's courier in this process (CMP-8, §10.1.7, OP-150 L2): identity events'
-//! Claim orders, signed by each realm's Claim issuer key in the identity signer and handed to
+//! The environment issuer's courier in this process (CMP-8, §10.1.7, OP-150 L2): identity events'
+//! Claim orders, signed by each environment's Claim issuer key in the identity signer and handed to
 //! Claim Ingest of the domains this process leads, through `internal-api` (OP-62).
 
 use std::sync::Arc;
@@ -26,7 +26,7 @@ pub(crate) struct Running {
     renewing: tokio::task::JoinHandle<()>,
 }
 
-/// The realm issuer's courier of this process.
+/// The environment issuer's courier of this process.
 pub(crate) type ClaimsCourier<L> =
     Courier<SignerKeys, Ingest<Arc<L>, PgSubmissions, Trusted>, SystemClock>;
 

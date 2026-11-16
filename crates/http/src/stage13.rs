@@ -1,4 +1,4 @@
-//! The Stage 13 routes outside the realm-admin and Frontend API manifests, declared before their
+//! The Stage 13 routes outside the environment-admin and Frontend API manifests, declared before their
 //! lanes serve them (OP-158 m.4 (a)): the Replica Mirror, the streamed Record Export, the watch
 //! stream, the checkpoint publication and inclusion bundles. Each
 //! answers `501 not-yet-served`; a lane that serves one removes its row and mounts its own

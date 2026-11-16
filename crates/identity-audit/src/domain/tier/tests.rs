@@ -5,7 +5,7 @@ use super::*;
 fn row(id: i64) -> AuditRow {
     AuditRow {
         tenant: [1; 16],
-        realm: [2; 16],
+        environment: [2; 16],
         at_ms: 1_000,
         id,
         xid: 7,

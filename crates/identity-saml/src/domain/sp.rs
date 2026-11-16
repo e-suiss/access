@@ -1,4 +1,4 @@
-//! A SAML service provider or WS-Federation relying party as the realm registers it
+//! A SAML service provider or WS-Federation relying party as the environment registers it
 //! (`idp.saml.sp_register`/`sp_update`, OP-155 m.3 (a), (e); §10.6.1; IDP-15, IDP-28, MD-10): its
 //! entity ID, exact ACS list, pinned certificates, `NameID` format, attribute release, signing and
 //! encryption options and catalog template. A registration is checked before any decision.
@@ -164,7 +164,7 @@ pub enum Source {
     Email,
     /// The `NameID` value of the assertion.
     NameId,
-    /// The subject's opaque realm identifier.
+    /// The subject's opaque environment identifier.
     Subject,
 }
 

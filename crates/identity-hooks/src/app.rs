@@ -1,10 +1,10 @@
-//! The hook caller (TN-135): finds the realm's live hook, signs the request, posts it with
+//! The hook caller (TN-135): finds the environment's live hook, signs the request, posts it with
 //! the deadline and reads the answer into an outcome. Every failure is a refusal (MD-8).
 
 use std::time::Duration;
 
 use access_kernel::json::b64url_encode;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
 use crate::domain::{
     Call, Outcome, Refusal, Reply, TIMEOUT_MS, decide, request_body, request_headers,
@@ -34,9 +34,9 @@ where
     }
 
     /// One call at `call`'s point.
-    pub async fn run(&self, tenant: TenantId, realm: RealmId, call: Call) -> Outcome {
+    pub async fn run(&self, tenant: TenantId, environment: EnvironmentId, call: Call) -> Outcome {
         let point = call.point();
-        let live = match self.registry.live(tenant, realm, point).await {
+        let live = match self.registry.live(tenant, environment, point).await {
             Ok(Some(l)) => l,
             Ok(None) => return Outcome::proceed(),
             Err(_) => {
@@ -52,9 +52,9 @@ where
                     reg,
                     &call,
                     &call_id,
-                    realm.as_bytes(),
+                    environment.as_bytes(),
                     now,
-                    live.realm_allows_disclosure,
+                    live.environment_allows_disclosure,
                 ) {
                     Ok(body) => {
                         let ts = now / 1000;
@@ -139,7 +139,7 @@ impl From<access_store::StoreError> for WriteError {
 pub fn new_key<V: crate::ports::KeyVault + ?Sized>(
     vault: &V,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     id: &[u8; 16],
     signing: crate::domain::Signing,
 ) -> Result<(access_store::events::SealedKey, Option<[u8; 32]>, ShownKey), WriteError> {
@@ -151,7 +151,7 @@ pub fn new_key<V: crate::ports::KeyVault + ?Sized>(
         crate::domain::Signing::Ed25519 => {
             let k = WebhookSigningKey::generate().map_err(down)?;
             let sealed = vault
-                .seal(tenant, realm, id, k.expose_seed())
+                .seal(tenant, environment, id, k.expose_seed())
                 .map_err(down)?;
             let pk = k.public_key();
             Ok((
@@ -163,7 +163,7 @@ pub fn new_key<V: crate::ports::KeyVault + ?Sized>(
         crate::domain::Signing::Hmac => {
             let k = WebhookSecret::generate().map_err(down)?;
             let sealed = vault
-                .seal(tenant, realm, id, k.expose_bytes())
+                .seal(tenant, environment, id, k.expose_bytes())
                 .map_err(down)?;
             Ok((sealed, None, ShownKey(k.expose_text())))
         }
@@ -183,7 +183,7 @@ pub async fn write<V: crate::ports::KeyVault + ?Sized>(
     allow_private: bool,
 ) -> Result<Written, WriteError> {
     use crate::domain::HookChange;
-    let realm = t.realm().ok_or(WriteError::Unavailable)?;
+    let environment = t.environment().ok_or(WriteError::Unavailable)?;
     match change {
         HookChange::Register { id, spec } => {
             spec.check(allow_private)?;
@@ -193,7 +193,8 @@ pub async fn write<V: crate::ports::KeyVault + ?Sized>(
             {
                 return Err(WriteError::Conflict);
             }
-            let (key, public_key, shown) = new_key(vault, t.tenant(), realm, id, spec.signing)?;
+            let (key, public_key, shown) =
+                new_key(vault, t.tenant(), environment, id, spec.signing)?;
             let row = access_store::extensions::HookRow {
                 id: *id,
                 point: String::from(spec.point.name()),
@@ -228,7 +229,7 @@ where
     T: HookTransport,
     C: HookClock,
 {
-    fn call(&self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'_> {
-        Box::pin(self.run(tenant, realm, call))
+    fn call(&self, tenant: TenantId, environment: EnvironmentId, call: Call) -> CallFuture<'_> {
+        Box::pin(self.run(tenant, environment, call))
     }
 }

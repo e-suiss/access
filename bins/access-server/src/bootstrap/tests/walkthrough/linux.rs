@@ -3,7 +3,7 @@
 //! decisions, the host named by the client certificate it presents on the public listener. The
 //! `access-linuxd` daemon reaches Access only over that listener with the public crates and
 //! answers the module channel on its own socket; the modules' side is the blocking client the
-//! NSS and PAM shells use. P approves the daemon's device codes on the realm's verification
+//! NSS and PAM shells use. P approves the daemon's device codes on the environment's verification
 //! routes with a session whose assurance the test chooses: a passkey, or a push alone.
 
 #![allow(
@@ -91,7 +91,7 @@ impl Desk {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -100,7 +100,7 @@ impl Desk {
         let ids = cell_ids(&self.w.db.app, &self.w.keys).await.unwrap();
         b.change(
             &b.admin(&ids, None),
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             self.domain,
             &root_key(&self.w.keys).unwrap(),
             change,
@@ -117,7 +117,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         t.insert_session(&NewSession {

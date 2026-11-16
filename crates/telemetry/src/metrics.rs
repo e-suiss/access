@@ -1,7 +1,7 @@
 //! Typed metric constructors over the OpenTelemetry metrics SDK (OP-47, OP-151 m.3 (p)).
 //!
 //! Label names come from the closed [`Label`] set and label values are `&'static str`, so no
-//! request-derived value (identifier, address, tenant, realm, domain) can become a series. The
+//! request-derived value (identifier, address, tenant, environment, domain) can become a series. The
 //! same SDK pipeline feeds the pull exposition at `/metrics` and the OTLP push export.
 
 use std::fmt::Write as _;
@@ -102,11 +102,11 @@ impl Label {
     }
 }
 
-/// Label names that never appear on a metric (OP-47: tenant, realm and domain breakdowns come
+/// Label names that never appear on a metric (OP-47: tenant, environment and domain breakdowns come
 /// from the analytics summary tables; identifiers, addresses and e-mail are PII).
 pub const FORBIDDEN_LABELS: [&str; 12] = [
     "tenant_id",
-    "realm_id",
+    "environment_id",
     "domain_id",
     "client_id",
     "sub",

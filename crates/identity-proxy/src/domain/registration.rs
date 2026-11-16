@@ -339,7 +339,7 @@ impl ProxyChange {
         }
     }
 
-    /// Its resource path below the realm's slug.
+    /// Its resource path below the environment's slug.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         vec![String::from("proxy"), String::from(self.name())]

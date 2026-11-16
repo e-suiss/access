@@ -1,5 +1,5 @@
-//! The `did:web` documents on axum (OP-154 m.3 (aa)): `GET /u/{party}/did.json` at the realm's
-//! host and under `/realms/{slug}`. Public, cookie-less and read-only; a DID is an identifier,
+//! The `did:web` documents on axum (OP-154 m.3 (aa)): `GET /u/{party}/did.json` at the environment's
+//! host and under `/env/{slug}`. Public, cookie-less and read-only; a DID is an identifier,
 //! never authority.
 
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ use axum::response::Response;
 use axum::routing::get;
 
 use super::Shared;
-use super::web::{realm, send};
+use super::web::{environment, send};
 
 struct Svc<D, K, KI, C, M, P> {
     login: Shared<D, K, KI, C, M>,
@@ -48,7 +48,7 @@ where
         keys,
     });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r.route(
             &format!("{prefix}/u/{{party}}/did.json"),
             get(document::<D, K, KI, C, M, P>),
@@ -72,7 +72,7 @@ where
     M: Messages,
     P: PartyKeys,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

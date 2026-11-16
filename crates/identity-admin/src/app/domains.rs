@@ -1,10 +1,10 @@
 //! Domain verification and its watch (TN-90, OP-153 m.3 (o)): a claimed domain is verified by
 //! its published challenge (DNS TXT or HTTPS) or by an upstream identity provider's assertion,
-//! and then holds as the realm issuer's time-limited `domain_verification` Claim. The watch
+//! and then holds as the environment issuer's time-limited `domain_verification` Claim. The watch
 //! re-verifies every 90 days, reads MX and the registrar daily, lapses a verification 72 hours
 //! after an unconfirmed change and retracts its Claim, and raises the contested alarm when a
 //! second organization claims the same domain; a contested domain carries no autojoin and no
-//! home realm discovery.
+//! home environment discovery.
 
 use std::collections::BTreeSet;
 
@@ -14,7 +14,7 @@ use access_identity_account::domain::claim_classes::{
 use access_identity_account::domain::claims::{ClaimOrder, line};
 use access_kernel::model::Id;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::org_authority::DomainClaim;
 
 use crate::AdminError;
@@ -24,7 +24,7 @@ use crate::domain::org::{
 };
 use crate::ports::DomainProbe;
 
-/// Contested-domain alarms raised (TN-90); no realm label (OP-47).
+/// Contested-domain alarms raised (TN-90); no environment label (OP-47).
 pub static CONTESTED: access_telemetry::metrics::Counter<0> =
     access_telemetry::metrics::Counter::new(
         "access_org_domain_contested_total",
@@ -32,7 +32,7 @@ pub static CONTESTED: access_telemetry::metrics::Counter<0> =
         [],
     );
 
-/// What one watch pass over a realm did.
+/// What one watch pass over an environment did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WatchPass {
     /// Claims verified or re-verified.
@@ -59,7 +59,7 @@ pub fn membership_line(org: [u8; 16]) -> [u8; 32] {
     line(&[b"membership", &org])
 }
 
-/// The realm issuer's `domain_verification` order for `c`, or its retraction.
+/// The environment issuer's `domain_verification` order for `c`, or its retraction.
 #[must_use]
 pub fn verification_order(c: &DomainClaim, at: u64, retract: bool) -> ClaimOrder {
     let method = match Method::parse(&c.method) {
@@ -87,7 +87,7 @@ pub fn verification_order(c: &DomainClaim, at: u64, retract: bool) -> ClaimOrder
     order
 }
 
-/// Queues `order` for the realm issuer's courier in `t` (OP-10).
+/// Queues `order` for the environment issuer's courier in `t` (OP-10).
 ///
 /// # Errors
 /// [`AdminError`].
@@ -99,7 +99,7 @@ pub(crate) async fn queue(t: &mut TenantTx, order: &ClaimOrder) -> Result<(), Ad
     Ok(())
 }
 
-/// The watch over one realm's domain claims.
+/// The watch over one environment's domain claims.
 pub struct DomainWatch<'a, P> {
     /// The `access_app` pool.
     pub app: &'a Pool,
@@ -109,7 +109,7 @@ pub struct DomainWatch<'a, P> {
 
 impl<P: DomainProbe> DomainWatch<'_, P> {
     /// Whether the claim's challenge is published now; `None` when the probe cannot answer.
-    async fn proved(&self, at: (TenantId, RealmId), c: &DomainClaim) -> Option<bool> {
+    async fn proved(&self, at: (TenantId, EnvironmentId), c: &DomainClaim) -> Option<bool> {
         match Method::parse(&c.method)? {
             Method::DnsTxt => self
                 .probe
@@ -131,7 +131,7 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
     /// organization's owners in a sign-in it vouched for within [`IDP_ASSERTION_S`] (TN-90).
     async fn idp_asserted(
         &self,
-        at: (TenantId, RealmId),
+        at: (TenantId, EnvironmentId),
         c: &DomainClaim,
     ) -> Result<bool, AdminError> {
         let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
@@ -151,7 +151,7 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
 
     async fn verified(
         &self,
-        at: (TenantId, RealmId),
+        at: (TenantId, EnvironmentId),
         c: &DomainClaim,
         seen: ([u8; 32], [u8; 32]),
     ) -> Result<(), AdminError> {
@@ -165,11 +165,14 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
         Ok(())
     }
 
-    /// One pass over the open claims of `(tenant, realm)` (TN-90).
+    /// One pass over the open claims of `(tenant, environment)` (TN-90).
     ///
     /// # Errors
     /// [`AdminError`] when the store cannot answer; probes that cannot answer only count.
-    pub async fn realm(&self, at: (TenantId, RealmId)) -> Result<WatchPass, AdminError> {
+    pub async fn environment(
+        &self,
+        at: (TenantId, EnvironmentId),
+    ) -> Result<WatchPass, AdminError> {
         let mut out = WatchPass::default();
         let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
         let now = i64::try_from(t.server_time().await?).unwrap_or(i64::MAX);
@@ -238,9 +241,9 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
         Ok(out)
     }
 
-    /// Issues the realm issuer's `membership` Claim of every open membership that has none yet
+    /// Issues the environment issuer's `membership` Claim of every open membership that has none yet
     /// and whose TN-109 cooling ended (OP-153 m.3 (o), (p)).
-    async fn membership_claims(&self, at: (TenantId, RealmId)) -> Result<u32, AdminError> {
+    async fn membership_claims(&self, at: (TenantId, EnvironmentId)) -> Result<u32, AdminError> {
         let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
         let now = t.server_time().await?;
         let Some(g) = access_store::idp::governance(&mut t).await? else {
@@ -307,7 +310,7 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
 
     /// Withdraws verifications past their re-verification time or 72 hours past an unconfirmed
     /// change, and retracts their Claims (TN-90).
-    async fn lapse(&self, at: (TenantId, RealmId)) -> Result<u32, AdminError> {
+    async fn lapse(&self, at: (TenantId, EnvironmentId)) -> Result<u32, AdminError> {
         let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
         let now = t.server_time().await?;
         let before = t.open_domain_claims(None).await?;

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, OutboxEvent, TenantId, TenantTx};
 use access_store::relay::{CourierLease, Undelivered};
 use suiss_crypto::envelope::Kek;
 
@@ -34,24 +34,24 @@ pub trait RelayPort: Send + Sync {
     fn send(&self, event: &CloudEvent) -> impl Future<Output = Result<(), SendFailure>> + Send;
 }
 
-/// The realm KEKs the courier unwraps subject DEKs with (OP-42, OP-135).
-pub trait RealmKeys: Send + Sync {
-    /// The realm's KEK with id `kek_id`, when this process holds it.
+/// The environment KEKs the courier unwraps subject DEKs with (OP-42, OP-135).
+pub trait EnvironmentKeys: Send + Sync {
+    /// The environment's KEK with id `kek_id`, when this process holds it.
     fn kek(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         kek_id: &str,
     ) -> Option<Arc<dyn Kek + Send + Sync>>;
 }
 
 /// A subject's wrapped DEK as the courier finds it.
 pub enum SubjectKey {
-    /// No such subject in the realm.
+    /// No such subject in the environment.
     Missing,
     /// Shredded (OP-73).
     Shredded,
-    /// Wrapped by the realm KEK `kek_id`.
+    /// Wrapped by the environment KEK `kek_id`.
     Wrapped {
         /// KEK id.
         kek_id: String,
@@ -61,7 +61,7 @@ pub enum SubjectKey {
 }
 
 /// The courier's storage: the outbox, its cursor and the courier lease as
-/// `access_outbox_reader` (OP-131, OP-156 m.3 (c)), and realm-scoped reads and records as
+/// `access_outbox_reader` (OP-131, OP-156 m.3 (c)), and environment-scoped reads and records as
 /// `access_app`.
 pub trait CourierStore: Send + Sync {
     /// Takes or renews the courier lease for `holder`; `None` while another node holds it.
@@ -95,14 +95,14 @@ pub trait CourierStore: Send + Sync {
     fn subject_key(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<SubjectKey, NotifyError>> + Send;
     /// Records an undeliverable message once.
     fn undelivered(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         record: &Undelivered<'_>,
     ) -> impl Future<Output = Result<(), NotifyError>> + Send;
 }

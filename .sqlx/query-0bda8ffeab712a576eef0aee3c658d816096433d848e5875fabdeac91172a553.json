@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains\n                  SET checked_at = checked_at - make_interval(secs => $3),\n                      changed_at = changed_at - make_interval(secs => $4)\n                WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0bda8ffeab712a576eef0aee3c658d816096433d848e5875fabdeac91172a553"
+}

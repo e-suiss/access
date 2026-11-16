@@ -599,19 +599,19 @@ pub async fn closed(sequencer: &PgPool, domain: &DomainId) -> Result<Option<Clos
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn mark_dr_promoted(app: &PgPool, realms: u32) -> Result<u64, StoreError> {
+pub async fn mark_dr_promoted(app: &PgPool, environments: u32) -> Result<u64, StoreError> {
     let g = sqlx::query_scalar!(
-        r#"INSERT INTO access_ops.dr_promotions (generation, realms)
+        r#"INSERT INTO access_ops.dr_promotions (generation, environments)
            SELECT coalesce(max(generation), 0) + 1, $1 FROM access_ops.dr_promotions
            RETURNING generation"#,
-        i32::try_from(realms).map_err(|_| StoreError::Range)?,
+        i32::try_from(environments).map_err(|_| StoreError::Range)?,
     )
     .fetch_one(app)
     .await?;
     unsigned(g)
 }
 
-/// The latest declared DR profile of every realm that ever declared one: (tenant, realm, RPO
+/// The latest declared DR profile of every environment that ever declared one: (tenant, environment, RPO
 /// seconds; `None` when closed) (OP-29).
 ///
 /// # Errors
@@ -619,21 +619,21 @@ pub async fn mark_dr_promoted(app: &PgPool, realms: u32) -> Result<u64, StoreErr
 pub async fn dr_profiles(
     app: &PgPool,
 ) -> Result<Vec<([u8; 16], [u8; 16], Option<u64>)>, StoreError> {
-    sqlx::query!(r#"SELECT tenant_id AS "tenant!", realm_id AS "realm!", rpo_s FROM access.dr_profiled_realms()"#)
+    sqlx::query!(r#"SELECT tenant_id AS "tenant!", environment_id AS "environment!", rpo_s FROM access.dr_profiled_environments()"#)
         .fetch_all(app)
         .await?
         .into_iter()
         .map(|r| {
             Ok((
                 r.tenant.into_bytes(),
-                r.realm.into_bytes(),
+                r.environment.into_bytes(),
                 r.rpo_s.map(unsigned).transpose()?,
             ))
         })
         .collect()
 }
 
-/// Writes the next version of the realm's declared DR profile (`idp.realm.dr_profile`, or
+/// Writes the next version of the environment's declared DR profile (`idp.environment.dr_profile`, or
 /// `dr_profile_close` with `None`) (OP-29, HL-31).
 ///
 /// # Errors
@@ -643,15 +643,15 @@ pub async fn put_dr_profile(
     bound: &crate::idp::Bound,
     rpo_s: Option<u64>,
 ) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
-        "INSERT INTO access.realm_dr_profiles (tenant_id, realm_id, version, rpo_s, domain_id, decision_pos)
+        "INSERT INTO access.environment_dr_profiles (tenant_id, environment_id, version, rpo_s, domain_id, decision_pos)
          SELECT $1, $2,
-                COALESCE((SELECT max(version) FROM access.realm_dr_profiles
-                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                COALESCE((SELECT max(version) FROM access.environment_dr_profiles
+                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                 $3, $4, $5",
         sqlx::types::Uuid::from_bytes(*t.tenant.as_bytes()),
-        sqlx::types::Uuid::from_bytes(*realm.as_bytes()),
+        sqlx::types::Uuid::from_bytes(*environment.as_bytes()),
         rpo_s.map(signed).transpose()?,
         bound.domain().as_bytes().as_slice(),
         bound.raw_position(),
@@ -661,18 +661,18 @@ pub async fn put_dr_profile(
     Ok(())
 }
 
-/// The realm's declared DR profile's RPO in seconds; `None` while none is declared or it is
+/// The environment's declared DR profile's RPO in seconds; `None` while none is declared or it is
 /// closed (OP-29).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn dr_profile(t: &mut crate::identity::TenantTx) -> Result<Option<u64>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let rpo = sqlx::query_scalar!(
-        "SELECT rpo_s FROM access.realm_dr_profiles
-          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+        "SELECT rpo_s FROM access.environment_dr_profiles
+          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
         sqlx::types::Uuid::from_bytes(*t.tenant.as_bytes()),
-        sqlx::types::Uuid::from_bytes(*realm.as_bytes()),
+        sqlx::types::Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(&mut *t.tx)
     .await?;

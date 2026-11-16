@@ -1,10 +1,10 @@
-//! A realm's SAML signing keys (OP-155 m.3 (d), (e); §10.6.1; Golden SAML, HL-35): RSA-3072, and
+//! An environment's SAML signing keys (OP-155 m.3 (d), (e); §10.6.1; Golden SAML, HL-35): RSA-3072, and
 //! a P-256 key for service providers whose template supports ECDSA, each with a long-lived
-//! self-signed certificate. Keys are made in this process, sealed under the realm's KEK and never
+//! self-signed certificate. Keys are made in this process, sealed under the environment's KEK and never
 //! leave it; they sign XML `SignedInfo` octets and HTTP-Redirect query strings only (artefact
 //! `SamlXml`). Rotation has two phases: a new key is published next to the active one, signing
 //! switches to it, and the old one is removed; the schedule (at least 14 days per phase) is the
-//! realm policy's, kept by access-server. SHA-1 is never used.
+//! environment policy's, kept by access-server. SHA-1 is never used.
 
 use access_crypto::xmlsec::{self, P256Key, RsaKey};
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -12,7 +12,7 @@ use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::SignError;
 
 use crate::ports::KeyFactory;
-use crate::protocol::{FrameError, Realm};
+use crate::protocol::{Environment, FrameError};
 
 /// The purpose label of these keys in the vault and in the protocol.
 pub const LABEL: &str = "saml";
@@ -20,7 +20,7 @@ pub const LABEL: &str = "saml";
 /// Validity of a SAML certificate (metadata interop: long-lived self-signed, no PKIX).
 pub const CERT_VALID_MS: u64 = 10 * 365 * 24 * 3_600_000;
 
-/// Most keys a realm's SAML ring holds at once (one active and one published per algorithm).
+/// Most keys an environment's SAML ring holds at once (one active and one published per algorithm).
 pub const MAX_KEYS: usize = 4;
 
 /// The key algorithm.
@@ -180,20 +180,20 @@ pub struct KeyInfo {
 /// A request about SAML keys.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamlRequest {
-    /// Opens the realm's key of `alg` (made on the first opt-in, MD-6); repeating changes
+    /// Opens the environment's key of `alg` (made on the first opt-in, MD-6); repeating changes
     /// nothing.
     Open {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// Algorithm.
         alg: SamlAlg,
     },
-    /// The realm's published keys.
-    Keys(Realm),
+    /// The environment's published keys.
+    Keys(Environment),
     /// Signs `data` with the active key of the method's algorithm.
     Sign {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// Method.
         sig: SamlSig,
         /// The canonical `SignedInfo` or the HTTP-Redirect signed octets.
@@ -201,8 +201,8 @@ pub enum SamlRequest {
     },
     /// One rotation step of the keys of `alg`.
     Rotate {
-        /// Realm.
-        realm: Realm,
+        /// Environment.
+        environment: Environment,
         /// Algorithm.
         alg: SamlAlg,
         /// Step.
@@ -213,7 +213,7 @@ pub enum SamlRequest {
 /// An answer about SAML keys.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SamlResponse {
-    /// The realm's published keys.
+    /// The environment's published keys.
     Keys(Vec<KeyInfo>),
     /// A signature and the certificate of the key that made it.
     Signed {
@@ -249,10 +249,10 @@ fn bytes(v: Option<&Value>) -> Result<Vec<u8>, FrameError> {
     }
 }
 
-fn realm(v: Option<&Value>) -> Result<Realm, FrameError> {
+fn environment(v: Option<&Value>) -> Result<Environment, FrameError> {
     bytes(v)?
         .try_into()
-        .map(Realm)
+        .map(Environment)
         .map_err(|_| FrameError::Malformed)
 }
 
@@ -290,24 +290,32 @@ impl SamlRequest {
     #[must_use]
     pub fn to_value(&self) -> Value {
         match self {
-            Self::Open { realm, alg } => map(vec![
+            Self::Open { environment, alg } => map(vec![
                 ("op", Value::text("open")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
                 ("alg", Value::text(alg.name())),
             ]),
-            Self::Keys(realm) => map(vec![
+            Self::Keys(environment) => map(vec![
                 ("op", Value::text("keys")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
             ]),
-            Self::Sign { realm, sig, data } => map(vec![
+            Self::Sign {
+                environment,
+                sig,
+                data,
+            } => map(vec![
                 ("op", Value::text("sign")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
                 ("sig", Value::text(sig.name())),
                 ("data", Value::Bytes(data.clone())),
             ]),
-            Self::Rotate { realm, alg, step } => map(vec![
+            Self::Rotate {
+                environment,
+                alg,
+                step,
+            } => map(vec![
                 ("op", Value::text("rotate")),
-                ("realm", Value::Bytes(realm.0.to_vec())),
+                ("environment", Value::Bytes(environment.0.to_vec())),
                 ("alg", Value::text(alg.name())),
                 ("step", Value::text(step.name())),
             ]),
@@ -322,17 +330,17 @@ impl SamlRequest {
         let alg = || SamlAlg::of(&text(v.get("alg"))?).ok_or(FrameError::Malformed);
         match text(v.get("op"))?.as_str() {
             "open" => Ok(Self::Open {
-                realm: realm(v.get("realm"))?,
+                environment: environment(v.get("environment"))?,
                 alg: alg()?,
             }),
-            "keys" => Ok(Self::Keys(realm(v.get("realm"))?)),
+            "keys" => Ok(Self::Keys(environment(v.get("environment"))?)),
             "sign" => Ok(Self::Sign {
-                realm: realm(v.get("realm"))?,
+                environment: environment(v.get("environment"))?,
                 sig: SamlSig::of(&text(v.get("sig"))?).ok_or(FrameError::Malformed)?,
                 data: bytes(v.get("data"))?,
             }),
             "rotate" => Ok(Self::Rotate {
-                realm: realm(v.get("realm"))?,
+                environment: environment(v.get("environment"))?,
                 alg: alg()?,
                 step: Step::of(&text(v.get("step"))?).ok_or(FrameError::Malformed)?,
             }),
@@ -340,14 +348,14 @@ impl SamlRequest {
         }
     }
 
-    /// The realm it is about.
+    /// The environment it is about.
     #[must_use]
-    pub const fn realm(&self) -> Realm {
+    pub const fn environment(&self) -> Environment {
         match self {
-            Self::Open { realm, .. }
-            | Self::Keys(realm)
-            | Self::Sign { realm, .. }
-            | Self::Rotate { realm, .. } => *realm,
+            Self::Open { environment, .. }
+            | Self::Keys(environment)
+            | Self::Sign { environment, .. }
+            | Self::Rotate { environment, .. } => *environment,
         }
     }
 }
@@ -494,12 +502,17 @@ fn generalized(ms: u64) -> Vec<u8> {
     tlv(0x18, s.as_bytes())
 }
 
-/// A self-signed certificate for `spki` named after the realm, valid from `now`.
+/// A self-signed certificate for `spki` named after the environment, valid from `now`.
 #[allow(
     clippy::arithmetic_side_effects,
     reason = "calendar arithmetic over a bounded millisecond count"
 )]
-fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u8>, SamlKeyError> {
+fn certificate(
+    pair: &Pair,
+    spki: &[u8],
+    environment: Environment,
+    now: u64,
+) -> Result<Vec<u8>, SamlKeyError> {
     let mut serial = [0_u8; 16];
     xmlsec::fill(&mut serial).map_err(|_| SamlKeyError::Key)?;
     if let Some(first) = serial.first_mut() {
@@ -507,7 +520,7 @@ fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u
         *first |= 0x01;
     }
     let mut cn = String::from("Access SAML ");
-    for b in realm.0.iter().take(8) {
+    for b in environment.0.iter().take(8) {
         let _ = std::fmt::Write::write_fmt(&mut cn, format_args!("{b:02x}"));
     }
     let name = seq(&[tlv(0x31, &seq(&[tlv(0x06, &CN), tlv(0x0c, cn.as_bytes())]))]);
@@ -560,7 +573,7 @@ fn spki_of(pair: &Pair) -> Result<Vec<u8>, SamlKeyError> {
 
 fn new_key<F: KeyFactory + ?Sized>(
     alg: SamlAlg,
-    realm: Realm,
+    environment: Environment,
     phase: Phase,
     now: u64,
     factory: &mut F,
@@ -573,7 +586,7 @@ fn new_key<F: KeyFactory + ?Sized>(
     let sealed = factory
         .seal_document(&doc)
         .map_err(|_: SignError| SamlKeyError::Key)?;
-    let cert = certificate(&pair, &spki_of(&pair)?, realm, now)?;
+    let cert = certificate(&pair, &spki_of(&pair)?, environment, now)?;
     Ok(Key {
         info: KeyInfo {
             kid: suiss_crypto::digest::sha256(&cert),
@@ -587,18 +600,18 @@ fn new_key<F: KeyFactory + ?Sized>(
     })
 }
 
-/// A realm's SAML keys.
+/// An environment's SAML keys.
 pub struct Ring {
-    realm: Realm,
+    environment: Environment,
     keys: Vec<Key>,
 }
 
 impl Ring {
     /// An empty ring.
     #[must_use]
-    pub const fn new(realm: Realm) -> Self {
+    pub const fn new(environment: Environment) -> Self {
         Self {
-            realm,
+            environment,
             keys: Vec::new(),
         }
     }
@@ -623,7 +636,7 @@ impl Ring {
             return Ok(false);
         }
         self.keys
-            .push(new_key(alg, self.realm, Phase::Active, now, factory)?);
+            .push(new_key(alg, self.environment, Phase::Active, now, factory)?);
         Ok(true)
     }
 
@@ -668,8 +681,13 @@ impl Ring {
                 {
                     return Err(SamlKeyError::Order);
                 }
-                self.keys
-                    .push(new_key(alg, self.realm, Phase::Published, now, factory)?);
+                self.keys.push(new_key(
+                    alg,
+                    self.environment,
+                    Phase::Published,
+                    now,
+                    factory,
+                )?);
             }
             Step::Switch => {
                 if !has(&self.keys, Phase::Published) || has(&self.keys, Phase::Retiring) {
@@ -694,7 +712,7 @@ impl Ring {
                     .retain(|k| !(k.info.alg == alg && k.info.phase == Phase::Retiring));
             }
             Step::Emergency => {
-                let fresh = new_key(alg, self.realm, Phase::Active, now, factory)?;
+                let fresh = new_key(alg, self.environment, Phase::Active, now, factory)?;
                 self.keys.retain(|k| k.info.alg != alg);
                 self.keys.push(fresh);
             }
@@ -722,7 +740,7 @@ impl Ring {
         dcbor::encode(
             &map(vec![
                 ("label", Value::text(LABEL)),
-                ("realm", Value::Bytes(self.realm.0.to_vec())),
+                ("environment", Value::Bytes(self.environment.0.to_vec())),
                 ("keys", Value::Array(keys)),
             ]),
             Limits::CEILING,
@@ -735,13 +753,13 @@ impl Ring {
     /// # Errors
     /// [`SamlKeyError`].
     pub fn restore<F: KeyFactory + ?Sized>(
-        owner: Realm,
+        owner: Environment,
         stored: &[u8],
         factory: &mut F,
     ) -> Result<Self, SamlKeyError> {
         let v = dcbor::decode(stored, Limits::CEILING).map_err(|_| SamlKeyError::Stored)?;
         if text(v.get("label")).ok().as_deref() != Some(LABEL)
-            || realm(v.get("realm")).ok() != Some(owner)
+            || environment(v.get("environment")).ok() != Some(owner)
         {
             return Err(SamlKeyError::Stored);
         }
@@ -758,7 +776,10 @@ impl Ring {
             let pair = pair_of(info.alg, &doc)?;
             keys.push(Key { info, sealed, pair });
         }
-        Ok(Self { realm: owner, keys })
+        Ok(Self {
+            environment: owner,
+            keys,
+        })
     }
 }
 

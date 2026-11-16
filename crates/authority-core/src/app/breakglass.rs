@@ -60,7 +60,7 @@ pub enum Refusal {
     /// Fewer than two holders, or fewer than two approvals (§12.3.8 (1), TN-93).
     #[error("break-glass needs at least two Grants and two approvals")]
     MinimumTwo,
-    /// No reserved action named, a prefix, or an action outside the realm's catalog.
+    /// No reserved action named, a prefix, or an action outside the environment's catalog.
     #[error("break-glass Grants name their reserved actions")]
     Actions,
 }
@@ -302,7 +302,7 @@ pub fn overdue<'a>(
         .collect()
 }
 
-/// Whether a realm whose break-glass stands since `since` is past its drill: no drill in the
+/// Whether an environment whose break-glass stands since `since` is past its drill: no drill in the
 /// last [`DRILL_EVERY_MS`] (§12.3.8 (5)).
 #[must_use]
 pub fn drill_overdue(last_drill: Option<u64>, since: u64, now: u64) -> bool {

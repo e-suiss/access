@@ -7,9 +7,9 @@ test.describe("@live console signal sources", () => {
   test("@live the signal sources route reads and writes nothing without a session", async ({
     page,
   }) => {
-    const list = await page.request.get("/console/api/proxy/admin/realms/acme/signal-sources");
+    const list = await page.request.get("/console/api/proxy/admin/envs/acme/signal-sources");
     expect([401, 403]).toContain(list.status());
-    const write = await page.request.post("/console/api/proxy/admin/realms/acme/signal-sources", {
+    const write = await page.request.post("/console/api/proxy/admin/envs/acme/signal-sources", {
       data: { name: "acme-mdm", kind: "mdm", provider: "Acme MDM", issuer: "x" },
     });
     expect([401, 403]).toContain(write.status());

@@ -1,5 +1,5 @@
-//! Realm governance through `idp.*` Exercises (MD-14, TN-106, TN-118, §13.2): branding, the
-//! realm's JOSE key policy, decided rotation and the emergency drop of a compromised key, each
+//! Environment governance through `idp.*` Exercises (MD-14, TN-106, TN-118, §13.2): branding, the
+//! environment's JOSE key policy, decided rotation and the emergency drop of a compromised key, each
 //! committed in the governing domain and then applied to the identity signer.
 
 use std::collections::BTreeSet;
@@ -12,20 +12,19 @@ use access_store::idp::{branding, key_changes};
 
 use super::*;
 
-const LEAD: u64 = Policy::REALM.publish_lead_ms;
+const LEAD: u64 = Policy::ENVIRONMENT.publish_lead_ms;
 const MINUTE: u64 = 60_000;
 
-fn kids(w: &World, realm: RealmId) -> Vec<[u8; 32]> {
-    let doc = w.block_jwks(realm);
+fn kids(w: &World, environment: EnvironmentId) -> Vec<[u8; 32]> {
+    let doc = w.block_jwks(environment);
     jwks_kids(&doc)
 }
 
 impl World {
-    fn block_jwks(&self, realm: RealmId) -> String {
-        match self
-            .keys
-            .ask(SignerRequest::Jwks(SignerRealm(*realm.as_bytes())))
-        {
+    fn block_jwks(&self, environment: EnvironmentId) -> String {
+        match self.keys.ask(SignerRequest::Jwks(SignerEnvironment(
+            *environment.as_bytes(),
+        ))) {
             SignerResponse::Jwks(doc) => doc,
             other => panic!("{other:?}"),
         }
@@ -47,20 +46,22 @@ fn brand(logo: &str) -> Branding {
 async fn idp_commits_carry_the_sessions_actor_binding() {
     // L0-META-7, INV-2, PI-7
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("bound").await;
+    let (tenant, environment, d) = w.environment("bound").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let root_subject = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     let alice_subject = t
-        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .insert_subject("staged", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     let nobody = t
-        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .insert_subject("staged", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     for (s, party) in [(root_subject, ROOT), (alice_subject, ALICE)] {
@@ -74,7 +75,7 @@ async fn idp_commits_carry_the_sessions_actor_binding() {
     let mapper = |nonce, subject| Proposal {
         subject: Some(subject),
         ..proposal(
-            (tenant, realm),
+            (tenant, environment),
             Change::MapperSet {
                 claim: ClaimName::parse("nick").unwrap(),
                 source: Some(Attribute::parse("nickname").unwrap()),
@@ -90,7 +91,9 @@ async fn idp_commits_carry_the_sessions_actor_binding() {
             Err(AdminError::Refused(code)) if code == "actor-binding"
         ));
     }
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         access_store::idp::mappers(&mut t).await.unwrap(),
         Vec::new()
@@ -108,18 +111,20 @@ async fn idp_commits_carry_the_sessions_actor_binding() {
 async fn branding_changes_through_commit() {
     // §12.4.2, E34, EI-25
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("brand").await;
+    let (tenant, environment, d) = w.environment("brand").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let good = brand("https://cdn.acme.example/logo.svg");
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::Branding(good.clone()),
         1,
         idp_anchor(d),
         1,
     );
     written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let stored = branding(&mut t).await.unwrap().unwrap();
     t.commit().await.unwrap();
     assert_eq!(
@@ -127,7 +132,7 @@ async fn branding_changes_through_commit() {
         dcbor::encode(&good.to_value(), Limits::CEILING).unwrap()
     );
     let outside = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::Branding(brand("https://evil.example/logo.svg")),
         2,
         idp_anchor(d),
@@ -144,14 +149,14 @@ async fn branding_changes_through_commit() {
 async fn claim_mappers_stay_inside_the_profile() {
     // MD-14, TN-117
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("mapper").await;
+    let (tenant, environment, d) = w.environment("mapper").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     for claim in ["roles", "groups", "permissions", "scope", "cnf"] {
         assert_eq!(ClaimName::parse(claim), Err(Invalid::Claim), "{claim}");
     }
     assert_eq!(Attribute::parse("is_admin"), Err(Invalid::Attribute));
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::MapperSet {
             claim: ClaimName::parse("display_name").unwrap(),
             source: Some(Attribute::parse("name").unwrap()),
@@ -161,7 +166,9 @@ async fn claim_mappers_stay_inside_the_profile() {
         1,
     );
     written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         access_store::idp::mappers(&mut t).await.unwrap(),
         vec![(String::from("display_name"), String::from("name"))]
@@ -170,27 +177,27 @@ async fn claim_mappers_stay_inside_the_profile() {
 
 // CR-59, SAI-46, CR-25, OP-146 m.16 (m)
 #[tokio::test]
-async fn a_new_realm_signs_tokens_at_once() {
+async fn a_new_environment_signs_tokens_at_once() {
     let w = World::new().await;
-    let (_, realm, _) = w.realm("fresh").await;
-    let signer_realm = SignerRealm(*realm.as_bytes());
+    let (_, environment, _) = w.environment("fresh").await;
+    let signer_environment = SignerEnvironment(*environment.as_bytes());
     let SignerResponse::Signed { kid, token } = w.keys.ask(SignerRequest::Sign {
-        realm: signer_realm,
+        environment: signer_environment,
         typ: String::from("at+jwt"),
         payload: br#"{"sub":"u1"}"#.to_vec(),
         at: 0,
     }) else {
-        panic!("the new realm signed nothing");
+        panic!("the new environment signed nothing");
     };
     assert_eq!(token.split('.').count(), 3);
-    let listed = kids(&w, realm);
+    let listed = kids(&w, environment);
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0], kid);
     let early = LEAD - MINUTE;
     w.keys.at(early);
     assert_eq!(
         w.keys.ask(SignerRequest::Rotate {
-            realm: signer_realm,
+            environment: signer_environment,
             retire: kid,
         }),
         SignerResponse::Error(String::from("signer-no-backup"))
@@ -198,12 +205,12 @@ async fn a_new_realm_signs_tokens_at_once() {
     w.keys.at(LEAD);
     assert!(matches!(
         w.keys.ask(SignerRequest::Rotate {
-            realm: signer_realm,
+            environment: signer_environment,
             retire: kid,
         }),
         SignerResponse::Rekeyed(_)
     ));
-    assert_ne!(kids(&w, realm)[0], kid);
+    assert_ne!(kids(&w, environment)[0], kid);
 }
 
 // §13.2, §13.7.1, §13.7.7, SEC9, MD-7
@@ -211,13 +218,13 @@ async fn a_new_realm_signs_tokens_at_once() {
 async fn a_compromised_key_is_dropped_at_once() {
     // CR-23, CR-27, OP-73, X11, SI-4
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("stolen").await;
+    let (tenant, environment, d) = w.environment("stolen").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     w.keys.at(LEAD);
-    let active = kids(&w, realm)[0];
+    let active = kids(&w, environment)[0];
     let at = 5 * 24 * 3_600_000;
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::KeyDrop {
             kid: active,
             compromised_at: Some(at),
@@ -232,20 +239,24 @@ async fn a_compromised_key_is_dropped_at_once() {
         ROOT_KEY,
     );
     written(&w.admin().apply(&p, ais.clone()).await.unwrap());
-    assert!(!kids(&w, realm).contains(&active));
+    assert!(!kids(&w, environment).contains(&active));
     assert!(matches!(
         w.admin().apply(&p, ais).await.unwrap(),
         Applied::AlreadyWritten { .. }
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let changes = key_changes(&mut t).await.unwrap();
     t.commit().await.unwrap();
     assert_eq!(changes.len(), 1);
-    assert_eq!(changes[0].action, "idp.realm.key_drop");
+    assert_eq!(changes[0].action, "idp.environment.key_drop");
     assert_eq!(changes[0].kid, Some(active));
     assert_eq!(changes[0].cutoff_at, Some(at - CUTOFF_MARGIN_MS));
     // CR-27, TN-41
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let signals = t.outbox_kinds().await.unwrap();
     t.commit().await.unwrap();
     assert_eq!(
@@ -256,7 +267,7 @@ async fn a_compromised_key_is_dropped_at_once() {
         1
     );
     let unknown = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::KeyDrop {
             kid: [0; 32],
             compromised_at: None,
@@ -276,31 +287,31 @@ async fn a_compromised_key_is_dropped_at_once() {
 async fn a_rotation_and_a_policy_are_decided() {
     // SAI-46, TN-118
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("rotate").await;
+    let (tenant, environment, d) = w.environment("rotate").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     w.keys.at(LEAD);
     w.keys.at(2 * LEAD + MINUTE);
-    let before = kids(&w, realm);
+    let before = kids(&w, environment);
     let active = before[0];
     let rotate = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::KeyRotate { retire: active },
         1,
         idp_anchor(d),
         48,
     );
     written(&exercise(&w, &rotate, ROOT_KEY).await.unwrap());
-    let after = kids(&w, realm);
+    let after = kids(&w, environment);
     assert_ne!(after[0], active);
     assert!(after.contains(&active));
-    let mut faster = Policy::REALM;
+    let mut faster = Policy::ENVIRONMENT;
     faster.lifetime_ms = 30 * 24 * 3_600_000;
     faster.window_ms = 60 * 24 * 3_600_000;
     written(
         &exercise(
             &w,
             &proposal(
-                (tenant, realm),
+                (tenant, environment),
                 Change::KeyPolicy(faster),
                 2,
                 idp_anchor(d),
@@ -311,12 +322,12 @@ async fn a_rotation_and_a_policy_are_decided() {
         .await
         .unwrap(),
     );
-    let mut bad = Policy::REALM;
+    let mut bad = Policy::ENVIRONMENT;
     bad.publish_lead_ms = 0;
     assert!(matches!(
         w.admin()
             .prepare(&proposal(
-                (tenant, realm),
+                (tenant, environment),
                 Change::KeyPolicy(bad),
                 3,
                 idp_anchor(d),
@@ -325,14 +336,19 @@ async fn a_rotation_and_a_policy_are_decided() {
             .await,
         Err(AdminError::Invalid(Invalid::KeyPolicy))
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let actions: Vec<String> = key_changes(&mut t)
         .await
         .unwrap()
         .into_iter()
         .map(|c| c.action)
         .collect();
-    assert_eq!(actions, ["idp.realm.key_rotate", "idp.realm.key_policy"]);
+    assert_eq!(
+        actions,
+        ["idp.environment.key_rotate", "idp.environment.key_policy"]
+    );
 }
 
 // TN-18, IDP-5, OP-153 m.3 (u), m.22 (j), m.25 (f)
@@ -340,7 +356,7 @@ async fn a_rotation_and_a_policy_are_decided() {
 async fn related_origins_hold_five_labels_under_verified_domains() {
     use access_identity_admin::domain::RelatedOrigins;
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("related").await;
+    let (tenant, environment, d) = w.environment("related").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let list = |hosts: &[&str]| RelatedOrigins {
         origins: hosts.iter().map(|h| format!("https://{h}")).collect(),
@@ -354,7 +370,7 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         "f.six.example",
     ]);
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(six),
         1,
         idp_anchor(d),
@@ -365,7 +381,7 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         Err(AdminError::Invalid(Invalid::RelatedOrigins))
     ));
     let unverified = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(list(&["shop.acme-brand.example"])),
         2,
         idp_anchor(d),
@@ -376,7 +392,7 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         Err(AdminError::Invalid(Invalid::RelatedOrigins))
     ));
     let malformed = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(RelatedOrigins {
             origins: BTreeSet::from([String::from("http://shop.acme.example/path")]),
         }),
@@ -389,14 +405,16 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         Err(AdminError::Invalid(Invalid::RelatedOrigins))
     ));
     let none = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(RelatedOrigins::default()),
         4,
         idp_anchor(d),
         1,
     );
     written(&exercise(&w, &none, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         access_store::idp::related_origins(&mut t).await.unwrap(),
         Vec::<String>::new()
@@ -405,7 +423,7 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
 
     // OP-153 m.25 (f)
     let six_under_one_suffix = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(list(&[
             "a.one.co.uk",
             "b.two.co.uk",
@@ -422,7 +440,9 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         w.admin().prepare(&six_under_one_suffix).await,
         Err(AdminError::Invalid(Invalid::RelatedOrigins))
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let org = t.insert_org([0x0b; 16], "Acme", &[0x0b; 32]).await.unwrap();
     for (n, domain) in ["acme.co.uk", "acme-brand.example"].into_iter().enumerate() {
         let n = u8::try_from(n).unwrap();
@@ -443,14 +463,16 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
         "shop.acme-brand.example",
     ]);
     let stored = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RelatedOrigins(brands.clone()),
         6,
         idp_anchor(d),
         1,
     );
     written(&exercise(&w, &stored, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         access_store::idp::related_origins(&mut t).await.unwrap(),
         brands.origins.into_iter().collect::<Vec<_>>()
@@ -463,7 +485,7 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
 async fn a_protected_message_is_never_overridden() {
     use access_identity_admin::domain::LocaleOverrides;
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("locale").await;
+    let (tenant, environment, d) = w.environment("locale").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let set = |locale: &str, key: &str, text: &str| LocaleOverrides {
         texts: std::collections::BTreeMap::from([(
@@ -482,7 +504,7 @@ async fn a_protected_message_is_never_overridden() {
     .enumerate()
     {
         let p = proposal(
-            (tenant, realm),
+            (tenant, environment),
             Change::LocaleOverrides(refused),
             u8::try_from(n).unwrap() + 1,
             idp_anchor(d),
@@ -498,14 +520,16 @@ async fn a_protected_message_is_never_overridden() {
     }
     let ok = set("tr", "action-continue", "İlerle");
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::LocaleOverrides(ok.clone()),
         9,
         idp_anchor(d),
         1,
     );
     written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let stored = access_store::idp::locale_overrides(&mut t)
         .await
         .unwrap()
@@ -530,17 +554,17 @@ async fn records(w: &World, d: Digest) -> usize {
 async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_exercise() {
     use access_internal_api::idp::IdpAction;
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("scheduled").await;
+    let (tenant, environment, d) = w.environment("scheduled").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let before = records(&w, d).await;
-    let first = kids(&w, realm)[0];
+    let first = kids(&w, environment)[0];
 
-    let ours = SignerRealm(*realm.as_bytes());
+    let ours = SignerEnvironment(*environment.as_bytes());
     let day = 86_400_000;
     let mut rotated = Vec::new();
     let mut now = LEAD;
-    while now <= Policy::REALM.lifetime_ms * 5 / 2 {
+    while now <= Policy::ENVIRONMENT.lifetime_ms * 5 / 2 {
         w.keys.now.store(now, std::sync::atomic::Ordering::SeqCst);
         let report = w.keys.signer.lock().unwrap().round(now, 7);
         assert!(report.troubled.is_empty(), "{now}");
@@ -557,35 +581,41 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
         access_identity_signer::service::AUDIT_EVENT_ROTATED,
         "signer.rotated"
     );
-    let current = kids(&w, realm);
+    let current = kids(&w, environment);
     assert_ne!(current[0], first);
     assert!(rotated.contains(&current[0]));
     assert_eq!(records(&w, d).await, before, "no Exercise, no record");
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(key_changes(&mut t).await.unwrap().len(), 0);
     t.commit().await.unwrap();
 
     // MD-14, §13.7.1
-    let mut slower = Policy::REALM;
+    let mut slower = Policy::ENVIRONMENT;
     slower.lifetime_ms = 120 * day;
     slower.window_ms = 240 * day;
     let change = Change::KeyPolicy(slower);
     assert!(change.action().reserved());
-    assert!(IdpAction::RealmKeyPolicy.schema().reserved);
-    assert!(IdpAction::RealmKeyRotate.schema().reserved);
-    let by_alice = proposal((tenant, realm), change.clone(), 1, idp_anchor(d), 48);
+    assert!(IdpAction::EnvironmentKeyPolicy.schema().reserved);
+    assert!(IdpAction::EnvironmentKeyRotate.schema().reserved);
+    let by_alice = proposal((tenant, environment), change.clone(), 1, idp_anchor(d), 48);
     assert!(!matches!(
         exercise(&w, &by_alice, ALICE_KEY).await,
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(key_changes(&mut t).await.unwrap().len(), 0);
     t.commit().await.unwrap();
-    let by_root = proposal((tenant, realm), change, 2, idp_anchor(d), 48);
+    let by_root = proposal((tenant, environment), change, 2, idp_anchor(d), 48);
     let at = records(&w, d).await;
     written(&exercise(&w, &by_root, ROOT_KEY).await.unwrap());
     assert!(records(&w, d).await > at);
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let actions: Vec<String> = key_changes(&mut t)
         .await
         .unwrap()
@@ -593,7 +623,7 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
         .map(|c| c.action)
         .collect();
     t.commit().await.unwrap();
-    assert_eq!(actions, ["idp.realm.key_policy"]);
+    assert_eq!(actions, ["idp.environment.key_policy"]);
     // OP-155 m.3 (o), OP-157 m.3 (x)
     for a in [IdpAction::GatewayKeytabPolicy, IdpAction::SamlCertPolicy] {
         assert!(!a.schema().reserved, "{a:?}");
@@ -602,7 +632,7 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
     assert!(IdpAction::SamlCertEmergency.schema().reserved);
 }
 
-/// A Grant to `holder` on the realm's `idp.*` resources over `actions`.
+/// A Grant to `holder` on the environment's `idp.*` resources over `actions`.
 fn idp_grant(
     d: Digest,
     slug: &str,
@@ -694,12 +724,14 @@ async fn a_claim_mapper_is_reserved_and_a_namespace_grant_does_not_reach_it() {
     use access_kernel::meta::HoldingRef;
     use access_kernel::model::ActionSet;
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("mapper-reserved").await;
+    let (tenant, environment, d) = w.environment("mapper-reserved").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let alice = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(
@@ -716,7 +748,7 @@ async fn a_claim_mapper_is_reserved_and_a_namespace_grant_does_not_reach_it() {
             let applied = w
                 .admin()
                 .meta(
-                    (tenant, realm),
+                    (tenant, environment),
                     root_write(d, nonce, idp_grant(d, "mapper-reserved", ALICE, actions)),
                 )
                 .await;
@@ -736,7 +768,7 @@ async fn a_claim_mapper_is_reserved_and_a_namespace_grant_does_not_reach_it() {
     let set = |nonce: u8, basis: ExerciseBasis| Proposal {
         subject: Some(alice),
         ..proposal(
-            (tenant, realm),
+            (tenant, environment),
             Change::MapperSet {
                 claim: ClaimName::parse("nick").unwrap(),
                 source: Some(Attribute::parse("nickname").unwrap()),
@@ -760,7 +792,9 @@ async fn a_claim_mapper_is_reserved_and_a_namespace_grant_does_not_reach_it() {
         exercise(&w, &set(0x41, namespace), ALICE_KEY).await,
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         access_store::idp::mappers(&mut t).await.unwrap(),
         Vec::new()

@@ -60,11 +60,11 @@ fn the_export_is_deterministic_sorted_and_without_generated_members() {
     redirect_uris:
       - "https://z.example/cb"
     token_endpoint_auth_method: "none"
+environment: "acme"
 groups:
   - display_name: "Ops"
     membership_issuer: "admin"
     name: "ops"
-realm: "acme"
 settings:
   branding:
     display_name: "Acme"
@@ -144,7 +144,7 @@ fn an_exported_document_has_no_drift_and_unset_members_are_not_drift() {
     .unwrap();
     assert!(steps.is_empty(), "{steps:?}");
     let sparse = json!({
-        "realm": "acme",
+        "environment": "acme",
         "clients": [{"client_id": "c-1", "display_name": "Alpha"}],
         "settings": {"branding": {"display_name": "Acme"}}
     });
@@ -264,7 +264,7 @@ fn a_release_is_a_restriction_exercise_proposal() {
 // TN-123 item 3
 #[test]
 fn prune_retires_what_the_document_does_not_name() {
-    let doc = json!({"realm": "acme", "clients": [{"client_id": "c-1"}]});
+    let doc = json!({"environment": "acme", "clients": [{"client_id": "c-1"}]});
     let steps = plan(
         contract(),
         "acme",
@@ -285,9 +285,9 @@ fn prune_retires_what_the_document_does_not_name() {
 }
 
 #[test]
-fn another_realms_or_an_unknown_document_is_refused() {
+fn another_environments_or_an_unknown_document_is_refused() {
     let mut doc = exported();
-    doc["realm"] = json!("other");
+    doc["environment"] = json!("other");
     assert_eq!(
         plan(
             contract(),
@@ -296,7 +296,7 @@ fn another_realms_or_an_unknown_document_is_refused() {
             &runtime(),
             &PlanOptions::default()
         ),
-        Err(DocError::Realm("other".into()))
+        Err(DocError::Environment("other".into()))
     );
     let mut doc = exported();
     doc["accounts"] = json!([]);
@@ -336,13 +336,13 @@ fn a_protection_mode_change_names_its_tier() {
     let mut r = runtime();
     r.settings["protection_mode"] = json!({"bot": "monitor", "suspicious_ip": "monitor",
         "breached_password": "monitor", "brute_force": "enforce", "sl2": "shadow", "denied_asns": []});
-    let doc = json!({"realm": "acme", "settings": {"protection_mode": {"suspicious_ip": "enforce"}, "jose_alg": "Ed25519"}});
+    let doc = json!({"environment": "acme", "settings": {"protection_mode": {"suspicious_ip": "enforce"}, "jose_alg": "Ed25519"}});
     let steps = plan(contract(), "acme", &doc, &r, &PlanOptions::default()).unwrap();
     assert!(
         steps
             .iter()
             .any(|s| matches!(s, Step::Write { operation, what, .. }
-        if operation == "putProtectionMode" && what.ends_with("(idp.realm.protection_mode)"))),
+        if operation == "putProtectionMode" && what.ends_with("(idp.environment.protection_mode)"))),
         "{steps:?}"
     );
     assert!(
@@ -351,8 +351,8 @@ fn a_protection_mode_change_names_its_tier() {
             .any(|s| matches!(s, Step::Write { operation, body, .. }
         if operation == "putJoseAlg" && body["alg"] == "Ed25519"))
     );
-    let doc = json!({"realm": "acme", "settings": {"protection_mode": {"suspicious_ip": "monitor", "bot": "monitor", "sl2": "shadow"}}});
+    let doc = json!({"environment": "acme", "settings": {"protection_mode": {"suspicious_ip": "monitor", "bot": "monitor", "sl2": "shadow"}}});
     r.settings["protection_mode"]["bot"] = json!("enforce");
     let steps = plan(contract(), "acme", &doc, &r, &PlanOptions::default()).unwrap();
-    assert!(steps.iter().any(|s| matches!(s, Step::Write { what, .. } if what.ends_with("(idp.realm.protection_mode_loosen)"))), "{steps:?}");
+    assert!(steps.iter().any(|s| matches!(s, Step::Write { what, .. } if what.ends_with("(idp.environment.protection_mode_loosen)"))), "{steps:?}");
 }

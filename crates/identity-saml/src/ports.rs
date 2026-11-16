@@ -1,4 +1,4 @@
-//! What the SAML use cases need from outside: the realm's SAML key, a random source and an
+//! What the SAML use cases need from outside: the environment's SAML key, a random source and an
 //! encrypter (OP-63: clock and RNG are ports).
 
 use std::future::Future;
@@ -6,7 +6,7 @@ use std::future::Future;
 use crate::alg::SigAlg;
 use crate::xml::El;
 
-/// A signature from the realm's SAML key.
+/// A signature from the environment's SAML key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signature {
     /// The signature value (PKCS#1 v1.5, or raw `r || s` for ECDSA).
@@ -20,7 +20,7 @@ pub struct Signature {
 #[error("signer: {0}")]
 pub struct SignError(pub String);
 
-/// Signs canonical `SignedInfo` octets with the realm's SAML key (§10.6.1 `XmlSigner`).
+/// Signs canonical `SignedInfo` octets with the environment's SAML key (§10.6.1 `XmlSigner`).
 pub trait XmlSigner: Sync {
     /// The signature of `signed_info` with `alg`.
     fn sign(

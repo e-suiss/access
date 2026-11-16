@@ -1,5 +1,5 @@
 //! The chain gate of chain-constrained issuers on the real ingest path (IDI-12, OP-155 m.3 (j)):
-//! the realm issuer's Claims stop while its tracked chain does not hold and flow again once it
+//! the environment issuer's Claims stop while its tracked chain does not hold and flow again once it
 //! does, with no Acceptance written in between.
 
 use std::collections::BTreeMap;
@@ -8,7 +8,7 @@ use access_identity_account::app::claims::Issued;
 use access_identity_account::domain::claims::{AuthFacts, Bind, authentication};
 use access_internal_api::claims::ClaimVerdict;
 use access_kernel::claim::body::AuthMethod;
-use access_store::issuer::{issuer_instance, realm_issuer};
+use access_store::issuer::{environment_issuer, issuer_instance};
 use access_store::oidf::{ChainState, set_issuer_state, track_issuer};
 
 use super::claims::courier;
@@ -35,12 +35,12 @@ fn admitted(i: &Issued) -> bool {
 #[tokio::test]
 async fn a_lost_chain_cuts_the_issuer_and_its_return_resumes_it() {
     let w = World::new().await;
-    let (t, r, d) = w.realm("oidf-gate").await;
+    let (t, r, d) = w.environment("oidf-gate").await;
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
-    let issuer = realm_issuer(&mut tx).await.unwrap().unwrap();
+    let issuer = environment_issuer(&mut tx).await.unwrap().unwrap();
     tx.commit().await.unwrap();
     let key = w.keys.open_issuer(r, issuer).await.unwrap();
     let domain = DomainId::from_bytes(d.0);
@@ -57,7 +57,7 @@ async fn a_lost_chain_cuts_the_issuer_and_its_return_resumes_it() {
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
     let alice = tx
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     assert!(
@@ -79,8 +79,8 @@ async fn a_lost_chain_cuts_the_issuer_and_its_return_resumes_it() {
         })
     };
     assert!(admitted(&c.issue(t, r, &login(NOW - 9)).await.unwrap()));
-    let realm = (*t.as_bytes(), *r.as_bytes());
-    track_issuer(&w.db.app, &domain, realm, ENTITY, Some(issuer), NOW)
+    let environment = (*t.as_bytes(), *r.as_bytes());
+    track_issuer(&w.db.app, &domain, environment, ENTITY, Some(issuer), NOW)
         .await
         .unwrap();
     let head = w.plane.domains.head(d).await.unwrap();
@@ -186,7 +186,7 @@ mod admin {
     async fn settings(
         w: &World,
         t: TenantId,
-        r: RealmId,
+        r: EnvironmentId,
     ) -> access_store::oidf::FederationSettingsRow {
         let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
         let s = tx.federation_settings().await.unwrap();
@@ -194,14 +194,20 @@ mod admin {
         s
     }
 
-    async fn anchors(w: &World, t: TenantId, r: RealmId) -> Vec<(String, bool)> {
+    async fn anchors(w: &World, t: TenantId, r: EnvironmentId) -> Vec<(String, bool)> {
         let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
         let a = tx.trust_anchors().await.unwrap();
         tx.commit().await.unwrap();
         a.into_iter().map(|a| (a.entity_id, a.live)).collect()
     }
 
-    async fn apply(w: &World, at: (TenantId, RealmId), d: Digest, c: FederationChange, n: u8) {
+    async fn apply(
+        w: &World,
+        at: (TenantId, EnvironmentId),
+        d: Digest,
+        c: FederationChange,
+        n: u8,
+    ) {
         let hours = if c.action().reserved() { 48 } else { 1 };
         let p = proposal(at, Change::Federation(c), n, idp_anchor(d), hours);
         written(&exercise(w, &p, ROOT_KEY).await.unwrap());
@@ -209,7 +215,7 @@ mod admin {
 
     async fn refused(
         w: &World,
-        at: (TenantId, RealmId),
+        at: (TenantId, EnvironmentId),
         d: Digest,
         c: FederationChange,
     ) -> Invalid {
@@ -225,7 +231,7 @@ mod admin {
     #[tokio::test]
     async fn federation_is_off_until_each_action_turns_it_on() {
         let w = World::new().await;
-        let (t, r, d) = w.realm("oidf-admin").await;
+        let (t, r, d) = w.environment("oidf-admin").await;
         onboard(&w.plane, d, ROOT, ROOT_KEY).await;
         let s = settings(&w, t, r).await;
         assert!(!s.enabled && !s.ta_enabled && !s.registration_open);
@@ -270,7 +276,7 @@ mod admin {
         assert!(!s.enabled && !s.ta_enabled && !s.registration_open);
     }
 
-    /// The realm signer as the discovery routes reach it.
+    /// The environment signer as the discovery routes reach it.
     struct Federated<'a>(&'a Opened);
 
     #[expect(clippy::unused_async_trait_impl, reason = "a fake of an async port")]
@@ -281,17 +287,17 @@ mod admin {
 
         async fn jwks(
             &self,
-            _: RealmId,
+            _: EnvironmentId,
         ) -> Result<String, access_identity_oauth::ports::Unavailable> {
             Err(access_identity_oauth::ports::Unavailable)
         }
 
         async fn federation_jwks(
             &self,
-            realm: RealmId,
+            environment: EnvironmentId,
         ) -> Result<String, access_identity_oauth::ports::Unavailable> {
-            match self.0.ask(SignerRequest::FederationJwks(SignerRealm(
-                *realm.as_bytes(),
+            match self.0.ask(SignerRequest::FederationJwks(SignerEnvironment(
+                *environment.as_bytes(),
             ))) {
                 SignerResponse::Jwks(d) => Ok(d),
                 _ => Err(access_identity_oauth::ports::Unavailable),
@@ -300,13 +306,13 @@ mod admin {
 
         async fn sign_federation(
             &self,
-            realm: RealmId,
+            environment: EnvironmentId,
             typ: &str,
             payload: &[u8],
             at: u64,
         ) -> Result<String, access_identity_oauth::ports::Unavailable> {
             match self.0.ask(SignerRequest::SignFederation {
-                realm: SignerRealm(*realm.as_bytes()),
+                environment: SignerEnvironment(*environment.as_bytes()),
                 typ: String::from(typ),
                 payload: payload.to_vec(),
                 at,
@@ -344,7 +350,7 @@ mod admin {
     async fn a_leaf_publishes_its_entity_configuration_with_its_federation_key() {
         use access_identity_oauth::adapters::PgDirectory;
         let w = World::new().await;
-        let (t, r, d) = w.realm("oidf-leaf").await;
+        let (t, r, d) = w.environment("oidf-leaf").await;
         onboard(&w.plane, d, ROOT, ROOT_KEY).await;
         let real_now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -364,12 +370,15 @@ mod admin {
             "{}/.well-known/openid-federation",
             rest.strip_prefix(host.as_str()).unwrap()
         );
-        let router = access_http::realm::router(access_identity_oauth::app::Discovery::new(
+        let router = access_http::environment::router(access_identity_oauth::app::Discovery::new(
             PgDirectory::new(w.db.router.clone()).with_facts(w.db.app.clone()),
             Federated(keys),
         ));
         let (status, _, _) = get(&router, &host, &path).await;
-        assert_eq!(status, 404, "a realm that is no leaf publishes nothing");
+        assert_eq!(
+            status, 404,
+            "an environment that is no leaf publishes nothing"
+        );
         apply(
             &w,
             (t, r),
@@ -394,13 +403,14 @@ mod admin {
             "a leaf serves no fetch or list"
         );
         let open = SignerRequest::Open {
-            realm: SignerRealm(*r.as_bytes()),
+            environment: SignerEnvironment(*r.as_bytes()),
             alg: access_crypto::jose::JwsAlg::Es256,
         };
         assert_eq!(keys.ask(open), SignerResponse::Opened);
-        let SignerResponse::Jwks(jose) = keys.ask(SignerRequest::Jwks(SignerRealm(*r.as_bytes())))
+        let SignerResponse::Jwks(jose) =
+            keys.ask(SignerRequest::Jwks(SignerEnvironment(*r.as_bytes())))
         else {
-            panic!("no realm keys");
+            panic!("no environment keys");
         };
         let kid = ec.jwks.first().unwrap().kid.clone().unwrap();
         assert!(
@@ -524,7 +534,7 @@ mod admin {
 
         fn fetch<'a>(
             &'a self,
-            _: RealmId,
+            _: EnvironmentId,
             url: &'a str,
             _: &'a str,
             _: usize,
@@ -556,13 +566,13 @@ mod admin {
         use access_identity_oauth::adapters::oidf::refresh_issuers;
         use access_identity_oidf::testing::Entity;
         let w = World::new().await;
-        let (t, r, d) = w.realm("oidf-idi12").await;
+        let (t, r, d) = w.environment("oidf-idi12").await;
         onboard(&w.plane, d, ROOT, ROOT_KEY).await;
         access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
             .await
             .unwrap();
         let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
-        let issuer = realm_issuer(&mut tx).await.unwrap().unwrap();
+        let issuer = environment_issuer(&mut tx).await.unwrap().unwrap();
         tx.commit().await.unwrap();
         let key = w.keys.open_issuer(r, issuer).await.unwrap();
         let domain = DomainId::from_bytes(d.0);
@@ -579,7 +589,7 @@ mod admin {
         onboard(&w.plane, d, ALICE, ALICE_KEY).await;
         let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
         let alice = tx
-            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .insert_subject("active", "environment-kek:1", &[9; 40])
             .await
             .unwrap();
         assert!(

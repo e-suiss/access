@@ -13,12 +13,12 @@ use super::{GENESIS_FIELDS, ROWS, Shape, project, resources, spec};
 use crate::api::app::rest::{next_link, page_request};
 use crate::api::app::{Caller, Committed, Ctx};
 use crate::api::domain::caller::AIS_FIELD;
+use crate::api::environment::matches;
 use crate::api::manifest::Access;
 use crate::api::ports::{
     Clock, Drafted, Env, Item, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite,
     Written,
 };
-use crate::api::realm::matches;
 use crate::problem::{Code, codes};
 
 fn problem(code: &Code) -> Response {
@@ -123,15 +123,15 @@ async fn get<E: Env>(
 fn object(body: &[u8]) -> Result<Map<String, Value>, &'static Code> {
     let bytes: &[u8] = if body.is_empty() { b"{}" } else { body };
     access_parse::json::check(bytes, bytes.len(), access_parse::json::MAX_DEPTH)
-        .map_err(|_| &codes::realm::INVALID_BODY)?;
+        .map_err(|_| &codes::environment::INVALID_BODY)?;
     match serde_json::from_slice(bytes) {
         Ok(Value::Object(m)) => Ok(m),
-        _ => Err(&codes::realm::INVALID_BODY),
+        _ => Err(&codes::environment::INVALID_BODY),
     }
 }
 
 /// `POST /admin/v1/platform/intents`: `{operation, key?, body}` → the intent the provisioning
-/// write compiles to (TN-110). `key` is the tenant a realm or sandbox creation is in.
+/// write compiles to (TN-110). `key` is the tenant an environment or sandbox creation is in.
 async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Code> {
     let mut request = object(raw)?;
     let operation = request
@@ -139,16 +139,16 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .and_then(Value::as_str)
         .and_then(|o| ROWS.iter().find(|r| r.operation_id == o))
         .filter(|r| r.access == Access::Write)
-        .ok_or(&codes::realm::UNKNOWN_OPERATION)?;
+        .ok_or(&codes::environment::UNKNOWN_OPERATION)?;
     let key = match request.remove("key") {
         None | Some(Value::Null) => None,
         Some(Value::String(k)) => Some(k),
-        Some(_) => return Err(&codes::realm::INVALID_BODY),
+        Some(_) => return Err(&codes::environment::INVALID_BODY),
     };
     let mut body = match request.remove("body") {
         None | Some(Value::Null) => Map::new(),
         Some(Value::Object(b)) => b,
-        Some(_) => return Err(&codes::realm::INVALID_BODY),
+        Some(_) => return Err(&codes::environment::INVALID_BODY),
     };
     body.remove(AIS_FIELD);
     let write = PlatformWrite {
@@ -181,7 +181,7 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .into_response())
 }
 
-/// The created resource and, for a realm, its Genesis summary, each limited to its members.
+/// The created resource and, for an environment, its Genesis summary, each limited to its members.
 fn created(kind: PlatformKind, item: Item, out: &mut Map<String, Value>) {
     let mut body = item.body;
     let genesis = body.as_object_mut().and_then(|o| o.remove("genesis"));

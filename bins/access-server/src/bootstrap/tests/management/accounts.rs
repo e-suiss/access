@@ -26,7 +26,7 @@ async fn an_import_file_named_by_its_digest_imports_through_admin_rest() {
         "not json",
     ]
     .join("\n");
-    let target = "/admin/v1/realms/acme/accounts/import";
+    let target = "/admin/v1/envs/acme/accounts/import";
     let mut wrong = import_body(&content);
     wrong["accounts"] = serde_json::json!(5);
     let refused = c
@@ -34,7 +34,7 @@ async fn an_import_file_named_by_its_digest_imports_through_admin_rest() {
         .await;
     assert_eq!(refused.status, StatusCode::BAD_REQUEST, "{}", refused.body);
 
-    let (_, before, _) = c.rest_read("/admin/v1/realms/acme/accounts").await;
+    let (_, before, _) = c.rest_read("/admin/v1/envs/acme/accounts").await;
     let done = c
         .rest_write(
             &Method::POST,
@@ -54,7 +54,7 @@ async fn an_import_file_named_by_its_digest_imports_through_admin_rest() {
         serde_json::json!([[4, "identifier already taken"], [5, "not an import line"]])
     );
     assert!(!done.body.to_string().contains("u-1"), "no line is echoed");
-    let (_, after, _) = c.rest_read("/admin/v1/realms/acme/accounts").await;
+    let (_, after, _) = c.rest_read("/admin/v1/envs/acme/accounts").await;
     assert_eq!(
         after["items"].as_array().unwrap().len(),
         before["items"].as_array().unwrap().len() + 2
@@ -69,7 +69,7 @@ async fn a_migration_export_through_admin_rest_opens_for_its_recipient_only() {
     let imported = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/accounts/import",
+            "/admin/v1/envs/acme/accounts/import",
             ("importAccounts", None),
             import_body(content),
             None,
@@ -77,7 +77,7 @@ async fn a_migration_export_through_admin_rest_opens_for_its_recipient_only() {
         .await;
     assert_eq!(imported.status, StatusCode::OK, "{}", imported.body);
     let key = access_crypto::migration_bundle::RecipientKey::generate().unwrap();
-    let target = "/admin/v1/realms/acme/accounts/migration-export";
+    let target = "/admin/v1/envs/acme/accounts/migration-export";
     let bad = c
         .rest_write(
             &Method::POST,
@@ -108,20 +108,20 @@ async fn a_migration_export_through_admin_rest_opens_for_its_recipient_only() {
 
 // OP-153 m.18 (e), m.25 (b), TN-113
 #[tokio::test]
-async fn a_binding_names_another_realm_of_the_tenant_only() {
+async fn a_binding_names_another_environment_of_the_tenant_only() {
     let c = console("rest-bind", false).await;
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let account = ids
         .encode(access_identity_account::app::SUBJECT_PREFIX, c.subject)
         .unwrap();
-    let target = format!("/admin/v1/realms/acme/accounts/{account}/bind");
+    let target = format!("/admin/v1/envs/acme/accounts/{account}/bind");
     for peer in ["acme", "nowhere"] {
         let w = c
             .rest_write(
                 &Method::POST,
                 &target,
                 ("bindAccount", Some(account.as_str())),
-                serde_json::json!({ "peer_realm": peer, "peer_account_id": account }),
+                serde_json::json!({ "peer_environment": peer, "peer_account_id": account }),
                 None,
             )
             .await;

@@ -12,10 +12,10 @@ import type { ConsoleMock } from "./mock.js";
 
 const GRANT = Buffer.alloc(16, 0x47).toString("base64url");
 const PARTY = Buffer.alloc(16, 2).toString("base64url");
-const ACTIONS = ["tenant_create", "realm_create", "sandbox_create"] as const;
+const ACTIONS = ["tenant_create", "environment_create", "sandbox_create"] as const;
 
 function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void {
-  bff.realm = "platform";
+  bff.environment = "platform";
   for (const a of held) bff.heldActions.add(`idp.platform/${a}`);
   bff.searches.set("holdings", {
     results: [
@@ -35,10 +35,10 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       { tenant_id: "tnt_acme", status: "active", placement: "pool-default" },
     ],
   });
-  bff.admin.set("platform/tenants/tnt_platform/realms", {
+  bff.admin.set("platform/tenants/tnt_platform/envs", {
     items: [{ slug: "platform", tenant_id: "tnt_platform", status: "active", sandbox: false }],
   });
-  bff.admin.set("platform/tenants/tnt_acme/realms", {
+  bff.admin.set("platform/tenants/tnt_acme/envs", {
     items: [{ slug: "acme", tenant_id: "tnt_acme", status: "active", sandbox: false }],
   });
   bff.admin.set("platform/tenants/tnt_acme/sandbox-domains", {
@@ -52,10 +52,10 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       },
     ],
   });
-  bff.admin.set("platform/realms/acme", {
+  bff.admin.set("platform/envs/acme", {
     slug: "acme",
     tenant_id: "tnt_acme",
-    issuer: "https://access-server:8443/realms/acme",
+    issuer: "https://access-server:8443/env/acme",
     status: "active",
     placement: "pool-default",
     domain: Buffer.alloc(32, 9).toString("base64url"),
@@ -75,7 +75,7 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
   });
 }
 
-/** Signs in to the platform realm, registers this browser's key and opens `path`. */
+/** Signs in to the platform environment, registers this browser's key and opens `path`. */
 async function openPlatform(page: Page, path: string): Promise<void> {
   await page.goto("/console/");
   await page.getByRole("button", { name: "Register this browser" }).click();
@@ -111,7 +111,7 @@ test("the platform section shows only for a viewer whose Grant covers a platform
   const screens = page.getByRole("navigation", { name: "Screens in this section" });
   await expect(screens.getByRole("link")).toHaveText([
     "Tenants",
-    "Realms",
+    "Environments",
     "Sandbox domains",
     "Operator health",
   ]);
@@ -122,17 +122,17 @@ test("the platform section shows only for a viewer whose Grant covers a platform
   }
 });
 
-// OP-159 m.43 (b), TN-119: in a platform session the switcher lists the platform's realms
-test("in a platform session the switcher lists the platform's realms and opens one", async ({
+// OP-159 m.43 (b), TN-119: in a platform session the switcher lists the platform's environments
+test("in a platform session the switcher lists the platform's environments and opens one", async ({
   page,
   bff,
 }) => {
   seedPlatform(bff);
   await openPlatform(page, "/console/platform/platform");
-  const switcher = page.getByRole("button", { name: "Realm platform: switch realm" });
+  const switcher = page.getByRole("button", { name: "Environment platform: switch environment" });
   await switcher.click();
   const menu = page.getByRole("menu");
-  const listed = menu.getByRole("group", { name: "Realms on this platform" });
+  const listed = menu.getByRole("group", { name: "Environments on this platform" });
   await expect(listed.getByRole("menuitemradio")).toHaveText(["acme", "platform"]);
   await expect(menu.getByRole("group", { name: "Signed in from this browser" })).toHaveCount(0);
   await listed.getByRole("menuitemradio", { name: "acme" }).click();
@@ -152,9 +152,12 @@ test("a Grant of one platform action shows only that action's screens", async ({
   ]);
 });
 
-// INV-29: without a Grant nothing shows, even in the platform realm
-test("a platform realm account without a Grant sees no platform section", async ({ page, bff }) => {
-  bff.realm = "platform";
+// INV-29: without a Grant nothing shows, even in the platform environment
+test("a platform environment account without a Grant sees no platform section", async ({
+  page,
+  bff,
+}) => {
+  bff.environment = "platform";
   await page.goto("/console/");
   await page.getByRole("button", { name: "Register this browser" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
@@ -179,7 +182,7 @@ test("a new tenant is drafted, shown, signed on the platform Grant and listed", 
   const listings = () =>
     bff.seen.filter((x) => x.method === "GET" && x.path.endsWith("/tenants")).length;
   // OP-159 m.43 (b)
-  await expect.poll(() => bff.seen.some((x) => x.path.endsWith("/tnt_platform/realms"))).toBe(true);
+  await expect.poll(() => bff.seen.some((x) => x.path.endsWith("/tnt_platform/envs"))).toBe(true);
   const before = listings();
   const panel = page.getByRole("region", { name: "New tenant" });
   await panel.getByRole("button", { name: "Create tenant" }).click();
@@ -196,34 +199,39 @@ test("a new tenant is drafted, shown, signed on the platform Grant and listed", 
   await expect.poll(listings).toBe(before + 1);
 });
 
-// TN-111, §13.7.7: a realm is opened with the viewer's founding root, never the operator's
-test("a realm's metadata and key state show, and a new realm names its own founding root", async ({
+// TN-111, §13.7.7: an environment is opened with the viewer's founding root, never the operator's
+test("an environment's metadata and key state show, and a new environment names its own founding root", async ({
   page,
   bff,
 }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/realms");
+  await openPlatform(page, "/console/platform/platform/envs");
   await page.getByLabel("Tenant").selectOption("tnt_acme");
   // OP-159 m.42 (d)
-  await expect(page.getByTestId("realm-console-link")).toHaveText(`${BASE}/console/acme`);
-  await expect(page.getByTestId("realm-console-link")).toHaveAttribute("href", "/console/acme");
-  await page.getByRole("button", { name: "acme" }).click();
-  await expect(page.getByTestId("realm-key-state")).toHaveAttribute("data-state", "signing");
-  await expect(page.getByTestId("realm-meta")).toContainText(
-    "https://access-server:8443/realms/acme",
+  await expect(page.getByTestId("environment-console-link")).toHaveText(`${BASE}/console/acme`);
+  await expect(page.getByTestId("environment-console-link")).toHaveAttribute(
+    "href",
+    "/console/acme",
   );
-  const panel = page.getByRole("region", { name: "New realm" });
+  await page.getByRole("button", { name: "acme" }).click();
+  await expect(page.getByTestId("environment-key-state")).toHaveAttribute("data-state", "signing");
+  await expect(page.getByTestId("environment-meta")).toContainText(
+    "https://access-server:8443/env/acme",
+  );
+  const panel = page.getByRole("region", { name: "New environment" });
   await panel.getByLabel("Short name").fill("shop");
-  await expect(panel.getByRole("button", { name: "Create realm" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "Create environment" })).toBeDisabled();
   await panel.getByLabel("Party IDs").fill(`${PARTY}\nAwMDAwMDAwMDAwMDAwMDAw`);
-  await panel.getByRole("button", { name: "Create realm" }).click();
+  await panel.getByRole("button", { name: "Create environment" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("idp.platform.realm_create");
+  await expect(dialog).toContainText("idp.platform.environment_create");
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect(panel.getByRole("status")).toContainText("Recorded as change");
-  await expect(panel.getByTestId("realm-console-created")).toContainText(`${BASE}/console/shop`);
+  await expect(panel.getByTestId("environment-console-created")).toContainText(
+    `${BASE}/console/shop`,
+  );
   const w = bff.writes[0];
-  expect(w?.path).toBe("platform/tenants/tnt_acme/realms");
+  expect(w?.path).toBe("platform/tenants/tnt_acme/envs");
   expect(w?.body["root"]).toEqual({
     joint: { k: 2, parties: [PARTY, "AwMDAwMDAwMDAwMDAwMDAw"] },
   });
@@ -240,7 +248,7 @@ test("a sandbox domain with a sole founding root needs the no-recovery acknowled
   await openPlatform(page, "/console/platform/platform/sandboxes");
   await page.getByLabel("Tenant").selectOption("tnt_acme");
   await expect(page.getByTestId("sandbox-domains-list")).toContainText("acme-lab");
-  await expect(page.getByTestId("realm-console-link")).toHaveCount(0);
+  await expect(page.getByTestId("environment-console-link")).toHaveCount(0);
   const panel = page.getByRole("region", { name: "New sandbox domain" });
   await panel.getByLabel("Short name").fill("acme-try");
   await panel.getByLabel("Only me").check();
@@ -262,13 +270,13 @@ test("a sandbox domain with a sole founding root needs the no-recovery acknowled
 // X11: a draft that is not what was asked for is never signed
 test("a tampered platform draft is refused before the signature screen", async ({ page, bff }) => {
   seedPlatform(bff);
-  await openPlatform(page, "/console/platform/platform/realms");
+  await openPlatform(page, "/console/platform/platform/envs");
   bff.tamper = true;
   await page.getByLabel("Tenant").selectOption("tnt_acme");
-  const panel = page.getByRole("region", { name: "New realm" });
+  const panel = page.getByRole("region", { name: "New environment" });
   await panel.getByLabel("Short name").fill("shop");
   await panel.getByLabel("Party IDs").fill(`${PARTY},AwMDAwMDAwMDAwMDAwMDAw`);
-  await panel.getByRole("button", { name: "Create realm" }).click();
+  await panel.getByRole("button", { name: "Create environment" }).click();
   await expect(panel.getByRole("alert")).toContainText(en.signatureMismatch);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(bff.writes).toEqual([]);
@@ -291,7 +299,7 @@ test("every platform screen has no WCAG 2.2 AA violations", async ({ page, bff }
   await openPlatform(page, "/console/platform/platform/tenants");
   for (const [path, heading] of [
     ["platform/tenants", "Tenants"],
-    ["platform/realms", "Realms"],
+    ["platform/envs", "Environments"],
     ["platform/sandboxes", "Sandbox domains"],
     ["platform/operator", "Operator health"],
   ] as const) {

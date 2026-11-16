@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id FROM access.identity_identifiers\n              WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'\n                AND (value_index = $3 OR (value IS NOT NULL AND lower(value) = lower($4)))\n              ORDER BY identifier_id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9da5eec90e7185e9c9df8678777d7cc7968bae78497239936008aa95e12a5c18"
+}

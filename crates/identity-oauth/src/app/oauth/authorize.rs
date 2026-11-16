@@ -9,8 +9,8 @@ use access_store::oauth::{NewCode, NewRequest};
 use serde_json::json;
 
 use super::{
-    ClientRequest, Env, OAuth, Realm, Reply, code_digest, day, decode32, from_day, session_aal,
-    session_live, signed, unsigned,
+    ClientRequest, Env, Environment, OAuth, Reply, code_digest, day, decode32, from_day,
+    session_aal, session_live, signed, unsigned,
 };
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
@@ -38,7 +38,7 @@ fn problem(u: Unredirectable) -> Reply {
     }
 }
 
-/// AG-8: a client the realm did not register names one registered protected resource; no
+/// AG-8: a client the environment did not register names one registered protected resource; no
 /// default audience is used for it.
 fn mcp_without_resource(client: &Client, request: &AuthRequest) -> bool {
     client.approval_required() && request.resource.is_none() && request.authority.is_none()
@@ -84,8 +84,13 @@ impl<E: Env> OAuth<E> {
     /// client with `iss` (RFC 9207). Without a live session the browser goes to the hosted
     /// login with the request stored; `prompt=none` answers `login_required` instead, the same
     /// whatever account exists (CR-40).
-    pub async fn authorize(&self, realm: &Realm, params: &Params, cookie: Option<&str>) -> Reply {
-        match self.authorize_inner(realm, params, cookie).await {
+    pub async fn authorize(
+        &self,
+        environment: &Environment,
+        params: &Params,
+        cookie: Option<&str>,
+    ) -> Reply {
+        match self.authorize_inner(environment, params, cookie).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -94,7 +99,7 @@ impl<E: Env> OAuth<E> {
     async fn load(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         now: u64,
     ) -> Result<Result<Loaded, Reply>, Unavailable> {
@@ -144,7 +149,7 @@ impl<E: Env> OAuth<E> {
             return Ok(Err(self
                 .answer(
                     tx,
-                    realm,
+                    environment,
                     &client,
                     Answer {
                         redirect_uri: redirect,
@@ -156,15 +161,21 @@ impl<E: Env> OAuth<E> {
                 )
                 .await?));
         }
-        let product = self.product_resource(realm, params).await?;
-        match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {
+        let product = self.product_resource(environment, params).await?;
+        match stage_two(
+            params,
+            &client,
+            redirect,
+            &environment.issuer,
+            product.as_deref(),
+        ) {
             // AG-8, §11.4.3
             Ok(request) if mcp_without_resource(&client, &request) => {
                 Ok(Err(Reply::Redirect(error_redirect(
                     redirect,
                     AuthError::RESOURCE_REQUIRED,
                     params.get("state"),
-                    &realm.issuer,
+                    &environment.issuer,
                 ))))
             }
             Ok(request) => Ok(Ok(Loaded {
@@ -181,7 +192,7 @@ impl<E: Env> OAuth<E> {
                 Ok(Err(self
                     .answer(
                         tx,
-                        realm,
+                        environment,
                         &client,
                         Answer {
                             redirect_uri: redirect,
@@ -202,17 +213,17 @@ impl<E: Env> OAuth<E> {
     )]
     async fn authorize_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         cookie: Option<&str>,
     ) -> Result<Reply, Unavailable> {
         // IDP-1, AG-4
-        if self.prepare_client(realm, params).await?.is_err() {
+        if self.prepare_client(environment, params).await?.is_err() {
             return Ok(problem(Unredirectable::Client));
         }
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
-        let l = match self.load(&mut tx, realm, params, now).await? {
+        let mut tx = self.begin(environment).await?;
+        let l = match self.load(&mut tx, environment, params, now).await? {
             Ok(l) => l,
             Err(reply) => return Ok(reply),
         };
@@ -243,15 +254,15 @@ impl<E: Env> OAuth<E> {
             if req.prompt == Prompt::None {
                 let members = Outcome::Error(AuthError::LOGIN_REQUIRED);
                 return self
-                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .answer(&mut tx, environment, &l.client, back_to, members, now)
                     .await;
             }
-            return self.to_login(tx, realm, &l, now, reason).await;
+            return self.to_login(tx, environment, &l, now, reason).await;
         }
         let (Some(session), Some(s)) = (session, signed_in) else {
             let members = Outcome::Error(AuthError::LOGIN_REQUIRED);
             return self
-                .answer(&mut tx, realm, &l.client, back_to, members, now)
+                .answer(&mut tx, environment, &l.client, back_to, members, now)
                 .await;
         };
         // §11.6, P58, EI-18
@@ -260,13 +271,13 @@ impl<E: Env> OAuth<E> {
             if req.prompt == Prompt::None {
                 let members = Outcome::Error(AuthError::CONSENT_REQUIRED);
                 return self
-                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .answer(&mut tx, environment, &l.client, back_to, members, now)
                     .await;
             }
             return self
                 .to_login(
                     tx,
-                    realm,
+                    environment,
                     &l,
                     now,
                     crate::domain::tokens::LoginReason::Approve,
@@ -278,13 +289,13 @@ impl<E: Env> OAuth<E> {
             if req.prompt == Prompt::None {
                 let members = Outcome::Error(AuthError::CONSENT_REQUIRED);
                 return self
-                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .answer(&mut tx, environment, &l.client, back_to, members, now)
                     .await;
             }
             return self
                 .to_login(
                     tx,
-                    realm,
+                    environment,
                     &l,
                     now,
                     crate::domain::tokens::LoginReason::Share,
@@ -329,7 +340,7 @@ impl<E: Env> OAuth<E> {
         let reply = self
             .answer(
                 &mut tx,
-                realm,
+                environment,
                 &l.client,
                 back_to,
                 Outcome::Code(&code),
@@ -346,7 +357,7 @@ impl<E: Env> OAuth<E> {
     async fn answer(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         to: Answer<'_>,
         outcome: Outcome<'_>,
@@ -355,9 +366,11 @@ impl<E: Env> OAuth<E> {
         if !to.mode.jwt() {
             let uri = match outcome {
                 Outcome::Code(code) => {
-                    code_redirect(to.redirect_uri, code, to.state, &realm.issuer)
+                    code_redirect(to.redirect_uri, code, to.state, &environment.issuer)
                 }
-                Outcome::Error(e) => error_redirect(to.redirect_uri, e, to.state, &realm.issuer),
+                Outcome::Error(e) => {
+                    error_redirect(to.redirect_uri, e, to.state, &environment.issuer)
+                }
             };
             return Ok(Reply::Redirect(uri));
         }
@@ -368,10 +381,18 @@ impl<E: Env> OAuth<E> {
         if let Some(st) = to.state {
             all.push(("state", st));
         }
-        let claims = jarm::claims(&realm.issuer, &client.id, now, &all);
+        let claims = jarm::claims(&environment.issuer, &client.id, now, &all);
         let encrypt = client.profile.encryption.as_ref().is_some_and(|e| e.jarm);
         let response = self
-            .client_jwt(tx, realm, client, jarm::JARM_TYP, &claims, encrypt, now)
+            .client_jwt(
+                tx,
+                environment,
+                client,
+                jarm::JARM_TYP,
+                &claims,
+                encrypt,
+                now,
+            )
             .await?;
         Ok(match to.mode {
             ResponseMode::FormPostJwt => Reply::FormPost {
@@ -386,7 +407,7 @@ impl<E: Env> OAuth<E> {
     async fn to_login(
         &self,
         mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         l: &Loaded,
         now: u64,
         reason: crate::domain::tokens::LoginReason,
@@ -407,9 +428,9 @@ impl<E: Env> OAuth<E> {
             )
             .await?;
         tx.commit().await?;
-        let back_to = return_to(&realm.issuer, &l.client.id, &uri);
+        let back_to = return_to(&environment.issuer, &l.client.id, &uri);
         Ok(Reply::Redirect(self.env.pages().login(
-            &realm.issuer,
+            &environment.issuer,
             &back_to,
             reason,
         )))
@@ -503,26 +524,27 @@ impl<E: Env> OAuth<E> {
     /// it binds the code to its key, as `dpop_jkt` does (RFC 9449 §10.1).
     pub async fn par(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Reply {
-        self.par_mtls(realm, params, authorization, dpop, &[]).await
+        self.par_mtls(environment, params, authorization, dpop, &[])
+            .await
     }
 
     /// [`Self::par`] over a connection that presented the client certificate `chain`, leaf
     /// first (RFC 8705 §2, OP-155 m.3 (k)).
     pub async fn par_mtls(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
         dpop: &[&str],
         chain: &[Vec<u8>],
     ) -> Reply {
         match self
-            .par_inner(realm, params, authorization, dpop, chain)
+            .par_inner(environment, params, authorization, dpop, chain)
             .await
         {
             Ok(r) => r,
@@ -536,7 +558,7 @@ impl<E: Env> OAuth<E> {
     )]
     async fn par_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         outer: &Params,
         authorization: Option<&str>,
         dpop: &[&str],
@@ -544,7 +566,7 @@ impl<E: Env> OAuth<E> {
     ) -> Result<Reply, Unavailable> {
         let params = outer;
         // IDP-1, AG-4
-        if self.prepare_client(realm, params).await?.is_err() {
+        if self.prepare_client(environment, params).await?.is_err() {
             return Ok(Reply::oauth_error(
                 401,
                 "invalid_client",
@@ -552,14 +574,14 @@ impl<E: Env> OAuth<E> {
             ));
         }
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let req = ClientRequest {
             authorization,
             params,
             endpoint: Endpoint::Par.path(),
             chain,
         };
-        let client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c) => c,
             Err(e) => {
                 return Ok(Reply::oauth_error(
@@ -572,7 +594,7 @@ impl<E: Env> OAuth<E> {
         // RFC 9101, OP-155 m.3 (k)
         let (inner, signed) = match outer.get("request") {
             Some(object) => match self
-                .request_object(realm, &client, outer, object, now)
+                .request_object(environment, &client, outer, object, now)
                 .await?
             {
                 Ok(p) => (p, true),
@@ -601,12 +623,17 @@ impl<E: Env> OAuth<E> {
                 "redirect_uri is not registered",
             ));
         };
-        let product = self.product_resource(realm, params).await?;
-        let mut request =
-            match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {
-                Ok(r) => r,
-                Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
-            };
+        let product = self.product_resource(environment, params).await?;
+        let mut request = match stage_two(
+            params,
+            &client,
+            redirect,
+            &environment.issuer,
+            product.as_deref(),
+        ) {
+            Ok(r) => r,
+            Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
+        };
         // AG-8
         if mcp_without_resource(&client, &request) {
             let e = AuthError::RESOURCE_REQUIRED;
@@ -627,10 +654,10 @@ impl<E: Env> OAuth<E> {
         // RFC 9449 §10.1
         let mut nonce = None;
         if !dpop.is_empty() {
-            let par_uri = realm.issuer.endpoint(Endpoint::Par.path());
+            let par_uri = environment.issuer.endpoint(Endpoint::Par.path());
             let proof = match self
                 .dpop(
-                    realm,
+                    environment,
                     Role::AuthorizationServer,
                     &DpopRequest {
                         proofs: dpop,

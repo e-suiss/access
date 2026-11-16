@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.parent_consents\n                  SET decided_at = clock_timestamp(),\n                      decision = CASE WHEN $4 THEN 'approved' ELSE 'declined' END\n                WHERE tenant_id = $1 AND environment_id = $2 AND consent_id = $3\n                  AND decided_at IS NULL AND expires_at > clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1ee90d89d8d9f9929b3f67aafcbcaaae145a04cf417ffceee4ed31aa2577d7ff"
+}

@@ -97,7 +97,7 @@ fields = ["error"]
 ocsf = "application_error"
 
 [[event]]
-name = "api.realm.unavailable"
+name = "api.environment.unavailable"
 plane = "ops"
 severity = "warn"
 since = "unreleased"
@@ -375,7 +375,7 @@ name = "analytics.aggregated"
 plane = "ops"
 severity = "info"
 since = "unreleased"
-fields = ["realms"]
+fields = ["environments"]
 ocsf = "application_lifecycle"
 
 [[event]]
@@ -827,7 +827,7 @@ name = "signer.rotated"
 plane = "signer"
 severity = "info"
 since = "unreleased"
-fields = ["domain", "realm", "kid", "trigger"]
+fields = ["domain", "environment", "kid", "trigger"]
 ocsf = "entity_management"
 
 # OP-46, OP-157 m.3 (j), (k): V5

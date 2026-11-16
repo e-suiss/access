@@ -27,10 +27,10 @@ use access_store::Pool;
 use access_store::identity::TenantTx;
 use access_store::jobs::{claim_kind, complete, schedule};
 use access_store::scope::DomainId;
-use access_store::tenancy::{RealmRoute, routes};
+use access_store::tenancy::{EnvironmentRoute, routes};
 use suiss_crypto::dcbor::{self, Limits};
 
-/// The job kind: one campaign period of one realm.
+/// The job kind: one campaign period of one environment.
 pub(crate) const KIND: &str = "review.period";
 
 /// How often a node schedules and claims (PD).
@@ -75,9 +75,9 @@ where
 pub(crate) struct Inputs<'a, K> {
     /// `access_app`.
     pub(crate) app: &'a Pool,
-    /// `access_router`, for the live realms.
+    /// `access_router`, for the live environments.
     pub(crate) router: &'a Pool,
-    /// The realms' KEKs.
+    /// The environments' KEKs.
     pub(crate) keks: &'a K,
     /// The cell's opaque-id key.
     pub(crate) ids: &'a IdKey,
@@ -103,18 +103,18 @@ fn hex(b: &[u8]) -> String {
     })
 }
 
-/// A job's subject: the realm, the period and the campaign. A campaign's name is lower-case
+/// A job's subject: the environment, the period and the campaign. A campaign's name is lower-case
 /// letters, digits and `-`, so `:` separates.
-fn subject(realm: &[u8; 16], k: u64, name: &str) -> String {
-    format!("{}:{k}:{name}", hex(realm))
+fn subject(environment: &[u8; 16], k: u64, name: &str) -> String {
+    format!("{}:{k}:{name}", hex(environment))
 }
 
 fn parse(subject: &str) -> Option<(String, u64, String)> {
     let mut parts = subject.splitn(3, ':');
-    let realm = parts.next()?.to_owned();
+    let environment = parts.next()?.to_owned();
     let k = parts.next()?.parse().ok()?;
     let name = parts.next()?.to_owned();
-    Some((realm, k, name))
+    Some((environment, k, name))
 }
 
 /// The roots of the Anchor `anchor` in `domain`.
@@ -151,18 +151,18 @@ async fn managers<T: Teams>(teams: &T, app: &Pool, domain: Digest) -> Result<BTr
     Ok(out)
 }
 
-/// Sends the period `k` notices of campaign `name` in the realm of `route`; how many.
-async fn notify<T: Teams, K: access_identity_events::adapters::RealmKek>(
+/// Sends the period `k` notices of campaign `name` in the environment of `route`; how many.
+async fn notify<T: Teams, K: access_identity_events::adapters::EnvironmentKek>(
     teams: &T,
     inputs: &Inputs<'_, K>,
-    route: &RealmRoute,
+    route: &EnvironmentRoute,
     (period_index, name): (u64, &str),
 ) -> Result<u32, String> {
     let e = |x: access_store::StoreError| x.to_string();
-    let Some(kek) = inputs.keks.kek(route.tenant, route.realm) else {
-        return Err(String::from("realm KEK"));
+    let Some(kek) = inputs.keks.kek(route.tenant, route.environment) else {
+        return Err(String::from("environment KEK"));
     };
-    let mut t = TenantTx::begin(inputs.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(inputs.app, route.tenant, route.environment)
         .await
         .map_err(e)?;
     let governing = access_store::idp::governance(&mut t).await.map_err(e)?;
@@ -196,7 +196,7 @@ async fn notify<T: Teams, K: access_identity_events::adapters::RealmKek>(
         }
     }
     let mut sent = 0_u32;
-    let mut t = TenantTx::begin(inputs.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(inputs.app, route.tenant, route.environment)
         .await
         .map_err(e)?;
     for (m, items) in counted {
@@ -232,12 +232,12 @@ async fn notify<T: Teams, K: access_identity_events::adapters::RealmKek>(
     Ok(sent)
 }
 
-/// Schedules the running period of every live campaign of every live realm and sends the
+/// Schedules the running period of every live campaign of every live environment and sends the
 /// notices of the periods this node claims; how many were sent.
 ///
 /// # Errors
-/// A store failure reading the realms or the jobs table.
-pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::RealmKek>(
+/// A store failure reading the environments or the jobs table.
+pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::EnvironmentKek>(
     teams: &T,
     inputs: &Inputs<'_, K>,
     worker: &str,
@@ -246,7 +246,7 @@ pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::RealmKek
     let e = |x: access_store::StoreError| x.to_string();
     let live = routes(inputs.router).await.map_err(e)?;
     for r in &live {
-        let mut t = TenantTx::begin(inputs.app, r.tenant, r.realm)
+        let mut t = TenantTx::begin(inputs.app, r.tenant, r.environment)
             .await
             .map_err(e)?;
         let campaigns = t.review_schedules().await.map_err(e)?;
@@ -255,7 +255,7 @@ pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::RealmKek
             let Some((k, _)) = period(c.first_ms, c.period_days, now) else {
                 continue;
             };
-            let s = subject(r.realm.as_bytes(), k, &c.name);
+            let s = subject(r.environment.as_bytes(), k, &c.name);
             schedule(inputs.app, KIND, &s, &format!("{KIND}:{s}"), Duration::ZERO)
                 .await
                 .map_err(e)?;
@@ -266,9 +266,9 @@ pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::RealmKek
         .await
         .map_err(e)?
     {
-        let found = parse(&job.subject).and_then(|(realm, k, name)| {
+        let found = parse(&job.subject).and_then(|(environment, k, name)| {
             live.iter()
-                .find(|r| hex(r.realm.as_bytes()) == realm)
+                .find(|r| hex(r.environment.as_bytes()) == environment)
                 .map(|r| (r, k, name))
         });
         let done = match found {
@@ -292,7 +292,7 @@ pub(crate) async fn step<T: Teams, K: access_identity_events::adapters::RealmKek
 }
 
 /// Runs [`step`] every [`INTERVAL`] until the task is aborted.
-pub(crate) async fn run<T: Teams, K: access_identity_events::adapters::RealmKek>(
+pub(crate) async fn run<T: Teams, K: access_identity_events::adapters::EnvironmentKek>(
     teams: std::sync::Arc<T>,
     (app, router): (Pool, Pool),
     (keks, ids): (K, std::sync::Arc<crate::ids::CellIds>),

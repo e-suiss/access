@@ -33,13 +33,13 @@ use super::*;
 /// evaluation and search, OAuth 2.0 endpoints, and `.well-known` discovery documents.
 pub(super) fn standard(path: &str) -> bool {
     let path = path.split('?').next().unwrap_or(path);
-    let realm = path
-        .strip_prefix("/realms/acme")
-        .or_else(|| path.strip_prefix("/realms/platform"));
+    let environment = path
+        .strip_prefix("/env/acme")
+        .or_else(|| path.strip_prefix("/env/platform"));
     path.starts_with("/access/v1/evaluation")
         || path.starts_with("/access/v1/search/")
         || path.contains("/.well-known/")
-        || realm.is_some_and(|r| {
+        || environment.is_some_and(|r| {
             matches!(
                 r,
                 "/token"
@@ -169,7 +169,7 @@ pub(super) async fn root_revoke(w: &World, domain: Digest, grant: Id, about: Id)
     root_commit(w, domain, about, Payload::GrantRevoke { grant }).await;
 }
 
-/// The local deployment's realm with the test user P (password, software passkey, device
+/// The local deployment's environment with the test user P (password, software passkey, device
 /// Instance and a Grant to contribute approvals), its hosted Approval Surface behind TLS, and
 /// an agent Party with one Instance.
 pub(super) struct Desk {
@@ -186,7 +186,7 @@ pub(super) struct Desk {
     pub(super) adp: Recorded,
     /// A client of the deployment without a client certificate: the agent's OAuth client.
     pub(super) agent_http: Http,
-    /// The CIBA pings the realm sent (OP-155 m.3 (l)).
+    /// The CIBA pings the environment sent (OP-155 m.3 (l)).
     pub(super) pings: ciba::Pings,
     /// The deployment's test PKI (OP-156 m.3 (p)): its CA and the PEP client leaf.
     pub(super) tls: TestTls,
@@ -199,7 +199,7 @@ pub(super) struct Desk {
 }
 
 impl Desk {
-    /// `operator` names who operates the agent: the realm root (a hosted agent) or P (an
+    /// `operator` names who operates the agent: the environment root (a hosted agent) or P (an
     /// agent on P's own device, its Instance opened under P's session).
     pub(super) async fn open(name: &str, on_the_persons_device: bool) -> Self {
         use access_http::login::{me_router, router as login_router};
@@ -211,14 +211,14 @@ impl Desk {
         use access_identity_account::domain::password::Argon2Params;
         use access_identity_account::domain::throttle::ThrottlePolicy;
         use access_identity_oauth::adapters::PgDirectory;
-        use access_identity_oauth::app::Discovery as RealmDiscovery;
+        use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
         use access_identity_session::domain::session::SessionPolicy;
         use access_identity_ui::adapters::Outbox;
         use access_identity_ui::app::{Devices, Hosted};
         use access_local_client::login::{Credential, sign_in};
         use access_local_client::passkey::{Passkey, relying_party};
 
-        use crate::login::{HsmKits, RealmKeks};
+        use crate::login::{EnvironmentKeks, HsmKits};
 
         let (w, signer) = World::open(name, true).await;
         let signer = signer.unwrap();
@@ -235,14 +235,18 @@ impl Desk {
         }
         let user = first.test_user.clone().unwrap();
         let allowed = serde_json::to_value(user.allowed.clone().unwrap()).unwrap();
-        let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+        let acme = first
+            .environments
+            .iter()
+            .find(|r| r.slug == "acme")
+            .unwrap();
         let domain = Digest(
             <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&acme.domain).unwrap())
                 .unwrap(),
         );
         let person = id_of(&user.party);
         let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let subject = idp::party_subject(&mut t, &person.0)
@@ -254,7 +258,7 @@ impl Desk {
         let tls = test_tls("access.test");
         let hosted = Arc::new(Hosted {
             kits: HsmKits::new(
-                RealmKeks::new(Arc::clone(&w.keys)),
+                EnvironmentKeks::new(Arc::clone(&w.keys)),
                 w.db.router.clone(),
                 w.db.app.clone(),
                 SessionPolicy::DEFAULT,
@@ -275,7 +279,7 @@ impl Desk {
             signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         });
         let discovery = || {
-            RealmDiscovery::new(
+            EnvironmentDiscovery::new(
                 PgDirectory::new(w.db.router.clone()),
                 SignerKeys::new(w.identity_signer.clone()),
             )

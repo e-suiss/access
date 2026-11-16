@@ -61,15 +61,15 @@ impl Exercises for NoExercises {
 /// How often due tokens are looked for (PD).
 pub(crate) const REFRESH_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Most connections one realm refreshes per round (PD).
+/// Most connections one environment refreshes per round (PD).
 const REFRESH_BATCH: u32 = 100;
 
-/// Refreshes, every [`REFRESH_EVERY`] until aborted, each realm's tokens that expire within
+/// Refreshes, every [`REFRESH_EVERY`] until aborted, each environment's tokens that expire within
 /// five minutes, each under its connection's lease (OP-154 m.3 (t)).
 pub(crate) async fn refresh_run<H, S>(
     app: access_store::Pool,
     router: access_store::Pool,
-    keks: crate::login::RealmKeks,
+    keks: crate::login::EnvironmentKeks,
     ids: std::sync::Arc<crate::ids::CellIds>,
     vault: access_identity_vault::app::Vault<H, S, NoExercises, OsRandom>,
 ) where
@@ -86,27 +86,28 @@ pub(crate) async fn refresh_run<H, S>(
         else {
             continue;
         };
-        let (Ok(realms), Some(id_key)) = (access_store::tenancy::routes(&router).await, ids.key())
+        let (Ok(environments), Some(id_key)) =
+            (access_store::tenancy::routes(&router).await, ids.key())
         else {
             tracing::warn!("vault refresh round not run");
             continue;
         };
-        for r in realms {
-            let Some(v) = keks.vault(r.realm) else {
+        for r in environments {
+            let Some(v) = keks.vault(r.environment) else {
                 continue;
             };
-            let realm_keys = access_identity_vault::app::Keys {
+            let environment_keys = access_identity_vault::app::Keys {
                 tenant: r.tenant,
-                realm: r.realm,
+                environment: r.environment,
                 kek: &*v.kek,
                 ids: &id_key,
                 issuer: &r.issuer,
             };
             if let Err(error) = vault
-                .refresh_due(&app, &realm_keys, now, REFRESH_BATCH)
+                .refresh_due(&app, &environment_keys, now, REFRESH_BATCH)
                 .await
             {
-                tracing::warn!(%error, "vault refresh round failed for a realm");
+                tracing::warn!(%error, "vault refresh round failed for an environment");
             }
         }
     }

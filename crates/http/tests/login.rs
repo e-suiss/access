@@ -46,7 +46,7 @@ use access_identity_account::app::claims::Issued;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
@@ -59,17 +59,18 @@ use access_identity_account::notify::ports::Notifier;
 use access_identity_account::ports::{BreachRanges, RangeUnavailable};
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::domain::issuer::Issuer;
-use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
-use access_identity_session::domain::realm_policy::RealmSignin;
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Keys, Unavailable};
+use access_identity_session::domain::environment_policy::EnvironmentSignin;
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::app::{Devices, Hosted};
 use access_identity_ui::ports::{
-    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit,
+    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, EnvironmentKit, Kits,
+    Messages,
 };
-use access_identity_webauthn::adapters::RealmDecoyKeys;
-use access_identity_webauthn::domain::ids::RealmId as WaRealm;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_webauthn::adapters::EnvironmentDecoyKeys;
+use access_identity_webauthn::domain::ids::EnvironmentId as WaEnvironment;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_internal_api::approvals::{Contribution, Opening};
 use access_internal_api::claims::ClaimVerdict;
@@ -78,9 +79,9 @@ use access_internal_api::instances::{Registered, Registration, RegistrationVerdi
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::model::Id;
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use axum::Router;
 use axum::body::Body as HttpBody;
@@ -185,7 +186,7 @@ impl Notifier for Recording<'_> {
 impl Messages for Outbox {
     type For<'a> = Recording<'a>;
 
-    fn notifier<'a>(&'a self, _: &'a Realm<'a>) -> Recording<'a> {
+    fn notifier<'a>(&'a self, _: &'a Environment<'a>) -> Recording<'a> {
         Recording(self)
     }
 }
@@ -196,18 +197,18 @@ impl Outbox {
     }
 }
 
-struct Dir(RealmEntry);
+struct Dir(EnvironmentEntry);
 
 impl Directory for Dir {
-    async fn by_host(&self, host: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_host(&self, host: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok((host == HOST).then(|| self.0.clone()))
     }
 
-    async fn by_slug(&self, _: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_slug(&self, _: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         Ok(None)
     }
 
-    async fn all(&self) -> Result<Vec<RealmEntry>, Unavailable> {
+    async fn all(&self) -> Result<Vec<EnvironmentEntry>, Unavailable> {
         Ok(vec![self.0.clone()])
     }
 }
@@ -219,7 +220,7 @@ impl Keys for NoKeys {
         Ok(())
     }
 
-    async fn jwks(&self, _: RealmId) -> Result<String, Unavailable> {
+    async fn jwks(&self, _: EnvironmentId) -> Result<String, Unavailable> {
         Err(Unavailable)
     }
 }
@@ -231,7 +232,7 @@ struct ArtifactKey(Arc<SoftSigner>);
 impl ArtifactSigner for ArtifactKey {
     async fn sign_cose(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         content_type: &str,
         payload: &[u8],
         _: u64,
@@ -440,7 +441,7 @@ impl Approvals for Surface {
     }
 }
 
-/// The realm's Claim courier: every order is admitted as Claim `[0xc1; 16]`.
+/// The environment's Claim courier: every order is admitted as Claim `[0xc1; 16]`.
 #[derive(Clone, Default)]
 struct Claims(Arc<Mutex<Vec<ClaimOrder>>>);
 
@@ -448,7 +449,7 @@ impl ApprovalClaims for Claims {
     async fn issue(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         order: &ClaimOrder,
     ) -> Result<Issued, PlaneUnavailable> {
         self.0.lock().unwrap().push(order.clone());
@@ -463,11 +464,11 @@ impl ApprovalClaims for Claims {
     }
 }
 
-struct Kit(Arc<RealmKit>);
+struct Kit(Arc<EnvironmentKit>);
 
 impl Kits for Kit {
-    async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Unavailable> {
-        if entry.realm == self.0.realm {
+    async fn kit(&self, entry: &EnvironmentEntry) -> Result<Arc<EnvironmentKit>, Unavailable> {
+        if entry.environment == self.0.environment {
             Ok(self.0.clone())
         } else {
             Err(Unavailable)
@@ -478,9 +479,9 @@ impl Kits for Kit {
 struct Env {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     domain: DomainId,
-    kit: Arc<RealmKit>,
+    kit: Arc<EnvironmentKit>,
     clock: TestClock,
     outbox: Outbox,
     app: Router,
@@ -492,35 +493,35 @@ struct Env {
     claims: Claims,
 }
 
-fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit {
-    let wa = WaRealm::from_bytes(*realm.as_bytes());
-    RealmKit {
+fn kit(tenant: TenantId, environment: EnvironmentId, seed: u8, auth: AuthPolicy) -> EnvironmentKit {
+    let wa = WaEnvironment::from_bytes(*environment.as_bytes());
+    EnvironmentKit {
         tenant,
-        realm,
+        environment,
         issuer: format!("https://{HOST}"),
         name: "Acme".into(),
-        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
-        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
-            [seed; 32],
-        ))),
+        kek: std::sync::Arc::new(SoftKek::new("environment-kek:1", [seed; 32])),
+        index: std::sync::Arc::new(access_crypto::environment_index::EnvironmentIndexKey::new(
+            Secret::new([seed; 32]),
+        )),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
-        decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
+        decoys: EnvironmentDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
         rp: RelyingParty {
-            realm: wa,
+            environment: wa,
             rp_id: RpId::parse(RP_ID).unwrap(),
             name: "Acme".into(),
             pinned: true,
             related: Vec::new(),
         },
         // MD-11, OP-156 m.3 (e)
-        webauthn: RealmPolicy {
+        webauthn: EnvironmentPolicy {
             platform_uv_is_factor: auth.profile.platform_uv_is_factor(),
-            ..RealmPolicy::default()
+            ..EnvironmentPolicy::default()
         },
         attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
         auth,
         lifetimes: SessionPolicy::DEFAULT,
-        signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
+        signin: access_identity_session::domain::environment_policy::EnvironmentSignin::default(),
         hash: access_identity_account::domain::password::HashPolicy::Argon2(
             access_identity_account::domain::password::Argon2Params::CANONICAL,
         ),
@@ -551,10 +552,16 @@ async fn env(seed: u8, slug: &str, auth: AuthPolicy) -> Env {
 }
 
 async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
-    env_full(seed, slug, auth, live, RealmSignin::default()).await
+    env_full(seed, slug, auth, live, EnvironmentSignin::default()).await
 }
 
-async fn env_full(seed: u8, slug: &str, auth: AuthPolicy, live: bool, signin: RealmSignin) -> Env {
+async fn env_full(
+    seed: u8,
+    slug: &str,
+    auth: AuthPolicy,
+    live: bool,
+    signin: EnvironmentSignin,
+) -> Env {
     let signup = access_identity_ui::app::signup::Signup::without_providers().unwrap();
     env_core(seed, slug, auth, live, signin, signup).await
 }
@@ -564,7 +571,7 @@ async fn env_core(
     slug: &str,
     auth: AuthPolicy,
     live: bool,
-    signin: RealmSignin,
+    signin: EnvironmentSignin,
     signup: access_identity_ui::app::signup::Signup,
 ) -> Env {
     env_legacy(seed, slug, auth, live, signin, signup, None).await
@@ -575,20 +582,20 @@ async fn env_legacy(
     slug: &str,
     auth: AuthPolicy,
     live: bool,
-    signin: RealmSignin,
+    signin: EnvironmentSignin,
     signup: access_identity_ui::app::signup::Signup,
     legacy: Option<Arc<dyn access_identity_account::ports::LegacyIdp>>,
 ) -> Env {
     env_tweaked((seed, slug, auth, live), signin, signup, legacy, |_, _| {}).await
 }
 
-/// An environment whose realm kit `tweak` adjusts once its database exists.
+/// An environment whose environment kit `tweak` adjusts once its database exists.
 async fn env_tweaked(
     (seed, slug, auth, live): (u8, &str, AuthPolicy, bool),
-    signin: RealmSignin,
+    signin: EnvironmentSignin,
     signup: access_identity_ui::app::signup::Signup,
     legacy: Option<Arc<dyn access_identity_account::ports::LegacyIdp>>,
-    tweak: impl FnOnce(&mut RealmKit, &TestDb),
+    tweak: impl FnOnce(&mut EnvironmentKit, &TestDb),
 ) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
@@ -604,11 +611,11 @@ async fn env_tweaked(
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut tx, &d, slug, "pool-default")
+    let environment = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let mut built = kit(tenant, realm, seed, auth);
+    let mut built = kit(tenant, environment, seed, auth);
     built.signin = signin;
     tweak(&mut built, &db);
     let kit = Arc::new(built);
@@ -617,9 +624,9 @@ async fn env_tweaked(
         live: live.then(std::time::Instant::now),
     };
     let outbox = Outbox::default();
-    let entry = RealmEntry {
+    let entry = EnvironmentEntry {
         tenant,
-        realm,
+        environment,
         slug: slug.to_owned(),
         issuer: Issuer::parse(&format!("https://{HOST}")).unwrap(),
     };
@@ -685,7 +692,7 @@ async fn env_tweaked(
     Env {
         db,
         tenant,
-        realm,
+        environment,
         domain: d,
         kit,
         clock,
@@ -701,36 +708,38 @@ async fn env_tweaked(
 }
 
 impl Env {
-    fn realm(&self) -> Realm<'_> {
-        let _ = (self.tenant, self.realm);
-        self.kit.realm()
+    fn environment(&self) -> Environment<'_> {
+        let _ = (self.tenant, self.environment);
+        self.kit.environment()
     }
 
     async fn account(&self, who: &str) -> [u8; 16] {
         let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
-        let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
+        let s = create(&pg, &self.environment(), &[id], &ADMIN)
+            .await
+            .unwrap();
         let services = PasswordServices {
             hasher: &self.hasher,
             ranges: &Corpus,
             entropy: &SystemEntropy,
         };
-        set_password(&pg, &self.realm(), &services, s, PW, &ADMIN)
+        set_password(&pg, &self.environment(), &services, s, PW, &ADMIN)
             .await
             .unwrap();
         for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-            change_status(&pg, &self.realm(), s, to, &ADMIN)
+            change_status(&pg, &self.environment(), s, to, &ADMIN)
                 .await
                 .unwrap();
         }
         s
     }
 
-    /// A client of the realm with `redirect` registered, under an idp.client.register ALLOW
+    /// A client of the environment with `redirect` registered, under an idp.client.register ALLOW
     /// recorded in the governing domain (EI-25).
     async fn client(&self, redirect: &str) {
         self.register_client(
-            (self.tenant, self.realm, self.domain),
+            (self.tenant, self.environment, self.domain),
             [0x5c; 16],
             format!("cli_{}4a", "0".repeat(24)),
             &[redirect],
@@ -739,7 +748,7 @@ impl Env {
         .await;
     }
 
-    /// A platform product client registered in another tenant's realm, the platform realm,
+    /// A platform product client registered in another tenant's environment, the platform environment,
     /// with `redirects` as its return addresses (OP-149 m.4, m.33 (d), m.35).
     async fn platform_client(&self, redirects: &[&str]) {
         let tenant = create_tenant(&self.db.app, "pool-default").await.unwrap();
@@ -755,12 +764,12 @@ impl Env {
             .await
             .unwrap();
         let mut tx = TenantTx::begin_tenant(&self.db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut tx, &d, "platform", "pool-default")
+        let environment = create_environment(&mut tx, &d, "platform", "pool-default")
             .await
             .unwrap();
         tx.commit().await.unwrap();
         self.register_client(
-            (tenant, realm, d),
+            (tenant, environment, d),
             [0x7a; 16],
             format!("cli_{}7a", "0".repeat(24)),
             redirects,
@@ -769,11 +778,11 @@ impl Env {
         .await;
     }
 
-    /// Registers a client in `(tenant, realm, domain)` under an idp.client.register ALLOW
+    /// Registers a client in `(tenant, environment, domain)` under an idp.client.register ALLOW
     /// recorded in that governing domain.
     async fn register_client(
         &self,
-        (tenant, realm, domain): (TenantId, RealmId, DomainId),
+        (tenant, environment, domain): (TenantId, EnvironmentId, DomainId),
         client_uuid: [u8; 16],
         client_id: String,
         redirects: &[&str],
@@ -831,7 +840,9 @@ impl Env {
         commit_batch(&self.db.sequencer, &domain, *tenant.as_bytes(), &batch)
             .await
             .unwrap();
-        let mut tx = TenantTx::begin(&self.db.app, tenant, realm).await.unwrap();
+        let mut tx = TenantTx::begin(&self.db.app, tenant, environment)
+            .await
+            .unwrap();
         let bound = bind(
             &mut tx,
             &Decision {
@@ -1258,7 +1269,7 @@ async fn unknown_hosts_and_forms_are_refused() {
 
 // OP-153 m.4, §17.9.6
 #[tokio::test]
-async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm() {
+async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_environment() {
     use access_identity_ui::domain::frontend_v1::{ROUTES, Verb};
     let e = env(4, "lg-planned", AuthPolicy::DEFAULT).await;
     let mut b = e.browser("b");
@@ -1945,7 +1956,11 @@ async fn a_known_device_binds_a_later_session() {
     let (mut bob_key, bob_id, bob_user) =
         register_passkey_with(&mut g, "bob@example.com", 0xc2).await;
     let (bob_device, _) = SoftSigner::generate_ed25519().unwrap();
-    let mut tx = PgTx::new(TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap());
+    let mut tx = PgTx::new(
+        TenantTx::begin(&e.db.app, e.tenant, e.environment)
+            .await
+            .unwrap(),
+    );
     assert!(
         bind_party(&mut tx, &bob, &[6; 16], &[0xd2; 40])
             .await
@@ -2157,7 +2172,7 @@ async fn a_decoy_passkey_list_is_keyed_stable_and_one_to_three_long() {
     use access_identity_webauthn::domain::decoy::{MAX_DECOYS, decoy_descriptors};
     use access_identity_webauthn::ports::DecoySource as _;
     let e = env(13, "lg-decoy", AuthPolicy::DEFAULT).await;
-    let wa = WaRealm::from_bytes(*e.realm.as_bytes());
+    let wa = WaEnvironment::from_bytes(*e.environment.as_bytes());
     let ids = |a: &Answer| -> Vec<String> {
         passkey_node(a)["allowCredentials"]
             .as_array()
@@ -2198,10 +2213,12 @@ async fn enumeration_parity_on_login() {
     let locked = e.account("ann3@example.com").await;
     let gone = e.account("ann4@example.com").await;
     let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
-    change_status(&pg, &e.realm(), locked, AccountStatus::Locked, &ADMIN)
+    change_status(&pg, &e.environment(), locked, AccountStatus::Locked, &ADMIN)
         .await
         .unwrap();
-    deactivate(&pg, &e.realm(), gone, &ADMIN).await.unwrap();
+    deactivate(&pg, &e.environment(), gone, &ADMIN)
+        .await
+        .unwrap();
     let who = [
         "ann1@example.com",
         "ann2@example.com",
@@ -2244,10 +2261,10 @@ async fn a_deleted_account_cannot_be_told_from_one_that_never_existed() {
     let e = env(37, "del-a", AuthPolicy::DEFAULT).await;
     let gone = e.account("gone@example.com").await;
     let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
-    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    let mut tx = pg.begin(e.tenant, e.environment).await.unwrap();
     request_deletion(
         &mut tx,
-        &e.realm(),
+        &e.environment(),
         gone,
         DeletionSource::SelfService,
         None,
@@ -2257,7 +2274,10 @@ async fn a_deleted_account_cannot_be_told_from_one_that_never_existed() {
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    assert_eq!(tombstone_due(&pg, &e.realm(), &ADMIN).await.unwrap(), 1);
+    assert_eq!(
+        tombstone_due(&pg, &e.environment(), &ADMIN).await.unwrap(),
+        1
+    );
     let who = ["gone@example.com", "never@example.com"];
     let (mut identified, mut wrong, mut right) = (Vec::new(), Vec::new(), Vec::new());
     for (i, w) in who.iter().enumerate() {
@@ -2309,13 +2329,13 @@ async fn enumeration_timing_parity_nightly() {
         classes[1].push(format!("unk{i}@example.com"));
         let locked = format!("lck{i}@example.com");
         let s = e.account(&locked).await;
-        change_status(&pg, &e.realm(), s, AccountStatus::Locked, &ADMIN)
+        change_status(&pg, &e.environment(), s, AccountStatus::Locked, &ADMIN)
             .await
             .unwrap();
         classes[2].push(locked);
         let gone = format!("off{i}@example.com");
         let s = e.account(&gone).await;
-        deactivate(&pg, &e.realm(), s, &ADMIN).await.unwrap();
+        deactivate(&pg, &e.environment(), s, &ADMIN).await.unwrap();
         classes[3].push(gone);
     }
     let warm = "warm@example.com";
@@ -2357,7 +2377,7 @@ async fn enumeration_timing_parity_nightly() {
 }
 
 // OP-149 m.6, m.8, m.9, m.16 (a), G57
-/// The payload of a signed `auth_context` the realm key issued (OP-149 m.8): verified, its
+/// The payload of a signed `auth_context` the environment key issued (OP-149 m.8): verified, its
 /// digest checked, decoded to its map entries.
 fn auth_context_fields(
     e: &Env,
@@ -3067,11 +3087,11 @@ async fn a_live_session_steps_up_in_place() {
 }
 
 impl Env {
-    /// The subject an address belongs to now, through the realm's vault.
+    /// The subject an address belongs to now, through the environment's vault.
     async fn holder(&self, email: &str) -> Option<[u8; 16]> {
         use access_identity_account::ports::{AccountDb as _, AccountTx as _};
         let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
-        let mut tx = pg.begin(self.tenant, self.realm).await.unwrap();
+        let mut tx = pg.begin(self.tenant, self.environment).await.unwrap();
         let s = tx.subject_by_identifier(email).await.unwrap();
         tx.commit().await.unwrap();
         s
@@ -3147,9 +3167,14 @@ async fn sign_up_creates_the_account_only_when_the_code_returns() {
     let subject = e.holder("NEW.PERSON@example.com").await.unwrap();
     let me = b.get("/v1/sessions/current").await;
     assert_eq!(me.status, StatusCode::OK);
-    assert_eq!(me.json()["subject"], e.realm().external(subject).unwrap());
+    assert_eq!(
+        me.json()["subject"],
+        e.environment().external(subject).unwrap()
+    );
     // TN-66
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let since = t.mailbox_since(subject).await.unwrap();
     t.commit().await.unwrap();
     assert_eq!(
@@ -3239,14 +3264,14 @@ async fn a_disposable_address_is_scored_and_never_refused() {
 
 // TN-132, OP-153 m.3 (g)
 #[tokio::test]
-async fn the_realm_domain_lists_and_required_name_hold_at_sign_up() {
-    let signin = RealmSignin {
+async fn the_environment_domain_lists_and_required_name_hold_at_sign_up() {
+    let signin = EnvironmentSignin {
         domain_deny: std::collections::BTreeSet::from([String::from("blocked.example")]),
         required_fields: std::collections::BTreeSet::from([
             String::from("email"),
             String::from("name"),
         ]),
-        ..RealmSignin::default()
+        ..EnvironmentSignin::default()
     };
     let e = env_full(35, "su-e", AuthPolicy::DEFAULT, false, signin).await;
     let mut b = e.browser("su-e");
@@ -3301,7 +3326,7 @@ impl Env {
         let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
         access_identity_account::app::import::import_line(
             &pg,
-            &self.realm(),
+            &self.environment(),
             &line.to_string(),
             &ADMIN,
         )
@@ -3311,7 +3336,7 @@ impl Env {
 
     async fn legacy_count(&self) -> u64 {
         let day = u32::try_from(self.clock.now_ms() / 86_400_000).unwrap();
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let (row, _) = t.aggregate_day(day).await.unwrap();
@@ -3320,7 +3345,7 @@ impl Env {
     }
 
     async fn password_algorithm(&self, subject: [u8; 16]) -> Vec<String> {
-        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let c = t.credentials(subject, "password").await.unwrap();
@@ -3394,7 +3419,7 @@ async fn a_legacy_idp_outage_fails_the_login_closed() {
         "mig-b",
         AuthPolicy::DEFAULT,
         false,
-        RealmSignin::default(),
+        EnvironmentSignin::default(),
         access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         Some(Arc::new(down)),
     )
@@ -3418,7 +3443,7 @@ async fn a_legacy_idp_outage_fails_the_login_closed() {
         "mig-c",
         AuthPolicy::DEFAULT,
         false,
-        RealmSignin::default(),
+        EnvironmentSignin::default(),
         access_identity_ui::app::signup::Signup::without_providers().unwrap(),
         Some(Arc::new(OldIdp {
             up: true,
@@ -3499,7 +3524,7 @@ async fn an_address_whose_domain_takes_no_mail_is_refused_before_any_code() {
         "su-mx",
         AuthPolicy::DEFAULT,
         false,
-        RealmSignin::default(),
+        EnvironmentSignin::default(),
         signup,
     )
     .await;
@@ -3539,7 +3564,7 @@ async fn the_mailbox_proof_kills_a_password_set_before_it() {
     let e = env(36, "su-f", AuthPolicy::DEFAULT).await;
     let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
     let id = Identifier::new(IdentifierKind::Email, "victim@example.com").unwrap();
-    let staged = create(&pg, &e.realm(), &[id], &ADMIN).await.unwrap();
+    let staged = create(&pg, &e.environment(), &[id], &ADMIN).await.unwrap();
     let services = PasswordServices {
         hasher: &e.hasher,
         ranges: &Corpus,
@@ -3547,7 +3572,7 @@ async fn the_mailbox_proof_kills_a_password_set_before_it() {
     };
     set_password(
         &pg,
-        &e.realm(),
+        &e.environment(),
         &services,
         staged,
         "attacker chose this",
@@ -3573,7 +3598,7 @@ async fn the_mailbox_proof_kills_a_password_set_before_it() {
         String::from_utf8_lossy(&done.body)
     );
     assert_eq!(e.holder("victim@example.com").await, Some(staged));
-    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    let mut tx = pg.begin(e.tenant, e.environment).await.unwrap();
     assert!(tx.credentials(staged, "password").await.unwrap().is_empty());
     let row = tx.subject(staged, false).await.unwrap().unwrap();
     tx.commit().await.unwrap();
@@ -3715,7 +3740,9 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
         .await;
     assert_eq!(again.status, StatusCode::CONFLICT);
     assert_eq!(again.json()["code"], "nothing-to-acknowledge");
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(!t.code_set_pending(subject).await.unwrap());
     t.commit().await.unwrap();
     let anonymous = e
@@ -3783,9 +3810,9 @@ async fn the_owner_exports_the_password_hash_and_app_seeds_after_a_fresh_step_up
 // OP-153 m.3 (j), TN-96, TN-82, CR-40
 #[tokio::test]
 async fn strict_mode_takes_identifier_and_password_on_one_screen() {
-    let signin = RealmSignin {
+    let signin = EnvironmentSignin {
         strict: true,
-        ..RealmSignin::default()
+        ..EnvironmentSignin::default()
     };
     let e = env_full(40, "su-j", AuthPolicy::DEFAULT, false, signin).await;
     e.account("strict@example.com").await;
@@ -3846,7 +3873,9 @@ async fn org_with_invitation(
     (token, code): (&str, &str),
 ) -> [u8; 16] {
     use access_identity_account::domain::invitation::{code_hash, token_hash};
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &owner, &party)
             .await
@@ -3859,7 +3888,7 @@ async fn org_with_invitation(
     let index = e
         .kit
         .vault()
-        .index_of(e.tenant.as_bytes(), e.realm.as_bytes(), invitee)
+        .index_of(e.tenant.as_bytes(), e.environment.as_bytes(), invitee)
         .unwrap();
     t.insert_invitation(&access_store::orgs::NewInvitation {
         org,
@@ -3905,7 +3934,9 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
         assert_eq!(a.json()["organization"]["display_name"], "Acme");
         assert_eq!(a.json()["role"]["name"], "member");
     }
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let listed = t.invitations(org).await.unwrap();
     assert!(listed[0].open);
     assert_eq!(listed[0].scanner_clicks, 2);
@@ -3984,7 +4015,9 @@ async fn an_invitation_from_an_inviter_who_left_grants_nothing() {
         (token, "WXYZ2345"),
     )
     .await;
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     t.insert_membership(org, other, access_store::orgs::Source::Invite, true, None)
         .await
         .unwrap();
@@ -4016,7 +4049,9 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
         ("tok-autojoin-0123456789abcdefghijklm", "AJNC2345"),
     )
     .await;
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     for domain in ["acme.example", "gmail.com"] {
         let claim = t
             .insert_domain_claim(org, domain, "dns_txt", &[1; 32])
@@ -4045,7 +4080,9 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
     let mine = d.get("/v1/account/organizations").await.json();
     assert_eq!(mine["items"][0]["source"], "domain_autojoin");
     assert_eq!(mine["items"][0]["owner"], false);
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let now = i64::try_from(t.server_time().await.unwrap()).unwrap();
     let cooled = t
         .members(org)
@@ -4067,7 +4104,9 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
         .await
         .unwrap()
         .into_iter()
-        .filter(|m| m.realm == e.realm && m.kind == "relay.message.membership_cooling.v1")
+        .filter(|m| {
+            m.environment == e.environment && m.kind == "relay.message.membership_cooling.v1"
+        })
         .count();
         if told > 0 {
             assert_eq!(told, 1);
@@ -4086,7 +4125,9 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
     );
 
     // TN-90
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let other = t
         .insert_org([0x0b; 16], "Not Acme", &[4; 32])
         .await
@@ -4118,7 +4159,9 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
         ("tok-handover-0123456789abcdefghijkl", "HNDC2345"),
     )
     .await;
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     t.insert_membership(org, bob, access_store::orgs::Source::Invite, false, None)
         .await
         .unwrap();
@@ -4195,7 +4238,9 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
         .await;
     assert_eq!(c.status, StatusCode::OK, "{:?}", c.json());
     assert_eq!(c.json()["state"], "contributed");
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert_eq!(
         t.transfer(first).await.unwrap().unwrap().acceptance,
         Some([0x7e; 32])
@@ -4212,7 +4257,9 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
             .status,
         StatusCode::NOT_FOUND
     );
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let kept = t.transfer(first).await.unwrap().unwrap();
     assert_eq!(
         kept.state,
@@ -4228,7 +4275,9 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
     let parent = e.account("parent@family.example").await;
     let child = e.account("child@family.example").await;
     e.account("other@family.example").await;
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let g = t
         .insert_guardianship((parent, child), "parent", "TR", 4_102_444_800_000)
         .await
@@ -4269,7 +4318,7 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
         .await
         .unwrap()
         .into_iter()
-        .filter(|m| m.realm == e.realm && m.kind == "relay.message.guardian_consent.v1")
+        .filter(|m| m.environment == e.environment && m.kind == "relay.message.guardian_consent.v1")
         .count();
         if told > 0 {
             assert_eq!(told, 1);
@@ -4699,7 +4748,9 @@ async fn directory_app_passwords_are_managed_in_s11() {
         0
     );
     assert_eq!(b.post(&path, None).await.status, StatusCode::NOT_FOUND);
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let kinds = tx.outbox_kinds().await.unwrap();
     tx.commit().await.unwrap();
     assert_eq!(
@@ -4795,7 +4846,9 @@ async fn n5_the_last_sign_in_method_stays() {
     assert_eq!(b.sign_in("ed@example.com").await.step(), "complete");
     let m = b.get("/v1/account/methods").await.json();
     assert_eq!(m["password"]["set"], true);
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     let rows = t.sign_in_methods(subject).await.unwrap();
     t.commit().await.unwrap();
     let id = e.kit.ids.encode("crd", rows[0].id).unwrap();
@@ -4818,7 +4871,7 @@ async fn n5_the_last_sign_in_method_stays() {
 }
 
 impl Env {
-    /// N5: an ALLOW recorded in the realm's governing domain; its log position.
+    /// N5: an ALLOW recorded in the environment's governing domain; its log position.
     async fn decided(&self, seed: u8) -> u64 {
         use access_store::authority::{
             CommitBatch, HeadRow, NonceRow, acquire_lease, commit_batch,
@@ -4879,7 +4932,7 @@ impl Env {
         pos
     }
 
-    /// N5: the realm's branding, decided through `idp.realm.branding` (TN-106).
+    /// N5: the environment's branding, decided through `idp.environment.branding` (TN-106).
     async fn brand(&self, entries: Vec<(&str, suiss_crypto::dcbor::Value)>, seed: u8) {
         use access_store::idp::{Decision, bind};
         use suiss_crypto::dcbor::{Limits, Value, encode};
@@ -4890,7 +4943,7 @@ impl Env {
                 .map(|(k, v)| (Value::Text(k.into()), v))
                 .collect(),
         );
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap();
         let bound = bind(
@@ -4901,7 +4954,7 @@ impl Env {
                 nonce: &[seed; 16],
                 intent: [seed; 32],
                 change: [seed; 32],
-                action: "idp.realm.branding",
+                action: "idp.environment.branding",
             },
         )
         .await
@@ -5020,7 +5073,9 @@ async fn n5_a_csp_violation_report_is_accepted_and_rate_limited() {
         "{}",
         String::from_utf8_lossy(&first.body)
     );
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
     assert_eq!(t.csp_reports_since(0).await.unwrap(), 1);
     t.commit().await.unwrap();
     let api = json!([{ "type": "csp-violation", "body": {

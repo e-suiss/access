@@ -3,12 +3,12 @@
 //! by redeeming its authorization code once with the PKCE verifier Access kept for it; no token
 //! leaves Access. The grant ends with its login session, its subject's epoch or a revocation,
 //! and the proxy session with it. The application token is an ES256 `access-app+jwt` of 60 s
-//! under the realm JOSE key, with the client's pairwise `sub` (MD-10).
+//! under the environment JOSE key, with the client's pairwise `sub` (MD-10).
 
 use access_kernel::json::b64url_encode;
 use serde_json::json;
 
-use super::{OAuth, Realm, code_digest, decode32, from_day, session_live, signed, unsigned};
+use super::{Environment, OAuth, code_digest, decode32, from_day, session_live, signed, unsigned};
 use crate::app::oauth::Env;
 use crate::domain::client::Client;
 use crate::domain::metadata::Endpoint;
@@ -41,7 +41,7 @@ pub struct ProxyHolder {
     pub subject: [u8; 16],
     /// The Party it is bound to, once bound.
     pub party: Option<[u8; 16]>,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: [u8; 32],
     /// When the grant ends, ms.
     pub expires_ms: u64,
@@ -66,18 +66,21 @@ fn verifier_ok(v: &str) -> bool {
 }
 
 impl<E: Env> OAuth<E> {
-    /// The live realm with slug `slug`.
+    /// The live environment with slug `slug`.
     ///
     /// # Errors
     /// [`Unavailable`].
-    pub async fn realm_by_slug(&self, slug: &str) -> Result<Option<Realm>, Unavailable> {
+    pub async fn environment_by_slug(
+        &self,
+        slug: &str,
+    ) -> Result<Option<Environment>, Unavailable> {
         crate::ports::Directory::by_slug(self.env.directory(), slug).await
     }
 
-    /// The realm's authorization endpoint.
+    /// The environment's authorization endpoint.
     #[must_use]
-    pub fn authorize_endpoint(realm: &Realm) -> String {
-        realm.issuer.endpoint(Endpoint::Authorize.path())
+    pub fn authorize_endpoint(environment: &Environment) -> String {
+        environment.issuer.endpoint(Endpoint::Authorize.path())
     }
 
     async fn proxy_client(
@@ -97,7 +100,7 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn proxy_redeem(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         redirect_uri: &str,
         (code, verifier): (&str, &str),
@@ -109,7 +112,7 @@ impl<E: Env> OAuth<E> {
         if !verifier_ok(verifier) {
             return Ok(None);
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let Some(client) = Self::proxy_client(&mut tx, client_id).await? else {
             return Ok(None);
         };
@@ -181,12 +184,12 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn proxy_holder(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         sid: &[u8; 16],
     ) -> Result<Option<ProxyHolder>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let Some(client) = Self::proxy_client(&mut tx, client_id).await? else {
             return Ok(None);
         };
@@ -207,7 +210,7 @@ impl<E: Env> OAuth<E> {
             serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
         let claims = self
             .released(
-                realm,
+                environment,
                 &client,
                 &details,
                 grant.subject,
@@ -232,20 +235,20 @@ impl<E: Env> OAuth<E> {
     }
 
     /// The application token of `subject` for `audience` and decision `decision` (OP-156 m.3
-    /// (l)): ES256 under the realm JOSE key, `typ: access-app+jwt`, 60 s, the pairwise `sub` of
-    /// `client_id`. A realm whose JOSE algorithm is not ES256 signs none.
+    /// (l)): ES256 under the environment JOSE key, `typ: access-app+jwt`, 60 s, the pairwise `sub` of
+    /// `client_id`. An environment whose JOSE algorithm is not ES256 signs none.
     ///
     /// # Errors
     /// [`Unavailable`].
     pub async fn app_token(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client_id: &str,
         sub: &str,
         (audience, decision): (&str, &str),
     ) -> Result<String, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let alg = tx.jose_alg().await?;
         let known = Self::proxy_client(&mut tx, client_id).await?.is_some();
         tx.commit().await?;
@@ -254,7 +257,7 @@ impl<E: Env> OAuth<E> {
         }
         let iat = now / 1000;
         let claims = json!({
-            "iss": realm.issuer.as_str(),
+            "iss": environment.issuer.as_str(),
             "sub": sub,
             "aud": audience,
             "iat": iat,
@@ -265,7 +268,13 @@ impl<E: Env> OAuth<E> {
         let payload = serde_json::to_vec(&claims).map_err(|_| Unavailable)?;
         self.env
             .signer()
-            .sign(realm.realm, JwsAlg::Es256, APP_TYP, &payload, now)
+            .sign(
+                environment.environment,
+                JwsAlg::Es256,
+                APP_TYP,
+                &payload,
+                now,
+            )
             .await
     }
 }

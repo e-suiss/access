@@ -1,4 +1,4 @@
-//! A realm's WebAuthn verification policy (§10.2.4).
+//! An environment's WebAuthn verification policy (§10.2.4).
 
 use super::cose::CoseAlgorithm;
 use super::ids::Aaguid;
@@ -67,9 +67,9 @@ pub enum SignCountAction {
     Reject,
 }
 
-/// A realm's WebAuthn policy.
+/// An environment's WebAuthn policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RealmPolicy {
+pub struct EnvironmentPolicy {
     /// User verification.
     pub user_verification: UserVerification,
     /// Attestation.
@@ -87,7 +87,7 @@ pub struct RealmPolicy {
     pub ceremony_ttl: u64,
 }
 
-impl Default for RealmPolicy {
+impl Default for EnvironmentPolicy {
     fn default() -> Self {
         Self {
             user_verification: UserVerification::Preferred,
@@ -101,8 +101,8 @@ impl Default for RealmPolicy {
     }
 }
 
-impl RealmPolicy {
-    /// The algorithms this realm offers, in preference order.
+impl EnvironmentPolicy {
+    /// The algorithms this environment offers, in preference order.
     #[must_use]
     pub fn algorithms(&self) -> Vec<CoseAlgorithm> {
         CoseAlgorithm::PREFERENCE

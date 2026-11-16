@@ -12,22 +12,22 @@ pub(super) fn components() -> Value {
     json!({
         "ResolveRequest": object(
             &json!({
-                "realm": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The realm, as the tenant snapshot names it." },
-                "client_id": text("The client whose pairwise `sub` is meant, its sector (MD-10): a client of the realm, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch)."),
+                "environment": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The environment, as the tenant snapshot names it." },
+                "client_id": text("The client whose pairwise `sub` is meant, its sector (MD-10): a client of the environment, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch)."),
                 "parties": { "type": "array", "items": b64("PartyID, base64url of 16 bytes."), "minItems": 1, "maxItems": MAX_RESOLVE, "uniqueItems": true },
                 "subs": { "type": "array", "items": b64("A pairwise `sub` of the client, 43 characters."), "minItems": 1, "maxItems": MAX_RESOLVE, "uniqueItems": true },
             }),
-            &["realm", "client_id"],
+            &["environment", "client_id"],
         ),
         "Resolution": object(
             &json!({
-                "realm": text("The realm."),
+                "environment": text("The environment."),
                 "client_id": text("The client."),
                 "resolved": {
                     "type": "array",
                     "items": object(&json!({
                         "party": b64("PartyID, for a subject with a Party."),
-                        "client_id": text("For a `sub` that is the pairwise pseudonym of a client of the realm without a Party (the `sub` of its service tokens), that client."),
+                        "client_id": text("For a `sub` that is the pairwise pseudonym of a client of the environment without a Party (the `sub` of its service tokens), that client."),
                         "sub": b64("The pairwise `sub` the client sees."),
                     }), &["sub"]),
                     "description": "Each entry carries `sub` and exactly one of `party` and `client_id`.",
@@ -35,7 +35,7 @@ pub(super) fn components() -> Value {
                 "unknown": { "type": "array", "items": { "type": "string" }, "description": "The entries asked for that did not resolve, as given." },
                 "consistency_token": text("Opaque; the governing domain's head before the read."),
             }),
-            &["realm", "client_id", "resolved", "unknown", "consistency_token"],
+            &["environment", "client_id", "resolved", "unknown", "consistency_token"],
         ),
         "Exercise": object(
             &json!({
@@ -100,12 +100,12 @@ pub(super) fn paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) 
         "/access/v1/tenants/{tenant}/subjects:resolve".into(),
         json!({ "post": {
             "operationId": "resolveSubjects",
-            "summary": "Between a realm's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37).",
+            "summary": "Between an environment's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37).",
             "security": either_caller(),
             "parameters": [path("tenant", &json!({ "type": "string" }))],
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("ResolveRequest") } } },
             "responses": with(
-                problems(&[common[0], EITHER_401, ("404", "tenant-unknown, or client-unknown: no such realm or active client."), common[2], common[3]]),
+                problems(&[common[0], EITHER_401, ("404", "tenant-unknown, or client-unknown: no such environment or active client."), common[2], common[3]]),
                 "200",
                 json_ok("The pairs.", "Resolution"),
             ),

@@ -61,7 +61,7 @@ async fn instance(c: &Console, by: &Browser) -> Id {
         tenant: *c.route.tenant.as_bytes(),
         domain: c.domain,
         registrant: Registrant::Device {
-            realm: *c.route.realm.as_bytes(),
+            environment: *c.route.environment.as_bytes(),
             subject: c.subject,
         },
         party: LEAVER,
@@ -148,7 +148,7 @@ async fn operation(
 
 /// Drafts the commit's envelope through the admin surface, signs it and posts the commit.
 async fn commit(c: &Console, party: &str, body: &serde_json::Value) -> Written {
-    let drafts = "/admin/v1/realms/acme/intents";
+    let drafts = "/admin/v1/envs/acme/intents";
     let proof = c.browser.ais(
         c.domain,
         &access_crypto::random::bytes::<16>().unwrap(),
@@ -161,7 +161,7 @@ async fn commit(c: &Console, party: &str, body: &serde_json::Value) -> Written {
         c.browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/intents",
+                "/console/api/proxy/admin/envs/acme/intents",
                 "x",
             )
             .header("x-access-ais", proof)
@@ -196,7 +196,7 @@ async fn commit(c: &Console, party: &str, body: &serde_json::Value) -> Written {
         c.browser
             .request(
                 &Method::POST,
-                &format!("/console/api/proxy/admin/realms/acme/offboarding/{party}/commit"),
+                &format!("/console/api/proxy/admin/envs/acme/offboarding/{party}/commit"),
                 "x",
             )
             .header("x-access-ais", envelope)
@@ -251,13 +251,13 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
         ),
         "{registered:?}"
     );
-    let accounts = c.admin_get("/admin/v1/realms/acme/accounts").await;
+    let accounts = c.admin_get("/admin/v1/envs/acme/accounts").await;
     let sponsor = accounts.body["items"][0]["account_id"].clone();
     let party = b64url_encode(&LEAVER.0);
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/agents",
+            "/admin/v1/envs/acme/agents",
             ("registerAgent", None),
             serde_json::json!({
                 "agent": party,
@@ -309,9 +309,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
     episode(&c).await;
 
     let preview = c
-        .admin_get(&format!(
-            "/admin/v1/realms/acme/offboarding/{party}/preview"
-        ))
+        .admin_get(&format!("/admin/v1/envs/acme/offboarding/{party}/preview"))
         .await;
     assert_eq!(preview.status, StatusCode::OK, "{}", preview.body);
     let p = &preview.body;
@@ -442,9 +440,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
     assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", r.body);
     assert_eq!(c.w.domains.head(c.domain).await.unwrap().0, head);
     let still = c
-        .admin_get(&format!(
-            "/admin/v1/realms/acme/offboarding/{party}/preview"
-        ))
+        .admin_get(&format!("/admin/v1/envs/acme/offboarding/{party}/preview"))
         .await;
     assert_eq!(still.body["status"], "active", "{}", still.body);
 
@@ -458,9 +454,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
         done.body
     );
     let after = c
-        .admin_get(&format!(
-            "/admin/v1/realms/acme/offboarding/{party}/preview"
-        ))
+        .admin_get(&format!("/admin/v1/envs/acme/offboarding/{party}/preview"))
         .await;
     assert_eq!(after.body["status"], "offboarded");
     assert_eq!(after.body["departure"]["reentry"], "blocked");

@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -115,14 +115,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn record_breakglass_use(&mut self, u: &BreakglassUse) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
-            "INSERT INTO access.breakglass_reviews (tenant_id, realm_id, exercise, version, state,
+            "INSERT INTO access.breakglass_reviews (tenant_id, environment_id, exercise, version, state,
                     drill, grant_id, actor, subject, used_at_ms, due_at_ms)
              VALUES ($1, $2, $3, 1, 'pending', $4, $5, $6, $7, $8, $9)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             u.exercise.as_slice(),
             u.drill,
             u.grant.as_slice(),
@@ -141,17 +141,17 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn breakglass_reviews(&mut self) -> Result<Vec<BreakglassReviewRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT * FROM (
                 SELECT DISTINCT ON (exercise) exercise, version, state, drill, grant_id, actor,
                        subject, used_at_ms, due_at_ms, classification, reviewer, decision_pos
                   FROM access.breakglass_reviews
-                 WHERE tenant_id = $1 AND realm_id = $2
+                 WHERE tenant_id = $1 AND environment_id = $2
                  ORDER BY exercise, version DESC) latest
               ORDER BY used_at_ms DESC, exercise",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -191,15 +191,15 @@ impl TenantTx {
             .into_iter()
             .filter(|r| r.state == ReviewState::Pending && r.used.due_at_ms < now_ms)
             .collect();
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let mut out = Vec::with_capacity(due.len());
         for r in due {
             sqlx::query!(
-                "INSERT INTO access.breakglass_reviews (tenant_id, realm_id, exercise, version,
+                "INSERT INTO access.breakglass_reviews (tenant_id, environment_id, exercise, version,
                         state, drill, grant_id, actor, subject, used_at_ms, due_at_ms)
                  VALUES ($1, $2, $3, $4, 'overdue', $5, $6, $7, $8, $9, $10)",
                 tenant,
-                realm,
+                environment,
                 r.used.exercise.as_slice(),
                 signed(r.version.saturating_add(1))?,
                 r.used.drill,
@@ -241,15 +241,15 @@ impl TenantTx {
         if r.used.actor == *reviewer {
             return Ok(Review::OwnUse);
         }
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let version = r.version.saturating_add(1);
         sqlx::query!(
-            "INSERT INTO access.breakglass_reviews (tenant_id, realm_id, exercise, version, state,
+            "INSERT INTO access.breakglass_reviews (tenant_id, environment_id, exercise, version, state,
                     drill, grant_id, actor, subject, used_at_ms, due_at_ms, classification,
                     reviewer, domain_id, decision_pos)
              VALUES ($1, $2, $3, $4, 'reviewed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             tenant,
-            realm,
+            environment,
             exercise.as_slice(),
             signed(version)?,
             r.used.drill,
@@ -275,17 +275,17 @@ impl TenantTx {
         }))
     }
 
-    /// When the realm's last drill committed, Unix ms.
+    /// When the environment's last drill committed, Unix ms.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn last_breakglass_drill(&mut self) -> Result<Option<u64>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let at = sqlx::query_scalar!(
             "SELECT MAX(used_at_ms) FROM access.breakglass_reviews
-              WHERE tenant_id = $1 AND realm_id = $2 AND drill",
+              WHERE tenant_id = $1 AND environment_id = $2 AND drill",
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -321,19 +321,19 @@ impl TenantTx {
         subject: &[u8; 16],
         on: bool,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
             "UPDATE access.org_memberships m
                 SET is_breakglass = $5,
                     breakglass_position = $6,
                     breakglass_marked_at = CASE WHEN $5 THEN clock_timestamp() END
                FROM access.organizations o
-              WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $4
-                AND o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id
+              WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $4
+                AND o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id
                 AND o.org_id = m.org_id AND o.party = $3
                 AND m.ended_at IS NULL AND o.ended_at IS NULL",
             tenant,
-            realm,
+            environment,
             org.as_slice(),
             Uuid::from_bytes(*subject),
             on,
@@ -344,24 +344,24 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// The realm's live break-glass accounts, oldest mark first.
+    /// The environment's live break-glass accounts, oldest mark first.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn breakglass_accounts(&mut self) -> Result<Vec<BreakglassAccount>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT m.subject_id, o.party, o.display_name,
                       m.breakglass_position AS "position!",
                       (extract(epoch FROM m.breakglass_marked_at) * 1000)::bigint AS "marked_ms!"
                  FROM access.org_memberships m
                  JOIN access.organizations o
-                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
-                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.is_breakglass
+                   ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.is_breakglass
                   AND m.ended_at IS NULL AND o.ended_at IS NULL
                 ORDER BY m.breakglass_marked_at, m.membership_id"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -383,38 +383,38 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn is_breakglass_account(&mut self, subject: &[u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             r#"SELECT EXISTS (
                  SELECT 1 FROM access.org_memberships m
                    JOIN access.organizations o
-                     ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
-                  WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                     ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id
+                  WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3
                     AND m.is_breakglass AND m.ended_at IS NULL AND o.ended_at IS NULL) AS "marked!""#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(*subject),
         )
         .fetch_one(&mut *self.tx)
         .await?)
     }
 
-    /// The owners of the organizations with a live break-glass account: who the realm's
+    /// The owners of the organizations with a live break-glass account: who the environment's
     /// break-glass alarms go to (OP-157 m.3 (h)).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn breakglass_on_call(&mut self) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_scalar!(
             "SELECT DISTINCT w.subject_id FROM access.org_memberships w
                JOIN access.org_memberships m
-                 ON m.tenant_id = w.tenant_id AND m.realm_id = w.realm_id AND m.org_id = w.org_id
-              WHERE w.tenant_id = $1 AND w.realm_id = $2 AND w.owner AND w.ended_at IS NULL
+                 ON m.tenant_id = w.tenant_id AND m.environment_id = w.environment_id AND m.org_id = w.org_id
+              WHERE w.tenant_id = $1 AND w.environment_id = $2 AND w.owner AND w.ended_at IS NULL
                 AND m.is_breakglass AND m.ended_at IS NULL
               ORDER BY w.subject_id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;

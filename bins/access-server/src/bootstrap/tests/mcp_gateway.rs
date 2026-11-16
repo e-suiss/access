@@ -4,7 +4,7 @@
 //! The gateway reaches Access only through the routes a registered proxy uses
 //! (`/proxy/v1/mcp/*` named by its client certificate, Domain Metadata), with the public crates;
 //! every call is decided by the real ADP on the real sequencer and `SoftHSM` with the agent's
-//! own statement, and audited in the realm's identity audit log.
+//! own statement, and audited in the environment's identity audit log.
 
 #![allow(
     clippy::too_many_lines,
@@ -220,7 +220,7 @@ fn call(
 }
 
 async fn audits(l: &Lab) -> Vec<access_store::audit::AuditRow> {
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     let mut rows: Vec<_> = t

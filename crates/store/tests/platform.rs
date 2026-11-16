@@ -1,5 +1,5 @@
 //! OP-149 m.4, m.16 (a), OP-73: a platform pairing is recorded once and never deleted, the
-//! platform client's Party binding is fixed, and both stay inside their realm.
+//! platform client's Party binding is fixed, and both stay inside their environment.
 
 #![allow(
     clippy::unwrap_used,
@@ -8,13 +8,13 @@
 )]
 
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::platform::PairingRow;
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
-async fn realm(db: &TestDb, seed: u8, slug: &str) -> (TenantId, RealmId) {
+async fn environment(db: &TestDb, seed: u8, slug: &str) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
     let g = LogRecord {
@@ -28,7 +28,7 @@ async fn realm(db: &TestDb, seed: u8, slug: &str) -> (TenantId, RealmId) {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, slug, "pool-default")
+    let r = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -53,8 +53,8 @@ fn row(challenge: u8, until: u64) -> PairingRow {
 async fn a_pairing_is_recorded_once_and_kept() {
     // L0-META-7, TN-1
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 1, "acme").await;
-    let (t2, r2) = realm(&db, 2, "beta").await;
+    let (t, r) = environment(&db, 1, "acme").await;
+    let (t2, r2) = environment(&db, 2, "beta").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     tx.insert_pairing(&row(1, 2_000)).await.unwrap();
     tx.insert_pairing(&row(2, 5_000)).await.unwrap();
@@ -93,7 +93,10 @@ async fn a_pairing_is_recorded_once_and_kept() {
         .raw_rows("SELECT challenge FROM access.platform_pairing")
         .await
         .unwrap();
-    assert!(seen.is_empty(), "another realm's pairings are not visible");
+    assert!(
+        seen.is_empty(),
+        "another environment's pairings are not visible"
+    );
 
     for sql in [
         "DELETE FROM access.platform_pairing",

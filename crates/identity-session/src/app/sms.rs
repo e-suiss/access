@@ -1,5 +1,5 @@
-//! The restricted SMS one-time code (OP-156 m.3 (f), §10.2.2, IDP-4, IDP-9): off unless the realm
-//! decided `idp.realm.sms_otp`; a second step only, AAL2 at best and never a Consequence Tier.
+//! The restricted SMS one-time code (OP-156 m.3 (f), §10.2.2, IDP-4, IDP-9): off unless the environment
+//! decided `idp.environment.sms_otp`; a second step only, AAL2 at best and never a Consequence Tier.
 //! The code is 6 digits, lives 5 minutes, takes 3 tries and is used once; Relay carries it to the
 //! account's phone number only (`Address::Phone`). A line whose SIM changed in the last 90 days
 //! takes no code; under the TR payment profile a line without a SIM signal checked in the last
@@ -209,7 +209,7 @@ where
         Ok(Activation::Proven)
     }
 
-    /// Sends a code for the flow's second step (OP-156 m.3 (f)): only in a realm that offers SMS
+    /// Sends a code for the flow's second step (OP-156 m.3 (f)): only in an environment that offers SMS
     /// at sign-in, after the first step, to an account with a phone number.
     ///
     /// # Errors

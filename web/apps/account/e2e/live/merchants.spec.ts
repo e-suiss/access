@@ -8,7 +8,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { PASSWORD, REALM, signIn } from "./signin.js";
+import { PASSWORD, ENVIRONMENT, signIn } from "./signin.js";
 
 async function axe(page: Page): Promise<void> {
   const result = await new AxeBuilder({ page: page })
@@ -18,7 +18,7 @@ async function axe(page: Page): Promise<void> {
 }
 
 async function setUpDevice(page: Page): Promise<void> {
-  await page.goto(`${REALM}/account/authority`);
+  await page.goto(`${ENVIRONMENT}/account/authority`);
   await page.getByRole("button", { name: "Set up this device" }).click();
   await page
     .getByRole("dialog", { name: "Check what you're signing" })
@@ -50,7 +50,7 @@ test.describe("@live merchants and the one-time payment", () => {
     );
     await expect(page.getByText(/pending/i)).toHaveCount(0);
 
-    await page.goto(`${REALM}/account/merchants`);
+    await page.goto(`${ENVIRONMENT}/account/merchants`);
     const list = page.getByTestId("merchants");
     await expect(
       list.getByRole("heading", { name: "Merchants that can charge you" }),
@@ -67,7 +67,7 @@ test.describe("@live merchants and the one-time payment", () => {
         merchant: "Shop",
       }),
     ).toString("base64url");
-    await page.goto(`${REALM}/account/payment#request=${request}`);
+    await page.goto(`${ENVIRONMENT}/account/payment#request=${request}`);
     await expect(page.getByRole("alert")).toContainText("can't be paid here as a one-time payment");
     await expect(page.getByRole("button", { name: "Pay once" })).toHaveCount(0);
     await axe(page);

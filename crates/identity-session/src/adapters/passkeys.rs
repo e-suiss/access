@@ -1,21 +1,21 @@
-//! The PostgreSQL passkey registry (CMP-15.7, OP-146 m.9): realm-scoped, soft delete only
+//! The PostgreSQL passkey registry (CMP-15.7, OP-146 m.9): environment-scoped, soft delete only
 //! (OP-73). Registering stores the public material and a sibling `identity_credentials` row of
 //! kind `webauthn` in one transaction, sealed under the subject's DEK like every credential
 //! (OP-145), so the last-method rule (TN-68) and crypto-shredding cover passkeys.
 
 use access_crypto::opaque_id::IdKey;
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::app::sealing::{seal, subject_key};
 use access_identity_account::domain::events::{CredentialChange, EventOrder};
 use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::domain::cose::CoseAlgorithm;
 use access_identity_webauthn::domain::credential::{AttestationKind, CredentialRecord};
-use access_identity_webauthn::domain::ids::{Aaguid, CredentialId, RealmId, UserHandle};
+use access_identity_webauthn::domain::ids::{Aaguid, CredentialId, EnvironmentId, UserHandle};
 use access_identity_webauthn::domain::prf::{PrfConfig, PrfSalt};
 use access_identity_webauthn::ports::{CredentialRegistry, Inserted};
 use access_store::Pool;
 use access_store::accounts::{NewCredential, Revoke, SealedSecret};
-use access_store::identity::{RealmId as StoreRealm, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId as StoreEnvironment, TenantId, TenantTx};
 use access_store::passkeys::PasskeyRow;
 use suiss_crypto::envelope::Kek;
 
@@ -28,7 +28,7 @@ pub struct PgPasskeys<'a> {
     pub pool: &'a Pool,
     /// Tenant.
     pub tenant: TenantId,
-    /// The realm KEK that wraps subject DEKs.
+    /// The environment KEK that wraps subject DEKs.
     pub kek: &'a (dyn Kek + Sync),
     /// The cell's id key.
     pub ids: &'a IdKey,
@@ -103,7 +103,7 @@ fn salt(v: &[u8]) -> Result<PrfSalt, WebAuthnError> {
         .map_err(|_| failed("prf salt"))
 }
 
-fn from_row(realm: RealmId, p: PasskeyRow) -> Result<CredentialRecord, WebAuthnError> {
+fn from_row(environment: EnvironmentId, p: PasskeyRow) -> Result<CredentialRecord, WebAuthnError> {
     let secs = |v: i64| u64::try_from(v).map_err(failed);
     let prf = match (p.prf_enabled, p.prf_first.as_deref()) {
         (Some(enabled), Some(first)) => Some(PrfConfig {
@@ -114,7 +114,7 @@ fn from_row(realm: RealmId, p: PasskeyRow) -> Result<CredentialRecord, WebAuthnE
         _ => None,
     };
     Ok(CredentialRecord {
-        realm,
+        environment,
         id: CredentialId::new(&p.raw_id).ok_or_else(|| failed("credential id"))?,
         user: UserHandle::from_slice(&p.user_handle).ok_or_else(|| failed("user handle"))?,
         public_key: p.public_key,
@@ -140,11 +140,11 @@ fn from_row(realm: RealmId, p: PasskeyRow) -> Result<CredentialRecord, WebAuthnE
 }
 
 impl PgPasskeys<'_> {
-    async fn begin(&self, realm: RealmId) -> Result<TenantTx, WebAuthnError> {
+    async fn begin(&self, environment: EnvironmentId) -> Result<TenantTx, WebAuthnError> {
         TenantTx::begin(
             self.pool,
             self.tenant,
-            StoreRealm::from_bytes(*realm.as_bytes()),
+            StoreEnvironment::from_bytes(*environment.as_bytes()),
         )
         .await
         .map_err(failed)
@@ -152,13 +152,13 @@ impl PgPasskeys<'_> {
 
     fn sealed(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: &access_store::accounts::SubjectRow,
         public_key: &[u8],
     ) -> Result<SealedSecret, WebAuthnError> {
-        let r = Realm {
+        let r = Environment {
             tenant: self.tenant,
-            realm: StoreRealm::from_bytes(*realm.as_bytes()),
+            environment: StoreEnvironment::from_bytes(*environment.as_bytes()),
             kek: self.kek,
             ids: self.ids,
         };
@@ -167,7 +167,7 @@ impl PgPasskeys<'_> {
     }
 
     async fn insert_record(&self, record: &CredentialRecord) -> Result<Inserted, WebAuthnError> {
-        let mut tx = self.begin(record.realm).await?;
+        let mut tx = self.begin(record.environment).await?;
         if tx
             .passkey_exists(record.id.as_bytes())
             .await
@@ -186,7 +186,7 @@ impl PgPasskeys<'_> {
             .await
             .map_err(failed)?
             .ok_or_else(|| failed("unknown subject"))?;
-        let sealed = self.sealed(record.realm, &row, &record.public_key)?;
+        let sealed = self.sealed(record.environment, &row, &record.public_key)?;
         let credential = tx
             .insert_credential(&NewCredential {
                 subject,
@@ -210,7 +210,7 @@ impl PgPasskeys<'_> {
             .map_err(failed)?;
         let event = EventOrder::credential(
             access_identity_account::app::events::new_id().map_err(failed)?,
-            record.realm.as_bytes(),
+            record.environment.as_bytes(),
             &self
                 .ids
                 .encode(access_identity_account::app::SUBJECT_PREFIX, subject)
@@ -234,35 +234,35 @@ impl PgPasskeys<'_> {
 
     async fn find_record(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
     ) -> Result<Option<CredentialRecord>, WebAuthnError> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let row = tx.passkey(id.as_bytes()).await.map_err(failed)?;
         tx.commit().await.map_err(failed)?;
-        row.map(|p| from_row(realm, p)).transpose()
+        row.map(|p| from_row(environment, p)).transpose()
     }
 
     async fn list_records(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         user: &UserHandle,
     ) -> Result<Vec<CredentialRecord>, WebAuthnError> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let rows = tx.passkeys(user.as_bytes()).await.map_err(failed)?;
         tx.commit().await.map_err(failed)?;
-        rows.into_iter().map(|p| from_row(realm, p)).collect()
+        rows.into_iter().map(|p| from_row(environment, p)).collect()
     }
 
     async fn record_use_of(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         sign_count: u32,
         backup_state: bool,
         at: u64,
     ) -> Result<(), WebAuthnError> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let at = i64::try_from(at).map_err(failed)?;
         tx.passkey_used(id.as_bytes(), i64::from(sign_count), backup_state, at)
             .await
@@ -275,11 +275,11 @@ impl PgPasskeys<'_> {
 
     async fn delete_record(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         at: u64,
     ) -> Result<(), WebAuthnError> {
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let Some(p) = tx.passkey(id.as_bytes()).await.map_err(failed)? else {
             return tx.commit().await.map_err(failed);
         };
@@ -319,37 +319,37 @@ impl CredentialRegistry for PgPasskeys<'_> {
 
     fn find(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
     ) -> impl Future<Output = Result<Option<CredentialRecord>, WebAuthnError>> + Send {
-        self.find_record(realm, id)
+        self.find_record(environment, id)
     }
 
     fn list(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         user: &UserHandle,
     ) -> impl Future<Output = Result<Vec<CredentialRecord>, WebAuthnError>> + Send {
-        self.list_records(realm, user)
+        self.list_records(environment, user)
     }
 
     fn record_use(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         sign_count: u32,
         backup_state: bool,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
-        self.record_use_of(realm, id, sign_count, backup_state, at)
+        self.record_use_of(environment, id, sign_count, backup_state, at)
     }
 
     fn soft_delete(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send {
-        self.delete_record(realm, id, at)
+        self.delete_record(environment, id, at)
     }
 }

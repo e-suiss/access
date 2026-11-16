@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claim_id FROM access.issued_claims\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND domain_id = $4\n            AND line = $5 AND disposition NOT LIKE 'rejected%'\n          ORDER BY id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.issued_claims",
+            "name": "claim_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "96ef4b17fa756fe98bb61f9113e21ffc47a8383bc6ad95524df5449fe619aa7e"
+}

@@ -1,4 +1,4 @@
-//! The Stage 14 routes outside the realm-admin and Frontend API manifests, declared before their
+//! The Stage 14 routes outside the environment-admin and Frontend API manifests, declared before their
 //! lanes serve them (OP-159 m.4 (a)): the projection reference fetch, the post-quantum checkpoint
 //! list and post-quantum inclusion bundles. Each answers `501 not-yet-served`; a lane that serves
 //! one removes its row and mounts its own handler.

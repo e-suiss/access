@@ -12,9 +12,9 @@ use std::sync::OnceLock;
 use access_identity_audit::ports::ColdStore as _;
 use access_identity_export::adapters::cold_file::FileCold;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::restore::{Shredded, mark_reshredded, mark_restored, pending_reshred};
-use access_store::tenancy::RealmRoute;
+use access_store::tenancy::EnvironmentRoute;
 
 /// The journal's prefix in the cold tier.
 pub(crate) const JOURNAL: &str = "shred-journal";
@@ -36,15 +36,20 @@ fn bytes(text: &str) -> Option<[u8; 16]> {
     u128::from_str_radix(text, 16).ok().map(u128::to_be_bytes)
 }
 
-fn key(tenant: &[u8; 16], realm: &[u8; 16], subject: &[u8; 16]) -> String {
-    format!("{JOURNAL}/{}/{}/{}", hex(tenant), hex(realm), hex(subject))
+fn key(tenant: &[u8; 16], environment: &[u8; 16], subject: &[u8; 16]) -> String {
+    format!(
+        "{JOURNAL}/{}/{}/{}",
+        hex(tenant),
+        hex(environment),
+        hex(subject)
+    )
 }
 
-/// One journal entry: the subject of a realm whose keys were destroyed.
+/// One journal entry: the subject of an environment whose keys were destroyed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Entry {
     pub(crate) tenant: [u8; 16],
-    pub(crate) realm: [u8; 16],
+    pub(crate) environment: [u8; 16],
     pub(crate) subject: [u8; 16],
 }
 
@@ -55,7 +60,7 @@ fn entry_of(key: &str) -> Option<Entry> {
         .split('/');
     let e = Entry {
         tenant: bytes(parts.next()?)?,
-        realm: bytes(parts.next()?)?,
+        environment: bytes(parts.next()?)?,
         subject: bytes(parts.next()?)?,
     };
     parts.next().is_none().then_some(e)
@@ -67,11 +72,11 @@ fn entry_of(key: &str) -> Option<Entry> {
 /// The cold tier's refusal.
 pub(crate) async fn journal_to(
     cold: &FileCold,
-    route: &RealmRoute,
+    route: &EnvironmentRoute,
     subjects: &[[u8; 16]],
 ) -> Result<(), String> {
     for s in subjects {
-        let k = key(route.tenant.as_bytes(), route.realm.as_bytes(), s);
+        let k = key(route.tenant.as_bytes(), route.environment.as_bytes(), s);
         cold.put(&k, b"destroyed")
             .await
             .map_err(|e| e.to_string())?;
@@ -80,7 +85,7 @@ pub(crate) async fn journal_to(
 }
 
 /// [`journal_to`] the cold tier named at start; without one nothing is journaled.
-pub(crate) async fn journal(route: &RealmRoute, subjects: &[[u8; 16]]) {
+pub(crate) async fn journal(route: &EnvironmentRoute, subjects: &[[u8; 16]]) {
     if let Some(cold) = COLD.get()
         && let Err(error) = journal_to(cold, route, subjects).await
     {
@@ -108,7 +113,7 @@ async fn behind(app: &Pool, entries: &[Entry]) -> Result<Vec<Entry>, String> {
         let mut tx = TenantTx::begin(
             app,
             TenantId::from_bytes(e.tenant),
-            RealmId::from_bytes(e.realm),
+            EnvironmentId::from_bytes(e.environment),
         )
         .await
         .map_err(|x| x.to_string())?;
@@ -191,7 +196,7 @@ pub(crate) async fn reshred(app: &Pool, cold: &FileCold) -> Result<Reshred, Stri
         let mut tx = TenantTx::begin(
             app,
             TenantId::from_bytes(e.tenant),
-            RealmId::from_bytes(e.realm),
+            EnvironmentId::from_bytes(e.environment),
         )
         .await
         .map_err(|x| x.to_string())?;

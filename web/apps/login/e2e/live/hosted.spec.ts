@@ -3,7 +3,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
+const ENVIRONMENT = process.env["ACCESS_LIVE_ENVIRONMENT"] ?? "/env/acme";
 const wcag22aa = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 async function clean(page: Page): Promise<void> {
@@ -20,7 +20,7 @@ test.describe("@live hosted pages", () => {
       "/login?reason=share",
       "/login/recovery",
     ]) {
-      const r = await page.goto(`${REALM}${path}`);
+      const r = await page.goto(`${ENVIRONMENT}${path}`);
       expect(r?.status(), path).toBe(200);
       const h = r?.headers() ?? {};
       const csp = h["content-security-policy"] ?? "";
@@ -36,9 +36,9 @@ test.describe("@live hosted pages", () => {
   test("@live the consent screen is never framed, may compile only the Kernel and needs a sign-in", async ({
     page,
   }) => {
-    const back = `${REALM}/authorize?client_id=${encodeURIComponent("https://app.example/c.json")}&request_uri=x`;
+    const back = `${ENVIRONMENT}/authorize?client_id=${encodeURIComponent("https://app.example/c.json")}&request_uri=x`;
     const r = await page.goto(
-      `${REALM}/login?reason=approve&return_to=${encodeURIComponent(back)}`,
+      `${ENVIRONMENT}/login?reason=approve&return_to=${encodeURIComponent(back)}`,
     );
     expect(r?.status()).toBe(200);
     const csp = r?.headers()["content-security-policy"] ?? "";
@@ -47,7 +47,7 @@ test.describe("@live hosted pages", () => {
     expect(csp).not.toContain("unsafe-inline");
     expect(r?.headers()["set-cookie"]).toBeUndefined();
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
-    const preview = await page.request.post(`${REALM}/v1/login/approval/preview`, {
+    const preview = await page.request.post(`${ENVIRONMENT}/v1/login/approval/preview`, {
       data: { return_to: back },
       headers: { origin: new URL(page.url()).origin },
     });
@@ -60,13 +60,13 @@ test.describe("@live hosted pages", () => {
   test("@live the device page is a framed-never page that needs a sign-in to read a code", async ({
     page,
   }) => {
-    const r = await page.goto(`${REALM}/device`);
+    const r = await page.goto(`${ENVIRONMENT}/device`);
     expect(r?.status()).toBe(200);
     const csp = r?.headers()["content-security-policy"] ?? "";
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).not.toContain("unsafe-inline");
     await expect(page.getByRole("heading", { name: "Connect a device" })).toBeVisible();
-    const preview = await page.request.post(`${REALM}/v1/device/preview`, {
+    const preview = await page.request.post(`${ENVIRONMENT}/v1/device/preview`, {
       data: { user_code: "BCDF-GHJZ" },
       headers: { origin: new URL(page.url()).origin },
     });
@@ -78,7 +78,7 @@ test.describe("@live hosted pages", () => {
   test("@live the CIBA approval page is never framed, may compile only the Kernel and needs a sign-in", async ({
     page,
   }) => {
-    const r = await page.goto(`${REALM}/login?reason=ciba&request=AAAAAAAAAAAAAAAAAAAAAA`);
+    const r = await page.goto(`${ENVIRONMENT}/login?reason=ciba&request=AAAAAAAAAAAAAAAAAAAAAA`);
     expect(r?.status()).toBe(200);
     const csp = r?.headers()["content-security-policy"] ?? "";
     expect(csp).toContain("frame-ancestors 'none'");
@@ -87,12 +87,12 @@ test.describe("@live hosted pages", () => {
     await expect(
       page.getByRole("link", { name: "Sign in" }).or(page.getByRole("alert")),
     ).toBeVisible();
-    const preview = await page.request.post(`${REALM}/v1/ciba/preview`, {
+    const preview = await page.request.post(`${ENVIRONMENT}/v1/ciba/preview`, {
       data: { request: "AAAAAAAAAAAAAAAAAAAAAA" },
       headers: { origin: new URL(page.url()).origin },
     });
     expect([401, 404]).toContain(preview.status());
-    const cross = await page.request.post(`${REALM}/v1/ciba/approval`, {
+    const cross = await page.request.post(`${ENVIRONMENT}/v1/ciba/approval`, {
       data: { request: "AAAAAAAAAAAAAAAAAAAAAA", approve: false },
       headers: { origin: "https://elsewhere.example" },
     });
@@ -101,7 +101,7 @@ test.describe("@live hosted pages", () => {
   });
 
   test("@live the sign-up page opens a registration flow and passes axe", async ({ page }) => {
-    await page.goto(`${REALM}/login?reason=create`);
+    await page.goto(`${ENVIRONMENT}/login?reason=create`);
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
     await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "email");
     await clean(page);
@@ -121,7 +121,7 @@ test.describe("@live hosted pages", () => {
       ];
       for (const [path, heading] of pages) {
         const join = path.includes("?") ? "&" : "?";
-        await page.goto(`${REALM}${path}${join}ui_locales=${locale}`);
+        await page.goto(`${ENVIRONMENT}${path}${join}ui_locales=${locale}`);
         await expect(page.getByRole("heading", { name: heading })).toBeVisible();
         await expect(page.locator("html")).toHaveAttribute(
           "dir",
@@ -132,9 +132,9 @@ test.describe("@live hosted pages", () => {
     }
   });
 
-  // X35, OP-153 m.22 (k): the pages read the realm's stored texts; none are protected keys
-  test("@live the realm's text overrides are served to the pages", async ({ page }) => {
-    const r = await page.request.get(`${REALM}/v1/login/messages`);
+  // X35, OP-153 m.22 (k): the pages read the environment's stored texts; none are protected keys
+  test("@live the environment's text overrides are served to the pages", async ({ page }) => {
+    const r = await page.request.get(`${ENVIRONMENT}/v1/login/messages`);
     expect(r.status()).toBe(200);
     const body = (await r.json()) as { overrides?: Record<string, Record<string, string>> };
     expect(typeof body.overrides).toBe("object");
@@ -144,7 +144,7 @@ test.describe("@live hosted pages", () => {
   });
 
   test("@live recovery answers the same for an unknown address", async ({ page }) => {
-    await page.goto(`${REALM}/login/recovery`);
+    await page.goto(`${ENVIRONMENT}/login/recovery`);
     await page.getByLabel("Email or username").fill(`nobody-${String(Date.now())}@example.org`);
     await page.getByRole("button", { name: "Start recovery" }).click();
     await expect(
@@ -153,17 +153,17 @@ test.describe("@live hosted pages", () => {
   });
 
   // TN-95, §8.13, OP-155 m.3 (h), Ek B 4678, 4731
-  test("@live an upstream connection the realm does not hold is not served and changes nothing", async ({
+  test("@live an upstream connection the environment does not hold is not served and changes nothing", async ({
     page,
   }) => {
-    const start = await page.request.get(`${REALM}/v1/login/upstream/no-such-connection`, {
+    const start = await page.request.get(`${ENVIRONMENT}/v1/login/upstream/no-such-connection`, {
       maxRedirects: 0,
     });
     expect(start.status()).toBe(404);
     const problem = (await start.json()) as { code?: string };
     expect(problem.code).toBe("no-such-provider");
     const metadata = await page.request.get(
-      `${REALM}/v1/login/upstream/no-such-connection/saml/metadata`,
+      `${ENVIRONMENT}/v1/login/upstream/no-such-connection/saml/metadata`,
     );
     expect(metadata.status()).toBe(404);
   });
@@ -173,13 +173,13 @@ test.describe("@live hosted pages", () => {
     page,
   }) => {
     const link = "u".repeat(43);
-    const r = await page.goto(`${REALM}/login/sso-setup/${link}`);
+    const r = await page.goto(`${ENVIRONMENT}/login/sso-setup/${link}`);
     expect(r?.status()).toBe(200);
     expect(r?.headers()["content-security-policy"] ?? "").toContain("frame-ancestors 'none'");
     await expect(page.getByTestId("expired")).toBeVisible();
-    const api = await page.request.get(`${REALM}/v1/sso-setup/${link}`);
+    const api = await page.request.get(`${ENVIRONMENT}/v1/sso-setup/${link}`);
     expect(api.status()).toBe(404);
-    const post = await page.request.post(`${REALM}/v1/sso-setup/${link}`, {
+    const post = await page.request.post(`${ENVIRONMENT}/v1/sso-setup/${link}`, {
       data: { step: "finish" },
       headers: { origin: new URL(page.url()).origin, "idempotency-key": crypto.randomUUID() },
     });

@@ -1,5 +1,5 @@
 //! Relay's İYS reports kept beside their records (OP-156 m.3 (c), IDP-37 (4), B23): the tenant
-//! named by its external id, the realm scoped by row-level security, the report audited.
+//! named by its external id, the environment scoped by row-level security, the report audited.
 //! Nothing here changes a preference or an authority.
 
 use std::sync::Arc;
@@ -8,9 +8,9 @@ use access_http::relay_callback::{IysReports, Kept, Report, Status, Unavailable}
 use access_identity_events::ports::TenantIds;
 use access_store::Pool;
 use access_store::audit::AuditEvent;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
-/// The reports, in each realm's own rows.
+/// The reports, in each environment's own rows.
 pub(crate) struct PgIysReports {
     pub(crate) app: Pool,
     pub(crate) ids: Arc<dyn TenantIds>,
@@ -37,7 +37,7 @@ impl IysReports for PgIysReports {
         let mut t = TenantTx::begin(
             &self.app,
             TenantId::from_bytes(tenant),
-            RealmId::from_bytes(r.realm),
+            EnvironmentId::from_bytes(r.environment),
         )
         .await
         .map_err(down)?;

@@ -3,7 +3,7 @@
 //! token answers 401 with `WWW-Authenticate: Negotiate` and a page that sends the browser on to
 //! normal sign-in, for browsers whose allowlist does not name this host. With a token, every
 //! failure (NTLM, another SPN, RC4, a bad ticket, an unknown principal) falls back to normal
-//! sign-in with a 303, never a second 401. A success has the realm issuer's `authentication`
+//! sign-in with a 303, never a second 401. A success has the environment issuer's `authentication`
 //! Claim queued and also ends at the sign-in page.
 
 use std::fmt::Write as _;
@@ -82,7 +82,7 @@ pub struct Endpoint {
     pub acceptor: Acceptor,
     /// The configured SPN, compared exactly.
     pub spn: String,
-    /// The realm's normal sign-in page.
+    /// The environment's normal sign-in page.
     pub login: String,
     /// The `S4U2Proxy` backend, when configured.
     pub proxy: Option<Proxy>,
@@ -120,7 +120,7 @@ fn fallback_page(login: &str) -> String {
 }
 
 impl Endpoint {
-    /// Writes the audit event `name` as the realm's log names it (`edge.<event>.<outcome>`).
+    /// Writes the audit event `name` as the environment's log names it (`edge.<event>.<outcome>`).
     async fn audit(&self, name: &str) {
         let Some((event, outcome)) = name
             .strip_prefix("edge.")
@@ -200,11 +200,11 @@ impl Endpoint {
             self.audit("edge.kerberos.accept.refused").await;
             return Outcome::Fallback;
         };
-        let Ok(realm) = self.core.realm(None) else {
+        let Ok(environment) = self.core.environment(None) else {
             return Outcome::Fallback;
         };
         let q = Authenticate {
-            realm: String::from(realm),
+            environment: String::from(environment),
             principal: accepted.principal.clone(),
             spn: token.spn(),
             kvno,

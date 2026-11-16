@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tenant_id, environment_id, subscription_id, events FROM access.event_subscription\n          WHERE platform_product IS NOT NULL AND disabled_at IS NULL\n          ORDER BY tenant_id, environment_id, subscription_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subscription_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "subscription_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "events",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "events"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "05a9d99ac1eedcb1de7564b39816986fea200c0e9255dcd57b9d3832398aa75a"
+}

@@ -15,9 +15,9 @@ type Cell = std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>;
 
 #[derive(Default, Clone)]
 struct MemVault(
-    std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>,
+    std::sync::Arc<std::sync::Mutex<BTreeMap<Environment, Vec<u8>>>>,
     Cell,
-    std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>,
+    std::sync::Arc<std::sync::Mutex<BTreeMap<Environment, Vec<u8>>>>,
 );
 
 impl Vault for MemVault {
@@ -25,8 +25,8 @@ impl Vault for MemVault {
         Ok(self.0.lock().unwrap().values().cloned().collect())
     }
 
-    fn put(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        self.0.lock().unwrap().insert(*realm, bytes.to_vec());
+    fn put(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        self.0.lock().unwrap().insert(*environment, bytes.to_vec());
         Ok(())
     }
 
@@ -39,42 +39,49 @@ impl Vault for MemVault {
         Ok(())
     }
 
-    fn issuer(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
-        Ok(self.2.lock().unwrap().get(realm).cloned())
+    fn issuer(&mut self, environment: &Environment) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(self.2.lock().unwrap().get(environment).cloned())
     }
 
-    fn put_issuer(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
-        self.2.lock().unwrap().insert(*realm, bytes.to_vec());
+    fn put_issuer(&mut self, environment: &Environment, bytes: &[u8]) -> Result<(), VaultError> {
+        self.2.lock().unwrap().insert(*environment, bytes.to_vec());
         Ok(())
     }
 }
 
 fn factory() -> SealedFactory<SoftKek> {
-    SealedFactory::new(SoftKek::new("realm-kek", [5; 32]))
+    SealedFactory::new(SoftKek::new("environment-kek", [5; 32]))
 }
 
-fn jwks(s: &mut Service<SealedFactory<SoftKek>, MemVault>, r: Realm) -> String {
+fn jwks(s: &mut Service<SealedFactory<SoftKek>, MemVault>, r: Environment) -> String {
     match s.handle(Request::Jwks(r), 0, 0) {
         Response::Jwks(d) => d,
         other => panic!("{other:?}"),
     }
 }
 
-const A: Realm = Realm([1; 16]);
-const B: Realm = Realm([2; 16]);
+fn es256(environment: Environment) -> Request {
+    Request::Open {
+        environment,
+        alg: JwsAlg::Es256,
+    }
+}
+
+const A: Environment = Environment([1; 16]);
+const B: Environment = Environment([2; 16]);
 
 // CMP-22b, CR-19, CR-27
 #[test]
-fn each_realm_has_its_own_published_keys() {
-    let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
+fn each_environment_has_its_own_published_keys() {
+    let mut s = Service::start(factory(), MemVault::default(), Policy::ENVIRONMENT).unwrap();
     assert_eq!(s.handle(Request::Ping, 0, 0), Response::Pong);
     assert_eq!(
         s.handle(Request::Jwks(A), 0, 0),
-        Response::Error(String::from(UNKNOWN_REALM))
+        Response::Error(String::from(UNKNOWN_ENVIRONMENT))
     );
     for r in [A, B] {
         let open = Request::Open {
-            realm: r,
+            environment: r,
             alg: JwsAlg::Es256,
         };
         assert_eq!(s.handle(open.clone(), 0, 7), Response::Opened);
@@ -83,24 +90,27 @@ fn each_realm_has_its_own_published_keys() {
     let (a, b) = (jwks(&mut s, A), jwks(&mut s, B));
     assert!(a.contains(r#""kty":"EC""#), "{a}");
     assert_ne!(a, b);
-    assert_eq!(s.realms(), vec![A, B]);
+    assert_eq!(s.environments(), vec![A, B]);
 }
 
 // OP-146 m.8 (e), m.16 (m), MD-6
 #[test]
 fn another_alg_applies_to_the_next_keys() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
-    let open = |alg| Request::Open { realm: A, alg };
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
+    let open = |alg| Request::Open {
+        environment: A,
+        alg,
+    };
     assert_eq!(s.handle(open(JwsAlg::Es256), 0, 7), Response::Opened);
     let first = jwks(&mut s, A);
     assert_eq!(s.handle(open(JwsAlg::Ed25519), 0, 7), Response::Opened);
     assert_eq!(jwks(&mut s, A), first);
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!(again.rings.get(&A).map(|(a, _)| *a), Some(JwsAlg::Ed25519));
     let day = 86_400_000;
     let rotated = (1..=800_u64).any(|d| {
-        assert_eq!(again.tick(d * day, 7), Vec::<Realm>::new());
+        assert_eq!(again.tick(d * day, 7), Vec::<Environment>::new());
         jwks(&mut again, A).contains(r#""kty":"OKP""#)
     });
     assert!(rotated);
@@ -109,11 +119,11 @@ fn another_alg_applies_to_the_next_keys() {
 // CR-59, SAI-46, CR-25
 #[test]
 fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
-    let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), MemVault::default(), Policy::ENVIRONMENT).unwrap();
     assert_eq!(
         s.handle(
             Request::Open {
-                realm: A,
+                environment: A,
                 alg: JwsAlg::Ed25519,
             },
             0,
@@ -122,7 +132,7 @@ fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
         Response::Opened
     );
     let sign = |at| Request::Sign {
-        realm: A,
+        environment: A,
         typ: String::from("JWT"),
         payload: b"{}".to_vec(),
         at,
@@ -133,11 +143,11 @@ fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
     let keys = s.rings[&A].1.keys();
     assert!(keys.iter().any(|k| k.kid == founding && k.founding));
     assert_eq!(keys.iter().filter(|k| k.founding).count(), 1);
-    let lead = Policy::REALM.publish_lead_ms;
+    let lead = Policy::ENVIRONMENT.publish_lead_ms;
     let early = lead - 60_000;
-    assert_eq!(s.tick(early, 0), Vec::<Realm>::new());
+    assert_eq!(s.tick(early, 0), Vec::<Environment>::new());
     let rotate = Request::Rotate {
-        realm: A,
+        environment: A,
         retire: founding,
     };
     assert_eq!(
@@ -148,7 +158,7 @@ fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
         s.handle(sign(early), early, 0),
         Response::Signed { kid, .. } if kid == founding
     ));
-    assert_eq!(s.tick(lead, 0), Vec::<Realm>::new());
+    assert_eq!(s.tick(lead, 0), Vec::<Environment>::new());
     assert!(matches!(s.handle(rotate, lead, 0), Response::Rekeyed(_)));
     let Response::Signed { kid: next, .. } = s.handle(sign(lead), lead, 0) else {
         panic!("not signed after the rotation");
@@ -167,7 +177,7 @@ fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
     );
 }
 
-/// `bytes` with every `founding` entry of every key removed: a realm as a vault written before
+/// `bytes` with every `founding` entry of every key removed: an environment as a vault written before
 /// CR-59 kept it.
 fn without_founding(bytes: &[u8]) -> Vec<u8> {
     let Value::Map(top) = dcbor::decode(bytes, Limits::CEILING).unwrap() else {
@@ -203,17 +213,17 @@ fn without_founding(bytes: &[u8]) -> Vec<u8> {
 #[test]
 fn an_older_vault_restores_without_a_founding_key() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let _ = s.handle(
         Request::Open {
-            realm: A,
+            environment: A,
             alg: JwsAlg::Es256,
         },
         0,
         0,
     );
     let sign = |at| Request::Sign {
-        realm: A,
+        environment: A,
         typ: String::from("JWT"),
         payload: b"{}".to_vec(),
         at,
@@ -225,7 +235,7 @@ fn an_older_vault_restores_without_a_founding_key() {
         .lock()
         .unwrap()
         .insert(A, without_founding(&current));
-    let mut restored = Service::start(factory(), older, Policy::REALM).unwrap();
+    let mut restored = Service::start(factory(), older, Policy::ENVIRONMENT).unwrap();
     let keys = restored.rings[&A].1.keys();
     assert_eq!(keys.len(), 2);
     assert!(keys.iter().all(|k| !k.founding));
@@ -233,12 +243,12 @@ fn an_older_vault_restores_without_a_founding_key() {
         restored.handle(sign(0), 0, 0),
         Response::Error(String::from("signer-no-key"))
     );
-    let lead = Policy::REALM.publish_lead_ms;
+    let lead = Policy::ENVIRONMENT.publish_lead_ms;
     assert!(matches!(
         restored.handle(sign(lead), lead, 0),
         Response::Signed { .. }
     ));
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!(again.rings[&A].1.keys(), s.rings[&A].1.keys());
     assert!(matches!(
         again.handle(sign(0), 0, 0),
@@ -248,13 +258,13 @@ fn an_older_vault_restores_without_a_founding_key() {
 
 // CR-23, OP-143 m.9 (e)
 #[test]
-fn a_restart_restores_every_realm() {
+fn a_restart_restores_every_environment() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     for r in [A, B] {
         let _ = s.handle(
             Request::Open {
-                realm: r,
+                environment: r,
                 alg: JwsAlg::Es256,
             },
             0,
@@ -262,7 +272,7 @@ fn a_restart_restores_every_realm() {
         );
     }
     let before = (jwks(&mut s, A), jwks(&mut s, B));
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!((jwks(&mut again, A), jwks(&mut again, B)), before);
 }
 
@@ -280,7 +290,7 @@ fn checkpoint(origin: &str, size: u64) -> String {
 // OP-150, CMP-22b, OP-143 m.10, L2-CKP-3
 #[test]
 fn the_cell_key_signs_audit_checkpoints() {
-    let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), MemVault::default(), Policy::ENVIRONMENT).unwrap();
     let body = checkpoint("cell-a/identity-audit", 3);
     let sign = |body: &str| Request::SignCheckpoint {
         body: String::from(body),
@@ -322,11 +332,11 @@ fn the_cell_key_signs_audit_checkpoints() {
 #[test]
 fn the_cell_key_survives_a_restart() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     s.open_cell("cell-a").unwrap();
     let _ = s.handle(
         Request::Open {
-            realm: A,
+            environment: A,
             alg: JwsAlg::Ed25519,
         },
         0,
@@ -335,13 +345,13 @@ fn the_cell_key_survives_a_restart() {
     let before = s.handle(Request::CellKey, 0, 0);
     let day = 86_400_000;
     for d in 1..=400_u64 {
-        assert_eq!(s.tick(d * day, 7), Vec::<Realm>::new());
+        assert_eq!(s.tick(d * day, 7), Vec::<Environment>::new());
     }
     assert_eq!(s.handle(Request::CellKey, 0, 0), before);
-    let mut again = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     again.open_cell("cell-a").unwrap();
     assert_eq!(again.handle(Request::CellKey, 0, 0), before);
-    let mut other = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut other = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!(
         other.open_cell("cell-b").err(),
         Some(crate::cell::CellError::OtherCell)
@@ -377,11 +387,11 @@ fn rounds_report_transitions_and_delays() {
     let mut s = Service::start(
         Flaky(factory(), down.clone()),
         MemVault::default(),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     )
     .unwrap();
     let open = Request::Open {
-        realm: A,
+        environment: A,
         alg: JwsAlg::Es256,
     };
     assert_eq!(s.handle(open, 0, 7), Response::Opened);
@@ -415,25 +425,18 @@ fn rounds_report_transitions_and_delays() {
 #[test]
 fn decided_key_changes_survive_a_restart() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     for r in [A, B] {
-        let _ = s.handle(
-            Request::Open {
-                realm: r,
-                alg: JwsAlg::Es256,
-            },
-            0,
-            0,
-        );
+        let _ = s.handle(es256(r), 0, 0);
     }
-    let lead = Policy::REALM.publish_lead_ms;
+    let lead = Policy::ENVIRONMENT.publish_lead_ms;
     let now = 2 * lead + 60_000;
-    assert_eq!(s.tick(lead, 1), Vec::<Realm>::new());
-    assert_eq!(s.tick(now, 1), Vec::<Realm>::new());
+    assert_eq!(s.tick(lead, 1), Vec::<Environment>::new());
+    assert_eq!(s.tick(now, 1), Vec::<Environment>::new());
     let b = jwks(&mut s, B);
     let Response::Signed { kid, .. } = s.handle(
         Request::Sign {
-            realm: A,
+            environment: A,
             typ: String::from("JWT"),
             payload: b"{}".to_vec(),
             at: now,
@@ -443,18 +446,32 @@ fn decided_key_changes_survive_a_restart() {
     ) else {
         panic!("not signed");
     };
-    let Response::Rekeyed(after) = s.handle(Request::DropKey { realm: A, kid }, now, 2) else {
+    let Response::Rekeyed(after) = s.handle(
+        Request::DropKey {
+            environment: A,
+            kid,
+        },
+        now,
+        2,
+    ) else {
         panic!("not dropped");
     };
     assert!(!after.contains(&access_kernel::json::b64url_encode(&kid)));
     assert_eq!(
-        s.handle(Request::DropKey { realm: A, kid }, now, 2),
+        s.handle(
+            Request::DropKey {
+                environment: A,
+                kid
+            },
+            now,
+            2
+        ),
         Response::Rekeyed(after.clone())
     );
     assert_eq!(
         s.handle(
             Request::DropKey {
-                realm: A,
+                environment: A,
                 kid: [0; 32]
             },
             now,
@@ -462,13 +479,13 @@ fn decided_key_changes_survive_a_restart() {
         ),
         Response::Error(String::from("signer-unknown-key"))
     );
-    let mut faster = Policy::REALM;
+    let mut faster = Policy::ENVIRONMENT;
     faster.lifetime_ms = 30 * 86_400_000;
     faster.window_ms = 60 * 86_400_000;
     assert!(matches!(
         s.handle(
             Request::SetPolicy {
-                realm: A,
+                environment: A,
                 policy: faster
             },
             now,
@@ -476,31 +493,31 @@ fn decided_key_changes_survive_a_restart() {
         ),
         Response::Rekeyed(_)
     ));
-    let mut bad = Policy::REALM;
+    let mut bad = Policy::ENVIRONMENT;
     bad.publish_lead_ms = 0;
     assert_eq!(
         s.handle(
             Request::SetPolicy {
-                realm: A,
+                environment: A,
                 policy: bad
             },
             now,
             0
         ),
-        Response::Error(String::from("realm-key-lead"))
+        Response::Error(String::from("environment-key-lead"))
     );
     assert_eq!(
         s.handle(
             Request::Rotate {
-                realm: Realm([9; 16]),
+                environment: Environment([9; 16]),
                 retire: kid
             },
             now,
             0
         ),
-        Response::Error(String::from(UNKNOWN_REALM))
+        Response::Error(String::from(UNKNOWN_ENVIRONMENT))
     );
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!(jwks(&mut again, A), after);
     assert_eq!(jwks(&mut again, B), b);
     assert_eq!(again.rings.get(&A).map(|(_, r)| r.policy()), Some(faster));
@@ -534,10 +551,10 @@ fn claim_payload(issuer: [u8; 16], at: u64) -> Vec<u8> {
 #[test]
 fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let party = [4; 16];
     let sign = |party| Request::SignClaim {
-        realm: A,
+        environment: A,
         payload: claim_payload(party, 100),
         at: 100,
     };
@@ -545,7 +562,10 @@ fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
         s.handle(sign(party), 100, 0),
         Response::Error(String::from(NO_ISSUER))
     );
-    let open = |party| Request::OpenIssuer { realm: A, party };
+    let open = |party| Request::OpenIssuer {
+        environment: A,
+        party,
+    };
     let Response::Issuer { key, kid, .. } = s.handle(open(party), 0, 0) else {
         panic!("not opened");
     };
@@ -578,17 +598,17 @@ fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
     );
     let _ = s.handle(
         Request::Open {
-            realm: A,
+            environment: A,
             alg: JwsAlg::Ed25519,
         },
         0,
         0,
     );
-    let later = Policy::REALM.publish_lead_ms + 60_000;
-    assert_eq!(s.tick(later, 0), Vec::<Realm>::new());
+    let later = Policy::ENVIRONMENT.publish_lead_ms + 60_000;
+    assert_eq!(s.tick(later, 0), Vec::<Environment>::new());
     for ct in PROTOCOL_TYPES {
         let r = Request::SignCose {
-            realm: A,
+            environment: A,
             content_type: String::from(ct),
             payload: claim_payload(party, later),
             at: later,
@@ -599,7 +619,7 @@ fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
         );
     }
     assert!(!jwks(&mut s, A).contains(&access_kernel::json::b64url_encode(&key)));
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert!(matches!(
         again.handle(sign(party), 100, 0),
         Response::SignedCose { kid: k, .. } if k == kid
@@ -610,9 +630,9 @@ fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
 #[test]
 fn the_federation_key_signs_only_federation_statements() {
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let open = Request::Open {
-        realm: A,
+        environment: A,
         alg: JwsAlg::Es256,
     };
     assert_eq!(s.handle(open, 0, 7), Response::Opened);
@@ -623,7 +643,7 @@ fn the_federation_key_signs_only_federation_statements() {
     assert_ne!(fed, jose);
     assert!(fed.contains(r#""crv":"P-256""#));
     let sign = |typ: &str| Request::SignFederation {
-        realm: A,
+        environment: A,
         typ: String::from(typ),
         payload: br#"{"iss":"https://id.example","sub":"https://id.example"}"#.to_vec(),
         at: 0,
@@ -637,7 +657,7 @@ fn the_federation_key_signs_only_federation_statements() {
     let payload = Response::Error(String::from(SignerError::Payload.code()));
     assert_eq!(s.handle(sign("JWT"), 0, 0), payload);
     let jose_sign = Request::Sign {
-        realm: A,
+        environment: A,
         typ: String::from("entity-statement+jwt"),
         payload: b"{}".to_vec(),
         at: 0,
@@ -647,11 +667,11 @@ fn the_federation_key_signs_only_federation_statements() {
         payload,
         "the JOSE key never signs one"
     );
-    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault, Policy::ENVIRONMENT).unwrap();
     assert_eq!(
-        again.realms(),
+        again.environments(),
         vec![A],
-        "the federation set is not a realm key set"
+        "the federation set is not an environment key set"
     );
     assert_eq!(
         again.handle(Request::FederationJwks(A), 0, 0),
@@ -704,9 +724,9 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
     use crate::pq::{NO_PQ, PqRequest};
     use access_kernel::verify::jws::{Origin, verify_compact};
     let vault = MemVault::default();
-    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let open = Request::Open {
-        realm: A,
+        environment: A,
         alg: JwsAlg::Es256,
     };
     assert_eq!(s.handle(open, 0, 7), Response::Opened);
@@ -721,7 +741,7 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
         Response::Opened
     );
     let sign = PqRequest::Sign {
-        realm: A,
+        environment: A,
         typ: String::from("JWT"),
         payload: br#"{"sub":"a"}"#.to_vec(),
         at: 0,
@@ -731,7 +751,7 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
         Response::Error(String::from(NO_PQ))
     );
     let open_pq = PqRequest::Open {
-        realm: A,
+        environment: A,
         alg: JwsAlg::MlDsa65,
     };
     assert_eq!(pq(&mut s, open_pq.clone()), Response::Opened);
@@ -755,7 +775,7 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
     assert_eq!(v.algorithm, suiss_crypto::cose::Algorithm::MlDsa65);
     let Response::Signed { token: classic, .. } = s.handle(
         Request::Sign {
-            realm: A,
+            environment: A,
             typ: String::from("JWT"),
             payload: br#"{"sub":"a"}"#.to_vec(),
             at: 0,
@@ -767,14 +787,17 @@ fn a_post_quantum_key_set_is_published_as_akp_signs_ml_dsa_and_closes_without_a_
     };
     assert!(classic.starts_with("eyJhbGciOiJFUzI1NiI"), "{classic}");
 
-    let mut again = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut again = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     assert!(matches!(
         again.handle(Request::Pq(sign.clone()), 0, 0),
         Response::Signed { .. }
     ));
     assert_eq!(akp_keys(&jwks(&mut again, A)).keys.len(), 2);
 
-    assert_eq!(pq(&mut s, PqRequest::Close { realm: A }), Response::Opened);
+    assert_eq!(
+        pq(&mut s, PqRequest::Close { environment: A }),
+        Response::Opened
+    );
     assert!(akp_keys(&jwks(&mut s, A)).keys.is_empty());
     assert_eq!(pq(&mut s, sign), Response::Error(String::from(NO_PQ)));
     let stored = vault
@@ -813,7 +836,7 @@ impl KeyFactory for NoPq {
 fn without_an_ml_dsa_key_store_the_profile_is_refused_and_nothing_falls_back() {
     use crate::pq::{PQ_KEY_UNAVAILABLE, PqRequest};
     let vault = MemVault::default();
-    let mut s = Service::start(NoPq(factory()), vault.clone(), Policy::REALM).unwrap();
+    let mut s = Service::start(NoPq(factory()), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let refused = Response::Error(String::from(PQ_KEY_UNAVAILABLE));
     for r in [
         PqRequest::Ready {
@@ -821,7 +844,7 @@ fn without_an_ml_dsa_key_store_the_profile_is_refused_and_nothing_falls_back() {
         },
         PqRequest::Ready { alg: JwsAlg::Es256 },
         PqRequest::Open {
-            realm: A,
+            environment: A,
             alg: JwsAlg::MlDsa87,
         },
     ] {
@@ -829,15 +852,15 @@ fn without_an_ml_dsa_key_store_the_profile_is_refused_and_nothing_falls_back() {
     }
     assert!(vault.0.lock().unwrap().is_empty());
 
-    let mut open = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let mut open = Service::start(factory(), vault.clone(), Policy::ENVIRONMENT).unwrap();
     let opened = open.handle(
         Request::Pq(PqRequest::Open {
-            realm: A,
+            environment: A,
             alg: JwsAlg::MlDsa65,
         }),
         0,
         0,
     );
     assert_eq!(opened, Response::Opened);
-    assert!(Service::start(NoPq(factory()), vault, Policy::REALM).is_err());
+    assert!(Service::start(NoPq(factory()), vault, Policy::ENVIRONMENT).is_err());
 }

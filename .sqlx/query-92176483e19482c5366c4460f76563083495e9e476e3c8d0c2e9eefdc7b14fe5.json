@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.org_id AS \"org!\" FROM access.org_memberships m\n                 JOIN access.organizations o\n                   ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id\n                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3\n                  AND m.ended_at IS NULL AND o.ended_at IS NULL\n                  AND (SELECT e.enforced FROM access.org_sso_enforcements e\n                        WHERE e.tenant_id = m.tenant_id AND e.environment_id = m.environment_id\n                          AND e.org_id = m.org_id\n                        ORDER BY e.version DESC LIMIT 1)\n                ORDER BY m.org_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "org_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "92176483e19482c5366c4460f76563083495e9e476e3c8d0c2e9eefdc7b14fe5"
+}

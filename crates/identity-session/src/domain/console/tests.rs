@@ -80,7 +80,7 @@ fn asn_binding_and_source_changes_end_the_session() {
 
 // TN-129
 #[test]
-fn full_address_binding_from_the_realm_policy() {
+fn full_address_binding_from_the_environment_policy() {
     let p = BindingPolicy { full_ip: true };
     let ip = v4(192, 0, 2, 10);
     let b = Binding::of(ip, Some(64_500), p);
@@ -159,7 +159,7 @@ fn cookies_are_strict_and_host_only() {
 
 // TN-129, OP-151 m.3 (f), m.11 (d)
 #[test]
-fn the_realm_session_policy_names_the_binding() {
+fn the_environment_session_policy_names_the_binding() {
     use suiss_crypto::dcbor::{self, Limits, Value};
     let stored = |binding: &str| {
         dcbor::encode(

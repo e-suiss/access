@@ -150,7 +150,7 @@ where
             let salt = self.random.salt()?;
             let phc = self.hasher.hash(&typed, salt).await?;
             let sealed = seal(
-                &self.realm,
+                &self.environment,
                 dek,
                 &subject,
                 RECOVERY_CODE,
@@ -238,7 +238,7 @@ where
         let s = Signal::session_revoked(fresh_id()?, session.subject, Initiator::User, self.now());
         signal(tx, &s).await?;
         // OP-151 m.3 (i)
-        events::sessions_ended(tx, &self.realm, session.subject, epoch).await?;
+        events::sessions_ended(tx, &self.environment, session.subject, epoch).await?;
         Ok(epoch)
     }
 
@@ -384,10 +384,16 @@ where
             .subject(subject, false)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let mut seed = [0; TOTP_SEED_BYTES];
         self.random.fill(&mut seed)?;
-        let sealed = seal(&self.realm, &dek, &subject, TOTP, hex(&seed).as_bytes())?;
+        let sealed = seal(
+            &self.environment,
+            &dek,
+            &subject,
+            TOTP,
+            hex(&seed).as_bytes(),
+        )?;
         Ok((seed, sealed))
     }
 
@@ -403,8 +409,8 @@ where
         code: &str,
         now: u64,
     ) -> Result<Option<([u8; 16], Option<Vec<Secret<String>>>)>, SessionError> {
-        let dek = subject_key(&self.realm, row)?;
-        let seed = open(&self.realm, &dek, &subject, TOTP, sealed)?;
+        let dek = subject_key(&self.environment, row)?;
+        let seed = open(&self.environment, &dek, &subject, TOTP, sealed)?;
         let key = Secret::new(hex_decode(seed.expose()).ok_or(SessionError::Corrupt)?);
         let params = access_crypto::totp::TotpParams::DEFAULT;
         let Some(step) = access_crypto::totp::matching_step(&key, &params, now / 1000, code.trim())
@@ -424,7 +430,14 @@ where
         }
         totp_enrolled(tx, subject, credential, now).await?;
         // OP-151 m.3 (i)
-        events::credential(tx, &self.realm, subject, TOTP, CredentialChange::Added).await?;
+        events::credential(
+            tx,
+            &self.environment,
+            subject,
+            TOTP,
+            CredentialChange::Added,
+        )
+        .await?;
         let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
             Some(self.new_recovery_codes(tx, subject, &dek).await?)
         } else {
@@ -507,7 +520,7 @@ where
         let s = Signal::session_revoked(fresh_id()?, subject, Initiator::System, now);
         signal(&mut tx, &s).await?;
         // OP-151 m.3 (i)
-        events::sessions_ended(&mut tx, &self.realm, subject, epoch).await?;
+        events::sessions_ended(&mut tx, &self.environment, subject, epoch).await?;
         self.totp_announced(&mut tx, subject, now, correlation)
             .await?;
         tx.commit().await?;
@@ -542,7 +555,7 @@ where
             .subject(subject, true)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let old = tx.credentials(subject, RECOVERY_CODE).await?;
         let codes = self.new_recovery_codes(&mut tx, subject, &dek).await?;
         for c in old {
@@ -553,7 +566,7 @@ where
         // OP-151 m.3 (i)
         events::credential(
             &mut tx,
-            &self.realm,
+            &self.environment,
             subject,
             RECOVERY_CODE,
             CredentialChange::Replaced,
@@ -724,7 +737,7 @@ where
         save(&mut tx, &l, "done", Resume::Clear).await?;
         tx.commit().await?;
         let state = RegistrationState {
-            realm: self.wa_realm(),
+            environment: self.wa_environment(),
             user: UserHandle::from_slice(&reg.user).ok_or(SessionError::Corrupt)?,
             challenge: reg.challenge,
             conditional: reg.conditional,
@@ -780,7 +793,7 @@ where
         }
         if let RegistrationOutcome::Registered(record) = &outcome {
             let others =
-                CredentialRegistry::list(self.passkeys.registry, record.realm, &record.user)
+                CredentialRegistry::list(self.passkeys.registry, record.environment, &record.user)
                     .await?;
             let mut tx = self.begin().await?;
             // IDP-2, TN-63, OP-150 L2

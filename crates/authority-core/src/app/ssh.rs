@@ -1,4 +1,4 @@
-//! What the realm's SSH certificate authority reads of the head (OP-156 m.3 (o), IDP-32): a
+//! What the environment's SSH certificate authority reads of the head (OP-156 m.3 (o), IDP-32): a
 //! Party's live Grants that cover `ssh.login`, with the episode a `holding` basis names, and
 //! whether a projection's basis still stands. Reads: they decide nothing and change nothing.
 

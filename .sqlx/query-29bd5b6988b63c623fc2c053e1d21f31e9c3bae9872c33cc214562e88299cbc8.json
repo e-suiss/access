@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instance_id FROM access.claim_issuer_instance\n          WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3 AND kid = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.claim_issuer_instance",
+            "name": "instance_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "29bd5b6988b63c623fc2c053e1d21f31e9c3bae9872c33cc214562e88299cbc8"
+}

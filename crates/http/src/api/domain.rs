@@ -15,8 +15,8 @@ pub mod trace;
 /// budget.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Surface {
-    /// Realm administration, `/admin/v1/realms/{slug}/…`.
-    Realm,
+    /// Environment administration, `/admin/v1/envs/{slug}/…`.
+    Environment,
     /// Platform administration, `/admin/v1/platform/…`.
     Platform,
 }
@@ -26,7 +26,7 @@ impl Surface {
     #[must_use]
     pub const fn read_scope(self) -> &'static str {
         match self {
-            Self::Realm => "realm.read",
+            Self::Environment => "environment.read",
             Self::Platform => "platform.read",
         }
     }
@@ -35,23 +35,23 @@ impl Surface {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Realm => "realm",
+            Self::Environment => "environment",
             Self::Platform => "platform",
         }
     }
 }
 
-/// Prefix of a realm-admin audience; the realm's slug follows.
-pub const REALM_AUDIENCE_PREFIX: &str = "access-admin:realm:";
+/// Prefix of an environment-admin audience; the environment's slug follows.
+pub const ENVIRONMENT_AUDIENCE_PREFIX: &str = "access-admin:environment:";
 
 /// The platform-admin audience.
 pub const PLATFORM_AUDIENCE: &str = "access-admin:platform";
 
-/// One surface instance: a realm's administration, or the platform's.
+/// One surface instance: an environment's administration, or the platform's.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SurfaceScope {
-    /// The realm with this slug.
-    Realm(String),
+    /// The environment with this slug.
+    Environment(String),
     /// The platform.
     Platform,
 }
@@ -61,7 +61,7 @@ impl SurfaceScope {
     #[must_use]
     pub const fn surface(&self) -> Surface {
         match self {
-            Self::Realm(_) => Surface::Realm,
+            Self::Environment(_) => Surface::Environment,
             Self::Platform => Surface::Platform,
         }
     }
@@ -70,7 +70,7 @@ impl SurfaceScope {
     #[must_use]
     pub fn audience(&self) -> String {
         match self {
-            Self::Realm(slug) => format!("{REALM_AUDIENCE_PREFIX}{slug}"),
+            Self::Environment(slug) => format!("{ENVIRONMENT_AUDIENCE_PREFIX}{slug}"),
             Self::Platform => PLATFORM_AUDIENCE.to_owned(),
         }
     }
@@ -79,7 +79,7 @@ impl SurfaceScope {
     #[must_use]
     pub fn key(&self) -> String {
         match self {
-            Self::Realm(slug) => format!("realm:{slug}"),
+            Self::Environment(slug) => format!("environment:{slug}"),
             Self::Platform => "platform".to_owned(),
         }
     }

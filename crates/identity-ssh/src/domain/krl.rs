@@ -1,5 +1,5 @@
-//! The OpenSSH key revocation list (OpenSSH `PROTOCOL.krl`, format version 1) the realm
-//! publishes at `/realms/{slug}/ssh/krl` (OP-156 m.3 (o)): the serials of revoked certificates
+//! The OpenSSH key revocation list (OpenSSH `PROTOCOL.krl`, format version 1) the environment
+//! publishes at `/env/{slug}/ssh/krl` (OP-156 m.3 (o)): the serials of revoked certificates
 //! under each CA key, and CA keys that no longer sign (replaced in an emergency, or the CA
 //! turned off), so a server that pulls the list refuses every certificate they signed. The list
 //! is unsigned: `sshd` reads it from a file the operator keeps current.

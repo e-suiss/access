@@ -1,4 +1,4 @@
-//! The realm authorization server against real PostgreSQL and a real identity signer on a
+//! The environment authorization server against real PostgreSQL and a real identity signer on a
 //! Unix socket (OP-146 I7): the code flow with PKCE and DPoP from a signed-in session, refresh
 //! rotation and reuse, client authentication methods, redirect URI exactness, errors with
 //! `iss`, introspection, revocation and logout.
@@ -30,9 +30,9 @@ use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgLogoutQueue, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::backchannel::Courier;
-use access_identity_oauth::app::oauth::{Env, OAuth, Realm, Reply, TokenHttp};
+use access_identity_oauth::app::oauth::{Env, Environment, OAuth, Reply, TokenHttp};
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, IssuerStyle};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
@@ -42,7 +42,7 @@ use access_identity_oauth::ports::oauth::{
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
-use access_identity_signer::protocol::{Realm as SignerRealm, Request, Response};
+use access_identity_signer::protocol::{Environment as SignerEnvironment, Request, Response};
 use access_identity_signer::service::Service;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::verify::cose::PublicKey;
@@ -53,11 +53,13 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
 use access_store::dpop::open_dpop_replay_day;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{ClientRow, Decision, bind, create_settings, insert_client};
 use access_store::scope::DomainId;
 use access_store::sessions::NewSession;
-use access_store::tenancy::{HostKind, add_hostname, create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{
+    HostKind, add_hostname, create_environment, create_tenant, set_issuer,
+};
 use access_store::testing::{TestDb, fresh};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
@@ -78,12 +80,12 @@ const KEYED: &str = "cli_0000000000000000000000000c";
 const KEYED_JWKS: &str = "https://shop.example/jwks.json";
 const PUSHED: &str = "cli_0000000000000000000000000d";
 /// A registered platform product client (OP-149 m.4): the one RFC 8707 resource besides the
-/// realm (OP-149 m.26 (a)).
+/// environment (OP-149 m.26 (a)).
 const PRODUCT: &str = "cli_0000000000000000000000000e";
 /// A third party's product registered with the same `platform_product` role (OP-150 m.3 (m)).
 const THIRD: &str = "cli_0000000000000000000000000f";
 const SECRET: &str = "shop-secret-shop-secret-shop-secret-shop-se";
-/// A public client the realm registered as a third party (OP-153 m.3 (z)).
+/// A public client the environment registered as a third party (OP-153 m.3 (z)).
 const SHARING: &str = "cli_0000000000000000000000000g";
 
 struct SysClock;
@@ -126,7 +128,7 @@ struct TestEnv {
     claims: VaultSource,
 }
 
-/// The accounts' identity claims under an in-memory realm vault (§10.4.6).
+/// The accounts' identity claims under an in-memory environment vault (§10.4.6).
 struct VaultSource {
     pool: Pool,
     vault: access_identity_account::app::vault::Vault,
@@ -135,12 +137,12 @@ struct VaultSource {
 fn test_vault() -> access_identity_account::app::vault::Vault {
     access_identity_account::app::vault::Vault {
         kek: Arc::new(access_crypto::envelope::SoftKek::new(
-            "realm-kek:1",
+            "environment-kek:1",
             [7; 32],
         )),
-        index: Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
-            [8; 32],
-        ))),
+        index: Arc::new(access_crypto::environment_index::EnvironmentIndexKey::new(
+            Secret::new([8; 32]),
+        )),
     }
 }
 
@@ -148,14 +150,16 @@ impl access_identity_oauth::ports::oauth::ClaimSource for VaultSource {
     fn held(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         subject: [u8; 16],
     ) -> access_identity_oauth::ports::oauth::Held<
         '_,
         access_identity_oauth::domain::claims_request::Held,
     > {
         Box::pin(async move {
-            let mut t = TenantTx::begin(&self.pool, tenant, realm).await.unwrap();
+            let mut t = TenantTx::begin(&self.pool, tenant, environment)
+                .await
+                .unwrap();
             let (email, fields) =
                 access_identity_account::app::vault::held_claims(&mut t, &self.vault, subject)
                     .await
@@ -211,10 +215,10 @@ impl Env for TestEnv {
     fn directory(&self) -> &PgDirectory {
         &self.directory
     }
-    fn replay(&self, tenant: TenantId, realm: RealmId) -> PgReplayCache {
-        PgReplayCache::new(self.pool.clone(), tenant, realm)
+    fn replay(&self, tenant: TenantId, environment: EnvironmentId) -> PgReplayCache {
+        PgReplayCache::new(self.pool.clone(), tenant, environment)
     }
-    fn nonces(&self, _realm: RealmId, role: Role) -> Option<Arc<NonceRing>> {
+    fn nonces(&self, _environment: EnvironmentId, role: Role) -> Option<Arc<NonceRing>> {
         Some(match role {
             Role::AuthorizationServer => self.as_ring.clone(),
             Role::ResourceServer => self.rs_ring.clone(),
@@ -246,18 +250,18 @@ fn temp(name: &str) -> PathBuf {
     dir
 }
 
-/// A signer whose key set for `realm` was opened two hours ago, so it is past its publish
+/// A signer whose key set for `environment` was opened two hours ago, so it is past its publish
 /// lead and signs now (MD-6: publish, wait, use).
-fn signer(dir: &Path, realm: RealmId) -> PathBuf {
+fn signer(dir: &Path, environment: EnvironmentId) -> PathBuf {
     let mut service = Service::start(
-        SealedFactory::new(SoftKek::new("realm-kek", [7; 32])),
+        SealedFactory::new(SoftKek::new("environment-kek", [7; 32])),
         DirVault::new(dir),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     )
     .unwrap();
     let opened = service.handle(
         Request::Open {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             alg: JwsAlg::Es256,
         },
         now_ms() - 2 * HOUR,
@@ -353,7 +357,7 @@ async fn domain(db: &TestDb, t: TenantId, allows: u8) -> DomainId {
 struct World {
     db: TestDb,
     oauth: OAuth<TestEnv>,
-    realm: Realm,
+    environment: Environment,
     subject: [u8; 16],
     cookie: String,
     dpop_key: EcdsaKeyPair,
@@ -413,12 +417,12 @@ async fn world() -> World {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 7).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, "acme", "pool-default")
+    let r = create_environment(&mut tx, &d, "acme", "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
-    let issuer = RealmBase::parse("https://id.test")
+    let issuer = EnvironmentBase::parse("https://id.test")
         .unwrap()
         .issuer("acme", IssuerStyle::Subdomain)
         .unwrap();
@@ -468,7 +472,7 @@ async fn world() -> World {
         insert_client(&mut tx, &b, &row).await.unwrap();
     }
     let subject = tx
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -495,11 +499,11 @@ async fn world() -> World {
         },
     };
     let oauth = OAuth::new(env);
-    let realm = oauth.realm(HOST, None).await.unwrap().unwrap();
+    let environment = oauth.environment(HOST, None).await.unwrap().unwrap();
     let mut w = World {
         db,
         oauth,
-        realm,
+        environment,
         subject,
         cookie: String::new(),
         dpop_key: EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap(),
@@ -516,9 +520,13 @@ impl World {
     async fn sign_in(&self, at: u64) -> String {
         let value: [u8; 32] = access_crypto::random::bytes().unwrap();
         let assurance = serde_json::to_vec(&vector(&[Factor::password(at)])).unwrap();
-        let mut tx = TenantTx::begin(&self.db.app, self.realm.tenant, self.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.db.app,
+            self.environment.tenant,
+            self.environment.environment,
+        )
+        .await
+        .unwrap();
         tx.insert_session(&NewSession {
             cookie_hash: &cookie_digest(&value),
             subject: self.subject,
@@ -596,7 +604,7 @@ impl World {
             }
         }
         self.oauth
-            .authorize(&self.realm, &Params::new(p).unwrap(), cookie)
+            .authorize(&self.environment, &Params::new(p).unwrap(), cookie)
             .await
     }
 
@@ -615,7 +623,7 @@ impl World {
         let proof = self.proof("POST", &format!("{ISSUER}/token"), None);
         self.oauth
             .token(
-                &self.realm,
+                &self.environment,
                 &Params::new(p).unwrap(),
                 TokenHttp {
                     authorization,
@@ -657,7 +665,7 @@ impl World {
         body(
             &self
                 .oauth
-                .introspect(&self.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)))
+                .introspect(&self.environment, &p, Some(&basic(CONFIDENTIAL, SECRET)))
                 .await,
             200,
         )
@@ -668,7 +676,7 @@ impl World {
         let proof = self.proof("GET", &uri, Some(access));
         self.oauth
             .userinfo(
-                &self.realm,
+                &self.environment,
                 "GET",
                 Some(&format!("DPoP {access}")),
                 &[&proof],
@@ -754,17 +762,23 @@ async fn code_flow_with_pkce_and_dpop() {
     assert!(login.starts_with(&prefix), "{login}");
     let return_to = query(&login, "return_to");
     assert!(access_identity_oauth::domain::login::return_to_ok(
-        &w.realm.issuer,
+        &w.environment.issuer,
         &return_to
     ));
     let back = Params::parse(return_to.split_once('?').unwrap().1).unwrap();
-    let reply = w.oauth.authorize(&w.realm, &back, Some(&w.cookie)).await;
+    let reply = w
+        .oauth
+        .authorize(&w.environment, &back, Some(&w.cookie))
+        .await;
     let to = location(&reply);
     assert!(to.starts_with("https://shop.example/cb?code="), "{to}");
     assert_eq!(query(&to, "state"), "st");
     assert_eq!(query(&to, "iss"), ISSUER);
     // RFC 9126 §4
-    let again = w.oauth.authorize(&w.realm, &back, Some(&w.cookie)).await;
+    let again = w
+        .oauth
+        .authorize(&w.environment, &back, Some(&w.cookie))
+        .await;
     assert!(
         matches!(again, Reply::Problem { status: 400, .. }),
         "{again:?}"
@@ -847,10 +861,10 @@ async fn two_relying_parties_cannot_link_a_user_by_sub() {
     }
 }
 
-/// The realm's tenant as every product-facing surface names it (OP-149 m.19 (a)).
+/// The environment's tenant as every product-facing surface names it (OP-149 m.19 (a)).
 fn tenant_id(w: &World) -> String {
     IdKey::new(Secret::new([0x1d; 32]))
-        .encode("tnt", *w.realm.tenant.as_bytes())
+        .encode("tnt", *w.environment.tenant.as_bytes())
         .unwrap()
 }
 
@@ -970,8 +984,8 @@ async fn a_platform_product_client_is_a_resource() {
         let r = location(&w.authorize(&[("resource", other)], Some(&w.cookie)).await);
         assert_eq!(query(&r, "error"), "invalid_target", "{other}");
     }
-    let realm = location(&w.authorize(&[("resource", ISSUER)], Some(&w.cookie)).await);
-    assert!(realm.contains("code="), "{realm}");
+    let environment = location(&w.authorize(&[("resource", ISSUER)], Some(&w.cookie)).await);
+    assert!(environment.contains("code="), "{environment}");
 }
 
 // OP-150 m.3 (m), MUST-NEVER-13, XI-18
@@ -1089,7 +1103,7 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
     let none = w
         .oauth
         .token(
-            &w.realm,
+            &w.environment,
             &p,
             TokenHttp {
                 authorization: None,
@@ -1306,7 +1320,7 @@ async fn redirect_exactness_errors_and_par() {
     .unwrap();
     let pushed = body(
         &w.oauth
-            .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)), &[])
+            .par(&w.environment, &p, Some(&basic(CONFIDENTIAL, SECRET)), &[])
             .await,
         201,
     );
@@ -1321,24 +1335,24 @@ async fn redirect_exactness_errors_and_par() {
     };
     let other = w
         .oauth
-        .authorize(&w.realm, &use_it(PUBLIC), Some(&w.cookie))
+        .authorize(&w.environment, &use_it(PUBLIC), Some(&w.cookie))
         .await;
     assert!(matches!(other, Reply::Problem { .. }), "{other:?}");
     let to = location(
         &w.oauth
-            .authorize(&w.realm, &use_it(CONFIDENTIAL), Some(&w.cookie))
+            .authorize(&w.environment, &use_it(CONFIDENTIAL), Some(&w.cookie))
             .await,
     );
     assert_eq!(query(&to, "state"), "par");
     let again = w
         .oauth
-        .authorize(&w.realm, &use_it(CONFIDENTIAL), Some(&w.cookie))
+        .authorize(&w.environment, &use_it(CONFIDENTIAL), Some(&w.cookie))
         .await;
     assert!(matches!(again, Reply::Problem { .. }), "{again:?}");
     assert_eq!(
         error(
             &w.oauth
-                .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, "x")), &[])
+                .par(&w.environment, &p, Some(&basic(CONFIDENTIAL, "x")), &[])
                 .await
         ),
         "invalid_client"
@@ -1406,13 +1420,13 @@ async fn par_with_private_key_jwt_and_dpop() {
         let w = &w;
         async move {
             let proofs: Vec<&str> = dpop.iter().map(String::as_str).collect();
-            w.oauth.par(&w.realm, &p, None, &proofs).await
+            w.oauth.par(&w.environment, &p, None, &proofs).await
         }
     };
     let redeem = |uri: String| async move {
         let to = location(
             &w.oauth
-                .authorize(&w.realm, &use_uri(KEYED, &uri), Some(&w.cookie))
+                .authorize(&w.environment, &use_uri(KEYED, &uri), Some(&w.cookie))
                 .await,
         );
         assert_eq!(query(&to, "state"), "par");
@@ -1512,7 +1526,7 @@ async fn par_required_per_client_and_expiry() {
     let pushed = body(
         &w.oauth
             .par(
-                &w.realm,
+                &w.environment,
                 &push_params(&[]),
                 Some(&basic(PUSHED, SECRET)),
                 &[],
@@ -1523,7 +1537,7 @@ async fn par_required_per_client_and_expiry() {
     let uri = pushed["request_uri"].as_str().unwrap();
     let to = location(
         &w.oauth
-            .authorize(&w.realm, &use_uri(PUSHED, uri), Some(&w.cookie))
+            .authorize(&w.environment, &use_uri(PUSHED, uri), Some(&w.cookie))
             .await,
     );
     assert_eq!(query(&to, "state"), "par");
@@ -1550,7 +1564,7 @@ async fn par_required_per_client_and_expiry() {
     };
     let params = serde_json::to_vec(&request).unwrap();
     let at = now();
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     tx.insert_oauth_request(&access_store::oauth::NewRequest {
@@ -1574,7 +1588,11 @@ async fn par_required_per_client_and_expiry() {
     );
     let r = w
         .oauth
-        .authorize(&w.realm, &use_uri(CONFIDENTIAL, &late), Some(&w.cookie))
+        .authorize(
+            &w.environment,
+            &use_uri(CONFIDENTIAL, &late),
+            Some(&w.cookie),
+        )
         .await;
     assert!(matches!(r, Reply::Problem { status: 400, .. }), "{r:?}");
 }
@@ -1611,7 +1629,7 @@ async fn introspection_and_revocation() {
     let public = w
         .oauth
         .introspect(
-            &w.realm,
+            &w.environment,
             &Params::new(vec![
                 ("token".into(), access.into()),
                 ("client_id".into(), PUBLIC.into()),
@@ -1625,7 +1643,7 @@ async fn introspection_and_revocation() {
     let revoke = Params::new(vec![("token".into(), refresh.into())]).unwrap();
     let done = w
         .oauth
-        .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
+        .revoke(&w.environment, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
         .await;
     assert_eq!(body(&done, 200), serde_json::json!({}));
     assert_eq!(w.introspect(access).await["active"], false);
@@ -1681,10 +1699,10 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
     let aud = live["aud"].as_str().unwrap().to_owned();
     let exp_ms = u64::try_from(live["exp"].as_i64().unwrap()).unwrap() * 1000;
     let jwks = SignerKeys::new(w.socket.clone())
-        .jwks(w.realm.realm)
+        .jwks(w.environment.environment)
         .await
         .unwrap();
-    let issuer = w.realm.issuer.as_str().to_owned();
+    let issuer = w.environment.issuer.as_str().to_owned();
     assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, now()).is_some());
 
     access_store::testing::refuse_connections(&w.db, true)
@@ -1704,7 +1722,7 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
     let revoke = Params::new(vec![("token".into(), refresh.clone())]).unwrap();
     let r = w
         .oauth
-        .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
+        .revoke(&w.environment, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
         .await;
     assert_eq!(
         r,
@@ -1752,11 +1770,13 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
 // U35, EP-3, MD-7, OP-21, OP-32, OP-61, §13.7.9, §17.5.1, Ek B 5701
 #[tokio::test(flavor = "multi_thread")]
 async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
-    async fn introspect(oauth: &OAuth<TestEnv>, realm: &Realm, token: &str) -> Value {
+    async fn introspect(oauth: &OAuth<TestEnv>, environment: &Environment, token: &str) -> Value {
         let p = Params::new(vec![("token".into(), token.into())]).unwrap();
         let authorization = basic(CONFIDENTIAL, SECRET);
         body(
-            &oauth.introspect(realm, &p, Some(&authorization)).await,
+            &oauth
+                .introspect(environment, &p, Some(&authorization))
+                .await,
             200,
         )["active"]
             .clone()
@@ -1778,7 +1798,7 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
             vault: test_vault(),
         },
     });
-    let realm_b = node_b.realm(HOST, None).await.unwrap().unwrap();
+    let environment_b = node_b.environment(HOST, None).await.unwrap().unwrap();
     let n = 40;
     let mut same = Vec::with_capacity(n);
     let mut cluster = Vec::with_capacity(n);
@@ -1799,20 +1819,20 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
         );
         let access = t["access_token"].as_str().unwrap().to_owned();
         let refresh = t["refresh_token"].as_str().unwrap().to_owned();
-        assert_eq!(introspect(&node_b, &realm_b, &access).await, true);
+        assert_eq!(introspect(&node_b, &environment_b, &access).await, true);
         let revoke = Params::new(vec![("token".into(), refresh)]).unwrap();
         let start = std::time::Instant::now();
         let done = w
             .oauth
-            .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
+            .revoke(&w.environment, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
             .await;
         assert_eq!(body(&done, 200), serde_json::json!({}));
         let committed = start.elapsed();
-        assert_eq!(introspect(&w.oauth, &w.realm, &access).await, false);
+        assert_eq!(introspect(&w.oauth, &w.environment, &access).await, false);
         same.push(u64::try_from(start.elapsed().saturating_sub(committed).as_micros()).unwrap());
         let at_b = std::time::Instant::now();
         assert_eq!(
-            introspect(&node_b, &realm_b, &access).await,
+            introspect(&node_b, &environment_b, &access).await,
             false,
             "the first read after the revocation"
         );
@@ -1867,7 +1887,11 @@ async fn logout_ends_the_session_and_notifies_clients() {
         )
         .unwrap();
         let w = &w;
-        async move { w.oauth.end_session(&w.realm, &p, cookie.as_deref()).await }
+        async move {
+            w.oauth
+                .end_session(&w.environment, &p, cookie.as_deref())
+                .await
+        }
     };
     let bad = end(
         vec![
@@ -1984,7 +2008,7 @@ async fn an_epoch_step_notifies_clients_and_records_refusals() {
     let w = world().await;
     let code = w.code(PUBLIC).await;
     body(&w.exchange(&code).await, 200);
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     tx.end_sessions(w.subject).await.unwrap();
@@ -1999,7 +2023,7 @@ async fn an_epoch_step_notifies_clients_and_records_refusals() {
     assert_eq!(sent.len(), 1);
     let retried = courier.step().await.unwrap();
     assert_eq!((retried.delivered, retried.undelivered), (0, 1));
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     let recorded = tx.list_backchannel_undelivered(10).await.unwrap();
@@ -2020,7 +2044,7 @@ async fn a_session_end_notifies_clients() {
     let w = world().await;
     let code = w.code(PUBLIC).await;
     let t = body(&w.exchange(&code).await, 200);
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     let value: [u8; 32] = b64url_decode(&w.cookie).unwrap().try_into().unwrap();
@@ -2058,9 +2082,9 @@ fn product_assertion(w: &World, client_id: &str, aud: &str) -> String {
     )
 }
 
-/// Binds the service Party a product's pairing with this realm would have bound (OP-149 m.4).
+/// Binds the service Party a product's pairing with this environment would have bound (OP-149 m.4).
 async fn pair(w: &World, client_id: &str, party: [u8; 16]) {
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     assert!(tx.bind_platform_party(client_id, &party).await.unwrap());
@@ -2088,7 +2112,7 @@ async fn introspect_as(w: &World, client_id: &str, token: &str) -> Value {
         ("client_assertion".into(), a),
     ])
     .unwrap();
-    body(&w.oauth.introspect(&w.realm, &p, None).await, 200)
+    body(&w.oauth.introspect(&w.environment, &p, None).await, 200)
 }
 
 // OP-149 m.31 (a), m.26 (a), E39, MD-7, MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068
@@ -2120,8 +2144,14 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     let header: Value =
         serde_json::from_slice(&b64url_decode(token.split('.').next().unwrap()).unwrap()).unwrap();
     assert_eq!(header["typ"], "at+jwt");
-    let jwks = w.oauth.env().signer.jwks(w.realm.realm).await.unwrap();
-    let keys = access_identity_oauth::domain::jwt::realm_key_set(jwks.as_bytes()).unwrap();
+    let jwks = w
+        .oauth
+        .env()
+        .signer
+        .jwks(w.environment.environment)
+        .await
+        .unwrap();
+    let keys = access_identity_oauth::domain::jwt::environment_key_set(jwks.as_bytes()).unwrap();
     access_kernel::verify::jws::verify_compact(
         &access_crypto::AwsLcBackend,
         token,
@@ -2159,7 +2189,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     // OP-149
     let again = body(&service(&w, PRODUCT, &[("resource", THIRD)]).await, 200);
     assert_eq!(claims(again["access_token"].as_str().unwrap())["sub"], sub);
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -2211,7 +2241,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
         error(
             &w.oauth
                 .token(
-                    &w.realm,
+                    &w.environment,
                     &p,
                     TokenHttp {
                         authorization: None,
@@ -2248,7 +2278,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     let p = Params::new(vec![("token".into(), token.into())]).unwrap();
     assert!(matches!(
         w.oauth
-            .revoke(&w.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)))
+            .revoke(&w.environment, &p, Some(&basic(CONFIDENTIAL, SECRET)))
             .await,
         Reply::Json { status: 200, .. }
     ));
@@ -2305,7 +2335,7 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
     // OP-149
     let again = body(&service(&w, KEYED, &[("resource", THIRD)]).await, 200);
     assert_eq!(claims(again["access_token"].as_str().unwrap())["sub"], sub);
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -2386,9 +2416,13 @@ impl World {
         use access_identity_account::app::vault;
         use access_identity_account::domain::identifier::IdentifierKind;
         let v = test_vault();
-        let mut tx = TenantTx::begin(&self.db.app, self.realm.tenant, self.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.db.app,
+            self.environment.tenant,
+            self.environment.environment,
+        )
+        .await
+        .unwrap();
         let sealed =
             vault::seal_identifier(&mut tx, &v, self.subject, IdentifierKind::Email, email)
                 .await
@@ -2516,7 +2550,7 @@ async fn a_third_party_asks_before_it_receives_claims_and_stopping_ends_the_rele
     );
 
     let client = [7_u8; 16];
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     tx.put_consent(
@@ -2552,7 +2586,7 @@ async fn a_third_party_asks_before_it_receives_claims_and_stopping_ends_the_rele
         "ada@example.com"
     );
 
-    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
         .await
         .unwrap();
     assert!(tx.stop_consent(w.subject, SHARING, now()).await.unwrap());

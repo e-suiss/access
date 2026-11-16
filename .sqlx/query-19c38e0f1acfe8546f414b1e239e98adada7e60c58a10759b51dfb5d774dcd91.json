@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.export_cursors\n            SET failures = failures + 1, failed_since = COALESCE(failed_since, clock_timestamp()),\n                last_error = $4, attempted_at = clock_timestamp()\n          WHERE tenant_id = $1 AND environment_id = $2 AND sink_uuid = $3\n         RETURNING failures",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "failures",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "failures"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "19c38e0f1acfe8546f414b1e239e98adada7e60c58a10759b51dfb5d774dcd91"
+}

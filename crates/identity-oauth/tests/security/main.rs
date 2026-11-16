@@ -1,5 +1,5 @@
-//! Conformance and security suites of the realm authorization server (OP-146 I11, Ek B Stage 5
-//! K19): the Fosite error-class regression corpus, the metamorphic realm and tenant isolation
+//! Conformance and security suites of the environment authorization server (OP-146 I11, Ek B Stage 5
+//! K19): the Fosite error-class regression corpus, the metamorphic environment and tenant isolation
 //! check, the token-confusion fuzzer (TN-23 test 4) and the negative boundary rows,
 //! against real PostgreSQL and a real identity signer.
 

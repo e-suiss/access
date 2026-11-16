@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_mtls_alias_settings\n               (tenant_id, environment_id, version, published, domain_id, decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.idp_mtls_alias_settings\n                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                    $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dcb94922bd2bc9fbc95c9a7b9c2ebf7042e432db0735bbd3754dd91e27383901"
+}

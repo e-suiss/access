@@ -1,5 +1,5 @@
 //! OP-156 m.3 (i), RFC 8737: the public listener picks its certificate by SNI. The operator's
-//! certificate serves the names it covers, a realm's certificate its verified custom domain, and
+//! certificate serves the names it covers, an environment's certificate its verified custom domain, and
 //! the TLS-ALPN-01 challenge certificate only a client offering `acme-tls/1`; any other name
 //! fails the handshake.
 

@@ -257,13 +257,13 @@ impl Access for AccessHttps {
         .await
     }
 
-    async fn release(&self, realm: String, body: Vec<u8>) -> Answer {
-        if !segment(&realm) {
+    async fn release(&self, environment: String, body: Vec<u8>) -> Answer {
+        if !segment(&environment) {
             return Answer::Unanswered(Fault::Transport);
         }
         self.call(
             "POST",
-            &format!("/realms/{realm}/v1/vault/releases"),
+            &format!("/env/{environment}/v1/vault/releases"),
             Vec::new(),
             body,
         )

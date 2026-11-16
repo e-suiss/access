@@ -36,17 +36,17 @@ export function SsoEnforcement({
   readonly ctx: Ctx;
   readonly org: string;
 }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const base = `organizations/${encodeURIComponent(org)}`;
   const preview = useLoad(() =>
-    adminGet<Preview>(ctx.instance, `realms/${realm}/${base}/sso-enforcement/preview`),
+    adminGet<Preview>(ctx.instance, `envs/${environment}/${base}/sso-enforcement/preview`),
   );
   const [fate, setFate] = useState<Fate | undefined>(undefined);
   const [email, setEmail] = useState("");
   const [w, write] = useRun<Linked>();
   const send = (operation: string, path: string, body: Record<string, unknown>) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         key: org,
         method: "POST",

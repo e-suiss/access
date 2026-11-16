@@ -1,6 +1,6 @@
-//! Needs Attention on the real server path (§8.17.6.5, IA-1, X5, X6, OP-156 m.3 (t)): the realm
-//! names its coordinator with `idp.realm.coordinator` through the admin API; Access publishes it
-//! in the realm's Suiss discovery document; the experience service asks that coordinator's public
+//! Needs Attention on the real server path (§8.17.6.5, IA-1, X5, X6, OP-156 m.3 (t)): the environment
+//! names its coordinator with `idp.environment.coordinator` through the admin API; Access publishes it
+//! in the environment's Suiss discovery document; the experience service asks that coordinator's public
 //! endpoint for the reader's count and shows one link. Access keeps no queue.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +11,7 @@ use access_experience::contract::{Hub, Kind, Plan};
 use access_experience::ports::{Clock, Random, Upstream};
 use access_http::adp::adapters::{Discovery as AdpDiscovery, Pep, router as adp_router};
 use access_http::adp::app::Service;
-use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
 use access_identity_oauth::domain::suiss::Settings as SuissSettings;
 use access_kernel::meta::meta_anchor;
 use access_sdk::transport::{Answer, Fault, Response as Answered};
@@ -70,11 +70,13 @@ impl Upstream for Public {
         answer(&self.adp, req).await
     }
 
-    async fn discovery(&self, realm: &str) -> Answer {
-        let req = Request::get(format!("/.well-known/suiss-configuration/realms/{realm}"))
-            .header(header::HOST, "access.test")
-            .body(Body::empty())
-            .unwrap();
+    async fn discovery(&self, environment: &str) -> Answer {
+        let req = Request::get(format!(
+            "/.well-known/suiss-configuration/env/{environment}"
+        ))
+        .header(header::HOST, "access.test")
+        .body(Body::empty())
+        .unwrap();
         answer(&self.discovery, req).await
     }
 
@@ -123,7 +125,7 @@ async fn call(app: &axum::Router, path: &str, body: &Value) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-/// The root's hub over the realm `acme`, read with its browser's signed reads.
+/// The root's hub over the environment `acme`, read with its browser's signed reads.
 async fn hub(c: &Console, app: &axum::Router) -> Hub {
     let viewer = b64url_encode(&c.root.0);
     let domain = b64url_encode(&c.domain.0);
@@ -160,7 +162,7 @@ async fn hub(c: &Console, app: &axum::Router) -> Hub {
         call(
             app,
             "/experience/v1/hub",
-            &json!({ "viewer": viewer, "reads": reads, "realm": "acme" }),
+            &json!({ "viewer": viewer, "reads": reads, "environment": "acme" }),
         )
         .await,
     )
@@ -169,12 +171,12 @@ async fn hub(c: &Console, app: &axum::Router) -> Hub {
 
 // §8.17.6.5, IA-1, X5, X6, OP-156 m.3 (t), Ek B 5256
 #[tokio::test]
-async fn the_hub_links_to_the_coordinator_the_realm_names_with_its_count() {
+async fn the_hub_links_to_the_coordinator_the_environment_names_with_its_count() {
     let c = console("q16-attention", true).await;
     let coordinator = Arc::new(CoordinatorTwin::default());
     coordinator.waiting.store(3, Ordering::SeqCst);
-    let discovery = access_http::realm::router(
-        RealmDiscovery::new(
+    let discovery = access_http::environment::router(
+        EnvironmentDiscovery::new(
             PgDirectory::new(c.w.db.router.clone()).with_facts(c.w.db.app.clone()),
             SignerKeys::new(c.w.identity_signer.clone()),
         )
@@ -211,7 +213,7 @@ async fn the_hub_links_to_the_coordinator_the_realm_names_with_its_count() {
     let refused = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/coordinator",
+            "/admin/v1/envs/acme/settings/coordinator",
             ("putCoordinator", None),
             json!({ "attention_url": "http://work.test/attention" }),
             None,
@@ -226,7 +228,7 @@ async fn the_hub_links_to_the_coordinator_the_realm_names_with_its_count() {
     let named = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/coordinator",
+            "/admin/v1/envs/acme/settings/coordinator",
             ("putCoordinator", None),
             json!({ "attention_url": ATTENTION }),
             None,
@@ -251,7 +253,7 @@ async fn the_hub_links_to_the_coordinator_the_realm_names_with_its_count() {
     let cleared = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/coordinator",
+            "/admin/v1/envs/acme/settings/coordinator",
             ("putCoordinator", None),
             json!({ "attention_url": null }),
             None,

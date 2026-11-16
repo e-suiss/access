@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/export-sinks", {
+  bff.admin.set("envs/acme/export-sinks", {
     items: [
       {
         name: "splunk",
@@ -89,8 +89,8 @@ test("sinks are registered and retired only through signed changes", async ({ pa
   await expect(page.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", "realms/acme/export-sinks"],
-    ["POST", "realms/acme/export-sinks/qradar/retire"],
+    ["POST", "envs/acme/export-sinks"],
+    ["POST", "envs/acme/export-sinks/qradar/retire"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({
     name: "datadog",

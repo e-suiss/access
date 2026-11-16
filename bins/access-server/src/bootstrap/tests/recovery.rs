@@ -1,4 +1,4 @@
-//! Account recovery end to end against the real router, PostgreSQL and the realm's keys in the
+//! Account recovery end to end against the real router, PostgreSQL and the environment's keys in the
 //! token (OP-153 m.3 (d), (e), (gg)): the neutral start, the proofs and their throttle, the
 //! objection window and its notices, the credential-only rebind consumed once, the grace period,
 //! the owner's own sign-in cancelling a recovery, and the configuration-time refusal of a
@@ -17,7 +17,7 @@ use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
     PasswordServices, change_status, create, set_password,
 };
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::notify::NotifyError;
@@ -44,7 +44,7 @@ const WHO: Actor<'static> = Actor {
 
 pub(super) const PW: &str = "correct horse battery staple";
 
-/// One message the realm would hand Relay.
+/// One message the environment would hand Relay.
 #[derive(Clone, Debug)]
 pub(super) struct Sent {
     pub(super) to: String,
@@ -86,10 +86,10 @@ impl Notifier for RecordingNotifier<'_> {
 impl Messages for Recording {
     type For<'a> = RecordingNotifier<'a>;
 
-    fn notifier<'a>(&'a self, realm: &'a Realm<'a>) -> RecordingNotifier<'a> {
+    fn notifier<'a>(&'a self, environment: &'a Environment<'a>) -> RecordingNotifier<'a> {
         RecordingNotifier {
             inner: OutboxNotifier::new(
-                realm,
+                environment,
                 &SystemEntropy,
                 &access_identity_account::adapters::system::SystemClock,
             ),
@@ -144,14 +144,14 @@ fn hasher() -> access_identity_account::app::hasher::Hasher {
     ))
 }
 
-/// The realm's hosted surface as `main` mounts it, over the token's realm keys, with the
+/// The environment's hosted surface as `main` mounts it, over the token's environment keys, with the
 /// recording Relay seam.
 pub(super) fn hosted(c: &Console, messages: Recording) -> axum::Router {
     routes(c, messages, false)
 }
 
 /// [`hosted`] with the Frontend API's device Instance routes over the authority plane and the
-/// realm issuer's courier (OP-149 m.6, OP-153 m.3 (c)).
+/// environment issuer's courier (OP-149 m.6, OP-153 m.3 (c)).
 pub(super) fn hosted_with_devices(c: &Console, messages: Recording) -> axum::Router {
     routes(c, messages, true)
 }
@@ -162,7 +162,7 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
     use access_identity_account::app::login::LoginGate;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::app::Hosted;
     let w = &c.w;
@@ -170,7 +170,7 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
     risk.breach = Arc::new(Clean);
     let hosted = Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -187,7 +187,7 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let discovery = || {
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         )
@@ -255,7 +255,7 @@ impl access_identity_federation::ports::ProviderHttp for NoProviders {
     }
 }
 
-/// The realm issuer's courier of this process over the token's issuer keys (OP-150 L2).
+/// The environment issuer's courier of this process over the token's issuer keys (OP-150 L2).
 pub(super) fn courier(c: &Console) -> crate::claims::ClaimsCourier<TestDomains> {
     let w = &c.w;
     access_identity_account::app::claims::Courier {
@@ -273,7 +273,7 @@ pub(super) fn courier(c: &Console) -> crate::claims::ClaimsCourier<TestDomains> 
     }
 }
 
-/// A browser on the realm's host: its cookie jar.
+/// A browser on the environment's host: its cookie jar.
 #[derive(Default)]
 pub(super) struct Page {
     pub(super) jar: BTreeMap<String, String>,
@@ -296,7 +296,7 @@ impl Page {
     ) -> Got {
         let mut b = axum::http::Request::builder()
             .method(method.clone())
-            .uri(format!("/realms/acme{path}"))
+            .uri(format!("/env/acme{path}"))
             .header(header::HOST, "access.test");
         if !self.jar.is_empty() {
             let cookie = self
@@ -342,8 +342,8 @@ impl Page {
 }
 
 pub(super) fn vault_of(c: &Console) -> access_identity_account::app::vault::Vault {
-    crate::login::RealmKeks::new(c.w.keys.clone())
-        .vault(c.route.realm)
+    crate::login::EnvironmentKeks::new(c.w.keys.clone())
+        .vault(c.route.environment)
         .unwrap()
 }
 
@@ -351,23 +351,25 @@ pub(super) fn vault_of(c: &Console) -> access_identity_account::app::vault::Vaul
 pub(super) async fn account(c: &Console, email: &str, password: bool) -> [u8; 16] {
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let v = vault_of(c);
-    let realm = Realm {
+    let environment = Environment {
         tenant: c.route.tenant,
-        realm: c.route.realm,
+        environment: c.route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
     let db = PgAccounts::sealed(c.w.db.app.clone(), v.clone());
     let id = Identifier::new(IdentifierKind::Email, email).unwrap();
-    let subject = create(&db, &realm, &[id], &WHO).await.unwrap();
+    let subject = create(&db, &environment, &[id], &WHO).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, subject, to, &WHO).await.unwrap();
+        change_status(&db, &environment, subject, to, &WHO)
+            .await
+            .unwrap();
     }
     if password {
         let h = hasher();
         set_password(
             &db,
-            &realm,
+            &environment,
             &PasswordServices {
                 hasher: &h,
                 ranges: &Corpus,
@@ -387,7 +389,7 @@ pub(super) async fn account(c: &Console, email: &str, password: bool) -> [u8; 16
 pub(super) async fn session(c: &Console, subject: [u8; 16]) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let epoch = t
@@ -431,7 +433,7 @@ fn attempt_id(v: &serde_json::Value) -> [u8; 16] {
 }
 
 async fn states(c: &Console, attempt: [u8; 16]) -> Vec<String> {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let ts = t.recovery_transitions(attempt).await.unwrap();
@@ -743,7 +745,7 @@ async fn the_owners_own_sign_in_denies_a_running_recovery() {
     assert_eq!(flow.status, StatusCode::CREATED);
     let action = |g: &Got| {
         let a = g.json["action"].as_str().unwrap();
-        a.strip_prefix("/realms/acme").unwrap_or(a).to_owned()
+        a.strip_prefix("/env/acme").unwrap_or(a).to_owned()
     };
     let id = owner
         .call(
@@ -792,7 +794,7 @@ async fn an_aal2_account_cannot_rest_its_recovery_on_one_email() {
     let app = hosted(&c, sent);
     let ana = account(&c, "ana@example.com", false).await;
     let mut t = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
             .await
             .unwrap(),
     );
@@ -868,7 +870,7 @@ pub(super) async fn admin_write(
     let proof = c.browser.ais(
         domain,
         &access_crypto::random::bytes::<16>().unwrap(),
-        read_intent(&Method::POST, "/admin/v1/realms/acme/intents"),
+        read_intent(&Method::POST, "/admin/v1/envs/acme/intents"),
         Mode::Check,
         basis,
     );
@@ -877,7 +879,7 @@ pub(super) async fn admin_write(
         c.browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/intents",
+                "/console/api/proxy/admin/envs/acme/intents",
                 "x",
             )
             .header("x-access-ais", proof)
@@ -924,18 +926,18 @@ pub(super) async fn admin_write(
 async fn relayed(c: &Console, subject: [u8; 16], kind: &str) -> Message {
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let v = vault_of(c);
-    let realm = Realm {
+    let environment = Environment {
         tenant: c.route.tenant,
-        realm: c.route.realm,
+        environment: c.route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let row = t.subject(subject, false).await.unwrap().unwrap();
     t.commit().await.unwrap();
-    let dek = access_identity_account::app::sealing::subject_key(&realm, &row).unwrap();
+    let dek = access_identity_account::app::sealing::subject_key(&environment, &row).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
         let mut cursor = access_store::identity::Cursor::default();
@@ -967,7 +969,7 @@ async fn relayed(c: &Console, subject: [u8; 16], kind: &str) -> Message {
 }
 
 pub(super) async fn audited(c: &Console, event: &str) -> Vec<access_store::audit::AuditRow> {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let rows: Vec<_> = t
@@ -1000,7 +1002,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "createResetIntent",
         Some(&key),
-        &format!("/admin/realms/acme/accounts/{key}/reset-intents"),
+        &format!("/admin/envs/acme/accounts/{key}/reset-intents"),
         serde_json::json!({"password": "chosen-by-the-admin"}),
     )
     .await;
@@ -1009,7 +1011,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "createResetIntent",
         Some(&key),
-        &format!("/admin/realms/acme/accounts/{key}/reset-intents"),
+        &format!("/admin/envs/acme/accounts/{key}/reset-intents"),
         serde_json::json!({}),
     )
     .await;
@@ -1085,7 +1087,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "createResetIntent",
         Some(&founder),
-        &format!("/admin/realms/acme/accounts/{founder}/reset-intents"),
+        &format!("/admin/envs/acme/accounts/{founder}/reset-intents"),
         serde_json::json!({}),
     )
     .await;
@@ -1095,7 +1097,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "createTemporaryAccessPass",
         Some(&key),
-        &format!("/admin/realms/acme/accounts/{key}/temporary-access-passes"),
+        &format!("/admin/envs/acme/accounts/{key}/temporary-access-passes"),
         serde_json::json!({}),
     )
     .await;
@@ -1112,7 +1114,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "putRecoveryPolicy",
         None,
-        "/admin/realms/acme/settings/recovery-policy",
+        "/admin/envs/acme/settings/recovery-policy",
         policy.clone(),
     )
     .await;
@@ -1124,7 +1126,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "putRecoveryPolicy",
         None,
-        "/admin/realms/acme/settings/recovery-policy",
+        "/admin/envs/acme/settings/recovery-policy",
         below,
     )
     .await;
@@ -1136,15 +1138,15 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "putRecoveryPolicy",
         None,
-        "/admin/realms/acme/settings/recovery-policy",
+        "/admin/envs/acme/settings/recovery-policy",
         loosen,
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
-    let stored = t.recovery_realm_policy().await.unwrap().unwrap();
+    let stored = t.recovery_environment_policy().await.unwrap().unwrap();
     t.commit().await.unwrap();
     let stored =
         access_identity_account::domain::recovery_policy::RecoveryPolicy::from_bytes(&stored)
@@ -1155,7 +1157,7 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
         &c,
         "createTemporaryAccessPass",
         Some(&key),
-        &format!("/admin/realms/acme/accounts/{key}/temporary-access-passes"),
+        &format!("/admin/envs/acme/accounts/{key}/temporary-access-passes"),
         serde_json::json!({}),
     )
     .await;
@@ -1176,7 +1178,7 @@ async fn a_suspension_and_its_lifting_are_told_to_the_account() {
         &c,
         "suspendAccount",
         Some(&key),
-        &format!("/admin/realms/acme/accounts/{key}/suspend"),
+        &format!("/admin/envs/acme/accounts/{key}/suspend"),
         serde_json::json!({}),
     )
     .await;

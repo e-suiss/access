@@ -1,4 +1,4 @@
-//! Realms side by side for the conformance and security suites (OP-146 I11): each realm in its
+//! Environments side by side for the conformance and security suites (OP-146 I11): each environment in its
 //! own tenant over one real PostgreSQL, one real identity signer on a Unix socket, its own
 //! DPoP nonce keys, three clients (`none`, `client_secret_basic`, `private_key_jwt`) and a
 //! signed-in browser.
@@ -35,9 +35,9 @@ use access_identity_hooks::ports::{CallFuture, HookCaller};
 use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
-use access_identity_oauth::app::oauth::{Env, OAuth, Realm, Reply, TokenHttp};
+use access_identity_oauth::app::oauth::{Env, Environment, OAuth, Reply, TokenHttp};
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, IssuerStyle};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
@@ -52,7 +52,7 @@ use access_identity_oauth::ports::profile::{
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
-use access_identity_signer::protocol::{Realm as SignerRealm, Request, Response};
+use access_identity_signer::protocol::{Environment as SignerEnvironment, Request, Response};
 use access_identity_signer::service::Service;
 use access_internal_api::idp::Unavailable as PlaneUnavailable;
 use access_internal_api::projections::{
@@ -67,11 +67,13 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
 use access_store::dpop::open_dpop_replay_day;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{ClientRow, Decision, bind, create_settings, insert_client};
 use access_store::scope::DomainId;
 use access_store::sessions::NewSession;
-use access_store::tenancy::{HostKind, add_hostname, create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{
+    HostKind, add_hostname, create_environment, create_tenant, set_issuer,
+};
 use access_store::testing::{TestDb, fresh};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
@@ -80,7 +82,7 @@ use suiss_crypto::envelope::SoftKek;
 use suiss_crypto::rotation::Policy;
 use tokio::net::UnixListener;
 
-/// The realm base every fixture realm's subdomain issuer hangs under.
+/// The environment base every fixture environment's subdomain issuer hangs under.
 pub const BASE: &str = "https://id.test";
 /// The registered redirect URI of every fixture client.
 pub const CB: &str = "https://shop.example/cb";
@@ -135,7 +137,7 @@ impl ClientKeys for StaticKeys {
     }
 }
 
-/// The realm's client certificate checks as a test scripts them (P9's port): the names each
+/// The environment's client certificate checks as a test scripts them (P9's port): the names each
 /// leaf shows, or why it is refused (OP-155 m.3 (k), (m)).
 #[derive(Clone, Default)]
 pub struct ScriptedCerts(
@@ -146,12 +148,12 @@ pub struct ScriptedCerts(
 impl ClientCertificates for ScriptedCerts {
     fn verify<'a>(
         &'a self,
-        realm: &'a access_identity_oauth::ports::RealmEntry,
+        environment: &'a access_identity_oauth::ports::EnvironmentEntry,
         chain: &'a [Vec<u8>],
         now_ms: u64,
     ) -> Held<'a, Result<CertificateNames, CertificateRefused>> {
         if let Some(real) = self.1.lock().unwrap().clone() {
-            return Box::pin(async move { real.verify(realm, chain, now_ms).await });
+            return Box::pin(async move { real.verify(environment, chain, now_ms).await });
         }
         let answer = chain
             .first()
@@ -161,14 +163,14 @@ impl ClientCertificates for ScriptedCerts {
     }
 }
 
-/// `client_secret_jwt` secrets as the realm KEK would open them: by sealed ciphertext.
+/// `client_secret_jwt` secrets as the environment KEK would open them: by sealed ciphertext.
 #[derive(Clone, Default)]
 pub struct ScriptedSecrets(pub Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>);
 
 impl JwtSecrets for ScriptedSecrets {
     fn open<'a>(
         &'a self,
-        _: RealmId,
+        _: EnvironmentId,
         _: [u8; 16],
         sealed: &'a access_store::client_profiles::SealedJwtSecret,
     ) -> Held<'a, Option<access_identity_oauth::ports::profile::Zeroizing<Vec<u8>>>> {
@@ -190,7 +192,7 @@ pub struct ScriptedSaml(pub Arc<Mutex<HashMap<String, Result<SamlSubject, SamlRe
 impl SamlAssertions for ScriptedSaml {
     fn verify<'a>(
         &'a self,
-        _: RealmId,
+        _: EnvironmentId,
         _: &'a str,
         assertion: &'a str,
         _: &'a str,
@@ -207,12 +209,12 @@ impl SamlAssertions for ScriptedSaml {
     }
 }
 
-/// The realm's `jwe-enc` key as a test holds it.
+/// The environment's `jwe-enc` key as a test holds it.
 #[derive(Clone, Default)]
 pub struct ScriptedRequestKeys(pub Arc<Mutex<Option<Vec<u8>>>>);
 
 impl RequestKeys for ScriptedRequestKeys {
-    fn decrypt<'a>(&'a self, _: RealmId, jwe: &'a str) -> Held<'a, Option<Vec<u8>>> {
+    fn decrypt<'a>(&'a self, _: EnvironmentId, jwe: &'a str) -> Held<'a, Option<Vec<u8>>> {
         let key = self.0.lock().unwrap().clone();
         let plain = key
             .and_then(|der| access_crypto::jwe::DecryptKey::p256(&der).ok())
@@ -272,7 +274,7 @@ impl Projections for Scripted {
     }
 }
 
-/// The nonce keys of one realm.
+/// The nonce keys of one environment.
 #[derive(Clone)]
 pub struct Rings {
     pub authorization: Arc<NonceRing>,
@@ -334,7 +336,7 @@ impl ClientDocuments for FixtureDocs {
 
     fn fetch<'a>(
         &'a self,
-        _: RealmId,
+        _: EnvironmentId,
         url: &'a str,
         _: &'a str,
         max_body: usize,
@@ -402,7 +404,7 @@ pub struct TestEnv {
     pub reader: Pool,
     pub router: Pool,
     pub socket: PathBuf,
-    pub rings: Arc<HashMap<RealmId, Rings>>,
+    pub rings: Arc<HashMap<EnvironmentId, Rings>>,
     pub profile: DpopProfile,
     pub plane: Scripted,
     pub ids: IdKey,
@@ -419,12 +421,12 @@ pub struct TestEnv {
 /// Live Instance keys by (domain, kid).
 pub type LiveKeyMap = HashMap<([u8; 32], [u8; 32]), PublicKey>;
 
-/// The live Instance keys and the platform realm a management read token exchange sees
+/// The live Instance keys and the platform environment a management read token exchange sees
 /// (TN-130); none by default.
 #[derive(Clone, Default)]
 pub struct ScriptedManagement {
     pub keys: Arc<Mutex<LiveKeyMap>>,
-    pub platform: Arc<Mutex<Option<RealmId>>>,
+    pub platform: Arc<Mutex<Option<EnvironmentId>>>,
 }
 
 impl ManagementHolders for ScriptedManagement {
@@ -433,8 +435,8 @@ impl ManagementHolders for ScriptedManagement {
         Box::pin(async move { Ok(key) })
     }
 
-    fn platform(&self, realm: &Realm) -> Held<'_, bool> {
-        let yes = *self.platform.lock().unwrap() == Some(realm.realm);
+    fn platform(&self, environment: &Environment) -> Held<'_, bool> {
+        let yes = *self.platform.lock().unwrap() == Some(environment.environment);
         Box::pin(async move { Ok(yes) })
     }
 }
@@ -444,7 +446,7 @@ impl ManagementHolders for ScriptedManagement {
 pub struct ScriptedHook(pub Arc<Mutex<Option<Outcome>>>);
 
 impl HookCaller for ScriptedHook {
-    fn call(&self, _: TenantId, _: RealmId, _: Call) -> CallFuture<'_> {
+    fn call(&self, _: TenantId, _: EnvironmentId, _: Call) -> CallFuture<'_> {
         let answer = self
             .0
             .lock()
@@ -520,11 +522,11 @@ impl Env for TestEnv {
     fn directory(&self) -> &PgDirectory {
         &self.directory
     }
-    fn replay(&self, tenant: TenantId, realm: RealmId) -> PgReplayCache {
-        PgReplayCache::new(self.pool.clone(), tenant, realm)
+    fn replay(&self, tenant: TenantId, environment: EnvironmentId) -> PgReplayCache {
+        PgReplayCache::new(self.pool.clone(), tenant, environment)
     }
-    fn nonces(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>> {
-        let r = self.rings.get(&realm)?;
+    fn nonces(&self, environment: EnvironmentId, role: Role) -> Option<Arc<NonceRing>> {
+        let r = self.rings.get(&environment)?;
         Some(match role {
             Role::AuthorizationServer => r.authorization.clone(),
             Role::ResourceServer => r.resource.clone(),
@@ -577,24 +579,24 @@ pub fn temp(name: &str) -> PathBuf {
     dir
 }
 
-/// A signer whose key sets for `realms`, the federation sets too, were opened two hours ago, so
+/// A signer whose key sets for `environments`, the federation sets too, were opened two hours ago, so
 /// they are past their publish lead and sign now (MD-6, SAI-46).
-pub fn signer(dir: &Path, realms: &[RealmId]) -> PathBuf {
-    signer_with(dir, realms, None)
+pub fn signer(dir: &Path, environments: &[EnvironmentId]) -> PathBuf {
+    signer_with(dir, environments, None)
 }
 
-/// [`signer`] with each realm's post-quantum key set of `pq` opened two hours ago too.
-pub fn signer_with(dir: &Path, realms: &[RealmId], pq: Option<JwsAlg>) -> PathBuf {
+/// [`signer`] with each environment's post-quantum key set of `pq` opened two hours ago too.
+pub fn signer_with(dir: &Path, environments: &[EnvironmentId], pq: Option<JwsAlg>) -> PathBuf {
     let mut service = Service::start(
-        SealedFactory::new(SoftKek::new("realm-kek", [7; 32])),
+        SealedFactory::new(SoftKek::new("environment-kek", [7; 32])),
         DirVault::new(dir),
-        Policy::REALM,
+        Policy::ENVIRONMENT,
     )
     .unwrap();
-    for r in realms {
+    for r in environments {
         let opened = service.handle(
             Request::Open {
-                realm: SignerRealm(*r.as_bytes()),
+                environment: SignerEnvironment(*r.as_bytes()),
                 alg: JwsAlg::Es256,
             },
             now_ms() - 2 * HOUR,
@@ -603,7 +605,7 @@ pub fn signer_with(dir: &Path, realms: &[RealmId], pq: Option<JwsAlg>) -> PathBu
         assert_eq!(opened, Response::Opened);
         // OP-155 m.3 (j)
         let _ = service.handle(
-            Request::FederationJwks(SignerRealm(*r.as_bytes())),
+            Request::FederationJwks(SignerEnvironment(*r.as_bytes())),
             now_ms() - 2 * HOUR,
             7,
         );
@@ -611,7 +613,7 @@ pub fn signer_with(dir: &Path, realms: &[RealmId], pq: Option<JwsAlg>) -> PathBu
         if let Some(alg) = pq {
             let opened = service.handle(
                 Request::Pq(access_identity_signer::pq::PqRequest::Open {
-                    realm: SignerRealm(*r.as_bytes()),
+                    environment: SignerEnvironment(*r.as_bytes()),
                     alg,
                 }),
                 now_ms() - 2 * HOUR,
@@ -633,9 +635,9 @@ pub fn signer_with(dir: &Path, realms: &[RealmId], pq: Option<JwsAlg>) -> PathBu
     path
 }
 
-fn ring(realm: RealmId, role: Role, key: u8) -> Arc<NonceRing> {
+fn ring(environment: EnvironmentId, role: Role, key: u8) -> Arc<NonceRing> {
     Arc::new(NonceRing::new(
-        *realm.as_bytes(),
+        *environment.as_bytes(),
         role,
         NoncePolicy::new(HOUR, MAX_STALE_MS).unwrap(),
         1,
@@ -706,12 +708,12 @@ pub async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId 
     d
 }
 
-/// One realm of the cluster and what its tests present.
+/// One environment of the cluster and what its tests present.
 pub struct Fixture {
-    pub realm: Realm,
-    /// The next spare ALLOW of the realm's domain, for configuration a test changes.
+    pub environment: Environment,
+    /// The next spare ALLOW of the environment's domain, for configuration a test changes.
     pub spare: std::sync::atomic::AtomicU64,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: [u8; 32],
     pub slug: String,
     pub issuer: String,
@@ -726,14 +728,14 @@ pub struct Fixture {
     pub client_key: EcdsaKeyPair,
 }
 
-/// Realms side by side.
+/// Environments side by side.
 pub struct Cluster {
     pub db: TestDb,
     pub oauth: OAuth<TestEnv>,
-    pub realms: Vec<Fixture>,
+    pub environments: Vec<Fixture>,
 }
 
-/// The `client_id` of fixture client `kind` (`a`, `b`, `c`) in realm number `n`
+/// The `client_id` of fixture client `kind` (`a`, `b`, `c`) in environment number `n`
 /// (`cli_` + 26 base32 characters, OP-146 m.13 (f)).
 pub fn client_id(n: usize, kind: char) -> String {
     let digit = char::from(b'2' + u8::try_from(n).unwrap());
@@ -791,22 +793,22 @@ pub fn new_key() -> EcdsaKeyPair {
 /// redirect URIs; its logout URIs are the conformance suite's, next to its first redirect URI.
 pub type Extra = (String, String, String, Vec<String>);
 
-/// Spare ALLOWs of every realm's domain, after its clients' registrations.
+/// Spare ALLOWs of every environment's domain, after its clients' registrations.
 pub const SPARE: usize = 16;
 
 impl Cluster {
-    /// Realms `slugs`, each in its own tenant, with the three fixture clients.
+    /// Environments `slugs`, each in its own tenant, with the three fixture clients.
     pub async fn new(slugs: &[&str]) -> Self {
         Self::seeded(BASE, slugs, &[]).await
     }
 
-    /// Realms `slugs` under the realm base `base`, with the three fixture clients and `extra`
-    /// clients in every realm (the OIDF target).
+    /// Environments `slugs` under the environment base `base`, with the three fixture clients and `extra`
+    /// clients in every environment (the OIDF target).
     pub async fn seeded(base: &str, slugs: &[&str], extra: &[Extra]) -> Self {
         Self::seeded_with(base, slugs, extra, None).await
     }
 
-    /// Realms `slugs` whose post-quantum key sets of `alg` were opened in the signer two hours
+    /// Environments `slugs` whose post-quantum key sets of `alg` were opened in the signer two hours
     /// ago, so they sign now (OP-159 m.3 (o)).
     pub async fn new_pq(slugs: &[&str], alg: JwsAlg) -> Self {
         Self::seeded_with(BASE, slugs, &[], Some(alg)).await
@@ -826,12 +828,12 @@ impl Cluster {
             let clients = 3 + extra.len();
             let d = domain(&db, t, seed, u8::try_from(clients + SPARE).unwrap()).await;
             let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-            let r = create_realm(&mut tx, &d, slug, "pool-default")
+            let r = create_environment(&mut tx, &d, slug, "pool-default")
                 .await
                 .unwrap();
-            tx.enter_realm(r).await.unwrap();
+            tx.enter_environment(r).await.unwrap();
             create_settings(&mut tx).await.unwrap();
-            let issuer = RealmBase::parse(base)
+            let issuer = EnvironmentBase::parse(base)
                 .unwrap()
                 .issuer(slug, IssuerStyle::Subdomain)
                 .unwrap();
@@ -909,7 +911,7 @@ impl Cluster {
                 insert_client(&mut tx, &b, row).await.unwrap();
             }
             let subject = tx
-                .insert_subject("active", "realm-kek:1", &[9; 40])
+                .insert_subject("active", "environment-kek:1", &[9; 40])
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -932,9 +934,9 @@ impl Cluster {
                 *d.as_bytes(),
             ));
         }
-        let ids: Vec<RealmId> = seeded.iter().map(|s| s.0).collect();
+        let ids: Vec<EnvironmentId> = seeded.iter().map(|s| s.0).collect();
         let socket = signer_with(&temp("c"), &ids, pq);
-        let rings: HashMap<RealmId, Rings> = seeded
+        let rings: HashMap<EnvironmentId, Rings> = seeded
             .iter()
             .map(|s| {
                 (
@@ -969,14 +971,14 @@ impl Cluster {
             saml: ScriptedSaml::default(),
         };
         let oauth = OAuth::new(env);
-        let mut realms = Vec::new();
+        let mut environments = Vec::new();
         for (_, slug, issuer, subject, secret, keyed_jwks, client_key, n, _, spare, domain) in
             seeded
         {
             let host = String::from(issuer.authority());
-            let realm = oauth.realm(&host, None).await.unwrap().unwrap();
-            realms.push(Fixture {
-                realm,
+            let environment = oauth.environment(&host, None).await.unwrap().unwrap();
+            environments.push(Fixture {
+                environment,
                 spare: std::sync::atomic::AtomicU64::new(spare),
                 domain,
                 slug,
@@ -992,10 +994,14 @@ impl Cluster {
                 client_key,
             });
         }
-        let mut c = Self { db, oauth, realms };
-        for i in 0..c.realms.len() {
+        let mut c = Self {
+            db,
+            oauth,
+            environments,
+        };
+        for i in 0..c.environments.len() {
             let cookie = c.at(i).sign_in(now() - 60_000).await;
-            c.realms[i].cookie = cookie;
+            c.environments[i].cookie = cookie;
         }
         c
     }
@@ -1005,17 +1011,17 @@ impl Cluster {
         self.oauth.env().clone()
     }
 
-    /// Realm `i` with a fresh DPoP key.
+    /// Environment `i` with a fresh DPoP key.
     pub fn at(&self, i: usize) -> At<'_> {
         At {
             c: self,
-            f: &self.realms[i],
+            f: &self.environments[i],
             key: Arc::new(new_key()),
         }
     }
 }
 
-/// One realm as a client and its user's browser see it.
+/// One environment as a client and its user's browser see it.
 #[derive(Clone)]
 pub struct At<'a> {
     pub c: &'a Cluster,
@@ -1028,15 +1034,15 @@ impl At<'_> {
         &self.c.oauth
     }
 
-    pub fn realm(&self) -> &Realm {
-        &self.f.realm
+    pub fn environment(&self) -> &Environment {
+        &self.f.environment
     }
 
     pub fn issuer(&self) -> &str {
         &self.f.issuer
     }
 
-    /// The same realm with another DPoP key.
+    /// The same environment with another DPoP key.
     pub fn with_key(&self, key: EcdsaKeyPair) -> Self {
         Self {
             c: self.c,
@@ -1045,7 +1051,7 @@ impl At<'_> {
         }
     }
 
-    /// Binds the realm's next spare ALLOW to `action`, for a configuration write.
+    /// Binds the environment's next spare ALLOW to `action`, for a configuration write.
     pub async fn bound(&self, tx: &mut TenantTx, action: &str) -> access_store::idp::Bound {
         let p = self.f.spare.fetch_add(1, Ordering::SeqCst);
         let nonce = [u8::try_from(p).unwrap(); 16];
@@ -1065,11 +1071,15 @@ impl At<'_> {
         .unwrap()
     }
 
-    /// Sets the realm's CIMD policy under a spare ALLOW (`idp.client.cimd_policy`).
+    /// Sets the environment's CIMD policy under a spare ALLOW (`idp.client.cimd_policy`).
     pub async fn cimd_policy(&self, enabled: bool, domains: &[&str]) {
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
         let b = self.bound(&mut tx, "idp.client.cimd_policy").await;
         let mut s = access_store::idp::settings(&mut tx).await.unwrap().unwrap();
         s.cimd_enabled = enabled;
@@ -1091,9 +1101,13 @@ impl At<'_> {
     /// Registers a protected resource whose access tokens are signed with `alg` (OP-159 m.21
     /// (g)).
     pub async fn register_resource_with(&self, resource: &str, alg: Option<&str>) {
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
         let b = self.bound(&mut tx, "idp.client.resource_register").await;
         access_store::clients::insert_protected_resource(&mut tx, &b, resource, "Tools", alg)
             .await
@@ -1101,12 +1115,16 @@ impl At<'_> {
         tx.commit().await.unwrap();
     }
 
-    /// Opens (`Some`) or closes the realm's post-quantum signing profile (OP-159 m.3 (o)).
+    /// Opens (`Some`) or closes the environment's post-quantum signing profile (OP-159 m.3 (o)).
     pub async fn signing_profile(&self, profile: Option<&str>) {
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
-        let b = self.bound(&mut tx, "idp.realm.signing_profile").await;
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
+        let b = self.bound(&mut tx, "idp.environment.signing_profile").await;
         tx.put_signing_profile(&b, profile).await.unwrap();
         tx.commit().await.unwrap();
     }
@@ -1115,9 +1133,13 @@ impl At<'_> {
     pub async fn sign_in(&self, at: u64) -> String {
         let value: [u8; 32] = access_crypto::random::bytes().unwrap();
         let assurance = serde_json::to_vec(&vector(&[Factor::password(at)])).unwrap();
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
         let epoch = tx
             .subject(self.f.subject, false)
             .await
@@ -1147,10 +1169,10 @@ impl At<'_> {
     }
 
     pub fn rings(&self) -> Rings {
-        self.c.oauth.env().rings[&self.f.realm.realm].clone()
+        self.c.oauth.env().rings[&self.f.environment.environment].clone()
     }
 
-    /// A DPoP proof for `method uri`, with this realm's nonce for the role the URI serves.
+    /// A DPoP proof for `method uri`, with this environment's nonce for the role the URI serves.
     pub fn proof(&self, method: &str, uri: &str, access_token: Option<&str>) -> String {
         let rings = self.rings();
         let ring = if access_token.is_some() {
@@ -1209,7 +1231,7 @@ impl At<'_> {
         }
         self.c
             .oauth
-            .authorize(&self.f.realm, &Params::new(p).unwrap(), cookie)
+            .authorize(&self.f.environment, &Params::new(p).unwrap(), cookie)
             .await
     }
 
@@ -1251,7 +1273,7 @@ impl At<'_> {
         self.c
             .oauth
             .token(
-                &self.f.realm,
+                &self.f.environment,
                 &Params::new(p).unwrap(),
                 TokenHttp {
                     authorization,
@@ -1262,7 +1284,7 @@ impl At<'_> {
             .await
     }
 
-    /// The internal id of fixture client `kind` (`a`, `b`, `c`) of this realm.
+    /// The internal id of fixture client `kind` (`a`, `b`, `c`) of this environment.
     pub fn client_uuid(&self, kind: char) -> [u8; 16] {
         let k = match kind {
             'a' => 1,
@@ -1272,7 +1294,7 @@ impl At<'_> {
         let seed = 40
             + u8::try_from(
                 self.c
-                    .realms
+                    .environments
                     .iter()
                     .position(|f| std::ptr::eq(f, self.f))
                     .unwrap(),
@@ -1288,9 +1310,13 @@ impl At<'_> {
         action: &str,
         p: &access_store::client_profiles::ClientProfileRow,
     ) -> Result<u64, access_store::StoreError> {
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
         let b = self.bound(&mut tx, action).await;
         let v = access_store::client_profiles::put_profile(&mut tx, &b, self.client_uuid(kind), p)
             .await?;
@@ -1298,12 +1324,18 @@ impl At<'_> {
         Ok(v)
     }
 
-    /// Turns on the realm's front-channel logout under a spare ALLOW.
+    /// Turns on the environment's front-channel logout under a spare ALLOW.
     pub async fn enable_frontchannel(&self) {
-        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
-            .await
-            .unwrap();
-        let b = self.bound(&mut tx, "idp.realm.frontchannel_logout").await;
+        let mut tx = TenantTx::begin(
+            &self.c.db.app,
+            self.f.environment.tenant,
+            self.f.environment.environment,
+        )
+        .await
+        .unwrap();
+        let b = self
+            .bound(&mut tx, "idp.environment.frontchannel_logout")
+            .await;
         assert!(
             access_store::client_profiles::enable_frontchannel(&mut tx, &b)
                 .await
@@ -1372,7 +1404,7 @@ impl At<'_> {
             &self
                 .c
                 .oauth
-                .introspect(&self.f.realm, &p, Some(&self.basic()))
+                .introspect(&self.f.environment, &p, Some(&self.basic()))
                 .await,
             200,
         )
@@ -1385,7 +1417,7 @@ impl At<'_> {
         self.c
             .oauth
             .userinfo(
-                &self.f.realm,
+                &self.f.environment,
                 "GET",
                 Some(&format!("DPoP {access}")),
                 &[&proof],
@@ -1416,7 +1448,10 @@ impl At<'_> {
                 .collect(),
         )
         .unwrap();
-        self.c.oauth.end_session(&self.f.realm, &p, cookie).await
+        self.c
+            .oauth
+            .end_session(&self.f.environment, &p, cookie)
+            .await
     }
 
     /// Whether the browser holding `cookie` is still signed in here.

@@ -1,13 +1,13 @@
-//! The realm's SSH user certificate authority (IDP-32, OP-156 m.3 (o)), free of I/O except
+//! The environment's SSH user certificate authority (IDP-32, OP-156 m.3 (o)), free of I/O except
 //! through [`ports`] (OP-63).
 //!
 //! - [`domain::cert`]: our own encoder of `ssh-ed25519-cert-v01@openssh.com` user certificates.
-//! - [`domain::krl`]: the OpenSSH key revocation list the realm publishes.
+//! - [`domain::krl`]: the OpenSSH key revocation list the environment publishes.
 //! - [`domain::key`]: Ed25519 keys in OpenSSH form, the CA's `authorized_keys` line.
 //! - [`domain::schema`]: the `ssh.login` action, its catalog and the server group resources.
 //! - [`domain::projection`]: a certificate as a projection of an `ssh.login` Grant, its
 //!   lifetimes, and the `ssh-cert.cddl` record.
-//! - [`app`]: a certificate for an allowed projection, signed by the realm's CA key.
+//! - [`app`]: a certificate for an allowed projection, signed by the environment's CA key.
 
 pub mod app;
 pub mod domain;

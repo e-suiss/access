@@ -1,4 +1,4 @@
-//! The realm-admin REST resources over the `idp.*` write path (OP-151 m.2 M1, TN-110, TN-112):
+//! The environment-admin REST resources over the `idp.*` write path (OP-151 m.2 M1, TN-110, TN-112):
 //! each write operation compiles its JSON body into exactly one [`Change`], and each resource
 //! reads back as a JSON view with no credential field (TN-61). The view's `ETag` is the
 //! position of the decision that last changed it.
@@ -12,15 +12,15 @@ use access_identity_account::domain::recovery_policy;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::model::Window;
 use access_store::federation::SocialRow;
-use access_store::identity::{RealmId, TenantId, TenantTx};
-use access_store::idp::realm::{self as resources, AccountRow, GroupRow, UpstreamRow};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
+use access_store::idp::environment::{self as resources, AccountRow, GroupRow, UpstreamRow};
 use access_store::idp::{self, ClientRow};
 use serde_json::{Map, Value as Json, json};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use super::Admin;
 use crate::AdminError;
-use crate::domain::realm::{AssuranceProfile, Attestation, Binding, EnumerationMode};
+use crate::domain::environment::{AssuranceProfile, Attestation, Binding, EnumerationMode};
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
@@ -29,7 +29,7 @@ use crate::domain::{
     Signing, Social, SocialClient, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange,
     WebhookSpec,
 };
-use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::webhook::event_names;
 use access_store::extensions::{HookListing, WebhookListing};
 
@@ -91,13 +91,13 @@ pub enum Op {
     MarkCanary,
     /// `resendRelayMessage`: `idp.relay.resend` (OP-156 m.3 (c)).
     ResendRelay,
-    /// `putSecurityNotices`: `idp.realm.security_notices`, or `security_notices_close`.
+    /// `putSecurityNotices`: `idp.environment.security_notices`, or `security_notices_close`.
     PutSecurityNotices,
     /// `deleteAccount`: `idp.account.delete`, reserved (OP-153 m.3 (bb)).
     DeleteAccount,
-    /// `rehomeRealm`: `idp.realm.rehome`, reserved, CT3, an Exercise in both governing domains
+    /// `rehomeEnvironment`: `idp.environment.rehome`, reserved, CT3, an Exercise in both governing domains
     /// (OP-150 m.11 (b), OP-158 m.3 (o)).
-    RehomeRealm,
+    RehomeEnvironment,
     /// `createResetIntent`: `idp.account.reset_intent` (TN-61).
     ResetIntent,
     /// `createTemporaryAccessPass`: `idp.account.tap_issue` (TN-62).
@@ -144,11 +144,11 @@ pub enum Op {
     LiftOrganizationSso,
     /// `createOrganizationSetupLink`: `idp.org.setup_link` (TN-134).
     CreateOrganizationSetupLink,
-    /// `putCspMode`: `idp.realm.csp_mode`, or `csp_mode_loosen` when it loosens (OP-153 m.22 (g)).
+    /// `putCspMode`: `idp.environment.csp_mode`, or `csp_mode_loosen` when it loosens (OP-153 m.22 (g)).
     PutCspMode,
-    /// `putRelatedOrigins`: `idp.realm.related_origins` (TN-18, OP-153 m.22 (k)).
+    /// `putRelatedOrigins`: `idp.environment.related_origins` (TN-18, OP-153 m.22 (k)).
     PutRelatedOrigins,
-    /// `putLocaleOverrides`: `idp.realm.locale_overrides` (X35, OP-153 m.22 (k)).
+    /// `putLocaleOverrides`: `idp.environment.locale_overrides` (X35, OP-153 m.22 (k)).
     PutLocaleOverrides,
     /// `importAccounts`: `idp.account.import` over a file the body carries (TN-85, OP-153 m.19 (d)).
     ImportAccounts,
@@ -261,31 +261,31 @@ pub enum Op {
     PutFederationAuthority,
     /// `putFederationRegistration`: `idp.federation.registration_open` or `registration_close`.
     PutFederationRegistration,
-    /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
+    /// `putDeviceCode`: `idp.environment.device_code`, or `device_code_close` (OP-154 m.3 (p)).
     PutDeviceCode,
-    /// `putPush`: `idp.realm.push`, or `push_close` (OP-156 m.3 (d)).
+    /// `putPush`: `idp.environment.push`, or `push_close` (OP-156 m.3 (d)).
     PutPush,
-    /// `putSmsOtp`: `idp.realm.sms_otp`, or `sms_otp_close` (OP-156 m.3 (f)).
+    /// `putSmsOtp`: `idp.environment.sms_otp`, or `sms_otp_close` (OP-156 m.3 (f)).
     PutSmsOtp,
-    /// `putSpc`: `idp.realm.spc` (OP-156 m.3 (g)).
+    /// `putSpc`: `idp.environment.spc` (OP-156 m.3 (g)).
     PutSpc,
-    /// `putCiba`: `idp.realm.ciba`, or `ciba_close` (OP-155 m.3 (l)).
+    /// `putCiba`: `idp.environment.ciba`, or `ciba_close` (OP-155 m.3 (l)).
     PutCiba,
-    /// `putCoordinator`: `idp.realm.coordinator` (OP-156 m.3 (t)).
+    /// `putCoordinator`: `idp.environment.coordinator` (OP-156 m.3 (t)).
     PutCoordinator,
     /// `createCrossAppConnection`: `idp.client.cross_app_connection` (OP-154 m.3 (n)).
     CreateCrossAppConnection,
     /// `retireCrossAppConnection`: `idp.client.cross_app_connection_retire`.
     RetireCrossAppConnection,
-    /// `putCertificateLogin`: `idp.realm.certificate_login` (OP-155 m.3 (m)).
+    /// `putCertificateLogin`: `idp.environment.certificate_login` (OP-155 m.3 (m)).
     PutCertificateLogin,
-    /// `putMtlsAliases`: `idp.realm.mtls_aliases` (OP-155 m.3 (m)).
+    /// `putMtlsAliases`: `idp.environment.mtls_aliases` (OP-155 m.3 (m)).
     PutMtlsAliases,
-    /// `putHrd`: `idp.realm.hrd` or `hrd_close` (TN-98, OP-155 m.3 (h)).
+    /// `putHrd`: `idp.environment.hrd` or `hrd_close` (TN-98, OP-155 m.3 (h)).
     PutHrd,
-    /// `putIys`: `idp.realm.iys` or `iys_close` (OP-156 m.3 (c)).
+    /// `putIys`: `idp.environment.iys` or `iys_close` (OP-156 m.3 (c)).
     PutIys,
-    /// `putPreferenceTopics`: `idp.realm.preference_topics` (OP-153 m.3 (ee)).
+    /// `putPreferenceTopics`: `idp.environment.preference_topics` (OP-153 m.3 (ee)).
     PutPreferenceTopics,
     /// `putUpstreamAssuranceMap`: `idp.upstream.assurance_map` (IDP-27, OP-155 m.3 (h)).
     PutUpstreamAssuranceMap,
@@ -311,7 +311,7 @@ pub enum Op {
     PutClientSamlBearer,
     /// `putClientLegacyBearer`: `idp.client.legacy_bearer`.
     PutClientLegacyBearer,
-    /// `putFrontchannelLogout`: `idp.realm.frontchannel_logout`.
+    /// `putFrontchannelLogout`: `idp.environment.frontchannel_logout`.
     PutFrontchannelLogout,
     /// `registerRadiusClient`: `idp.gateway.radius_client_register` (OP-155 m.3 (f)).
     RegisterRadiusClient,
@@ -333,11 +333,11 @@ pub enum Op {
     ScheduleReview,
     /// `closeReview`: `idp.review.schedule_close`.
     CloseReview,
-    /// `putDelegatedAdmin`: `idp.realm.delegated_admin`, or `delegated_admin_close` (OP-157 m.3 (t)).
+    /// `putDelegatedAdmin`: `idp.environment.delegated_admin`, or `delegated_admin_close` (OP-157 m.3 (t)).
     PutDelegatedAdmin,
-    /// `putApprovalInline`: `idp.realm.approval_inline`, or `approval_inline_close` (OP-157 m.3 (m)).
+    /// `putApprovalInline`: `idp.environment.approval_inline`, or `approval_inline_close` (OP-157 m.3 (m)).
     PutApprovalInline,
-    /// `putApprovalBatch`: `idp.realm.approval_batch`, or `approval_batch_close` (OP-157 m.3 (m)).
+    /// `putApprovalBatch`: `idp.environment.approval_batch`, or `approval_batch_close` (OP-157 m.3 (m)).
     PutApprovalBatch,
     /// `commitOffboarding`: the caller's signed offboarding Exercises, one explicit choice per
     /// channel (OP-157 m.3 (v)).
@@ -346,22 +346,22 @@ pub enum Op {
     KeepReviewItem,
     /// `reviewBreakglassUse`: `idp.org.breakglass_review` (OP-157 m.3 (h), m.4 (b)).
     ReviewBreakglassUse,
-    /// `putResidency`: `idp.realm.residency`, reserved (OP-158 m.3 (o)).
+    /// `putResidency`: `idp.environment.residency`, reserved (OP-158 m.3 (o)).
     PutResidency,
-    /// `putDrProfile`: `idp.realm.dr_profile`, or `dr_profile_close` (OP-158 m.3 (r)).
+    /// `putDrProfile`: `idp.environment.dr_profile`, or `dr_profile_close` (OP-158 m.3 (r)).
     PutDrProfile,
-    /// `putRateLimit`: `idp.realm.rate_limit` (OP-158 m.3 (v)).
+    /// `putRateLimit`: `idp.environment.rate_limit` (OP-158 m.3 (v)).
     PutRateLimit,
-    /// `putCryptoProfile`: `idp.realm.crypto_profile` (OP-158 m.3 (y)).
+    /// `putCryptoProfile`: `idp.environment.crypto_profile` (OP-158 m.3 (y)).
     PutCryptoProfile,
-    /// `putHashProfile`: `idp.realm.hash_profile`, raise only (OP-158 m.3 (a)).
+    /// `putHashProfile`: `idp.environment.hash_profile`, raise only (OP-158 m.3 (a)).
     PutHashProfile,
-    /// `putAuditTier`: `idp.realm.audit_tier`, or `audit_tier_close` (OP-158 m.3 (w)).
+    /// `putAuditTier`: `idp.environment.audit_tier`, or `audit_tier_close` (OP-158 m.3 (w)).
     PutAuditTier,
-    /// `putSigningProfile`: `idp.realm.signing_profile`, or `signing_profile_close` (OP-159
+    /// `putSigningProfile`: `idp.environment.signing_profile`, or `signing_profile_close` (OP-159
     /// m.3 (a), (o)).
     PutSigningProfile,
-    /// `putKexShare`: `idp.realm.kex_share` (OP-159 m.3 (a), (t)).
+    /// `putKexShare`: `idp.environment.kex_share` (OP-159 m.3 (a), (t)).
     PutKexShare,
 }
 
@@ -399,7 +399,7 @@ impl Op {
             "resendRelayMessage" => Self::ResendRelay,
             "putSecurityNotices" => Self::PutSecurityNotices,
             "deleteAccount" => Self::DeleteAccount,
-            "rehomeRealm" => Self::RehomeRealm,
+            "rehomeEnvironment" => Self::RehomeEnvironment,
             "createResetIntent" => Self::ResetIntent,
             "createTemporaryAccessPass" => Self::IssueTap,
             "putRecoveryPolicy" => Self::PutRecoveryPolicy,
@@ -911,7 +911,7 @@ fn seconds(m: &Map<String, Json>, k: &str, default_ms: u64) -> Result<u64, Inval
 }
 
 /// The profile change a client profile operation asks for (OP-155 m.3 (k)). `client_secret_jwt`
-/// needs the realm KEK to seal its secret and is refused here until a write path holds one.
+/// needs the environment KEK to seal its secret and is refused here until a write path holds one.
 fn profile_delta(op: Op, m: &Map<String, Json>) -> Result<crate::domain::ProfileDelta, Invalid> {
     use crate::domain::ProfileDelta;
     use access_identity_oauth::domain::fapi::{Encryption, IdAlg};
@@ -970,7 +970,7 @@ fn profile_delta(op: Op, m: &Map<String, Json>) -> Result<crate::domain::Profile
 }
 
 /// The body without the members every write carries: its validity and AIS.
-/// The member of a `rehomeRealm` body that carries the new domain's AIS (E14, OP-158 m.3 (o)).
+/// The member of a `rehomeEnvironment` body that carries the new domain's AIS (E14, OP-158 m.3 (o)).
 pub const TARGET_AIS: &str = "target_ais";
 
 fn own_body(m: &Map<String, Json>) -> Json {
@@ -1635,7 +1635,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 ssf: match m.get("ssf") {
                     None | Some(Json::Null) => None,
                     Some(v) => Some(
-                        crate::domain::realm::TransmitterConfig::parse(v)
+                        crate::domain::environment::TransmitterConfig::parse(v)
                             .map_err(|_| Invalid::Upstream)?,
                     ),
                 },
@@ -1842,11 +1842,16 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::BindAccount => {
             only(
                 m,
-                &["peer_realm", "peer_realm_id", "peer_account_id", "offer"],
+                &[
+                    "peer_environment",
+                    "peer_environment_id",
+                    "peer_account_id",
+                    "offer",
+                ],
             )?;
             Change::AccountBind(crate::domain::accounts::AccountBind {
                 subject: subject(ids, key_of(key)?)?,
-                peer_realm: party_of(text(m, "peer_realm_id")?, Invalid::NoAccount)?,
+                peer_environment: party_of(text(m, "peer_environment_id")?, Invalid::NoAccount)?,
                 peer_subject: subject(ids, text(m, "peer_account_id")?)?,
                 offer: opt_text(m, "offer")?.map(|o| suiss_crypto::digest::sha256(o.as_bytes())),
             })
@@ -1905,7 +1910,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::AccountDelete(subject(ids, key_of(key)?)?)
         }
         // OP-158 m.3 (a), (o)
-        Op::RehomeRealm => {
+        Op::RehomeEnvironment => {
             let mut own = own_body(m);
             if let Some(o) = own.as_object_mut() {
                 o.remove(TARGET_AIS);
@@ -2576,7 +2581,7 @@ pub fn account_view(a: &AccountRow, ids: &IdKey) -> Json {
     })
 }
 
-/// The realm's protection mode as the settings view shows it (OP-151 m.3 (o)); brute-force
+/// The environment's protection mode as the settings view shows it (OP-151 m.3 (o)); brute-force
 /// protection is always `enforce`.
 #[must_use]
 pub fn protection_view(m: &ProtectionMode) -> Json {
@@ -2711,20 +2716,20 @@ pub enum Kind {
     Accounts,
     /// Upstream identity providers.
     Upstreams,
-    /// The realm settings singleton.
+    /// The environment settings singleton.
     Settings,
     /// Inline hooks (TN-135).
     Hooks,
     /// Webhooks (TN-136).
     Webhooks,
-    /// The realm's signal sources (§8.13, OP-151 m.19 (e)): inbound transmitters and verifier
+    /// The environment's signal sources (§8.13, OP-151 m.19 (e)): inbound transmitters and verifier
     /// reports; the process adds its `GeoIP` source's state.
     Signals,
-    /// The realm's daily sign-in analytics of the last [`ANALYTICS_DAYS`] days (IDP-36).
+    /// The environment's daily sign-in analytics of the last [`ANALYTICS_DAYS`] days (IDP-36).
     Analytics,
     /// One webhook's delivery log, by its `webhook_id` (TN-136): no event body.
     Deliveries,
-    /// The social presets the realm enabled, with their warnings (IDP-31, TN-87).
+    /// The social presets the environment enabled, with their warnings (IDP-31, TN-87).
     Socials,
     /// Organizations by their Party's base64url, each with its members and roots, domain
     /// claims, ownership handovers and connection drafts (§8.5 S7, §12.3.8, OP-153 m.10 (c)).
@@ -2757,7 +2762,7 @@ pub enum Kind {
     TrustAnchors,
     /// What enforcing SSO on one organization would end (TN-94, X20, OP-155 m.3 (i)).
     SsoPreview,
-    /// The realm's custom domains by host (OP-156 m.3 (i)).
+    /// The environment's custom domains by host (OP-156 m.3 (i)).
     CustomDomains,
     /// The undelivered Relay messages by event id, without their content (OP-156 m.3 (c)).
     RelayUndelivered,
@@ -2777,16 +2782,16 @@ pub enum Kind {
     ReviewItems,
     /// What offboarding one Party would do, by its Party's base64url (OP-157 m.3 (v)).
     OffboardingPreviews,
-    /// The realm's and its domains' cell placement, by subject (OP-158 m.3 (o)).
+    /// The environment's and its domains' cell placement, by subject (OP-158 m.3 (o)).
     Placement,
-    /// The realm's durability, DR and residency declaration (OP-158 m.3 (n), (p)).
+    /// The environment's durability, DR and residency declaration (OP-158 m.3 (n), (p)).
     Durability,
-    /// The realm's rate limits (§12.5.4, OP-158 m.3 (v)).
+    /// The environment's rate limits (§12.5.4, OP-158 m.3 (v)).
     RateLimits,
     /// Whether the governing domain can be recovered, and its handovers and forced recoveries
     /// (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)).
     Recovery,
-    /// The realm's signing profile, signing keys and algorithms, key exchange share policy and
+    /// The environment's signing profile, signing keys and algorithms, key exchange share policy and
     /// crypto module (OP-159 m.3 (o), (r), (t)).
     Signing,
 }
@@ -2884,7 +2889,7 @@ fn full<T>(rows: &[T], limit: u32, key: impl Fn(&T) -> String) -> Option<String>
         .flatten()
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     /// One organization as S7 reads it (§8.5 S7, §8.17.7.6, TN-91, TN-90, TN-120): its roots
     /// and members with how each joined (the membership source, apart from any sign-in source),
     /// its role's versioned Grant and any autojoin cooling, its domain claims with their watch
@@ -3002,10 +3007,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     pub async fn resolve(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         change: Change,
     ) -> Result<Change, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let resolved = match change {
             Change::GroupCreate(g)
                 if resources::group(&mut t, g.name.as_str()).await?.is_some() =>
@@ -3021,7 +3026,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // TN-55
             Change::RecoveryPolicy { policy, .. } => {
-                let current = match t.recovery_realm_policy().await? {
+                let current = match t.recovery_environment_policy().await? {
                     Some(b) => recovery_policy::RecoveryPolicy::from_bytes(&b)
                         .map_err(|_| AdminError::Encode)?,
                     None => recovery_policy::RecoveryPolicy::DEFAULT,
@@ -3089,20 +3094,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// Reads one resource (`key`) or one page of a collection after `after` (TN-113: the
-    /// transaction's realm scope is the filter; nothing outside it is visible).
+    /// transaction's environment scope is the filter; nothing outside it is visible).
     ///
     /// # Errors
     /// [`AdminError`].
     pub async fn read(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         kind: Kind,
         key: Option<&str>,
         after: Option<&str>,
         limit: u32,
     ) -> Result<Read, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let read = self.read_in(&mut t, kind, key, after, limit).await;
         t.commit().await?;
         read
@@ -3321,7 +3326,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let Some(a) = t.agent(party).await? else {
                     return Ok(Read::default());
                 };
-                let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                let g = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
                 // AG-21, OP-154 m.3 (f)
                 let instances = self
                     .governance
@@ -3568,7 +3573,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // §8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)
             (Kind::Recovery, _) => {
-                let gov = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                let gov = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
                 Read {
                     items: vec![(
                         crate::app::recovery_view::view(self.app, &gov.domain).await?,
@@ -3594,7 +3599,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             (Kind::Settings, _) => {
-                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
                 let p = resources::policies(t).await?;
                 let branding = idp::branding(t).await?;
                 let mappers = idp::mappers(t).await?;
@@ -3652,15 +3657,15 @@ fn agent_key(k: &str) -> Option<[u8; 16]> {
         .and_then(|b| <[u8; 16]>::try_from(b).ok())
 }
 
-/// The realm's signing view (OP-159 m.3 (o), (r), (t), m.7 (b)): its post-quantum signing
+/// The environment's signing view (OP-159 m.3 (o), (r), (t), m.7 (b)): its post-quantum signing
 /// profile, the algorithms it signs with, its key exchange share policy, its FIPS profile and
 /// whether this deployment runs the validated module. The domain's last post-quantum re-anchor is
 /// added from its Domain Metadata by the caller.
 async fn signing_view(t: &mut TenantTx) -> Result<Json, AdminError> {
-    let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
-    let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
-    let signing = t.realm_signing().await?;
-    let crypto = t.realm_crypto().await?;
+    let g = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
+    let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
+    let signing = t.environment_signing().await?;
+    let crypto = t.environment_crypto().await?;
     let mut algorithms = vec![s.jose_alg.clone()];
     if let Some(pq) = signing
         .profile

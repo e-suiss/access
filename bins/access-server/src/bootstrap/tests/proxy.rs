@@ -1,9 +1,9 @@
 //! Forward-auth on the real server path (IDP-30 (1), (3), B22, OP-156 m.3 (l), OP-153 m.3
 //! (gg)): a proxy registered by a committed `idp.proxy.register` asks `/proxy/v1/check/{engine}`
 //! through the real forward-auth router with its transport identity; the browser signs in at
-//! the realm's real `/authorize` with its login session and code + PKCE; each request is the
+//! the environment's real `/authorize` with its login session and code + PKCE; each request is the
 //! authority core's eligibility check on the real sequencer and `SoftHSM`; the application token
-//! is signed by the real identity signer and verified by the SDK against the realm JWKS.
+//! is signed by the real identity signer and verified by the SDK against the environment JWKS.
 
 #![allow(
     clippy::too_many_lines,
@@ -73,14 +73,14 @@ pub(super) fn oauth(w: &World) -> Arc<OAuth<Env>> {
     }))
 }
 
-/// Commits `change` as the realm's root through the identity plane's write path.
+/// Commits `change` as the environment's root through the identity plane's write path.
 pub(super) async fn commit(l: &Lab, change: Change) {
     let declared = DeclaredTargets::default();
     let b = Bootstrap {
         app: &l.w.db.app,
         router: &l.w.db.router,
         plane: &l.w.plane,
-        realm_keys: &l.w.keyring,
+        environment_keys: &l.w.keyring,
         hsm: &l.w.keys,
         base: &l.w.base,
         declared: &declared,
@@ -89,7 +89,7 @@ pub(super) async fn commit(l: &Lab, change: Change) {
     let ids = cell_ids(&l.w.db.app, &l.w.keys).await.unwrap();
     b.change(
         &b.admin(&ids, None),
-        (l.route.tenant, l.route.realm),
+        (l.route.tenant, l.route.environment),
         l.domain,
         &root_key(&l.w.keys).unwrap(),
         change,
@@ -110,7 +110,7 @@ pub(super) async fn proxy_client_for(l: &Lab, callback: &str) -> String {
         app: &l.w.db.app,
         router: &l.w.db.router,
         plane: &l.w.plane,
-        realm_keys: &l.w.keyring,
+        environment_keys: &l.w.keyring,
         hsm: &l.w.keys,
         base: &l.w.base,
         declared: &declared,
@@ -137,11 +137,11 @@ pub(super) async fn proxy_client_for(l: &Lab, callback: &str) -> String {
     String::from(id.as_str())
 }
 
-/// The person's login session at the realm, as a sign-in leaves it: its cookie value.
+/// The person's login session at the environment, as a sign-in leaves it: its cookie value.
 pub(super) async fn login_session(l: &Lab) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now_ms();
-    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.environment)
         .await
         .unwrap();
     let epoch = t
@@ -301,7 +301,7 @@ async fn a_registered_proxy_signs_the_browser_in_and_every_request_is_a_real_dec
     assert_eq!(r.status(), StatusCode::FOUND);
     let to = header_of(&r, "location").unwrap();
     assert!(
-        to.starts_with("https://access.test/realms/acme/authorize?response_type=code&"),
+        to.starts_with("https://access.test/env/acme/authorize?response_type=code&"),
         "{to}"
     );
     assert!(to.contains("code_challenge_method=S256"));
@@ -386,13 +386,13 @@ async fn a_registered_proxy_signs_the_browser_in_and_every_request_is_a_real_dec
         "plain headers are off"
     );
     let jwks = SignerKeys::new(l.w.identity_signer.clone())
-        .jwks(l.route.realm)
+        .jwks(l.route.environment)
         .await
         .unwrap();
     let keys =
         access_sdk::resource::keys::key_set(jwks.as_bytes(), &app_token_algorithms()).unwrap();
     let rules = |aud| AppTokenRules {
-        issuer: "https://access.test/realms/acme",
+        issuer: "https://access.test/env/acme",
         audience: aud,
         now: now_ms(),
         skew_ms: APP_SKEW_MS,

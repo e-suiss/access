@@ -1,5 +1,5 @@
 //! OP-159 m.4 (a): the Stage 14 routes answer `501 not-yet-served` until their lanes serve them:
-//! the realm-admin rows and the routes outside the realm-admin manifest.
+//! the environment-admin rows and the routes outside the environment-admin manifest.
 
 #![allow(
     clippy::unwrap_used,
@@ -8,14 +8,14 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
-use access_http::api::realm::{ROWS, planned, spec};
+use access_http::api::environment::{ROWS, planned, spec};
 use access_http::stage14::{Method, PLANNED, router};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use tower::ServiceExt as _;
 
-/// The Stage 14 realm-admin operations (OP-159 m.4 (a)).
+/// The Stage 14 environment-admin operations (OP-159 m.4 (a)).
 const ADMIN: [&str; 3] = ["getSigning", "putSigningProfile", "putKexShare"];
 
 /// The Stage 14 admin rows their lanes serve.

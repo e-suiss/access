@@ -1,5 +1,5 @@
 //! What the issuer needs from the identity plane (OP-63): the person's verified facts, the
-//! realm's status list entries, time and randomness. A port answers what it holds; it never
+//! environment's status list entries, time and randomness. A port answers what it holds; it never
 //! decides whether a credential is issued.
 
 use crate::domain::types::PersonAttribute;
@@ -23,7 +23,7 @@ pub trait Facts {
     fn value(&self, subject: &[u8; 16], attribute: PersonAttribute) -> Option<serde_json::Value>;
 }
 
-/// The realm's credential status list.
+/// The environment's credential status list.
 pub trait StatusList {
     /// A fresh entry for a new credential: its index and the list's URI; `None` when the list is
     /// full or unavailable.

@@ -42,7 +42,7 @@ impl Ports for Script {
         }
     }
 
-    fn realm(&self) -> &str {
+    fn environment(&self) -> &str {
         "acme"
     }
 }
@@ -94,7 +94,7 @@ fn script(worker: Vec<Reply>, issue: Result<Vec<u8>, String>, certs: Vec<Vec<u8>
 
 fn redirect() -> Forward {
     Forward {
-        realm: String::from("acme"),
+        environment: String::from("acme"),
         handle: [7; 32],
         binding: Binding::Redirect,
         message: Some(binding::encode(&b64::encode(b"deflated"))),
@@ -162,12 +162,12 @@ async fn refusals_end_the_forward() {
     );
 
     let other = Forward {
-        realm: String::from("other"),
+        environment: String::from("other"),
         ..redirect()
     };
     assert_eq!(
         handle(&forged, &other).await,
-        Done::Refused(String::from("edge-realm"))
+        Done::Refused(String::from("edge-environment"))
     );
 
     let mut unknown = script(

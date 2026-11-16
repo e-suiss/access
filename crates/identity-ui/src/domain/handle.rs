@@ -54,7 +54,7 @@ impl Handle {
         format!("https://{}", self.0)
     }
 
-    /// Whether it is a subdomain of `base`, the realm's Suiss host.
+    /// Whether it is a subdomain of `base`, the environment's Suiss host.
     #[must_use]
     pub fn under(&self, base: &str) -> bool {
         self.0
@@ -112,7 +112,7 @@ mod tests {
 
     use super::*;
 
-    const DID: &str = "did:web:access.test:realms:acme:u:AAECAwQFBgcICQoLDA0ODw";
+    const DID: &str = "did:web:access.test:env:acme:u:AAECAwQFBgcICQoLDA0ODw";
 
     fn doc(also: &[&str]) -> Value {
         json!({ "id": DID, "alsoKnownAs": also })

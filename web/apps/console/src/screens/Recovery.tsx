@@ -27,8 +27,8 @@ interface RecoveryView {
 
 /** The recovery and handover screen. */
 export function Recovery({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const view = useLoad(() => adminGet<RecoveryView>(ctx.instance, `realms/${realm}/recovery`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const view = useLoad(() => adminGet<RecoveryView>(ctx.instance, `envs/${environment}/recovery`));
   return (
     <div data-testid="recovery" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("recoveryIntro")}</p>

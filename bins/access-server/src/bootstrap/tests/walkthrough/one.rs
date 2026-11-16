@@ -1,5 +1,5 @@
 //! One's cloud key permission on the real server (OP-156 m.3 (w), E59, E46, OP-78, OP-153 m.3
-//! (gg)): the realm root accepts One's `one` and `one.cloud_key` schemas and gives P the cloud
+//! (gg)): the environment root accepts One's `one` and `one.cloud_key` schemas and gives P the cloud
 //! key actions; One binds the Mandate that covers its work while P is away; P's device Instance
 //! grants the permission with its own signed Exercise through the account surface, on the real
 //! router, sequencer, store and `SoftHSM`. The record holds no key or data, lasts at most a day,
@@ -409,7 +409,7 @@ impl Lab {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.d.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.d.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let rows = t.audit_page(None, 10_000).await.unwrap();
@@ -539,7 +539,7 @@ async fn kit_id(l: &Lab, made: &JsonValue) -> [u8; 16] {
         .await
         .unwrap()
         .unwrap();
-    let mut t = TenantTx::begin(&l.d.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&l.d.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let rows = t.cloud_keys(l.d.subject, 0, 50).await.unwrap();

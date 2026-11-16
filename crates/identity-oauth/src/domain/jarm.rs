@@ -1,5 +1,5 @@
 //! JWT Secured Authorization Response Mode (OAuth JARM; §10.4.3, CR-4, OP-155 m.3 (k)): the
-//! authorization response as a JWT the realm signs with the client's chosen identity
+//! authorization response as a JWT the environment signs with the client's chosen identity
 //! algorithm, optionally encrypted to the client, returned in the query (`jwt`, `query.jwt`)
 //! or in a posted form (`form_post.jwt`).
 

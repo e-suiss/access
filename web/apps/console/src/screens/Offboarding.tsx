@@ -190,7 +190,7 @@ async function commit(
     readonly reentry: string;
   },
 ): Promise<WriteResult> {
-  const slug = ctx.session.realm;
+  const slug = ctx.session.environment;
   const ops: { readonly op: string; readonly key: string; readonly payload: MetaPayload }[] = [];
   for (const [grant, c] of Object.entries(choices.grants)) {
     if (c === "revoke")
@@ -228,7 +228,7 @@ async function commit(
     },
     operations: signed.map((s) => s.body),
   };
-  const path = `realms/${encodeURIComponent(slug)}/offboarding/${encodeURIComponent(p.party)}/commit`;
+  const path = `envs/${encodeURIComponent(slug)}/offboarding/${encodeURIComponent(p.party)}/commit`;
   const d = await draftChange(ctx.instance, slug, {
     operation: "commitOffboarding",
     key: p.party,
@@ -402,7 +402,7 @@ export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
     load(() =>
       adminGet<Preview>(
         ctx.instance,
-        `realms/${encodeURIComponent(ctx.session.realm)}/offboarding/${encodeURIComponent(party)}/preview`,
+        `envs/${encodeURIComponent(ctx.session.environment)}/offboarding/${encodeURIComponent(party)}/preview`,
       ),
     );
   };

@@ -2,7 +2,7 @@
 //! deterministic, plausible `allowCredentials` list, so the answer is the same whether the
 //! account exists, has no passkey, or is locked.
 
-use super::ids::{CredentialId, RealmId};
+use super::ids::{CredentialId, EnvironmentId};
 use super::options::CredentialDescriptor;
 
 /// Plausible credential ID lengths, chosen per decoy.
@@ -13,9 +13,9 @@ pub const MAX_DECOYS: u8 = 3;
 /// Plausible transport sets, chosen per decoy.
 const TRANSPORTS: [&[&str]; 3] = [&["internal", "hybrid"], &["usb", "nfc"], &["internal"]];
 
-fn input(tag: u8, a: u8, b: u8, realm: RealmId, identifier: &str) -> Vec<u8> {
+fn input(tag: u8, a: u8, b: u8, environment: EnvironmentId, identifier: &str) -> Vec<u8> {
     let mut out = vec![tag, a, b];
-    out.extend_from_slice(realm.as_bytes());
+    out.extend_from_slice(environment.as_bytes());
     out.extend_from_slice(identifier.as_bytes());
     out
 }
@@ -41,21 +41,21 @@ fn count(seed: &[u8; 32]) -> u8 {
 /// # Errors
 /// Whatever `derive` returns.
 pub fn decoy_descriptors<E>(
-    realm: RealmId,
+    environment: EnvironmentId,
     identifier: &str,
     derive: impl Fn(&[u8]) -> Result<[u8; 32], E>,
 ) -> Result<Vec<CredentialDescriptor>, E> {
-    let seed = derive(&input(b'n', 0, 0, realm, identifier))?;
+    let seed = derive(&input(b'n', 0, 0, environment, identifier))?;
     let count = count(&seed);
     let mut out = Vec::new();
     for i in 0..count {
-        let shape = derive(&input(b's', i, 0, realm, identifier))?;
+        let shape = derive(&input(b's', i, 0, environment, identifier))?;
         let len = pick(&LENGTHS, shape[0]).unwrap_or(32);
         let transports = pick(&TRANSPORTS, shape[1]).unwrap_or(&["internal"]);
         let mut id = Vec::new();
         let mut block = 0_u8;
         while id.len() < len {
-            id.extend_from_slice(&derive(&input(b'i', i, block, realm, identifier))?);
+            id.extend_from_slice(&derive(&input(b'i', i, block, environment, identifier))?);
             block = block.saturating_add(1);
         }
         id.truncate(len);

@@ -1,4 +1,4 @@
-//! The requirement model (TN-132, LFP-23): the realm picks what must be completed; the server
+//! The requirement model (TN-132, LFP-23): the environment picks what must be completed; the server
 //! never looks at the order of the steps, only at whether the list is complete, and keeps the
 //! unbreakable rules: required MFA cannot be skipped and resuming never raises assurance.
 
@@ -15,20 +15,20 @@ pub enum MfaPolicy {
     Required,
 }
 
-/// A realm's sign-in requirements (PD values; TN-132).
+/// An environment's sign-in requirements (PD values; TN-132).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each first step the realm enables is one flag (TN-132)"
+    reason = "each first step the environment enables is one flag (TN-132)"
 )]
 pub struct AuthPolicy {
     /// MFA rule.
     pub mfa: MfaPolicy,
     /// Lowest AAL a sign-in reaches.
     pub min_aal: Aal,
-    /// Passwords as a first step (TN-132: the realm enabled e-mail or username sign-in).
+    /// Passwords as a first step (TN-132: the environment enabled e-mail or username sign-in).
     pub password: bool,
-    /// Passkeys as a first step (TN-132: the realm enabled passkey sign-in).
+    /// Passkeys as a first step (TN-132: the environment enabled passkey sign-in).
     pub passkey: bool,
     /// E-mail codes as a first step.
     pub email_otp: bool,
@@ -36,13 +36,13 @@ pub struct AuthPolicy {
     pub magic_link: bool,
     /// Days a device marker skips the second step (X33); `None` disables it.
     pub remember_device_days: Option<u32>,
-    /// Push verification as a second step (`idp.realm.push`, OP-156 m.3 (d)); off by default.
+    /// Push verification as a second step (`idp.environment.push`, OP-156 m.3 (d)); off by default.
     pub push: bool,
-    /// SMS codes as a second step (`idp.realm.sms_otp`, OP-156 m.3 (f)); off by default.
+    /// SMS codes as a second step (`idp.environment.sms_otp`, OP-156 m.3 (f)); off by default.
     pub sms: bool,
-    /// The realm's assurance profile (MD-11, OP-156 m.3 (e)).
+    /// The environment's assurance profile (MD-11, OP-156 m.3 (e)).
     pub profile: AssuranceProfile,
-    /// Secure Payment Confirmation on the approval surface (`idp.realm.spc`, OP-156 m.3 (g)); off
+    /// Secure Payment Confirmation on the approval surface (`idp.environment.spc`, OP-156 m.3 (g)); off
     /// by default.
     pub spc: bool,
 }
@@ -77,10 +77,10 @@ pub struct Enrolled {
     pub recovery_codes: bool,
     /// Live passkeys.
     pub passkeys: bool,
-    /// An active approver, in a realm that offers push (OP-156 m.3 (d)).
+    /// An active approver, in an environment that offers push (OP-156 m.3 (d)).
     #[serde(default)]
     pub push: bool,
-    /// A phone number, in a realm that takes SMS codes at sign-in (OP-156 m.3 (f)).
+    /// A phone number, in an environment that takes SMS codes at sign-in (OP-156 m.3 (f)).
     #[serde(default)]
     pub sms: bool,
 }
@@ -103,7 +103,7 @@ pub enum Requirement {
     SecondFactor,
     /// MFA is required and the account has no second factor: enroll one.
     EnrollSecondFactor,
-    /// The realm's minimum AAL is not reached.
+    /// The environment's minimum AAL is not reached.
     Aal(Aal),
 }
 

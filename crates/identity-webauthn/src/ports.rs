@@ -6,7 +6,7 @@ use std::pin::Pin;
 use crate::WebAuthnError;
 use crate::domain::ceremony::Signal;
 use crate::domain::credential::CredentialRecord;
-use crate::domain::ids::{CredentialId, RealmId, UserHandle};
+use crate::domain::ids::{CredentialId, EnvironmentId, UserHandle};
 use crate::domain::mds::MdsBlob;
 
 /// Trusted time.
@@ -32,13 +32,13 @@ pub trait Random {
 pub enum Inserted {
     /// Stored.
     Stored,
-    /// A live or deleted credential with this ID exists in the realm.
+    /// A live or deleted credential with this ID exists in the environment.
     Duplicate,
 }
 
-/// The realm-scoped passkey registry (CMP-15.7). Rows are never deleted (OP-73).
+/// The environment-scoped passkey registry (CMP-15.7). Rows are never deleted (OP-73).
 pub trait CredentialRegistry {
-    /// Stores a new credential unless its ID is taken in the realm.
+    /// Stores a new credential unless its ID is taken in the environment.
     fn insert(
         &self,
         record: &CredentialRecord,
@@ -47,21 +47,21 @@ pub trait CredentialRegistry {
     /// A credential by ID, deleted ones included.
     fn find(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
     ) -> impl Future<Output = Result<Option<CredentialRecord>, WebAuthnError>> + Send;
 
     /// The live credentials of an account.
     fn list(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         user: &UserHandle,
     ) -> impl Future<Output = Result<Vec<CredentialRecord>, WebAuthnError>> + Send;
 
     /// Records a successful authentication: counter, BS and time.
     fn record_use(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         sign_count: u32,
         backup_state: bool,
@@ -71,19 +71,19 @@ pub trait CredentialRegistry {
     /// Soft-deletes a credential (OP-73).
     fn soft_delete(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &CredentialId,
         at: u64,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send;
 }
 
-/// The realm's keyed derivation for decoy credential IDs (TN-97, CR-3 (a)).
+/// The environment's keyed derivation for decoy credential IDs (TN-97, CR-3 (a)).
 pub trait DecoySource {
-    /// A keyed 32-byte derivation of `input` under the realm's key.
+    /// A keyed 32-byte derivation of `input` under the environment's key.
     ///
     /// # Errors
     /// [`WebAuthnError::Decoy`].
-    fn derive(&self, realm: RealmId, input: &[u8]) -> Result<[u8; 32], WebAuthnError>;
+    fn derive(&self, environment: EnvironmentId, input: &[u8]) -> Result<[u8; 32], WebAuthnError>;
 }
 
 /// Where passkey risk signals go (TN-63, K14). Stage 6 turns them into signal Claims.
@@ -91,7 +91,7 @@ pub trait SignalSink {
     /// Records one signal.
     fn emit(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         credential: &CredentialId,
         signal: Signal,
     ) -> impl Future<Output = Result<(), WebAuthnError>> + Send;
@@ -115,7 +115,7 @@ pub trait MdsCache {
 /// A boxed future of an attestation source.
 pub type Pending<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// What a `direct` realm verifies attestation against (§10.2.4, OP-159 m.3 (ll)): the FIDO
+/// What a `direct` environment verifies attestation against (§10.2.4, OP-159 m.3 (ll)): the FIDO
 /// metadata held now and the CRLs of the statement's chain. A source that cannot answer gives
 /// nothing, and the registration is refused.
 pub trait AttestationSources {

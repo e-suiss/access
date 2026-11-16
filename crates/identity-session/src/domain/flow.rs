@@ -56,8 +56,11 @@ pub fn resume_digest(token: &[u8; 32]) -> [u8; 32] {
 
 /// The digest that ties a flow to the identifier it was started with, without storing it.
 #[must_use]
-pub fn identifier_digest(tenant: &[u8; 16], realm: &[u8; 16], folded: &str) -> [u8; 32] {
-    tagged(IDENTIFIER_CONTEXT, &[tenant, realm, folded.as_bytes()])
+pub fn identifier_digest(tenant: &[u8; 16], environment: &[u8; 16], folded: &str) -> [u8; 32] {
+    tagged(
+        IDENTIFIER_CONTEXT,
+        &[tenant, environment, folded.as_bytes()],
+    )
 }
 
 /// The digest of an e-mail code, bound to its flow.

@@ -1,9 +1,9 @@
 //! The token response and the ID token (RFC 6749 §5, RFC 9449 §5, OIDC Core §3.1.3.7). The ID
-//! token is verified through the Kernel's compact JWS check against the realm JWKS: header
+//! token is verified through the Kernel's compact JWS check against the environment JWKS: header
 //! `alg`/`kid`/`typ` only, `typ` `JWT`, an Access signature algorithm; then `iss`, `aud`, `exp`,
 //! `iat`, `azp`, the request's `nonce`, and `sub`.
 //!
-//! A `sub` is the subject at this client only (OIDC Core §8.1): a realm may issue pairwise
+//! A `sub` is the subject at this client only (OIDC Core §8.1): an environment may issue pairwise
 //! identifiers, so [`Subject`] carries the issuer and the client and two clients' subjects are
 //! never equal, even when the strings are.
 
@@ -209,7 +209,7 @@ pub enum IdTokenError {
     Sub,
 }
 
-/// Verifies an ID token against the realm's keys (see [`crate::resource::keys::key_set`]).
+/// Verifies an ID token against the environment's keys (see [`crate::resource::keys::key_set`]).
 ///
 /// # Errors
 /// [`IdTokenError`].

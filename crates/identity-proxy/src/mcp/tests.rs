@@ -49,7 +49,7 @@ fn registration() -> Registration {
 }
 
 impl McpPorts for Fake {
-    type Realm = ();
+    type Environment = ();
 
     async fn registered(
         &self,

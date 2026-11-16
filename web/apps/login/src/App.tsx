@@ -1,5 +1,5 @@
-// CMP-15.6, TN-133, X40: the realm's hosted pages under /login, drawn from the node contract and
-// the realm's Frontend API; the realm's own branding, no Suiss shell.
+// CMP-15.6, TN-133, X40: the environment's hosted pages under /login, drawn from the node contract and
+// the environment's Frontend API; the environment's own branding, no Suiss shell.
 import { Approval } from "./Approval.js";
 import { Branding } from "./Branding.js";
 import { Ciba } from "./Ciba.js";
@@ -30,8 +30,8 @@ export type Page =
 
 export function pageOf(path: string, search: string): Page {
   // OP-154 m.3 (p), m.7 (f)
-  if (/^(\/realms\/[a-z0-9-]+)?\/device\/?$/.test(path)) return "device";
-  const rest = path.replace(/^(\/realms\/[a-z0-9-]+)?\/login/, "").replace(/\/+$/, "");
+  if (/^(\/env\/[a-z0-9-]+)?\/device\/?$/.test(path)) return "device";
+  const rest = path.replace(/^(\/env\/[a-z0-9-]+)?\/login/, "").replace(/\/+$/, "");
   if (rest === "/recovery") return "recovery";
   if (rest === "/link") return "link";
   if (rest === "/error") return "error";

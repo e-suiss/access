@@ -1,6 +1,6 @@
-//! The account BFF (OP-153 m.3 (w), m.8 (e)): the realm's `/account` pages on its public
-//! listener, realm-branded, over the hosted login session they reuse. The built app is served
-//! at `/account` (or `/realms/{slug}/account` for a path issuer), its API under `…/account/api/`.
+//! The account BFF (OP-153 m.3 (w), m.8 (e)): the environment's `/account` pages on its public
+//! listener, environment-branded, over the hosted login session they reuse. The built app is served
+//! at `/account` (or `/env/{slug}/account` for a path issuer), its API under `…/account/api/`.
 //!
 //! # What the cookie can and cannot do
 //!
@@ -22,7 +22,7 @@
 //!   key (PI-7).
 //!
 //! A stolen cookie, without the browser's key, can therefore neither read nor change authority.
-//! Every state-changing call names the realm's own origin and carries the session's CSRF token
+//! Every state-changing call names the environment's own origin and carries the session's CSRF token
 //! (TN-131). A store failure answers `503`; nothing is passed through (fail closed).
 
 pub mod domain;

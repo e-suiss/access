@@ -1,13 +1,13 @@
 //! SSF beyond delivery (OP-151 m.3 (k), (l); TN-39…TN-43; E30): a stream's profile and
 //! algorithm, the reads the identity plane's CAEP and RISC SETs need, the inbound transmitters
-//! of a realm with their delay state, the SETs taken from them by `jti`, the upstream subject
+//! of an environment with their delay state, the SETs taken from them by `jti`, the upstream subject
 //! links, and receiver acknowledgements. Nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::events::SealedKey;
-use crate::identity::{RealmId, TenantTx};
+use crate::identity::{EnvironmentId, TenantTx};
 use crate::idp::Bound;
 
 fn uuid(b: &[u8; 16]) -> Uuid {
@@ -15,8 +15,8 @@ fn uuid(b: &[u8; 16]) -> Uuid {
 }
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
-    Ok((uuid(t.tenant.as_bytes()), uuid(realm.as_bytes())))
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    Ok((uuid(t.tenant.as_bytes()), uuid(environment.as_bytes())))
 }
 
 fn ms(t: Option<i64>) -> Option<u64> {
@@ -38,7 +38,7 @@ pub struct StreamProfile {
     pub alg: String,
 }
 
-/// A transmitter a realm takes SETs from, as `idp.upstream.register` declared it.
+/// A transmitter an environment takes SETs from, as `idp.upstream.register` declared it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransmitterRow {
     /// Its id, the `{stream}` of the inbound push path.
@@ -55,7 +55,7 @@ pub struct TransmitterRow {
     pub delivery: String,
     /// The poll endpoint of a `poll` transmitter.
     pub poll_endpoint: Option<String>,
-    /// The poll credential, sealed under the realm KEK.
+    /// The poll credential, sealed under the environment KEK.
     pub secret: Option<SealedKey>,
     /// How often it is expected to be heard from, seconds.
     pub expected_interval_s: u32,
@@ -127,7 +127,7 @@ impl RawTransmitter {
     }
 }
 
-/// Receiver acknowledgement counts of a realm's streams (E30), for the staleness exposure view.
+/// Receiver acknowledgement counts of an environment's streams (E30), for the staleness exposure view.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AckCounts {
     /// Deliveries a receiver took (push `2xx` or poll ack).
@@ -145,17 +145,17 @@ fn count(n: Option<i64>) -> u64 {
 }
 
 impl TenantTx {
-    /// Records the profile and algorithm of a new stream of this realm.
+    /// Records the profile and algorithm of a new stream of this environment.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn set_stream_profile(&mut self, p: &StreamProfile) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.event_subscription_ssf (tenant_id, realm_id, subscription_id, profile, alg)
+            "INSERT INTO access.event_subscription_ssf (tenant_id, environment_id, subscription_id, profile, alg)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             uuid(&p.subscription),
             p.profile,
             p.alg,
@@ -165,19 +165,19 @@ impl TenantTx {
         Ok(())
     }
 
-    /// The profiles of the streams of `realm` that have one.
+    /// The profiles of the streams of `environment` that have one.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn stream_profiles(
         &mut self,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> Result<Vec<StreamProfile>, StoreError> {
         let rows = sqlx::query!(
             "SELECT subscription_id, profile, alg FROM access.event_subscription_ssf
-              WHERE tenant_id = $1 AND realm_id = $2",
+              WHERE tenant_id = $1 AND environment_id = $2",
             uuid(self.tenant.as_bytes()),
-            uuid(realm.as_bytes()),
+            uuid(environment.as_bytes()),
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -201,12 +201,12 @@ impl TenantTx {
         subject: [u8; 16],
         client_uuid: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT value FROM access.pairwise_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND sector = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND sector = $4",
             tenant,
-            realm,
+            environment,
             uuid(&subject),
             uuid(&client_uuid),
         )
@@ -222,13 +222,13 @@ impl TenantTx {
         &mut self,
         instance: &[u8; 16],
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query_scalar!(
             "SELECT subject_id FROM access.device_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND instance_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND instance_id = $3
               ORDER BY created_at LIMIT 1",
             tenant,
-            realm,
+            environment,
             instance.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -236,19 +236,19 @@ impl TenantTx {
         Ok(row.map(|s| *s.as_bytes()))
     }
 
-    /// The subjects of the realm with a live grant.
+    /// The subjects of the environment with a live grant.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn granted_subjects(&mut self) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_scalar!(
             "SELECT DISTINCT subject_id FROM access.oauth_grants
-              WHERE tenant_id = $1 AND realm_id = $2 AND revoked_ms IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND revoked_ms IS NULL
                 AND expires_ms > (extract(epoch FROM clock_timestamp()) * 1000)::bigint
               ORDER BY subject_id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -260,22 +260,22 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn backchannel_grants(&mut self) -> Result<Vec<Uuid>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT g.grant_id FROM access.oauth_grants g
                JOIN access.idp_clients c
-                 ON c.tenant_id = g.tenant_id AND c.realm_id = g.realm_id AND c.client_uuid = g.client_uuid
-              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.revoked_ms IS NULL
+                 ON c.tenant_id = g.tenant_id AND c.environment_id = g.environment_id AND c.client_uuid = g.client_uuid
+              WHERE g.tenant_id = $1 AND g.environment_id = $2 AND g.revoked_ms IS NULL
                 AND c.backchannel_logout_uri IS NOT NULL
               ORDER BY g.grant_id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?)
     }
 
-    /// Declares an inbound transmitter of this realm under the `idp.upstream.register` decision
+    /// Declares an inbound transmitter of this environment under the `idp.upstream.register` decision
     /// `bound` (EI-25, MD-14).
     ///
     /// # Errors
@@ -286,15 +286,15 @@ impl TenantTx {
         bound: &Bound,
         t: &TransmitterRow,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.ssf_transmitter
-                (tenant_id, realm_id, transmitter_id, issuer, jwks_uri, audience, events, delivery,
+                (tenant_id, environment_id, transmitter_id, issuer, jwks_uri, audience, events, delivery,
                  poll_endpoint, secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
                  expected_interval_s, exercise, domain_id, decision_pos)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
             tenant,
-            realm,
+            environment,
             uuid(&t.id),
             t.issuer,
             t.jwks_uri,
@@ -326,12 +326,12 @@ impl TenantTx {
         bound: &Bound,
         id: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.ssf_transmitter SET disabled_at = now(), domain_id = $4, decision_pos = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3 AND disabled_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND transmitter_id = $3 AND disabled_at IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(&id),
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -342,12 +342,12 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// The transmitters of this realm, live first.
+    /// The transmitters of this environment, live first.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn transmitters(&mut self) -> Result<Vec<TransmitterRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let raws = sqlx::query_as!(
             RawTransmitter,
             r#"SELECT transmitter_id, issuer, jwks_uri, audience, events, delivery, poll_endpoint,
@@ -356,17 +356,17 @@ impl TenantTx {
                       (extract(epoch FROM last_seen_at) * 1000)::bigint AS last_seen_ms,
                       (extract(epoch FROM created_at) * 1000)::bigint AS created_ms,
                       disabled_at IS NOT NULL AS "disabled!"
-                 FROM access.ssf_transmitter WHERE tenant_id = $1 AND realm_id = $2
+                 FROM access.ssf_transmitter WHERE tenant_id = $1 AND environment_id = $2
                 ORDER BY disabled_at IS NOT NULL, created_at"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
         raws.into_iter().map(RawTransmitter::row).collect()
     }
 
-    /// The transmitter `id` of this realm, ended or not.
+    /// The transmitter `id` of this environment, ended or not.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -374,7 +374,7 @@ impl TenantTx {
         &mut self,
         id: [u8; 16],
     ) -> Result<Option<TransmitterRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let raw = sqlx::query_as!(
             RawTransmitter,
             r#"SELECT transmitter_id, issuer, jwks_uri, audience, events, delivery, poll_endpoint,
@@ -384,9 +384,9 @@ impl TenantTx {
                       (extract(epoch FROM created_at) * 1000)::bigint AS created_ms,
                       disabled_at IS NOT NULL AS "disabled!"
                  FROM access.ssf_transmitter
-                WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND transmitter_id = $3"#,
             tenant,
-            realm,
+            environment,
             uuid(&id),
         )
         .fetch_optional(&mut *self.tx)
@@ -399,12 +399,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn transmitter_seen(&mut self, id: [u8; 16], now_ms: u64) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "UPDATE access.ssf_transmitter SET last_seen_at = GREATEST(last_seen_at, to_timestamp($4::bigint / 1000.0))
-              WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND transmitter_id = $3",
             tenant,
-            realm,
+            environment,
             uuid(&id),
             signed(now_ms)?,
         )
@@ -425,12 +425,12 @@ impl TenantTx {
         event_type: &str,
         outcome: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.ssf_inbound_set (tenant_id, realm_id, transmitter_id, jti_digest, event_type, outcome)
+            "INSERT INTO access.ssf_inbound_set (tenant_id, environment_id, transmitter_id, jti_digest, event_type, outcome)
              VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(&id),
             jti_digest.as_slice(),
             event_type,
@@ -452,12 +452,12 @@ impl TenantTx {
         digest: &[u8; 32],
         subject: [u8; 16],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.upstream_subject (tenant_id, realm_id, subject_digest, subject_id)
+            "INSERT INTO access.upstream_subject (tenant_id, environment_id, subject_digest, subject_id)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             digest.as_slice(),
             uuid(&subject),
         )
@@ -478,13 +478,13 @@ impl TenantTx {
         digest: &[u8; 32],
         subject: [u8; 16],
     ) -> Result<Option<bool>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "INSERT INTO access.upstream_subject
-               (tenant_id, realm_id, subject_digest, subject_id, domain_id, decision_pos)
+               (tenant_id, environment_id, subject_digest, subject_id, domain_id, decision_pos)
              VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             digest.as_slice(),
             uuid(&subject),
             bound.domain().as_bytes().as_slice(),
@@ -498,9 +498,9 @@ impl TenantTx {
         }
         let held = sqlx::query_scalar!(
             "SELECT subject_id FROM access.upstream_subject
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_digest = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_digest = $3",
             tenant,
-            realm,
+            environment,
             digest.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -508,7 +508,7 @@ impl TenantTx {
         Ok(held.filter(|s| *s.as_bytes() == subject).map(|_| false))
     }
 
-    /// The realm subject linked to the upstream subject digest.
+    /// The environment subject linked to the upstream subject digest.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -516,12 +516,12 @@ impl TenantTx {
         &mut self,
         digest: &[u8; 32],
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query_scalar!(
             "SELECT subject_id FROM access.upstream_subject
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_digest = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_digest = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             digest.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -542,16 +542,16 @@ impl TenantTx {
         kind: &str,
         state: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.event_ack (tenant_id, realm_id, subscription_id, event_id, kind, state)
+            "INSERT INTO access.event_ack (tenant_id, environment_id, subscription_id, event_id, kind, state)
              SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (
                SELECT 1 FROM access.event_delivery
-                WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3 AND event_id = $4
+                WHERE tenant_id = $1 AND environment_id = $2 AND subscription_id = $3 AND event_id = $4
                   AND state IN ('delivered', 'acknowledged'))
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(&subscription),
             event_id,
             kind,
@@ -563,17 +563,17 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// The acknowledgement counts of this realm's streams (E30).
+    /// The acknowledgement counts of this environment's streams (E30).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn ack_counts(&mut self) -> Result<AckCounts, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let delivered = sqlx::query_scalar!(
             "SELECT count(*) FROM access.event_delivery
-              WHERE tenant_id = $1 AND realm_id = $2 AND state IN ('delivered', 'acknowledged')",
+              WHERE tenant_id = $1 AND environment_id = $2 AND state IN ('delivered', 'acknowledged')",
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -581,9 +581,9 @@ impl TenantTx {
             r#"SELECT count(*) FILTER (WHERE state = 'applied') AS "applied",
                       count(*) FILTER (WHERE state = 'ignored') AS "ignored",
                       count(*) FILTER (WHERE kind = 'authority_state') AS "authority"
-                 FROM access.event_ack WHERE tenant_id = $1 AND realm_id = $2"#,
+                 FROM access.event_ack WHERE tenant_id = $1 AND environment_id = $2"#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -595,18 +595,18 @@ impl TenantTx {
         })
     }
 
-    /// The kinds of this realm's identity outbox entries, oldest first; for tests that cannot
+    /// The kinds of this environment's identity outbox entries, oldest first; for tests that cannot
     /// wait for the outbox watermark.
     ///
     /// # Errors
     /// [`StoreError`].
     #[cfg(feature = "testing")]
     pub async fn outbox_kinds(&mut self) -> Result<Vec<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
-            "SELECT kind FROM access.identity_outbox WHERE tenant_id = $1 AND realm_id = $2 ORDER BY id",
+            "SELECT kind FROM access.identity_outbox WHERE tenant_id = $1 AND environment_id = $2 ORDER BY id",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?)

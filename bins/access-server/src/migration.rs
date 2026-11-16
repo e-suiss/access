@@ -1,11 +1,11 @@
 //! Moving accounts in from another identity provider (§12.3.7, TN-84, TN-85): the
-//! `import-accounts <realm> <file>` command over this process's pools and token, and the
+//! `import-accounts <environment> <file>` command over this process's pools and token, and the
 //! previous provider's password check for the accounts that brought no hash.
 
 use std::sync::Arc;
 
 use access_identity_account::app::import::{Report, import_all};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::ports::{LegacyIdp, LegacyIdpFuture, LegacyIdpUnavailable};
 use access_identity_oauth::adapters::outbound::Outbound;
 use access_store::Pool;
@@ -75,18 +75,18 @@ pub(crate) fn legacy_idp(url: Option<&str>, http: Outbound) -> Option<Arc<dyn Le
     url.map(|u| Arc::new(OutboundLegacyIdp::new(http, u.to_owned())) as Arc<dyn LegacyIdp>)
 }
 
-/// Imports every non-empty line of `text` into the realm.
+/// Imports every non-empty line of `text` into the environment.
 ///
 /// # Errors
 /// A storage or key failure stops the run; lines already imported stay.
 pub(crate) async fn import(
     app: &Pool,
     vault: access_identity_account::app::vault::Vault,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     text: &str,
 ) -> Result<Report, String> {
     let db = access_identity_account::adapters::pg::PgAccounts::sealed(app.clone(), vault);
-    let report = import_all(&db, realm, text, &IMPORTER)
+    let report = import_all(&db, environment, text, &IMPORTER)
         .await
         .map_err(|(n, e)| format!("line {n}: {e}"))?;
     tracing::info!(

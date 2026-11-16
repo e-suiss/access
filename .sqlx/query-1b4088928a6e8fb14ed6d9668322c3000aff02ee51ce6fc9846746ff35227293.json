@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.login_sessions SET ended_ms = $4, end_reason = $5\n              WHERE tenant_id = $1 AND environment_id = $2 AND session_id = $3 AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b4088928a6e8fb14ed6d9668322c3000aff02ee51ce6fc9846746ff35227293"
+}

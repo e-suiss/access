@@ -20,8 +20,8 @@ pub struct Connector {
     pub name: String,
     /// The HR system it reads.
     pub vendor: Vendor,
-    /// The realm's slug.
-    pub realm: String,
+    /// The environment's slug.
+    pub environment: String,
     /// The Access HR source it pushes to.
     pub source: String,
 }
@@ -66,8 +66,8 @@ fn digest(v: &Value) -> Result<[u8; 32], Fault> {
 #[must_use]
 pub fn batch_path(c: &Connector) -> String {
     format!(
-        "/admin/v1/realms/{}/hr-sources/{}/records:batch",
-        c.realm, c.source
+        "/admin/v1/envs/{}/hr-sources/{}/records:batch",
+        c.environment, c.source
     )
 }
 
@@ -83,7 +83,7 @@ async fn push<A: Access, S: Sign, R: Random>(
     });
     let draft = access
         .draft(
-            &c.realm,
+            &c.environment,
             json!({ "operation": "importHrBatch", "key": c.source, "body": body }),
         )
         .await?;

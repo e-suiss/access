@@ -11,17 +11,17 @@ use access_store::console::{
     EndReason, NewConsoleSession, Pending, attach, by_cookie, by_id, end, live_of, open,
     set_pending, take_pending, touch,
 };
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::testing::fresh;
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 
 fn new(cookie: &[u8; 32], subject: u8) -> NewConsoleSession<'_> {
     NewConsoleSession {
         cookie_digest: cookie,
         tenant: T,
-        realm: R,
+        environment: R,
         subject: [subject; 16],
         login_session: [9; 16],
         session_epoch: 0,

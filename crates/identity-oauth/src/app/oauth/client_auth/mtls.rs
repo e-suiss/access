@@ -1,13 +1,13 @@
 //! Mutual TLS client authentication (RFC 8705 §2; §10.4.3, §12.2.1, TN-32, OP-155 m.3 (k)).
 //! The certificate is the one the TLS connection to access-server presented: a forwarded
-//! certificate header is never read. `tls_client_auth` takes a certificate the realm's trusted
+//! certificate header is never read. `tls_client_auth` takes a certificate the environment's trusted
 //! CAs issued and that is known not revoked, naming the registered subject; the self-signed
 //! method takes one of the certificates the client registered. Its `x5t#S256` then binds the
 //! client's tokens (RFC 8705 §3).
 
 use access_crypto::webauthn::sha256;
 
-use crate::app::oauth::{Env, OAuth, Realm};
+use crate::app::oauth::{Env, Environment, OAuth};
 use crate::domain::client::{Client, ClientAuthError, Presented};
 use crate::domain::fapi::{TlsAuth, names_match, self_signed_match};
 use crate::ports::Unavailable;
@@ -17,7 +17,7 @@ impl<E: Env> OAuth<E> {
     /// it under `tls`; it presents only its `client_id` besides the certificate.
     pub(crate) async fn mtls_client(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         mut client: Client,
         tls: &TlsAuth,
         presented: &Presented,
@@ -36,7 +36,7 @@ impl<E: Env> OAuth<E> {
                 match self
                     .env
                     .client_certificates()
-                    .verify(realm, chain, now)
+                    .verify(environment, chain, now)
                     .await?
                 {
                     Ok(names) => names_match(name, &names),

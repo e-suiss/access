@@ -1,6 +1,6 @@
 //! Claim release consents (OP-153 m.3 (z)): what a person shares with a third-party client, kept
 //! per (person, client, claim set) and ended from "Connected apps". Scoped to the transaction's
-//! realm by row-level security; a consent only ends (OP-73).
+//! environment by row-level security; a consent only ends (OP-73).
 
 use sqlx::types::Uuid;
 
@@ -8,10 +8,10 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -44,13 +44,13 @@ impl TenantTx {
         subject: [u8; 16],
         client: [u8; 16],
     ) -> Result<Option<Vec<String>>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT claims FROM access.identity_claim_consents
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND client_uuid = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4
                 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             Uuid::from_bytes(client),
         )
@@ -70,14 +70,14 @@ impl TenantTx {
         claims: &[String],
         now_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let now = i64_of(now_ms)?;
         sqlx::query!(
             "UPDATE access.identity_claim_consents SET ended_ms = $5, end_reason = 'replaced'
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND client_uuid = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4
                 AND ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             Uuid::from_bytes(client),
             now,
@@ -88,11 +88,11 @@ impl TenantTx {
         sorted.sort();
         sorted.dedup();
         sqlx::query!(
-            "INSERT INTO access.identity_claim_consents (tenant_id, realm_id, subject_id,
+            "INSERT INTO access.identity_claim_consents (tenant_id, environment_id, subject_id,
                     client_uuid, claims, created_ms)
              VALUES ($1, $2, $3, $4, $5, $6)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             Uuid::from_bytes(client),
             &sorted,
@@ -108,18 +108,18 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn consents_of(&mut self, subject: [u8; 16]) -> Result<Vec<ConsentRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT k.client_uuid, c.client_id, c.display_name, k.claims, k.created_ms
                FROM access.identity_claim_consents k
                JOIN access.idp_clients c
-                 ON c.tenant_id = k.tenant_id AND c.realm_id = k.realm_id
+                 ON c.tenant_id = k.tenant_id AND c.environment_id = k.environment_id
                 AND c.client_uuid = k.client_uuid
-              WHERE k.tenant_id = $1 AND k.realm_id = $2 AND k.subject_id = $3
+              WHERE k.tenant_id = $1 AND k.environment_id = $2 AND k.subject_id = $3
                 AND k.ended_ms IS NULL
               ORDER BY k.consent_id DESC",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -146,15 +146,15 @@ impl TenantTx {
         client_id: &str,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.identity_claim_consents k SET ended_ms = $5, end_reason = 'stopped'
                FROM access.idp_clients c
-              WHERE k.tenant_id = $1 AND k.realm_id = $2 AND k.subject_id = $3
-                AND c.tenant_id = k.tenant_id AND c.realm_id = k.realm_id
+              WHERE k.tenant_id = $1 AND k.environment_id = $2 AND k.subject_id = $3
+                AND c.tenant_id = k.tenant_id AND c.environment_id = k.environment_id
                 AND c.client_uuid = k.client_uuid AND c.client_id = $4 AND k.ended_ms IS NULL",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             client_id,
             i64_of(now_ms)?,

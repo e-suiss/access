@@ -1,6 +1,6 @@
 //! What the identity plane does when a break-glass Grant is used (OP-157 m.3 (h), §12.3.8,
 //! TN-71): the use is recorded for its review, audited as critical, the person whose account it
-//! acted on gets the notice, and the realm's on-call Parties get the alarm. Delivery is not
+//! acted on gets the notice, and the environment's on-call Parties get the alarm. Delivery is not
 //! guaranteed (N-2); the authority decision never waits on it (INV-24).
 
 use access_crypto::Secret;
@@ -16,10 +16,10 @@ use crate::notify::notices::queue_body;
 use crate::ports::{Clock, Entropy};
 use suiss_crypto::envelope::Kek;
 
-/// The console page a break-glass alarm opens, under the realm issuer.
+/// The console page a break-glass alarm opens, under the environment issuer.
 pub const CONSOLE_PATH: &str = "/console/breakglass";
 
-/// Hours within which another Party reviews a use, unless the realm's `breakglass_review_h`
+/// Hours within which another Party reviews a use, unless the environment's `breakglass_review_h`
 /// says less (PD, OP-157 m.3 (h), (n)).
 pub const REVIEW_WITHIN_H: u64 = 72;
 
@@ -34,7 +34,7 @@ pub struct Used<'a> {
     pub actor: [u8; 16],
     /// The subject Party.
     pub party: [u8; 16],
-    /// The subject's account, when the Party has one in this realm.
+    /// The subject's account, when the Party has one in this environment.
     pub subject: Option<[u8; 16]>,
     /// How many approvals the Grant asks for.
     pub approvals: u64,
@@ -145,7 +145,7 @@ pub async fn deliver(
     Ok(out)
 }
 
-/// Marks the realm's unreviewed uses past their window overdue, audits each as critical and
+/// Marks the environment's unreviewed uses past their window overdue, audits each as critical and
 /// alarms the on-call Parties (OP-157 m.3 (h), §12.3.8 (4)); how many fell overdue.
 ///
 /// # Errors
@@ -190,7 +190,7 @@ pub async fn sweep(
 /// Longest gap between two drills, ms (PD, 90 days, §12.3.8 (5)).
 pub const DRILL_EVERY_MS: u64 = 90 * 86_400_000;
 
-/// When a realm with break-glass accounts ran no drill in [`DRILL_EVERY_MS`], counted from its
+/// When an environment with break-glass accounts ran no drill in [`DRILL_EVERY_MS`], counted from its
 /// last drill or else its oldest mark: the critical audit row and the on-call alarm, once a run
 /// of the daily job (OP-157 m.3 (h), §12.3.8 (5)); whether it was overdue.
 ///

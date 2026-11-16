@@ -1,0 +1,91 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT day, client_uuid, session_id, details, expires_ms, grant_id\n               FROM access.oauth_codes\n              WHERE tenant_id = $1 AND environment_id = $2 AND day >= $3 AND code_hash = $4\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "details",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "details"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_codes",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "fe2862df54639bb82c7f59124452a6f80868be8fdc0d7a5d239448d57f234fdd"
+}

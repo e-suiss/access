@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -145,14 +145,14 @@ pub struct CertificateRow {
 }
 
 impl TenantTx {
-    /// Serialises the realm's CA work until this transaction ends (one reconciliation at a
+    /// Serialises the environment's CA work until this transaction ends (one reconciliation at a
     /// time across the cell).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn lock_ssh_ca(&mut self) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
-        let name = format!("access/ssh-ca/{tenant}/{realm}");
+        let (tenant, environment) = scope(self)?;
+        let name = format!("access/ssh-ca/{tenant}/{environment}");
         sqlx::query!(
             "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
             name
@@ -171,16 +171,16 @@ impl TenantTx {
         bound: &Bound,
         change: &str,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let v = sqlx::query_scalar!(
-            "INSERT INTO access.ssh_ca_changes (tenant_id, realm_id, version, change, domain_id,
+            "INSERT INTO access.ssh_ca_changes (tenant_id, environment_id, version, change, domain_id,
                     decision_pos)
              SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5
                FROM access.ssh_ca_changes
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
              RETURNING version",
             tenant,
-            realm,
+            environment,
             change,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -195,13 +195,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ssh_ca_change(&mut self) -> Result<Option<CaChange>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT version, change, decision_pos FROM access.ssh_ca_changes
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -215,19 +215,19 @@ impl TenantTx {
         .transpose()
     }
 
-    /// The newest phase of every CA key the realm ever had.
+    /// The newest phase of every CA key the environment ever had.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn ssh_ca_keys(&mut self) -> Result<Vec<CaKeyRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (public_key) public_key, phase, since_ms, change_version
                FROM access.ssh_ca_keys
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY public_key, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -255,15 +255,15 @@ impl TenantTx {
         since_ms: u64,
         change_version: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.ssh_ca_keys (tenant_id, realm_id, public_key, version, phase,
+            "INSERT INTO access.ssh_ca_keys (tenant_id, environment_id, public_key, version, phase,
                     since_ms, change_version)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6
                FROM access.ssh_ca_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND public_key = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND public_key = $3",
             tenant,
-            realm,
+            environment,
             key.as_slice(),
             phase,
             signed(since_ms)?,
@@ -279,12 +279,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ssh_ca_applied(&mut self) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let v = sqlx::query_scalar!(
             "SELECT MAX(change_version) FROM access.ssh_ca_keys
-              WHERE tenant_id = $1 AND realm_id = $2",
+              WHERE tenant_id = $1 AND environment_id = $2",
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -302,15 +302,15 @@ impl TenantTx {
         live: bool,
         description: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.ssh_host_groups (tenant_id, realm_id, name, version, state,
+            "INSERT INTO access.ssh_host_groups (tenant_id, environment_id, name, version, state,
                     description, domain_id, decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7
                FROM access.ssh_host_groups
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             name,
             if live { "live" } else { "retired" },
             description,
@@ -327,14 +327,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn ssh_host_groups(&mut self) -> Result<Vec<HostGroupRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (name) name, state, description, version, decision_pos
                FROM access.ssh_host_groups
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY name, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -359,14 +359,14 @@ impl TenantTx {
         &mut self,
         c: &NewCertificate<'_>,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.ssh_certificates (tenant_id, realm_id, ca_key, serial, key_id,
+            "INSERT INTO access.ssh_certificates (tenant_id, environment_id, ca_key, serial, key_id,
                     domain_id, exercise, decision_pos, intent, holder, party, host_group,
                     principals, public_key, valid_after, valid_before, issued_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
             tenant,
-            realm,
+            environment,
             c.ca_key.as_slice(),
             serial_in(c.serial),
             c.key_id,
@@ -398,19 +398,19 @@ impl TenantTx {
         now_s: u64,
         limit: u32,
     ) -> Result<Vec<CertificateRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT c.ca_key, c.serial, c.key_id, c.domain_id, c.exercise, c.intent, c.holder,
                       c.party, c.host_group, c.principals, c.valid_after, c.valid_before,
                       c.issued_ms, r.reason AS "reason?", r.revoked_ms AS "revoked_ms?"
                  FROM access.ssh_certificates c
                  LEFT JOIN access.ssh_revocations r
-                   ON r.tenant_id = c.tenant_id AND r.realm_id = c.realm_id
+                   ON r.tenant_id = c.tenant_id AND r.environment_id = c.environment_id
                   AND r.ca_key = c.ca_key AND r.serial = c.serial
-                WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.valid_before > $3
+                WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.valid_before > $3
                 ORDER BY c.issued_ms DESC LIMIT $4"#,
             tenant,
-            realm,
+            environment,
             signed(now_s)?,
             i64::from(limit),
         )
@@ -453,14 +453,14 @@ impl TenantTx {
         reason: &str,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.ssh_revocations (tenant_id, realm_id, ca_key, serial, reason,
+            "INSERT INTO access.ssh_revocations (tenant_id, environment_id, ca_key, serial, reason,
                     revoked_ms)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             ca_key.as_slice(),
             serial_in(serial),
             reason,
@@ -472,20 +472,20 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// How many revocations and key phases the realm ever recorded: the KRL version, which
+    /// How many revocations and key phases the environment ever recorded: the KRL version, which
     /// only grows.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn ssh_krl_version(&mut self) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query_scalar!(
             r#"SELECT ((SELECT COUNT(*) FROM access.ssh_revocations
-                          WHERE tenant_id = $1 AND realm_id = $2)
+                          WHERE tenant_id = $1 AND environment_id = $2)
                      + (SELECT COUNT(*) FROM access.ssh_ca_keys
-                          WHERE tenant_id = $1 AND realm_id = $2)) AS "n!""#,
+                          WHERE tenant_id = $1 AND environment_id = $2)) AS "n!""#,
             tenant,
-            realm,
+            environment,
         )
         .fetch_one(&mut *self.tx)
         .await?;

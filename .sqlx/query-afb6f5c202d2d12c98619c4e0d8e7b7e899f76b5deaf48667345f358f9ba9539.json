@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.export_cursors (tenant_id, environment_id, sink_uuid)\n         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "afb6f5c202d2d12c98619c4e0d8e7b7e899f76b5deaf48667345f358f9ba9539"
+}

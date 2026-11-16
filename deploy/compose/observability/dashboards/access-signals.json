@@ -1,7 +1,7 @@
 {
   "uid": "access-signals",
   "title": "Access operation signals",
-  "description": "The section 17.8.2 operation signals. No tenant, realm or domain breakdown: that comes from the analytics tables (OP-47).",
+  "description": "The section 17.8.2 operation signals. No tenant, environment or domain breakdown: that comes from the analytics tables (OP-47).",
   "tags": [
     "access"
   ],

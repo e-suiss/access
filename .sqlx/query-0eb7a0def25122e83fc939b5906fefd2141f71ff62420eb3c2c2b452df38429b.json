@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.ssh_revocations (tenant_id, environment_id, ca_key, serial, reason,\n                    revoked_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0eb7a0def25122e83fc939b5906fefd2141f71ff62420eb3c2c2b452df38429b"
+}

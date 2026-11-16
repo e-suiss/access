@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/proxies", {
+  bff.admin.set("envs/acme/proxies", {
     items: [
       {
         name: "wiki",
@@ -78,9 +78,9 @@ test("proxies are registered and retired only through signed changes", async ({ 
   await expect(page.getByRole("status")).toContainText("Recorded as change");
 
   expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
-    ["POST", "realms/acme/proxies"],
-    ["PUT", "realms/acme/proxies/wiki/plain-headers"],
-    ["POST", "realms/acme/proxies/wiki/retire"],
+    ["POST", "envs/acme/proxies"],
+    ["PUT", "envs/acme/proxies/wiki/plain-headers"],
+    ["POST", "envs/acme/proxies/wiki/retire"],
   ]);
   expect(bff.writes[0]?.body).toMatchObject({
     name: "grafana",

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, domains, tokens FROM access.idp_dcr_policies\n              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_dcr_policies",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "domains",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_dcr_policies",
+            "name": "domains"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tokens",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_dcr_policies",
+            "name": "tokens"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e6c56727e8cad51bd24e7325f6f55252132985137b2e702a45dabf4dd7aa875b"
+}

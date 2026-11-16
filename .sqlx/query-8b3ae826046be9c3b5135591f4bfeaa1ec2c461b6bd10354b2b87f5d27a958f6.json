@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_claim_issuer (tenant_id, environment_id, party_id) VALUES ($1, $2, $3)\n         ON CONFLICT (tenant_id, environment_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8b3ae826046be9c3b5135591f4bfeaa1ec2c461b6bd10354b2b87f5d27a958f6"
+}

@@ -23,10 +23,10 @@ use access_identity_account::notify::courier::Courier;
 use access_identity_account::notify::delivery::{Backoff, check_discovery};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint, discover};
 use access_identity_account::notify::pg::PgCourierStore;
-use access_identity_account::notify::ports::{CourierStore as _, RealmKeys};
-use access_identity_events::adapters::RealmKek as _;
+use access_identity_account::notify::ports::{CourierStore as _, EnvironmentKeys};
+use access_identity_events::adapters::EnvironmentKek as _;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderValue, header};
@@ -35,7 +35,7 @@ use serde_json::json;
 use suiss_crypto::envelope::Kek;
 
 use crate::config::Config;
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The public lag route.
 pub(crate) const STATUS_PATH: &str = access_http::stage11::RELAY_STATUS;
@@ -107,17 +107,17 @@ pub(crate) fn lockdown_needs(config: &Config) -> (Option<PathBuf>, Option<u16>) 
     (dir, port)
 }
 
-/// The realms' KEKs the courier unwraps subject keys with.
-pub(crate) struct Keks(pub(crate) RealmKeks);
+/// The environments' KEKs the courier unwraps subject keys with.
+pub(crate) struct Keks(pub(crate) EnvironmentKeks);
 
-impl RealmKeys for Keks {
+impl EnvironmentKeys for Keks {
     fn kek(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         kek_id: &str,
     ) -> Option<Arc<dyn Kek + Send + Sync>> {
-        self.0.kek(tenant, realm).filter(|k| k.opens(kek_id))
+        self.0.kek(tenant, environment).filter(|k| k.opens(kek_id))
     }
 }
 
@@ -160,7 +160,7 @@ async fn confirmed(p: &Prepared, stop: &mut tokio::sync::watch::Receiver<bool>) 
 pub(crate) fn start(
     prepared: Prepared,
     (reader, app, router): (Pool, Pool, Pool),
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     ids: [u8; 32],
     holder: String,
     alive: &ReadyFlag,
@@ -231,7 +231,7 @@ pub(crate) fn start(
 pub(crate) fn spawn(
     prepared: Option<Prepared>,
     pools: &crate::Pools,
-    keks: &RealmKeks,
+    keks: &EnvironmentKeks,
     ids: [u8; 32],
     alive: &ReadyFlag,
 ) -> Result<Option<Running>, String> {
@@ -306,19 +306,19 @@ const NOTICE_BATCH: u32 = 100;
 pub(crate) struct NoticePools {
     /// `access_app`.
     pub(crate) app: Pool,
-    /// `access_router`, for the live realms.
+    /// `access_router`, for the live environments.
     pub(crate) router: Pool,
     /// `access_outbox_reader`, for the lease.
     pub(crate) reader: Pool,
 }
 
-/// One step over every live realm's governing domain: each security-relevant authority event
+/// One step over every live environment's governing domain: each security-relevant authority event
 /// past the notice cursor becomes a notice to the person whose Party it concerns (OP-156 m.3
 /// (c), Ek B 5294); returns the notices queued.
 ///
 /// # Errors
 /// A store failure; the cursor has not passed an event whose notice is not queued.
-pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
+pub(crate) async fn notices_step<K: access_identity_events::adapters::EnvironmentKek>(
     pools: &NoticePools,
     keks: &K,
     ids: &IdKey,
@@ -333,18 +333,18 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
         .await
         .map_err(e)?
     {
-        let mut t = TenantTx::begin(&pools.app, r.tenant, r.realm)
+        let mut t = TenantTx::begin(&pools.app, r.tenant, r.environment)
             .await
             .map_err(e)?;
         let g = access_store::idp::governance(&mut t).await.map_err(e)?;
         t.commit().await.map_err(e)?;
         let Some(g) = g else { continue };
         let domain = DomainId::from_bytes(*g.domain.as_bytes());
-        let Some(kek) = keks.kek(r.tenant, r.realm) else {
+        let Some(kek) = keks.kek(r.tenant, r.environment) else {
             continue;
         };
         // OP-157 m.3 (h), §12.3.8 (4)
-        let mut s = TenantTx::begin(&pools.app, r.tenant, r.realm)
+        let mut s = TenantTx::begin(&pools.app, r.tenant, r.environment)
             .await
             .map_err(e)?;
         access_identity_account::app::breakglass::sweep(
@@ -369,7 +369,7 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
         let Some(last) = rows.last().map(|o| (o.pos, o.idx)) else {
             continue;
         };
-        let mut t = TenantTx::begin(&pools.app, r.tenant, r.realm)
+        let mut t = TenantTx::begin(&pools.app, r.tenant, r.environment)
             .await
             .map_err(e)?;
         // OP-156 m.3 (c)
@@ -426,7 +426,7 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
     Ok(queued)
 }
 
-/// Ends the realm's support access past its end and shreds its expired support artifacts
+/// Ends the environment's support access past its end and shreds its expired support artifacts
 /// (OP-157 m.3 (f), (g)).
 async fn support_sweep(
     t: &mut TenantTx,
@@ -507,7 +507,7 @@ async fn acting_org(
         .map(|(o, _)| o))
 }
 
-/// The notices an event sends whatever the realm's notice setting, to the people it names:
+/// The notices an event sends whatever the environment's notice setting, to the people it names:
 /// break-glass use (OP-157 m.3 (h), TN-71), a forced recovery (§13.6, OP-158 m.3 (m)) and a
 /// revoked support access (OP-157 m.3 (f), SI-21); `None` for any other event, after the
 /// rotation alarm of a departed break-glass account.
@@ -538,7 +538,7 @@ async fn directed(
 }
 
 /// The people a domain-wide notice goes to: every root participant of the domain's meta-anchor
-/// with an account in this realm and the realm's on-call Parties, its administrators (§13.6,
+/// with an account in this environment and the environment's on-call Parties, its administrators (§13.6,
 /// §15.16 m.3, OP-158 m.3 (m), OP-159 m.3 (f)).
 async fn domain_people(
     t: &mut TenantTx,
@@ -570,12 +570,12 @@ async fn domain_people(
     Ok(to)
 }
 
-/// Delivers the `algorithm_retired` notice of `domain` to the people of every live realm it
+/// Delivers the `algorithm_retired` notice of `domain` to the people of every live environment it
 /// governs (§15.16 m.3, OP-159 m.3 (f)); the notices queued.
 ///
 /// # Errors
 /// A store failure.
-pub(crate) async fn algorithm_retired<K: access_identity_events::adapters::RealmKek>(
+pub(crate) async fn algorithm_retired<K: access_identity_events::adapters::EnvironmentKek>(
     (app, router): (&Pool, &Pool),
     (keks, ids): (&K, &IdKey),
     domain: &access_store::scope::DomainId,
@@ -587,12 +587,14 @@ pub(crate) async fn algorithm_retired<K: access_identity_events::adapters::Realm
     let e = |x: access_store::StoreError| x.to_string();
     let mut sent = 0_u32;
     for r in access_store::tenancy::routes(router).await.map_err(e)? {
-        let mut t = TenantTx::begin(app, r.tenant, r.realm).await.map_err(e)?;
+        let mut t = TenantTx::begin(app, r.tenant, r.environment)
+            .await
+            .map_err(e)?;
         let governs = access_store::idp::governance(&mut t)
             .await
             .map_err(e)?
             .is_some_and(|g| g.domain.as_bytes() == domain.as_bytes());
-        let Some(kek) = keks.kek(r.tenant, r.realm).filter(|_| governs) else {
+        let Some(kek) = keks.kek(r.tenant, r.environment).filter(|_| governs) else {
             t.commit().await.map_err(e)?;
             continue;
         };
@@ -625,14 +627,14 @@ pub(crate) async fn algorithm_retired<K: access_identity_events::adapters::Realm
     Ok(sent)
 }
 
-/// The console page the algorithm retirement notice opens, under the realm issuer.
+/// The console page the algorithm retirement notice opens, under the environment issuer.
 const SIGNING_PATH: &str = "/console/durability";
 
-/// The console page the forced-recovery notice opens, under the realm issuer (§8.17.9.7).
+/// The console page the forced-recovery notice opens, under the environment issuer (§8.17.9.7).
 const RECOVERY_HISTORY_PATH: &str = "/console/recovery";
 
 /// Delivers one `domain-recovered` authority event in `t` to every root participant of the
-/// domain's meta-anchor with an account in this realm and to the realm's on-call Parties, its
+/// domain's meta-anchor with an account in this environment and to the environment's on-call Parties, its
 /// administrators (§13.6, OP-158 m.3 (m)); the notices queued. "Changes after" is the time of the
 /// last record the recovery kept, position N − 1.
 async fn domain_recovered(
@@ -679,7 +681,7 @@ async fn domain_recovered(
 }
 
 /// Delivers one `breakglass.used` authority event in `t`: the record for its review, the
-/// critical audit row, the subject's notice whatever the realm's notice setting, the on-call
+/// critical audit row, the subject's notice whatever the environment's notice setting, the on-call
 /// alarm and the `breakglass.used` webhook (OP-157 m.3 (h), (aa), TN-71); whether it was new.
 async fn breakglass_used(
     t: &mut TenantTx,
@@ -724,14 +726,16 @@ async fn breakglass_used(
     let done = deliver(t, (kek, ids), &SystemEntropy, &SystemClock, &used, issuer)
         .await
         .map_err(|x| x.to_string())?;
-    if let (true, Some(s), Some(o), Some(realm)) = (done.recorded, subject, org, t.realm()) {
+    if let (true, Some(s), Some(o), Some(environment)) =
+        (done.recorded, subject, org, t.environment())
+    {
         let id = access_crypto::random::bytes::<32>().map_err(|_| "random")?;
         let account = ids
             .encode(access_identity_account::app::SUBJECT_PREFIX, s)
             .map_err(|x| x.to_string())?;
         let event = access_identity_events::domain::catalog::IdentityEvent::breakglass_used(
             id,
-            realm.as_bytes(),
+            environment.as_bytes(),
             (
                 &account,
                 &access_kernel::json::b64url_encode(&exercise.0),
@@ -812,7 +816,7 @@ async fn breakglass_departed(
 /// Runs [`notices_step`] as `holder` while it holds the notice lease, until `stop`.
 pub(crate) async fn notices_run(
     pools: NoticePools,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     ids: [u8; 32],
     holder: String,
     stop: tokio::sync::watch::Receiver<bool>,

@@ -4,17 +4,17 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { PASSWORD, REALM } from "./signin.js";
+import { PASSWORD, ENVIRONMENT } from "./signin.js";
 
 // @axe-core/playwright pins a newer playwright-core than @playwright/test; the page is the same
 
 test.describe("@live sign-in methods and sign-ins", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");
 
-  test("@live S11 lists the account's sign-in methods from the realm's own routes", async ({
+  test("@live S11 lists the account's sign-in methods from the environment's own routes", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     const methods = page.getByTestId("sign-in-methods");
     await expect(methods.getByTestId("password")).toContainText("A password is set.");
     await expect(methods.getByTestId("passkeys")).toBeVisible();
@@ -30,7 +30,7 @@ test.describe("@live sign-in methods and sign-ins", () => {
   test("@live a password change is refused and the sign-in kept while no breach corpus can check it", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     const password = page.getByTestId("password");
     await password.getByRole("button", { name: "Change password" }).click();
     await password.getByLabel("New password").fill(PASSWORD);
@@ -39,13 +39,13 @@ test.describe("@live sign-in methods and sign-ins", () => {
       "That didn't work. Try again.",
     );
     expect(page.url()).not.toContain("/login");
-    expect((await page.request.get(`${REALM}/account/api/session`)).status()).toBe(200);
+    expect((await page.request.get(`${ENVIRONMENT}/account/api/session`)).status()).toBe(200);
   });
 
   test("@live S10 shows this device's sign-in with its end time and no End button", async ({
     page,
   }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     const here = page.locator('[data-testid="sign-in-row"][data-current="true"]');
     await expect(here.locator("strong")).toHaveText("Sign-in on this device");
     await expect(here).toContainText("Signed in until");
@@ -54,7 +54,7 @@ test.describe("@live sign-in methods and sign-ins", () => {
   });
 
   test("@live the account page passes axe with S10 and S11 drawn", async ({ page }) => {
-    await page.goto(`${REALM}/account`);
+    await page.goto(`${ENVIRONMENT}/account`);
     await expect(page.getByTestId("sign-in-row").first()).toBeVisible();
     const result = await new AxeBuilder({ page: page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])

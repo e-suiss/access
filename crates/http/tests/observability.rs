@@ -67,7 +67,7 @@ async fn metrics_are_exposed() {
     let (status, body) = get_path(&app(Readiness::default()), "/metrics").await;
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("access_http_responses_total"), "{body}");
-    assert!(!body.contains("tenant_id") && !body.contains("realm_id"));
+    assert!(!body.contains("tenant_id") && !body.contains("environment_id"));
 }
 
 // OP-67 m.3, MD-8, OP-53

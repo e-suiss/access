@@ -1,4 +1,4 @@
-//! Payment-class authentication (OP-156 m.3 (e)–(h), MD-11, IDP-3, IDP-4, IDP-9): the realm's
+//! Payment-class authentication (OP-156 m.3 (e)–(h), MD-11, IDP-3, IDP-4, IDP-9): the environment's
 //! decided SMS one-time code and Secure Payment Confirmation settings, SMS codes by their keyed
 //! digest, the app-controlled factor's attestation and PIN declarations, the SIM change signals
 //! of admitted `sim_change` Claims and the breach-range mirror's versions. Nothing is deleted
@@ -13,10 +13,10 @@ use crate::idp::Bound;
 use crate::scope::{DomainId, DomainTx};
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -97,39 +97,39 @@ pub struct SimChange {
 }
 
 impl TenantTx {
-    /// Whether the realm decided to offer SMS one-time codes (`idp.realm.sms_otp`); off by
+    /// Whether the environment decided to offer SMS one-time codes (`idp.environment.sms_otp`); off by
     /// default.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn sms_otp_enabled(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT enabled FROM access.idp_sms_otp_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next SMS setting under `bound` (`idp.realm.sms_otp`, `sms_otp_close`).
+    /// Writes the next SMS setting under `bound` (`idp.environment.sms_otp`, `sms_otp_close`).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn put_sms_otp(&mut self, bound: &Bound, enabled: bool) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_sms_otp_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_sms_otp_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             enabled,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -139,39 +139,39 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Whether the realm opened Secure Payment Confirmation on its approval surface
-    /// (`idp.realm.spc`); off by default.
+    /// Whether the environment opened Secure Payment Confirmation on its approval surface
+    /// (`idp.environment.spc`); off by default.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn spc_enabled(&mut self) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT enabled FROM access.idp_spc_settings
-              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+              WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?
         .unwrap_or(false))
     }
 
-    /// Writes the next SPC setting under `bound` (`idp.realm.spc`).
+    /// Writes the next SPC setting under `bound` (`idp.environment.spc`).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn put_spc(&mut self, bound: &Bound, enabled: bool) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.idp_spc_settings
-               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+               (tenant_id, environment_id, version, enabled, domain_id, decision_pos)
              SELECT $1, $2,
                     COALESCE((SELECT max(version) FROM access.idp_spc_settings
-                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                               WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                     $3, $4, $5",
             tenant,
-            realm,
+            environment,
             enabled,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
@@ -186,13 +186,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_sms_code(&mut self, c: &NewSmsCode<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.sms_codes (tenant_id, realm_id, subject_id, purpose, binding,
+            "INSERT INTO access.sms_codes (tenant_id, environment_id, subject_id, purpose, binding,
                     code_hash, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(c.subject),
             c.purpose,
             c.binding.as_slice(),
@@ -214,16 +214,16 @@ impl TenantTx {
         binding: &[u8; 32],
         purpose: &str,
     ) -> Result<Option<SmsCodeRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT code_id, subject_id, purpose, code_hash, created_ms, expires_ms, attempts,
                     used_ms
                FROM access.sms_codes
-              WHERE tenant_id = $1 AND realm_id = $2 AND binding = $3 AND purpose = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND binding = $3 AND purpose = $4
               ORDER BY created_ms DESC, code_id DESC LIMIT 1
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             binding.as_slice(),
             purpose,
         )
@@ -255,13 +255,13 @@ impl TenantTx {
         id: [u8; 16],
         used_ms: Option<u64>,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.sms_codes SET attempts = attempts + 1, used_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND code_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND code_id = $3
                 AND used_ms IS NULL AND attempts < 3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(id),
             used_ms.map(i64_of).transpose()?,
         )
@@ -280,12 +280,12 @@ impl TenantTx {
         subject: [u8; 16],
         since_ms: u64,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query_scalar!(
             r#"SELECT count(*) AS "n!" FROM access.sms_codes
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND created_ms >= $4"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND created_ms >= $4"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             i64_of(since_ms)?,
         )
@@ -303,12 +303,12 @@ impl TenantTx {
         &mut self,
         device: [u8; 16],
     ) -> Result<Option<AppFactorKey>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT hardware_attested, pin_policy FROM access.identity_device_keys
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3 AND status = 'active'",
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(device),
         )
         .fetch_optional(&mut *self.tx)
@@ -329,14 +329,14 @@ impl TenantTx {
         subject: [u8; 16],
         device: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.identity_device_keys
                 SET hardware_attested = true, pin_policy = 'app_pin', attested_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_id = $3
                 AND identity_subject_id = $4 AND status = 'active'",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(device),
             Uuid::from_bytes(subject),
         )
@@ -357,13 +357,13 @@ impl TenantTx {
         device: [u8; 16],
         pin_verified: bool,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.app_factor_answers (tenant_id, realm_id, challenge_id, device_id,
+            "INSERT INTO access.app_factor_answers (tenant_id, environment_id, challenge_id, device_id,
                     pin_verified)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(challenge),
             Uuid::from_bytes(device),
             pin_verified,
@@ -378,12 +378,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn app_factor_answer(&mut self, challenge: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT pin_verified FROM access.app_factor_answers
-              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND challenge_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(challenge),
         )
         .fetch_optional(&mut *self.tx)
@@ -401,15 +401,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<crate::accounts::StoredValue>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT value, value_index, pii_class, nonce, ciphertext
                FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                 AND kind = 'phone'
               ORDER BY identifier_id LIMIT 1",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_optional(&mut *self.tx)
@@ -420,7 +420,7 @@ impl TenantTx {
         .transpose()
     }
 
-    /// The SIM change signals about the Party of `subject` in the realm's governing domain: the
+    /// The SIM change signals about the Party of `subject` in the environment's governing domain: the
     /// latest change any of them names and the newest check, Unix ms; `None` when the subject
     /// has no Party or there is no signal. The domain scope is set for this read only.
     ///
@@ -430,15 +430,15 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<(u64, u64)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let found = sqlx::query!(
             "SELECT r.governing_domain_id, p.party_id
-               FROM access.realms r
-               JOIN access.subject_party p ON p.tenant_id = r.tenant_id AND p.realm_id = r.realm_id
-              WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.status = 'active'
+               FROM access.environments r
+               JOIN access.subject_party p ON p.tenant_id = r.tenant_id AND p.environment_id = r.environment_id
+              WHERE r.tenant_id = $1 AND r.environment_id = $2 AND r.status = 'active'
                 AND p.subject_id = $3",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_optional(&mut *self.tx)

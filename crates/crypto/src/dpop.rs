@@ -1,6 +1,6 @@
 //! DPoP server state (§10.4.3 m.2–m.3, §12.2.1, MD-18): the fixed-length replay key (TN-30,
 //! SHA-256 by OP-146 m.3) and the long-lived, shared, stateless server nonce (TN-29), a
-//! time-window value MAC'd with a per-realm key that one component both issues and checks
+//! time-window value MAC'd with a per-environment key that one component both issues and checks
 //! (CR-3 (b)). Authorization server and resource server nonces use separate keys.
 
 use std::fmt::Write as _;
@@ -43,12 +43,12 @@ pub fn replay_key(htm: &str, htu: &str, jti: &str) -> [u8; 32] {
     out
 }
 
-/// Which side of the realm issues and checks the nonce; each has its own key (TN-29).
+/// Which side of the environment issues and checks the nonce; each has its own key (TN-29).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Role {
     /// The authorization server: a missing or stale nonce is `400 use_dpop_nonce`.
     AuthorizationServer,
-    /// A resource server of the realm: a missing or stale nonce is `401 use_dpop_nonce`.
+    /// A resource server of the environment: a missing or stale nonce is `401 use_dpop_nonce`.
     ResourceServer,
 }
 
@@ -68,11 +68,11 @@ impl Role {
     }
 }
 
-/// The token label of a realm's nonce key: `access/dpop-nonce/<RealmID hex>/<as|rs>/<generation>`.
+/// The token label of an environment's nonce key: `access/dpop-nonce/<EnvironmentID hex>/<as|rs>/<generation>`.
 #[must_use]
-pub fn label(realm: &[u8; 16], role: Role, generation: u32) -> String {
+pub fn label(environment: &[u8; 16], role: Role, generation: u32) -> String {
     let mut out = String::from("access/dpop-nonce/");
-    for b in realm {
+    for b in environment {
         let _ = write!(out, "{b:02x}");
     }
     let _ = write!(out, "/{}/{generation}", role.name());
@@ -85,7 +85,7 @@ enum Key {
     Memory(Secret<[u8; 32]>),
 }
 
-/// One generation of a realm's nonce key.
+/// One generation of an environment's nonce key.
 pub struct NonceKey(Key);
 
 impl NonceKey {
@@ -187,7 +187,7 @@ pub enum NonceError {
     /// From a window that has not started.
     #[error("future")]
     Future,
-    /// The MAC does not verify: another realm, role or key.
+    /// The MAC does not verify: another environment, role or key.
     #[error("mismatch")]
     Mismatch,
     /// The key store refused; the proof is rejected (MD-8).
@@ -215,10 +215,10 @@ impl NonceError {
     }
 }
 
-/// A realm's nonce keys for one role: the current generation, which issues, and the previous
+/// An environment's nonce keys for one role: the current generation, which issues, and the previous
 /// one, which is still accepted after a rotation.
 pub struct NonceRing {
-    realm: [u8; 16],
+    environment: [u8; 16],
     role: Role,
     policy: NoncePolicy,
     current: (u32, NonceKey),
@@ -229,14 +229,14 @@ impl NonceRing {
     /// A ring with one key generation.
     #[must_use]
     pub const fn new(
-        realm: [u8; 16],
+        environment: [u8; 16],
         role: Role,
         policy: NoncePolicy,
         generation: u32,
         key: NonceKey,
     ) -> Self {
         Self {
-            realm,
+            environment,
             role,
             policy,
             current: (generation, key),
@@ -267,7 +267,7 @@ impl NonceRing {
         let mut m = Vec::with_capacity(NONCE_CONTEXT.len().saturating_add(29));
         m.extend_from_slice(NONCE_CONTEXT);
         m.push(self.role.byte());
-        m.extend_from_slice(&self.realm);
+        m.extend_from_slice(&self.environment);
         m.extend_from_slice(&generation.to_be_bytes());
         m.extend_from_slice(&window.to_be_bytes());
         m

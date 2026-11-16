@@ -8,7 +8,7 @@
 //! |---|---|---|---|---|---|---|
 //! | `cose` | `COSE_Sign1` under the issuer Instance's key | statement | statement | statement | statement | statement |
 //! | `unsigned` | the caller's channel (PEP or SCIM thumbprint) | statement | statement | statement | statement | statement |
-//! | `webauthn` | as `cose`; the realm issuer mapped the ceremony | realm issuer | statement | `authentication` (method `webauthn`) or `authenticator_binding` (`passkey`) | body digest | statement |
+//! | `webauthn` | as `cose`; the environment issuer mapped the ceremony | environment issuer | statement | `authentication` (method `webauthn`) or `authenticator_binding` (`passkey`) | body digest | statement |
 //! | `oidc` | compact JWS under the Acceptance's pinned key set, `typ` `JWT` | the pinned issuer's Party | carrier context, held by an `identity_binding_person` Claim on `H(iss, sub)` | `authentication` (method `oidc`, `upstream` = `iss`, `acr`, `amr`) | body digest | `iat` / `[iat, exp]` |
 //! | `set` | compact JWS under the pinned key set, `typ` `secevent+jwt` | as `oidc` | as `oidc`, from `sub_id` (`iss_sub`) or `sub` | `account_status` | the event's status | `iat` / `[iat, exp or iat + 90 days]` |
 //!
@@ -156,7 +156,7 @@ pub fn narrowing(s: &Statement) -> bool {
     }
 }
 
-/// A `webauthn` carrier is a realm issuer's `authentication` of method `webauthn` with its
+/// A `webauthn` carrier is an environment issuer's `authentication` of method `webauthn` with its
 /// flags, or its `authenticator_binding` of a passkey; the body must travel with it.
 ///
 /// # Errors
@@ -243,7 +243,7 @@ pub fn peek_iss(token: &[u8]) -> Result<String, Refusal> {
 }
 
 /// The key id a compact JWS names in its protected header, when it is a 32-byte key id, read
-/// without verifying it: the signing key a realm key drop cuts off (§13.7.7, SEC9).
+/// without verifying it: the signing key an environment key drop cuts off (§13.7.7, SEC9).
 #[must_use]
 pub fn peek_kid(token: &[u8]) -> Option<[u8; 32]> {
     let text = core::str::from_utf8(token).ok()?;
@@ -470,16 +470,16 @@ pub fn map_set(token: &[u8], f: &Frame<'_>) -> Result<Mapped, Refusal> {
     })
 }
 
-/// How a domain takes a realm's identity Claims (TN-4, §12.1.1, MD-5).
+/// How a domain takes an environment's identity Claims (TN-4, §12.1.1, MD-5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bound {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     Governing,
-    /// A domain that consumes the realm's Claims through this Acceptance.
+    /// A domain that consumes the environment's Claims through this Acceptance.
     Consuming(Id),
 }
 
-/// The domains a realm's identity Claims go to (TN-4): its governing domain and each consuming
+/// The domains an environment's identity Claims go to (TN-4): its governing domain and each consuming
 /// domain whose Acceptance is still live there (`live`). A Claim names one domain, so the
 /// issuer signs one per target; a domain without a live Acceptance gets none.
 pub fn targets(bindings: &[(Digest, Bound)], live: impl Fn(&Digest, &Id) -> bool) -> Vec<Digest> {

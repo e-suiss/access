@@ -234,11 +234,23 @@ fn anything_else_is_refused() {
             DraftError::Action,
         ),
         (
-            wanted("idp.platform", "realm_create", "idp", &["acme"], "commit"),
+            wanted(
+                "idp.platform",
+                "environment_create",
+                "idp",
+                &["acme"],
+                "commit",
+            ),
             DraftError::Mode,
         ),
         (
-            wanted("idp.platform", "realm_delete", "idp", &["acme"], "check"),
+            wanted(
+                "idp.platform",
+                "environment_delete",
+                "idp",
+                &["acme"],
+                "check",
+            ),
             DraftError::Action,
         ),
         (
@@ -250,7 +262,13 @@ fn anything_else_is_refused() {
             DraftError::Resource,
         ),
         (
-            wanted("idp.account", "suspend", "idp.realm", &["acme"], "check"),
+            wanted(
+                "idp.account",
+                "suspend",
+                "idp.environment",
+                &["acme"],
+                "check",
+            ),
             DraftError::Resource,
         ),
         (

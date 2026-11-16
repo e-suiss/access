@@ -11,7 +11,7 @@
 //! dropped on every listener: trust comes only from TLS that ends at access-server.
 //!
 //! The public listener picks its certificate by SNI ([`Sni`], OP-156 m.3 (i)): the operator's
-//! certificate for the names it covers, a realm's own certificate for each verified custom
+//! certificate for the names it covers, an environment's own certificate for each verified custom
 //! domain, and, only for a client that offers nothing but `acme-tls/1`, the TLS-ALPN-01
 //! challenge certificate of an open ACME order (RFC 8737). An SNI no certificate covers fails
 //! the handshake; a connection that negotiated `acme-tls/1` is closed after the handshake.
@@ -255,7 +255,7 @@ const PUBLIC_ALPN: [&[u8]; 3] = [
     access_identity_domain::x509::ACME_TLS_ALPN,
 ];
 
-/// A realm certificate for one custom domain: its chain (DER, leaf first) and PKCS#8 key.
+/// An environment certificate for one custom domain: its chain (DER, leaf first) and PKCS#8 key.
 pub struct DomainCert {
     /// The host.
     pub host: String,
@@ -336,7 +336,7 @@ impl Sni {
             .is_ok_and(|c| c.verify_is_valid_for_subject_name(&server).is_ok())
     }
 
-    /// Replaces the realm certificates served: one per verified custom domain. A certificate
+    /// Replaces the environment certificates served: one per verified custom domain. A certificate
     /// whose key does not match its leaf is left out.
     pub fn set_domains(&self, certs: Vec<DomainCert>) {
         let mut map = HashMap::new();
@@ -646,7 +646,7 @@ pub async fn serve_behind(
 
 /// Serves `app` on the mTLS listener until `shutdown` resolves (OP-155 m.3 (m)): each request
 /// carries the connection's [`MtlsChain`] when one was presented, and its `Host` port is that
-/// of the public listener (`public_port`; none for 443), so the realm resolves as on the public
+/// of the public listener (`public_port`; none for 443), so the environment resolves as on the public
 /// listener.
 ///
 /// # Errors

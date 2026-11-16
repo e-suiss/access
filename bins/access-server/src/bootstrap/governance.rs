@@ -3,7 +3,7 @@
 //! test user, a marked break-glass account with its two pre-issued break-glass Grants, and a
 //! scheduled access review whose manager is the test user. The `@live` specs read them.
 //!
-//! - Every authority and realm fact comes from an Exercise: the realm root's `idp.*` changes
+//! - Every authority and environment fact comes from an Exercise: the environment root's `idp.*` changes
 //!   (MD-14, EI-25), the founder's organization, the root's `grant_issue`s and the case system's
 //!   own signed `support_case` Claim through Claim Ingest (CMP-8). Nothing is a SQL seed.
 //! - Accounts are made through the account service, as the test user is.
@@ -17,7 +17,7 @@ use access_authority_core::genesis::IDP_ANCHOR;
 use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgAccounts;
-use access_identity_account::app::Realm;
+use access_identity_account::app::Environment;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::ports::{AccountDb, AccountTx};
 use access_identity_admin::app::Admin;
@@ -26,8 +26,8 @@ use access_identity_admin::domain::hr::name_ok;
 use access_identity_admin::domain::review::{ReviewChange, ReviewSchedule};
 use access_identity_admin::domain::support::{CaseSystem, CaseSystemChange};
 use access_identity_admin::domain::{Change, OrgCreate};
-use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
-use access_identity_events::adapters::RealmKek as _;
+use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
+use access_identity_events::adapters::EnvironmentKek as _;
 use access_internal_api::claims::{Carrier, ClaimSubmission, ClaimVerdict};
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_internal_api::instances::{
@@ -47,7 +47,7 @@ use access_kernel::meta::{
 use access_kernel::model::{EqValue, Id, ResourceSelector, Structural, SubjectSelector, Window};
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::authority::server_time;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use serde::{Deserialize, Serialize};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::HsmSigner;
@@ -58,7 +58,7 @@ use super::{
     Bootstrap, BootstrapError, MetaExercises, Moment, authority, holding_json, root_challenge,
     root_party, sample_tenant, sign, token_key,
 };
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The token label of the support operator's device key.
 pub(crate) const SUPPORT_DEVICE_LABEL: &str = "access/bootstrap/support-operator-device";
@@ -83,7 +83,7 @@ const BREAKGLASS_GRANT_LABEL: &[u8] = b"access-bootstrap/breakglass-grant:1";
 const SCREEN_GRANT_LABEL: &[u8] = b"access-bootstrap/screen-grant:1";
 
 /// The attestation class the fixtures' own bootstrap Exercises are counted under, apart from the
-/// realm's (§13.7.4, OP-152 m.5 (b)): the per-hour limit still holds for them.
+/// environment's (§13.7.4, OP-152 m.5 (b)): the per-hour limit still holds for them.
 const FIXTURE_CONTEXT: &str = "local-bootstrap.fixtures";
 
 /// The `support_case` Claim class (OP-157 m.3 (e)).
@@ -127,7 +127,7 @@ const BREAKGLASS_APPROVALS: u64 = 2;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SupportOperatorFile {
-    realm: String,
+    environment: String,
     display_name: String,
     organisation: String,
     identifier: String,
@@ -140,7 +140,7 @@ pub(super) struct SupportOperatorFile {
 impl core::fmt::Debug for SupportOperatorFile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SupportOperatorFile")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("identifier", &self.identifier)
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("password_env", &self.password_env)
@@ -152,7 +152,7 @@ impl core::fmt::Debug for SupportOperatorFile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct BreakglassAccountFile {
-    realm: String,
+    environment: String,
     identifier: String,
     organisation: Option<String>,
 }
@@ -161,16 +161,16 @@ pub(super) struct BreakglassAccountFile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ReviewScheduleFile {
-    realm: String,
+    environment: String,
     period_days: u16,
     name: Option<String>,
 }
 
-/// The support operator of a realm that also has the test user, whose case is open.
+/// The support operator of an environment that also has the test user, whose case is open.
 #[derive(Clone)]
 pub(crate) struct SupportOperatorPlan {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The operator's name people see.
     pub(crate) display_name: String,
     /// The support organization's name.
@@ -188,7 +188,7 @@ pub(crate) struct SupportOperatorPlan {
 impl core::fmt::Debug for SupportOperatorPlan {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SupportOperatorPlan")
-            .field("realm", &self.realm)
+            .field("environment", &self.environment)
             .field("identifier", &self.identifier)
             .field("case_system", &self.case_system)
             .field("case", &self.case)
@@ -196,22 +196,22 @@ impl core::fmt::Debug for SupportOperatorPlan {
     }
 }
 
-/// The break-glass account of a realm that also has the test user.
+/// The break-glass account of an environment that also has the test user.
 #[derive(Clone, Debug)]
 pub(crate) struct BreakglassPlan {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The account's login identifier.
     pub(crate) identifier: String,
     /// Its organization's name.
     pub(crate) organisation: String,
 }
 
-/// The access review of a realm whose test user manages the sample agent's Grant.
+/// The access review of an environment whose test user manages the sample agent's Grant.
 #[derive(Clone, Debug)]
 pub(crate) struct ReviewPlan {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The campaign's name.
     pub(crate) name: String,
     /// Its period, in days.
@@ -252,21 +252,21 @@ fn case_label(case: &str) -> bool {
 fn needs(
     section: &str,
     what: &str,
-    realm: &str,
+    environment: &str,
     there: Option<&str>,
 ) -> Result<(), BootstrapError> {
-    if there == Some(realm) {
+    if there == Some(environment) {
         Ok(())
     } else {
         Err(BootstrapError::Plan(format!(
-            "{section}: the realm needs the {what}"
+            "{section}: the environment needs the {what}"
         )))
     }
 }
 
 impl Fixtures {
-    /// Checks each section that is present: its realm is one of `tenants` with the test user,
-    /// and a review's realm also has the sample agent, whose Grant from the test user is the
+    /// Checks each section that is present: its environment is one of `tenants` with the test user,
+    /// and a review's environment also has the sample agent, whose Grant from the test user is the
     /// manager's team.
     pub(super) fn plans(
         self,
@@ -277,8 +277,8 @@ impl Fixtures {
         let support = match self.support_operator {
             None => None,
             Some(s) => {
-                sample_tenant(tenants, "support_operator", &s.realm)?;
-                needs("support_operator", "[test_user]", &s.realm, test_user)?;
+                sample_tenant(tenants, "support_operator", &s.environment)?;
+                needs("support_operator", "[test_user]", &s.environment, test_user)?;
                 text("support_operator", "display_name", &s.display_name)?;
                 text("support_operator", "organisation", &s.organisation)?;
                 text("support_operator", "identifier", &s.identifier)?;
@@ -307,7 +307,7 @@ impl Fixtures {
                     return Err(plan("the password is empty"));
                 }
                 Some(SupportOperatorPlan {
-                    realm: s.realm,
+                    environment: s.environment,
                     display_name: s.display_name,
                     organisation: s.organisation,
                     identifier: s.identifier,
@@ -320,15 +320,20 @@ impl Fixtures {
         let breakglass = match self.breakglass_account {
             None => None,
             Some(b) => {
-                sample_tenant(tenants, "breakglass_account", &b.realm)?;
-                needs("breakglass_account", "[test_user]", &b.realm, test_user)?;
+                sample_tenant(tenants, "breakglass_account", &b.environment)?;
+                needs(
+                    "breakglass_account",
+                    "[test_user]",
+                    &b.environment,
+                    test_user,
+                )?;
                 text("breakglass_account", "identifier", &b.identifier)?;
                 let organisation = b
                     .organisation
                     .unwrap_or_else(|| String::from(DEFAULT_BREAKGLASS_ORG));
                 text("breakglass_account", "organisation", &organisation)?;
                 Some(BreakglassPlan {
-                    realm: b.realm,
+                    environment: b.environment,
                     identifier: b.identifier,
                     organisation,
                 })
@@ -337,9 +342,14 @@ impl Fixtures {
         let review = match self.review_schedule {
             None => None,
             Some(r) => {
-                sample_tenant(tenants, "review_schedule", &r.realm)?;
-                needs("review_schedule", "[test_user]", &r.realm, test_user)?;
-                needs("review_schedule", "[sample_agent]", &r.realm, sample_agent)?;
+                sample_tenant(tenants, "review_schedule", &r.environment)?;
+                needs("review_schedule", "[test_user]", &r.environment, test_user)?;
+                needs(
+                    "review_schedule",
+                    "[sample_agent]",
+                    &r.environment,
+                    sample_agent,
+                )?;
                 if r.period_days < 7 || r.period_days > MAX_PERIOD_DAYS {
                     return Err(BootstrapError::Plan(format!(
                         "review_schedule: period_days is 7 to {MAX_PERIOD_DAYS}"
@@ -352,7 +362,7 @@ impl Fixtures {
                     )));
                 }
                 Some(ReviewPlan {
-                    realm: r.realm,
+                    environment: r.environment,
                     name,
                     period_days: u32::from(r.period_days),
                 })
@@ -383,8 +393,8 @@ pub(super) fn case_acceptance(issuer: Id) -> Value {
 /// The support operator in the summary.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SupportOperatorOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The operator's login identifier.
     pub(crate) identifier: String,
     /// The operator's account (`usr_…`).
@@ -402,7 +412,7 @@ pub(crate) struct SupportOperatorOut {
     /// The test user's open case.
     pub(crate) case: String,
     /// `accepted` once the domain takes the case system's Claims, `pending` while the
-    /// time-lock of a realm made before runs.
+    /// time-lock of an environment made before runs.
     pub(crate) acceptance: &'static str,
     /// When the case Claim stops holding, Unix ms; absent while the Acceptance is pending.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -414,8 +424,8 @@ pub(crate) struct SupportOperatorOut {
 /// The break-glass account in the summary.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct BreakglassOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The account's login identifier.
     pub(crate) identifier: String,
     /// The account (`usr_…`).
@@ -435,8 +445,8 @@ pub(crate) struct BreakglassOut {
 /// The access review in the summary.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ReviewOut {
-    /// The realm's slug.
-    pub(crate) realm: String,
+    /// The environment's slug.
+    pub(crate) environment: String,
     /// The campaign's name.
     pub(crate) name: String,
     /// Its period, in days.
@@ -449,8 +459,8 @@ pub(crate) struct ReviewOut {
     pub(crate) created: bool,
 }
 
-/// The realm's `idp` resources: what every `idp.*` change names.
-pub(super) fn realm_resources(slug: &str) -> ResourceSelector {
+/// The environment's `idp` resources: what every `idp.*` change names.
+pub(super) fn environment_resources(slug: &str) -> ResourceSelector {
     ResourceSelector::Structural(Structural {
         namespace: String::from(RESOURCE_NAMESPACE),
         prefix: vec![String::from(slug)],
@@ -472,7 +482,7 @@ const fn day_of(now: u64) -> u64 {
 impl<P, K> Bootstrap<'_, P, K>
 where
     P: Decider + Governance + Instances + MetaExercises,
-    K: RealmKeys,
+    K: EnvironmentKeys,
 {
     /// The case system's issuer key, made in the token once, and its Party.
     pub(super) fn case_system(&self) -> Result<(HsmSigner, Id), BootstrapError> {
@@ -481,11 +491,11 @@ where
         Ok((key, party))
     }
 
-    /// The account of `identifier` in the realm, made with `password` when there is none.
+    /// The account of `identifier` in the environment, made with `password` when there is none.
     pub(super) async fn account(
         &self,
         ids: &IdKey,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         identifier: &str,
         password: Option<&Secret<String>>,
     ) -> Result<([u8; 16], String, bool), BootstrapError> {
@@ -496,21 +506,21 @@ where
         };
         let identifier = Identifier::new(kind, identifier)
             .map_err(|e| BootstrapError::Plan(format!("identifier: {e}")))?;
-        let keks = RealmKeks::new(Arc::clone(self.hsm));
+        let keks = EnvironmentKeks::new(Arc::clone(self.hsm));
         let kek = keks
-            .kek(tenant, realm)
-            .ok_or_else(|| BootstrapError::Unavailable(String::from("realm KEK")))?;
-        let scope = Realm {
+            .kek(tenant, environment)
+            .ok_or_else(|| BootstrapError::Unavailable(String::from("environment KEK")))?;
+        let scope = Environment {
             tenant,
-            realm,
+            environment,
             kek: &*kek,
             ids,
         };
         let vault = keks
-            .vault(realm)
+            .vault(environment)
             .ok_or_else(|| BootstrapError::Unavailable(String::from("PII vault keys")))?;
         let accounts = PgAccounts::sealed(self.app.clone(), vault);
-        let mut tx = accounts.begin(tenant, realm).await?;
+        let mut tx = accounts.begin(tenant, environment).await?;
         let existing = tx.subject_by_identifier(identifier.value()).await?;
         tx.commit().await?;
         let (subject, created) = match existing {
@@ -525,20 +535,20 @@ where
 
     /// The organization `name` whose Party the token key `label` registers, rooted solely in
     /// `founder`'s Party and created by `idp.org.create` with `founder` as its first owner
-    /// (TN-5, OP-153 m.3 (b)). The realm root grants the founder's Party `idp.org.create`, and
+    /// (TN-5, OP-153 m.3 (b)). The environment root grants the founder's Party `idp.org.create`, and
     /// the founder's device key `device` signs the creation on that holding; found, not made
     /// again.
     async fn organization(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (domain, root, slug): (Digest, &HsmSigner, &str),
         (founder, founder_party, device): ([u8; 16], Id, &str),
         (label, name): (&str, &str),
     ) -> Result<Id, BootstrapError> {
         let key = token_key(self.hsm, label)?;
         let party = root_party(&key.public_key());
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let found = t.org_by_party(party.0).await?;
         t.commit().await?;
         if found.is_some() {
@@ -561,7 +571,7 @@ where
         self.lead(domain).await?;
         admin
             .register_organization(
-                (tenant, realm),
+                (tenant, environment),
                 founder,
                 party,
                 key.public_key(),
@@ -582,7 +592,7 @@ where
         let device = token_key(self.hsm, device)?;
         self.change_as(
             admin,
-            (tenant, realm),
+            (tenant, environment),
             (&device, ExerciseBasis::Holding(held)),
             (
                 Change::OrgCreate(OrgCreate {
@@ -596,7 +606,7 @@ where
         Ok(party)
     }
 
-    /// The root's Grant to `holder` of `action` over the realm's `idp` resources, on the realm's
+    /// The root's Grant to `holder` of `action` over the environment's `idp` resources, on the environment's
     /// `idp` Anchor: what makes a console screen's eligibility check answer for the test user
     /// (IA-5, OP-157 m.3 (h), (w)), or lets a founder create its organization; its holding.
     async fn screen_grant(
@@ -616,7 +626,7 @@ where
             ),
         );
         content.basis = GrantBasis::Anchor(idp);
-        content.authority.authority.resource = realm_resources(slug);
+        content.authority.authority.resource = environment_resources(slug);
         let mut label = SCREEN_GRANT_LABEL.to_vec();
         label.extend_from_slice(&domain.0);
         label.extend_from_slice(&holder.0);
@@ -635,7 +645,7 @@ where
     /// password, a device Party, its name, and its support organization with it as owner; the
     /// case system registered by `idp.support.case_system_register` with its own issuer Party;
     /// and the case system's signed Claim that `person`'s case is open, admitted through Claim
-    /// Ingest under the Acceptance the realm's Genesis or the root's time-locked
+    /// Ingest under the Acceptance the environment's Genesis or the root's time-locked
     /// `acceptance_establish` set up. The operator can then ask `person` for support access.
     #[expect(
         clippy::too_many_lines,
@@ -645,19 +655,19 @@ where
         &self,
         admin: &Admin<'_, P, P, K>,
         ids: &IdKey,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (domain, root, slug): (Digest, &HsmSigner, &str),
         s: &SupportOperatorPlan,
         person: Id,
     ) -> Result<SupportOperatorOut, BootstrapError> {
         let (subject, external, created) = self
-            .account(ids, (tenant, realm), &s.identifier, Some(&s.password))
+            .account(ids, (tenant, environment), &s.identifier, Some(&s.password))
             .await?;
         if created {
-            let vault = RealmKeks::new(Arc::clone(self.hsm))
-                .vault(realm)
+            let vault = EnvironmentKeks::new(Arc::clone(self.hsm))
+                .vault(environment)
                 .ok_or_else(|| BootstrapError::Unavailable(String::from("PII vault keys")))?;
-            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            let mut t = TenantTx::begin(self.app, tenant, environment).await?;
             access_identity_account::app::vault::set_profile(
                 &mut t,
                 &vault,
@@ -670,7 +680,7 @@ where
         }
         let (party, _) = self
             .device_party(
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 subject,
                 (SUPPORT_DEVICE_LABEL, context()),
@@ -680,15 +690,21 @@ where
         let org = self
             .organization(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 (domain, root, slug),
                 (subject, party, SUPPORT_DEVICE_LABEL),
                 (SUPPORT_ORG_LABEL, &s.organisation),
             )
             .await?;
         let (key, issuer) = self.case_system()?;
-        self.register_in(tenant, realm, domain, (&key, issuer), ([0; 16], context()))
-            .await?;
+        self.register_in(
+            tenant,
+            environment,
+            domain,
+            (&key, issuer),
+            ([0; 16], context()),
+        )
+        .await?;
         // L2-CLM-3, OP-157 m.3 (e)
         let accepted = if self
             .issuer_accepts(domain, issuer, PREDICATE_INPUT, &[String::from(CASE_CLASS)])
@@ -710,7 +726,7 @@ where
             .state
                 == "accepted"
         };
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let registered = t
             .case_systems()
             .await?
@@ -721,7 +737,7 @@ where
             // OP-157 m.3 (e)
             self.change(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 root,
                 Change::CaseSystem(CaseSystemChange::Register(CaseSystem {
@@ -739,7 +755,7 @@ where
             None
         };
         Ok(SupportOperatorOut {
-            realm: s.realm.clone(),
+            environment: s.environment.clone(),
             identifier: s.identifier.clone(),
             subject: external,
             party: b64url_encode(&party.0),
@@ -829,9 +845,9 @@ where
     }
 
     /// The break-glass account of `b` (OP-157 m.3 (h), m.10, §12.3.8): an active account with
-    /// no password (it signs in only with the realm's own phishing-resistant method), a device
+    /// no password (it signs in only with the environment's own phishing-resistant method), a device
     /// Party, its organization with it as owner, marked by `idp.org.member_breakglass`; and two
-    /// pre-issued break-glass Grants from the realm's `idp` Anchor, one to its Party and one to
+    /// pre-issued break-glass Grants from the environment's `idp` Anchor, one to its Party and one to
     /// `person`'s, each naming a reserved action and asking for two fresh approvals from
     /// distinct Parties. `person` may also review break-glass uses, so the console offers the
     /// screen.
@@ -839,17 +855,17 @@ where
         &self,
         admin: &Admin<'_, P, P, K>,
         ids: &IdKey,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (domain, root, slug): (Digest, &HsmSigner, &str),
         b: &BreakglassPlan,
         person: Id,
     ) -> Result<BreakglassOut, BootstrapError> {
         let (subject, external, created) = self
-            .account(ids, (tenant, realm), &b.identifier, None)
+            .account(ids, (tenant, environment), &b.identifier, None)
             .await?;
         let (party, _) = self
             .device_party(
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 subject,
                 (BREAKGLASS_DEVICE_LABEL, context()),
@@ -858,13 +874,13 @@ where
         let org = self
             .organization(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 (domain, root, slug),
                 (subject, party, BREAKGLASS_DEVICE_LABEL),
                 (BREAKGLASS_ORG_LABEL, &b.organisation),
             )
             .await?;
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let marked = t
             .breakglass_accounts()
             .await?
@@ -875,7 +891,7 @@ where
             // OP-157 m.3 (h)
             self.change(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 root,
                 Change::Breakglass(BreakglassMark {
@@ -892,7 +908,7 @@ where
             basis: GrantBasis::Anchor(idp),
             holders: BTreeSet::from([party, person]),
             actions: BTreeSet::from([IdpAction::AccountMfaChange.action_ref()]),
-            resource: realm_resources(slug),
+            resource: environment_resources(slug),
             validity: Window {
                 from: 0,
                 until: u64::MAX,
@@ -925,7 +941,7 @@ where
         self.screen_grant((domain, root, slug), person, IdpAction::OrgBreakglassReview)
             .await?;
         Ok(BreakglassOut {
-            realm: b.realm.clone(),
+            environment: b.environment.clone(),
             identifier: b.identifier.clone(),
             subject: external,
             party: b64url_encode(&party.0),
@@ -943,19 +959,19 @@ where
     pub(super) async fn review_schedule(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         (domain, root, slug): (Digest, &HsmSigner, &str),
         r: &ReviewPlan,
         manager: Id,
     ) -> Result<ReviewOut, BootstrapError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let scheduled = t.review_schedules().await?.iter().any(|x| x.name == r.name);
         t.commit().await?;
         if !scheduled {
             // OP-157 m.3 (w)
             self.change(
                 admin,
-                (tenant, realm),
+                (tenant, environment),
                 domain,
                 root,
                 Change::Review(ReviewChange::Schedule(ReviewSchedule {
@@ -979,7 +995,7 @@ where
             .map_err(|e| BootstrapError::Unavailable(e.0))?
             .len();
         Ok(ReviewOut {
-            realm: r.realm.clone(),
+            environment: r.environment.clone(),
             name: r.name.clone(),
             period_days: r.period_days,
             manager: b64url_encode(&manager.0),
@@ -995,35 +1011,35 @@ mod tests {
 
     // OP-157 m.4 (a), m.6 (i), TI-9
     #[test]
-    fn a_fixture_needs_its_realm_and_what_it_stands_on() {
+    fn a_fixture_needs_its_environment_and_what_it_stands_on() {
         let dir = std::env::temp_dir().join(format!("abs-fixtures-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let head = "platform = \"platform\"\ntenants = [\"acme\"]\n";
         for (name, section, want) in [
             (
                 "support",
-                "[support_operator]\nrealm = \"acme\"\ndisplay_name = \"Mehmet Y.\"\norganisation = \"Acme Support\"\nidentifier = \"support@acme.example\"\npassword_env = \"ABS_FIXTURES_UNSET\"\n",
-                "the realm needs the [test_user]",
+                "[support_operator]\nenvironment = \"acme\"\ndisplay_name = \"Mehmet Y.\"\norganisation = \"Acme Support\"\nidentifier = \"support@acme.example\"\npassword_env = \"ABS_FIXTURES_UNSET\"\n",
+                "the environment needs the [test_user]",
             ),
             (
                 "breakglass",
-                "[breakglass_account]\nrealm = \"acme\"\nidentifier = \"oncall@acme.example\"\n",
-                "the realm needs the [test_user]",
+                "[breakglass_account]\nenvironment = \"acme\"\nidentifier = \"oncall@acme.example\"\n",
+                "the environment needs the [test_user]",
             ),
             (
                 "review",
-                "[review_schedule]\nrealm = \"acme\"\nperiod_days = 90\n",
-                "the realm needs the [test_user]",
+                "[review_schedule]\nenvironment = \"acme\"\nperiod_days = 90\n",
+                "the environment needs the [test_user]",
             ),
             (
                 "elsewhere",
-                "[review_schedule]\nrealm = \"beta\"\nperiod_days = 90\n",
+                "[review_schedule]\nenvironment = \"beta\"\nperiod_days = 90\n",
                 "not one of the plan's tenants",
             ),
             (
                 "short",
-                "[review_schedule]\nrealm = \"acme\"\nperiod_days = 1\n",
-                "the realm needs the [test_user]",
+                "[review_schedule]\nenvironment = \"acme\"\nperiod_days = 1\n",
+                "the environment needs the [test_user]",
             ),
         ] {
             let path = dir.join(format!("{name}.toml"));

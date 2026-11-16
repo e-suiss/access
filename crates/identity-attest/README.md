@@ -40,9 +40,9 @@ value, bound to the attested Instance. Device integrity verdicts only narrow: th
 is a compliant posture, a failed one a non-compliant posture, anything between says nothing. An
 Instance, its current key binding and its attestations are kept as three separate records.
 
-A realm takes evidence at `POST /v1/workloads/attestations`. The challenge is
+An environment takes evidence at `POST /v1/workloads/attestations`. The challenge is
 `SHA-256("access/attestation-challenge/v1" ‖ 0x00 ‖ issuer ‖ 0x00 ‖ instance ‖ at)`, where `at`
-(milliseconds) must be within five minutes of the realm's clock. The attested key must be the
+(milliseconds) must be within five minutes of the environment's clock. The attested key must be the
 Instance's own current P-256 key. Android evidence counts only from a verified, locked device. An
 App Attest key is never an Instance's own key, so App Attest evidence is refused there. What
-passes becomes the realm issuer's `attestation_runtime` Claim, bound to the Instance.
+passes becomes the environment issuer's `attestation_runtime` Claim, bound to the Instance.

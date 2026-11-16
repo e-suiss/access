@@ -1,5 +1,5 @@
 ; Forward-auth decision and application token, version 1 (RFC 8610; OP-156 m.3 (l), (m), (n),
-; IDP-30). The application token is a JWS (`typ: access-app+jwt`, ES256, the realm JOSE key);
+; IDP-30). The application token is a JWS (`typ: access-app+jwt`, ES256, the environment JOSE key);
 ; its claims set is JSON and is described here as the equivalent data model.
 
 ; The answer of `/proxy/v1/check/{engine}` as the proxy caches it: keyed by session,

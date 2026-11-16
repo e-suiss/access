@@ -1,6 +1,6 @@
 //! CIBA as an invitation (OpenID CIBA Core 1.0 PROFILE, IDP-14, §10.5.3, §9.9.5, §9.14.5 k.2,
 //! OP-155 m.3 (l)). A registered confidential client that received `REQUIRE_ACTION` names it at
-//! `/bc-authorize` by its `exercise_ref` and the RAR `kind=intent` detail; the realm invites the
+//! `/bc-authorize` by its `exercise_ref` and the RAR `kind=intent` detail; the environment invites the
 //! person through Relay `CibaInvite` to their Approval Surface, where the answer is their AAS and
 //! the contribution it committed. The client polls `/token` (or is pinged first) and learns the
 //! contribution, which it presents on its own commit of the same nonce: the CIBA answer is never
@@ -17,12 +17,12 @@ use access_store::oauth::NewGrant;
 use access_store::sessions::SessionRow;
 use serde_json::{Value, json};
 
-use super::{Env, OAuth, Realm, Reply, TokenHttp, decode32, session_live, signed, unsigned};
+use super::{Env, Environment, OAuth, Reply, TokenHttp, decode32, session_live, signed, unsigned};
 use crate::domain::ciba::{self, BackchannelRequest, CibaError, Hint, INTERVAL_S};
 use crate::domain::client::{Client, ClientAuth, TrustLevel};
 use crate::domain::dpop::{ClientType, Jkt};
 use crate::domain::fapi::Binding;
-use crate::domain::jwt::{parse_jwks, realm_key_set};
+use crate::domain::jwt::{environment_key_set, parse_jwks};
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
 use crate::domain::tokens::{GrantDetails, ID_TYP};
@@ -68,7 +68,7 @@ pub enum CibaRefused {
     /// The approval named is not this person's finished AAS over this request's intent
     /// (IDI-9, §9.14.5 k.2), or the nonce was answered already (OP-154 m.13 (f)).
     NotApproved,
-    /// The realm does not offer CIBA.
+    /// The environment does not offer CIBA.
     Off,
 }
 
@@ -146,23 +146,23 @@ impl<E: Env> OAuth<E> {
     /// `POST /bc-authorize` (CIBA Core §7, OP-155 m.3 (l)).
     pub async fn backchannel_authentication(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         http: TokenHttp<'_>,
     ) -> Reply {
-        match self.backchannel_inner(realm, params, http).await {
+        match self.backchannel_inner(environment, params, http).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
     }
 
     /// The person a hint names (OP-155 m.3 (l)): the pairwise `sub` of a `login_hint_token` the
-    /// client signed or of an ID token this realm issued to it; a free `login_hint` through the
-    /// realm's lookup, where nobody is no answer (enumeration-safe, §10.2.1).
+    /// client signed or of an ID token this environment issued to it; a free `login_hint` through the
+    /// environment's lookup, where nobody is no answer (enumeration-safe, §10.2.1).
     async fn hinted(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         hint: &Hint,
         now: u64,
@@ -172,7 +172,7 @@ impl<E: Env> OAuth<E> {
                 return Ok(Ok(self
                     .env
                     .ciba()
-                    .login_hint(realm.tenant, realm.realm, h.clone())
+                    .login_hint(environment.tenant, environment.environment, h.clone())
                     .await?));
             }
             Hint::LoginHintToken(t) => {
@@ -196,7 +196,7 @@ impl<E: Env> OAuth<E> {
                     t,
                     &keys,
                     &client.id,
-                    realm.issuer.as_str(),
+                    environment.issuer.as_str(),
                     rs256,
                     now,
                 ) {
@@ -205,8 +205,8 @@ impl<E: Env> OAuth<E> {
                 }
             }
             Hint::IdTokenHint(t) => {
-                let jwks = self.env.signer().jwks(realm.realm).await?;
-                let keys = realm_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
+                let jwks = self.env.signer().jwks(environment.environment).await?;
+                let keys = environment_key_set(jwks.as_bytes()).map_err(|_| Unavailable)?;
                 let Ok(v) = verify_compact(&AwsLcBackend, t, &keys, ID_TYP, Origin::Native) else {
                     return Ok(Err(CibaError::HintToken));
                 };
@@ -214,7 +214,7 @@ impl<E: Env> OAuth<E> {
                     return Ok(Err(CibaError::HintToken));
                 };
                 let text = |n: &str| c.get(n).and_then(Json::as_str).map(String::from);
-                if text("iss").as_deref() != Some(realm.issuer.as_str())
+                if text("iss").as_deref() != Some(environment.issuer.as_str())
                     || text("aud").as_deref() != Some(client.id.as_str())
                 {
                     return Ok(Err(CibaError::HintToken));
@@ -237,12 +237,12 @@ impl<E: Env> OAuth<E> {
     )]
     async fn backchannel_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         outer: &Params,
         http: TokenHttp<'_>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let settings = tx.ciba_settings().await?;
         // OP-155 m.3 (l)
         if !settings.enabled {
@@ -250,7 +250,7 @@ impl<E: Env> OAuth<E> {
         }
         let mut req = http.client_request(outer);
         req.endpoint = Endpoint::BackchannelAuthentication.path();
-        let client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c)
                 if c.trust == TrustLevel::Registered
                     && c.client_type() == ClientType::Confidential =>
@@ -276,7 +276,7 @@ impl<E: Env> OAuth<E> {
         let signed;
         let params = match outer.get("request") {
             Some(object) => match self
-                .request_object(realm, &client, outer, object, now)
+                .request_object(environment, &client, outer, object, now)
                 .await?
             {
                 Ok(p) => {
@@ -311,9 +311,9 @@ impl<E: Env> OAuth<E> {
                 "the delivery mode is not the client's",
             ));
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         if tx.governing().await? != Some(r.exercise.domain) {
-            return Ok(refused(CibaError::Request, "not this realm's domain"));
+            return Ok(refused(CibaError::Request, "not this environment's domain"));
         }
         // §9.9.5, P54
         let Some(opening) = self.env.ciba().opening(r.exercise.domain, r.intent).await? else {
@@ -322,7 +322,10 @@ impl<E: Env> OAuth<E> {
                 "no approval waits on this intent",
             ));
         };
-        let subject = match self.hinted(&mut tx, realm, &client, &r.hint, now).await? {
+        let subject = match self
+            .hinted(&mut tx, environment, &client, &r.hint, now)
+            .await?
+        {
             Ok(s) => s,
             Err(e) => return Ok(refused(e, "the hint names no one")),
         };
@@ -360,14 +363,14 @@ impl<E: Env> OAuth<E> {
         if let Some(subject) = subject {
             let link = format!(
                 "{}?reason=ciba&request={}",
-                realm.issuer.endpoint(ciba::PAGE_PATH),
+                environment.issuer.endpoint(ciba::PAGE_PATH),
                 b64url_encode(&id)
             );
             self.env
                 .ciba()
                 .invite(CibaInvite {
-                    tenant: realm.tenant,
-                    realm: realm.realm,
+                    tenant: environment.tenant,
+                    environment: environment.environment,
                     subject,
                     link,
                     client: client.name.clone(),
@@ -422,12 +425,12 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn ciba_preview(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         request: &str,
     ) -> Result<Result<CibaView, CibaRefused>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let (session, row) = match self.waiting_ciba(&mut tx, cookie, request, now).await? {
             Ok(w) => w,
             Err(r) => return Ok(Err(r)),
@@ -501,13 +504,13 @@ impl<E: Env> OAuth<E> {
     /// [`Unavailable`].
     pub async fn ciba_decide(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         cookie: Option<&str>,
         request: &str,
         approval: Option<&str>,
     ) -> Result<Result<(), CibaRefused>, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let (session, row) = match self.waiting_ciba(&mut tx, cookie, request, now).await? {
             Ok(w) => w,
             Err(r) => return Ok(Err(r)),
@@ -551,7 +554,7 @@ impl<E: Env> OAuth<E> {
             .ping(endpoint.clone(), token, handle)
             .await?
         {
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             tx.ping_ciba(row.id, now).await?;
             tx.commit().await?;
         }
@@ -570,7 +573,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn ciba_token(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         jkt: Jkt,
@@ -667,7 +670,7 @@ impl<E: Env> OAuth<E> {
         let mut body = self
             .issue(
                 tx,
-                realm,
+                environment,
                 client,
                 &grant,
                 &details,

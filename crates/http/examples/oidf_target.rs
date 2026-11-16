@@ -1,8 +1,8 @@
 //! The OpenID Foundation conformance target (OP-146 I11, §14.8 SA-T2, B9, OP-155 m.3 (q)): one
-//! realm `acme` seeded on the PostgreSQL at `DATABASE_URL` with the clients of every config in
+//! environment `acme` seeded on the PostgreSQL at `DATABASE_URL` with the clients of every config in
 //! `conformance/oidf/plans.json`, served over TLS 1.3 at `https://acme.id.test:9443` with the
-//! realm, authorization server routes and a fixture sign-in page that starts a session for the
-//! realm's one user. The realm has CIBA, front-channel logout, DCR behind an initial access token
+//! environment, authorization server routes and a fixture sign-in page that starts a session for the
+//! environment's one user. The environment has CIBA, front-channel logout, DCR behind an initial access token
 //! and an OpenID Federation leaf that is its own trust anchor turned on. The nightly and release
 //! workflows point the conformance suite and the differential tests at it.
 //!
@@ -27,8 +27,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use access_http::environment::router as environment_router;
 use access_http::oauth::{SESSION_COOKIE, router as oauth_router};
-use access_http::realm::router as realm_router;
 use access_http::{Limits, harden};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery;
@@ -48,9 +48,9 @@ use rcgen::{CertificateParams, KeyPair};
 use serde_json::{Value, json};
 use support::{Cluster, Extra, ec_jwk, new_key, now};
 
-/// The realm base of the target; the realm `acme` is `https://acme.id.test:9443`.
+/// The environment base of the target; the environment `acme` is `https://acme.id.test:9443`.
 const BASE: &str = "https://id.test:9443";
-/// What the suite's CIBA tests name the realm's user by.
+/// What the suite's CIBA tests name the environment's user by.
 const LOGIN_HINT: &str = "oidf-user";
 
 fn conformance_dir() -> PathBuf {
@@ -160,7 +160,7 @@ fn clients(rt: &mut Runtime) -> Vec<Extra> {
     out
 }
 
-/// The internal id of extra client `id` of the realm (`Cluster::seeded` numbers them after the
+/// The internal id of extra client `id` of the environment (`Cluster::seeded` numbers them after the
 /// three fixture clients).
 fn extra_uuid(extra: &[Extra], id: &str) -> [u8; 16] {
     let k = u8::try_from(extra.iter().position(|e| e.0 == id).unwrap() + 4).unwrap();
@@ -173,9 +173,13 @@ async fn profiles(cluster: &Cluster, extra: &[Extra], config: &str, row: &Client
     let config = read(config);
     for k in ["client", "client2"] {
         let id = config[k]["client_id"].as_str().unwrap();
-        let mut tx = TenantTx::begin(&cluster.db.app, at.f.realm.tenant, at.f.realm.realm)
-            .await
-            .unwrap();
+        let mut tx = TenantTx::begin(
+            &cluster.db.app,
+            at.f.environment.tenant,
+            at.f.environment.environment,
+        )
+        .await
+        .unwrap();
         let b = at.bound(&mut tx, "idp.client.update").await;
         access_store::client_profiles::put_profile(&mut tx, &b, extra_uuid(extra, id), row)
             .await
@@ -194,8 +198,8 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
         .next()
         .unwrap()
         .to_owned();
-    let realm = (at.f.realm.tenant, at.f.realm.realm);
-    let begin = || TenantTx::begin(&cluster.db.app, realm.0, realm.1);
+    let environment = (at.f.environment.tenant, at.f.environment.environment);
+    let begin = || TenantTx::begin(&cluster.db.app, environment.0, environment.1);
 
     // IDP-24, OP-155 m.3 (k)
     at.enable_frontchannel().await;
@@ -224,7 +228,7 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
         })
         .collect();
     let mut tx = begin().await.unwrap();
-    let b = at.bound(&mut tx, "idp.realm.ciba").await;
+    let b = at.bound(&mut tx, "idp.environment.ciba").await;
     tx.put_ciba(
         &b,
         &access_store::ciba::CibaSettingsRow {
@@ -271,15 +275,15 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
     tx.commit().await.unwrap();
 }
 
-/// `GET {issuer}/login?return_to=…`: a new session for the realm's user, then back to the
-/// stored request (TN-104: only to this realm's `/authorize`).
+/// `GET {issuer}/login?return_to=…`: a new session for the environment's user, then back to the
+/// stored request (TN-104: only to this environment's `/authorize`).
 async fn sign_in(State(c): State<Arc<Cluster>>, RawQuery(q): RawQuery) -> Response {
     let at = c.at(0);
     let Some(return_to) = q
         .as_deref()
         .and_then(|q| Params::parse(q).ok())
         .and_then(|p| p.get("return_to").map(String::from))
-        .filter(|r| return_to_ok(&at.f.realm.issuer, r))
+        .filter(|r| return_to_ok(&at.f.environment.issuer, r))
     else {
         return StatusCode::BAD_REQUEST.into_response();
     };
@@ -307,12 +311,12 @@ async fn serve() {
         .unwrap()
         .to_owned();
     assert!(
-        discovery_url.starts_with(&cluster.realms[0].issuer),
+        discovery_url.starts_with(&cluster.environments[0].issuer),
         "{discovery_url} is not under {}",
-        cluster.realms[0].issuer
+        cluster.environments[0].issuer
     );
     let env = cluster.env();
-    let routes = realm_router(Discovery::new(
+    let routes = environment_router(Discovery::new(
         PgDirectory::new(env.router.clone()).with_facts(env.pool.clone()),
         SignerKeys::new(env.socket.clone()),
     ))
@@ -324,7 +328,7 @@ async fn serve() {
     );
     let key = KeyPair::generate().unwrap();
     let cert = CertificateParams::new(vec![String::from(
-        cluster.realms[0].host.split(':').next().unwrap(),
+        cluster.environments[0].host.split(':').next().unwrap(),
     )])
     .unwrap()
     .self_signed(&key)

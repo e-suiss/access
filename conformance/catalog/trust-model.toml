@@ -246,16 +246,16 @@ rows = ["SI-13", "U15"]
 tests = []
 
 [[component]]
-id = "realm-signing-key"
-name = "Realm JOSE or SAML signing key (identity plane)"
-trust = "Signing authentication results for its own realm's relying parties"
-not_trusted = "Signing authority artefacts; any other realm"
-blast_radius = "Golden SAML or forged ID tokens for any user at every relying party of the realm until rotation; on the Access side only as far as the authentication use"
-never = "Create authority; write a Grant or Acceptance; be valid at another realm's relying party"
+id = "environment-signing-key"
+name = "Environment JOSE or SAML signing key (identity plane)"
+trust = "Signing authentication results for its own environment's relying parties"
+not_trusted = "Signing authority artefacts; any other environment"
+blast_radius = "Golden SAML or forged ID tokens for any user at every relying party of the environment until rotation; on the Access side only as far as the authentication use"
+never = "Create authority; write a Grant or Acceptance; be valid at another environment's relying party"
 containment = "Key rotation and removal from the JWKS (key_epoch increment), issuer cutoff, HSM or signer process"
 rows = ["HL-35", "INV-15", "SI-3", "SEC18", "SEC9", "G46"]
 tests = [
-  "crates/authority-core/tests/ingest.rs::a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff",
+  "crates/authority-core/tests/ingest.rs::a_dropped_environment_key_signs_nothing_admitted_after_its_cutoff",
 ]
 
 [[component]]
@@ -287,9 +287,9 @@ id = "legacy-gateway"
 name = "LDAP, Kerberos, RADIUS or WS-Fed gateway process"
 trust = "Turning a legacy protocol bind into an identity plane authentication event"
 not_trusted = "Authority; credentials other than passwords"
-blast_radius = "Passwords of users who bind through it (it sees cleartext); forged authentication for that realm"
-never = "Leave its realm; reach the signer key (separate process and sandbox profile); let the Kerberos C FFI reach the main process memory"
-containment = "Close the gateway; reset credentials for affected users; realm cutoff"
+blast_radius = "Passwords of users who bind through it (it sees cleartext); forged authentication for that environment"
+never = "Leave its environment; reach the signer key (separate process and sandbox profile); let the Kerberos C FFI reach the main process memory"
+containment = "Close the gateway; reset credentials for affected users; environment cutoff"
 rows = ["RR-28", "INV-15"]
 tests = []
 
@@ -309,7 +309,7 @@ id = "parser-worker"
 name = "Parser worker (SAML/XML and, where needed, BER or CBOR; isolated process)"
 trust = "Turning input into a normalised structure"
 not_trusted = "Deciding a signature verification result alone; key material"
-blast_radius = "Accepting a forged assertion through XSW-class misparsing in the realm it serves; crashing (denial of service)"
+blast_radius = "Accepting a forged assertion through XSW-class misparsing in the environment it serves; crashing (denial of service)"
 never = "Reach the signer or the main process memory (separate process, no network syscalls)"
 containment = "Restart the worker; XSW regression corpus; roll back the parser version"
 rows = ["RR-20"]

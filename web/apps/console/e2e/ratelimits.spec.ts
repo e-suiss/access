@@ -7,8 +7,8 @@ import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/rate-limits", {
-    realm: "acme",
+  bff.admin.set("envs/acme/rate-limits", {
+    environment: "acme",
     rate_limit_rps: 200,
     default: true,
     tenant_rps: 1000,
@@ -16,14 +16,14 @@ test.beforeEach(async ({ context, bff }) => {
     usage: {
       buckets: [
         {
-          name: "realm-request",
+          name: "environment-request",
           now_percent: 92,
           average_1h_percent: 40,
           average_24h_percent: 12,
           above_threshold: true,
         },
         {
-          name: "realm-write",
+          name: "environment-write",
           now_percent: 4,
           average_1h_percent: 1,
           average_24h_percent: 0,
@@ -44,10 +44,12 @@ test("the rate limits screen shows each bucket, the heaviest consumers and the r
 }) => {
   await open(page, bff, "/console/acme/admin/ratelimits");
   await expect(page.getByRole("heading", { level: 2, name: "Rate limits" })).toBeVisible();
-  const realm = page.locator('[data-testid="rate-limits-bucket"][data-name="realm-request"]');
-  await expect(realm).toContainText("92%");
-  await expect(realm).toContainText("40%");
-  await expect(realm).toContainText("12%");
+  const environment = page.locator(
+    '[data-testid="rate-limits-bucket"][data-name="environment-request"]',
+  );
+  await expect(environment).toContainText("92%");
+  await expect(environment).toContainText("40%");
+  await expect(environment).toContainText("12%");
   await expect(page.getByTestId("rate-limits-warning")).toContainText("Above 80% of the limit");
   await expect(page.getByTestId("rate-limits-consumers")).toContainText("1234 requests");
   await expect(page.getByTestId("rate-limits-events")).toContainText("quota-exceeded");

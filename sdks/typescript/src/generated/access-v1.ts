@@ -130,7 +130,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's Suiss discovery document (OP-149 m.3); also under the realm path of a path issuer. `Cache-Control: max-age=300`. */
+        /** The environment's Suiss discovery document (OP-149 m.3); also under the environment path of a path issuer. `Cache-Control: max-age=300`. */
         get: operations["getSuissConfiguration"];
         put?: never;
         post?: never;
@@ -140,15 +140,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/.well-known/suiss-configuration/realms/{slug}": {
+    "/.well-known/suiss-configuration/env/{slug}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The same document of the realm `slug`, for a reader that names the realm rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here. */
-        get: operations["getRealmSuissConfiguration"];
+        /** The same document of the environment `slug`, for a reader that names the environment rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here. */
+        get: operations["getEnvironmentSuissConfiguration"];
         put?: never;
         post?: never;
         delete?: never;
@@ -183,7 +183,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Between a realm's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37). */
+        /** Between an environment's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10). A platform client asking with its assertion is the sector itself (OP-149 m.37). */
         post: operations["resolveSubjects"];
         delete?: never;
         options?: never;
@@ -234,7 +234,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** For each realm, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again. */
+        /** For each environment, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again. */
         post: operations["createPairingChallenges"];
         delete?: never;
         options?: never;
@@ -251,7 +251,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** The product's self-signed Exercises for the challenged realms (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)). */
+        /** The product's self-signed Exercises for the challenged environments (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)). */
         post: operations["pair"];
         delete?: never;
         options?: never;
@@ -920,8 +920,8 @@ export interface components {
             /** @description Opaque tenant id (`tnt_…`), the same id events carry in `accesstenant`, `access_tenant` and `tenant` (OP-149 m.15 (i)). */
             tenant: string;
             organizations: string[];
-            /** @description The tenant's live realms, by slug. */
-            realms: components["schemas"]["TenantRealm"][];
+            /** @description The tenant's live environments, by slug. */
+            environments: components["schemas"]["TenantEnvironment"][];
             /** @description The deployment's region. */
             region: string;
             /** @enum {string} */
@@ -931,12 +931,12 @@ export interface components {
             /** @description Retention policies (OP-147); empty until they are stored. */
             retention: Record<string, never>;
         };
-        TenantRealm: {
-            /** @description The realm, as events name it in `accessrealm` and `realm`. */
+        TenantEnvironment: {
+            /** @description The environment, as events name it in `accessenvironment` and `environment`. */
             id: string;
-            /** @description The realm's fixed issuer; its `/.well-known/suiss-configuration` describes it. */
+            /** @description The environment's fixed issuer; its `/.well-known/suiss-configuration` describes it. */
             issuer: string;
-            /** @description The realm's immutable slug. */
+            /** @description The environment's immutable slug. */
             slug: string;
         };
         TenantPage: {
@@ -947,7 +947,7 @@ export interface components {
         SuissConfiguration: {
             /** @constant */
             suiss_configuration_version: 1;
-            /** @description The realm issuer. */
+            /** @description The environment issuer. */
             issuer: string;
             /** @description The deployment's region. */
             suiss_region: string;
@@ -956,7 +956,7 @@ export interface components {
             /** @description The management API's base URL. */
             suiss_management_api: string;
             suiss_event_subscriptions: {
-                /** @description The realm's SSF transmitter metadata (SSF 1.0 §7.1). */
+                /** @description The environment's SSF transmitter metadata (SSF 1.0 §7.1). */
                 ssf_configuration: string;
                 /**
                  * @description The Suiss webhook profile's delivery method: CloudEvents 1.0 structured JSON signed per Standard Webhooks.
@@ -993,23 +993,23 @@ export interface components {
             };
         };
         ResolveRequest: {
-            /** @description The realm, as the tenant snapshot names it. */
-            realm: string;
-            /** @description The client whose pairwise `sub` is meant, its sector (MD-10): a client of the realm, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch). */
+            /** @description The environment, as the tenant snapshot names it. */
+            environment: string;
+            /** @description The client whose pairwise `sub` is meant, its sector (MD-10): a client of the environment, e.g. Relay's client of it, when a PEP asks; the asking platform client itself when it asks with its assertion (OP-149 m.37; another value is 400 client-mismatch). */
             client_id: string;
             parties?: string[];
             subs?: string[];
         };
         Resolution: {
-            /** @description The realm. */
-            realm: string;
+            /** @description The environment. */
+            environment: string;
             /** @description The client. */
             client_id: string;
             /** @description Each entry carries `sub` and exactly one of `party` and `client_id`. */
             resolved: {
                 /** @description PartyID, for a subject with a Party. */
                 party?: string;
-                /** @description For a `sub` that is the pairwise pseudonym of a client of the realm without a Party (the `sub` of its service tokens), that client. */
+                /** @description For a `sub` that is the pairwise pseudonym of a client of the environment without a Party (the `sub` of its service tokens), that client. */
                 client_id?: string;
                 /** @description The pairwise `sub` the client sees. */
                 sub: string;
@@ -1074,8 +1074,8 @@ export interface components {
             };
         };
         PairingChallengeRequest: {
-            /** @description The realms to pair with; every live realm of the tenant when absent (OP-149 m.16 (d)). */
-            realms?: string[];
+            /** @description The environments to pair with; every live environment of the tenant when absent (OP-149 m.16 (d)). */
+            environments?: string[];
         };
         PairingExercise: {
             /** @description The instance_create nonce. */
@@ -1090,11 +1090,11 @@ export interface components {
             intent: string;
         };
         PairingTarget: {
-            /** @description The realm. */
-            realm: string;
+            /** @description The environment. */
+            environment: string;
             /** @enum {string} */
             status: "unpaired" | "paired" | "refused";
-            /** @description The realm's governing DomainID, 32 bytes. */
+            /** @description The environment's governing DomainID, 32 bytes. */
             domain?: string;
             /** @description The Genesis bootstrap Grant the Exercises name as `public` basis (L0-META-7). */
             basis?: string;
@@ -1129,8 +1129,8 @@ export interface components {
             targets: components["schemas"]["PairingTarget"][];
         };
         PairingAnswer: {
-            /** @description The realm of the challenge. */
-            realm: string;
+            /** @description The environment of the challenge. */
+            environment: string;
             /** @description The challenge answered. */
             challenge: string;
             /** @description AIS (tagged COSE_Sign1) by the service key over the instance_create intent: nonce the challenge, mode commit, capacity own, the challenge's domain, basis and pep. */
@@ -2412,7 +2412,7 @@ export interface components {
             context: Record<string, never>;
         };
         SuissCoordinator: {
-            /** @description The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue. */
+            /** @description The coordinator's public Needs Attention endpoint the environment named (`idp.environment.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue. */
             attention: string;
         };
         EligibleSet: {
@@ -2432,9 +2432,9 @@ export interface components {
             tenant: string;
             /**
              * Format: uuid
-             * @description The realm, as the Relay message's accessrealm names it.
+             * @description The environment, as the Relay message's accessenvironment names it.
              */
-            realm: string;
+            environment: string;
             /**
              * Format: uuid
              * @description The CloudEvents id of the relay.message.iys_consent.v1 the record came in.
@@ -2946,7 +2946,7 @@ export interface operations {
                     "application/json": components["schemas"]["SuissConfiguration"];
                 };
             };
-            /** @description No realm here. */
+            /** @description No environment here. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2966,7 +2966,7 @@ export interface operations {
             };
         };
     };
-    getRealmSuissConfiguration: {
+    getEnvironmentSuissConfiguration: {
         parameters: {
             query?: never;
             header?: never;
@@ -2986,7 +2986,7 @@ export interface operations {
                     "application/json": components["schemas"]["SuissConfiguration"];
                 };
             };
-            /** @description No realm here. */
+            /** @description No environment here. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3068,7 +3068,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description tenant-unknown, or client-unknown: no such realm or active client. */
+            /** @description tenant-unknown, or client-unknown: no such environment or active client. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3261,7 +3261,7 @@ export interface operations {
                     "application/json": components["schemas"]["PairingChallenges"];
                 };
             };
-            /** @description invalid-request, realms or unknown-member. */
+            /** @description invalid-request, environments or unknown-member. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3279,7 +3279,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description tenant-unknown or realm-unknown. */
+            /** @description tenant-unknown or environment-unknown. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3341,7 +3341,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description tenant-unknown or realm-unknown. */
+            /** @description tenant-unknown or environment-unknown. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3834,7 +3834,7 @@ export interface operations {
                     "application/json": components["schemas"]["SsfError"];
                 };
             };
-            /** @description No live push transmitter with this id in the realm. */
+            /** @description No live push transmitter with this id in the environment. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5386,7 +5386,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description not-found: the realm has no such record. */
+            /** @description not-found: the environment has no such record. */
             404: {
                 headers: {
                     [name: string]: unknown;

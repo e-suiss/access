@@ -1,4 +1,4 @@
-//! Certificate, PIV and CAC sign-in of a realm (`idp.realm.certificate_login`, CT2, OP-155
+//! Certificate, PIV and CAC sign-in of an environment (`idp.environment.certificate_login`, CT2, OP-155
 //! m.3 (m), §10.2.5): whether it is on, how a certificate names the account, the CAs whose paths
 //! are accepted, and the issuer policies mapped as hardware-bound PIV. A CA here is a candidate
 //! only: it is trusted once the governing domain holds an actor-binding Acceptance of its issuer
@@ -16,13 +16,13 @@ use suiss_crypto::dcbor::Value;
 
 use super::Invalid;
 
-/// Most CAs a realm names (PD).
+/// Most CAs an environment names (PD).
 pub const MAX_ANCHORS: usize = 16;
 
-/// Most issuer policies a realm maps (PD).
+/// Most issuer policies an environment maps (PD).
 pub const MAX_POLICIES: usize = 16;
 
-/// A realm's certificate sign-in setting.
+/// An environment's certificate sign-in setting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CertificateLogin {
     /// Whether it is on.

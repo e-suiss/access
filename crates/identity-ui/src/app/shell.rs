@@ -1,9 +1,9 @@
-//! The account shell's session (OP-153 m.3 (w)): what the realm's `/account` pages read from
+//! The account shell's session (OP-153 m.3 (w)): what the environment's `/account` pages read from
 //! the hosted login session they reuse. The cookie carries the Account section's own,
 //! authority-free screens; the Authority hub needs the session's device Instance, whose key
 //! lives in the browser, and only its public half is read here (OP-151 m.3 (e)).
 
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::domain::device::{Assurance, assurance, instance_key};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
@@ -41,11 +41,11 @@ pub struct ShellInstance {
 /// A live hosted login session as the account shell sees it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shell {
-    /// The realm's slug.
+    /// The environment's slug.
     pub slug: String,
-    /// The realm's origin, `https://host[:port]`, from its stored issuer (never from `Host`).
+    /// The environment's origin, `https://host[:port]`, from its stored issuer (never from `Host`).
     pub origin: String,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: Digest,
     /// The account's external id.
     pub account: String,
@@ -96,7 +96,7 @@ where
     /// # Errors
     /// The reply to send instead: `401` without a live session (G57), `503` when a store does
     /// not answer.
-    pub async fn shell(&self, entry: &RealmEntry, b: &Browser<'_>) -> Result<Shell, Reply> {
+    pub async fn shell(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Result<Shell, Reply> {
         let kit = self.kit(entry).await?;
         signin!(self, kit, auth);
         let cookie = b.session.ok_or_else(|| Reply::problem(SESSION_REQUIRED))?;
@@ -110,7 +110,7 @@ where
             Assurance::Fresh
         );
         let domain = governing(&self.db, &kit).await?;
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let party = idp::subject_party(&mut t, &v.subject)
@@ -144,7 +144,10 @@ where
             slug: entry.slug.clone(),
             origin,
             domain,
-            account: kit.realm().external(v.subject).map_err(|_| unavailable())?,
+            account: kit
+                .environment()
+                .external(v.subject)
+                .map_err(|_| unavailable())?,
             session: v.id,
             expires_ms: v.expires_ms,
             party,
@@ -161,7 +164,7 @@ where
     pub async fn shell_challenge<A, I, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         cose: &str,
     ) -> Reply {
@@ -212,7 +215,7 @@ where
             tenant: *entry.tenant.as_bytes(),
             domain,
             registrant: Registrant::Device {
-                realm: *entry.realm.as_bytes(),
+                environment: *entry.environment.as_bytes(),
                 subject: [0; 16],
             },
             party: Id(party),

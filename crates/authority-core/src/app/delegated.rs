@@ -1,6 +1,6 @@
 //! Delegated administration (TN-114, §12.5.2, C28, X20, OP-157 m.3 (t)): an admin Grant is a
-//! Grant on meta-action `ActionRef`s, and a realm opens the path to new ones with the staged
-//! flag `idp.realm.delegated_admin`. While it is closed, only root holds meta-actions; closing it
+//! Grant on meta-action `ActionRef`s, and an environment opens the path to new ones with the staged
+//! flag `idp.environment.delegated_admin`. While it is closed, only root holds meta-actions; closing it
 //! does not end the admin Grants already issued.
 
 use access_kernel::meta::{self, GrantState, Payload};
@@ -53,7 +53,7 @@ fn adds_meta(old: &AuthoritySet, new: &AuthoritySet) -> bool {
     meta_names(&new.actions).any(|n| !kept.contains(&n))
 }
 
-/// Whether `payload` makes a new admin Grant, which the realm's flag must allow (OP-157 m.3 (t)):
+/// Whether `payload` makes a new admin Grant, which the environment's flag must allow (OP-157 m.3 (t)):
 /// a Grant naming a meta-action, or an amendment adding one to `current`. A reserved break-glass
 /// Grant is its own pre-issued exception (G29), a narrowing or an unchanged admin Grant stays
 /// (narrowing does not spread back), and any other payload is unaffected.

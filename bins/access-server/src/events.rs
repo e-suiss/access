@@ -1,7 +1,7 @@
 //! Event delivery of the identity plane in this process (OP-149 m.4, m.7, m.17, OP-151 m.3 (l)):
 //! the fan-out from the identity and authority outboxes, the push courier over the SSRF-guarded
-//! client, the realms' SSF transmitter, and the SSF receiver with its RFC 8936 poll client.
-//! Webhook secrets and poll credentials are sealed under the realm KEKs the hosted login opens.
+//! client, the environments' SSF transmitter, and the SSF receiver with its RFC 8936 poll client.
+//! Webhook secrets and poll credentials are sealed under the environment KEKs the hosted login opens.
 
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ use access_identity_oauth::adapters::outbound::{DeclaredTargets, Outbound};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_store::Pool;
 
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The pools delivery and stream management read and write.
 #[derive(Clone)]
@@ -32,7 +32,7 @@ pub(crate) struct EventPools {
     pub(crate) app: Pool,
     /// `access_outbox_reader`.
     pub(crate) reader: Pool,
-    /// `access_router`, for the live realms.
+    /// `access_router`, for the live environments.
     pub(crate) router: Pool,
     /// The tenants' `tnt_` ids (OP-149 m.15 (i)).
     pub(crate) ids: Arc<dyn TenantIds>,
@@ -40,7 +40,7 @@ pub(crate) struct EventPools {
     /// (OP-149 m.23).
     pub(crate) declared: DeclaredTargets,
     /// The SSRF-guarded client the receiver fetches transmitter keys with; without it the
-    /// realms take no inbound SETs (OP-151 m.3 (l)).
+    /// environments take no inbound SETs (OP-151 m.3 (l)).
     pub(crate) outbound: Option<Outbound>,
     /// What the doorbell rings, to wake the fan-out (OP-156 m.3 (j)); it polls without one.
     pub(crate) wake: Option<Arc<tokio::sync::Notify>>,
@@ -73,7 +73,7 @@ impl Delivery {
         pools: &EventPools,
         transport: T,
         signer: SignerKeys,
-        keks: RealmKeks,
+        keks: EnvironmentKeks,
         alive: &ReadyFlag,
     ) -> Self {
         let (stop, stopped) = tokio::sync::watch::channel(false);
@@ -132,7 +132,7 @@ impl Delivery {
         pools: &EventPools,
         outbound: Outbound,
         signer: SignerKeys,
-        keks: RealmKeks,
+        keks: EnvironmentKeks,
         alive: &ReadyFlag,
     ) -> Self {
         let mut delivery = Self::start(
@@ -168,10 +168,11 @@ impl Delivery {
     }
 }
 
-type InboundReceiver = Receiver<PgDirectory, HttpClientKeys, KekSealer<RealmKeks>, SystemClock>;
+type InboundReceiver =
+    Receiver<PgDirectory, HttpClientKeys, KekSealer<EnvironmentKeks>, SystemClock>;
 
 /// The SSF receiver: transmitter keys over the SSRF-guarded client (OP-151 m.3 (l)).
-fn receiver(pools: &EventPools, outbound: Outbound, keks: RealmKeks) -> InboundReceiver {
+fn receiver(pools: &EventPools, outbound: Outbound, keks: EnvironmentKeks) -> InboundReceiver {
     Receiver::new(
         PgDirectory::new(pools.router.clone()),
         pools.db(),
@@ -181,8 +182,8 @@ fn receiver(pools: &EventPools, outbound: Outbound, keks: RealmKeks) -> InboundR
     )
 }
 
-/// The realms' SSF transmitter and receiver routes (SSF 1.0, RFC 8935, RFC 8936).
-pub(crate) fn ssf(pools: &EventPools, signer: SignerKeys, keks: RealmKeks) -> axum::Router {
+/// The environments' SSF transmitter and receiver routes (SSF 1.0, RFC 8935, RFC 8936).
+pub(crate) fn ssf(pools: &EventPools, signer: SignerKeys, keks: EnvironmentKeks) -> axum::Router {
     let transmitter = access_http::ssf::router(Transmitter::new(
         PgDirectory::new(pools.router.clone()),
         Streams::new(pools.db(), KekSealer(keks.clone()), OsRandom)

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.retention_holds\n                 (tenant_id, scope, environment_id, subject_id, classes, kind, suspicious_activity, until)\n               VALUES ($1, $2, CASE WHEN $2 = 'subject' THEN $3::uuid END, $4, $5, $6, $7,\n                       CASE WHEN $8::bigint IS NULL THEN NULL ELSE to_timestamp($8::bigint / 1000.0) END)\n               RETURNING hold_id AS \"id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.retention_holds",
+            "name": "hold_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Text",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c3a6a5ef1713501b8bdcc86d79745d1ebfaba380d5302fc0bf2fec6e1ce62237"
+}

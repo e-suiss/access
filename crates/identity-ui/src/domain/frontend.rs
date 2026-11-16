@@ -48,7 +48,7 @@ pub struct InstanceChallenge {
     pub challenge: String,
     /// When it stops being accepted, RFC 3339.
     pub expires_at: String,
-    /// The realm's governing `DomainID`, base64url of its 32 bytes.
+    /// The environment's governing `DomainID`, base64url of its 32 bytes.
     pub domain: String,
     /// The basis both Exercises name: `public` with this Genesis bootstrap `GrantID`, base64url
     /// of its 16 bytes (L0-META-7).
@@ -190,7 +190,7 @@ pub struct AuthContextIssued {
 pub struct ApproveQuery {
     /// The authority request's digest (base64url, 32 bytes) or a pushed `request_uri`.
     pub request: String,
-    /// Where the browser goes back; exactly a redirect URI a client of the realm registered.
+    /// Where the browser goes back; exactly a redirect URI a client of the environment registered.
     pub redirect_uri: String,
     /// Echoed unchanged.
     pub state: String,
@@ -231,7 +231,7 @@ impl ApproveRejection {
     }
 }
 
-/// Checks the call's own parameters; the redirect URI is checked against the realm's clients
+/// Checks the call's own parameters; the redirect URI is checked against the environment's clients
 /// by the caller.
 ///
 /// # Errors
@@ -380,7 +380,7 @@ fn components() -> Value {
             &json!({
                 "challenge": b64("32 bytes: the nonce of the device's instance_create; party_register uses it followed by the byte 0x01."),
                 "expires_at": time_field("When it stops being accepted."),
-                "domain": b64("The realm's governing DomainID, 32 bytes."),
+                "domain": b64("The environment's governing DomainID, 32 bytes."),
                 "basis": b64("GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7)."),
                 "pep": { "type": "string", "const": "access-identity", "description": "The PEP name both AIS name." },
                 "party": id16("The user's Party once its first device registered it; absent before."),
@@ -451,7 +451,7 @@ fn components() -> Value {
         ),
         "AuthContextIssued": object(
             &json!({
-                "auth_context": b64("Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."),
+                "auth_context": b64("Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the environment's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."),
                 "digest": b64("SHA-256(\"suiss/auth-context/v1\" || 0x00 || payload), 32 bytes."),
             }),
             &["auth_context", "digest"],
@@ -541,7 +541,7 @@ fn instance_paths(paths: &mut Map<String, Value>, step_up: &str) {
                 "400": problem("invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party or invalid-request."),
                 "401": problem("No live session (session-required)."),
                 "403": problem(step_up),
-                "409": problem("The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered)."),
+                "409": problem("The session already has an active device Instance (instance-exists; INV-13: one per session and environment), or the authority plane did not open the Instance (instance-not-registered)."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),
@@ -558,7 +558,7 @@ fn instance_paths(paths: &mut Map<String, Value>, step_up: &str) {
                 "400": problem("invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party (no active device of this user holds the key) or invalid-request."),
                 "401": problem("No live session (session-required)."),
                 "403": problem(step_up),
-                "409": problem("The session already binds an active device Instance (instance-exists; INV-13: one per session and realm)."),
+                "409": problem("The session already binds an active device Instance (instance-exists; INV-13: one per session and environment)."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),
@@ -575,7 +575,7 @@ pub fn openapi() -> Value {
         RECOVER_PATH.to_owned(),
         json!({ "post": {
             "operationId": "recoverInstance",
-            "summary": "Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the realm issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind.",
+            "summary": "Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the environment issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind.",
             "parameters": [idempotency()],
             "requestBody": body("InstanceRecovery", true),
             "responses": {
@@ -618,7 +618,7 @@ pub fn openapi() -> Value {
         AUTH_CONTEXT_PATH.to_owned(),
         json!({ "post": {
             "operationId": "issueAuthContext",
-            "summary": "The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8).",
+            "summary": "The session's auth_context artifact, signed by the environment's identity signer key (OP-149 m.8).",
             "parameters": [idempotency()],
             "requestBody": body("AuthContextRequest", false),
             "responses": {
@@ -667,7 +667,7 @@ fn approve() -> Value {
             "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest, claim and state; the result is confirmed with GET /access/v1/exercises/{id}.",
             "parameters": [
                 q("request", "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…)."),
-                q("redirect_uri", "Exactly a redirect URI an active client of the realm registered, or one an active platform product client registered in the platform realm (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match)."),
+                q("redirect_uri", "Exactly a redirect URI an active client of the environment registered, or one an active platform product client registered in the platform environment (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match)."),
                 q("state", "1 to 512 printable ASCII characters, echoed unchanged."),
             ],
             "responses": {

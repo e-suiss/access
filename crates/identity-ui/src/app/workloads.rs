@@ -1,11 +1,11 @@
 //! A workload opens its own Instance (OP-154 m.3 (d), §11.21.1 carleton note, U20): the key it
 //! presented at the token endpoint signs its own `instance_create` under the bootstrap basis,
-//! and the authority plane accepts it only on the realm issuer's live
+//! and the authority plane accepts it only on the environment issuer's live
 //! `identity_binding_workload` Claim about that key and the agent. No session, no cookie: the
 //! signature is the proof of possession. The Instance acts only through a Grant.
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::domain::device::instance_key;
 use access_internal_api::instances::{RegistrationVerdict, SelfSigned};
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -72,10 +72,10 @@ fn parsed(body: &WorkloadInstanceBody) -> Option<(Id, Vec<u8>, SelfSigned)> {
 
 impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// `POST /v1/workloads/instances` (OP-154 m.3 (d)): the Instance the key opened, or the
-    /// refusal; a key without the realm issuer's live Claim gets `403 workload-not-bound`.
+    /// refusal; a key without the environment issuer's live Claim gets `403 workload-not-bound`.
     pub async fn open_workload_instance<W: WorkloadInstances>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         body: &WorkloadInstanceBody,
         workloads: &W,
     ) -> Reply {
@@ -124,7 +124,7 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     }
 }
 
-/// The attestation roots a realm's surface verifies against (OP-154 m.3 (s), AG-31 model 1).
+/// The attestation roots an environment's surface verifies against (OP-154 m.3 (s), AG-31 model 1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AttestRoots {
     /// Android hardware key attestation roots.
@@ -270,12 +270,12 @@ fn verified(
 impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
     /// `POST /v1/workloads/attestations` (§5.9, §10.1.2, §12.2.1, L21, AG-31, OP-154 m.3 (s)):
     /// verifies the evidence against the embedded roots, for the challenge of the Instance at
-    /// `at`; the attested key must be the Instance's own current key. The realm issuer's
+    /// `at`; the attested key must be the Instance's own current key. The environment issuer's
     /// `attestation_runtime` Claim about the Instance's Party, bound to the Instance, is queued
     /// for the courier; it narrows or meets requirements and grants nothing.
     pub async fn attest_workload<P: PartyKeys>(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         body: &AttestationBody,
         (keys, roots): (&P, &AttestRoots),
     ) -> Reply {
@@ -292,7 +292,8 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
             Ok(k) => k,
             Err(r) => return r,
         };
-        let Ok(t) = access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await
+        let Ok(t) =
+            access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment).await
         else {
             return unavailable();
         };

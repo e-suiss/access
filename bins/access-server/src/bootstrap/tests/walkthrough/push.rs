@@ -1,5 +1,5 @@
-//! Push verification on the real server (OP-156 m.3 (d), TN-102, OP-153 m.3 (gg)): the realm's
-//! push setting is a root-signed `idp.realm.push` Exercise through the sequencer and `SoftHSM`, an
+//! Push verification on the real server (OP-156 m.3 (d), TN-102, OP-153 m.3 (gg)): the environment's
+//! push setting is a root-signed `idp.environment.push` Exercise through the sequencer and `SoftHSM`, an
 //! approver registers with the public SDK's `approver` module, and a CIBA approval sign-in of the
 //! person waits on that approver as its suspended second step (OP-155 m.14 (j)).
 
@@ -63,7 +63,7 @@ fn offers_push(step: &JsonValue) -> bool {
 
 // OP-156 m.3 (d), TN-102, IDP-14, OP-155 m.14 (j), Ek B 5087, 5394, 5398
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_ciba_sign_in_waits_on_the_persons_approver_once_the_realm_offers_push() {
+async fn a_ciba_sign_in_waits_on_the_persons_approver_once_the_environment_offers_push() {
     let d = Desk::open("q5-push-ciba", false).await;
     let issuer = d.user.issuer.clone();
     let (key, public) = approver();

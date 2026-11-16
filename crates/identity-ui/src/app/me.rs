@@ -4,7 +4,7 @@
 //! nothing else happens (G57).
 
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::devices::DeviceRefusal;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::domain::auth_context::{CONTENT_TYPE, Content};
@@ -30,7 +30,7 @@ use crate::domain::frontend::{
     AuthContextRequest, InstanceBinding, InstanceRecovery, InstanceRegistration,
     InstanceTermination, rfc3339, unix_ms,
 };
-use crate::ports::{ArtifactSigner, DeviceInstances, Kits, Messages, RealmKit};
+use crate::ports::{ArtifactSigner, DeviceInstances, EnvironmentKit, Kits, Messages};
 
 /// The ports the product-facing endpoints add to the hosted login.
 pub struct Devices<A, I, P, Q> {
@@ -40,7 +40,7 @@ pub struct Devices<A, I, P, Q> {
     pub instances: I,
     /// The authority plane behind the Approval Surface (OP-150 L6).
     pub approvals: P,
-    /// The realm's Claim courier, for approvals (SI-5).
+    /// The environment's Claim courier, for approvals (SI-5).
     pub claims: Q,
     /// The identity plane's PEP name in the governing domain.
     pub pep: String,
@@ -170,13 +170,13 @@ fn parsed(body: &InstanceRegistration) -> Option<Parsed> {
 }
 
 /// The active device Instance `session` registered, if any (INV-13, §7.1, §12.12/7: at most one
-/// per session and realm).
+/// per session and environment).
 async fn session_instance(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     session: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, Reply> {
-    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+    let mut t = TenantTx::begin(db, kit.tenant, kit.environment)
         .await
         .map_err(|_| unavailable())?;
     let i = access_store::issuer::session_instance(&mut t, session)
@@ -189,10 +189,10 @@ async fn session_instance(
 /// The Party the subject's device Instances belong to (OP-149 m.16 (a)).
 async fn bound_party(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, Reply> {
-    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+    let mut t = TenantTx::begin(db, kit.tenant, kit.environment)
         .await
         .map_err(|_| unavailable())?;
     let p = idp::subject_party(&mut t, subject)
@@ -207,13 +207,13 @@ async fn bound_party(
 /// proof, the Party's own `party_register`, enters by digest only.
 async fn bind_party(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: &[u8; 16],
     party: &[u8; 16],
     proof: &[u8],
 ) -> Result<(), Reply> {
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(db, kit.tenant, kit.realm)
+        TenantTx::begin(db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?,
     );
@@ -231,7 +231,7 @@ async fn bind_party(
 /// session that proved the key, now bound to that Instance (§10.1.5, OP-150 L2).
 async fn device_registered(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     proven: &access_identity_session::app::devices::ProvenKey,
     instance: [u8; 16],
 ) -> Result<(), Reply> {
@@ -243,7 +243,7 @@ async fn device_registered(
     }
     let s = &proven.session;
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(db, kit.tenant, kit.realm)
+        TenantTx::begin(db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?,
     );
@@ -277,12 +277,12 @@ async fn device_registered(
 /// (OP-150 m.12 (f)); nothing else is written (OP-73).
 async fn device_bound(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     proven: &access_identity_session::app::devices::ProvenKey,
 ) -> Result<Result<[u8; 16], devices::NotBound>, Reply> {
     let s = &proven.session;
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(db, kit.tenant, kit.realm)
+        TenantTx::begin(db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?,
     );
@@ -306,7 +306,7 @@ async fn device_bound(
 /// (IDP-2); the Instance itself was ended by `instance.terminate`.
 async fn device_retired(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     subject: [u8; 16],
     instance: [u8; 16],
 ) -> Result<(), Reply> {
@@ -314,7 +314,7 @@ async fn device_retired(
     use access_identity_account::domain::claims::authenticator_removed;
     use access_kernel::claim::body::AuthenticatorKind;
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(db, kit.tenant, kit.realm)
+        TenantTx::begin(db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?,
     );
@@ -335,7 +335,7 @@ async fn device_retired(
 /// predecessor's key retired with its binding line ended.
 async fn recovery_forwarded(
     db: &access_store::Pool,
-    kit: &RealmKit,
+    kit: &EnvironmentKit,
     s: &access_identity_session::app::recovery::Successor,
     r: &Recovery,
     successor: Option<[u8; 16]>,
@@ -350,7 +350,7 @@ async fn recovery_forwarded(
         PublicKey::MlDsa(..) => return Err(invalid()),
     };
     let mut tx = access_identity_account::adapters::pg::PgTx::new(
-        TenantTx::begin(db, kit.tenant, kit.realm)
+        TenantTx::begin(db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?,
     );
@@ -393,9 +393,12 @@ async fn recovery_forwarded(
     tx.0.commit().await.map_err(|_| unavailable())
 }
 
-/// The realm's governing domain.
-pub(super) async fn governing(db: &access_store::Pool, kit: &RealmKit) -> Result<Digest, Reply> {
-    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+/// The environment's governing domain.
+pub(super) async fn governing(
+    db: &access_store::Pool,
+    kit: &EnvironmentKit,
+) -> Result<Digest, Reply> {
+    let mut t = TenantTx::begin(db, kit.tenant, kit.environment)
         .await
         .map_err(|_| unavailable())?;
     let g = idp::governance(&mut t).await.map_err(|_| unavailable())?;
@@ -416,7 +419,7 @@ where
     pub async fn instance_challenge<A, I, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -463,7 +466,7 @@ where
     pub async fn register_instance<A, I: DeviceInstances, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &InstanceRegistration,
     ) -> Reply {
@@ -529,7 +532,7 @@ where
                 tenant: *kit.tenant.as_bytes(),
                 domain,
                 registrant: Registrant::Device {
-                    realm: *kit.realm.as_bytes(),
+                    environment: *kit.environment.as_bytes(),
                     subject,
                 },
                 party: Id(party),
@@ -549,7 +552,7 @@ where
                 context: self
                     .risk
                     .ips
-                    .prefix(kit.tenant.as_bytes(), kit.realm.as_bytes(), b.ip)
+                    .prefix(kit.tenant.as_bytes(), kit.environment.as_bytes(), b.ip)
                     .map(|p| RateContext::address(&p)),
             })
             .await;
@@ -575,7 +578,7 @@ where
     /// (OP-73); a session that already binds an Instance keeps it.
     pub async fn bind_instance(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &InstanceBinding,
     ) -> Reply {
@@ -645,7 +648,7 @@ where
     pub async fn terminate_instance<A, I: DeviceInstances, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         instance: &str,
         body: &InstanceTermination,
@@ -715,14 +718,14 @@ where
 
     /// `POST /v1/me/instances/recover` (OP-153 m.3 (c), INV-13, §12.3.2): the successor key's
     /// own `instance_recover` after a recovery's rebind. The session's subject must be in the
-    /// grace period that followed it and the realm issuer's `recovery_result` of the attempt
+    /// grace period that followed it and the environment issuer's `recovery_result` of the attempt
     /// must have reached the governing domain; the predecessor is the subject's device Instance.
     /// The authority plane checks that the Claim names the key; while the domain's time-lock runs
     /// the answer is `202` with the time it can be sent again.
     pub async fn recover_instance<A, I: DeviceInstances, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: &InstanceRecovery,
     ) -> Reply {
@@ -818,11 +821,11 @@ where
     }
 
     /// `POST /v1/me/auth-context` (OP-149 m.8): the artifact of this session, bound to the
-    /// content when given, signed by the realm's identity signer key.
+    /// content when given, signed by the environment's identity signer key.
     pub async fn auth_context<A: ArtifactSigner, I, P, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: Option<&AuthContextRequest>,
     ) -> Reply {
@@ -862,7 +865,7 @@ where
         };
         match devices
             .signer
-            .sign_cose(kit.realm, CONTENT_TYPE, &payload, self.clock.now_ms())
+            .sign_cose(kit.environment, CONTENT_TYPE, &payload, self.clock.now_ms())
             .await
         {
             Ok(sign1) => Reply::json(

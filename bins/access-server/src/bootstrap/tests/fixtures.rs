@@ -12,11 +12,11 @@ use crate::bootstrap::governance::{BreakglassPlan, ReviewPlan, SupportOperatorPl
 pub(super) fn fixtures_plan() -> Plan {
     Plan {
         sample_agent: Some(SampleAgentPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             display_name: String::from("Local sample agent"),
         }),
         support_operator: Some(SupportOperatorPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             display_name: String::from("Mehmet Y."),
             organisation: String::from("Acme Support"),
             identifier: String::from("support@acme.example"),
@@ -25,12 +25,12 @@ pub(super) fn fixtures_plan() -> Plan {
             case: String::from("4411"),
         }),
         breakglass_account: Some(BreakglassPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             identifier: String::from("oncall@acme.example"),
             organisation: String::from("Acme Security"),
         }),
         review_schedule: Some(ReviewPlan {
-            realm: String::from("acme"),
+            environment: String::from("acme"),
             name: String::from("local-review"),
             period_days: 90,
         }),
@@ -54,7 +54,7 @@ async fn the_bootstrap_makes_the_stage_twelve_fixtures_once_through_their_exerci
     assert!(support["case_until"].as_u64().is_some(), "{support}");
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let operator = ids
@@ -130,7 +130,7 @@ async fn the_bootstrap_makes_the_stage_twelve_fixtures_once_through_their_exerci
     t.commit().await.unwrap();
 
     // OP-157 m.3 (w), m.18, Ek B 5565
-    let keks = crate::login::RealmKeks::new(w.keys.clone());
+    let keks = crate::login::EnvironmentKeks::new(w.keys.clone());
     let inputs = crate::reviews::Inputs {
         app: &w.db.app,
         router: &w.db.router,
@@ -196,7 +196,7 @@ async fn the_local_client_runs_a_support_episode_on_the_fixtures() {
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::{Devices, Hosted};
@@ -206,7 +206,7 @@ async fn the_local_client_runs_a_support_episode_on_the_fixtures() {
     use access_local_client::support::{Episode, episode};
 
     use crate::bootstrap::governance::SUPPORT_DEVICE_LABEL;
-    use crate::login::{HsmKits, RealmKeks};
+    use crate::login::{EnvironmentKeks, HsmKits};
 
     let (w, signer) = World::open("bootstrap-support-episode", true).await;
     let signer = signer.unwrap();
@@ -223,7 +223,7 @@ async fn the_local_client_runs_a_support_episode_on_the_fixtures() {
     let tls = test_tls("access.test");
     let hosted = Arc::new(Hosted {
         kits: HsmKits::new(
-            RealmKeks::new(Arc::clone(&w.keys)),
+            EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -244,7 +244,7 @@ async fn the_local_client_runs_a_support_episode_on_the_fixtures() {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let discovery = || {
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         )

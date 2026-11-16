@@ -8,19 +8,19 @@ import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/placement", {
+  bff.admin.set("envs/acme/placement", {
     cell: "eu-central-1",
     region: "eu-central",
     dedicated_cell: false,
     tenant: null,
-    realm: { cell: "eu-central-1", dedicated: false, version: 2 },
+    environment: { cell: "eu-central-1", dedicated: false, version: 2 },
     domain: null,
     governing_domain: "ZG9tYWluLWlk",
     residency: { region: "eu-central", class: "regional" },
     pending_rehome: [{ side: "from", to: "bmV3LWRvbWFpbg", position: "12" }],
     routing_only: true,
   });
-  bff.admin.set("realms/acme/durability", {
+  bff.admin.set("envs/acme/durability", {
     durability: "single-node",
     class: "regional",
     region: "eu-central",
@@ -41,7 +41,7 @@ test("the placement screen shows the cell, the residency and a rehome waiting fo
 }) => {
   await open(page, bff, "/console/acme/admin/placement");
   await expect(page.getByRole("heading", { level: 2, name: "Placement" })).toBeVisible();
-  await expect(page.getByTestId("placement-realm-cell")).toHaveText("eu-central-1");
+  await expect(page.getByTestId("placement-environment-cell")).toHaveText("eu-central-1");
   await expect(page.getByTestId("placement-domain-cell")).toContainText("eu-central-1");
   await expect(page.getByTestId("placement-residency")).toContainText(
     "Data stays in eu-central (regional)",
@@ -76,7 +76,7 @@ test("the durability screen says there is no post-quantum anchor yet and marks a
   page,
   bff,
 }) => {
-  bff.admin.set("realms/acme/durability", {
+  bff.admin.set("envs/acme/durability", {
     durability: "replicated",
     class: "regional",
     region: "eu-central",
@@ -109,7 +109,7 @@ test("the durability screen shows the last post-quantum anchor and claims nothin
   page,
   bff,
 }) => {
-  bff.admin.set("realms/acme/durability", {
+  bff.admin.set("envs/acme/durability", {
     durability: "replicated",
     class: "regional",
     region: "eu-central",
@@ -140,7 +140,7 @@ test("the durability screen shows the co-tenant risk when the hosting is shared 
   await expect(hosting).toHaveAttribute("data-compute", "shared");
   await expect(hosting).toContainText("Shared HSM partition: co-tenant risk applies");
   await expect(hosting).toContainText("Shared compute: co-tenant risk applies");
-  bff.admin.set("realms/acme/durability", {
+  bff.admin.set("envs/acme/durability", {
     durability: "replicated",
     class: "regional",
     region: "eu-central",

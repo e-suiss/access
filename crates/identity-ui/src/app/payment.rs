@@ -1,7 +1,7 @@
 //! Payment-class authentication on the hosted surface (OP-156 m.3 (e), (f), MD-11, IDP-4, IDP-9):
 //! the SMS code of a sign-in's second step, the activation code a signed-in person asks for, and
 //! the activation of an approver as the app-controlled factor: its key's hardware attestation,
-//! bound to the approver key and to a challenge of the realm, and under the TR payment profile an
+//! bound to the approver key and to a challenge of the environment, and under the TR payment profile an
 //! SMS activation code first.
 
 use access_identity_account::adapters::pg::PgAccounts;
@@ -9,7 +9,7 @@ use access_identity_account::app::approver;
 use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::ports::Notifier;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::FlowRef;
 use access_identity_session::app::sessions::{SessionStatus, SessionView};
 use access_identity_session::app::sms::{Activation, SmsStart};
@@ -30,7 +30,7 @@ use super::{
 use crate::domain::flow::FlowId;
 use crate::domain::frontend::rfc3339;
 use crate::domain::message::{Message, TextId};
-use crate::ports::{Kits, Messages, RealmKit};
+use crate::ports::{EnvironmentKit, Kits, Messages};
 
 const fn problem(status: u16, code: &'static str, title: &'static str) -> Problem {
     Problem {
@@ -251,7 +251,7 @@ where
     pub(super) async fn sms_step<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         b: &Browser<'_>,
         flow: &FlowId,
         fref: &FlowRef<'_>,
@@ -291,17 +291,21 @@ where
         Ok(reply)
     }
 
-    /// Whether the realm decided `idp.realm.spc`, which opens `payment` on its payment page
+    /// Whether the environment decided `idp.environment.spc`, which opens `payment` on its payment page
     /// (OP-156 m.3 (g)).
     ///
     /// # Errors
-    /// The realm's kit is unavailable.
-    pub async fn spc_on(&self, entry: &RealmEntry) -> Result<bool, Reply> {
+    /// The environment's kit is unavailable.
+    pub async fn spc_on(&self, entry: &EnvironmentEntry) -> Result<bool, Reply> {
         Ok(self.kit(entry).await?.auth.spc)
     }
 
     /// The signed-in session, authenticated in the last five minutes.
-    async fn fresh_session(&self, kit: &RealmKit, b: &Browser<'_>) -> Result<SessionView, Reply> {
+    async fn fresh_session(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+    ) -> Result<SessionView, Reply> {
         signin!(self, kit, auth);
         let Some(cookie) = b.session else {
             return Err(Reply::problem(SESSION_REQUIRED));
@@ -320,7 +324,7 @@ where
 
     /// `POST /v1/sms/activation` (OP-156 m.3 (f)): an activation code to the signed-in
     /// person's phone number, the one SMS use the TR payment profile allows.
-    pub async fn sms_activation(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn sms_activation(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -361,7 +365,7 @@ where
     /// answer declares the app PIN verified.
     pub async fn activate_approver(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         device: &str,
         body: &ActivationBody,
@@ -385,7 +389,7 @@ where
         let subject = session.subject;
         let read = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             let rows = approver::list(&mut tx, subject).await?;
             tx.commit().await?;
@@ -430,7 +434,7 @@ where
         let target = kit.ids.encode(APPROVER_PREFIX, id).unwrap_or_default();
         let done = async {
             let mut tx = PgAccounts::sealed(self.db.clone(), kit.vault())
-                .begin(kit.tenant, kit.realm)
+                .begin(kit.tenant, kit.environment)
                 .await?;
             if !tx.0.attest_app_factor_key(subject, id).await? {
                 return Ok(false);

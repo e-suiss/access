@@ -1,6 +1,6 @@
 //! The edge calls access-server serves (OP-155 m.3 (c)): `hello`, `subject_lookup`,
 //! `issue_claim` and `audit`. Each starts from the gateway the certificate named and stays in
-//! its realm (IDP-26, §13.2); nothing here writes authority state (IDI-11).
+//! its environment (IDP-26, §13.2); nothing here writes authority state (IDI-11).
 
 use access_identity_account::adapters::pg::{PgAccounts, PgTx};
 use access_identity_account::app::claims::emit;
@@ -22,7 +22,7 @@ pub mod kerberos;
 pub mod ldap;
 pub mod radius;
 
-/// The edge service over the gateway registry and the realms' account tables.
+/// The edge service over the gateway registry and the environments' account tables.
 pub struct Edge<R, V> {
     registry: R,
     vaults: V,
@@ -49,10 +49,10 @@ impl<R: Registry, V: Vaults> Edge<R, V> {
     async fn begin(&self, g: &Gateway) -> Result<PgTx, EdgeError> {
         let vault = self
             .vaults
-            .vault(g.tenant, g.realm)
+            .vault(g.tenant, g.environment)
             .ok_or_else(|| EdgeError::Unavailable(String::from("vault")))?;
         Ok(PgAccounts::sealed(self.app.clone(), vault)
-            .begin(g.tenant, g.realm)
+            .begin(g.tenant, g.environment)
             .await?)
     }
 
@@ -67,16 +67,16 @@ impl<R: Registry, V: Vaults> Edge<R, V> {
             .ok_or(EdgeError::NotRegistered)
     }
 
-    /// `hello`: the gateway and its realm.
+    /// `hello`: the gateway and its environment.
     #[must_use]
     pub fn hello(g: &Gateway) -> Hello {
         Hello {
             gateway: g.uri.clone(),
-            realm: g.slug.clone(),
+            environment: g.slug.clone(),
         }
     }
 
-    /// `subject_lookup`: the active subject holding `identifier` in the gateway's realm. An
+    /// `subject_lookup`: the active subject holding `identifier` in the gateway's environment. An
     /// unknown and an inactive identifier answer the same.
     ///
     /// # Errors
@@ -86,20 +86,20 @@ impl<R: Registry, V: Vaults> Edge<R, V> {
         g: &Gateway,
         q: &SubjectLookup,
     ) -> Result<Subject, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         let mut tx = self.begin(g).await?;
         let subject = active(&mut tx, &q.identifier).await?;
         tx.commit().await?;
         Ok(Subject { subject })
     }
 
-    /// `issue_claim`: queues the realm issuer's `authentication` Claim of an edge
+    /// `issue_claim`: queues the environment issuer's `authentication` Claim of an edge
     /// authentication, with its audit row (P-ID-5). The gateway is never the issuer.
     ///
     /// # Errors
     /// [`EdgeError`].
     pub async fn issue_claim(&self, g: &Gateway, q: &IssueClaim) -> Result<Issued, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         let method = domain::method(g.uri.kind, &q.method)?;
         let mut tx = self.begin(g).await?;
         domain::fresh(q.auth_time, tx.server_time().await?)?;
@@ -134,15 +134,17 @@ impl<R: Registry, V: Vaults> Edge<R, V> {
         Ok(Issued { queued: true })
     }
 
-    /// `audit`: one gateway event in the realm's audit log, codes only (OP-47).
+    /// `audit`: one gateway event in the environment's audit log, codes only (OP-47).
     ///
     /// # Errors
     /// [`EdgeError`].
     pub async fn audit(&self, g: &Gateway, q: &Audit) -> Result<Audited, EdgeError> {
-        domain::in_scope(g, &q.realm)?;
+        domain::in_scope(g, &q.environment)?;
         let event_type = domain::event_type(&q.event, &q.outcome)?;
         let actor = g.uri.uri();
-        let target = q.subject.map_or_else(|| String::from("realm"), |s| hex(&s));
+        let target = q
+            .subject
+            .map_or_else(|| String::from("environment"), |s| hex(&s));
         let mut tx = self.begin(g).await?;
         tx.audit(&AuditEvent {
             event_type: &event_type,

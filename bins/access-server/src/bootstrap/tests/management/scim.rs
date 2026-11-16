@@ -1,13 +1,13 @@
 //! The SCIM server on the real server path (OP-155 m.3 (g), OP-153 m.3 (gg), IDP-23): a client
 //! registered by REST through `idp.scim.client_register` provisions Users and Groups of its
-//! realm over the real router on real Postgres, the account use cases and the PII vault.
+//! environment over the real router on real Postgres, the account use cases and the PII vault.
 
 use access_identity_scim::domain::patch::PATCH_SCHEMA;
 use access_identity_scim::domain::schema::{GROUP, USER};
 
 use super::*;
 
-const BASE: &str = "/realms/acme/scim/v2";
+const BASE: &str = "/env/acme/scim/v2";
 
 pub(super) struct Scim {
     router: axum::Router,
@@ -19,7 +19,7 @@ pub(super) fn scim_router(c: &Console) -> Scim {
         router: crate::scim::routes(
             c.w.db.router.clone(),
             c.w.db.app.clone(),
-            crate::login::RealmKeks::new(c.w.keys.clone()),
+            crate::login::EnvironmentKeks::new(c.w.keys.clone()),
             ids,
         )
         .unwrap(),
@@ -84,7 +84,7 @@ async fn register(c: &Console, name: &str, profile: Option<&str>) -> String {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients",
+            "/admin/v1/envs/acme/scim-clients",
             ("registerScimClient", None),
             body,
             None,
@@ -106,7 +106,7 @@ pub(super) fn user(name: &str, external: &str) -> serde_json::Value {
 }
 
 async fn subject_of(c: &Console, client: &str, id: &str) -> [u8; 16] {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let id = access_identity_scim::app::parse_id(id).unwrap();
@@ -119,7 +119,7 @@ async fn subject_of(c: &Console, client: &str, id: &str) -> [u8; 16] {
 }
 
 async fn status_of(c: &Console, subject: [u8; 16]) -> (String, i64) {
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let row = t.subject(subject, false).await.unwrap().unwrap();
@@ -274,7 +274,7 @@ async fn a_scim_client_provisions_deprovisions_and_never_reuses_an_id() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients/entra/secret/rotate",
+            "/admin/v1/envs/acme/scim-clients/entra/secret/rotate",
             ("rotateScimSecret", Some("entra")),
             serde_json::json!({}),
             None,
@@ -289,7 +289,7 @@ async fn a_scim_client_provisions_deprovisions_and_never_reuses_an_id() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-clients/entra/retire",
+            "/admin/v1/envs/acme/scim-clients/entra/retire",
             ("retireScimClient", Some("entra")),
             serde_json::json!({}),
             None,
@@ -712,7 +712,7 @@ async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/scim-targets",
+            "/admin/v1/envs/acme/scim-targets",
             ("registerScimTarget", None),
             serde_json::json!({
                 "name": "crm",
@@ -737,7 +737,7 @@ async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
     let local = created["id"].as_str().unwrap().to_owned();
 
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
-    let keks = crate::login::RealmKeks::new(c.w.keys.clone());
+    let keks = crate::login::EnvironmentKeks::new(c.w.keys.clone());
     let recorder = Recorder {
         calls: std::sync::Mutex::new(Vec::new()),
         replies: std::sync::Mutex::new(vec![Reply {
@@ -766,7 +766,7 @@ async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
         assert_eq!(body["externalId"], local);
         assert!(body.get("id").is_none() && body.get("password").is_none());
     }
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let pushes = access_store::scim::pushes(&mut t, "crm", 10).await.unwrap();
@@ -799,7 +799,7 @@ async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
     assert_eq!(calls.len(), 3);
     assert_eq!(calls[1].0, "DELETE");
     assert_eq!(calls[1].1, "https://crm.example/scim/v2/Users/remote-1");
-    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
     let pushes = access_store::scim::pushes(&mut t, "crm", 10).await.unwrap();

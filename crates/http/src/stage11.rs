@@ -1,4 +1,4 @@
-//! The Stage 11 routes outside the realm-admin and Frontend API manifests, declared before
+//! The Stage 11 routes outside the environment-admin and Frontend API manifests, declared before
 //! their lanes serve them (OP-156 m.4): the Relay callbacks and status. The forward-auth
 //! checks are served by [`crate::proxy`]. Each answers `501 not-yet-served`; a lane that serves one removes its
 //! row and mounts its own handler.

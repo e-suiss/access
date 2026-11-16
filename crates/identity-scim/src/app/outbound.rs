@@ -1,4 +1,4 @@
-//! The outbound SCIM client (IDP-29, §10.6.2, Ek B 4823, 5036): the realm's provisioned users and
+//! The outbound SCIM client (IDP-29, §10.6.2, Ek B 4823, 5036): the environment's provisioned users and
 //! groups are pushed to each live target registered by `idp.scim.outbound_register`, in order,
 //! through the identity outbox. Each push and the target's answer go to the outbound log; a
 //! transient failure is queued again, at most [`MAX_ATTEMPTS`] times. A target's answer is a
@@ -12,7 +12,7 @@ use access_identity_account::adapters::pg::PgTx;
 use access_identity_account::ports::AccountTx;
 use access_store::Pool;
 use access_store::events::SealedKey;
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx, ack, cursor, poll};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx, ack, cursor, poll};
 use access_store::scim::{PushLog, TargetRow};
 use serde_json::{Value, json};
 
@@ -139,7 +139,7 @@ impl Push {
     }
 }
 
-/// Queues `operation` of the local resource for every live target of the realm (IDP-29).
+/// Queues `operation` of the local resource for every live target of the environment (IDP-29).
 ///
 /// # Errors
 /// [`access_identity_account::AccountError`].
@@ -191,13 +191,13 @@ pub trait Sender: Send + Sync {
     ) -> Pending<'a, Option<Reply>>;
 }
 
-/// Opens a target's sealed secret under the realm KEK.
+/// Opens a target's sealed secret under the environment KEK.
 pub trait Secrets: Send + Sync {
     /// The secret of target `id`; `None` when it cannot be opened (fail closed).
     fn open(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         sealed: &SealedKey,
     ) -> Option<zeroize::Zeroizing<Vec<u8>>>;
@@ -223,7 +223,7 @@ pub trait Local: Send + Sync {
     fn read<'a>(
         &'a self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         push: &'a Push,
     ) -> Pending<'a, Option<Value>>;
 }
@@ -256,10 +256,10 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
     async fn target(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         name: &str,
     ) -> Result<Option<TargetRow>, access_store::StoreError> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
         let x = access_store::scim::targets(&mut t)
             .await?
             .into_iter()
@@ -271,11 +271,11 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
     async fn links(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         p: &Push,
         members: &[[u8; 16]],
     ) -> Result<(Option<String>, Vec<(String, String)>), access_store::StoreError> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
         let own = access_store::scim::link(&mut t, &p.target, kind_name(p.kind), p.local).await?;
         let mut linked = Vec::new();
         for m in members {
@@ -294,17 +294,17 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
     pub async fn push(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         p: &Push,
     ) -> Result<(), access_store::StoreError> {
-        let Some(target) = self.target(tenant, realm, &p.target).await? else {
+        let Some(target) = self.target(tenant, environment, &p.target).await? else {
             return Ok(());
         };
         let id = crate::app::clients::target_id(&target.name);
-        let Some(secret) = self.secrets.open(tenant, realm, &id, &target.secret) else {
-            return self.log(tenant, realm, p, None, "failed").await;
+        let Some(secret) = self.secrets.open(tenant, environment, &id, &target.secret) else {
+            return self.log(tenant, environment, p, None, "failed").await;
         };
-        let local = self.local.read(tenant, realm, p).await;
+        let local = self.local.read(tenant, environment, p).await;
         let members: Vec<[u8; 16]> = local
             .as_ref()
             .and_then(|v| v.get("members"))
@@ -315,7 +315,7 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
                     .collect()
             })
             .unwrap_or_default();
-        let (remote, linked) = self.links(tenant, realm, p, &members).await?;
+        let (remote, linked) = self.links(tenant, environment, p, &members).await?;
         let base = target.base_url.trim_end_matches('/');
         let endpoint = format!("{base}/{}", p.kind.endpoint());
         let reply = match (p.operation, &remote, local) {
@@ -325,7 +325,7 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
                     .await
             }
             (Operation::Delete, None, _) | (_, _, None) => {
-                return self.log(tenant, realm, p, None, "done").await;
+                return self.log(tenant, environment, p, None, "done").await;
             }
             (op, remote, Some(v)) => {
                 let mut body = outbound_body(p.kind, v, &linked);
@@ -360,7 +360,7 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
                 .and_then(|v| v.get("id").and_then(Value::as_str).map(str::to_owned))
             && (1..=256).contains(&rid.len())
         {
-            let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+            let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
             access_store::scim::put_link(&mut t, &p.target, kind_name(p.kind), p.local, &rid)
                 .await?;
             t.commit().await?;
@@ -375,19 +375,19 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
             r if retryable(r.as_ref()) && p.attempt < MAX_ATTEMPTS => "retry",
             _ => "failed",
         };
-        self.log(tenant, realm, p, reply.map(|r| r.status), outcome)
+        self.log(tenant, environment, p, reply.map(|r| r.status), outcome)
             .await
     }
 
     async fn log(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         p: &Push,
         status: Option<u16>,
         outcome: &str,
     ) -> Result<(), access_store::StoreError> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(&self.app, tenant, environment).await?;
         access_store::scim::log_push(
             &mut t,
             &PushLog {
@@ -422,7 +422,7 @@ impl<S: Sender, K: Secrets, L: Local> Worker<S, K, L> {
             if e.kind == OUTBOX_KIND
                 && let Some(p) = Push::from_bytes(&e.payload)
             {
-                self.push(e.tenant, e.realm, &p).await?;
+                self.push(e.tenant, e.environment, &p).await?;
                 n = n.saturating_add(1);
             }
             at = Cursor {

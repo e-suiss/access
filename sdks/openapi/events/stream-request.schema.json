@@ -74,7 +74,7 @@
         "ES256",
         "RS256"
       ],
-      "description": "The SET signing algorithm (TN-40). ES256 by default; RS256 is answered with problem `unsupported_alg` until the realm can hold an RSA key."
+      "description": "The SET signing algorithm (TN-40). ES256 by default; RS256 is answered with problem `unsupported_alg` until the environment can hold an RSA key."
     }
   }
 }

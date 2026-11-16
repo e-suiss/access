@@ -125,7 +125,7 @@
             }
           },
           "409": {
-            "description": "The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered).",
+            "description": "The session already has an active device Instance (instance-exists; INV-13: one per session and environment), or the authority plane did not open the Instance (instance-not-registered).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -214,7 +214,7 @@
             }
           },
           "409": {
-            "description": "The session already binds an active device Instance (instance-exists; INV-13: one per session and realm).",
+            "description": "The session already binds an active device Instance (instance-exists; INV-13: one per session and environment).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -239,7 +239,7 @@
     "/v1/me/instances/recover": {
       "post": {
         "operationId": "recoverInstance",
-        "summary": "Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the realm issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind.",
+        "summary": "Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the environment issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -422,7 +422,7 @@
     "/v1/me/auth-context": {
       "post": {
         "operationId": "issueAuthContext",
-        "summary": "The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8).",
+        "summary": "The session's auth_context artifact, signed by the environment's identity signer key (OP-149 m.8).",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -506,7 +506,7 @@
             "name": "redirect_uri",
             "in": "query",
             "required": true,
-            "description": "Exactly a redirect URI an active client of the realm registered, or one an active platform product client registered in the platform realm (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match).",
+            "description": "Exactly a redirect URI an active client of the environment registered, or one an active platform product client registered in the platform environment (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match).",
             "schema": {
               "type": "string"
             }
@@ -561,7 +561,7 @@
     "/v1/approve/batch": {
       "post": {
         "operationId": "startBatchApproval",
-        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3).",
+        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m), §13.7.3).",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -595,7 +595,7 @@
             }
           },
           "422": {
-            "description": "approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused.",
+            "description": "approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the environment did not open; the whole batch is refused.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -690,7 +690,7 @@
     "/v1/approve/inline": {
       "post": {
         "operationId": "answerInlineApproval",
-        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the realm's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26).",
+        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the environment's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26).",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -762,7 +762,7 @@
     "/v1/approve/requests": {
       "post": {
         "operationId": "pushApprovalRequest",
-        "summary": "A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the realm's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing.",
+        "summary": "A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the environment's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -885,7 +885,7 @@
             }
           },
           "400": {
-            "description": "invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the realm's).",
+            "description": "invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the environment's).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1095,7 +1095,7 @@
           "domain": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "The realm's governing DomainID, 32 bytes."
+            "description": "The environment's governing DomainID, 32 bytes."
           },
           "basis": {
             "type": "string",
@@ -1335,7 +1335,7 @@
           "auth_context": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."
+            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the environment's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."
           },
           "digest": {
             "type": "string",
@@ -1742,12 +1742,12 @@
           "credential_id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "rawId of the approver's registered passkey in the realm."
+            "description": "rawId of the approver's registered passkey in the environment."
           },
           "authenticator_data": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "response.authenticatorData; its RP ID hash is the realm's RP ID and UP is set."
+            "description": "response.authenticatorData; its RP ID hash is the environment's RP ID and UP is set."
           },
           "client_data_json": {
             "type": "string",
@@ -1944,7 +1944,7 @@
           },
           "spc": {
             "type": "object",
-            "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))."
+            "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the environment decided idp.environment.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))."
           }
         }
       },
@@ -1962,7 +1962,7 @@
           },
           "redirect_uri": {
             "type": "string",
-            "description": "As GET /v1/approve; checked against the realm's clients again."
+            "description": "As GET /v1/approve; checked against the environment's clients again."
           },
           "state": {
             "type": "string",

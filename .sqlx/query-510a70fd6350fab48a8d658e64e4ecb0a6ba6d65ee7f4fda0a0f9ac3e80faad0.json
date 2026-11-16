@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.admin_job_items SET status = $5, http_status = $6, problem = $7,\n                exercise_id = $8, decision_pos = $9\n          WHERE tenant_id = $1 AND environment_id = $2 AND job_id = $3 AND item_index = $4\n            AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "510a70fd6350fab48a8d658e64e4ecb0a6ba6d65ee7f4fda0a0f9ac3e80faad0"
+}

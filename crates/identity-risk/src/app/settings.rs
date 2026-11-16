@@ -1,12 +1,12 @@
-//! The realm's protection mode and canary accounts as configuration (MD-14, EI-25, OP-151 m.3
+//! The environment's protection mode and canary accounts as configuration (MD-14, EI-25, OP-151 m.3
 //! (o)). Both are `idp.*` domain actions: the management surface compiles a change to an
 //! Exercise carrying the caller's AIS, and the write below happens only under the committed ALLOW
 //! bound in the same transaction; the database refuses any other write (TN-110).
 //!
 //! | Action | Tier |
 //! |---|---|
-//! | `idp.realm.protection_mode` | CT1 when it only tightens (monitor → enforce, a later SL2 stage, more denied ASNs); CT2 when anything loosens |
-//! | `idp.account.canary` | CT2: a canary account is a credential the realm plants |
+//! | `idp.environment.protection_mode` | CT1 when it only tightens (monitor → enforce, a later SL2 stage, more denied ASNs); CT2 when anything loosens |
+//! | `idp.account.canary` | CT2: a canary account is a credential the environment plants |
 
 use access_store::identity::TenantTx;
 use access_store::idp::Bound;
@@ -57,7 +57,7 @@ pub fn canonical(m: &ProtectionMode) -> String {
     )
 }
 
-/// The realm's mode; the defaults when none was decided.
+/// The environment's mode; the defaults when none was decided.
 ///
 /// # Errors
 /// [`RiskError::Corrupt`] for a stored value outside the model; [`RiskError`].
@@ -68,7 +68,7 @@ pub async fn mode(tx: &mut TenantTx) -> Result<ProtectionMode, RiskError> {
     }
 }
 
-/// The tier of changing the realm's mode to `next`.
+/// The tier of changing the environment's mode to `next`.
 ///
 /// # Errors
 /// [`RiskError`].
@@ -77,7 +77,7 @@ pub async fn change_tier(tx: &mut TenantTx, next: &ProtectionMode) -> Result<Tie
     Ok(tier(&current, next))
 }
 
-/// Writes `next` under `bound`, a committed `idp.realm.protection_mode` ALLOW of this
+/// Writes `next` under `bound`, a committed `idp.environment.protection_mode` ALLOW of this
 /// transaction.
 ///
 /// # Errors
@@ -94,7 +94,7 @@ pub async fn apply_mode(
         suspicious_ip = next.suspicious_ip.name(),
         breached_password = next.breached_password.name(),
         bot = next.bot.name(),
-        "realm protection mode changed"
+        "environment protection mode changed"
     );
     Ok(())
 }

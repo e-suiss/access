@@ -1,6 +1,6 @@
 //! Agents through commit against real PostgreSQL, the sequencer and the authority plane
 //! (OP-154 m.3 (c), (e), (g), RR-12, AG-19, AG-41): an agent is its own Party rooted in its
-//! operator, the realm issuer exports it as Claims, it acts only through a template's Grant
+//! operator, the environment issuer exports it as Claims, it acts only through a template's Grant
 //! inside its budget and depth, and the sponsor rule holds on the real commit.
 
 use access_authority_core::domain::{ProofRef, Request};
@@ -18,7 +18,7 @@ use access_kernel::combinator::{BlockerClass, Outcome};
 use access_kernel::intent::IntentEnvelope;
 use access_kernel::meta::{ActorKind, GrantBasis, HoldingRef, Payload, Root};
 use access_kernel::model::SubjectSelector;
-use access_store::issuer::{last_in_line, realm_issuer};
+use access_store::issuer::{environment_issuer, last_in_line};
 use serde_json::json;
 
 use super::claims::courier;
@@ -53,30 +53,35 @@ fn agent_register(d: Digest, party: Id, operator: Id, seed: u8) -> SelfSigned {
 
 struct Ready {
     w: World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     issuer: Id,
     sponsor: [u8; 16],
 }
 
-/// A realm whose root ROOT is bound to a founder account, and a second account bound to ALICE
+/// An environment whose root ROOT is bound to a founder account, and a second account bound to ALICE
 /// that sponsors agents.
 async fn ready() -> Ready {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm(SLUG).await;
+    let (tenant, environment, d) = w.environment(SLUG).await;
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();
-    w.admin().register_issuer(tenant, realm).await.unwrap();
+    w.admin()
+        .register_issuer(tenant, environment)
+        .await
+        .unwrap();
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let founder = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "environment-kek:1", &[9; 40])
         .await
         .unwrap();
     let sponsor = t
-        .insert_subject("active", "realm-kek:1", &[8; 40])
+        .insert_subject("active", "environment-kek:1", &[8; 40])
         .await
         .unwrap();
     assert!(
@@ -89,11 +94,11 @@ async fn ready() -> Ready {
             .await
             .unwrap()
     );
-    let issuer = Id(realm_issuer(&mut t).await.unwrap().unwrap());
+    let issuer = Id(environment_issuer(&mut t).await.unwrap().unwrap());
     t.commit().await.unwrap();
     Ready {
         w,
-        at: (tenant, realm),
+        at: (tenant, environment),
         d,
         issuer,
         sponsor,
@@ -271,7 +276,7 @@ fn rename(agent: Id) -> IntentEnvelope {
     .unwrap()
 }
 
-/// The last Claim the realm issuer issued on `agent`'s `class` line about `about`.
+/// The last Claim the environment issuer issued on `agent`'s `class` line about `about`.
 async fn claim_of(r: &Ready, agent: Id, class: Class, about: &[u8]) -> [u8; 16] {
     let mut t = TenantTx::begin(&r.w.db.app, r.at.0, r.at.1).await.unwrap();
     let id = last_in_line(
@@ -300,7 +305,7 @@ fn denied(v: &Verdict) -> &access_kernel::combinator::Decision {
 
 // OP-154 m.3 (c), AG-19, AG-20, F15, F18, I2, E23, Ek B 4266, 4317, 4318, 4319, 4320, 4375
 #[tokio::test]
-async fn an_agent_is_its_own_party_and_the_realm_issuer_exports_it_as_claims() {
+async fn an_agent_is_its_own_party_and_the_environment_issuer_exports_it_as_claims() {
     let r = Box::pin(ready()).await;
     agent(&r, (AGENT, AGENT_ONE_TIME, AGENT_KEY), 1, &[r.sponsor]).await;
     assert_eq!(

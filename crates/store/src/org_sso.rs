@@ -116,16 +116,16 @@ impl TenantTx {
         org: [u8; 16],
         invites: Option<&str>,
     ) -> Result<u64, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let version = sqlx::query_scalar!(
             r#"INSERT INTO access.org_sso_enforcements
-                 (tenant_id, realm_id, org_id, version, enforced, invites, domain_id, decision_pos)
+                 (tenant_id, environment_id, org_id, version, enforced, invites, domain_id, decision_pos)
                SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7
                  FROM access.org_sso_enforcements
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3
                RETURNING version AS "version!""#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             invites.is_some(),
             invites,
@@ -145,13 +145,13 @@ impl TenantTx {
         &mut self,
         org: [u8; 16],
     ) -> Result<Option<Enforcement>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             "SELECT version, enforced, invites FROM access.org_sso_enforcements
-              WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_optional(&mut *self.tx)
@@ -174,20 +174,20 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query_scalar!(
             r#"SELECT m.org_id AS "org!" FROM access.org_memberships m
                  JOIN access.organizations o
-                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
-                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                   ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3
                   AND m.ended_at IS NULL AND o.ended_at IS NULL
                   AND (SELECT e.enforced FROM access.org_sso_enforcements e
-                        WHERE e.tenant_id = m.tenant_id AND e.realm_id = m.realm_id
+                        WHERE e.tenant_id = m.tenant_id AND e.environment_id = m.environment_id
                           AND e.org_id = m.org_id
                         ORDER BY e.version DESC LIMIT 1)
                 ORDER BY m.org_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -207,15 +207,15 @@ impl TenantTx {
         if parties.is_empty() {
             return Ok(Vec::new());
         }
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             "SELECT name FROM access.idp_upstreams
-              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+              WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'
                 AND profile IS NOT NULL
                 AND (profile::jsonb ->> 'organization') = ANY($3)
               ORDER BY name",
             tenant,
-            realm,
+            environment,
             parties,
         )
         .fetch_all(&mut *self.tx)
@@ -227,36 +227,36 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn sso_impact(&mut self, org: [u8; 16]) -> Result<Vec<MemberImpact>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query!(
             r#"SELECT m.subject_id, m.owner,
                       (SELECT count(*) FROM access.identity_credentials c
-                        WHERE c.tenant_id = m.tenant_id AND c.realm_id = m.realm_id
+                        WHERE c.tenant_id = m.tenant_id AND c.environment_id = m.environment_id
                           AND c.subject_id = m.subject_id AND c.status = 'active') AS "local!",
                       EXISTS (SELECT 1 FROM access.identity_credentials c
-                        WHERE c.tenant_id = m.tenant_id AND c.realm_id = m.realm_id
+                        WHERE c.tenant_id = m.tenant_id AND c.environment_id = m.environment_id
                           AND c.subject_id = m.subject_id AND c.status = 'active'
                           AND c.kind = 'password') AS "password!",
                       (SELECT count(*) FROM access.ldap_credentials l
-                        WHERE l.tenant_id = m.tenant_id AND l.realm_id = m.realm_id
+                        WHERE l.tenant_id = m.tenant_id AND l.environment_id = m.environment_id
                           AND l.subject_id = m.subject_id AND l.status = 'active') AS "api_keys!",
                       (SELECT count(*) FROM access.login_sessions s
-                        WHERE s.tenant_id = m.tenant_id AND s.realm_id = m.realm_id
+                        WHERE s.tenant_id = m.tenant_id AND s.environment_id = m.environment_id
                           AND s.subject_id = m.subject_id AND s.ended_ms IS NULL) AS "sessions!",
                       (SELECT count(*) FROM access.oauth_grants g
-                        WHERE g.tenant_id = m.tenant_id AND g.realm_id = m.realm_id
+                        WHERE g.tenant_id = m.tenant_id AND g.environment_id = m.environment_id
                           AND g.subject_id = m.subject_id AND g.revoked_ms IS NULL
                           AND g.expires_ms > (extract(epoch FROM clock_timestamp()) * 1000)::bigint)
                         AS "refresh!",
                       (SELECT count(*) FROM access.identity_federated f
-                        WHERE f.tenant_id = m.tenant_id AND f.realm_id = m.realm_id
+                        WHERE f.tenant_id = m.tenant_id AND f.environment_id = m.environment_id
                           AND f.subject_id = m.subject_id AND f.ended_ms IS NULL) AS "linked!"
                  FROM access.org_memberships m
-                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.org_id = $3
+                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.org_id = $3
                   AND m.ended_at IS NULL
                 ORDER BY m.joined_at, m.membership_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
@@ -281,15 +281,15 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn open_invitations(&mut self, org: [u8; 16]) -> Result<Vec<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query_scalar!(
             r#"SELECT invitation_id AS "id!" FROM access.org_invitations
-                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3
                   AND accepted_at IS NULL AND revoked_at IS NULL
                   AND expires_at > clock_timestamp()
                 ORDER BY invitation_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
@@ -310,16 +310,16 @@ impl TenantTx {
         if orgs.is_empty() || invitees.is_empty() {
             return Ok(0);
         }
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let orgs: Vec<Uuid> = orgs.iter().map(|o| uuid(*o)).collect();
         let invitees: Vec<Vec<u8>> = invitees.iter().map(|i| i.to_vec()).collect();
         let done = sqlx::query!(
             "UPDATE access.org_invitations SET revoked_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND org_id = ANY($3)
+              WHERE tenant_id = $1 AND environment_id = $2 AND org_id = ANY($3)
                 AND invitee_index = ANY($4)
                 AND accepted_at IS NULL AND revoked_at IS NULL",
             tenant,
-            realm,
+            environment,
             &orgs,
             &invitees,
         )
@@ -336,14 +336,14 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<[u8; 32]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let rows = sqlx::query_scalar!(
             r#"SELECT value_index AS "index!" FROM access.identity_identifiers
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'
                   AND value_index IS NOT NULL
                 ORDER BY identifier_id"#,
             tenant,
-            realm,
+            environment,
             uuid(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -365,16 +365,16 @@ impl TenantTx {
         exercise: &[u8; 32],
         ttl_s: i64,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let secs = f64::from(i32::try_from(ttl_s).map_err(|_| StoreError::Range)?);
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_setup_links
-                 (tenant_id, realm_id, org_id, token_hash, created_exercise, created_at, expires_at)
+                 (tenant_id, environment_id, org_id, token_hash, created_exercise, created_at, expires_at)
                SELECT $1, $2, $3, $4, $5, n, n + make_interval(secs => $6)
                  FROM (SELECT clock_timestamp() AS n) t
                RETURNING link_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             token_hash.as_slice(),
             exercise.as_slice(),
@@ -398,16 +398,16 @@ impl TenantTx {
         exercise: &[u8; 32],
         ago_s: i64,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let secs = f64::from(i32::try_from(ago_s).map_err(|_| StoreError::Range)?);
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_setup_links
-                 (tenant_id, realm_id, org_id, token_hash, created_exercise, created_at, expires_at)
+                 (tenant_id, environment_id, org_id, token_hash, created_exercise, created_at, expires_at)
                SELECT $1, $2, $3, $4, $5, n, n + interval '72 hours'
                  FROM (SELECT clock_timestamp() - make_interval(secs => $6) AS n) t
                RETURNING link_id"#,
             tenant,
-            realm,
+            environment,
             uuid(org),
             token_hash.as_slice(),
             exercise.as_slice(),
@@ -418,7 +418,7 @@ impl TenantTx {
         Ok(*id.as_bytes())
     }
 
-    /// The action of the realm's `idp.*` decision at `position`, for tests.
+    /// The action of the environment's `idp.*` decision at `position`, for tests.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -427,12 +427,12 @@ impl TenantTx {
         &mut self,
         position: i64,
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             "SELECT action FROM access.idp_config_log
-              WHERE tenant_id = $1 AND realm_id = $2 AND decision_pos = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND decision_pos = $3",
             tenant,
-            realm,
+            environment,
             position,
         )
         .fetch_optional(&mut *self.tx)
@@ -447,16 +447,16 @@ impl TenantTx {
         &mut self,
         token_hash: &[u8; 32],
     ) -> Result<Option<SetupLink>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query!(
             r#"SELECT link_id, org_id, created_exercise, browser_hash,
                       expires_at <= clock_timestamp() AS "expired!",
                       finished_at IS NOT NULL AS "finished!",
                       (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
                  FROM access.org_setup_links
-                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND token_hash = $3"#,
             tenant,
-            realm,
+            environment,
             token_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -490,13 +490,13 @@ impl TenantTx {
         link: [u8; 16],
         browser: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             "UPDATE access.org_setup_links SET browser_hash = $4, opened_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND link_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND link_id = $3
                 AND opened_at IS NULL AND expires_at > clock_timestamp()",
             tenant,
-            realm,
+            environment,
             uuid(link),
             browser.as_slice(),
         )
@@ -510,14 +510,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn finish_setup_link(&mut self, link: [u8; 16]) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             "UPDATE access.org_setup_links SET finished_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND link_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND link_id = $3
                 AND opened_at IS NOT NULL AND finished_at IS NULL
                 AND expires_at > clock_timestamp()",
             tenant,
-            realm,
+            environment,
             uuid(link),
         )
         .execute(&mut *self.tx)
@@ -533,7 +533,7 @@ impl TenantTx {
         &mut self,
         d: &NewDraft<'_>,
     ) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let (protocol, issuer, client_id, entity_id, metadata_url) = match d.shape {
             DraftShape::Oidc { issuer, client_id } => {
                 ("oidc", Some(issuer), Some(client_id), None, None)
@@ -545,11 +545,11 @@ impl TenantTx {
         };
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_sso_drafts
-                 (tenant_id, realm_id, org_id, protocol, issuer, client_id, saml_entity_id,
+                 (tenant_id, environment_id, org_id, protocol, issuer, client_id, saml_entity_id,
                   saml_metadata_url, provider, drafted_by, created_exercise, setup_link)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING draft_id"#,
             tenant,
-            realm,
+            environment,
             uuid(d.org),
             protocol,
             issuer,
@@ -576,13 +576,13 @@ impl TenantTx {
         client: &str,
         exercise: &[u8; 32],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         sqlx::query!(
             "INSERT INTO access.org_scim_sources
-               (tenant_id, realm_id, org_id, client_name, created_exercise)
+               (tenant_id, environment_id, org_id, client_name, created_exercise)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             uuid(org),
             client,
             exercise.as_slice(),
@@ -597,12 +597,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn end_scim_source(&mut self, client: &str) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let done = sqlx::query!(
             "UPDATE access.org_scim_sources SET ended_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND ended_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND ended_at IS NULL",
             tenant,
-            realm,
+            environment,
             client,
         )
         .execute(&mut *self.tx)
@@ -615,13 +615,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn scim_sources(&mut self, org: [u8; 16]) -> Result<Vec<String>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         Ok(sqlx::query_scalar!(
             "SELECT client_name FROM access.org_scim_sources
-              WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL
+              WHERE tenant_id = $1 AND environment_id = $2 AND org_id = $3 AND ended_at IS NULL
               ORDER BY client_name",
             tenant,
-            realm,
+            environment,
             uuid(org),
         )
         .fetch_all(&mut *self.tx)
@@ -633,12 +633,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn scim_source_org(&mut self, client: &str) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.org_scope()?;
+        let (tenant, environment) = self.org_scope()?;
         let row = sqlx::query_scalar!(
             "SELECT org_id FROM access.org_scim_sources
-              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND ended_at IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND client_name = $3 AND ended_at IS NULL",
             tenant,
-            realm,
+            environment,
             client,
         )
         .fetch_optional(&mut *self.tx)

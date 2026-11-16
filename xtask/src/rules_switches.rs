@@ -29,7 +29,7 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[
     (
         "bins/access-gw-ldap/src/server.rs",
         "danger",
-        "rustls names its custom verifier traits `danger`; the LDAP gateway's verifier checks only that the client holds the certificate's key (TLS 1.3 handshake signature) and bounds the chain, then access-server runs the realm's certificate sign-in rules (path, Acceptance, revocation) before anyone is bound (OP-155 m.3 (n))",
+        "rustls names its custom verifier traits `danger`; the LDAP gateway's verifier checks only that the client holds the certificate's key (TLS 1.3 handshake signature) and bounds the chain, then access-server runs the environment's certificate sign-in rules (path, Acceptance, revocation) before anyone is bound (OP-155 m.3 (n))",
     ),
     (
         "bins/access-gw-radius/src/server.rs",

@@ -1,4 +1,4 @@
-// IDP-30, B22, OP-156 m.3 (l), (m), m.15 (h): the realm's forward-auth proxies. Registering,
+// IDP-30, B22, OP-156 m.3 (l), (m), m.15 (h): the environment's forward-auth proxies. Registering,
 // retiring and turning plain identity headers on or off are each one signed change; turning them
 // on runs the setup check, and its refusal is shown as the change's answer.
 import { useState, type ReactElement } from "react";
@@ -31,8 +31,10 @@ const ENGINES = ["envoy", "caddy", "traefik", "nginx"] as const;
 
 /** The forward-auth proxies screen. */
 export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const proxies = useLoad(() => adminGet<Page<ProxyRow>>(ctx.instance, `realms/${realm}/proxies`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const proxies = useLoad(() =>
+    adminGet<Page<ProxyRow>>(ctx.instance, `envs/${environment}/proxies`),
+  );
   const [name, setName] = useState("");
   const [engine, setEngine] = useState<string>("envoy");
   const [host, setHost] = useState("");
@@ -54,7 +56,7 @@ export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
     key?: string,
   ) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method,
         path,

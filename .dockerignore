@@ -6,7 +6,7 @@
 docs
 deploy
 !deploy/compose/access
-!deploy/realm-templates
+!deploy/environment-templates
 !deploy/linux-client
 target
 **/target

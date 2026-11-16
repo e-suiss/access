@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT value_index AS \"index!\" FROM access.identity_identifiers\n                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'\n                  AND kind = 'email' AND value_index IS NOT NULL\n                ORDER BY identifier_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "index!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value_index"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "93f7385f593e3f981bc18c1df09ae04b0c9d2c38e13284323feb94e31d25aefa"
+}

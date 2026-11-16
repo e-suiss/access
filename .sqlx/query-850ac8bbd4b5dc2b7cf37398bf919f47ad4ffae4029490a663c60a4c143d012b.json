@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_webhook_keys\n                SET not_after = to_timestamp($4::bigint / 1000.0), domain_id = $5, decision_pos = $6\n              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND not_after IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "850ac8bbd4b5dc2b7cf37398bf919f47ad4ffae4029490a663c60a4c143d012b"
+}

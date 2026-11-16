@@ -39,9 +39,13 @@ fn rp_metadata(id: &str) -> Json {
 }
 
 async fn federate(a: &At<'_>, ta: &Entity) {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let b = a.bound(&mut tx, "idp.federation.enable").await;
     tx.put_federation_settings(
         &b,
@@ -79,9 +83,13 @@ fn problem(r: &Reply) -> &'static str {
 }
 
 async fn rows(a: &At<'_>, id: &str) -> (bool, bool) {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let oidf = tx.oidf_client(id).await.unwrap().is_some();
     let cimd = tx.cimd_client(id).await.unwrap().is_some();
     tx.commit().await.unwrap();
@@ -138,7 +146,7 @@ async fn a_url_client_id_with_a_chain_resolves_through_federation_only() {
     assert_eq!(
         problem(&chained),
         "invalid-client",
-        "a trust_chain in a realm that is no leaf"
+        "a trust_chain in an environment that is no leaf"
     );
     federate(&a, &ta).await;
     let asked = location(&ask(&a, RP, &[]).await);
@@ -196,9 +204,13 @@ async fn a_url_client_id_with_a_chain_resolves_through_federation_only() {
 }
 
 async fn open_registration(a: &At<'_>) {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let b = a.bound(&mut tx, "idp.federation.registration_open").await;
     tx.put_federation_settings(
         &b,
@@ -214,9 +226,13 @@ async fn open_registration(a: &At<'_>) {
 }
 
 async fn registration(a: &At<'_>, id: &str) -> Option<access_store::oidf::OidfRegistration> {
-    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
-        .await
-        .unwrap();
+    let mut tx = TenantTx::begin(
+        &a.c.db.app,
+        a.f.environment.tenant,
+        a.f.environment.environment,
+    )
+    .await
+    .unwrap();
     let row = tx.oidf_client(id).await.unwrap();
     tx.commit().await.unwrap();
     row.map(|r| r.registration)

@@ -16,7 +16,7 @@ use std::time::Duration;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Bound, Decision, bind, create_settings};
 use access_store::payment::{
     NewSmsCode, SimChange, fail_mirror_version, mirror_versions, promote_mirror_version,
@@ -24,7 +24,7 @@ use access_store::payment::{
 };
 use access_store::push::{NewDeviceKey, NewPushChallenge};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -90,12 +90,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, slug, "pool-default")
+    let r = create_environment(&mut tx, d, slug, "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     assert!(
         set_issuer(&mut tx, &format!("https://{slug}.suiss.id"))
@@ -124,7 +124,7 @@ async fn allow(tx: &mut TenantTx, d: &DomainId, pos: u8, action: &str) -> Bound 
     .unwrap()
 }
 
-async fn subject(db: &TestDb, t: TenantId, r: RealmId) -> [u8; 16] {
+async fn subject(db: &TestDb, t: TenantId, r: EnvironmentId) -> [u8; 16] {
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let s = tx
         .insert_subject("active", "kek-1", &[1; 40])
@@ -140,26 +140,26 @@ async fn sms_and_spc_settings_need_their_own_allows() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 60, 4).await;
-    let r = realm(&db, t, &d, "pay").await;
+    let r = environment(&db, t, &d, "pay").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(!tx.sms_otp_enabled().await.unwrap());
     assert!(!tx.spc_enabled().await.unwrap());
-    let wrong = allow(&mut tx, &d, 1, "idp.realm.push").await;
+    let wrong = allow(&mut tx, &d, 1, "idp.environment.push").await;
     assert!(tx.put_sms_otp(&wrong, true).await.is_err());
     drop(tx);
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    let b = allow(&mut tx, &d, 1, "idp.realm.sms_otp").await;
+    let b = allow(&mut tx, &d, 1, "idp.environment.sms_otp").await;
     tx.put_sms_otp(&b, true).await.unwrap();
-    let b = allow(&mut tx, &d, 2, "idp.realm.spc").await;
+    let b = allow(&mut tx, &d, 2, "idp.environment.spc").await;
     tx.put_spc(&b, true).await.unwrap();
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert!(tx.sms_otp_enabled().await.unwrap());
     assert!(tx.spc_enabled().await.unwrap());
-    let b = allow(&mut tx, &d, 3, "idp.realm.sms_otp_close").await;
+    let b = allow(&mut tx, &d, 3, "idp.environment.sms_otp_close").await;
     tx.put_sms_otp(&b, false).await.unwrap();
     tx.commit().await.unwrap();
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
@@ -172,7 +172,7 @@ async fn an_sms_code_takes_three_tries_and_is_used_once() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 61, 0).await;
-    let r = realm(&db, t, &d, "sms").await;
+    let r = environment(&db, t, &d, "sms").await;
     let s = subject(&db, t, r).await;
     let code = |binding: &'static [u8; 32]| NewSmsCode {
         subject: s,
@@ -224,7 +224,7 @@ async fn an_approver_key_is_attested_and_its_pin_declarations_are_kept() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 62, 0).await;
-    let r = realm(&db, t, &d, "app").await;
+    let r = environment(&db, t, &d, "app").await;
     let s = subject(&db, t, r).await;
     let mut key = [4_u8; 65];
     key[0] = 4;

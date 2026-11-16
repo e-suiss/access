@@ -1,6 +1,6 @@
 {
   "alias": "access-ciba",
-  "description": "Access realm acme with CIBA on, OIDF FAPI-CIBA in poll and ping mode (OP-155 m.3 (l), (q)); the client keys are made by the target at run time",
+  "description": "Access environment acme with CIBA on, OIDF FAPI-CIBA in poll and ping mode (OP-155 m.3 (l), (q)); the client keys are made by the target at run time",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

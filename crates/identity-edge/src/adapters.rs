@@ -30,7 +30,7 @@ impl Registry for PgRegistry {
         };
         Ok(Some(Gateway {
             tenant: r.tenant,
-            realm: r.realm,
+            environment: r.environment,
             slug: r.slug,
             uri: uri.clone(),
         }))
@@ -48,7 +48,7 @@ pub enum RegisterError {
     Store(#[from] access_store::StoreError),
 }
 
-/// `idp.gateway.register`: the gateway `kind`/`name` of the transaction's realm, live with the
+/// `idp.gateway.register`: the gateway `kind`/`name` of the transaction's environment, live with the
 /// client certificate whose SHA-256 is `cert` (a re-registration replaces the certificate).
 ///
 /// # Errors

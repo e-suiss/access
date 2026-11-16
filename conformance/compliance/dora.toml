@@ -35,7 +35,7 @@ tests = [
   "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
   "bins/access-verify/tests/artefacts.rs::receipt_evidence_vectors",
 ]
-note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; realm post-quantum keys and the FIPS profile wait on lane J3."
+note = "A hybrid receipt from the real server verifies only with both components, the ML-DSA COSE layer needs a provider, and receipts carry their inclusion evidence; environment post-quantum keys and the FIPS profile wait on lane J3."
 
 [[control]]
 control = "Art. 10 detection"

@@ -1,4 +1,4 @@
-//! The edge channel's gateway registry and the realms' vault keys (OP-155 m.3 (c), IDI-11), and
+//! The edge channel's gateway registry and the environments' vault keys (OP-155 m.3 (c), IDI-11), and
 //! the LDAP, RADIUS and Kerberos gateways' calls (OP-155 m.3 (n), (f), (o)).
 
 use std::sync::Arc;
@@ -16,16 +16,16 @@ use access_identity_edge::app::ldap::{Certificates, Ldap};
 use access_identity_edge::app::radius::Radius;
 use access_identity_edge::app::{Edge, Vaults};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
-/// The realms' PII vault keys from the token.
-pub(crate) struct EdgeVaults(pub(crate) RealmKeks);
+/// The environments' PII vault keys from the token.
+pub(crate) struct EdgeVaults(pub(crate) EnvironmentKeks);
 
 impl Vaults for EdgeVaults {
-    fn vault(&self, _: TenantId, realm: RealmId) -> Option<Vault> {
-        self.0.vault(realm)
+    fn vault(&self, _: TenantId, environment: EnvironmentId) -> Option<Vault> {
+        self.0.vault(environment)
     }
 }
 
@@ -36,7 +36,7 @@ impl Vaults for EdgeVaults {
 pub(crate) fn routes(
     router: Pool,
     app: Pool,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     saml: Arc<crate::saml::Saml>,
     (ids, certificates): (Arc<IdKey>, Certificates),
 ) -> axum::Router {

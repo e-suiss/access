@@ -18,6 +18,7 @@ use access_store::claims::{
     QuarantineRow, first_submission, insert_quarantine, open_claim_ingest_day, quarantined,
     quota_notified, quota_reached,
 };
+use access_store::environment_binding::{Role, bind, domains, retire};
 use access_store::identity::TenantTx;
 use access_store::offline::{
     ContractRow, ProfileRow, ReconciliationRow, ReportRow, contract_of, insert_contract,
@@ -25,10 +26,9 @@ use access_store::offline::{
     profile, profile_for, reconciliations, reports, unreported_overdue,
 };
 use access_store::projections::{Family, family, open_family, revoke_family};
-use access_store::realm_binding::{Role, bind, domains, retire};
 use access_store::scope::DomainId;
 use access_store::status::{Publication, latest, publish};
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use sqlx::{Connection, Executor, PgConnection};
 
@@ -188,14 +188,14 @@ async fn quarantine_and_quota_notices() {
 
 // TN-4
 #[tokio::test]
-async fn realms_bind_to_many_domains() {
+async fn environments_bind_to_many_domains() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let governing = domain(&db, *t.as_bytes(), 3).await;
     let consuming = domain(&db, *t.as_bytes(), 4).await;
     let other = domain(&db, *t.as_bytes(), 5).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &governing, "acme-bind", "pool-default")
+    let r = create_environment(&mut tx, &governing, "acme-bind", "pool-default")
         .await
         .unwrap();
     assert!(bind(&mut tx, r, &governing, Role::Governing).await.unwrap());

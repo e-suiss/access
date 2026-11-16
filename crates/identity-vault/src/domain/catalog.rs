@@ -1,7 +1,7 @@
 //! The upstream catalog (AG-39, F23, OP-154 m.3 (t)): curated OAuth 2.0 metadata, scopes and the
 //! refresh and revocation facts of 25 common services, shipped as `catalog/*.toml`. An entry is
-//! data: it grants nothing to anyone (E36, EI-26). A realm uses one only after
-//! `idp.vault.resource_enable`; a service the catalog does not have is the realm's own upstream,
+//! data: it grants nothing to anyone (E36, EI-26). An environment uses one only after
+//! `idp.vault.resource_enable`; a service the catalog does not have is the environment's own upstream,
 //! `idp.vault.resource_register` (reserved).
 
 use std::collections::BTreeMap;
@@ -38,7 +38,7 @@ pub struct Upstream {
     pub id: String,
     /// The name people see.
     pub display_name: String,
-    /// Authorization endpoint; `{name}` stands for a value of the realm's Resource
+    /// Authorization endpoint; `{name}` stands for a value of the environment's Resource
     /// (a Shopify shop, a Zendesk subdomain).
     pub authorization_endpoint: String,
     /// Token endpoint.

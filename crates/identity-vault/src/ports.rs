@@ -1,5 +1,5 @@
 //! What the vault needs from the outside world (OP-63): the authority plane's record of an
-//! allowed Exercise, HTTPS to upstreams and the realm's client secrets (the federation ports,
+//! allowed Exercise, HTTPS to upstreams and the environment's client secrets (the federation ports,
 //! through the SSRF-guarded outbound client), and randomness. Each fails closed (MD-8).
 
 use std::future::Future;

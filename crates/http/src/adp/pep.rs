@@ -1,6 +1,6 @@
 //! PEP transport authentication by OAuth (OP-155 m.3 (q), §9.5.1 #10, Ek B 5074): next to the
 //! client certificate the TLS layer names, a PEP may present a DPoP-bound `client_credentials`
-//! token of a realm for this ADP with its DPoP proof. The PEP it names is the proof key's
+//! token of an environment for this ADP with its DPoP proof. The PEP it names is the proof key's
 //! thumbprint. A request carrying both a certificate PEP and a token is refused rather than
 //! guessed about; one with neither reaches the routes without a PEP and is refused there.
 
@@ -24,13 +24,13 @@ struct Tokens<E> {
     issuer: String,
 }
 
-/// The realm authority and path slug an issuer URL names (§17.9.6): `https://host[:port]` or
-/// `https://host[:port]/realms/{slug}`.
-fn realm_of(iss: &str) -> Option<(&str, Option<&str>)> {
+/// The environment authority and path slug an issuer URL names (§17.9.6): `https://host[:port]` or
+/// `https://host[:port]/env/{slug}`.
+fn environment_of(iss: &str) -> Option<(&str, Option<&str>)> {
     let rest = iss.strip_prefix("https://")?;
     match rest.split_once('/') {
         None => Some((rest, None)),
-        Some((authority, path)) => Some((authority, Some(path.strip_prefix("realms/")?))),
+        Some((authority, path)) => Some((authority, Some(path.strip_prefix("env/")?))),
     }
 }
 
@@ -86,10 +86,10 @@ async fn authenticate<E: Env>(
     let Some(iss) = issuer_of(token) else {
         return unauthenticated("invalid_token", None);
     };
-    let Some((authority, slug)) = realm_of(&iss) else {
+    let Some((authority, slug)) = environment_of(&iss) else {
         return unauthenticated("invalid_token", None);
     };
-    let realm = match tokens.oauth.realm(authority, slug).await {
+    let environment = match tokens.oauth.environment(authority, slug).await {
         Ok(Some(r)) => r,
         Ok(None) => return unauthenticated("invalid_token", None),
         Err(_) => return crate::problem::codes::UNAVAILABLE.problem().into_response(),
@@ -98,7 +98,7 @@ async fn authenticate<E: Env>(
     let method = request.method().as_str().to_owned();
     match tokens
         .oauth
-        .pep_identity(&realm, &method, &uri, &authorization, &proofs)
+        .pep_identity(&environment, &method, &uri, &authorization, &proofs)
         .await
     {
         Ok(PepIdentity::Pep { jkt, nonce }) => {
@@ -114,7 +114,7 @@ async fn authenticate<E: Env>(
     }
 }
 
-/// `adp` that also hears PEPs presenting a DPoP-bound PEP token of a realm `oauth` serves; the
+/// `adp` that also hears PEPs presenting a DPoP-bound PEP token of an environment `oauth` serves; the
 /// proof's `htu` is `issuer` followed by the request path.
 pub fn with_tokens<E: Env + 'static>(
     adp: axum::Router,
@@ -129,20 +129,20 @@ pub fn with_tokens<E: Env + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use super::realm_of;
+    use super::environment_of;
 
     // OP-155 m.3 (q)
     #[test]
-    fn an_issuer_names_its_realm_by_host_or_path() {
+    fn an_issuer_names_its_environment_by_host_or_path() {
         assert_eq!(
-            realm_of("https://acme.access.test"),
+            environment_of("https://acme.access.test"),
             Some(("acme.access.test", None))
         );
         assert_eq!(
-            realm_of("https://access.test:9443/realms/acme"),
+            environment_of("https://access.test:9443/env/acme"),
             Some(("access.test:9443", Some("acme")))
         );
-        assert_eq!(realm_of("http://access.test/realms/acme"), None);
-        assert_eq!(realm_of("https://access.test/other/acme"), None);
+        assert_eq!(environment_of("http://access.test/env/acme"), None);
+        assert_eq!(environment_of("https://access.test/other/acme"), None);
     }
 }

@@ -1,4 +1,4 @@
-//! The realm authorization server's state (OP-146 I7): pending authorization requests and
+//! The environment authorization server's state (OP-146 I7): pending authorization requests and
 //! codes are ephemeral, digest-keyed and partitioned by day (OP-146 m.5 (f)); grants, their
 //! refresh chains and pairwise subjects are identity records that are revoked or rotated, never
 //! deleted (OP-73, CR-38, TN-31, MD-10).
@@ -189,8 +189,8 @@ impl GrantRecord {
 
 impl TenantTx {
     fn oauth_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
-        Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
+        let environment = self.environment().ok_or(StoreError::Range)?;
+        Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))
     }
 
     /// Stores a pending authorization request.
@@ -198,13 +198,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_oauth_request(&mut self, r: &NewRequest<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query!(
-            "INSERT INTO access.oauth_requests (tenant_id, realm_id, day, request_hash, client_uuid,
+            "INSERT INTO access.oauth_requests (tenant_id, environment_id, day, request_hash, client_uuid,
                     pushed, params, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             r.day,
             r.hash.as_slice(),
             uuid(r.client),
@@ -227,14 +227,14 @@ impl TenantTx {
         from_day: i32,
         hash: &[u8; 32],
     ) -> Result<Option<RequestRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let row = sqlx::query!(
             "SELECT day, client_uuid, pushed, params, created_ms, expires_ms, used_ms
                FROM access.oauth_requests
-              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND request_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day >= $3 AND request_hash = $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             from_day,
             hash.as_slice(),
         )
@@ -261,13 +261,13 @@ impl TenantTx {
         hash: &[u8; 32],
         at_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let n = sqlx::query!(
             "UPDATE access.oauth_requests SET used_ms = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND day = $3 AND request_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day = $3 AND request_hash = $4
                 AND used_ms IS NULL",
             tenant,
-            realm,
+            environment,
             day,
             hash.as_slice(),
             at_ms,
@@ -283,13 +283,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_code(&mut self, c: &NewCode<'_>) -> Result<(), StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query!(
-            "INSERT INTO access.oauth_codes (tenant_id, realm_id, day, code_hash, client_uuid,
+            "INSERT INTO access.oauth_codes (tenant_id, environment_id, day, code_hash, client_uuid,
                     session_id, details, created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             c.day,
             c.hash.as_slice(),
             uuid(c.client),
@@ -313,14 +313,14 @@ impl TenantTx {
         from_day: i32,
         hash: &[u8; 32],
     ) -> Result<Option<CodeRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let row = sqlx::query!(
             "SELECT day, client_uuid, session_id, details, expires_ms, grant_id
                FROM access.oauth_codes
-              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND code_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day >= $3 AND code_hash = $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             from_day,
             hash.as_slice(),
         )
@@ -347,13 +347,13 @@ impl TenantTx {
         at_ms: i64,
         grant: [u8; 16],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let n = sqlx::query!(
             "UPDATE access.oauth_codes SET redeemed_ms = $5, grant_id = $6
-              WHERE tenant_id = $1 AND realm_id = $2 AND day = $3 AND code_hash = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day = $3 AND code_hash = $4
                 AND redeemed_ms IS NULL",
             tenant,
-            realm,
+            environment,
             day,
             hash.as_slice(),
             at_ms,
@@ -374,12 +374,12 @@ impl TenantTx {
         day: i32,
         key: &[u8; 32],
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let n = sqlx::query!(
-            "INSERT INTO access.client_assertion_replay (tenant_id, realm_id, day, key_hash)
+            "INSERT INTO access.client_assertion_replay (tenant_id, environment_id, day, key_hash)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             day,
             key.as_slice(),
         )
@@ -394,14 +394,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_grant(&mut self, g: &NewGrant<'_>) -> Result<[u8; 16], StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.oauth_grants (tenant_id, realm_id, sid, client_uuid, subject_id,
+            r#"INSERT INTO access.oauth_grants (tenant_id, environment_id, sid, client_uuid, subject_id,
                     session_id, session_epoch, dpop_jkt, details, created_ms, expires_ms)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                RETURNING grant_id AS "id!""#,
             tenant,
-            realm,
+            environment,
             g.sid.as_slice(),
             uuid(g.client),
             uuid(g.subject),
@@ -422,7 +422,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn grant(&mut self, id: [u8; 16]) -> Result<Option<GrantRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query_as!(
             GrantRecord,
             "SELECT g.grant_id, g.sid, g.client_uuid, g.subject_id, g.session_id, g.session_epoch,
@@ -430,11 +430,11 @@ impl TenantTx {
                     g.details, g.expires_ms, g.revoked_ms
                FROM access.oauth_grants g
                JOIN access.identity_subjects s
-                 ON s.tenant_id = g.tenant_id AND s.realm_id = g.realm_id AND s.subject_id = g.subject_id
-              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.grant_id = $3
+                 ON s.tenant_id = g.tenant_id AND s.environment_id = g.environment_id AND s.subject_id = g.subject_id
+              WHERE g.tenant_id = $1 AND g.environment_id = $2 AND g.grant_id = $3
               FOR UPDATE OF g",
             tenant,
-            realm,
+            environment,
             uuid(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -448,7 +448,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn grant_by_sid(&mut self, sid: &[u8; 16]) -> Result<Option<GrantRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query_as!(
             GrantRecord,
             "SELECT g.grant_id, g.sid, g.client_uuid, g.subject_id, g.session_id, g.session_epoch,
@@ -456,10 +456,10 @@ impl TenantTx {
                     g.details, g.expires_ms, g.revoked_ms
                FROM access.oauth_grants g
                JOIN access.identity_subjects s
-                 ON s.tenant_id = g.tenant_id AND s.realm_id = g.realm_id AND s.subject_id = g.subject_id
-              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.sid = $3",
+                 ON s.tenant_id = g.tenant_id AND s.environment_id = g.environment_id AND s.subject_id = g.subject_id
+              WHERE g.tenant_id = $1 AND g.environment_id = $2 AND g.sid = $3",
             tenant,
-            realm,
+            environment,
             sid.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -473,7 +473,7 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn session_grants(&mut self, session: [u8; 16]) -> Result<Vec<GrantRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query_as!(
             GrantRecord,
             "SELECT g.grant_id, g.sid, g.client_uuid, g.subject_id, g.session_id, g.session_epoch,
@@ -481,11 +481,11 @@ impl TenantTx {
                     g.details, g.expires_ms, g.revoked_ms
                FROM access.oauth_grants g
                JOIN access.identity_subjects s
-                 ON s.tenant_id = g.tenant_id AND s.realm_id = g.realm_id AND s.subject_id = g.subject_id
-              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.session_id = $3 AND g.revoked_ms IS NULL
+                 ON s.tenant_id = g.tenant_id AND s.environment_id = g.environment_id AND s.subject_id = g.subject_id
+              WHERE g.tenant_id = $1 AND g.environment_id = $2 AND g.session_id = $3 AND g.revoked_ms IS NULL
               ORDER BY g.grant_id",
             tenant,
-            realm,
+            environment,
             uuid(session),
         )
         .fetch_all(&mut *self.tx)
@@ -505,12 +505,12 @@ impl TenantTx {
         at_ms: i64,
         reason: &str,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let n = sqlx::query!(
             "UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND grant_id = $3 AND revoked_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND grant_id = $3 AND revoked_ms IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(id),
             at_ms,
             reason,
@@ -531,12 +531,12 @@ impl TenantTx {
         grant: [u8; 16],
         at_ms: i64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query!(
-            "INSERT INTO access.oauth_refresh_tokens (tenant_id, realm_id, token_hash, grant_id, created_ms)
+            "INSERT INTO access.oauth_refresh_tokens (tenant_id, environment_id, token_hash, grant_id, created_ms)
              VALUES ($1, $2, $3, $4, $5)",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
             uuid(grant),
             at_ms,
@@ -551,13 +551,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn refresh(&mut self, hash: &[u8; 32]) -> Result<Option<RefreshRow>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let row = sqlx::query!(
             "SELECT grant_id, rotated_ms FROM access.oauth_refresh_tokens
-              WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND token_hash = $3
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -577,12 +577,12 @@ impl TenantTx {
         hash: &[u8; 32],
         at_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let n = sqlx::query!(
             "UPDATE access.oauth_refresh_tokens SET rotated_ms = $4
-              WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3 AND rotated_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND token_hash = $3 AND rotated_ms IS NULL",
             tenant,
-            realm,
+            environment,
             hash.as_slice(),
             at_ms,
         )
@@ -601,12 +601,12 @@ impl TenantTx {
         sector: [u8; 16],
         value: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         let row = sqlx::query_scalar!(
             "SELECT subject_id FROM access.pairwise_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND sector = $3 AND value = $4",
             tenant,
-            realm,
+            environment,
             uuid(sector),
             value,
         )
@@ -626,12 +626,12 @@ impl TenantTx {
         sector: [u8; 16],
         candidate: &str,
     ) -> Result<String, StoreError> {
-        let (tenant, realm) = self.oauth_scope()?;
+        let (tenant, environment) = self.oauth_scope()?;
         sqlx::query!(
-            "INSERT INTO access.pairwise_subjects (tenant_id, realm_id, subject_id, sector, value)
-             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tenant_id, realm_id, subject_id, sector) DO NOTHING",
+            "INSERT INTO access.pairwise_subjects (tenant_id, environment_id, subject_id, sector, value)
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tenant_id, environment_id, subject_id, sector) DO NOTHING",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(sector),
             candidate,
@@ -640,9 +640,9 @@ impl TenantTx {
         .await?;
         Ok(sqlx::query_scalar!(
             "SELECT value FROM access.pairwise_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND sector = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND sector = $4",
             tenant,
-            realm,
+            environment,
             uuid(subject),
             uuid(sector),
         )

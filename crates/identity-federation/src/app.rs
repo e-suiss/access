@@ -1,4 +1,4 @@
-//! The relying party over its ports (OP-63): resolves which client a realm signs in with,
+//! The relying party over its ports (OP-63): resolves which client an environment signs in with,
 //! builds the authorization request and turns the provider's redirect into one checked
 //! external identity. Sessions, accounts and links are the caller's (identity-ui).
 
@@ -21,7 +21,7 @@ use crate::ports::{ProviderHttp, SocialSecrets, Unreachable};
 pub mod connection;
 
 /// A shared development client the operator configured for one preset (`social.dev_clients`,
-/// OP-153 m.3 (l)); accepted only in a sandbox realm.
+/// OP-153 m.3 (l)); accepted only in a sandbox environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DevClient {
     /// The client id.
@@ -30,12 +30,12 @@ pub struct DevClient {
     pub secret_ref: String,
 }
 
-/// A provider as a realm enabled it.
+/// A provider as an environment enabled it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Enabled {
     /// The preset, or the upstream's discovered profile.
     pub preset: Preset,
-    /// The client id the realm holds; `None` names the shared development client.
+    /// The client id the environment holds; `None` names the shared development client.
     pub client_id: Option<String>,
     /// Its secret's reference.
     pub secret_ref: Option<String>,
@@ -47,7 +47,7 @@ pub enum FederationError {
     /// The provider, its keys or the secret store did not answer (MD-8).
     #[error("unavailable")]
     Unavailable,
-    /// The client may not be used in this realm (IDP-31 (4)).
+    /// The client may not be used in this environment (IDP-31 (4)).
     #[error("client refused: {0:?}")]
     Client(ClientRefusal),
     /// An answer of the provider was refused.
@@ -123,7 +123,7 @@ fn name_of(claims: &Value) -> Option<String> {
 }
 
 impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
-    /// The client of `e` in a realm that is (`sandbox`) or is not a sandbox: the realm's own,
+    /// The client of `e` in an environment that is (`sandbox`) or is not a sandbox: the environment's own,
     /// or the shared development client only in a sandbox (OP-153 m.3 (l)); checked at
     /// `enable` and again here, at every sign-in.
     ///

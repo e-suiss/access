@@ -396,7 +396,7 @@ test("an OAuth error names its owner and a reference, never the raw code", async
 });
 
 // TN-106, OP-153 m.3 (t), §14.3
-test("the realm's name and logo are drawn from data; the logo is an image only", async ({
+test("the environment's name and logo are drawn from data; the logo is an image only", async ({
   page,
   mock,
   pageErrors,
@@ -451,22 +451,22 @@ test("ar-XB draws right to left; ui_locales picks Turkish", async ({ page }) => 
 });
 
 // §17.9.6, TN-133
-test("a path realm keeps its prefix on every call and link", async ({ page, mock }) => {
-  await page.goto("/realms/acme/login");
+test("a path environment keeps its prefix on every call and link", async ({ page, mock }) => {
+  await page.goto("/env/acme/login");
   await expect(page.getByLabel("Email or username")).toBeVisible();
-  expect(mock.requests).toEqual(["POST /realms/acme/v1/login/flows"]);
+  expect(mock.requests).toEqual(["POST /env/acme/v1/login/flows"]);
   await expect(page.getByRole("link", { name: "Can't sign in?" })).toHaveAttribute(
     "href",
-    "/realms/acme/login/recovery",
+    "/env/acme/login/recovery",
   );
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Password")).toBeVisible();
-  expect(mock.requests.at(-1)).toBe("POST /realms/acme/v1/login/flows/lgf_example");
+  expect(mock.requests.at(-1)).toBe("POST /env/acme/v1/login/flows/lgf_example");
 });
 
-// X35, XI-25, OP-153 m.22 (k): the realm's texts replace Access's, never a protected one
-test("the realm's text overrides are drawn, and a protected key keeps Access's text", async ({
+// X35, XI-25, OP-153 m.22 (k): the environment's texts replace Access's, never a protected one
+test("the environment's text overrides are drawn, and a protected key keeps Access's text", async ({
   page,
   mock,
 }) => {

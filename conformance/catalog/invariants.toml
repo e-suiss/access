@@ -465,7 +465,7 @@ family = "INV"
 section = "6.9"
 status = "candidate"
 stage = 6
-title = "Tenant, Realm and Cell are not authority inputs"
+title = "Tenant, Environment and Cell are not authority inputs"
 tests = []
 
 [[rule]]
@@ -1740,7 +1740,7 @@ family = "SAI"
 section = "14.11"
 status = "candidate"
 stage = 6
-title = "Mutations in one domain or realm never affect another's decisions"
+title = "Mutations in one domain or environment never affect another's decisions"
 tests = []
 
 [[rule]]
@@ -1864,7 +1864,7 @@ section = "10.11"
 status = "candidate"
 class = "BS"
 stage = 5
-title = "Credentials and login identifiers are realm-local; email is never a key"
+title = "Credentials and login identifiers are environment-local; email is never a key"
 tests = []
 
 [[rule]]
@@ -1884,7 +1884,7 @@ section = "10.11"
 status = "candidate"
 class = "BS"
 stage = 7
-title = "Realm RP ID change with passkeys requires irreversible CT3 action"
+title = "Environment RP ID change with passkeys requires irreversible CT3 action"
 tests = []
 
 [[rule]]
@@ -2054,7 +2054,7 @@ family = "TNI"
 section = "12.9"
 status = "candidate"
 stage = 4
-title = "Realm keys and domain operational keys are strictly separated"
+title = "Environment keys and domain operational keys are strictly separated"
 tests = []
 
 [[rule]]

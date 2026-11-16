@@ -3,7 +3,7 @@
 //! signed Response is only ever made from such a session. Single logout signs the user out
 //! locally with one `session_epoch` step, which always succeeds (§10.6.1 SLO, MD-7).
 
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::{SessionStatus, SessionView};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
@@ -21,10 +21,10 @@ where
     /// nothing).
     ///
     /// # Errors
-    /// A reply for an unavailable realm or store.
+    /// A reply for an unavailable environment or store.
     pub async fn saml_session(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
     ) -> Result<Option<SessionView>, Reply> {
         let kit = self.kit(entry).await?;
@@ -41,7 +41,7 @@ where
 
     /// Single logout's local sign-out: one `session_epoch` step ends every session of the
     /// user; the session cookie is cleared either way. Returns the clearing cookie.
-    pub async fn saml_sign_out(&self, entry: &RealmEntry, b: &Browser<'_>) -> String {
+    pub async fn saml_sign_out(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> String {
         let clear = clear_cookie(SESSION_COOKIE);
         let Ok(kit) = self.kit(entry).await else {
             return clear;
@@ -51,7 +51,7 @@ where
             return clear;
         };
         if let Ok(SessionStatus::Valid(me)) = auth.check_session(cookie).await
-            && let Ok(actor) = kit.realm().external(me.subject)
+            && let Ok(actor) = kit.environment().external(me.subject)
         {
             let _ = auth
                 .sign_out_everywhere(me.subject, &actor, b.correlation)

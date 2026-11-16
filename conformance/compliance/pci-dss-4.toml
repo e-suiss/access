@@ -1,6 +1,6 @@
 # SA-53, OP-159 m.3 (ii), §10.3.4, §17.6.7, §18.2, §18.6, H17
 # Requirement 8 (identification and authentication) and Requirement 10 (logging and monitoring).
-# `access-cli realm check --profile pci-dss-4` reports a realm's settings against 8.2.8, 8.3.4,
+# `access-cli environment check --profile pci-dss-4` reports an environment's settings against 8.2.8, 8.3.4,
 # 8.3.6 and 8.4.2.
 
 version = 1
@@ -12,7 +12,7 @@ control = "8.2.1"
 status = "met"
 rules = ["IDI-2"]
 tests = ["crates/identity-account/tests/accounts.rs::a_taken_identifier_creates_nothing"]
-note = "Each login identifier belongs to one account of one realm; a taken identifier creates nothing."
+note = "Each login identifier belongs to one account of one environment; a taken identifier creates nothing."
 
 [[control]]
 control = "8.2.2"
@@ -45,9 +45,9 @@ rules = ["G57"]
 tests = [
   "crates/http/tests/console.rs::idle_sessions_end_after_fifteen_minutes",
   "crates/identity-session/src/domain/session.rs::idle_absolute_epoch_and_end",
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
 ]
-note = "Console sessions end after at most 15 idle minutes; the realm check reports the realm's idle setting."
+note = "Console sessions end after at most 15 idle minutes; the environment check reports the environment's idle setting."
 
 [[control]]
 control = "8.3.1"
@@ -75,9 +75,9 @@ status = "partial"
 rules = ["U46"]
 tests = [
   "crates/identity-account/tests/accounts.rs::a_hundred_failures_lock_the_account",
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
 ]
-note = "Failures wait longer each time and lock at 100 (SA-30), not 10; a realm without password sign-in passes, which the realm check reports."
+note = "Failures wait longer each time and lock at 100 (SA-30), not 10; an environment without password sign-in passes, which the environment check reports."
 
 [[control]]
 control = "8.3.5"
@@ -92,9 +92,9 @@ status = "partial"
 rules = ["U69"]
 tests = [
   "crates/identity-account/src/domain/password/tests.rs::policy_counts_characters_after_nfkc",
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
 ]
-note = "The product minimum is 8 characters (NIST SP 800-63B-4), not 12; a passkey-only realm passes, which the realm check reports."
+note = "The product minimum is 8 characters (NIST SP 800-63B-4), not 12; a passkey-only environment passes, which the environment check reports."
 
 [[control]]
 control = "8.3.7"
@@ -118,7 +118,7 @@ tests = [
   "crates/identity-session/tests/signin.rs::required_mfa_without_a_second_factor_never_signs_in",
   "crates/identity-session/tests/signin.rs::a_passkey_signs_in_phishing_resistant_and_steps_up",
 ]
-note = "A realm that requires MFA signs nobody in with one factor; administrative actions of CT2 and above need a phishing-resistant step."
+note = "An environment that requires MFA signs nobody in with one factor; administrative actions of CT2 and above need a phishing-resistant step."
 
 [[control]]
 control = "8.4.2"
@@ -126,9 +126,9 @@ status = "met"
 rules = ["SEC10"]
 tests = [
   "crates/identity-session/tests/signin.rs::a_stored_mfa_requirement_cannot_be_skipped",
-  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_realm_check_fails_a_weak_realm_passes_a_hardened_one_and_changes_nothing",
+  "bins/access-server/src/bootstrap/tests/management/profile_check.rs::a_environment_check_fails_a_weak_environment_passes_a_hardened_one_and_changes_nothing",
 ]
-note = "MFA on every sign-in is a realm setting the realm check reports."
+note = "MFA on every sign-in is an environment setting the environment check reports."
 
 [[control]]
 control = "8.5.1"
@@ -204,7 +204,7 @@ tests = [
   "crates/identity-export/tests/cold_tier.rs::a_partition_inside_its_hot_window_is_not_due",
   "crates/identity-export/tests/cold_tier.rs::a_due_partition_moves_to_the_cold_tier_verified_and_detached",
 ]
-note = "The base window is 12 months (OP-158 m.3 (w)); three months immediately available needs a hot window of at least 90 days in the realm's audit tier, which may be a paid tier."
+note = "The base window is 12 months (OP-158 m.3 (w)); three months immediately available needs a hot window of at least 90 days in the environment's audit tier, which may be a paid tier."
 
 [[control]]
 control = "10.6.1"

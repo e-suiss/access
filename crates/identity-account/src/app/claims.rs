@@ -1,8 +1,8 @@
-//! The realm issuer at work (CMP-8, §10.1.7, OP-150 L2): identity events queue [`ClaimOrder`]s
+//! The environment issuer at work (CMP-8, §10.1.7, OP-150 L2): identity events queue [`ClaimOrder`]s
 //! in their own transaction, and the courier reads them from the identity outbox, places each in
-//! the realm's governing domain, has the realm's Claim issuer key sign it and hands it to Claim
+//! the environment's governing domain, has the environment's Claim issuer key sign it and hands it to Claim
 //! Ingest through `internal-api` (OP-62). The authority plane answers; it never writes back. An
-//! order whose subject has no Party there yet, or whose realm has no issuer, is not a Claim.
+//! order whose subject has no Party there yet, or whose environment has no issuer, is not a Claim.
 
 use std::future::Future;
 
@@ -12,7 +12,7 @@ use access_kernel::claim;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
-use access_store::identity::{RealmId, TenantId, TenantTx, ack, cursor, poll};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx, ack, cursor, poll};
 use access_store::issuer::{self as store, IssuedClaim};
 use access_store::{Pool, idp};
 
@@ -52,12 +52,12 @@ impl From<Unavailable> for NotSigned {
     }
 }
 
-/// Signs a realm issuer's Claims with the realm's Claim issuer key (CMP-22b).
+/// Signs an environment issuer's Claims with the environment's Claim issuer key (CMP-22b).
 pub trait ClaimSigner: Send + Sync {
     /// The `COSE_Sign1` of the canonical statement `payload` signed at `at`.
     fn sign(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         payload: Vec<u8>,
         at: u64,
     ) -> impl Future<Output = Result<Vec<u8>, NotSigned>> + Send;
@@ -91,9 +91,9 @@ pub struct Report {
     pub refused: u32,
 }
 
-/// The realm issuer's courier.
+/// The environment issuer's courier.
 pub struct Courier<S, I, C> {
-    /// `access_app`, for the realm's rows.
+    /// `access_app`, for the environment's rows.
     pub app: Pool,
     /// `access_outbox_reader`, for the outbox and the cursor.
     pub reader: Pool,
@@ -118,21 +118,21 @@ fn word(v: &ClaimVerdict) -> String {
 }
 
 impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
-    /// Where `order` lands in its realm, or why it does not.
+    /// Where `order` lands in its environment, or why it does not.
     async fn place(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         order: &ClaimOrder,
     ) -> Result<Result<Placement, &'static str>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
-        let Some(issuer) = store::realm_issuer(&mut t).await.map_err(down)? else {
+        let Some(issuer) = store::environment_issuer(&mut t).await.map_err(down)? else {
             return Ok(Err("no-issuer"));
         };
         let Some(g) = idp::governance(&mut t).await.map_err(down)? else {
-            return Ok(Err("no-realm"));
+            return Ok(Err("no-environment"));
         };
         let party = match order.party() {
             Some(p) => Some(p),
@@ -164,7 +164,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
         }))
     }
 
-    /// Issues `order` of `realm` now: places, signs, submits and records it. The synchronous
+    /// Issues `order` of `environment` now: places, signs, submits and records it. The synchronous
     /// path of an approval that needs its `authentication` Claim at once (§9.14.1) and the
     /// courier's step.
     ///
@@ -174,10 +174,10 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
     pub async fn issue(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         order: &ClaimOrder,
     ) -> Result<Issued, Unavailable> {
-        let p = match self.place(tenant, realm, order).await? {
+        let p = match self.place(tenant, environment, order).await? {
             Ok(p) => p,
             Err(why) => return Ok(Issued::Unplaced(why)),
         };
@@ -187,7 +187,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
         let Ok(payload) = prepared.statement.to_bytes() else {
             return Ok(Issued::Refused("unencodable"));
         };
-        let sign1 = match self.signer.sign(realm, payload, p.now).await {
+        let sign1 = match self.signer.sign(environment, payload, p.now).await {
             Ok(sign1) => sign1,
             // L2-CLM-1
             Err(NotSigned::Refused(code)) => return Ok(Issued::Refused(code)),
@@ -210,7 +210,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
             l[..16].copy_from_slice(&id.0);
             l
         });
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         store::record_issued(
@@ -245,7 +245,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
         for e in poll(&self.reader, at, BATCH).await.map_err(down)? {
             if e.kind.starts_with(OUTBOX_PREFIX) {
                 let issued = match ClaimOrder::from_bytes(&e.payload) {
-                    Ok(order) => self.issue(e.tenant, e.realm, &order).await?,
+                    Ok(order) => self.issue(e.tenant, e.environment, &order).await?,
                     Err(_) => Issued::Unplaced("unreadable"),
                 };
                 match &issued {

@@ -1,4 +1,4 @@
-//! The edge core over the channel: realm, subject, Claim and audit layers.
+//! The edge core over the channel: environment, subject, Claim and audit layers.
 
 use access_internal_api::edge::{
     Audit, Audited, Call, GatewayUri, Hello, IssueClaim, Issued, Subject, SubjectLookup,
@@ -11,9 +11,9 @@ use crate::health::{Health, Outcome};
 /// Why an edge request was not made or not answered.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EdgeError {
-    /// The request names another realm than the gateway's (IDP-26).
-    #[error("realm outside the gateway's scope")]
-    Realm,
+    /// The request names another environment than the gateway's (IDP-26).
+    #[error("environment outside the gateway's scope")]
+    Environment,
     /// The channel refused or failed.
     #[error(transparent)]
     Channel(#[from] ChannelError),
@@ -27,12 +27,12 @@ pub enum EdgeError {
 pub struct EdgeCore {
     channel: Channel,
     gateway: GatewayUri,
-    realm: String,
+    environment: String,
     health: Health,
 }
 
 impl EdgeCore {
-    /// Asks access-server who this gateway is (`hello`): its identity and its realm.
+    /// Asks access-server who this gateway is (`hello`): its identity and its environment.
     ///
     /// # Errors
     /// [`EdgeError`].
@@ -43,7 +43,7 @@ impl EdgeCore {
         Ok(Self {
             channel,
             gateway: hello.gateway,
-            realm: hello.realm,
+            environment: hello.environment,
             health,
         })
     }
@@ -69,15 +69,15 @@ impl EdgeCore {
         &self.gateway
     }
 
-    /// The realm layer: the gateway's realm, or [`EdgeError::Realm`] when the protocol named
+    /// The environment layer: the gateway's environment, or [`EdgeError::Environment`] when the protocol named
     /// another (IDP-26, §13.2).
     ///
     /// # Errors
-    /// [`EdgeError::Realm`].
-    pub fn realm(&self, asked: Option<&str>) -> Result<&str, EdgeError> {
+    /// [`EdgeError::Environment`].
+    pub fn environment(&self, asked: Option<&str>) -> Result<&str, EdgeError> {
         match asked {
-            Some(r) if r != self.realm => Err(EdgeError::Realm),
-            _ => Ok(&self.realm),
+            Some(r) if r != self.environment => Err(EdgeError::Environment),
+            _ => Ok(&self.environment),
         }
     }
 
@@ -93,7 +93,7 @@ impl EdgeCore {
     /// [`EdgeError`].
     pub async fn subject(&self, identifier: &str) -> Result<Option<[u8; 16]>, EdgeError> {
         let body = SubjectLookup {
-            realm: self.realm.clone(),
+            environment: self.environment.clone(),
             identifier: String::from(identifier),
         }
         .encode();
@@ -102,21 +102,21 @@ impl EdgeCore {
     }
 
     /// The Claim layer: reports that `subject` authenticated with `method` at `auth_time`; the
-    /// realm issuer makes the Claim. `realm` is the realm the protocol named, if any.
+    /// environment issuer makes the Claim. `environment` is the environment the protocol named, if any.
     ///
     /// # Errors
-    /// [`EdgeError`]; [`EdgeError::Realm`] before anything is sent.
+    /// [`EdgeError`]; [`EdgeError::Environment`] before anything is sent.
     pub async fn issue(
         &self,
-        realm: Option<&str>,
+        environment: Option<&str>,
         subject: [u8; 16],
         method: &str,
         auth_time: u64,
         evidence: Option<[u8; 32]>,
     ) -> Result<Issued, EdgeError> {
-        let realm = String::from(self.realm(realm)?);
+        let environment = String::from(self.environment(environment)?);
         let body = IssueClaim {
-            realm,
+            environment,
             subject,
             method: String::from(method),
             auth_time,
@@ -138,7 +138,7 @@ impl EdgeCore {
         subject: Option<[u8; 16]>,
     ) -> Result<Audited, EdgeError> {
         let body = Audit {
-            realm: self.realm.clone(),
+            environment: self.environment.clone(),
             event: String::from(event),
             outcome: String::from(outcome),
             subject,

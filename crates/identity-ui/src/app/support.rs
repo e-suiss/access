@@ -11,7 +11,7 @@ use access_identity_account::app::support::{
     self as model, Draft, INVITATION_MS, Names, REQUEST_PREFIX, Scope, hex,
 };
 use access_identity_account::domain::login::Problem;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_internal_api::idp::{IdpAction, Submission, Verdict};
 use access_internal_api::support::SupportAuthority;
 use access_kernel::codec::Canonical as _;
@@ -34,12 +34,12 @@ use super::me::{governing, unavailable};
 use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Browser, Hosted, Reply};
 use crate::domain::frontend::rfc3339;
-use crate::ports::{Clock, Kits, Messages, RealmKit};
+use crate::ports::{Clock, EnvironmentKit, Kits, Messages};
 
 /// Most requests one list shows.
 const PAGE: i64 = 50;
 
-/// Largest support artifact the route takes before the realm's own limit, bytes (PD).
+/// Largest support artifact the route takes before the environment's own limit, bytes (PD).
 pub const MAX_ARTIFACT_BYTES: usize = 10 * 1024 * 1024;
 
 /// The context an artifact's redacted text is sealed under.
@@ -82,7 +82,7 @@ const CASE_SYSTEM: Problem = problem(
 const CASE_REQUIRED: Problem = problem(
     409,
     "support-case-required",
-    "The case system's cases don't count in this realm yet",
+    "The case system's cases don't count in this environment yet",
 );
 const NOT_GIVEN: Problem = problem(
     403,
@@ -98,7 +98,7 @@ const TOO_LARGE: Problem = problem(413, "artifact-too-large", "The file is too l
 const CLOSED: Problem = problem(
     409,
     "support-artifacts-closed",
-    "This realm doesn't take support files",
+    "This environment doesn't take support files",
 );
 const ARTIFACT_UNKNOWN: Problem = problem(404, "support-artifact-unknown", "There is no such file");
 const ARTIFACT_DENIED: Problem = problem(
@@ -165,17 +165,17 @@ pub struct Block {
     pub blocked: bool,
 }
 
-/// An artifact upload the session, the realm's policy and the person's own support request
+/// An artifact upload the session, the environment's policy and the person's own support request
 /// allow, before its body is read (OP-159 m.3 (mm)).
 pub struct UploadGate {
-    kit: std::sync::Arc<RealmKit>,
+    kit: std::sync::Arc<EnvironmentKit>,
     row: SupportRequestRow,
     policy: access_store::support_access::ArtifactPolicy,
     now: u64,
 }
 
 impl UploadGate {
-    /// The largest body the realm takes, bytes: its policy's `max_bytes`, at most
+    /// The largest body the environment takes, bytes: its policy's `max_bytes`, at most
     /// [`MAX_ARTIFACT_BYTES`].
     #[must_use]
     pub fn limit(&self) -> usize {
@@ -302,7 +302,7 @@ pub async fn announce(
     let Some((Answer::Granted { grant, .. }, _)) = &row.answer else {
         return Ok(());
     };
-    let Some(realm) = tx.realm() else {
+    let Some(environment) = tx.environment() else {
         return Ok(());
     };
     let id = access_crypto::random::bytes::<32>().map_err(|_| access_store::StoreError::Range)?;
@@ -311,7 +311,7 @@ pub async fn announce(
         .map_err(|_| access_store::StoreError::Range)?;
     let event = access_identity_events::domain::catalog::IdentityEvent::support_access_changed(
         id,
-        realm.as_bytes(),
+        environment.as_bytes(),
         (
             &account,
             &b64url_encode(grant),
@@ -330,13 +330,13 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn begin(&self, kit: &RealmKit) -> Result<TenantTx, Reply> {
-        TenantTx::begin(&self.db, kit.tenant, kit.realm)
+    async fn begin(&self, kit: &EnvironmentKit) -> Result<TenantTx, Reply> {
+        TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())
     }
 
-    async fn party(&self, kit: &RealmKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
+    async fn party(&self, kit: &EnvironmentKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
         let mut t = self.begin(kit).await?;
         let p = idp::subject_party(&mut t, &subject)
             .await
@@ -374,7 +374,7 @@ where
         }
     }
 
-    fn row_json(kit: &RealmKit, row: &SupportRequestRow, names: &Names, now: u64) -> Value {
+    fn row_json(kit: &EnvironmentKit, row: &SupportRequestRow, names: &Names, now: u64) -> Value {
         let scope = Scope::parse(&row.scope);
         let mut v = json!({
             "id": kit.ids.encode(REQUEST_PREFIX, row.id).ok(),
@@ -425,7 +425,12 @@ where
     /// `POST /v1/support/requests` (OP-157 m.3 (f), TN-137 (1)): a support operator asks for
     /// access to one person's account for one case. Access sends the person an invitation that
     /// opens their own page; nothing is granted and the operator never opens that page (XI-7).
-    pub async fn ask_support(&self, entry: &RealmEntry, b: &Browser<'_>, body: &Ask) -> Reply {
+    pub async fn ask_support(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        body: &Ask,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -458,7 +463,7 @@ where
         };
         let issuer = kit.issuer.clone();
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let Some(system) = t
                 .case_systems()
@@ -527,7 +532,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -539,7 +544,7 @@ where
             Err(r) => return r,
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let party = idp::subject_party(&mut t, &subject).await?;
             let blocked = t.support_blocked(subject).await?;
@@ -707,7 +712,7 @@ where
 
     async fn own_open(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         subject: [u8; 16],
         request: &str,
     ) -> Result<(SupportRequestRow, u64), Reply> {
@@ -727,7 +732,7 @@ where
     /// `POST /v1/support/requests/{request}/decline`: nothing is granted.
     pub async fn decline_support(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         request: &str,
     ) -> Reply {
@@ -744,7 +749,7 @@ where
             Err(r) => return r,
         };
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let first = t
                 .answer_support_request(row.id, &Answer::Declined, now)
                 .await?;
@@ -768,7 +773,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         request: &str,
         body: &Signed,
@@ -857,7 +862,7 @@ where
             template: String::from(scope.template(minutes).0),
         };
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let names = model::names(&mut t, &*kit.kek, &row, &kit.name)
                 .await
                 .map_err(|_| access_store::StoreError::Corrupt)?;
@@ -884,7 +889,7 @@ where
         }
     }
 
-    async fn issuer_of(&self, kit: &RealmKit, system: &str) -> Result<[u8; 16], Reply> {
+    async fn issuer_of(&self, kit: &EnvironmentKit, system: &str) -> Result<[u8; 16], Reply> {
         let mut t = self.begin(kit).await?;
         let found = t.case_systems().await.map_err(|_| unavailable())?;
         t.commit().await.map_err(|_| unavailable())?;
@@ -902,7 +907,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -914,7 +919,7 @@ where
             Err(r) => return r,
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let since = now.saturating_sub(30 * 86_400_000);
             let rows = t.support_requests(subject, false, since, PAGE).await?;
@@ -972,7 +977,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         grant: &str,
         body: &Signed,
@@ -995,7 +1000,7 @@ where
             return Reply::problem(INVALID);
         }
         let row = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let r = t.support_request_by_grant(grant).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(r)
@@ -1020,7 +1025,7 @@ where
             return r;
         }
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             model::ended(
                 &mut t,
@@ -1046,7 +1051,7 @@ where
     /// reaches the person; turning it off again needs a sign-in in the last 5 minutes.
     pub async fn put_support_block(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         body: Block,
     ) -> Reply {
@@ -1064,7 +1069,7 @@ where
             Err(r) => return r,
         };
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             if t.support_blocked(subject).await? != body.blocked {
                 t.set_support_block(subject, body.blocked, now).await?;
@@ -1079,15 +1084,15 @@ where
     }
 
     /// The first half of `POST /v1/support/artifacts` (§8.16 #12, TN-74, OP-157 m.3 (g), OP-159
-    /// m.3 (mm)), before a byte of the body is read: the session, the realm's artifact policy
-    /// and the person's own support `request`. The answer names the largest body the realm
+    /// m.3 (mm)), before a byte of the body is read: the session, the environment's artifact policy
+    /// and the person's own support `request`. The answer names the largest body the environment
     /// takes; a request without a session is refused here (GHSA-84jc-3hj2-hwc7).
     ///
     /// # Errors
     /// The [`Reply`] that refuses the upload.
     pub async fn open_upload(
         &self,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         request: &str,
     ) -> Result<UploadGate, Reply> {
@@ -1097,7 +1102,7 @@ where
             return Err(Reply::problem(UNKNOWN));
         };
         let read = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let now = t.server_time().await?;
             let policy = t.support_artifact_policy().await?;
             let row = t.support_request(id).await?;
@@ -1197,7 +1202,7 @@ where
 
     async fn keep_artifact(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         (row, format): (&SupportRequestRow, Format),
         redacted: &artifacts::Redacted,
         (exercise, now): (Digest, u64),
@@ -1225,7 +1230,7 @@ where
             .unwrap_or_default();
         let size = u32::try_from(redacted.text.len()).unwrap_or(u32::MAX);
         let done = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let id = t
                 .insert_support_artifact(&NewSupportArtifact {
                     subject: row.subject,
@@ -1278,7 +1283,7 @@ where
         &self,
         authority: &A,
         pep: &str,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         b: &Browser<'_>,
         artifact: &str,
         exercise: Option<&Signed>,
@@ -1295,7 +1300,7 @@ where
             return Reply::problem(ARTIFACT_UNKNOWN);
         };
         let row = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let r = t.support_artifact(id).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(r)
@@ -1363,7 +1368,7 @@ where
             .encode(access_identity_account::app::SUBJECT_PREFIX, reader)
             .unwrap_or_default();
         let audited = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             t.audit(&AuditEvent {
                 event_type: "support.artifact_read",
                 actor: &actor,

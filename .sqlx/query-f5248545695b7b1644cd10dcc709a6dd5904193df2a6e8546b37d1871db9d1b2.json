@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.push_challenges (tenant_id, environment_id, challenge_hash, subject_id,\n                    flow_hash, number, origin_device, created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Int2",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5248545695b7b1644cd10dcc709a6dd5904193df2a6e8546b37d1871db9d1b2"
+}

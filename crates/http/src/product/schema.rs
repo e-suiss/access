@@ -223,19 +223,19 @@ fn other_components() -> Value {
             &json!({
                 "tenant": text("Opaque tenant id (`tnt_…`), the same id events carry in `accesstenant`, `access_tenant` and `tenant` (OP-149 m.15 (i))."),
                 "organizations": { "type": "array", "items": { "type": "string" } },
-                "realms": { "type": "array", "items": r("TenantRealm"), "description": "The tenant's live realms, by slug." },
+                "environments": { "type": "array", "items": r("TenantEnvironment"), "description": "The tenant's live environments, by slug." },
                 "region": text("The deployment's region."),
                 "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
                 "version": text("Changes exactly when the snapshot does."),
                 "retention": { "type": "object", "description": "Retention policies (OP-147); empty until they are stored." },
             }),
-            &["tenant", "organizations", "realms", "region", "status", "version", "retention"],
+            &["tenant", "organizations", "environments", "region", "status", "version", "retention"],
         ),
-        "TenantRealm": object(
+        "TenantEnvironment": object(
             &json!({
-                "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The realm, as events name it in `accessrealm` and `realm`." },
-                "issuer": text("The realm's fixed issuer; its `/.well-known/suiss-configuration` describes it."),
-                "slug": text("The realm's immutable slug."),
+                "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The environment, as events name it in `accessenvironment` and `environment`." },
+                "issuer": text("The environment's fixed issuer; its `/.well-known/suiss-configuration` describes it."),
+                "slug": text("The environment's immutable slug."),
             }),
             &["id", "issuer", "slug"],
         ),
@@ -249,7 +249,7 @@ fn other_components() -> Value {
         "SuissConfiguration": object(
             &json!({
                 "suiss_configuration_version": { "const": 1 },
-                "issuer": text("The realm issuer."),
+                "issuer": text("The environment issuer."),
                 "suiss_region": text("The deployment's region."),
                 "suiss_relay": text("Relay's base URL."),
                 "suiss_management_api": text("The management API's base URL."),
@@ -257,7 +257,7 @@ fn other_components() -> Value {
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                        "ssf_configuration": text("The realm's SSF transmitter metadata (SSF 1.0 §7.1)."),
+                        "ssf_configuration": text("The environment's SSF transmitter metadata (SSF 1.0 §7.1)."),
                         "webhooks": { "const": "urn:suiss:access:delivery:webhook", "description": "The Suiss webhook profile's delivery method: CloudEvents 1.0 structured JSON signed per Standard Webhooks." },
                     },
                     "required": ["ssf_configuration", "webhooks"],
@@ -511,10 +511,10 @@ pub fn openapi() -> Value {
         "/.well-known/suiss-configuration".into(),
         json!({ "get": {
             "operationId": "getSuissConfiguration",
-            "summary": "The realm's Suiss discovery document (OP-149 m.3); also under the realm path of a path issuer. `Cache-Control: max-age=300`.",
+            "summary": "The environment's Suiss discovery document (OP-149 m.3); also under the environment path of a path issuer. `Cache-Control: max-age=300`.",
             "security": [],
             "responses": with(
-                problems(&[("404", "No realm here."), ("503", "Temporarily unavailable.")]),
+                problems(&[("404", "No environment here."), ("503", "Temporarily unavailable.")]),
                 "200",
                 json_ok("The document.", "SuissConfiguration"),
             ),
@@ -522,14 +522,14 @@ pub fn openapi() -> Value {
     );
     // OP-156 m.3 (t)
     paths.insert(
-        "/.well-known/suiss-configuration/realms/{slug}".into(),
+        "/.well-known/suiss-configuration/env/{slug}".into(),
         json!({ "get": {
-            "operationId": "getRealmSuissConfiguration",
-            "summary": "The same document of the realm `slug`, for a reader that names the realm rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
+            "operationId": "getEnvironmentSuissConfiguration",
+            "summary": "The same document of the environment `slug`, for a reader that names the environment rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
             "security": [],
             "parameters": [path("slug", &json!({ "type": "string" }))],
             "responses": with(
-                problems(&[("404", "No realm here."), ("503", "Temporarily unavailable.")]),
+                problems(&[("404", "No environment here."), ("503", "Temporarily unavailable.")]),
                 "200",
                 json_ok("The document.", "SuissConfiguration"),
             ),

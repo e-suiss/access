@@ -431,14 +431,14 @@ pub enum Node {
         /// Whether it starts checked; never for the second-step marker (X-L2).
         checked: bool,
     },
-    /// N5: a sign-in provider of the realm (OP-153 m.3 (l)): a button that navigates the whole
-    /// page to `href`, a path under the realm issuer.
+    /// N5: a sign-in provider of the environment (OP-153 m.3 (l)): a button that navigates the whole
+    /// page to `href`, a path under the environment issuer.
     Provider {
         /// The preset name.
         provider: String,
         /// Caption.
         label: Text,
-        /// `GET` target that starts the provider sign-in, below the realm issuer like every
+        /// `GET` target that starts the provider sign-in, below the environment issuer like every
         /// action of the contract.
         href: String,
     },

@@ -62,7 +62,7 @@ pub struct Registration<'a> {
     pub public_key: &'a [u8],
     /// Its ES256 signature over [`approver::registration_message`].
     pub proof: &'a [u8],
-    /// The realm issuer the proof names.
+    /// The environment issuer the proof names.
     pub issuer: &'a str,
 }
 

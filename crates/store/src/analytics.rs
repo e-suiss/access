@@ -1,7 +1,7 @@
-//! Tenant analytics summaries (IDP-36, OP-151 m.3 (n)): one DERIVED row of counters per realm
-//! and day, recomputed from the day's sign-in flows, the realm's credentials, the audit log and
+//! Tenant analytics summaries (IDP-36, OP-151 m.3 (n)): one DERIVED row of counters per environment
+//! and day, recomputed from the day's sign-in flows, the environment's credentials, the audit log and
 //! the risk review queue; and the failed-login surge alert. Counters only, no identifier and no
-//! pseudonym; read only through a realm-scoped transaction (viewer-rechecked) and never by a
+//! pseudonym; read only through an environment-scoped transaction (viewer-rechecked) and never by a
 //! decision path (TI-18).
 
 use sqlx::types::Uuid;
@@ -10,10 +10,10 @@ use crate::StoreError;
 use crate::identity::TenantTx;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -40,14 +40,14 @@ pub const COUNTERS: [&str; 19] = [
     "legacy_password_accounts",
 ];
 
-/// The other columns of `access.analytics_daily`: the realm, the day and when it was computed.
-pub const KEY: [&str; 4] = ["tenant_id", "realm_id", "day", "computed_at"];
+/// The other columns of `access.analytics_daily`: the environment, the day and when it was computed.
+pub const KEY: [&str; 4] = ["tenant_id", "environment_id", "day", "computed_at"];
 
 fn count(v: i64) -> Result<u64, StoreError> {
     u64::try_from(v).map_err(|_| StoreError::Corrupt)
 }
 
-/// One realm's day.
+/// One environment's day.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnalyticsDay {
     /// Days since the Unix epoch.
@@ -104,36 +104,36 @@ pub struct SurgeAlert {
 }
 
 impl TenantTx {
-    /// Recomputes the transaction realm's row of `day` and returns it with the day before's
+    /// Recomputes the transaction environment's row of `day` and returns it with the day before's
     /// failed-login count (0 without a row).
     ///
     /// # Errors
     /// [`StoreError`].
     #[expect(clippy::too_many_lines, reason = "one derived row, column by column")]
     pub async fn aggregate_day(&mut self, day: u32) -> Result<(AnalyticsDay, u64), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let d = i32::try_from(day).map_err(|_| StoreError::Range)?;
         let r = sqlx::query!(
             r#"WITH f AS (
                  SELECT status, convert_from(state, 'UTF8')::jsonb AS s
                    FROM access.auth_flows
-                  WHERE tenant_id = $1 AND realm_id = $2 AND day = $3),
+                  WHERE tenant_id = $1 AND environment_id = $2 AND day = $3),
                l AS (SELECT * FROM f WHERE s -> 'purpose' = '"login"'::jsonb),
                e AS (SELECT * FROM f WHERE jsonb_typeof(s -> 'purpose') = 'object'
                        AND (s -> 'purpose' ? 'enroll_totp' OR s -> 'purpose' ? 'register_passkey')),
                a AS (SELECT subject_id FROM access.identity_subjects
-                      WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'),
+                      WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'),
                c AS (SELECT DISTINCT c.subject_id, c.kind FROM access.identity_credentials c
                        JOIN a USING (subject_id)
-                      WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.status = 'active'
+                      WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.status = 'active'
                         AND c.kind IN ('webauthn', 'totp')),
                lp AS (SELECT DISTINCT c.subject_id FROM access.identity_credentials c
                        JOIN a USING (subject_id)
-                      WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.status = 'active'
+                      WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.status = 'active'
                         AND c.kind = 'password' AND c.algorithm LIKE 'legacy-%'),
                w AS (SELECT to_timestamp($3::bigint * 86400) AS lo,
                             to_timestamp(($3::bigint + 1) * 86400) AS hi)
-             INSERT INTO access.analytics_daily AS t (tenant_id, realm_id, day, flows_started,
+             INSERT INTO access.analytics_daily AS t (tenant_id, environment_id, day, flows_started,
                     identifier_entered, first_factor_passed, second_factor_passed,
                     sessions_created, method_password, method_passkey, method_email_code,
                     method_magic_link, accounts_active, accounts_with_passkey, accounts_with_mfa,
@@ -159,18 +159,18 @@ impl TenantTx {
                     (SELECT count(*) FROM e),
                     (SELECT count(*) FROM e WHERE status = 'done'),
                     (SELECT count(*) FROM access.identity_audit, w
-                      WHERE tenant_id = $1 AND realm_id = $2
+                      WHERE tenant_id = $1 AND environment_id = $2
                         AND event_type IN ('login.password.failed', 'login.failed')
                         AND at >= w.lo AND at < w.hi),
                     (SELECT count(*) FROM l WHERE s -> 'risk' ->> 'step_up' = 'true'),
                     (SELECT count(*) FROM access.risk_review, w
-                      WHERE tenant_id = $1 AND realm_id = $2
+                      WHERE tenant_id = $1 AND environment_id = $2
                         AND created_at >= w.lo AND created_at < w.hi),
                     (SELECT count(*) FROM access.risk_review, w
-                      WHERE tenant_id = $1 AND realm_id = $2 AND state = 'false_positive'
+                      WHERE tenant_id = $1 AND environment_id = $2 AND state = 'false_positive'
                         AND decided_at >= w.lo AND decided_at < w.hi),
                     (SELECT count(*) FROM lp)
-             ON CONFLICT (tenant_id, realm_id, day) DO UPDATE
+             ON CONFLICT (tenant_id, environment_id, day) DO UPDATE
                 SET flows_started = EXCLUDED.flows_started,
                     identifier_entered = EXCLUDED.identifier_entered,
                     first_factor_passed = EXCLUDED.first_factor_passed,
@@ -199,10 +199,10 @@ impl TenantTx {
                     t.risk_step_ups, t.risk_reviews, t.risk_false_positives,
                     t.legacy_password_accounts,
                     (SELECT p.failed_logins FROM access.analytics_daily p
-                      WHERE p.tenant_id = $1 AND p.realm_id = $2 AND p.day = $3 - 1)
+                      WHERE p.tenant_id = $1 AND p.environment_id = $2 AND p.day = $3 - 1)
                       AS previous"#,
             tenant,
-            realm,
+            environment,
             d,
         )
         .fetch_one(&mut *self.tx)
@@ -232,18 +232,18 @@ impl TenantTx {
         Ok((row, r.previous.map(count).transpose()?.unwrap_or(0)))
     }
 
-    /// Records a failed-login surge of the transaction realm; false when one is already
+    /// Records a failed-login surge of the transaction environment; false when one is already
     /// recorded for the day.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn record_surge(&mut self, alert: &SurgeAlert) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let done = sqlx::query!(
-            "INSERT INTO access.analytics_alert (tenant_id, realm_id, day, kind, observed, baseline)
+            "INSERT INTO access.analytics_alert (tenant_id, environment_id, day, kind, observed, baseline)
              VALUES ($1, $2, $3, 'failed_login_surge', $4, $5) ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             i32::try_from(alert.day).map_err(|_| StoreError::Range)?,
             i64::try_from(alert.observed).map_err(|_| StoreError::Range)?,
             i64::try_from(alert.baseline).map_err(|_| StoreError::Range)?,
@@ -253,16 +253,16 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// The transaction realm's rows of days `from..=to`, oldest first.
+    /// The transaction environment's rows of days `from..=to`, oldest first.
     ///
     /// # Errors
-    /// [`StoreError`]; [`StoreError::Range`] for a transaction without a realm.
+    /// [`StoreError`]; [`StoreError::Range`] for a transaction without an environment.
     pub async fn analytics_days(
         &mut self,
         from: u32,
         to: u32,
     ) -> Result<Vec<AnalyticsDay>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT day, flows_started, identifier_entered, first_factor_passed,
                     second_factor_passed, sessions_created, method_password, method_passkey,
@@ -270,10 +270,10 @@ impl TenantTx {
                     accounts_with_mfa, mfa_setup_started, mfa_setup_completed, failed_logins,
                     risk_step_ups, risk_reviews, risk_false_positives, legacy_password_accounts
                FROM access.analytics_daily
-              WHERE tenant_id = $1 AND realm_id = $2 AND day BETWEEN $3 AND $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND day BETWEEN $3 AND $4
               ORDER BY day",
             tenant,
-            realm,
+            environment,
             i32::try_from(from).map_err(|_| StoreError::Range)?,
             i32::try_from(to).map_err(|_| StoreError::Range)?,
         )
@@ -307,7 +307,7 @@ impl TenantTx {
             .collect()
     }
 
-    /// The transaction realm's surge alerts of days `from..=to`, oldest first.
+    /// The transaction environment's surge alerts of days `from..=to`, oldest first.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -316,14 +316,14 @@ impl TenantTx {
         from: u32,
         to: u32,
     ) -> Result<Vec<SurgeAlert>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT day, observed, baseline FROM access.analytics_alert
-              WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'failed_login_surge'
+              WHERE tenant_id = $1 AND environment_id = $2 AND kind = 'failed_login_surge'
                 AND day BETWEEN $3 AND $4
               ORDER BY day",
             tenant,
-            realm,
+            environment,
             i32::try_from(from).map_err(|_| StoreError::Range)?,
             i32::try_from(to).map_err(|_| StoreError::Range)?,
         )

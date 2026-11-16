@@ -1,4 +1,4 @@
-//! The realm's Linux client in access-server (OP-156 m.3 (p), IDP-32, MD-8).
+//! The environment's Linux client in access-server (OP-156 m.3 (p), IDP-32, MD-8).
 //!
 //! A host is a live `idp.linux.host_register` row named by its client certificate. Who may sign
 //! in to it is derived, never stored: every principal of a live `ssh.login` Grant held by name
@@ -11,9 +11,9 @@
 use std::collections::BTreeMap;
 
 use access_http::linux::{LinuxFront, LinuxReply};
-use access_http::problem::codes::realm as r;
-use access_identity_oauth::app::oauth::RealmHolder;
-use access_identity_oauth::ports::RealmEntry;
+use access_http::problem::codes::environment as r;
+use access_identity_oauth::app::oauth::EnvironmentHolder;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::domain::assurance::AssuranceVector;
 use access_identity_ssh::domain::projection::grant_principals;
 use access_identity_ssh::domain::schema::{self, FORCE_COMMAND, SOURCE_ADDRESS};
@@ -100,17 +100,17 @@ where
         Self { app, plane }
     }
 
-    async fn begin(&self, realm: &RealmEntry) -> Result<(TenantTx, u64), String> {
+    async fn begin(&self, environment: &EnvironmentEntry) -> Result<(TenantTx, u64), String> {
         let now = access_store::authority::server_time(&self.app)
             .await
             .map_err(|e| e.to_string())?;
-        let t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(|e| e.to_string())?;
         Ok((t, now))
     }
 
-    /// The live host the certificate names and the realm's domain.
+    /// The live host the certificate names and the environment's domain.
     async fn host(
         t: &mut TenantTx,
         certificate: &str,
@@ -131,8 +131,12 @@ where
         Ok(Some((host, Digest(*g.domain.as_bytes()))))
     }
 
-    async fn snapshot(&self, realm: &RealmEntry, certificate: &str) -> Result<LinuxReply, String> {
-        let (mut t, now) = self.begin(realm).await?;
+    async fn snapshot(
+        &self,
+        environment: &EnvironmentEntry,
+        certificate: &str,
+    ) -> Result<LinuxReply, String> {
+        let (mut t, now) = self.begin(environment).await?;
         let Some((host, domain)) = Self::host(&mut t, certificate).await? else {
             return Ok(LinuxReply::Refused(&r::LINUX_HOST_UNKNOWN));
         };
@@ -237,7 +241,7 @@ where
 
     async fn credentials(
         t: &mut TenantTx,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         subject: &[u8; 16],
     ) -> Result<Vec<Value>, String> {
         let Some(handle) = t.user_handle(*subject).await.map_err(|e| e.to_string())? else {
@@ -249,7 +253,7 @@ where
             .and_then(|s| s.rp_id)
             .unwrap_or_else(|| {
                 String::from(
-                    realm
+                    environment
                         .issuer
                         .authority()
                         .split(':')
@@ -280,9 +284,9 @@ where
 
     async fn decide(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         certificate: &str,
-        holder: &RealmHolder,
+        holder: &EnvironmentHolder,
         body: &Value,
         sudo: bool,
     ) -> Result<LinuxReply, String> {
@@ -304,7 +308,7 @@ where
         if sudo && command.is_none() {
             return Ok(LinuxReply::Refused(&r::INVALID_LINUX_REQUEST));
         }
-        let (mut t, now) = self.begin(realm).await?;
+        let (mut t, now) = self.begin(environment).await?;
         let Some((host, domain)) = Self::host(&mut t, certificate).await? else {
             return Ok(LinuxReply::Refused(&r::LINUX_HOST_UNKNOWN));
         };
@@ -337,7 +341,7 @@ where
         .await
         .map_err(|e| e.to_string())?;
         let credentials = if allowed && !sudo {
-            Self::credentials(&mut t, realm, &holder.subject).await?
+            Self::credentials(&mut t, environment, &holder.subject).await?
         } else {
             Vec::new()
         };
@@ -356,30 +360,32 @@ impl<P> LinuxFront for Linux<P>
 where
     P: LinuxGrants + SshGrants + Send + Sync + 'static,
 {
-    async fn nss(&self, realm: &RealmEntry, host: &str) -> LinuxReply {
-        self.snapshot(realm, host).await.unwrap_or_else(unavailable)
+    async fn nss(&self, environment: &EnvironmentEntry, host: &str) -> LinuxReply {
+        self.snapshot(environment, host)
+            .await
+            .unwrap_or_else(unavailable)
     }
 
     async fn sign_in(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         host: &str,
-        holder: RealmHolder,
+        holder: EnvironmentHolder,
         body: Value,
     ) -> LinuxReply {
-        self.decide(realm, host, &holder, &body, false)
+        self.decide(environment, host, &holder, &body, false)
             .await
             .unwrap_or_else(unavailable)
     }
 
     async fn sudo(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
         host: &str,
-        holder: RealmHolder,
+        holder: EnvironmentHolder,
         body: Value,
     ) -> LinuxReply {
-        self.decide(realm, host, &holder, &body, true)
+        self.decide(environment, host, &holder, &body, true)
             .await
             .unwrap_or_else(unavailable)
     }

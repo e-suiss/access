@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT conflict_id, connection, subject_id, identity_key, created_ms, resolved_ms\n               FROM access.upstream_subject_conflicts\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n              ORDER BY conflict_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conflict_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "conflict_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "connection",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "connection"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "identity_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "identity_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "resolved_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.upstream_subject_conflicts",
+            "name": "resolved_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f6e4b2fc3300b58c7201849a4e7b29773cd66131e4a64ea3e6f7e354dddb0332"
+}

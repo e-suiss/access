@@ -1,7 +1,7 @@
 ; Suiss discovery, version 1 (RFC 8610; OP-149 m.3).
 ; The deterministic CBOR (RFC 8949 §4.2.1) of `suiss-discovery` is the `discovery` byte string of
 ; Domain Metadata, which the Kernel keeps opaque (CR-58 m.3). The `endpoints` map is the same map
-; the realm's /.well-known/suiss-configuration document carries. Only endpoints in service appear.
+; the environment's /.well-known/suiss-configuration document carries. Only endpoints in service appear.
 
 suiss-discovery = {
   v: 1,
@@ -28,7 +28,7 @@ suiss-endpoints = {
   ; OP-150 m.2: Claim Ingest and the Token Status List, once served.
   ? claim_ingest: https-url,
   ? status_list: https-url,
-  ; OP-149 m.29 (a): the Approval Surface and PAR on the realm.
+  ; OP-149 m.29 (a): the Approval Surface and PAR on the environment.
   ? approval: https-url,
   ? approval_requests: https-url,
   ? pushed_authorization_request: https-url,

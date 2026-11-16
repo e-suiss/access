@@ -1,7 +1,7 @@
-//! What a product's end-to-end tests need from a local deployment besides the realms and
+//! What a product's end-to-end tests need from a local deployment besides the environments and
 //! clients (OP-149 m.26 (b), (c), (e), m.28 (b)): a test user with a password and a software
 //! passkey, a public client to sign in with and a device Instance that binds the user to a
-//! Party, in a sample realm; the
+//! Party, in a sample environment; the
 //! Acceptance under which a local declarant Party's unsigned `party_compromise` Claims are
 //! admitted there, so a product's PEP can produce `party.compromised` at Claim Ingest; and the
 //! `idp.client.update` and `idp.client.retire` changes of a platform client, which produce
@@ -25,7 +25,7 @@ use access_identity_account::app::accounts::{
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
@@ -36,11 +36,11 @@ use access_identity_account::ports::{
 use access_identity_admin::AdminError;
 use access_identity_admin::app::{Admin, Applied};
 use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId};
-use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
-use access_identity_events::adapters::RealmKek as _;
+use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
+use access_identity_events::adapters::EnvironmentKek as _;
 use access_identity_events::domain::catalog::IdentityKind;
 use access_identity_oauth::domain::issuer::Issuer;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
@@ -51,7 +51,7 @@ use access_identity_session::domain::session::SessionPolicy;
 use access_identity_session::ports::Random;
 use access_identity_ui::adapters::{LogSignals, Outbox};
 use access_identity_ui::app::devices::{self, DeviceKey};
-use access_identity_ui::ports::{Kits as _, Messages as _, RealmKit};
+use access_identity_ui::ports::{EnvironmentKit, Kits as _, Messages as _};
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{ClientExtensionResults, RegistrationResponse};
 use access_identity_webauthn::domain::ids::UserHandle;
@@ -63,7 +63,7 @@ use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use access_kernel::model::{Id, SubjectSelector};
 use access_kernel::verify::cose::PublicKey;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp;
 use access_store::issuer::subject_instance;
 use access_store::tenancy::route_by_slug;
@@ -76,7 +76,7 @@ use super::{
     Bootstrap, BootstrapError, CompromiseOut, CompromisePlan, MetaExercises, Plan, TestUserOut,
     TestUserPlan, TotpOut, TotpSeedFile, cell_ids, root_key, root_party, token_key,
 };
-use crate::login::{HsmKits, RealmKeks};
+use crate::login::{EnvironmentKeks, HsmKits};
 
 /// The token label of the local compromise declarant's key (OP-149 m.26 (c)).
 pub(crate) const DECLARANT_LABEL: &str = "access/bootstrap/compromise-declarant";
@@ -90,12 +90,12 @@ pub(crate) const TEST_PASSKEY_LABEL: &str = "access/bootstrap/test-user-passkey"
 /// Where the seed of an authenticator app the bootstrap enrolls comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Seed {
-    /// The realm draws it, and the seed file receives it.
+    /// The environment draws it, and the seed file receives it.
     Drawn,
-    /// The seed file already holds it, the seed of the same person's app in another realm
-    /// (OP-159 m.43 (c)); `redrawn` when that realm drew it in this run.
+    /// The seed file already holds it, the seed of the same person's app in another environment
+    /// (OP-159 m.43 (c)); `redrawn` when that environment drew it in this run.
     Shared {
-        /// Whether the other realm drew the seed in this run.
+        /// Whether the other environment drew the seed in this run.
         redrawn: bool,
     },
 }
@@ -189,7 +189,7 @@ pub(crate) struct ChangeOut {
 /// one (§10.2.1), moved to `active` along TN-49.
 pub(super) async fn create_account(
     accounts: &PgAccounts,
-    scope: &Realm<'_>,
+    scope: &Environment<'_>,
     identifier: &Identifier,
     password: Option<(&Secret<String>, Option<PathBuf>)>,
 ) -> Result<[u8; 16], BootstrapError> {
@@ -213,7 +213,7 @@ pub(super) async fn create_account(
 /// is one (IDP-3).
 async fn set_account_password(
     accounts: &PgAccounts,
-    scope: &Realm<'_>,
+    scope: &Environment<'_>,
     subject: [u8; 16],
     password: &Secret<String>,
     breach_ranges_dir: Option<PathBuf>,
@@ -242,7 +242,7 @@ async fn set_account_password(
 }
 
 /// The `acceptance-content` under which `issuer`'s `party_compromise` Claims are predicate
-/// input about any subject, for good (L2-CLM-3); a sample realm's Genesis establishes it.
+/// input about any subject, for good (L2-CLM-3); a sample environment's Genesis establishes it.
 pub(super) fn acceptance(issuer: Id) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), issuer.to_value()),
@@ -262,16 +262,16 @@ pub(super) fn acceptance(issuer: Id) -> Value {
 impl<P, K> Bootstrap<'_, P, K>
 where
     P: Decider + Governance + Instances + MetaExercises,
-    K: RealmKeys,
+    K: EnvironmentKeys,
 {
-    /// The test user of `u` in the realm, active with a password credential (AAL1) and a
+    /// The test user of `u` in the environment, active with a password credential (AAL1) and a
     /// software passkey (AAL2), the public client a headless login signs in with (OP-149 m.26
     /// (b), (e)), and its Party. An account holding the identifier is found, not made again.
     pub(super) async fn test_user(
         &self,
         admin: &Admin<'_, P, P, K>,
         ids: &IdKey,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         u: &TestUserPlan,
@@ -283,21 +283,21 @@ where
         };
         let identifier = Identifier::new(kind, &u.identifier)
             .map_err(|e| BootstrapError::Plan(format!("test_user identifier: {e}")))?;
-        let keks = RealmKeks::new(Arc::clone(self.hsm));
+        let keks = EnvironmentKeks::new(Arc::clone(self.hsm));
         let kek = keks
-            .kek(tenant, realm)
-            .ok_or_else(|| BootstrapError::Unavailable(String::from("realm KEK")))?;
-        let scope = Realm {
+            .kek(tenant, environment)
+            .ok_or_else(|| BootstrapError::Unavailable(String::from("environment KEK")))?;
+        let scope = Environment {
             tenant,
-            realm,
+            environment,
             kek: &*kek,
             ids,
         };
         let vault = keks
-            .vault(realm)
+            .vault(environment)
             .ok_or_else(|| BootstrapError::Unavailable(String::from("PII vault keys")))?;
         let accounts = PgAccounts::sealed(self.app.clone(), vault);
-        let mut tx = accounts.begin(tenant, realm).await?;
+        let mut tx = accounts.begin(tenant, environment).await?;
         let existing = tx.subject_by_identifier(identifier.value()).await?;
         tx.commit().await?;
         let (subject, created) = if let Some(s) = existing {
@@ -315,14 +315,19 @@ where
             )
         };
         let client_id = self
-            .public_client(admin, (tenant, realm), domain, root, u)
+            .public_client(admin, (tenant, environment), domain, root, u)
             .await?;
         let (party, instance) = self
-            .device_party((tenant, realm), domain, subject, (TEST_DEVICE_LABEL, None))
+            .device_party(
+                (tenant, environment),
+                domain,
+                subject,
+                (TEST_DEVICE_LABEL, None),
+            )
             .await?;
         let (passkey, totp) = self
             .authenticators(
-                &u.realm,
+                &u.environment,
                 subject,
                 identifier.value(),
                 (true, u.totp.as_ref().map(|f| (f, Seed::Drawn))),
@@ -331,7 +336,7 @@ where
         let passkey = passkey.ok_or(BootstrapError::Encode)?;
         Ok((
             TestUserOut {
-                realm: u.realm.clone(),
+                environment: u.environment.clone(),
                 issuer: String::new(),
                 identifier: String::from(identifier.value()),
                 subject: scope.external(subject)?,
@@ -348,22 +353,22 @@ where
         ))
     }
 
-    /// Whether `subject` holds the live passkey `credential_id` in the realm.
+    /// Whether `subject` holds the live passkey `credential_id` in the environment.
     async fn has_passkey(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         registry: &PgPasskeys<'_>,
         subject: [u8; 16],
         credential_id: &[u8],
     ) -> Result<bool, BootstrapError> {
-        let mut t = TenantTx::begin(self.app, kit.tenant, kit.realm).await?;
+        let mut t = TenantTx::begin(self.app, kit.tenant, kit.environment).await?;
         let handle = t.user_handle(subject).await?;
         t.commit().await?;
         let Some(h) = handle else {
             return Ok(false);
         };
         Ok(registry
-            .list(kit.rp.realm, &UserHandle::from_bytes(h))
+            .list(kit.rp.environment, &UserHandle::from_bytes(h))
             .await
             .map_err(|e| BootstrapError::Unavailable(e.to_string()))?
             .iter()
@@ -371,11 +376,11 @@ where
     }
 
     /// With `passkey`, the test user's software passkey (OP-149 m.26 (e)): an Ed25519 key kept
-    /// in the token answers the realm's own registration ceremony, through the step the hosted
+    /// in the token answers the environment's own registration ceremony, through the step the hosted
     /// `POST /v1/account/passkeys/{registration}` finishes with (§10.2.4, OP-150 L2), so the
     /// passkey is a device-bound, user-verified credential of the account like any other. A
     /// registered passkey of that key is found, not made again. With `totp`, also the user's
-    /// authenticator app (OP-149 m.26 (b), OP-159 m.41 (a), §10.2.2): the realm's own TOTP
+    /// authenticator app (OP-149 m.26 (b), OP-159 m.41 (a), §10.2.2): the environment's own TOTP
     /// enrollment makes the seed, a code computed from it confirms it, and the seed goes to the
     /// plan's file; an account with an authenticator app and a file holding a seed keeps both.
     /// With [`Seed::Shared`] the enrollment takes the seed the file already holds instead
@@ -407,17 +412,17 @@ where
         };
         let route = route_by_slug(self.router, slug)
             .await?
-            .ok_or(AdminError::NoRealm)?;
+            .ok_or(AdminError::NoEnvironment)?;
         let issuer = Issuer::parse(&route.issuer)
-            .map_err(|e| BootstrapError::Plan(format!("{slug}: realm issuer: {e}")))?;
-        let entry = RealmEntry {
+            .map_err(|e| BootstrapError::Plan(format!("{slug}: environment issuer: {e}")))?;
+        let entry = EnvironmentEntry {
             tenant: route.tenant,
-            realm: route.realm,
+            environment: route.environment,
             slug: route.slug.clone(),
             issuer,
         };
         let kits = HsmKits::new(
-            RealmKeks::new(Arc::clone(self.hsm)),
+            EnvironmentKeks::new(Arc::clone(self.hsm)),
             self.router.clone(),
             self.app.clone(),
             SessionPolicy::DEFAULT,
@@ -425,7 +430,7 @@ where
         let kit = kits
             .kit(&entry)
             .await
-            .map_err(|_| BootstrapError::Unavailable(String::from("realm keys")))?;
+            .map_err(|_| BootstrapError::Unavailable(String::from("environment keys")))?;
         let registry = PgPasskeys {
             pool: self.app,
             tenant: kit.tenant,
@@ -433,8 +438,8 @@ where
             ids: &kit.ids,
         };
         let db = PgAccounts::sealed(self.app.clone(), kit.vault());
-        let realm = kit.realm();
-        let notifier = Outbox.notifier(&realm);
+        let environment = kit.environment();
+        let notifier = Outbox.notifier(&environment);
         let link_base = format!("{}/login/link#", kit.issuer);
         let gate = LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0);
         let hasher = Hasher::new(HasherConfig::sized(
@@ -444,7 +449,7 @@ where
         ));
         let auth = Auth {
             db: &db,
-            realm: kit.realm(),
+            environment: kit.environment(),
             policy: kit.auth,
             lifetimes: kit.lifetimes,
             clock: &SystemClock,
@@ -545,7 +550,7 @@ where
         ))
     }
 
-    /// An account's Party and device Instance in the realm's governing domain (OP-149 m.28 (b),
+    /// An account's Party and device Instance in the environment's governing domain (OP-149 m.28 (b),
     /// m.16 (a), L0-META-7): the device key `label` kept in the token signs its own
     /// `party_register` and `instance_create`, and the identity plane binds the subject to that
     /// Party, queues the `identity_binding_person` Claim and records the device key, as
@@ -553,14 +558,14 @@ where
     /// them.
     pub(super) async fn device_party(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         subject: [u8; 16],
         (label, context): (&str, Option<access_internal_api::context::RateContext>),
     ) -> Result<(Id, Id), BootstrapError> {
         let key = token_key(self.hsm, label)?;
         let party = root_party(&key.public_key());
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let bound = idp::subject_party(&mut t, &subject).await?;
         let instance = subject_instance(&mut t, &subject).await?;
         t.commit().await?;
@@ -573,9 +578,15 @@ where
             )));
         }
         let onboarded = self
-            .register_in(tenant, realm, domain, (&key, party), (subject, context))
+            .register_in(
+                tenant,
+                environment,
+                domain,
+                (&key, party),
+                (subject, context),
+            )
             .await?;
-        let mut tx = PgTx::new(TenantTx::begin(self.app, tenant, realm).await?);
+        let mut tx = PgTx::new(TenantTx::begin(self.app, tenant, environment).await?);
         devices::bind_party(&mut tx, &subject, &party.0, &onboarded.register_ais).await?;
         let device = DeviceKey {
             subject,
@@ -588,17 +599,17 @@ where
         Ok((party, onboarded.instance))
     }
 
-    /// The active public client of the realm with the test user's redirect URI, registered by
+    /// The active public client of the environment with the test user's redirect URI, registered by
     /// an `idp.client.register` Exercise the root signs when there is none.
     async fn public_client(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         root: &HsmSigner,
         u: &TestUserPlan,
     ) -> Result<String, BootstrapError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let mut found = None;
         for id in idp::clients_with_redirect(&mut t, u.redirect_uri.as_str()).await? {
             if let Some(row) = idp::client(&mut t, &id).await?
@@ -629,7 +640,7 @@ where
         let id = String::from(client.id.as_str());
         self.change(
             admin,
-            (tenant, realm),
+            (tenant, environment),
             domain,
             root,
             Change::ClientRegister(client),
@@ -645,22 +656,23 @@ where
         Ok((key, issuer))
     }
 
-    /// The local declarant's Instance in the realm's domain, whose Genesis accepted its
+    /// The local declarant's Instance in the environment's domain, whose Genesis accepted its
     /// `party_compromise` Claims as predicate input (OP-149 m.26 (c), L2-CLM-3, L2-CLM-5).
-    /// An Acceptance is a Genesis fact: a realm created without one keeps none, so the summary
-    /// says whether this run created the realm.
+    /// An Acceptance is a Genesis fact: an environment created without one keeps none, so the summary
+    /// says whether this run created the environment.
     pub(super) async fn compromise(
         &self,
         c: &CompromisePlan,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         key: &HsmSigner,
         issuer: Id,
         created: bool,
     ) -> Result<CompromiseOut, BootstrapError> {
-        self.onboard(tenant, realm, domain, key, issuer).await?;
+        self.onboard(tenant, environment, domain, key, issuer)
+            .await?;
         Ok(CompromiseOut {
-            realm: c.realm.clone(),
+            environment: c.environment.clone(),
             domain: b64url_encode(&domain.0),
             issuer: b64url_encode(&issuer.0),
             class: PARTY_COMPROMISE,
@@ -668,7 +680,7 @@ where
         })
     }
 
-    /// Commits `change` to the platform client of `product` in the platform realm as an
+    /// Commits `change` to the platform client of `product` in the platform environment as an
     /// `idp.client.update` or `idp.client.retire` Exercise the root signs (OP-149 m.26 (c),
     /// MD-14, EI-25); its event is queued with the write.
     ///
@@ -688,16 +700,18 @@ where
             .ok_or_else(|| BootstrapError::Plan(format!("the plan names no product {product}")))?;
         let route = route_by_slug(self.router, &plan.platform)
             .await?
-            .ok_or(AdminError::NoRealm)?;
-        let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
-        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+            .ok_or(AdminError::NoEnvironment)?;
+        let mut t = TenantTx::begin(self.app, route.tenant, route.environment).await?;
+        let g = idp::governance(&mut t)
+            .await?
+            .ok_or(AdminError::NoEnvironment)?;
         t.commit().await?;
         let domain = Digest(*g.domain.as_bytes());
         let ids = cell_ids(self.app, self.hsm).await?;
         let admin = self.admin(&ids, Some(route.tenant));
         let root = root_key(self.hsm)?;
         let client_id = self
-            .find_product_client((route.tenant, route.realm), p)
+            .find_product_client((route.tenant, route.environment), p)
             .await?
             .ok_or_else(|| {
                 BootstrapError::Plan(format!("{product} has no active platform client"))
@@ -715,7 +729,13 @@ where
         };
         let action = change.action().label();
         let applied = self
-            .change(&admin, (route.tenant, route.realm), domain, &root, change)
+            .change(
+                &admin,
+                (route.tenant, route.environment),
+                domain,
+                &root,
+                change,
+            )
             .await?;
         let (exercise, position) = match applied {
             Applied::Written {

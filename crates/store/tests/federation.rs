@@ -10,12 +10,12 @@
 
 use access_store::authority::{LogRecord, create_domain};
 use access_store::federation::NewAttempt;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
-async fn realm(db: &TestDb) -> (TenantId, RealmId) {
+async fn environment(db: &TestDb) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([4; 32]);
     let g = LogRecord {
@@ -29,7 +29,7 @@ async fn realm(db: &TestDb) -> (TenantId, RealmId) {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, "acme", "pool-default")
+    let r = create_environment(&mut tx, &d, "acme", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -40,9 +40,9 @@ async fn realm(db: &TestDb) -> (TenantId, RealmId) {
 #[tokio::test]
 async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    assert!(!tx.realm_is_sandbox().await.unwrap());
+    assert!(!tx.environment_is_sandbox().await.unwrap());
     let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     let b = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     assert!(
@@ -101,7 +101,7 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
 #[tokio::test]
 async fn the_last_live_link_stays_unless_a_combination_moves_it() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     let b = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
@@ -139,7 +139,7 @@ async fn the_last_live_link_stays_unless_a_combination_moves_it() {
 #[tokio::test]
 async fn an_attempt_and_a_ticket_are_used_once_by_their_own_browser() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     let n = "n".repeat(43);
@@ -221,7 +221,7 @@ async fn an_attempt_and_a_ticket_are_used_once_by_their_own_browser() {
 #[tokio::test]
 async fn a_binding_half_is_committed_once_and_never_deleted() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db).await;
+    let (t, r) = environment(&db).await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     let half = access_store::federation::NewHalf {
@@ -237,7 +237,7 @@ async fn a_binding_half_is_committed_once_and_never_deleted() {
     assert!(tx.insert_binding_half(&half).await.unwrap());
     assert!(
         !tx.insert_binding_half(&half).await.unwrap(),
-        "one half per realm"
+        "one half per environment"
     );
     assert!(
         !tx.commit_binding_half([3; 16], a, &[5; 32], 700_000)

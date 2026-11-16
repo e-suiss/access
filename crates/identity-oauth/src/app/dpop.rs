@@ -1,4 +1,4 @@
-//! The DPoP check of a request at the authorization server or a resource server of the realm
+//! The DPoP check of a request at the authorization server or a resource server of the environment
 //! (§10.4.3, IDP-11): the Kernel's stateless steps, then the server nonce (TN-29), then the
 //! replay cache (TN-30). A proof that fails is never recorded.
 
@@ -47,7 +47,7 @@ pub struct Accepted {
     pub nonce: String,
 }
 
-/// Checks DPoP proofs for one role of one realm.
+/// Checks DPoP proofs for one role of one environment.
 pub struct DpopChecker<'a, R, C> {
     profile: &'a DpopProfile,
     nonces: &'a NonceRing,
@@ -60,7 +60,7 @@ fn invalid(step: Step, code: &'static str) -> Failure {
 }
 
 impl<'a, R: ReplayCache, C: Clock> DpopChecker<'a, R, C> {
-    /// A checker over the realm's profile, its nonce keys for this role and its replay cache.
+    /// A checker over the environment's profile, its nonce keys for this role and its replay cache.
     #[must_use]
     pub const fn new(
         profile: &'a DpopProfile,

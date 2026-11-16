@@ -70,7 +70,7 @@ fn segments() -> impl Strategy<Value = Vec<Vec<u8>>> {
 fn ordinary_paths_are_canonical() {
     for p in [
         "/",
-        "/.well-known/openid-configuration/realms/acme",
+        "/.well-known/openid-configuration/env/acme",
         "/access/v1/keys/q1w2-e3_r4~",
         "/v1/me/auth-context",
         "/a%20b/%C3%A9",

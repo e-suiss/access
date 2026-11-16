@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.ssf_inbound_set (tenant_id, environment_id, transmitter_id, jti_digest, event_type, outcome)\n             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee0002e7cbdfc8d6d328b2e50b4fb3cf64565cc76b5a31f9286259550f93bb5c"
+}

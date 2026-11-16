@@ -18,7 +18,7 @@ pub(crate) struct File {
 }
 
 /// Where `incident contain` declares a compromise and as whom (OP-157 m.3 (i)): the public
-/// listener, reached with the PEP certificate the realm accepted its declarant over. Credentials
+/// listener, reached with the PEP certificate the environment accepted its declarant over. Credentials
 /// are files (OP-129 m.3).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,7 +31,7 @@ pub(crate) struct Incident {
     pub(crate) pep_cert_file: PathBuf,
     /// PEM private key of that certificate.
     pub(crate) pep_key_file: PathBuf,
-    /// The realm's governing domain, base64url.
+    /// The environment's governing domain, base64url.
     pub(crate) domain: String,
     /// The accepted declarant Party, base64url.
     pub(crate) declarant: String,

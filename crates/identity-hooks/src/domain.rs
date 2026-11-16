@@ -194,7 +194,7 @@ impl Disclosure {
 }
 
 /// Whether `url` may be a hook or webhook endpoint: `https`, at most 2048 bytes, no user info
-/// or fragment, a DNS host name (never an IP literal), and, unless the realm allows private
+/// or fragment, a DNS host name (never an IP literal), and, unless the environment allows private
 /// targets, port 443 and no local-only name. A name that resolves to a private address is
 /// refused again when the request is sent (§14.3).
 ///
@@ -248,7 +248,7 @@ pub fn check_target(url: &str, allow_private: bool) -> Result<(), Invalid> {
     Ok(())
 }
 
-/// What a realm lets its extension points reach and receive (`idp.realm.extension_policy`,
+/// What an environment lets its extension points reach and receive (`idp.environment.extension_policy`,
 /// OP-151 m.10 (e)): by default no private target and no personal data beyond pseudonymous ids.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExtensionPolicy {
@@ -415,7 +415,7 @@ pub fn change_digest(action: ExtensionAction, body: Cbor) -> Result<Digest, dcbo
     Ok(Digest(context_digest(CHANGE_CONTEXT, &bytes).0))
 }
 
-/// The intent of a change of `resource` in realm `slug` (EI-25).
+/// The intent of a change of `resource` in environment `slug` (EI-25).
 ///
 /// # Errors
 /// [`dcbor::EncodeError`].
@@ -479,7 +479,7 @@ impl HookChange {
         }
     }
 
-    /// The intent that authorizes it in realm `slug`, valid over `validity`.
+    /// The intent that authorizes it in environment `slug`, valid over `validity`.
     ///
     /// # Errors
     /// [`dcbor::EncodeError`].
@@ -604,8 +604,8 @@ pub fn uuid(b: &[u8; 16]) -> String {
     out
 }
 
-/// The JSON body of one call: `{type, id, hook, realm, at, data}`. The e-mail enters only when
-/// the registration discloses it and the realm allows disclosure.
+/// The JSON body of one call: `{type, id, hook, environment, at, data}`. The e-mail enters only when
+/// the registration discloses it and the environment allows disclosure.
 ///
 /// # Errors
 /// [`Invalid`] when encoding fails.
@@ -613,16 +613,16 @@ pub fn request_body(
     reg: &Registration,
     call: &Call,
     call_id: &str,
-    realm: &[u8; 16],
+    environment: &[u8; 16],
     at_ms: u64,
-    realm_allows_disclosure: bool,
+    environment_allows_disclosure: bool,
 ) -> Result<Vec<u8>, Invalid> {
-    let email = realm_allows_disclosure && reg.disclose.contains(&Disclosure::Email);
+    let email = environment_allows_disclosure && reg.disclose.contains(&Disclosure::Email);
     serde_json::to_vec(&json!({
         "type": format!("{TYPE_PREFIX}{}", call.point().name()),
         "id": call_id,
         "hook": uuid(&reg.id),
-        "realm": uuid(realm),
+        "environment": uuid(environment),
         "at": at_ms,
         "data": call.data(email),
     }))

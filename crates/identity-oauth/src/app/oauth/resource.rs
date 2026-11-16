@@ -1,4 +1,4 @@
-//! The realm's own resource and token management: `/userinfo` (OIDC Core §5.3, MD-10),
+//! The environment's own resource and token management: `/userinfo` (OIDC Core §5.3, MD-10),
 //! `/revoke` (RFC 7009) and `/introspect` (RFC 7662, MD-8). Access tokens are read back by
 //! signature and then held against their grant on the primary (Δ = 0); a product's service
 //! token (OP-149 m.31 (a)) has no grant and is held against both products' registrations.
@@ -11,13 +11,14 @@ use access_store::oauth::GrantRow;
 use serde_json::{Value, json};
 
 use super::{
-    ClientRequest, Env, OAuth, Realm, Reply, decode32, grant_live, refresh_digest, session_live,
+    ClientRequest, Env, Environment, OAuth, Reply, decode32, grant_live, refresh_digest,
+    session_live,
 };
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
 use crate::domain::dpop::{DpopProfile, Failure, Jkt};
 use crate::domain::fapi::Binding;
-use crate::domain::jwt::{SKEW_MS, realm_key_set};
+use crate::domain::jwt::{SKEW_MS, environment_key_set};
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
 use crate::domain::tokens::{ACCESS_TYP, GrantDetails};
@@ -32,11 +33,11 @@ pub(crate) const INTROSPECTION_TYP: &str = "token-introspection+jwt";
 /// `typ` of a signed userinfo answer (OIDC Core §5.3.2).
 pub(crate) const USERINFO_TYP: &str = "JWT";
 
-/// A verified access token of this realm: a grant's protocol-scope token (`sid`) or a client's
+/// A verified access token of this environment: a grant's protocol-scope token (`sid`) or a client's
 /// service token for a product (no `sid`, `access_tenant`; OP-149 m.31 (a), m.34 (b)).
 pub(crate) struct AccessToken {
     pub(crate) sub: String,
-    /// Its one audience: the realm, or a registered platform product (OP-149 m.26 (a)).
+    /// Its one audience: the environment, or a registered platform product (OP-149 m.26 (a)).
     pub(crate) aud: String,
     pub(crate) client_id: String,
     /// The grant's `sid`; a service token has none.
@@ -52,10 +53,10 @@ pub(crate) struct AccessToken {
     pub(crate) iat: i64,
 }
 
-/// Who presented a live DPoP-bound access token of this realm for the realm itself, as a
-/// realm resource such as the SSH certificate authority reads it (OP-156 m.3 (o)).
+/// Who presented a live DPoP-bound access token of this environment for the environment itself, as a
+/// environment resource such as the SSH certificate authority reads it (OP-156 m.3 (o)).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RealmHolder {
+pub struct EnvironmentHolder {
     /// The account the token's grant names.
     pub subject: [u8; 16],
     /// The thumbprint of the DPoP key the token is bound to, which signed this request's proof.
@@ -78,18 +79,18 @@ fn active_false() -> Reply {
 }
 
 impl<E: Env> OAuth<E> {
-    /// Reads back an access token of this realm: signature with the realm's keys, `typ`
+    /// Reads back an access token of this environment: signature with the environment's keys, `typ`
     /// `at+jwt`, `iss`, its one string `aud` and times (RFC 9068 §4); `Ok(None)` when it is not
     /// one. The caller holds `aud` against the resource it serves (AG-8, §9.9.3 k.1).
     pub(crate) async fn access_token(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         token: &str,
         now: u64,
         check_time: bool,
     ) -> Result<Option<AccessToken>, Unavailable> {
-        let jwks = self.env.signer().jwks(realm.realm).await?;
-        let Ok(keys) = realm_key_set(jwks.as_bytes()) else {
+        let jwks = self.env.signer().jwks(environment.environment).await?;
+        let Ok(keys) = environment_key_set(jwks.as_bytes()) else {
             return Err(Unavailable);
         };
         let Ok(v) = verify_compact(&AwsLcBackend, token, &keys, ACCESS_TYP, Origin::Native) else {
@@ -105,7 +106,7 @@ impl<E: Env> OAuth<E> {
         };
         let aud = aud.clone();
         let rules = ClaimRules {
-            issuer: realm.issuer.as_str(),
+            issuer: environment.issuer.as_str(),
             audience: &aud,
             now,
             skew_ms: SKEW_MS,
@@ -113,8 +114,9 @@ impl<E: Env> OAuth<E> {
         let claims = if check_time {
             check_claims(&v.payload, &rules).ok()
         } else {
-            Some(parsed)
-                .filter(|c| c.get("iss").and_then(Json::as_str) == Some(realm.issuer.as_str()))
+            Some(parsed).filter(|c| {
+                c.get("iss").and_then(Json::as_str) == Some(environment.issuer.as_str())
+            })
         };
         let Some(c) = claims else {
             return Ok(None);
@@ -178,25 +180,25 @@ impl<E: Env> OAuth<E> {
     }
 
     /// The holder of `authorization` (`DPoP <token>`) for `method` on `uri` with its `DPoP`
-    /// proofs: a live token of this realm for the realm itself, bound to the key that signed
+    /// proofs: a live token of this environment for the environment itself, bound to the key that signed
     /// the proof, whose grant and session are live now. Anything else answers `401` with the
     /// RFC 9449 challenge; there is no bearer form.
     ///
     /// # Errors
     /// [`Unavailable`].
-    pub async fn realm_holder(
+    pub async fn environment_holder(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         method: &str,
         uri: &str,
         authorization: Option<&str>,
         dpop: &[&str],
-    ) -> Result<Result<RealmHolder, Reply>, Unavailable> {
+    ) -> Result<Result<EnvironmentHolder, Reply>, Unavailable> {
         let profile = self.env.dpop().clone();
         let unauthorized = |error: &str| Reply::Json {
             status: 401,
             body: json!({ "error": error }).to_string(),
-            dpop_nonce: self.nonce(realm, Role::ResourceServer),
+            dpop_nonce: self.nonce(environment, Role::ResourceServer),
             challenge: Some(format!(
                 r#"DPoP error="{error}", algs="{}""#,
                 profile.signing_alg_values().join(" ")
@@ -212,9 +214,9 @@ impl<E: Env> OAuth<E> {
         };
         let now = self.now()?;
         let Some((at, sid, jkt)) = self
-            .access_token(realm, token, now, true)
+            .access_token(environment, token, now, true)
             .await?
-            .filter(|at| at.aud == realm.issuer.as_str())
+            .filter(|at| at.aud == environment.issuer.as_str())
             .and_then(|at| match (at.sid, at.binding) {
                 (Some(sid), Binding::Dpop(jkt)) => Some((at, sid, jkt)),
                 _ => None,
@@ -224,7 +226,7 @@ impl<E: Env> OAuth<E> {
         };
         let proof = self
             .dpop(
-                realm,
+                environment,
                 Role::ResourceServer,
                 &DpopRequest {
                     proofs: dpop,
@@ -247,7 +249,7 @@ impl<E: Env> OAuth<E> {
                 }));
             }
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let grant = self.live_grant(&mut tx, &sid, now).await?;
         let session = match &grant {
             Some(g) => tx.session(g.session).await?,
@@ -257,7 +259,7 @@ impl<E: Env> OAuth<E> {
         let (Some(grant), Some(session)) = (grant, session) else {
             return Ok(Err(unauthorized("invalid_token")));
         };
-        Ok(Ok(RealmHolder {
+        Ok(Ok(EnvironmentHolder {
             subject: grant.subject,
             jkt: jkt.0,
             client_id: at.client_id,
@@ -270,12 +272,12 @@ impl<E: Env> OAuth<E> {
     /// the pairwise `sub` only (MD-10). A bearer token is refused: there is none (TN-27).
     pub async fn userinfo(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         method: &str,
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Reply {
-        self.userinfo_mtls(realm, method, authorization, dpop, &[])
+        self.userinfo_mtls(environment, method, authorization, dpop, &[])
             .await
     }
 
@@ -285,7 +287,7 @@ impl<E: Env> OAuth<E> {
     /// `Bearer` (OP-155 m.3 (k), Ek B 5090).
     pub async fn userinfo_mtls(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         method: &str,
         authorization: Option<&str>,
         dpop: &[&str],
@@ -293,7 +295,7 @@ impl<E: Env> OAuth<E> {
     ) -> Reply {
         let profile = self.env.dpop().clone();
         match self
-            .userinfo_inner(realm, method, authorization, dpop, chain, &profile)
+            .userinfo_inner(environment, method, authorization, dpop, chain, &profile)
             .await
         {
             Ok(r) => r,
@@ -307,7 +309,7 @@ impl<E: Env> OAuth<E> {
     )]
     async fn userinfo_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         method: &str,
         authorization: Option<&str>,
         dpop: &[&str],
@@ -323,7 +325,7 @@ impl<E: Env> OAuth<E> {
         let unauthorized = |error: &str| Reply::Json {
             status: 401,
             body: json!({ "error": error }).to_string(),
-            dpop_nonce: self.nonce(realm, Role::ResourceServer),
+            dpop_nonce: self.nonce(environment, Role::ResourceServer),
             challenge: challenge(error),
         };
         let Some((scheme, token)) = authorization
@@ -340,19 +342,19 @@ impl<E: Env> OAuth<E> {
         let now = self.now()?;
         // RFC 9068 §4, AG-8
         let Some((at, sid)) = self
-            .access_token(realm, token, now, true)
+            .access_token(environment, token, now, true)
             .await?
-            .filter(|at| at.aud == realm.issuer.as_str())
+            .filter(|at| at.aud == environment.issuer.as_str())
             .and_then(|at| at.sid.map(|sid| (at, sid)))
         else {
             return Ok(unauthorized("invalid_token"));
         };
-        let uri = realm.issuer.endpoint(Endpoint::Userinfo.path());
+        let uri = environment.issuer.endpoint(Endpoint::Userinfo.path());
         let nonce = match (at.binding, dpop_scheme) {
             (Binding::Dpop(jkt), true) => {
                 let proof = self
                     .dpop(
-                        realm,
+                        environment,
                         Role::ResourceServer,
                         &DpopRequest {
                             proofs: dpop,
@@ -387,7 +389,7 @@ impl<E: Env> OAuth<E> {
             (Binding::Bearer, false) => None,
             _ => return Ok(unauthorized("invalid_token")),
         };
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let live = self.live_grant(&mut tx, &sid, now).await?;
         tx.commit().await?;
         let Some(grant) = live else {
@@ -395,12 +397,12 @@ impl<E: Env> OAuth<E> {
         };
         let details: GrantDetails =
             serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let client = tx.client_by_uuid(grant.client).await?;
         tx.commit().await?;
         let client = match client.and_then(crate::domain::client::Client::from_row) {
             Some(c) => {
-                let mut tx = self.begin(realm).await?;
+                let mut tx = self.begin(environment).await?;
                 let c = self.profiled(&mut tx, c).await?;
                 tx.commit().await?;
                 c
@@ -418,7 +420,7 @@ impl<E: Env> OAuth<E> {
         // §10.4.6
         let mut body = self
             .released(
-                realm,
+                environment,
                 &client,
                 &details,
                 grant.subject,
@@ -432,12 +434,23 @@ impl<E: Env> OAuth<E> {
             .as_ref()
             .is_some_and(|e| e.userinfo);
         if client.profile.userinfo_signed || encrypt {
-            body.insert(String::from("iss"), Value::from(realm.issuer.as_str()));
+            body.insert(
+                String::from("iss"),
+                Value::from(environment.issuer.as_str()),
+            );
             body.insert(String::from("aud"), Value::from(client.id.as_str()));
             let claims = Value::Object(body).to_string().into_bytes();
-            let mut tx = self.begin(realm).await?;
+            let mut tx = self.begin(environment).await?;
             let jwt = self
-                .client_jwt(&mut tx, realm, &client, USERINFO_TYP, &claims, encrypt, now)
+                .client_jwt(
+                    &mut tx,
+                    environment,
+                    &client,
+                    USERINFO_TYP,
+                    &claims,
+                    encrypt,
+                    now,
+                )
                 .await?;
             tx.commit().await?;
             return Ok(Reply::Jwt {
@@ -449,18 +462,18 @@ impl<E: Env> OAuth<E> {
         Ok(Reply::json(200, &Value::Object(body)).with_nonce(nonce))
     }
 
-    /// The token `token` names when it is not a refresh token: an access token of this realm,
+    /// The token `token` names when it is not a refresh token: an access token of this environment,
     /// read without its times.
     async fn presented(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         token: &str,
         now: u64,
     ) -> Result<Option<AccessToken>, Unavailable> {
         if decode32(token).is_some() {
             return Ok(None);
         }
-        self.access_token(realm, token, now, false).await
+        self.access_token(environment, token, now, false).await
     }
 
     /// The grant behind a refresh token or a grant's access token `at`.
@@ -490,11 +503,11 @@ impl<E: Env> OAuth<E> {
     /// another client, is answered 200 without effect (RFC 7009 §2.2).
     pub async fn revoke(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
     ) -> Reply {
-        match self.revoke_inner(realm, params, authorization).await {
+        match self.revoke_inner(environment, params, authorization).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -502,19 +515,19 @@ impl<E: Env> OAuth<E> {
 
     async fn revoke_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let req = ClientRequest {
             authorization,
             params,
             endpoint: Endpoint::Revoke.path(),
             chain: &[],
         };
-        let client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c) => c,
             Err(e) => {
                 return Ok(Reply::oauth_error(
@@ -533,10 +546,10 @@ impl<E: Env> OAuth<E> {
         };
         if super::authority::looks_authority(token) {
             tx.commit().await?;
-            self.revoke_authority(realm, &client, token).await?;
+            self.revoke_authority(environment, &client, token).await?;
             return Ok(Reply::json(200, &json!({})));
         }
-        let at = self.presented(realm, token, now).await?;
+        let at = self.presented(environment, token, now).await?;
         if let Some((grant, _)) = self.token_grant(&mut tx, token, at).await?
             && grant.client == client.uuid
         {
@@ -562,32 +575,32 @@ impl<E: Env> OAuth<E> {
     /// reach included, every token is `active: false`, never 503 (P-ID-8, EP-3).
     pub async fn introspect(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
     ) -> Reply {
-        self.introspect_as(realm, params, authorization, false, &[])
+        self.introspect_as(environment, params, authorization, false, &[])
             .await
     }
 
     /// [`Self::introspect`]; when the client asked for `application/token-introspection+jwt`
-    /// (`accept_jwt`) or is under FAPI 2.0 Message Signing, the answer is a JWT the realm signs
+    /// (`accept_jwt`) or is under FAPI 2.0 Message Signing, the answer is a JWT the environment signs
     /// with the client's algorithm, encrypted when it asked (RFC 9701, OP-155 m.3 (k)). `chain`
     /// is the connection's client certificate, leaf first (RFC 8705 §2).
     pub async fn introspect_as(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
         accept_jwt: bool,
         chain: &[Vec<u8>],
     ) -> Reply {
         match self
-            .introspect_inner(realm, params, authorization, chain)
+            .introspect_inner(environment, params, authorization, chain)
             .await
         {
             Ok((reply, Some(client))) if accept_jwt || client.profile.fapi2 => self
-                .introspection_jwt(realm, &client, reply)
+                .introspection_jwt(environment, &client, reply)
                 .await
                 .unwrap_or_else(|Unavailable| active_false()),
             Ok((reply, _)) => reply,
@@ -599,7 +612,7 @@ impl<E: Env> OAuth<E> {
     /// and the answer under `token_introspection`.
     async fn introspection_jwt(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         reply: Reply,
     ) -> Result<Reply, Unavailable> {
@@ -612,7 +625,7 @@ impl<E: Env> OAuth<E> {
         let answer: Value = serde_json::from_str(&body).map_err(|_| Unavailable)?;
         let now = self.now()?;
         let claims = json!({
-            "iss": realm.issuer.as_str(),
+            "iss": environment.issuer.as_str(),
             "aud": client.id,
             "iat": now / 1000,
             "token_introspection": answer,
@@ -620,11 +633,11 @@ impl<E: Env> OAuth<E> {
         .to_string()
         .into_bytes();
         let encrypt = client.profile.encryption.is_some();
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let jwt = self
             .client_jwt(
                 &mut tx,
-                realm,
+                environment,
                 client,
                 INTROSPECTION_TYP,
                 &claims,
@@ -642,20 +655,20 @@ impl<E: Env> OAuth<E> {
 
     async fn introspect_inner(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         params: &Params,
         authorization: Option<&str>,
         chain: &[Vec<u8>],
     ) -> Result<(Reply, Option<Client>), Unavailable> {
         let now = self.now()?;
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let req = ClientRequest {
             authorization,
             params,
             endpoint: Endpoint::Introspect.path(),
             chain,
         };
-        let client: Client = match self.authenticate(&mut tx, realm, &req, now).await? {
+        let client: Client = match self.authenticate(&mut tx, environment, &req, now).await? {
             Ok(c) if c.client_type() == crate::domain::dpop::ClientType::Confidential => c,
             Ok(_) | Err(_) => {
                 return Ok((
@@ -664,14 +677,16 @@ impl<E: Env> OAuth<E> {
                 ));
             }
         };
-        let reply = self.introspect_for(tx, realm, &client, params, now).await?;
+        let reply = self
+            .introspect_for(tx, environment, &client, params, now)
+            .await?;
         Ok((reply, Some(client)))
     }
 
     async fn introspect_for(
         &self,
         mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         params: &Params,
         now: u64,
@@ -686,13 +701,13 @@ impl<E: Env> OAuth<E> {
         };
         if super::authority::looks_authority(token) {
             tx.commit().await?;
-            return self.introspect_authority(realm, &client, token).await;
+            return self.introspect_authority(environment, &client, token).await;
         }
-        let at = self.presented(realm, token, now).await?;
+        let at = self.presented(environment, token, now).await?;
         if let Some(at) = at.as_ref().filter(|at| at.sid.is_none()) {
             // OP-149 m.31 (a)
             let reply = self
-                .introspect_service(&mut tx, realm, &client, at, now)
+                .introspect_service(&mut tx, environment, &client, at, now)
                 .await?;
             tx.commit().await?;
             return Ok(reply);
@@ -721,7 +736,7 @@ impl<E: Env> OAuth<E> {
             "active": true,
             "client_id": client.id,
             "sub": sub,
-            "iss": realm.issuer.as_str(),
+            "iss": environment.issuer.as_str(),
         });
         let Value::Object(m) = &mut body else {
             return Err(Unavailable);
@@ -729,12 +744,15 @@ impl<E: Env> OAuth<E> {
         if let Some(at) = at {
             let expired = u64::try_from(at.exp).map_or(true, |e| e.saturating_mul(1000) <= now);
             // OP-149 m.26 (a)
-            if at.client_id != client.id || expired || at.aud != details.audience(&realm.issuer) {
+            if at.client_id != client.id
+                || expired
+                || at.aud != details.audience(&environment.issuer)
+            {
                 return Ok(active_false());
             }
             // OP-149 m.34 (a)
             let tenant = if details.resource.is_some() {
-                Some(self.tenant_name(realm)?)
+                Some(self.tenant_name(environment)?)
             } else {
                 None
             };

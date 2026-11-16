@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use access_identity_oauth::ports::{Directory, RealmEntry};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry};
 use access_identity_ui::app::shell::Shell;
 use access_identity_ui::app::{Browser, Devices, Hosted, Reply, SESSION_COOKIE};
 use access_identity_ui::domain::frontend::{InstanceRegistration, rfc3339};
@@ -56,27 +56,27 @@ type Boxed<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 trait Hosting: Send + Sync {
     fn shell<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
     ) -> Boxed<'a, Result<Shell, Reply>>;
     fn challenge<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
         key: &'a str,
     ) -> Boxed<'a, Reply>;
     fn register<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
         body: &'a InstanceRegistration,
     ) -> Boxed<'a, Reply>;
     fn now_ms(&self) -> u64;
-    fn realm<'a>(
+    fn environment<'a>(
         &'a self,
         authority: &'a str,
         slug: Option<&'a str>,
-    ) -> Boxed<'a, Result<Option<RealmEntry>, ()>>;
+    ) -> Boxed<'a, Result<Option<EnvironmentEntry>, ()>>;
 }
 
 struct Hosted9<D, KI, C, M, A, I, P, Q> {
@@ -98,7 +98,7 @@ where
 {
     fn shell<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
     ) -> Boxed<'a, Result<Shell, Reply>> {
         Box::pin(async move { self.hosted.shell(entry, &b).await })
@@ -106,7 +106,7 @@ where
 
     fn challenge<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
         key: &'a str,
     ) -> Boxed<'a, Reply> {
@@ -119,7 +119,7 @@ where
 
     fn register<'a>(
         &'a self,
-        entry: &'a RealmEntry,
+        entry: &'a EnvironmentEntry,
         b: Browser<'a>,
         body: &'a InstanceRegistration,
     ) -> Boxed<'a, Reply> {
@@ -134,11 +134,11 @@ where
         self.hosted.clock.now_ms()
     }
 
-    fn realm<'a>(
+    fn environment<'a>(
         &'a self,
         authority: &'a str,
         slug: Option<&'a str>,
-    ) -> Boxed<'a, Result<Option<RealmEntry>, ()>> {
+    ) -> Boxed<'a, Result<Option<EnvironmentEntry>, ()>> {
         Box::pin(async move {
             // OP-156 m.3 (i)
             access_identity_oauth::app::resolve_hosted(&self.directory, authority, slug)
@@ -221,17 +221,17 @@ fn json_reply(status: StatusCode, value: &serde_json::Value) -> Response {
     no_store((status, axum::Json(value)).into_response())
 }
 
-/// The realm's origin from its stored issuer (TN-131: the `Host` header only selects it).
-fn origin_of(entry: &RealmEntry) -> &str {
+/// The environment's origin from its stored issuer (TN-131: the `Host` header only selects it).
+fn origin_of(entry: &EnvironmentEntry) -> &str {
     let issuer = entry.issuer.as_str();
     issuer
         .get(..issuer.len().saturating_sub(entry.issuer.path().len()))
         .unwrap_or(issuer)
 }
 
-/// A request's realm, its cookies and its live session.
+/// A request's environment, its cookies and its live session.
 struct Live {
-    entry: RealmEntry,
+    entry: EnvironmentEntry,
     jar: Jar,
     cookie: Secret<[u8; 32]>,
     shell: Shell,
@@ -256,10 +256,10 @@ async fn entry(
     p: &HashMap<String, String>,
     uri: &Uri,
     headers: &HeaderMap,
-) -> Result<RealmEntry, Response> {
+) -> Result<EnvironmentEntry, Response> {
     match s
         .hosting
-        .realm(authority(uri, headers), p.get("slug").map(String::as_str))
+        .environment(authority(uri, headers), p.get("slug").map(String::as_str))
         .await
     {
         Ok(Some(e)) => Ok(e),
@@ -268,7 +268,7 @@ async fn entry(
     }
 }
 
-/// TN-131: a browser's cross-site request is refused; a state-changing one names the realm's
+/// TN-131: a browser's cross-site request is refused; a state-changing one names the environment's
 /// origin and carries the session's CSRF token.
 fn guard(
     origin: &str,
@@ -298,7 +298,7 @@ fn guard(
     }
 }
 
-/// Every API call: the realm, the gates and the live session (G57).
+/// Every API call: the environment, the gates and the live session (G57).
 async fn live(
     s: &Account,
     p: &HashMap<String, String>,
@@ -370,7 +370,7 @@ async fn session(
     let mut r = json_reply(
         StatusCode::OK,
         &json!({
-            "realm": sh.slug,
+            "environment": sh.slug,
             "domain": b64url_encode(&sh.domain.0),
             "account": sh.account,
             "expires_at": rfc3339(sh.expires_ms),
@@ -380,7 +380,7 @@ async fn session(
             "step_up_needed": !sh.fresh,
             "pep": ACCOUNT_PEP,
             "api": api_base(slug),
-            "frontend": slug.map_or_else(String::new, |s| format!("/realms/{s}")),
+            "frontend": slug.map_or_else(String::new, |s| format!("/env/{s}")),
         }),
     );
     if let Ok(v) = HeaderValue::from_str(&csrf_cookie(&token)) {
@@ -610,8 +610,8 @@ async fn headers_layer(request: Request, next: Next) -> Response {
     r
 }
 
-/// The account routes: the pages, their assets and `…/account/api/*`, at the realm's host and
-/// under `/realms/{slug}`, every answer with the account's security headers. `adp` is ADP's
+/// The account routes: the pages, their assets and `…/account/api/*`, at the environment's host and
+/// under `/env/{slug}`, every answer with the account's security headers. `adp` is ADP's
 /// router in this process; `assets` the built `web/apps/account`.
 pub fn router<D, KI, C, M, A, I, P, Q>(
     directory: D,
@@ -642,7 +642,7 @@ where
         limits,
     });
     let mut routes = Router::new().route("/account/assets/{*path}", get(asset));
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         routes = routes
             .route(&format!("{prefix}/account"), get(page))
             .route(&format!("{prefix}/account/api/session"), get(session))

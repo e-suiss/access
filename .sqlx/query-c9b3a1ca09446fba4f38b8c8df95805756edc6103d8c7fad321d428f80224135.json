@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.event_subscription\n                (tenant_id, environment_id, subscription_id, channel, endpoint, audience, events,\n                 description, token_digest, status, owner_client_id, platform_product)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n             ON CONFLICT (tenant_id, environment_id, owner_client_id, channel, endpoint)\n               WHERE owner_client_id IS NOT NULL AND disabled_at IS NULL AND endpoint IS NOT NULL\n             DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c9b3a1ca09446fba4f38b8c8df95805756edc6103d8c7fad321d428f80224135"
+}

@@ -153,8 +153,8 @@ impl RecoveryTx for PgTx {
             .await?)
     }
 
-    async fn recovery_realm_policy(&mut self) -> Result<Option<Vec<u8>>, SessionError> {
-        Ok(self.0.recovery_realm_policy().await?)
+    async fn recovery_environment_policy(&mut self) -> Result<Option<Vec<u8>>, SessionError> {
+        Ok(self.0.recovery_environment_policy().await?)
     }
 
     async fn insert_attempt(&mut self, attempt: &NewAttempt<'_>) -> Result<[u8; 16], SessionError> {

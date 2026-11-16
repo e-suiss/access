@@ -14,7 +14,7 @@ pub(crate) struct Config {
     pub(crate) log: String,
     /// The Unix socket the identity plane reaches the signer on (CMP-22b).
     pub(crate) socket: PathBuf,
-    /// The directory of sealed realm keys; the only one the signer writes, never shared with
+    /// The directory of sealed environment keys; the only one the signer writes, never shared with
     /// the authority signer's.
     pub(crate) vault: PathBuf,
     /// User ids allowed to call (peer credentials).
@@ -24,7 +24,7 @@ pub(crate) struct Config {
     /// The cell's name; its identity audit log's origin is `<cell>/identity-audit` and its
     /// `audit-checkpoint` key belongs to it (OP-150 m.3 (h)).
     pub(crate) cell: String,
-    /// The PKCS#11 token holding the KEK that seals realm keys (CR-21, T31).
+    /// The PKCS#11 token holding the KEK that seals environment keys (CR-21, T31).
     pub(crate) hsm: Option<Hsm>,
     /// CR-34: the hardening mode.
     pub(crate) hardening: Hardening,
@@ -77,7 +77,7 @@ pub(crate) struct Hsm {
     pub(crate) token: String,
     /// User PIN file (OP-129 m.3).
     pub(crate) pin_file: PathBuf,
-    /// Label of the KEK that seals realm keys.
+    /// Label of the KEK that seals environment keys.
     pub(crate) kek: String,
     /// Directories a file-backed token keeps its objects in, opened read-write.
     #[serde(default)]

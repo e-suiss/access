@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ((SELECT COUNT(*) FROM access.ssh_revocations\n                          WHERE tenant_id = $1 AND environment_id = $2)\n                     + (SELECT COUNT(*) FROM access.ssh_ca_keys\n                          WHERE tenant_id = $1 AND environment_id = $2)) AS \"n!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6351bac41452403ad279bef2561e30bcbf4a0354065050c109ab008fb016ab25"
+}

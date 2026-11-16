@@ -1,10 +1,10 @@
 //! `access-linuxd`: the Access Linux client daemon (OP-156 m.3 (p), B21). It reaches Access only
-//! over the realm's public listener with the host's client certificate and answers the NSS and
+//! over the environment's public listener with the host's client certificate and answers the NSS and
 //! PAM modules on its socket.
 //!
 //! Configuration (environment, from the systemd unit's `EnvironmentFile`):
-//! - `ACCESS_LINUXD_ISSUER`: the realm's issuer, `https://host[:port][/realms/slug]`.
-//! - `ACCESS_LINUXD_CLIENT_ID`: the realm's public client with the device grant.
+//! - `ACCESS_LINUXD_ISSUER`: the environment's issuer, `https://host[:port][/env/slug]`.
+//! - `ACCESS_LINUXD_CLIENT_ID`: the environment's public client with the device grant.
 //! - `ACCESS_LINUXD_CA`, `ACCESS_LINUXD_CERT`, `ACCESS_LINUXD_KEY`: PEM files of the roots
 //!   Access chains to, the host's client certificate chain (its `x5t#S256` is what
 //!   `idp.linux.host_register` names) and its key.

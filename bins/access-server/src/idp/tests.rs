@@ -17,16 +17,16 @@ use access_crypto::event_id::EventKey;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
 use access_identity_admin::AdminError;
-use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
+use access_identity_admin::app::{Admin, Applied, NewEnvironment, Proposal};
 use access_identity_admin::domain::{
     AuthMethod, Change, Client, ClientId, Invalid, Platform, RedirectUri, RpId,
 };
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
-use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, IssuerStyle};
 use access_identity_signer::adapters::SealedFactory;
 use access_identity_signer::ports::{Vault, VaultError};
 use access_identity_signer::protocol::{
-    Realm as SignerRealm, Request as SignerRequest, Response as SignerResponse,
+    Environment as SignerEnvironment, Request as SignerRequest, Response as SignerResponse,
 };
 use access_identity_signer::service::Service;
 use access_internal_api::instances::{PlatformProduct, Registrant, register_nonce};
@@ -38,7 +38,7 @@ use access_kernel::meta::{self, ActorKind, ExerciseBasis, Payload, Root, kind};
 use access_kernel::model::{Id, Window};
 use access_kernel::verify::cose::{ALG, CONTENT_TYPE as CT, KID, PublicKey, to_be_signed};
 use access_kernel::verify::key_scope::thumbprint;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{client, settings};
 use access_store::tenancy::{create_tenant, route_by_slug};
 use access_store::testing::{TestDb, fresh};
@@ -156,11 +156,11 @@ fn plane(db: &TestDb, clock: &Fixed) -> TestPlane {
     Plane::new(domains, db.app.clone(), clock.clone(), actors)
 }
 
-/// Realm key sets and Claim issuer keys, in memory.
+/// Environment key sets and Claim issuer keys, in memory.
 #[derive(Default)]
 struct MemVault(
-    std::collections::BTreeMap<SignerRealm, Vec<u8>>,
-    std::collections::BTreeMap<SignerRealm, Vec<u8>>,
+    std::collections::BTreeMap<SignerEnvironment, Vec<u8>>,
+    std::collections::BTreeMap<SignerEnvironment, Vec<u8>>,
 );
 
 impl Vault for MemVault {
@@ -168,8 +168,8 @@ impl Vault for MemVault {
         Ok(self.0.values().cloned().collect())
     }
 
-    fn put(&mut self, realm: &SignerRealm, bytes: &[u8]) -> Result<(), VaultError> {
-        self.0.insert(*realm, bytes.to_vec());
+    fn put(&mut self, environment: &SignerEnvironment, bytes: &[u8]) -> Result<(), VaultError> {
+        self.0.insert(*environment, bytes.to_vec());
         Ok(())
     }
 
@@ -181,19 +181,23 @@ impl Vault for MemVault {
         Ok(())
     }
 
-    fn issuer(&mut self, realm: &SignerRealm) -> Result<Option<Vec<u8>>, VaultError> {
-        Ok(self.1.get(realm).cloned())
+    fn issuer(&mut self, environment: &SignerEnvironment) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(self.1.get(environment).cloned())
     }
 
-    fn put_issuer(&mut self, realm: &SignerRealm, bytes: &[u8]) -> Result<(), VaultError> {
-        self.1.insert(*realm, bytes.to_vec());
+    fn put_issuer(
+        &mut self,
+        environment: &SignerEnvironment,
+        bytes: &[u8],
+    ) -> Result<(), VaultError> {
+        self.1.insert(*environment, bytes.to_vec());
         Ok(())
     }
 }
 
 type TestSigner = Service<SealedFactory<SoftKek>, MemVault>;
 
-/// The realm keys opened, in order, over an identity signer whose clock the test moves.
+/// The environment keys opened, in order, over an identity signer whose clock the test moves.
 struct Opened {
     log: std::sync::Mutex<Vec<([u8; 16], JoseAlg)>>,
     signer: std::sync::Mutex<TestSigner>,
@@ -202,11 +206,11 @@ struct Opened {
 
 impl Default for Opened {
     fn default() -> Self {
-        let factory = SealedFactory::new(SoftKek::new("realm-kek", [5; 32]));
+        let factory = SealedFactory::new(SoftKek::new("environment-kek", [5; 32]));
         Self {
             log: std::sync::Mutex::default(),
             signer: std::sync::Mutex::new(
-                Service::start(factory, MemVault::default(), Policy::REALM).unwrap(),
+                Service::start(factory, MemVault::default(), Policy::ENVIRONMENT).unwrap(),
             ),
             now: std::sync::atomic::AtomicU64::new(0),
         }
@@ -224,7 +228,7 @@ impl Opened {
         self.now.store(now, std::sync::atomic::Ordering::SeqCst);
         assert_eq!(
             self.signer.lock().unwrap().tick(now, 7),
-            Vec::<SignerRealm>::new()
+            Vec::<SignerEnvironment>::new()
         );
     }
 
@@ -237,14 +241,14 @@ impl Opened {
 
     fn sign_claim(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         payload: &[u8],
         at: u64,
     ) -> Result<Vec<u8>, access_identity_account::app::claims::NotSigned> {
         use access_identity_account::app::claims::NotSigned;
         let refused = access_identity_signer::SignerError::Payload.code();
         match self.ask(SignerRequest::SignClaim {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             payload: payload.to_vec(),
             at,
         }) {
@@ -255,26 +259,29 @@ impl Opened {
     }
 }
 
-impl RealmKeys for Opened {
-    fn vault(&self, _: RealmId) -> Option<access_identity_account::app::vault::Vault> {
+impl EnvironmentKeys for Opened {
+    fn vault(&self, _: EnvironmentId) -> Option<access_identity_account::app::vault::Vault> {
         Some(access_identity_account::app::vault::Vault::in_memory(
-            std::sync::Arc::new(SoftKek::new("realm-kek", [5; 32])),
+            std::sync::Arc::new(SoftKek::new("environment-kek", [5; 32])),
             [9; 32],
         ))
     }
 
     fn open(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JoseAlg,
     ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
-        self.log.lock().unwrap().push((*realm.as_bytes(), alg));
+        self.log
+            .lock()
+            .unwrap()
+            .push((*environment.as_bytes(), alg));
         let alg = match alg {
             JoseAlg::Es256 => JwsAlg::Es256,
             JoseAlg::Ed25519 => JwsAlg::Ed25519,
         };
         let r = self.ask(SignerRequest::Open {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             alg,
         });
         std::future::ready(if r == SignerResponse::Opened {
@@ -286,10 +293,12 @@ impl RealmKeys for Opened {
 
     fn jwks(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
     ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
         std::future::ready(
-            match self.ask(SignerRequest::Jwks(SignerRealm(*realm.as_bytes()))) {
+            match self.ask(SignerRequest::Jwks(SignerEnvironment(
+                *environment.as_bytes(),
+            ))) {
                 SignerResponse::Jwks(doc) => Ok(doc),
                 other => Err(Unavailable(format!("{other:?}"))),
             },
@@ -298,45 +307,45 @@ impl RealmKeys for Opened {
 
     fn rotate(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         retire: [u8; 32],
     ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
         std::future::ready(self.rekeyed(SignerRequest::Rotate {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             retire,
         }))
     }
 
     fn drop_key(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         kid: [u8; 32],
     ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
         std::future::ready(self.rekeyed(SignerRequest::DropKey {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             kid,
         }))
     }
 
     fn set_policy(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         policy: Policy,
     ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
         std::future::ready(self.rekeyed(SignerRequest::SetPolicy {
-            realm: SignerRealm(*realm.as_bytes()),
+            environment: SignerEnvironment(*environment.as_bytes()),
             policy,
         }))
     }
 
     fn open_issuer(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         party: [u8; 16],
     ) -> impl std::future::Future<Output = Result<PublicKey, Unavailable>> + Send {
         std::future::ready(
             match self.ask(SignerRequest::OpenIssuer {
-                realm: SignerRealm(*realm.as_bytes()),
+                environment: SignerEnvironment(*environment.as_bytes()),
                 party,
             }) {
                 SignerResponse::Issuer { key, .. } => Ok(PublicKey::Ed25519(key)),
@@ -347,7 +356,7 @@ impl RealmKeys for Opened {
 
     fn sign_jws(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         typ: &str,
         claims: &[u8],
         _: u64,
@@ -355,7 +364,7 @@ impl RealmKeys for Opened {
         let at = self.now.load(std::sync::atomic::Ordering::SeqCst);
         std::future::ready(
             match self.ask(SignerRequest::Sign {
-                realm: SignerRealm(*realm.as_bytes()),
+                environment: SignerEnvironment(*environment.as_bytes()),
                 typ: String::from(typ),
                 payload: claims.to_vec(),
                 at,
@@ -368,12 +377,12 @@ impl RealmKeys for Opened {
 
     fn sign_issuer_registration(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         registration: access_identity_admin::ports::IssuerAis,
     ) -> impl std::future::Future<Output = Result<Vec<u8>, Unavailable>> + Send {
         std::future::ready(
             match self.ask(SignerRequest::SignIssuerRegistration {
-                realm: SignerRealm(*realm.as_bytes()),
+                environment: SignerEnvironment(*environment.as_bytes()),
                 registration,
             }) {
                 SignerResponse::SignedCose { sign1, .. } => Ok(sign1),
@@ -383,14 +392,14 @@ impl RealmKeys for Opened {
     }
 }
 
-/// One soft KEK for every realm, sealing hook and webhook keys (OP-42, OP-135).
+/// One soft KEK for every environment, sealing hook and webhook keys (OP-42, OP-135).
 struct TestKek(Arc<SoftKek>);
 
-impl access_identity_events::adapters::RealmKek for TestKek {
+impl access_identity_events::adapters::EnvironmentKek for TestKek {
     fn kek(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
     ) -> Option<Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
         Some(self.0.clone())
     }
@@ -401,7 +410,7 @@ struct World {
     plane: TestPlane,
     clock: Fixed,
     ids: IdKey,
-    base: RealmBase,
+    base: EnvironmentBase,
     keys: Opened,
     vault: access_identity_events::adapters::KekSealer<TestKek>,
 }
@@ -416,10 +425,10 @@ impl World {
             plane,
             clock,
             ids: IdKey::new(Secret::new([8; 32])),
-            base: RealmBase::parse("https://id.test").unwrap(),
+            base: EnvironmentBase::parse("https://id.test").unwrap(),
             keys: Opened::default(),
             vault: access_identity_events::adapters::KekSealer(TestKek(Arc::new(SoftKek::new(
-                "realm-kek",
+                "environment-kek",
                 [9; 32],
             )))),
         }
@@ -444,19 +453,19 @@ impl World {
         self.keys.log.lock().unwrap().clone()
     }
 
-    async fn realm(&self, slug: &str) -> (TenantId, RealmId, Digest) {
-        self.realm_with(slug, None).await
+    async fn environment(&self, slug: &str) -> (TenantId, EnvironmentId, Digest) {
+        self.environment_with(slug, None).await
     }
 
-    async fn realm_with(
+    async fn environment_with(
         &self,
         slug: &str,
         ct3_delay_s: Option<u64>,
-    ) -> (TenantId, RealmId, Digest) {
+    ) -> (TenantId, EnvironmentId, Digest) {
         let tenant = create_tenant(&self.db.app, "pool-default").await.unwrap();
         let created = self
             .admin()
-            .create_realm(&NewRealm {
+            .create_environment(&NewEnvironment {
                 tenant,
                 slug,
                 style: IssuerStyle::Subdomain,
@@ -471,7 +480,7 @@ impl World {
             })
             .await
             .unwrap();
-        (tenant, created.realm, created.domain)
+        (tenant, created.environment, created.domain)
     }
 }
 
@@ -581,7 +590,7 @@ fn registration(d: Digest, registrant: Registrant, party: Id, seed: u8, new: boo
 
 fn device() -> Registrant {
     Registrant::Device {
-        realm: [0; 16],
+        environment: [0; 16],
         subject: [0; 16],
     }
 }
@@ -609,7 +618,7 @@ fn idp_anchor(d: Digest) -> ExerciseBasis {
 }
 
 fn proposal(
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     change: Change,
     nonce: u8,
     basis: ExerciseBasis,
@@ -617,7 +626,7 @@ fn proposal(
 ) -> Proposal {
     Proposal {
         tenant,
-        realm,
+        environment,
         change,
         nonce: vec![nonce; 16],
         validity: Window {
@@ -702,7 +711,7 @@ fn written(a: &Applied) -> u64 {
 
 // TN-111, TN-16, TN-10, OP-146 m.8 (c), §12.1.1
 #[tokio::test]
-async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
+async fn environment_creation_opens_genesis_and_fixes_the_issuer() {
     // MD-5a, INV-2, INV-29, L0-META-7, CMP-26
     let w = World::new().await;
     assert!(
@@ -711,7 +720,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
             .unwrap()
             .is_empty()
     );
-    let (tenant, realm, d) = w.realm("acme").await;
+    let (tenant, environment, d) = w.environment("acme").await;
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     assert_eq!(route.issuer, "https://acme.id.test");
     let log = access_store::authority::read_log(&w.db.app, &DomainId::from_bytes(d.0), 0, 0)
@@ -720,14 +729,16 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].kind, "genesis");
     fold_check(&w.db.sequencer, d).await.unwrap();
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let s = settings(&mut t).await.unwrap().unwrap();
     assert_eq!(
         (s.jose_alg.as_str(), s.argon2_m_kib, s.rp_id),
         ("ES256", 7 * 1024, None)
     );
     // OP-146 m.16 (m)
-    assert_eq!(w.opened(), vec![(*realm.as_bytes(), JoseAlg::Es256)]);
+    assert_eq!(w.opened(), vec![(*environment.as_bytes(), JoseAlg::Es256)]);
     // OP-149 m.4, m.17 (e)
     let created = identity_events(&w.db, "event.tenant.", 1).await;
     assert_eq!(created.len(), 1);
@@ -739,7 +750,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
     assert_eq!(event.payload["placement"], "pool-default");
     let taken = w
         .admin()
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant,
             slug: "acme",
             style: IssuerStyle::Subdomain,
@@ -761,11 +772,11 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
 async fn a_client_is_registered_through_commit() {
     // E34, OP-137, TN-20, CMP-15.5
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("shop").await;
+    let (tenant, environment, d) = w.environment("shop").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let c = new_client(&w).await;
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::ClientRegister(c.clone()),
         1,
         idp_anchor(d),
@@ -792,7 +803,9 @@ async fn a_client_is_registered_through_commit() {
     )
     .unwrap();
     assert_eq!(event.payload["client_id"], c.id.as_str());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let row = client(&mut t, c.id.as_str()).await.unwrap().unwrap();
     assert!(row.client_id.starts_with("cli_") && row.display_name == "Shop");
     assert_eq!(
@@ -808,12 +821,12 @@ async fn a_client_is_registered_through_commit() {
 async fn no_write_bypasses_the_commit() {
     // EI-25, PI-7, MUST-NEVER-1
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("shop-b").await;
+    let (tenant, environment, d) = w.environment("shop-b").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let c = new_client(&w).await;
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::ClientRegister(c.clone()),
         1,
         idp_anchor(d),
@@ -824,7 +837,7 @@ async fn no_write_bypasses_the_commit() {
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
     let other = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::ClientRegister(new_client(&w).await),
         2,
         idp_anchor(d),
@@ -839,22 +852,24 @@ async fn no_write_bypasses_the_commit() {
         w.admin().apply(&p, ais).await,
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(client(&mut t, c.id.as_str()).await.unwrap().is_none());
 }
 
 // MD-5a, TN-1, INV-37, F21
 #[tokio::test]
-async fn only_the_governing_domain_commits_a_realm_change() {
+async fn only_the_governing_domain_commits_an_environment_change() {
     // MD-14, CI-15, EI-25, E34
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("gov-a").await;
-    let (_, _, other) = w.realm("gov-b").await;
+    let (tenant, environment, d) = w.environment("gov-a").await;
+    let (_, _, other) = w.environment("gov-b").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     onboard(&w.plane, other, ROOT, ROOT_KEY).await;
     let c = new_client(&w).await;
     let p = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::ClientRegister(c.clone()),
         3,
         idp_anchor(other),
@@ -894,7 +909,9 @@ async fn only_the_governing_domain_commits_a_realm_change() {
         w.admin().apply(&p, ais).await,
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(client(&mut t, c.id.as_str()).await.unwrap().is_none());
 }
 
@@ -903,14 +920,14 @@ async fn only_the_governing_domain_commits_a_realm_change() {
 async fn an_rp_id_change_is_a_ct3_exercise() {
     // §13.7.1, §13.7.3, TI-RT3, K15
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("pass").await;
+    let (tenant, environment, d) = w.environment("pass").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let c = new_client(&w).await;
     written(
         &exercise(
             &w,
             &proposal(
-                (tenant, realm),
+                (tenant, environment),
                 Change::ClientRegister(c.clone()),
                 1,
                 idp_anchor(d),
@@ -922,7 +939,7 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
         .unwrap(),
     );
     let long_retire = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::ClientRetire(ClientId::parse(c.id.as_str()).unwrap()),
         2,
         idp_anchor(d),
@@ -933,14 +950,16 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
         Err(access_identity_admin::AdminError::Refused(code)) if code == "intent-validity"
     ));
     let rp = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RpId(RpId::parse("id.test").unwrap()),
         3,
         idp_anchor(d),
         48,
     );
     written(&exercise(&w, &rp, ROOT_KEY).await.unwrap());
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert_eq!(
         settings(&mut t).await.unwrap().unwrap().rp_id.as_deref(),
         Some("id.test")
@@ -949,7 +968,7 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
     assert!(t.last_rp_id_change().await.unwrap().is_some());
     t.commit().await.unwrap();
     let foreign = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::RpId(RpId::parse("other.test").unwrap()),
         4,
         idp_anchor(d),
@@ -960,11 +979,11 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
 
 // OP-33, OP-146 m.4 (f), m.8 (e)
 #[tokio::test]
-async fn realm_settings_change_through_commit() {
+async fn environment_settings_change_through_commit() {
     // CR-36, §17.5.2, K05
     use access_identity_account::domain::password::Argon2Params;
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm("tune").await;
+    let (tenant, environment, d) = w.environment("tune").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let raise = Argon2Params {
         m_kib: 19 * 1024,
@@ -974,7 +993,13 @@ async fn realm_settings_change_through_commit() {
     written(
         &exercise(
             &w,
-            &proposal((tenant, realm), Change::Argon2(raise), 1, idp_anchor(d), 1),
+            &proposal(
+                (tenant, environment),
+                Change::Argon2(raise),
+                1,
+                idp_anchor(d),
+                1,
+            ),
             ROOT_KEY,
         )
         .await
@@ -984,7 +1009,7 @@ async fn realm_settings_change_through_commit() {
         &exercise(
             &w,
             &proposal(
-                (tenant, realm),
+                (tenant, environment),
                 Change::JoseAlg(JoseAlg::Ed25519),
                 2,
                 idp_anchor(d),
@@ -996,7 +1021,7 @@ async fn realm_settings_change_through_commit() {
         .unwrap(),
     );
     let lower = proposal(
-        (tenant, realm),
+        (tenant, environment),
         Change::Argon2(Argon2Params::CANONICAL),
         3,
         idp_anchor(d),
@@ -1004,7 +1029,7 @@ async fn realm_settings_change_through_commit() {
     );
     assert!(w.admin().prepare(&lower).await.is_err());
     assert_eq!(
-        access_identity_admin::app::jose_alg(&w.db.app, tenant, realm)
+        access_identity_admin::app::jose_alg(&w.db.app, tenant, environment)
             .await
             .unwrap(),
         JoseAlg::Ed25519
@@ -1013,38 +1038,44 @@ async fn realm_settings_change_through_commit() {
     assert_eq!(
         w.opened(),
         vec![
-            (*realm.as_bytes(), JoseAlg::Es256),
-            (*realm.as_bytes(), JoseAlg::Ed25519)
+            (*environment.as_bytes(), JoseAlg::Es256),
+            (*environment.as_bytes(), JoseAlg::Ed25519)
         ]
     );
 }
 
 // OP-146 m.16 (m), m.15 (e), m.7 (b), OP-94
 #[test]
-fn realm_keys_are_made_once_in_the_hsm() {
+fn environment_keys_are_made_once_in_the_hsm() {
     static STORE: std::sync::OnceLock<Arc<KeyStore>> = std::sync::OnceLock::new();
     let store = STORE
         .get_or_init(|| {
-            let (module, label) = hsm("realm-keys");
+            let (module, label) = hsm("environment-keys");
             let pin = Secret::new(String::from("1234-test-only"));
             Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
         })
         .clone();
-    let keyring = RealmKeyring::new(SignerKeys::new("/nonexistent.sock".into()), store.clone());
-    let realm = [7; 16];
-    keyring.hsm(&realm).unwrap();
-    keyring.hsm(&realm).unwrap();
-    store.kek(&kek_label(&realm)).unwrap();
-    store.mac(&decoy_label(&realm)).unwrap();
+    let keyring =
+        EnvironmentKeyring::new(SignerKeys::new("/nonexistent.sock".into()), store.clone());
+    let environment = [7; 16];
+    keyring.hsm(&environment).unwrap();
+    keyring.hsm(&environment).unwrap();
+    store.kek(&kek_label(&environment)).unwrap();
+    store.mac(&decoy_label(&environment)).unwrap();
     let nonces = crate::oauth::HsmNonces::new(store);
     for role in [NonceRole::AuthorizationServer, NonceRole::ResourceServer] {
-        let ring = nonces.ring(RealmId::from_bytes(realm), role).unwrap();
+        let ring = nonces
+            .ring(EnvironmentId::from_bytes(environment), role)
+            .unwrap();
         let n = ring.issue(NOW).unwrap();
         ring.check(Some(&n), NOW).unwrap();
     }
     assert!(
         nonces
-            .ring(RealmId::from_bytes([8; 16]), NonceRole::AuthorizationServer)
+            .ring(
+                EnvironmentId::from_bytes([8; 16]),
+                NonceRole::AuthorizationServer
+            )
             .is_none()
     );
 }
@@ -1073,8 +1104,8 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
 async fn a_platform_client_is_registered_in_the_platform_tenant() {
     // MD-14, EI-25, RFC 7523, OP-62
     let w = World::new().await;
-    let (pt, pr, pd) = w.realm("platform").await;
-    let (t2, _, _) = w.realm("acme").await;
+    let (pt, pr, pd) = w.environment("platform").await;
+    let (t2, _, _) = w.environment("acme").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let c = platform_client(
         w.admin().new_client_id().await.unwrap(),
@@ -1180,7 +1211,7 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
 async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
     // L0-META-1, TN-50
     let w = World::new().await;
-    let (_, _, d) = w.realm("acme").await;
+    let (_, _, d) = w.environment("acme").await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let create = challenge_of(ALICE_KEY);
     let register = register_nonce(&create);
@@ -1234,7 +1265,7 @@ impl access_identity_events::ports::Sealer for NoSeal {
     fn seal(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &[u8; 16],
         _: &[u8],
     ) -> Result<access_store::events::SealedKey, access_identity_events::Unavailable> {
@@ -1244,7 +1275,7 @@ impl access_identity_events::ports::Sealer for NoSeal {
     fn open(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &[u8; 16],
         _: &access_store::events::SealedKey,
     ) -> Result<zeroize::Zeroizing<Vec<u8>>, access_identity_events::Unavailable> {
@@ -1265,7 +1296,7 @@ async fn a_platform_subscription_receives_every_tenant() {
     use access_identity_oauth::adapters::oauth::OsRandom;
 
     let w = World::new().await;
-    let (pt, pr, pd) = w.realm("platform").await;
+    let (pt, pr, pd) = w.environment("platform").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let platform = Admin {
         platform_tenant: Some(pt),
@@ -1319,7 +1350,7 @@ async fn a_platform_subscription_receives_every_tenant() {
         .await
         .unwrap();
 
-    let (t2, r2, _) = w.realm("acme").await;
+    let (t2, r2, _) = w.environment("acme").await;
     let own = streams.create(t2, r2, &request("acme")).await.unwrap();
     let listed = access_store::events::platform_subscriptions(&w.db.reader)
         .await
@@ -1389,7 +1420,7 @@ async fn a_platform_subscription_receives_every_tenant() {
 async fn self_signed_registration_binds_only_the_signing_key() {
     // E6, OP-141 m.2
     let w = World::new().await;
-    let (_, _, d) = w.realm("acme").await;
+    let (_, _, d) = w.environment("acme").await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let registered = |v: &RegistrationVerdict| matches!(v, RegistrationVerdict::Registered(_));
 
@@ -1424,7 +1455,7 @@ async fn self_signed_registration_binds_only_the_signing_key() {
 async fn registrations_are_limited_per_context() {
     use access_internal_api::context::RateContext;
     let w = World::new().await;
-    let (_, _, d) = w.realm("bootstrap-rate").await;
+    let (_, _, d) = w.environment("bootstrap-rate").await;
     let with = |seed: u8, context: &str| {
         let mut r = registration(d, device(), Id([seed; 16]), seed, true);
         r.context = RateContext::parse(context);

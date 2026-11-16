@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (extract(epoch FROM created_at) * 1000)::bigint AS \"ms!\" FROM access.environments\n              WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ad947531044e472bf2d83c35b206cec941b3b26380cd7abb0e1684b148982856"
+}

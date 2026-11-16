@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_identifier_tombstones\n               (tenant_id, environment_id, value_index, subject_id, retired_ms, reusable_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5d079dea487efdbed7d7eb85b2211c323c482891564be20e347891399e9bf509"
+}

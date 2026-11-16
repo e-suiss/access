@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use super::domain::idempotency::MAX_KEY;
 use super::domain::page::{CURSOR, DEFAULT_PAGE, FILTER, MAX_PAGE, PAGE_SIZE};
-use super::domain::{PLATFORM_AUDIENCE, REALM_AUDIENCE_PREFIX, Surface};
+use super::domain::{ENVIRONMENT_AUDIENCE_PREFIX, PLATFORM_AUDIENCE, Surface};
 use super::manifest::{Access, MANIFEST, Route, Visibility};
 use crate::problem::TYPE_PREFIX;
 
@@ -46,12 +46,12 @@ fn with_workload_clients(mut schemas: Value) -> Value {
     schemas
 }
 
-/// OP-159 m.3 (s), (t): the realm's key share policy and the hosting its domain declares.
+/// OP-159 m.3 (s), (t): the environment's key share policy and the hosting its domain declares.
 fn with_hosting(mut schemas: Value) -> Value {
     let hosting = r("schemas", "Hosting");
     for (at, members) in [
         (
-            "/RealmMetadata/properties",
+            "/EnvironmentMetadata/properties",
             vec![
                 (
                     "kex_share",
@@ -94,25 +94,25 @@ fn schemas() -> Value {
             String::from("Signing"),
             json!({
                 "type": "object",
-                "description": "The realm's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)).",
+                "description": "The environment's signing profile, the algorithms it signs with, the key exchange share policy, its FIPS profile, whether this deployment runs the validated FIPS module, and the governing domain's last post-quantum re-anchor (OP-159 m.3 (g), (o), (r), (t)).",
                 "required": ["signing_profile", "algorithms", "kex_share", "fips", "fips_module", "governing_domain", "pq_reanchor"],
                 "properties": {
                     "signing_profile": {
                         "type": ["string", "null"],
                         "enum": ["ml-dsa-65", "ml-dsa-44", "ml-dsa-87", null],
-                        "description": "The open ML-DSA parameter set; null while the realm signs classically only.",
+                        "description": "The open ML-DSA parameter set; null while the environment signs classically only.",
                     },
                     "algorithms": {
                         "type": "array",
                         "items": { "type": "string" },
-                        "description": "The JWS algorithms the realm signs with: its classical algorithm, then ML-DSA while the profile is open.",
+                        "description": "The JWS algorithms the environment signs with: its classical algorithm, then ML-DSA while the profile is open.",
                     },
                     "kex_share": {
                         "type": "string",
                         "enum": ["optimistic", "advertise-only"],
                         "description": "The hybrid key exchange share policy; both offer the post-quantum group.",
                     },
-                    "fips": { "type": "boolean", "description": "The realm's FIPS crypto profile is on." },
+                    "fips": { "type": "boolean", "description": "The environment's FIPS crypto profile is on." },
                     "fips_module": { "type": "boolean", "description": "This deployment signs with the validated FIPS module." },
                     "governing_domain": text("The governing domain, base64url."),
                     "pq_reanchor": {
@@ -254,7 +254,7 @@ fn base_schemas() -> Value {
         "Agent": {
             "type": "object",
             "additionalProperties": false,
-            "description": "An agent of the realm (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19).",
+            "description": "An agent of the environment (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19).",
             "properties": {
                 "agent": text("Opaque id of the agent Party."),
                 "display_name": text("Name shown to people; attacker input, rendered as text."),
@@ -320,7 +320,7 @@ fn base_schemas() -> Value {
         "SocialProvider": {
             "type": "object",
             "additionalProperties": false,
-            "description": "A social preset the realm enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox realm may use. Warnings never refuse anything (TN-87, IDP-31 (5)).",
+            "description": "A social preset the environment enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox environment may use. Warnings never refuse anything (TN-87, IDP-31 (5)).",
             "properties": {
                 "preset": { "type": "string", "enum": ["apple", "facebook", "github", "google", "linkedin", "microsoft"] },
                 "client_id": { "type": ["string", "null"] },
@@ -372,7 +372,7 @@ fn base_schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["transmitters", "geoip", "verifiers"],
-            "description": "The realm's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows.",
+            "description": "The environment's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows.",
             "properties": {
                 "transmitters": {
                     "type": "array",
@@ -442,7 +442,7 @@ fn base_schemas() -> Value {
         },
         "Settings": {
             "type": "object",
-            "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18), `locale_overrides` by locale and key (X35), and whether push verification (`push.enabled`) and the restricted SMS code (`sms_otp.enabled`) are on (OP-156 m.3 (d), (f)).",
+            "description": "The environment's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18), `locale_overrides` by locale and key (X35), and whether push verification (`push.enabled`) and the restricted SMS code (`sms_otp.enabled`) are on (OP-156 m.3 (d), (f)).",
         },
         "SsoEnforcementPreview": {
             "type": "object",
@@ -591,16 +591,16 @@ fn base_schemas() -> Value {
         },
         "Placement": {
             "type": "object",
-            "description": "The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it.",
-            "required": ["cell", "region", "dedicated_cell", "tenant", "realm", "domain", "governing_domain", "residency", "pending_rehome", "routing_only"],
+            "description": "The cell the environment and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it.",
+            "required": ["cell", "region", "dedicated_cell", "tenant", "environment", "domain", "governing_domain", "residency", "pending_rehome", "routing_only"],
             "properties": {
                 "cell": { "type": ["string", "null"], "description": "This cell's name, as its configuration declares it." },
                 "region": { "type": ["string", "null"], "description": "This cell's region (OP-30)." },
                 "dedicated_cell": { "type": "boolean", "description": "Whether this cell serves one tenant alone (OP-12, OP-48)." },
                 "tenant": { "$ref": "#/components/schemas/Placed" },
-                "realm": { "$ref": "#/components/schemas/Placed" },
+                "environment": { "$ref": "#/components/schemas/Placed" },
                 "domain": { "$ref": "#/components/schemas/Placed" },
-                "governing_domain": { "type": "string", "description": "The realm's governing domain, base64url." },
+                "governing_domain": { "type": "string", "description": "The environment's governing domain, base64url." },
                 "residency": {
                     "type": ["object", "null"],
                     "required": ["region", "class"],
@@ -633,7 +633,7 @@ fn base_schemas() -> Value {
         },
         "Durability": {
             "type": "object",
-            "description": "The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness.",
+            "description": "The environment's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness.",
             "required": ["durability", "class", "region", "dr_profile", "rpo_s", "governing_domain"],
             "properties": {
                 "durability": { "type": ["string", "null"], "enum": ["replicated", "single-node", null] },
@@ -663,13 +663,13 @@ fn base_schemas() -> Value {
         },
         "RateLimits": {
             "type": "object",
-            "description": "The realm's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value.",
-            "required": ["realm", "rate_limit_rps", "default", "tenant_rps", "burst_s", "usage"],
+            "description": "The environment's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value.",
+            "required": ["environment", "rate_limit_rps", "default", "tenant_rps", "burst_s", "usage"],
             "properties": {
-                "realm": { "type": "string" },
-                "rate_limit_rps": { "type": "integer", "minimum": 1, "description": "The realm's identity requests per second (idp.realm.rate_limit)." },
+                "environment": { "type": "string" },
+                "rate_limit_rps": { "type": "integer", "minimum": 1, "description": "The environment's identity requests per second (idp.environment.rate_limit)." },
                 "default": { "type": "boolean", "description": "Whether the product default is in force." },
-                "tenant_rps": { "type": "integer", "minimum": 1, "description": "The tenant's identity requests per second across its realms." },
+                "tenant_rps": { "type": "integer", "minimum": 1, "description": "The tenant's identity requests per second across its environments." },
                 "burst_s": { "type": "integer", "minimum": 1, "description": "Seconds of each rate a burst may take at once." },
                 "usage": {
                     "type": "object",
@@ -711,9 +711,9 @@ fn base_schemas() -> Value {
         "Recovery": {
             "type": "object",
             "description": "Whether the governing domain can be recovered, and its handovers and forced recoveries (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)). Read from the authority record; never a decision input.",
-            "required": ["realm", "recovery", "history"],
+            "required": ["environment", "recovery", "history"],
             "properties": {
-                "realm": { "type": "string" },
+                "environment": { "type": "string" },
                 "recovery": { "type": "string", "enum": ["available", "not_available"], "description": "`not_available`: no rootTerms recovery entry; the console says \"Recovery not available\"." },
                 "recovery_threshold": {
                     "type": "object",
@@ -741,7 +741,7 @@ fn base_schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["items"],
-            "description": "One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113).",
+            "description": "One page; the next is in the `Link` header (OP-65). Only what the environment may see is listed (TN-113).",
             "properties": { "items": { "type": "array", "items": { "type": "object" } } },
         },
         "WriteResult": {
@@ -755,17 +755,17 @@ fn base_schemas() -> Value {
                 "resource": { "type": "object" },
                 "client_secret": text("Shown once; never stored or read back."),
                 "verification_key": text("The `whpk_` public key or `whsec_` secret a hook's or webhook's receiver verifies with; shown once, never read back."),
-                "offer": text("An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this realm's key, for the peer realm's `bindAccount` (OP-153 m.18 (e)); shown once."),
+                "offer": text("An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this environment's key, for the peer environment's `bindAccount` (OP-153 m.18 (e)); shown once."),
                 "bundle": text("A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept."),
                 "setup_link": text("An organization's one-use SSO setup link, valid 72 hours; shown once and kept only as its token's SHA-256 (TN-134)."),
                 "challenge": text("A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90)."),
-                "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)." },
+                "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the environment's passkeys stop working (IDI-4)." },
             },
         },
         "Tenant": {
             "type": "object",
             "additionalProperties": false,
-            "description": "A tenant's metadata; never its realms' content (INV-29, X31).",
+            "description": "A tenant's metadata; never its environments' content (INV-29, X31).",
             "properties": {
                 "tenant_id": text("Opaque `tnt_` id (OP-137)."),
                 "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
@@ -782,10 +782,10 @@ fn base_schemas() -> Value {
                 "projections_per_day": r("schemas", "Position"),
             },
         },
-        "RealmMetadata": {
+        "EnvironmentMetadata": {
             "type": "object",
             "additionalProperties": false,
-            "description": "A realm's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
+            "description": "An environment's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
             "properties": {
                 "slug": text("The immutable slug (TN-16)."),
                 "tenant_id": text("Opaque `tnt_` id of its tenant."),
@@ -824,12 +824,12 @@ fn base_schemas() -> Value {
             "description": "One page of tenants; the next is in the `Link` header (OP-65).",
             "properties": { "items": { "type": "array", "items": r("schemas", "Tenant") } },
         },
-        "RealmPage": {
+        "EnvironmentPage": {
             "type": "object",
             "additionalProperties": false,
             "required": ["items"],
-            "description": "One page of realms or sandbox domains; the next is in the `Link` header (OP-65).",
-            "properties": { "items": { "type": "array", "items": r("schemas", "RealmMetadata") } },
+            "description": "One page of environments or sandbox domains; the next is in the `Link` header (OP-65).",
+            "properties": { "items": { "type": "array", "items": r("schemas", "EnvironmentMetadata") } },
         },
         "FoundingRoot": {
             "type": "object",
@@ -860,11 +860,11 @@ fn base_schemas() -> Value {
                 "ais": text("The caller's AIS, when not in the header."),
             },
         },
-        "RealmCreate": {
+        "EnvironmentCreate": {
             "type": "object",
             "additionalProperties": false,
             "required": ["slug", "root"],
-            "description": "A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
+            "description": "A new environment and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
             "examples": [
                 { "slug": "shop", "issuer_style": "subdomain", "root": { "joint": { "k": 2, "parties": ["AQEBAQEBAQEBAQEBAQEBAQ", "AgICAgICAgICAgICAgICAg"] } } },
                 { "slug": "lab", "root": { "sole": "AQEBAQEBAQEBAQEBAQEBAQ" }, "acknowledge_no_recovery": true },
@@ -934,11 +934,11 @@ fn base_schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["exercise_id", "position"],
-            "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis.",
+            "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for an environment its Genesis.",
             "properties": {
                 "exercise_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
                 "position": r("schemas", "Position"),
-                "resource": { "oneOf": [r("schemas", "Tenant"), r("schemas", "RealmMetadata")] },
+                "resource": { "oneOf": [r("schemas", "Tenant"), r("schemas", "EnvironmentMetadata")] },
                 "genesis": r("schemas", "Genesis"),
             },
         },
@@ -947,10 +947,10 @@ fn base_schemas() -> Value {
             "additionalProperties": false,
             "required": ["surface", "audience", "scope_namespace", "read_scope", "domain", "rate_policies"],
             "properties": {
-                "surface": { "type": "string", "enum": ["realm", "platform"] },
-                "realm": text("The realm's slug (realm surface)."),
-                "audience": text(&format!("The token audience: `{REALM_AUDIENCE_PREFIX}<slug>` or `{PLATFORM_AUDIENCE}` (TN-119).")),
-                "scope_namespace": text("The surface's scope prefix: `realm.` or `platform.`."),
+                "surface": { "type": "string", "enum": ["environment", "platform"] },
+                "environment": text("The environment's slug (environment surface)."),
+                "audience": text(&format!("The token audience: `{ENVIRONMENT_AUDIENCE_PREFIX}<slug>` or `{PLATFORM_AUDIENCE}` (TN-119).")),
+                "scope_namespace": text("The surface's scope prefix: `environment.` or `platform.`."),
                 "read_scope": text("The scope a read needs at least."),
                 "domain": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "The surface's governing DomainID, unpadded base64url." },
                 "rate_policies": { "type": "array", "items": text("A `RateLimit-Policy` item of the caller's own budget.") },
@@ -1028,22 +1028,22 @@ fn responses() -> Value {
 
 /// The response body schema of an operation.
 fn body_of(row: &Route) -> &'static str {
+    use super::environment::{Shape, spec};
     use super::platform::Shape as P;
     use super::ports::{PlatformKind, ResourceKind};
-    use super::realm::{Shape, spec};
     if let Some((kind, shape)) = super::platform::spec(row.operation_id) {
         return match (kind, shape) {
             (_, P::Draft) => "IntentDraft",
             (_, P::Create) => "PlatformWriteResult",
             (PlatformKind::Tenants, P::List(_)) => "TenantPage",
-            (_, P::List(_)) => "RealmPage",
+            (_, P::List(_)) => "EnvironmentPage",
             (PlatformKind::Tenants, P::Get) => "Tenant",
             (PlatformKind::Health, P::Get) => "OperatorHealth",
-            (_, P::Get) => "RealmMetadata",
+            (_, P::Get) => "EnvironmentMetadata",
         };
     }
     match (row.operation_id, spec(row.operation_id)) {
-        ("getPlatformSurface" | "getRealmSurface", _) => "SurfaceRoot",
+        ("getPlatformSurface" | "getEnvironmentSurface", _) => "SurfaceRoot",
         (_, Some((_, Shape::Planned(name)))) => name,
         (_, Some((_, Shape::List(_) | Shape::ReviewItems))) => "Page",
         (_, Some((_, Shape::Draft))) => "IntentDraft",
@@ -1117,8 +1117,8 @@ fn path_params(path: &str) -> Vec<Value> {
         .collect()
 }
 
-fn takes_write_body(shape: &super::realm::Shape) -> bool {
-    use super::realm::Shape;
+fn takes_write_body(shape: &super::environment::Shape) -> bool {
+    use super::environment::Shape;
     matches!(
         shape,
         Shape::Write { .. } | Shape::Offboarding | Shape::ReviewKeep
@@ -1128,7 +1128,7 @@ fn takes_write_body(shape: &super::realm::Shape) -> bool {
 fn operation(row: &Route) -> Value {
     let write = row.access == Access::Write;
     let mut params = vec![r("parameters", "Traceparent")];
-    if row.surface == Surface::Realm {
+    if row.surface == Surface::Environment {
         params.push(r("parameters", "Slug"));
     }
     params.extend(path_params(row.path));
@@ -1153,8 +1153,8 @@ fn operation(row: &Route) -> Value {
         ok_headers.insert("Sunset".to_owned(), r("headers", "Sunset"));
     }
     let creates = matches!(
-        super::realm::spec(row.operation_id),
-        Some((_, super::realm::Shape::Write { creates: true, .. }))
+        super::environment::spec(row.operation_id),
+        Some((_, super::environment::Shape::Write { creates: true, .. }))
     ) || matches!(
         super::platform::spec(row.operation_id),
         Some((_, super::platform::Shape::Create))
@@ -1182,7 +1182,7 @@ fn operation(row: &Route) -> Value {
         errors.extend([("409", "Conflict"), ("422", "Unprocessable")]);
     }
     // OP-154 m.4
-    if super::realm::planned(row.operation_id) {
+    if super::environment::planned(row.operation_id) {
         errors.push(("501", "NotYetServed"));
     }
     for (status, name) in errors {
@@ -1193,17 +1193,17 @@ fn operation(row: &Route) -> Value {
         Access::Write => (json!([{ "ais": [] }]), Value::Null),
     };
     let request_body = match (
-        super::realm::spec(row.operation_id),
+        super::environment::spec(row.operation_id),
         super::platform::spec(row.operation_id),
     ) {
-        (Some((_, super::realm::Shape::Draft)), _)
+        (Some((_, super::environment::Shape::Draft)), _)
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
         (Some((_, shape)), _) if takes_write_body(&shape) => Some("WriteBody"),
-        (Some((_, super::realm::Shape::Planned(_))), _) if write => Some("WriteBody"),
+        (Some((_, super::environment::Shape::Planned(_))), _) if write => Some("WriteBody"),
         (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
             Some("TenantCreate")
         }
-        (_, Some((_, super::platform::Shape::Create))) => Some("RealmCreate"),
+        (_, Some((_, super::platform::Shape::Create))) => Some("EnvironmentCreate"),
         _ => None,
     };
     let mut op = json!({
@@ -1244,11 +1244,11 @@ pub fn openapi() -> Value {
         "info": {
             "title": "Access management API",
             "version": VERSION,
-            "description": "Realm-admin (`/admin/v1/realms/{slug}`) and platform-admin (`/admin/v1/platform`) surfaces on the management listener. Reads take a holder-bound DPoP token of the surface's audience living at most 60 minutes; writes take the caller's AIS and compile to an Exercise; there is no bearer management token (TN-110, TN-119, TN-130). Field names are snake_case, times RFC 3339 UTC, 64-bit integers strings (OP-65).",
+            "description": "Environment-admin (`/admin/v1/envs/{slug}`) and platform-admin (`/admin/v1/platform`) surfaces on the management listener. Reads take a holder-bound DPoP token of the surface's audience living at most 60 minutes; writes take the caller's AIS and compile to an Exercise; there is no bearer management token (TN-110, TN-119, TN-130). Field names are snake_case, times RFC 3339 UTC, 64-bit integers strings (OP-65).",
             "license": { "name": "Apache-2.0", "identifier": "Apache-2.0" },
         },
         "tags": [
-            { "name": "realm", "description": format!("Realm administration; audience `{REALM_AUDIENCE_PREFIX}<slug>`, scopes `realm.*`.") },
+            { "name": "environment", "description": format!("Environment administration; audience `{ENVIRONMENT_AUDIENCE_PREFIX}<slug>`, scopes `environment.*`.") },
             { "name": "platform", "description": format!("Platform administration; audience `{PLATFORM_AUDIENCE}`, scopes `platform.*`.") },
         ],
         "paths": paths,

@@ -5,7 +5,7 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:org.sso_enforced`. Its members' passwords, API tokens, sign-ins and refresh families ended; `invitations` says what happened to the pending invitations. A notification, never an authority source (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "organization",
     "connection",
     "invitations",
@@ -14,7 +14,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "organization": {
@@ -24,7 +24,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
-      "description": "The upstream connection's name in the realm."
+      "description": "The upstream connection's name in the environment."
     },
     "invitations": {
       "type": "string",

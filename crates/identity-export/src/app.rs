@@ -1,4 +1,4 @@
-//! The export pass (OP-41, OP-44, OP-156 m.3 (s), X22): for each live sink of a realm, the audit
+//! The export pass (OP-41, OP-44, OP-156 m.3 (s), X22): for each live sink of an environment, the audit
 //! rows after its cursor go out in batches, in integration order, every row and none sampled.
 //! The cursor moves only after the sink accepted the batch; a refused batch leaves it where it
 //! was and is sent again on the next pass, so nothing is lost. A sink that keeps refusing raises
@@ -8,7 +8,7 @@ use access_identity_audit::domain::record::AuditRecord;
 use access_identity_events::domain::catalog::IdentityEvent;
 use access_store::audit::{AuditEvent, AuditRow};
 use access_store::export::{self as store, SinkRow};
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx};
+use access_store::identity::{Cursor, EnvironmentId, TenantId, TenantTx};
 use access_store::{Pool, StoreError};
 use serde_json::{Map, Value};
 
@@ -16,7 +16,7 @@ use crate::domain::collector::{self, Request};
 use crate::domain::secret;
 use crate::domain::sink::{Adapter, Format, Preset, SinkSecret, SinkSpec, host_port};
 use crate::domain::{otlp, parquet, s3, syslog};
-use crate::ports::{Down, RealmKek, Wire};
+use crate::ports::{Down, EnvironmentKek, Wire};
 
 /// Rows per batch (PD).
 pub const BATCH: u32 = 500;
@@ -41,7 +41,7 @@ pub const SINK_FAILED: &str = "export.sink_failed";
 
 const MAX_ANSWER: usize = 64 * 1024;
 
-/// What one pass over a realm did.
+/// What one pass over an environment did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
     /// Rows the sinks accepted.
@@ -60,7 +60,7 @@ pub struct Pass<'a, W, K> {
     pub app: &'a Pool,
     /// The sinks' transports.
     pub wire: &'a W,
-    /// The realm KEKs.
+    /// The environment KEKs.
     pub keys: &'a K,
 }
 
@@ -113,29 +113,30 @@ fn uuid(b: &[u8; 16]) -> String {
     access_identity_audit::domain::record::uuid_text(b)
 }
 
-impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
-    /// Sends every live sink of the realm what it has not accepted yet, at `now_ms`.
+impl<W: Wire, K: EnvironmentKek> Pass<'_, W, K> {
+    /// Sends every live sink of the environment what it has not accepted yet, at `now_ms`.
     ///
     /// # Errors
     /// [`StoreError`]; what was committed stays.
-    pub async fn realm(
+    pub async fn environment(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         now_ms: u64,
     ) -> Result<Outcome, StoreError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let sinks = store::sinks(&mut t).await?;
         t.commit().await?;
         let mut out = Outcome::default();
         for s in sinks.iter().filter(|s| s.state == "live") {
-            self.sink((tenant, realm), s, now_ms, &mut out).await?;
+            self.sink((tenant, environment), s, now_ms, &mut out)
+                .await?;
         }
         Ok(out)
     }
 
     async fn sink(
         &self,
-        scope: (TenantId, RealmId),
+        scope: (TenantId, EnvironmentId),
         s: &SinkRow,
         now_ms: u64,
         out: &mut Outcome,
@@ -224,7 +225,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
     async fn raise(
         &self,
         t: &mut TenantTx,
-        (_, realm): (TenantId, RealmId),
+        (_, environment): (TenantId, EnvironmentId),
         s: &SinkRow,
         since_ms: u64,
         now_ms: u64,
@@ -240,7 +241,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
         let id = access_crypto::random::bytes::<32>().map_err(|_| StoreError::Range)?;
         let event = IdentityEvent::export_sink_failed(
             id,
-            realm.as_bytes(),
+            environment.as_bytes(),
             (&s.name, &s.adapter),
             since_ms,
             now_ms,
@@ -250,7 +251,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
 
     fn opened(
         &self,
-        scope: (TenantId, RealmId),
+        scope: (TenantId, EnvironmentId),
         s: &SinkRow,
     ) -> Result<(SinkSpec, Option<SinkSecret>), Down> {
         let spec = spec_of(s)?;
@@ -272,7 +273,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
 
     async fn send(
         &self,
-        (_, realm): (TenantId, RealmId),
+        (_, environment): (TenantId, EnvironmentId),
         (s, spec, secret): (&SinkRow, &SinkSpec, Option<&SinkSecret>),
         rows: &[AuditRow],
         now_ms: u64,
@@ -307,7 +308,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
                 let file = parquet::file(&records).map_err(|_| Down(String::from("render")))?;
                 let key = s3::key(
                     spec,
-                    &uuid(realm.as_bytes()),
+                    &uuid(environment.as_bytes()),
                     (first.xid, first.id),
                     u64::try_from(first.at_ms).unwrap_or(0),
                 );

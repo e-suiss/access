@@ -37,7 +37,7 @@ export function DeviceSetup({
           onClick={() => {
             setBusy(true);
             setMessage(null);
-            register(session.realm, session.account, session.pep, confirm)
+            register(session.environment, session.account, session.pep, confirm)
               .then(onReady)
               .catch((e: unknown) => {
                 if (e instanceof NotSigned) return;

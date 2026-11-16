@@ -22,8 +22,8 @@ use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
 use access_identity_account::app::signal::emit_tenant;
 use access_identity_account::domain::signal::SignalKind;
-use access_identity_account::domain::signal::{Initiator, Signal, realm_key_compromise};
-use access_identity_events::adapters::{KekSealer, RealmKek};
+use access_identity_account::domain::signal::{Initiator, Signal, environment_key_compromise};
+use access_identity_events::adapters::{EnvironmentKek, KekSealer};
 use access_identity_events::app::Db;
 use access_identity_events::app::fanout::Fanout;
 use access_identity_events::app::receiver::{Receiver, declare};
@@ -35,23 +35,23 @@ use access_identity_events::ports::{Clock, TokenSigner, Unavailable};
 use access_identity_oauth::adapters::oauth::OsRandom;
 use access_identity_oauth::ports::dpop::ClockUnavailable;
 use access_identity_oauth::ports::oauth::ClientKeys;
-use access_identity_oauth::ports::{Directory, RealmEntry};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry};
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{ClientRow, Decision, bind, create_settings, insert_client};
 use access_store::scope::DomainId;
 use access_store::ssf::TransmitterRow;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
 use serde_json::{Value as Json, json};
 use suiss_crypto::envelope::{Kek, SoftKek};
 
-const ISSUER: &str = "https://id.test/realms/shop";
+const ISSUER: &str = "https://id.test/env/shop";
 const UPSTREAM: &str = "https://upstream.example";
 const T0: u64 = 1_793_750_400_000;
 
@@ -66,14 +66,14 @@ impl Clock for TestClock {
 
 struct OneKek(Arc<SoftKek>);
 
-impl RealmKek for OneKek {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+impl EnvironmentKek for OneKek {
+    fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
         Some(self.0.clone())
     }
 }
 
 fn sealer() -> KekSealer<OneKek> {
-    KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32]))))
+    KekSealer(OneKek(Arc::new(SoftKek::new("environment-kek-1", [9; 32]))))
 }
 
 struct ClearSigner;
@@ -81,7 +81,7 @@ struct ClearSigner;
 impl TokenSigner for ClearSigner {
     fn sign(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
@@ -97,7 +97,7 @@ impl TokenSigner for ClearSigner {
 
     fn jwks(
         &self,
-        _: RealmId,
+        _: EnvironmentId,
     ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
         std::future::ready(Ok(String::from("{}")))
     }
@@ -122,20 +122,22 @@ impl Directory for NoDirectory {
     fn by_host(
         &self,
         _: &str,
-    ) -> impl std::future::Future<Output = Result<Option<RealmEntry>, Unavailable>> + Send {
+    ) -> impl std::future::Future<Output = Result<Option<EnvironmentEntry>, Unavailable>> + Send
+    {
         std::future::ready(Ok(None))
     }
 
     fn by_slug(
         &self,
         _: &str,
-    ) -> impl std::future::Future<Output = Result<Option<RealmEntry>, Unavailable>> + Send {
+    ) -> impl std::future::Future<Output = Result<Option<EnvironmentEntry>, Unavailable>> + Send
+    {
         std::future::ready(Ok(None))
     }
 
     fn all(
         &self,
-    ) -> impl std::future::Future<Output = Result<Vec<RealmEntry>, Unavailable>> + Send {
+    ) -> impl std::future::Future<Output = Result<Vec<EnvironmentEntry>, Unavailable>> + Send {
         std::future::ready(Ok(Vec::new()))
     }
 }
@@ -143,7 +145,7 @@ impl Directory for NoDirectory {
 struct World {
     db: TestDb,
     tenant: TenantId,
-    realm: RealmId,
+    environment: EnvironmentId,
     clock: TestClock,
     subject: [u8; 16],
 }
@@ -212,10 +214,10 @@ impl World {
             head = next;
         }
         let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-        let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+        let environment = create_environment(&mut t, &domain, "shop", "pool-default")
             .await
             .unwrap();
-        t.enter_realm(realm).await.unwrap();
+        t.enter_environment(environment).await.unwrap();
         assert!(set_issuer(&mut t, ISSUER).await.unwrap());
         create_settings(&mut t).await.unwrap();
         let b = bind(
@@ -234,14 +236,14 @@ impl World {
         .unwrap();
         insert_client(&mut t, &b, &client_row()).await.unwrap();
         let subject = t
-            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .insert_subject("active", "environment-kek:1", &[9; 40])
             .await
             .unwrap();
         t.commit().await.unwrap();
         Self {
             db,
             tenant,
-            realm,
+            environment,
             clock: TestClock(Arc::new(AtomicU64::new(T0))),
             subject,
         }
@@ -260,7 +262,7 @@ impl World {
     }
 
     async fn tx(&self) -> TenantTx {
-        TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        TenantTx::begin(&self.db.app, self.tenant, self.environment)
             .await
             .unwrap()
     }
@@ -276,7 +278,7 @@ impl World {
         .unwrap();
         let created = self
             .streams()
-            .create(self.tenant, self.realm, &parse_stream(&body).unwrap())
+            .create(self.tenant, self.environment, &parse_stream(&body).unwrap())
             .await
             .unwrap();
         assert_eq!(created.stream["profile"], profile);
@@ -291,7 +293,7 @@ impl World {
                     &ClearSigner,
                     &self.clock,
                     self.tenant,
-                    self.realm,
+                    self.environment,
                     token,
                     &body,
                 )
@@ -391,13 +393,13 @@ async fn signals_name_the_subject_by_the_receivers_own_sub() {
         T0,
     ))
     .await;
-    w.signal(&realm_key_compromise([9; 32], T0)).await;
+    w.signal(&environment_key_compromise([9; 32], T0)).await;
     w.settle(2).await;
     let sets = w.polled(&rp).await;
     assert_eq!(
         sets.len(),
         1,
-        "no pairwise sub yet: only the realm-wide signal"
+        "no pairwise sub yet: only the environment-wide signal"
     );
     assert!(sets[0]["events"].get(&compromise).is_some());
     let mut t = w.tx().await;
@@ -426,13 +428,17 @@ async fn signals_name_the_subject_by_the_receivers_own_sub() {
     assert!(s.get("sub").is_none() && s.get("exp").is_none());
     assert!(s["txn"].is_string() && s["jti"] != json!(b64url_encode(&[2; 32])));
     let other = w.polled(&stranger).await;
-    assert_eq!(other.len(), 1, "a stranger gets the realm-wide signal only");
+    assert_eq!(
+        other.len(),
+        1,
+        "a stranger gets the environment-wide signal only"
+    );
     assert!(other[0]["events"].get(&uri).is_none());
 }
 
 // CR-27
 #[tokio::test]
-async fn a_realm_key_compromise_reaches_every_stream() {
+async fn a_environment_key_compromise_reaches_every_stream() {
     let w = World::new().await;
     let uri = signal_uri(SignalKind::CredentialCompromise);
     let a = w
@@ -441,7 +447,7 @@ async fn a_realm_key_compromise_reaches_every_stream() {
     let b = w
         .poll_stream("cli_other", std::slice::from_ref(&uri), "both")
         .await;
-    w.signal(&realm_key_compromise([5; 32], T0)).await;
+    w.signal(&environment_key_compromise([5; 32], T0)).await;
     w.settle(2).await;
     for token in [a, b] {
         let sets = w.polled(&token).await;
@@ -466,14 +472,22 @@ async fn rs256_streams_are_refused() {
     };
     let rs = w
         .streams()
-        .create(w.tenant, w.realm, &parse_stream(&body("RS256")).unwrap())
+        .create(
+            w.tenant,
+            w.environment,
+            &parse_stream(&body("RS256")).unwrap(),
+        )
         .await
         .unwrap_err();
     assert!(matches!(rs, StreamError::UnsupportedAlg));
     assert_eq!(rs.problem(), (400, "unsupported_alg"));
     let es = w
         .streams()
-        .create(w.tenant, w.realm, &parse_stream(&body("ES256")).unwrap())
+        .create(
+            w.tenant,
+            w.environment,
+            &parse_stream(&body("ES256")).unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(es.stream["alg"], "ES256");
@@ -586,12 +600,12 @@ async fn inbound_session_revoked_ends_sessions_and_revokes_no_grant() {
         "j1",
         &json!({"event_timestamp": 1}),
     );
-    r.take(w.tenant, w.realm, &row, &token)
+    r.take(w.tenant, w.environment, &row, &token)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(w.epoch().await, before + 1);
-    r.take(w.tenant, w.realm, &row, &token)
+    r.take(w.tenant, w.environment, &row, &token)
         .await
         .unwrap()
         .unwrap();
@@ -625,7 +639,7 @@ async fn inbound_risk_is_a_narrowing_claim_only() {
         let row = &row;
         let w = &w;
         async move {
-            r.take(w.tenant, w.realm, row, &token)
+            r.take(w.tenant, w.environment, row, &token)
                 .await
                 .unwrap()
                 .unwrap();
@@ -671,7 +685,7 @@ async fn inbound_risk_is_a_narrowing_claim_only() {
     let token = set(&k, SignalKind::SessionRevoked, "f", &json!({}));
     unlinked
         .receiver(&k)
-        .take(unlinked.tenant, unlinked.realm, &row2, &token)
+        .take(unlinked.tenant, unlinked.environment, &row2, &token)
         .await
         .unwrap()
         .unwrap();
@@ -687,7 +701,7 @@ async fn inbound_sets_under_other_keys_are_refused() {
     let token = set(&ec(), SignalKind::SessionRevoked, "x", &json!({}));
     let refused = w
         .receiver(&ec())
-        .take(w.tenant, w.realm, &row, &token)
+        .take(w.tenant, w.environment, &row, &token)
         .await
         .unwrap();
     assert_eq!(refused, Err(Reject::Key));
@@ -702,14 +716,14 @@ async fn a_silent_transmitter_is_delayed() {
     let row = w.transmitter(true).await;
     let r = w.receiver(&k);
     let token = set(&k, SignalKind::SessionPresented, "p", &json!({}));
-    r.take(w.tenant, w.realm, &row, &token)
+    r.take(w.tenant, w.environment, &row, &token)
         .await
         .unwrap()
         .unwrap();
-    let h = r.health(w.tenant, w.realm).await.unwrap();
+    let h = r.health(w.tenant, w.environment).await.unwrap();
     assert_eq!((h[0].last_seen_ms, h[0].delayed_since_ms), (Some(T0), None));
     w.clock.0.fetch_add(3_600_001, Ordering::SeqCst);
-    let h = r.health(w.tenant, w.realm).await.unwrap();
+    let h = r.health(w.tenant, w.environment).await.unwrap();
     assert_eq!(h[0].delayed_since_ms, Some(T0 + 3_600_000));
     assert_eq!(h[0].issuer, UPSTREAM);
 }
@@ -722,13 +736,13 @@ async fn acks_are_apart_and_counted() {
     let token = w
         .poll_stream(CLIENT, std::slice::from_ref(&uri), "both")
         .await;
-    w.signal(&realm_key_compromise([5; 32], T0)).await;
+    w.signal(&environment_key_compromise([5; 32], T0)).await;
     w.settle(1).await;
     let sets = w.polled(&token).await;
     let jti = sets[0]["jti"].as_str().unwrap();
     let s = w
         .streams()
-        .by_token(w.tenant, w.realm, &token)
+        .by_token(w.tenant, w.environment, &token)
         .await
         .unwrap();
     let ack = |jti: &str, state: &str| {
@@ -740,24 +754,24 @@ async fn acks_are_apart_and_counted() {
     let streams = w.streams();
     assert!(
         streams
-            .ack(w.tenant, w.realm, &s, &ack(jti, "applied"))
+            .ack(w.tenant, w.environment, &s, &ack(jti, "applied"))
             .await
             .unwrap()
     );
     assert!(
         !streams
-            .ack(w.tenant, w.realm, &s, &ack(jti, "ignored"))
+            .ack(w.tenant, w.environment, &s, &ack(jti, "ignored"))
             .await
             .unwrap()
     );
     let never = b64url_encode(&[1; 32]);
     assert!(
         !streams
-            .ack(w.tenant, w.realm, &s, &ack(&never, "applied"))
+            .ack(w.tenant, w.environment, &s, &ack(&never, "applied"))
             .await
             .unwrap()
     );
-    let counts = streams.ack_counts(w.tenant, w.realm).await.unwrap();
+    let counts = streams.ack_counts(w.tenant, w.environment).await.unwrap();
     assert_eq!(
         (
             counts.delivered,
@@ -912,7 +926,7 @@ async fn polling_a_declared_transmitter_takes_its_sets() {
     let undeclared = OutboundTransport(Outbound::new(tls.clone(), Duration::from_secs(5)));
     assert!(
         w.receiver(&k)
-            .poll_once(&undeclared, w.tenant, w.realm, &row)
+            .poll_once(&undeclared, w.tenant, w.environment, &row)
             .await
             .is_err(),
         "an undeclared private endpoint is never reached"
@@ -923,7 +937,7 @@ async fn polling_a_declared_transmitter_takes_its_sets() {
         .declaring(vec![DeclaredTarget::new(&url, None).unwrap()]);
     let taken = w
         .receiver(&k)
-        .poll_once(&OutboundTransport(outbound), w.tenant, w.realm, &row)
+        .poll_once(&OutboundTransport(outbound), w.tenant, w.environment, &row)
         .await
         .unwrap();
     assert_eq!(taken, 1);

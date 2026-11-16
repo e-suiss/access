@@ -76,7 +76,7 @@ pub trait Random: Send + Sync {
 pub struct Config {
     /// Its platform client id (OP-149 m.4).
     pub client_id: String,
-    /// The `aud` of its client assertions: the platform realm's issuer (OP-149 m.19 (e)).
+    /// The `aud` of its client assertions: the platform environment's issuer (OP-149 m.19 (e)).
     pub audience: String,
     /// Its PEP name: what its client certificate authenticates as (L1-ADP-2).
     pub pep: String,
@@ -471,7 +471,7 @@ impl<W: Wire, C: Clock + Send + Sync, R: Random> Twin<W, C, R> {
             Ok(b64url_encode(&self.sign_statement(&s)?))
         };
         let mut out = json!({
-            "realm": t.get("realm").cloned().ok_or_else(bad)?,
+            "environment": t.get("environment").cloned().ok_or_else(bad)?,
             "challenge": t.get("challenge").cloned().ok_or_else(bad)?,
             "ais": ais(t.get("instance_create").ok_or_else(bad)?)?,
         });
@@ -492,8 +492,8 @@ impl<W: Wire, C: Clock + Send + Sync, R: Random> Twin<W, C, R> {
         ))
     }
 
-    /// Pairs with every live realm of `tenant` (OP-149 m.4): the platform API hands out one
-    /// challenge per realm and the twin signs its own `party_register` and `instance_create`
+    /// Pairs with every live environment of `tenant` (OP-149 m.4): the platform API hands out one
+    /// challenge per environment and the twin signs its own `party_register` and `instance_create`
     /// with its service key. Answers the domains it is now paired in.
     ///
     /// # Errors

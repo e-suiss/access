@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_residency (tenant_id, environment_id, version, region, class, domain_id, decision_pos)\n         SELECT $1, $2,\n                COALESCE((SELECT max(version) FROM access.environment_residency\n                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,\n                $3, $4, $5, $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a7f20ab3e6d79d9d4a79c08738e0bb7602697e2813f16034614b8851f80a4abd"
+}

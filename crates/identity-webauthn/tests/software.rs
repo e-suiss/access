@@ -12,11 +12,11 @@ use access_identity_webauthn::domain::ceremony::{
 };
 use access_identity_webauthn::domain::cose::CoseAlgorithm;
 use access_identity_webauthn::domain::ids::UserHandle;
-use access_identity_webauthn::domain::policy::RealmPolicy;
+use access_identity_webauthn::domain::policy::EnvironmentPolicy;
 use access_identity_webauthn::domain::software::{SOFTWARE_AAGUID, SoftwareAuthenticator};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{Ed25519KeyPair, KeyPair as _};
-use support::{NOW, ORIGIN, REALM, RP_ID, rp};
+use support::{ENVIRONMENT, NOW, ORIGIN, RP_ID, rp};
 
 fn key() -> Ed25519KeyPair {
     let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
@@ -40,11 +40,11 @@ fn the_software_passkey_passes_the_real_ceremonies() {
     let public = <[u8; 32]>::try_from(pair.public_key().as_ref()).unwrap();
     let passkey = SoftwareAuthenticator::ed25519(public);
     let user = UserHandle::from_bytes([7; 64]);
-    let policy = RealmPolicy::default();
+    let policy = EnvironmentPolicy::default();
     let challenge = [0x5a; 32];
     let reg = passkey.registration(RP_ID, ORIGIN, &challenge);
     let state = RegistrationState {
-        realm: REALM,
+        environment: ENVIRONMENT,
         user,
         challenge,
         conditional: false,
@@ -80,7 +80,7 @@ fn the_software_passkey_passes_the_real_ceremonies() {
         })
         .unwrap();
     let auth = AuthenticationState {
-        realm: REALM,
+        environment: ENVIRONMENT,
         challenge: statement,
         user: Some(user),
         allowed: Vec::new(),

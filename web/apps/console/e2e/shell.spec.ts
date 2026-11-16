@@ -11,13 +11,13 @@ async function registerDevice(page: Page) {
   return dialog;
 }
 
-/** Answers the hosted login hand-off with a stand-in page and resolves with the realm it names. */
+/** Answers the hosted login hand-off with a stand-in page and resolves with the environment it names. */
 async function signInStarted(page: Page): Promise<() => Promise<string | null>> {
   await page.route("**/console/api/sign-in?**", (route) =>
     route.fulfill({ status: 200, contentType: "text/html", body: "<title>Sign-in</title>" }),
   );
   const started = page.waitForRequest((r) => r.url().includes("/console/api/sign-in?"));
-  return async () => new URL((await started).url()).searchParams.get("realm");
+  return async () => new URL((await started).url()).searchParams.get("environment");
 }
 
 function ended(reason: string) {
@@ -28,16 +28,19 @@ function ended(reason: string) {
   };
 }
 
-// TN-128, OP-159 m.42 (a): signed out at a realm's console, its hosted login starts on its own
-test("signed out, a realm's console starts that realm's hosted login", async ({ page, bff }) => {
-  const realm = await signInStarted(page);
+// TN-128, OP-159 m.42 (a): signed out at an environment's console, its hosted login starts on its own
+test("signed out, an environment's console starts that environment's hosted login", async ({
+  page,
+  bff,
+}) => {
+  const environment = await signInStarted(page);
   await page.goto("/console/acme/admin/roles");
-  expect(await realm()).toBe("acme");
+  expect(await environment()).toBe("acme");
   expect(bff.seen.some((s) => s.ais)).toBe(false);
 });
 
-// OP-159 m.42 (b): the bare console names no realm and asks for none
-test("signed out at the bare console with no remembered realm, nothing asks for a realm", async ({
+// OP-159 m.42 (b): the bare console names no environment and asks for none
+test("signed out at the bare console with no remembered environment, nothing asks for an environment", async ({
   page,
 }) => {
   let started = false;
@@ -48,26 +51,26 @@ test("signed out at the bare console with no remembered realm, nothing asks for 
   await expect(
     page.getByRole("heading", { level: 1, name: "Use your organization's console link" }),
   ).toBeVisible();
-  await expect(page.getByTestId("console-link-shape")).toHaveText(`${BASE}/console/<realm>`);
+  await expect(page.getByTestId("console-link-shape")).toHaveText(`${BASE}/console/<environment>`);
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(page.locator("input")).toHaveCount(0);
   expect(started).toBe(false);
 });
 
-// OP-159 m.42 (b): the realm this browser last signed in to
-test("signed out at the bare console, the remembered realm's console opens", async ({
+// OP-159 m.42 (b): the environment this browser last signed in to
+test("signed out at the bare console, the remembered environment's console opens", async ({
   page,
   context,
 }) => {
   await context.addInitScript(() => {
-    localStorage.setItem("access-console-realm", "shop");
+    localStorage.setItem("access-console-environment", "shop");
   });
-  const realm = await signInStarted(page);
+  const environment = await signInStarted(page);
   await page.goto("/console/");
-  expect(await realm()).toBe("shop");
+  expect(await environment()).toBe("shop");
 });
 
-// OP-159 m.42 (b): an unreadable store is no remembered realm
+// OP-159 m.42 (b): an unreadable store is no remembered environment
 test("a browser that refuses storage still gets the bare console page", async ({
   page,
   context,
@@ -83,8 +86,8 @@ test("a browser that refuses storage still gets the bare console page", async ({
   await expect(page.getByTestId("console-link-shape")).toBeVisible();
 });
 
-// OP-159 m.42 (a), (b): signed in, the bare console moves to the session's realm and remembers it
-test("signed in at the bare console, the console moves to the session's realm", async ({
+// OP-159 m.42 (a), (b): signed in, the bare console moves to the session's environment and remembers it
+test("signed in at the bare console, the console moves to the session's environment", async ({
   page,
   context,
   bff,
@@ -93,13 +96,15 @@ test("signed in at the bare console, the console moves to the session's realm", 
   await page.goto("/console/");
   await expect(page).toHaveURL(`${BASE}/console/acme`);
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem("access-console-realm"))).toBe("acme");
+  expect(await page.evaluate(() => localStorage.getItem("access-console-environment"))).toBe(
+    "acme",
+  );
   await page.getByRole("link", { name: "Your profile" }).click();
   await expect(page).toHaveURL(`${BASE}/console/acme/profile`);
 });
 
-// OP-159 m.42 (c): signed in to one realm at another realm's console, nothing switches silently
-test("signed in to another realm, the console says so and offers both ways", async ({
+// OP-159 m.42 (c): signed in to one environment at another environment's console, nothing switches silently
+test("signed in to another environment, the console says so and offers both ways", async ({
   page,
   context,
   bff,
@@ -115,14 +120,14 @@ test("signed in to another realm, the console says so and offers both ways", asy
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
 
   await page.goto("/console/shop");
-  const realm = await signInStarted(page);
+  const environment = await signInStarted(page);
   await page.getByRole("button", { name: "Sign out and sign in to shop" }).click();
-  expect(await realm()).toBe("shop");
+  expect(await environment()).toBe("shop");
   expect(bff.seen.find((s) => s.path === "/sign-out")?.status).toBe(204);
 });
 
 // TN-129, OP-159 m.42 (a): an ended console session says why and waits for the viewer
-test("an idle session explains the sign-out and offers the realm's sign-in", async ({
+test("an idle session explains the sign-out and offers the environment's sign-in", async ({
   page,
   context,
 }) => {
@@ -136,16 +141,16 @@ test("an idle session explains the sign-out and offers the realm's sign-in", asy
     "You were signed out: the console was idle for 15 minutes.",
   );
   expect(started).toBe(false);
-  const realm = await signInStarted(page);
+  const environment = await signInStarted(page);
   await page.getByRole("button", { name: "Sign in to acme" }).click();
-  expect(await realm()).toBe("acme");
+  expect(await environment()).toBe("acme");
 });
 
 // OP-159 m.42 (a): a sign-in that came back without a session does not start again on its own
 test("a sign-in that just started is not started again on its own", async ({ page }) => {
-  const realm = await signInStarted(page);
+  const environment = await signInStarted(page);
   await page.goto("/console/acme");
-  expect(await realm()).toBe("acme");
+  expect(await environment()).toBe("acme");
   await page.goto("/console/acme");
   await expect(page.getByRole("button", { name: "Sign in to acme" })).toBeVisible();
 });
@@ -222,7 +227,7 @@ test("own profile and sign-ins need only the cookie", async ({ page, context, br
   const rows = page.getByRole("row");
   await expect(rows).toHaveCount(3);
   await rows
-    .filter({ hasText: "Realm sign-in" })
+    .filter({ hasText: "Environment sign-in" })
     .getByRole("button", { name: "End sign-in" })
     .click();
   await expect(rows).toHaveCount(2);

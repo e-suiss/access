@@ -1,6 +1,6 @@
 //! The SCIM server and the outbound SCIM client in this process (OP-155 m.3 (g), IDP-23, IDP-29):
-//! the realms' PII vault keys, the SCIM routes, and the outbound worker over the guarded HTTP
-//! client with each target's secret opened under its realm KEK.
+//! the environments' PII vault keys, the SCIM routes, and the outbound worker over the guarded HTTP
+//! client with each target's secret opened under its environment KEK.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,20 +17,20 @@ use access_identity_scim::app::{Scim, Vaults};
 use access_identity_scim::ports::SystemClock;
 use access_store::Pool;
 use access_store::events::SealedKey;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// How often the outbound worker looks for new pushes (PD).
 pub(crate) const INTERVAL: Duration = Duration::from_secs(2);
 
-/// The realms' PII vault keys from the token.
+/// The environments' PII vault keys from the token.
 #[derive(Clone)]
-pub(crate) struct ScimVaults(pub(crate) RealmKeks);
+pub(crate) struct ScimVaults(pub(crate) EnvironmentKeks);
 
 impl Vaults for ScimVaults {
-    fn vault(&self, _: TenantId, realm: RealmId) -> Option<Vault> {
-        self.0.vault(realm)
+    fn vault(&self, _: TenantId, environment: EnvironmentId) -> Option<Vault> {
+        self.0.vault(environment)
     }
 }
 
@@ -41,19 +41,23 @@ pub(crate) type Service = Scim<ScimVaults, SystemClock>;
 ///
 /// # Errors
 /// No randomness for the cursor key.
-pub(crate) fn service(app: Pool, keks: RealmKeks, ids: Arc<IdKey>) -> Result<Service, String> {
+pub(crate) fn service(
+    app: Pool,
+    keks: EnvironmentKeks,
+    ids: Arc<IdKey>,
+) -> Result<Service, String> {
     let cursors = CursorKey::generate().map_err(|e| e.to_string())?;
     Ok(Scim::new(app, ScimVaults(keks), SystemClock, cursors, ids))
 }
 
-/// The SCIM routes: realms named by the router role, requests in the application role.
+/// The SCIM routes: environments named by the router role, requests in the application role.
 ///
 /// # Errors
 /// No randomness for the cursor key.
 pub(crate) fn routes(
     router: Pool,
     app: Pool,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     ids: Arc<IdKey>,
 ) -> Result<axum::Router, String> {
     Ok(access_http::scim::router(
@@ -97,18 +101,18 @@ impl Sender for Pusher {
     }
 }
 
-/// Targets' secrets opened under their realm KEK.
-pub(crate) struct TargetSecrets(pub(crate) KekSealer<RealmKeks>);
+/// Targets' secrets opened under their environment KEK.
+pub(crate) struct TargetSecrets(pub(crate) KekSealer<EnvironmentKeks>);
 
 impl Secrets for TargetSecrets {
     fn open(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         sealed: &SealedKey,
     ) -> Option<zeroize::Zeroizing<Vec<u8>>> {
-        self.0.open(tenant, realm, id, sealed).ok()
+        self.0.open(tenant, environment, id, sealed).ok()
     }
 }
 
@@ -125,7 +129,7 @@ pub(crate) struct Running {
 pub(crate) fn start(
     (app, reader): (Pool, Pool),
     outbound: Outbound,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     ids: Arc<IdKey>,
 ) -> Result<Running, String> {
     let worker = Worker {

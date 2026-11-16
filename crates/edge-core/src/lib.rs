@@ -4,14 +4,14 @@
 //!
 //! The seven shared layers:
 //!
-//! 1. **Realm resolution**: the gateway serves the one realm it is registered in, named by
-//!    access-server at [`EdgeCore::connect`]; [`EdgeCore::realm`] refuses any other.
+//! 1. **Environment resolution**: the gateway serves the one environment it is registered in, named by
+//!    access-server at [`EdgeCore::connect`]; [`EdgeCore::environment`] refuses any other.
 //! 2. **Subject lookup**: [`EdgeCore::subject`] asks access-server over the edge channel.
-//! 3. **Claim issuance**: [`EdgeCore::issue`] reports an authentication; the realm issuer inside
+//! 3. **Claim issuance**: [`EdgeCore::issue`] reports an authentication; the environment issuer inside
 //!    access-server signs the Claim (P-ID-5).
 //! 4. **Keys**: the gateway holds only its channel identity (its client certificate and key,
 //!    read before the lockdown); every signature is made by access-server and its signers.
-//! 5. **Audit**: [`EdgeCore::audit`] writes codes, never bodies, to the realm's audit log.
+//! 5. **Audit**: [`EdgeCore::audit`] writes codes, never bodies, to the environment's audit log.
 //! 6. **Governor**: [`governor::Governor`] token buckets per caller key.
 //! 7. **Health and metrics**: [`health::Health`], labelled by call and outcome only (OP-47).
 //!

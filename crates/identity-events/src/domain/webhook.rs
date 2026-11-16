@@ -1,8 +1,8 @@
 //! Webhook registrations and their delivery rules, free of I/O (TN-136, OP-151 m.3 (i), E42).
 //!
-//! - A webhook is realm configuration: `idp.webhook.register`, `idp.webhook.update`,
+//! - A webhook is environment configuration: `idp.webhook.register`, `idp.webhook.update`,
 //!   `idp.webhook.retire` (MD-14). Its URL is `https` on a DNS name; private targets are
-//!   refused unless the realm allows them (§14.3).
+//!   refused unless the environment allows them (§14.3).
 //! - Every delivery is the Suiss webhook profile shared with Relay: a `CloudEvents` 1.0
 //!   structured JSON body signed per Standard Webhooks, `v1a` Ed25519 by default, `v1` HMAC for
 //!   compatibility. A rotated key keeps signing beside the new one for
@@ -192,7 +192,7 @@ impl WebhookChange {
         }
     }
 
-    /// The intent that authorizes it in realm `slug` (EI-25).
+    /// The intent that authorizes it in environment `slug` (EI-25).
     ///
     /// # Errors
     /// [`suiss_crypto::dcbor::EncodeError`].

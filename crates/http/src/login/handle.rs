@@ -1,5 +1,5 @@
 //! Handles on axum (E56, OP-156 m.4 Q20): the `frontend-v1` `/v1/me/handles` routes at the
-//! realm's host and under `/realms/{slug}`, on the session cookie and the same-origin rule, and
+//! environment's host and under `/env/{slug}`, on the session cookie and the same-origin rule, and
 //! `GET /.well-known/access-handle` on any host, which answers the DID a verified Suiss handle of
 //! that host points at. Writes take an `Idempotency-Key`.
 
@@ -19,7 +19,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 /// Largest request body.
@@ -67,7 +67,7 @@ where
     });
     let mut writes = Router::new();
     let mut reads = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/me/handles"),
@@ -142,7 +142,7 @@ where
     M: Messages,
     H: HandleHosts,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -168,7 +168,7 @@ where
     M: Messages,
     H: HandleHosts,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -215,7 +215,7 @@ where
     M: Messages,
     H: HandleHosts,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -250,7 +250,7 @@ where
     M: Messages,
     H: HandleHosts,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

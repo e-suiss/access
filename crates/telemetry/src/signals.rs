@@ -1,5 +1,5 @@
 //! The §17.8.2 operation signals and the §13.7 security counters as metrics. Each one names
-//! its §17.8.2 row; none carries a tenant, realm or domain label (OP-47). Telemetry is never a
+//! its §17.8.2 row; none carries a tenant, environment or domain label (OP-47). Telemetry is never a
 //! decision input (TI-18): recording returns nothing a caller could branch on.
 
 use crate::metrics::{COUNT, Counter, Gauge, Histogram, LATENCY_SECONDS, Label};

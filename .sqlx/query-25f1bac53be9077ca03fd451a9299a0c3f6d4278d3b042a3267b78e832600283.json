@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.vault_connections SET refresh_lease_ms = $5\n              WHERE tenant_id = $1 AND environment_id = $2 AND connection_id = $3 AND status = 'active'\n                AND (refresh_lease_ms IS NULL OR refresh_lease_ms <= $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25f1bac53be9077ca03fd451a9299a0c3f6d4278d3b042a3267b78e832600283"
+}

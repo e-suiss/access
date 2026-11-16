@@ -1,7 +1,7 @@
 //! The hosts a custom domain may be (OP-156 m.3 (i), TN-20): a lower-case DNS name of at least
 //! three labels below a registrable domain, outside the deployment's base domain, never
 //! `localhost` and never a public suffix. The registration names its DNS records: the TXT
-//! challenge at `_access-challenge.<host>` and a CNAME to the realm's own `<slug>.<base>`.
+//! challenge at `_access-challenge.<host>` and a CNAME to the environment's own `<slug>.<base>`.
 
 use access_identity_webauthn::domain::psl::Psl;
 use access_identity_webauthn::domain::rp::PublicSuffix as _;
@@ -85,14 +85,14 @@ pub fn test_name(host: &str) -> bool {
     host.rsplit('.').next() == Some("test")
 }
 
-/// The deployment's base host: realm hostnames are `<slug>.<base>` (TN-10). A base under
+/// The deployment's base host: environment hostnames are `<slug>.<base>` (TN-10). A base under
 /// `localhost` is the local profile's, and one under `test` exists only in test runs; neither
 /// is a Suiss domain (OP-156 m.3 (i), RFC 6761).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Base(String);
 
 impl Base {
-    /// The base of the realm base host `host` (no port).
+    /// The base of the environment base host `host` (no port).
     #[must_use]
     pub fn new(host: &str) -> Self {
         Self(host.to_ascii_lowercase())
@@ -117,14 +117,14 @@ impl Base {
         at_or_under(host, &self.0) || at_or_under(&self.0, host)
     }
 
-    /// The realm hostname a custom domain's CNAME must name: `<slug>.<base>`.
+    /// The environment hostname a custom domain's CNAME must name: `<slug>.<base>`.
     #[must_use]
-    pub fn realm_host(&self, slug: &str) -> String {
+    pub fn environment_host(&self, slug: &str) -> String {
         format!("{slug}.{}", self.0)
     }
 }
 
-/// A host a realm may register as its custom domain.
+/// A host an environment may register as its custom domain.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CustomHost(String);
 
@@ -200,7 +200,7 @@ mod tests {
         }
         let h = CustomHost::parse("login.acme.example", &base).unwrap();
         assert_eq!(h.challenge_name(), "_access-challenge.login.acme.example");
-        assert_eq!(base.realm_host("acme"), "acme.suiss.id");
+        assert_eq!(base.environment_host("acme"), "acme.suiss.id");
         assert!(base.is_suiss());
         assert!(!Base::new("localhost").is_suiss());
         assert!(!Base::new("access.test").is_suiss());

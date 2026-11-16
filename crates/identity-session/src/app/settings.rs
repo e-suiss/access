@@ -78,7 +78,7 @@ where
             actor: &target,
             correlation,
         };
-        match remove_credential(self.db, &self.realm, subject, credential, &who).await {
+        match remove_credential(self.db, &self.environment, subject, credential, &who).await {
             Ok(()) => Ok(Ok(())),
             Err(AccountError::LastMethod) => Ok(Err(MethodRefusal::LastMethod)),
             Err(AccountError::NotFound) => Ok(Err(MethodRefusal::NotFound)),
@@ -115,14 +115,14 @@ where
             correlation,
         };
         let mut tx = self.begin().await?;
-        store_password(&mut tx, &self.realm, subject, phc.expose(), &who).await?;
+        store_password(&mut tx, &self.environment, subject, phc.expose(), &who).await?;
         let ended = tx.live_sessions(subject).await?;
         // TN-50, OP-153 m.3 (y)
         let epoch = tx
             .end_sessions_because(subject, "password")
             .await?
             .ok_or(SessionError::Account(AccountError::NotFound))?;
-        events::sessions_ended(&mut tx, &self.realm, subject, epoch).await?;
+        events::sessions_ended(&mut tx, &self.environment, subject, epoch).await?;
         for s in ended {
             emit(&mut tx, &authentication_ended(subject, s.id, now)).await?;
         }

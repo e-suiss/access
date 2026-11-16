@@ -1,10 +1,10 @@
 //! Certificate, PIV and CAC sign-in on axum (§10.2.5, OP-155 m.3 (k), (m)): `GET
-//! /login/certificate` at the realm's host and under `/realms/{slug}`, served on the mTLS
+//! /login/certificate` at the environment's host and under `/env/{slug}`, served on the mTLS
 //! listener. The chain is the connection's [`MtlsChain`], set only by TLS that ends at
 //! access-server; on any other listener there is none and the request is refused. A forwarded
 //! certificate header never reaches here (`tls::FORWARDED_CERT_HEADERS`).
 //!
-//! The request is a top-level navigation from the realm's login page, so it is held to the same
+//! The request is a top-level navigation from the environment's login page, so it is held to the same
 //! site, not the same origin: a `Sec-Fetch-Site` other than `same-origin`, `same-site` or `none`
 //! is refused.
 
@@ -22,7 +22,7 @@ use axum::response::Response;
 use axum::routing::get;
 use axum::{Extension, Router};
 
-use super::web::{Jar, problem, realm, send};
+use super::web::{Jar, environment, problem, send};
 use super::{Peer, Shared};
 use crate::tls::MtlsChain;
 
@@ -33,7 +33,7 @@ struct Svc<D, K, KI, C, M> {
 
 type St<D, K, KI, C, M> = State<Arc<Svc<D, K, KI, C, M>>>;
 
-/// The certificate sign-in route, at the realm's host and under `/realms/{slug}`.
+/// The certificate sign-in route, at the environment's host and under `/env/{slug}`.
 pub fn router<D, K, KI, C, M>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -55,7 +55,7 @@ where
         certs,
     });
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r.route(
             &format!("{prefix}/login/certificate"),
             get(sign_in::<D, K, KI, C, M>),
@@ -64,7 +64,7 @@ where
     r.with_state(svc)
 }
 
-/// OP-155 m.3 (m): a navigation from the realm's own site, or a direct one.
+/// OP-155 m.3 (m): a navigation from the environment's own site, or a direct one.
 fn same_site(headers: &HeaderMap) -> bool {
     headers
         .get("sec-fetch-site")
@@ -88,7 +88,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s.login, &p, &uri, &headers).await {
+    let entry = match environment(&s.login, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

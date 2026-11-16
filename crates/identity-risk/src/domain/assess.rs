@@ -64,7 +64,7 @@ pub struct Inputs {
     pub last_at_ms: Option<u64>,
     /// Now.
     pub now_ms: u64,
-    /// Whether the browser has a valid device marker; `None` when the realm has no markers.
+    /// Whether the browser has a valid device marker; `None` when the environment has no markers.
     pub device_known: Option<bool>,
     /// Failed password attempts counted before this sign-in; `None` without a password step.
     pub prior_failures: Option<u32>,

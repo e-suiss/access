@@ -9,13 +9,13 @@
 
 use access_store::accounts::{NewCredential, Revoke, SealedIdentifier, SealedSecret, StoredValue};
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 use access_store::throttle::{ThrottleRow, open_day};
 
-async fn realm(db: &TestDb, seed: u8, slug: &str) -> (TenantId, RealmId) {
+async fn environment(db: &TestDb, seed: u8, slug: &str) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
     let g = LogRecord {
@@ -29,14 +29,14 @@ async fn realm(db: &TestDb, seed: u8, slug: &str) -> (TenantId, RealmId) {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, slug, "pool-default")
+    let r = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
     (t, r)
 }
 
-async fn second_realm(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> RealmId {
+async fn second_environment(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> EnvironmentId {
     let d = DomainId::from_bytes([seed; 32]);
     let g = LogRecord {
         pos: 0,
@@ -49,7 +49,7 @@ async fn second_realm(db: &TestDb, t: TenantId, seed: u8, slug: &str) -> RealmId
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, slug, "pool-default")
+    let r = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -67,7 +67,7 @@ fn sealed() -> SealedSecret {
 }
 
 async fn subject(tx: &mut TenantTx) -> [u8; 16] {
-    tx.insert_subject("staged", "realm-kek:1", &[9; 40])
+    tx.insert_subject("staged", "environment-kek:1", &[9; 40])
         .await
         .unwrap()
 }
@@ -94,10 +94,10 @@ fn sealed_id(seed: u8) -> SealedIdentifier {
 
 // MD-5, OP-12, TN-2, TN-76, §17.2.2, IDI-2, OP-153 m.3 (aa)
 #[tokio::test]
-async fn identifiers_are_unique_by_blind_index_and_realm_scoped() {
+async fn identifiers_are_unique_by_blind_index_and_environment_scoped() {
     let db = fresh().await.unwrap();
-    let (t, r1) = realm(&db, 1, "acct-a").await;
-    let r2 = second_realm(&db, t, 2, "acct-b").await;
+    let (t, r1) = environment(&db, 1, "acct-a").await;
+    let r2 = second_environment(&db, t, 2, "acct-b").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r1).await.unwrap();
     let a = subject(&mut tx).await;
@@ -132,13 +132,13 @@ async fn identifiers_are_unique_by_blind_index_and_realm_scoped() {
 #[tokio::test]
 async fn no_new_identifier_is_plaintext_and_old_ones_are_sealed_in_place() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 11, "acct-legacy").await;
+    let (t, r) = environment(&db, 11, "acct-legacy").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let a = subject(&mut tx).await;
     tx.commit().await.unwrap();
     let mut conn = db.owner.acquire().await.unwrap();
     let refused = sqlx::query(
-        "INSERT INTO access.identity_identifiers (tenant_id, realm_id, subject_id, kind, value)
+        "INSERT INTO access.identity_identifiers (tenant_id, environment_id, subject_id, kind, value)
          VALUES ($1, $2, $3, 'email', 'old@example.com')",
     )
     .bind(sqlx::types::Uuid::from_bytes(*t.as_bytes()))
@@ -150,7 +150,7 @@ async fn no_new_identifier_is_plaintext_and_old_ones_are_sealed_in_place() {
     assert!(refused.to_string().contains("sealed"), "{refused}");
     for sql in [
         "ALTER TABLE access.identity_identifiers DISABLE TRIGGER identifier_sealed",
-        "INSERT INTO access.identity_identifiers (tenant_id, realm_id, subject_id, kind, value)
+        "INSERT INTO access.identity_identifiers (tenant_id, environment_id, subject_id, kind, value)
          VALUES ($1, $2, $3, 'email', 'Old@Example.com')",
         "ALTER TABLE access.identity_identifiers ENABLE TRIGGER identifier_sealed",
     ] {
@@ -192,21 +192,21 @@ async fn no_new_identifier_is_plaintext_and_old_ones_are_sealed_in_place() {
 #[tokio::test]
 async fn shredding_removes_every_key_and_keeps_the_rows() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 12, "acct-shred").await;
+    let (t, r) = environment(&db, 12, "acct-shred").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let a = subject(&mut tx).await;
     assert!(
-        tx.insert_subject_key(a, "contact", "realm-kek:1", &[4; 40])
+        tx.insert_subject_key(a, "contact", "environment-kek:1", &[4; 40])
             .await
             .unwrap()
     );
     assert!(
-        !tx.insert_subject_key(a, "contact", "realm-kek:1", &[5; 40])
+        !tx.insert_subject_key(a, "contact", "environment-kek:1", &[5; 40])
             .await
             .unwrap()
     );
     assert!(
-        tx.insert_subject_key(a, "profile", "realm-kek:1", &[6; 40])
+        tx.insert_subject_key(a, "profile", "environment-kek:1", &[6; 40])
             .await
             .unwrap()
     );
@@ -264,7 +264,7 @@ async fn shredding_removes_every_key_and_keeps_the_rows() {
 #[tokio::test]
 async fn the_status_chain_is_enforced_and_rows_stay() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 3, "acct-c").await;
+    let (t, r) = environment(&db, 3, "acct-c").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let s = subject(&mut tx).await;
     tx.commit().await.unwrap();
@@ -307,7 +307,7 @@ async fn the_status_chain_is_enforced_and_rows_stay() {
 #[tokio::test]
 async fn the_last_method_cannot_be_removed() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 4, "acct-d").await;
+    let (t, r) = environment(&db, 4, "acct-d").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let s = subject(&mut tx).await;
     let pw = credential(&mut tx, s, "password").await;
@@ -341,7 +341,7 @@ async fn the_last_method_cannot_be_removed() {
 #[tokio::test]
 async fn a_live_linked_sign_in_is_a_method() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 7, "acct-l").await;
+    let (t, r) = environment(&db, 7, "acct-l").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let s = subject(&mut tx).await;
     let wa = credential(&mut tx, s, "webauthn").await;
@@ -361,10 +361,10 @@ async fn a_live_linked_sign_in_is_a_method() {
 
 // OP-12, §12.1.3 test 2
 #[tokio::test]
-async fn accounts_are_invisible_outside_their_realm() {
+async fn accounts_are_invisible_outside_their_environment() {
     let db = fresh().await.unwrap();
-    let (t, r1) = realm(&db, 5, "acct-e").await;
-    let r2 = second_realm(&db, t, 6, "acct-f").await;
+    let (t, r1) = environment(&db, 5, "acct-e").await;
+    let r2 = second_environment(&db, t, 6, "acct-f").await;
     let mut tx = TenantTx::begin(&db.app, t, r1).await.unwrap();
     let s = subject(&mut tx).await;
     credential(&mut tx, s, "password").await;
@@ -400,7 +400,7 @@ async fn accounts_are_invisible_outside_their_realm() {
 #[tokio::test]
 async fn throttle_state_carries_across_days() {
     let db = fresh().await.unwrap();
-    let (t, r) = realm(&db, 7, "acct-g").await;
+    let (t, r) = environment(&db, 7, "acct-g").await;
     let key = [7_u8; 32];
     let day = 20_000;
     open_day(&db.archive, day).await.unwrap();

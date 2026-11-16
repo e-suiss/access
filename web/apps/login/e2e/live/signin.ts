@@ -1,5 +1,5 @@
 // OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, §10.2.2: the bootstrap test user signs in at
-// the realm's hosted login through its JSON steps: identifier, password and, since the realm asks
+// the environment's hosted login through its JSON steps: identifier, password and, since the environment asks
 // for a second factor once one is enrolled, a code of the authenticator app whose seed the
 // bootstrap wrote.
 import { expect, type APIRequestContext } from "@playwright/test";
@@ -29,21 +29,21 @@ async function post(
   return (await r.json()) as Record<string, unknown>;
 }
 
-/** Signs the bootstrap test user in at `realm` on `request`, whose cookie jar then holds the
+/** Signs the bootstrap test user in at `environment` on `request`, whose cookie jar then holds the
  * session. */
 export async function signIn(
   request: APIRequestContext,
   origin: string,
-  realm: string,
+  environment: string,
 ): Promise<void> {
   const step = SEED === "" ? 0 : await nextStep();
-  const started = await post(request, origin, `${realm}/v1/login/flows`);
-  const identified = await post(request, origin, `${realm}${String(started["action"])}`, {
+  const started = await post(request, origin, `${environment}/v1/login/flows`);
+  const identified = await post(request, origin, `${environment}${String(started["action"])}`, {
     method: "identifier",
     fields: { identifier: IDENTIFIER },
   });
   expect(identified["step"]).toBe("authenticate");
-  let done = await post(request, origin, `${realm}${String(identified["action"])}`, {
+  let done = await post(request, origin, `${environment}${String(identified["action"])}`, {
     method: "password",
     fields: { password: PASSWORD },
   });
@@ -52,7 +52,7 @@ export async function signIn(
       SEED,
       "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
     ).not.toBe("");
-    done = await post(request, origin, `${realm}${String(done["action"])}`, {
+    done = await post(request, origin, `${environment}${String(done["action"])}`, {
       method: "totp",
       fields: { totp_code: totp(SEED, step) },
     });

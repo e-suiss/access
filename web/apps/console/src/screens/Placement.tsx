@@ -1,5 +1,5 @@
-// TI-17, CMP-26, OP-30, OP-158 m.3 (o): Settings ▸ Placement. The cell this realm, its governing
-// domain and its tenant are served from, the cell's region and the realm's residency, and any
+// TI-17, CMP-26, OP-30, OP-158 m.3 (o): Settings ▸ Placement. The cell this environment, its governing
+// domain and its tenant are served from, the cell's region and the environment's residency, and any
 // rehome waiting for its second governing domain. Placement only routes requests.
 import type { ReactElement } from "react";
 
@@ -27,7 +27,7 @@ interface PlacementView {
   readonly region: string | null;
   readonly dedicated_cell: boolean;
   readonly tenant: Placed | null;
-  readonly realm: Placed | null;
+  readonly environment: Placed | null;
   readonly domain: Placed | null;
   readonly governing_domain: string;
   readonly residency: { readonly region: string; readonly class: string } | null;
@@ -39,8 +39,10 @@ const cellOf = (v: PlacementView, p: Placed | null): string => p?.cell ?? v.cell
 
 /** The placement screen. */
 export function Placement({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const view = useLoad(() => adminGet<PlacementView>(ctx.instance, `realms/${realm}/placement`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const view = useLoad(() =>
+    adminGet<PlacementView>(ctx.instance, `envs/${environment}/placement`),
+  );
   return (
     <div data-testid="placement" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("placementIntro")}</p>
@@ -51,8 +53,8 @@ export function Placement({ ctx }: { readonly ctx: Ctx }): ReactElement {
               <dl className={ROWS} data-testid="placement-cells">
                 <div>
                   <dt>{t("placementCell")}</dt>
-                  <dd className={MONO} data-testid="placement-realm-cell">
-                    {cellOf(v, v.realm)}
+                  <dd className={MONO} data-testid="placement-environment-cell">
+                    {cellOf(v, v.environment)}
                   </dd>
                 </div>
                 <div>

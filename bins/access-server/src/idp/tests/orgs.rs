@@ -38,7 +38,7 @@ fn org_register(d: Digest, party: [u8; 16], founder: Id, seed: u8) -> SelfSigned
 
 async fn register_org(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     founder: [u8; 16],
     party: [u8; 16],
@@ -55,18 +55,22 @@ async fn register_org(
         .await
 }
 
-/// The realm's vault keys as the test world's realm keys hand them out.
-fn vault_of(w: &World, realm: RealmId) -> access_identity_account::app::vault::Vault {
-    access_identity_admin::ports::RealmKeys::vault(&w.keys, realm).unwrap()
+/// The environment's vault keys as the test world's environment keys hand them out.
+fn vault_of(w: &World, environment: EnvironmentId) -> access_identity_account::app::vault::Vault {
+    access_identity_admin::ports::EnvironmentKeys::vault(&w.keys, environment).unwrap()
 }
 
-/// A real account of the realm with the e-mail `email`, sealed under the realm's vault.
-async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -> [u8; 16] {
+/// A real account of the environment with the e-mail `email`, sealed under the environment's vault.
+async fn account(
+    w: &World,
+    (tenant, environment): (TenantId, EnvironmentId),
+    email: &str,
+) -> [u8; 16] {
     use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
-    let v = vault_of(w, realm);
-    let named = access_identity_account::app::Realm {
+    let v = vault_of(w, environment);
+    let named = access_identity_account::app::Environment {
         tenant,
-        realm,
+        environment,
         kek: &*v.kek,
         ids: &w.ids,
     };
@@ -90,19 +94,21 @@ async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -
     subject
 }
 
-pub(super) async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
+pub(super) async fn ready(slug: &str) -> (World, (TenantId, EnvironmentId), Digest, [u8; 16]) {
     Box::pin(ready_with(slug, None)).await
 }
 
 async fn ready_with(
     slug: &str,
     ct3_delay_s: Option<u64>,
-) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
+) -> (World, (TenantId, EnvironmentId), Digest, [u8; 16]) {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm_with(slug, ct3_delay_s).await;
+    let (tenant, environment, d) = w.environment_with(slug, ct3_delay_s).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    let founder = account(&w, (tenant, realm), "founder@acme.example").await;
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let founder = account(&w, (tenant, environment), "founder@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &founder, &ROOT.0)
             .await
@@ -110,11 +116,11 @@ async fn ready_with(
     );
     t.commit().await.unwrap();
     assert!(
-        !register_org(&w, (tenant, realm), d, founder, ORG, ORG_KEY)
+        !register_org(&w, (tenant, environment), d, founder, ORG, ORG_KEY)
             .await
             .unwrap()
     );
-    (w, (tenant, realm), d, founder)
+    (w, (tenant, environment), d, founder)
 }
 
 // OP-153 m.3 (b), m.10 (e), C6, Ek B 4082, 3599
@@ -178,7 +184,7 @@ async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
 }
 
 pub(super) fn as_founder(
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -189,8 +195,8 @@ pub(super) fn as_founder(
     p
 }
 
-/// Waits until the realm's identity outbox holds `n` events of `kind` (OP-153 m.4).
-async fn realm_events(w: &World, realm: RealmId, kind: &str, n: usize) {
+/// Waits until the environment's identity outbox holds `n` events of `kind` (OP-153 m.4).
+async fn environment_events(w: &World, environment: EnvironmentId, kind: &str, n: usize) {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     loop {
         let seen = access_store::identity::poll(
@@ -201,7 +207,7 @@ async fn realm_events(w: &World, realm: RealmId, kind: &str, n: usize) {
         .await
         .unwrap()
         .into_iter()
-        .filter(|e| e.realm == realm && e.kind == kind)
+        .filter(|e| e.environment == environment && e.kind == kind)
         .count();
         if seen >= n {
             assert_eq!(seen, n, "{kind}");
@@ -245,13 +251,16 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let org = t.org_by_party(ORG).await.unwrap().unwrap();
     assert_eq!(org.display_name, "Acme");
-    assert!(!org.hrd, "TN-98: home realm discovery is off by default");
+    assert!(
+        !org.hrd,
+        "TN-98: home environment discovery is off by default"
+    );
     let members = t.memberships(org.id).await.unwrap();
     assert_eq!(members.len(), 1);
     assert!(members[0].owner && members[0].source == Source::Founder);
     // OP-153 m.4, OP-149 m.4
-    realm_events(&w, at.1, "event.organization.created", 1).await;
-    realm_events(&w, at.1, "event.membership.added", 1).await;
+    environment_events(&w, at.1, "event.organization.created", 1).await;
+    environment_events(&w, at.1, "event.membership.added", 1).await;
     let bob = t.insert_subject("active", "kek-1", &[2; 40]).await.unwrap();
     t.insert_membership(org.id, bob, Source::Invite, false, Some(("member", 1)))
         .await
@@ -285,7 +294,7 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     assert_eq!(t.memberships(org.id).await.unwrap().len(), 1);
     t.commit().await.unwrap();
-    realm_events(&w, at.1, "event.membership.removed", 1).await;
+    environment_events(&w, at.1, "event.membership.removed", 1).await;
     assert_eq!(
         refused(&w, &as_founder(at, d, remove(bob), 6, founder)).await,
         Invalid::NoMember
@@ -304,7 +313,7 @@ fn invite(w: &World, body: &serde_json::Value) -> Change {
 
 pub(super) async fn create_org(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     founder: [u8; 16],
 ) -> [u8; 16] {
@@ -353,7 +362,7 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
     assert_eq!(listed[0].role, (String::from("member"), 1));
     t.commit().await.unwrap();
     // OP-153 m.3 (o)
-    realm_events(&w, at.1, "relay.message.invitation.v1", 1).await;
+    environment_events(&w, at.1, "relay.message.invitation.v1", 1).await;
 
     // TN-89
     for bad in [
@@ -410,7 +419,7 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
 
 // TN-98, §10.2.6, TN-90, OP-149 m.4, Ek B 3436, 3454, 3611
 #[tokio::test]
-async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
+async fn home_environment_discovery_needs_a_verified_uncontested_domain() {
     let (w, at, d, founder) = Box::pin(ready("org-hrd")).await;
     let org = create_org(&w, at, d, founder).await;
     let patch = |body: serde_json::Value| {
@@ -474,7 +483,7 @@ async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
         .unwrap();
     assert_eq!(t.hrd_domains(org).await.unwrap(), Vec::<String>::new());
     t.commit().await.unwrap();
-    realm_events(&w, at.1, "event.organization.updated", 1).await;
+    environment_events(&w, at.1, "event.organization.updated", 1).await;
     assert_eq!(
         refused(
             &w,
@@ -545,21 +554,21 @@ impl access_identity_admin::ports::DomainProbe for Probe {
 
 async fn watch_pass(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     probe: &Probe,
 ) -> access_identity_admin::app::domains::WatchPass {
     access_identity_admin::app::domains::DomainWatch {
         app: &w.db.app,
         probe,
     }
-    .realm(at)
+    .environment(at)
     .await
     .unwrap()
 }
 
 async fn claims_of(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     org: [u8; 16],
 ) -> Vec<access_store::org_authority::DomainClaim> {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
@@ -575,7 +584,7 @@ fn orders(events: &[access_store::identity::OutboxEvent]) -> Vec<ClaimOrder> {
         .collect()
 }
 
-async fn age(w: &World, at: (TenantId, RealmId), checked_s: i64, changed_s: i64) {
+async fn age(w: &World, at: (TenantId, EnvironmentId), checked_s: i64, changed_s: i64) {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     t.age_domain_watch(checked_s, changed_s).await.unwrap();
     t.commit().await.unwrap();
@@ -747,7 +756,7 @@ fn meta_write(
     }
 }
 
-/// The `member` role: reading accounts in the realm `slug`.
+/// The `member` role: reading accounts in the environment `slug`.
 fn member_set(slug: &str) -> access_kernel::model::AuthoritySet {
     use access_kernel::model::{ActionSet, AuthoritySet, ResourceSelector, Structural};
     AuthoritySet {
@@ -799,7 +808,7 @@ fn role_issue(d: Digest, holder: Id, (name, version): (&str, u64)) -> Payload {
 
 async fn role(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     member: ([u8; 16], [u8; 16]),
     sub: access_internal_api::idp::Submission,
 ) -> Result<Applied, AdminError> {
@@ -1016,7 +1025,7 @@ async fn an_owner_issues_the_autojoin_role_to_the_organizations_org_member_claim
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let anchor = t.party_anchor(ORG).await.unwrap().unwrap();
-    let issuer = access_store::issuer::realm_issuer(&mut t)
+    let issuer = access_store::issuer::environment_issuer(&mut t)
         .await
         .unwrap()
         .unwrap();
@@ -1305,13 +1314,15 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
     use access_identity_account::domain::claim_classes::GuardianshipBasis;
     use access_identity_admin::app::household::Household;
     let w = World::new().await;
-    let (tenant, realm, _d) = w.realm("household").await;
-    let at = (tenant, realm);
+    let (tenant, environment, _d) = w.environment("household").await;
+    let at = (tenant, environment);
     let parent = account(&w, at, "parent@family.example").await;
     let child = account(&w, at, "child@family.example").await;
     let adult = account(&w, at, "adult@family.example").await;
-    let v = vault_of(&w, realm);
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let v = vault_of(&w, environment);
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &parent, &ROOT.0)
             .await
@@ -1362,7 +1373,9 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
         .unwrap();
     identity_events(&w.db, "claim.guardianship", 1).await;
     identity_events(&w.db, "claim.age_range", 1).await;
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     let row = t.guardianship(g).await.unwrap().unwrap();
     assert!(row.majority_ms > i64::try_from(now + 7 * year_ms).unwrap());
     assert!(row.majority_ms < i64::try_from(now + 9 * year_ms).unwrap());
@@ -1393,7 +1406,9 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
         home.decide(at, declined, parent, false).await.unwrap(),
         access_kernel::combinator::Outcome::Deny
     );
-    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
     assert!(t.insert_consent(g, &[9; 32], 73 * 3_600).await.is_err());
     t.rollback().await.unwrap();
 }
@@ -1581,7 +1596,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .await
         .unwrap();
     // TN-91, OP-153 m.17 (f)
-    realm_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
+    environment_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
     // OP-153 m.25 (i) (2)
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     assert_eq!(
@@ -1759,12 +1774,12 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
 
 /// The recipient's `accept_root` contribution to the handover whose `anchor_transfer` intent is
 /// `target`, as the Approval Surface commits it (§9.14.1 A, L0-META-30): its device signs the
-/// contribute intent on its Party's own self-anchor, the realm issuer states the
+/// contribute intent on its Party's own self-anchor, the environment issuer states the
 /// `authentication` Claim bound to the Approval Act Statement over the render the domain kept,
 /// and the contribution goes to the domain with both as proofs.
 async fn accept_root(
     w: &World,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     d: Digest,
     (subject, party, seed): ([u8; 16], Id, u8),
     target: Digest,
@@ -1775,16 +1790,18 @@ async fn accept_root(
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();
-    let mut tx = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
-    let issuer = access_store::issuer::realm_issuer(&mut tx)
+    let mut tx = TenantTx::begin(&w.db.app, tenant, environment)
+        .await
+        .unwrap();
+    let issuer = access_store::issuer::environment_issuer(&mut tx)
         .await
         .unwrap()
         .unwrap();
     tx.commit().await.unwrap();
-    w.keys.open_issuer(realm, issuer).await.unwrap();
+    w.keys.open_issuer(environment, issuer).await.unwrap();
     assert!(
         w.admin()
-            .register_issuer(tenant, realm)
+            .register_issuer(tenant, environment)
             .await
             .unwrap()
             .is_some()
@@ -1846,7 +1863,7 @@ async fn accept_root(
         },
     });
     let claim = match super::claims::courier(w)
-        .issue(tenant, realm, &order)
+        .issue(tenant, environment, &order)
         .await
         .unwrap()
     {
@@ -2064,7 +2081,7 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
     let changes = [
         Change::AccountBind(AccountBind {
             subject: founder,
-            peer_realm: [0x21; 16],
+            peer_environment: [0x21; 16],
             peer_subject: [0x22; 16],
             offer: None,
         }),

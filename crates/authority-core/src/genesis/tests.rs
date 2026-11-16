@@ -24,7 +24,7 @@ impl Salts for Fixed {
 }
 
 fn values(order: &GenesisOrder) -> BTreeMap<String, Value> {
-    realm(order, &mut Fixed)
+    environment(order, &mut Fixed)
         .unwrap()
         .into_iter()
         .map(|(k, o)| (k, o.value))
@@ -48,7 +48,7 @@ fn order(root: Root) -> GenesisOrder {
 
 // TN-111, L0-META-7, OP-141 m.35 (d)
 #[test]
-fn a_realm_genesis_roots_idp_and_accepts_its_catalogs() {
+fn a_environment_genesis_roots_idp_and_accepts_its_catalogs() {
     // INV-2, INV-29, E34, MD-14
     let d = Digest([7; 32]);
     let founder = Id([2; 16]);
@@ -89,7 +89,7 @@ fn intent(action: IdpAction) -> IntentEnvelope {
         action: action.action_ref(),
         resources: vec![ResourceRef {
             namespace: String::from("idp"),
-            path: vec![String::from("acme"), String::from("realm")],
+            path: vec![String::from("acme"), String::from("environment")],
             incarnation: 0,
         }],
         params: BTreeMap::new(),
@@ -108,8 +108,8 @@ fn intent(action: IdpAction) -> IntentEnvelope {
 fn idp_actions_carry_their_consequence_tiers() {
     // IDP-5, IDI-4, TN-95, TN-117, §13.7.1
     let tier = |a: IdpAction| of(&intent(a), None, false, Some(&a.schema()));
-    assert_eq!(tier(IdpAction::RealmRpId), Tier::Ct3);
-    assert_eq!(tier(IdpAction::RealmRehome), Tier::Ct3);
+    assert_eq!(tier(IdpAction::EnvironmentRpId), Tier::Ct3);
+    assert_eq!(tier(IdpAction::EnvironmentRehome), Tier::Ct3);
     assert_eq!(tier(IdpAction::UpstreamRegister), Tier::Ct3);
     assert_eq!(tier(IdpAction::UpstreamMapping), Tier::Ct3);
     // OP-157 m.3 (t), m.19 (d)
@@ -117,15 +117,15 @@ fn idp_actions_carry_their_consequence_tiers() {
     assert_eq!(tier(IdpAction::ClientRegister), Tier::Ct2);
     assert_eq!(tier(IdpAction::ClientUpdate), Tier::Ct2);
     assert_eq!(tier(IdpAction::CimdPolicy), Tier::Ct2);
-    assert_eq!(tier(IdpAction::RealmJoseAlg), Tier::Ct2);
+    assert_eq!(tier(IdpAction::EnvironmentJoseAlg), Tier::Ct2);
     assert_eq!(tier(IdpAction::ClientRetire), Tier::Ct1);
-    assert_eq!(tier(IdpAction::RealmArgon2), Tier::Ct1);
+    assert_eq!(tier(IdpAction::EnvironmentArgon2), Tier::Ct1);
     // TN-118, TN-106, §13.2, §13.7.1, OP-73
-    assert_eq!(tier(IdpAction::RealmKeyPolicy), Tier::Ct3);
-    assert_eq!(tier(IdpAction::RealmKeyRotate), Tier::Ct3);
+    assert_eq!(tier(IdpAction::EnvironmentKeyPolicy), Tier::Ct3);
+    assert_eq!(tier(IdpAction::EnvironmentKeyRotate), Tier::Ct3);
     assert_eq!(tier(IdpAction::AccountDelete), Tier::Ct3);
-    assert_eq!(tier(IdpAction::RealmBranding), Tier::Ct2);
-    assert_eq!(tier(IdpAction::RealmKeyDrop), Tier::Ct1);
+    assert_eq!(tier(IdpAction::EnvironmentBranding), Tier::Ct2);
+    assert_eq!(tier(IdpAction::EnvironmentKeyDrop), Tier::Ct1);
     // TN-117, TN-129, TN-132, CR-38, §12.3.1, OP-151 m.2 M1
     for (a, t) in [
         (IdpAction::GroupCreate, Tier::Ct2),
@@ -138,19 +138,19 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::ClientSecretRotate, Tier::Ct2),
         (IdpAction::UpstreamUpdate, Tier::Ct3),
         (IdpAction::UpstreamRetire, Tier::Ct1),
-        (IdpAction::RealmSigninPolicy, Tier::Ct2),
-        (IdpAction::RealmSessionPolicy, Tier::Ct2),
+        (IdpAction::EnvironmentSigninPolicy, Tier::Ct2),
+        (IdpAction::EnvironmentSessionPolicy, Tier::Ct2),
         // OP-151 m.14 (f)
-        (IdpAction::RealmProtectionMode, Tier::Ct1),
-        (IdpAction::RealmProtectionModeLoosen, Tier::Ct2),
+        (IdpAction::EnvironmentProtectionMode, Tier::Ct1),
+        (IdpAction::EnvironmentProtectionModeLoosen, Tier::Ct2),
         (IdpAction::AccountCanary, Tier::Ct2),
         // OP-153 m.18 (e), m.19 (d), m.20 (g), m.22 (g), m.25 (b)
         (IdpAction::AccountBind, Tier::Ct2),
         (IdpAction::AccountImport, Tier::Ct2),
         (IdpAction::AccountMigrationExport, Tier::Ct3),
         (IdpAction::AccountGuardianshipRecord, Tier::Ct2),
-        (IdpAction::RealmCspMode, Tier::Ct1),
-        (IdpAction::RealmCspModeLoosen, Tier::Ct2),
+        (IdpAction::EnvironmentCspMode, Tier::Ct1),
+        (IdpAction::EnvironmentCspModeLoosen, Tier::Ct2),
         // OP-154 m.3 (a)
         (IdpAction::AgentRegister, Tier::Ct2),
         (IdpAction::AgentUpdate, Tier::Ct1),
@@ -168,8 +168,8 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::ClientDcrPolicyTighten, Tier::Ct1),
         (IdpAction::ClientCrossAppConnection, Tier::Ct2),
         (IdpAction::ClientCrossAppConnectionRetire, Tier::Ct1),
-        (IdpAction::RealmDeviceCode, Tier::Ct2),
-        (IdpAction::RealmDeviceCodeClose, Tier::Ct1),
+        (IdpAction::EnvironmentDeviceCode, Tier::Ct2),
+        (IdpAction::EnvironmentDeviceCodeClose, Tier::Ct1),
         // OP-155 m.3 (a)
         (IdpAction::SamlSpRegister, Tier::Ct2),
         (IdpAction::SamlSpMapping, Tier::Ct3),
@@ -206,13 +206,13 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::ClientEncryption, Tier::Ct1),
         (IdpAction::ClientSamlBearer, Tier::Ct2),
         (IdpAction::ClientLegacyBearer, Tier::Ct2),
-        (IdpAction::RealmCiba, Tier::Ct2),
-        (IdpAction::RealmCibaClose, Tier::Ct1),
-        (IdpAction::RealmCertificateLogin, Tier::Ct2),
-        (IdpAction::RealmMtlsAliases, Tier::Ct2),
-        (IdpAction::RealmHrd, Tier::Ct2),
-        (IdpAction::RealmHrdClose, Tier::Ct1),
-        (IdpAction::RealmFrontchannelLogout, Tier::Ct2),
+        (IdpAction::EnvironmentCiba, Tier::Ct2),
+        (IdpAction::EnvironmentCibaClose, Tier::Ct1),
+        (IdpAction::EnvironmentCertificateLogin, Tier::Ct2),
+        (IdpAction::EnvironmentMtlsAliases, Tier::Ct2),
+        (IdpAction::EnvironmentHrd, Tier::Ct2),
+        (IdpAction::EnvironmentHrdClose, Tier::Ct1),
+        (IdpAction::EnvironmentFrontchannelLogout, Tier::Ct2),
         (IdpAction::OrgSsoEnforce, Tier::Ct1),
         (IdpAction::OrgSsoEnforceLift, Tier::Ct2),
         (IdpAction::UpstreamAssuranceMap, Tier::Ct3),
@@ -246,16 +246,16 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::ExportSinkRetire, Tier::Ct1),
         (IdpAction::SignalSourceRegister, Tier::Ct2),
         (IdpAction::SignalSourceRetire, Tier::Ct1),
-        (IdpAction::RealmPush, Tier::Ct2),
-        (IdpAction::RealmPushClose, Tier::Ct1),
-        (IdpAction::RealmSmsOtp, Tier::Ct2),
-        (IdpAction::RealmSmsOtpClose, Tier::Ct1),
-        (IdpAction::RealmSpc, Tier::Ct2),
-        (IdpAction::RealmCoordinator, Tier::Ct2),
-        (IdpAction::RealmIys, Tier::Ct2),
-        (IdpAction::RealmIysClose, Tier::Ct1),
-        (IdpAction::RealmSecurityNotices, Tier::Ct2),
-        (IdpAction::RealmSecurityNoticesClose, Tier::Ct1),
+        (IdpAction::EnvironmentPush, Tier::Ct2),
+        (IdpAction::EnvironmentPushClose, Tier::Ct1),
+        (IdpAction::EnvironmentSmsOtp, Tier::Ct2),
+        (IdpAction::EnvironmentSmsOtpClose, Tier::Ct1),
+        (IdpAction::EnvironmentSpc, Tier::Ct2),
+        (IdpAction::EnvironmentCoordinator, Tier::Ct2),
+        (IdpAction::EnvironmentIys, Tier::Ct2),
+        (IdpAction::EnvironmentIysClose, Tier::Ct1),
+        (IdpAction::EnvironmentSecurityNotices, Tier::Ct2),
+        (IdpAction::EnvironmentSecurityNoticesClose, Tier::Ct1),
         (IdpAction::RelayResend, Tier::Ct1),
         // OP-157 m.3 (a)
         (IdpAction::AccountSigninMethodChange, Tier::Ct3),
@@ -276,26 +276,26 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::ReviewScheduleClose, Tier::Ct1),
         (IdpAction::OrgMemberBreakglass, Tier::Ct2),
         (IdpAction::OrgMemberBreakglassClear, Tier::Ct1),
-        (IdpAction::RealmDelegatedAdmin, Tier::Ct2),
-        (IdpAction::RealmDelegatedAdminClose, Tier::Ct1),
-        (IdpAction::RealmApprovalInline, Tier::Ct2),
-        (IdpAction::RealmApprovalInlineClose, Tier::Ct1),
-        (IdpAction::RealmApprovalBatch, Tier::Ct2),
-        (IdpAction::RealmApprovalBatchClose, Tier::Ct1),
+        (IdpAction::EnvironmentDelegatedAdmin, Tier::Ct2),
+        (IdpAction::EnvironmentDelegatedAdminClose, Tier::Ct1),
+        (IdpAction::EnvironmentApprovalInline, Tier::Ct2),
+        (IdpAction::EnvironmentApprovalInlineClose, Tier::Ct1),
+        (IdpAction::EnvironmentApprovalBatch, Tier::Ct2),
+        (IdpAction::EnvironmentApprovalBatchClose, Tier::Ct1),
         // OP-158 m.3 (a)
-        (IdpAction::RealmRehome, Tier::Ct3),
-        (IdpAction::RealmResidency, Tier::Ct3),
-        (IdpAction::RealmDrProfile, Tier::Ct3),
-        (IdpAction::RealmDrProfileClose, Tier::Ct1),
-        (IdpAction::RealmRateLimit, Tier::Ct2),
-        (IdpAction::RealmCryptoProfile, Tier::Ct2),
-        (IdpAction::RealmHashProfile, Tier::Ct1),
-        (IdpAction::RealmAuditTier, Tier::Ct2),
-        (IdpAction::RealmAuditTierClose, Tier::Ct1),
+        (IdpAction::EnvironmentRehome, Tier::Ct3),
+        (IdpAction::EnvironmentResidency, Tier::Ct3),
+        (IdpAction::EnvironmentDrProfile, Tier::Ct3),
+        (IdpAction::EnvironmentDrProfileClose, Tier::Ct1),
+        (IdpAction::EnvironmentRateLimit, Tier::Ct2),
+        (IdpAction::EnvironmentCryptoProfile, Tier::Ct2),
+        (IdpAction::EnvironmentHashProfile, Tier::Ct1),
+        (IdpAction::EnvironmentAuditTier, Tier::Ct2),
+        (IdpAction::EnvironmentAuditTierClose, Tier::Ct1),
         // OP-159 m.3 (a)
-        (IdpAction::RealmSigningProfile, Tier::Ct3),
-        (IdpAction::RealmSigningProfileClose, Tier::Ct1),
-        (IdpAction::RealmKexShare, Tier::Ct2),
+        (IdpAction::EnvironmentSigningProfile, Tier::Ct3),
+        (IdpAction::EnvironmentSigningProfileClose, Tier::Ct1),
+        (IdpAction::EnvironmentKexShare, Tier::Ct2),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }
@@ -343,17 +343,17 @@ fn a_genesis_publishes_the_founders_further_catalogs() {
     ] {
         o.schemas = vec![bad];
         assert!(matches!(
-            realm(&o, &mut Fixed),
+            environment(&o, &mut Fixed),
             Err(CoreError::Protocol("genesis-schema"))
         ));
     }
     o.schemas = vec![catalog(founder, "work"), catalog(founder, "work")];
-    assert!(realm(&o, &mut Fixed).is_err());
+    assert!(environment(&o, &mut Fixed).is_err());
 }
 
 // §10.1.4 rule 3, E18, OP-142, INV-12, G45, PI-13 (§9.13.2)
 #[test]
-fn the_realm_issuer_is_accepted_for_actor_binding_only() {
+fn the_environment_issuer_is_accepted_for_actor_binding_only() {
     let d = Digest([7; 32]);
     let issuer = Id([9; 16]);
     let mut o = order(Root::Sole(Id([2; 16])));
@@ -376,13 +376,13 @@ fn the_realm_issuer_is_accepted_for_actor_binding_only() {
     assert_eq!(gates[0].use_, access_kernel::claim::ACTOR_BINDING);
     assert_eq!(
         gates[0].classes,
-        REALM_ISSUER_CLASSES.map(String::from).to_vec()
+        ENVIRONMENT_ISSUER_CLASSES.map(String::from).to_vec()
     );
 }
 
 // MD-5a, TN-1, INV-37
 #[test]
-fn the_idp_anchor_covers_its_realm_only() {
+fn the_idp_anchor_covers_its_environment_only() {
     let o = order(Root::Sole(Id([2; 16])));
     let Value::Array(anchors) = values(&o).remove("anchors").unwrap() else {
         panic!("anchors");
@@ -411,7 +411,7 @@ fn the_idp_anchor_covers_its_realm_only() {
     let mut bad = order(Root::Sole(Id([2; 16])));
     bad.slug = String::new();
     assert!(matches!(
-        realm(&bad, &mut Fixed),
+        environment(&bad, &mut Fixed),
         Err(CoreError::Protocol("genesis-slug"))
     ));
 }

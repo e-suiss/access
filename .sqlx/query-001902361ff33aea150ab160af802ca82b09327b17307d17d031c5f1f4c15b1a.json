@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.kind, u.reason, o.payload AS \"payload?\"\n               FROM access.relay_undelivered u\n               LEFT JOIN access.identity_outbox o\n                 ON o.tenant_id = u.tenant_id AND o.environment_id = u.environment_id\n                AND o.id = u.outbox_id AND o.xid = u.outbox_xid\n              WHERE u.tenant_id = $1 AND u.environment_id = $2 AND u.event_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_outbox",
+            "name": "payload"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "001902361ff33aea150ab160af802ca82b09327b17307d17d031c5f1f4c15b1a"
+}

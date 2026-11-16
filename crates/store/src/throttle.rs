@@ -37,12 +37,12 @@ impl TenantTx {
         day: i32,
         horizon_days: i32,
     ) -> Result<ThrottleRow, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let tenant = Uuid::from_bytes(*self.tenant.as_bytes());
-        let realm = Uuid::from_bytes(*realm.as_bytes());
+        let environment = Uuid::from_bytes(*environment.as_bytes());
         sqlx::query!(
             "INSERT INTO access.login_throttle
-               (tenant_id, realm_id, day, key, tat_ms, failures, last_failure_ms, blocked_until_ms, locked)
+               (tenant_id, environment_id, day, key, tat_ms, failures, last_failure_ms, blocked_until_ms, locked)
              SELECT $1, $2, date '1970-01-01' + $3::int, $4,
                     coalesce(p.tat_ms, 0), coalesce(p.failures, 0), coalesce(p.last_failure_ms, 0),
                     coalesce(p.blocked_until_ms, 0), coalesce(p.locked, false)
@@ -50,13 +50,13 @@ impl TenantTx {
                LEFT JOIN LATERAL (
                  SELECT tat_ms, failures, last_failure_ms, blocked_until_ms, locked
                    FROM access.login_throttle
-                  WHERE tenant_id = $1 AND realm_id = $2 AND key = $4
+                  WHERE tenant_id = $1 AND environment_id = $2 AND key = $4
                     AND day < date '1970-01-01' + $3::int
                     AND day >= date '1970-01-01' + $3::int - $5::int
                   ORDER BY day DESC LIMIT 1) AS p ON true
-             ON CONFLICT (tenant_id, realm_id, key, day) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, key, day) DO NOTHING",
             tenant,
-            realm,
+            environment,
             day,
             key.as_slice(),
             horizon_days,
@@ -65,10 +65,10 @@ impl TenantTx {
         .await?;
         let r = sqlx::query!(
             "SELECT tat_ms, failures, last_failure_ms, blocked_until_ms, locked FROM access.login_throttle
-              WHERE day = date '1970-01-01' + $3::int AND tenant_id = $1 AND realm_id = $2 AND key = $4
+              WHERE day = date '1970-01-01' + $3::int AND tenant_id = $1 AND environment_id = $2 AND key = $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             day,
             key.as_slice(),
         )
@@ -93,13 +93,13 @@ impl TenantTx {
         day: i32,
         row: &ThrottleRow,
     ) -> Result<(), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let n = sqlx::query!(
             "UPDATE access.login_throttle
                 SET tat_ms = $5, failures = $6, last_failure_ms = $7, blocked_until_ms = $8, locked = $9
-              WHERE day = date '1970-01-01' + $3::int AND tenant_id = $1 AND realm_id = $2 AND key = $4",
+              WHERE day = date '1970-01-01' + $3::int AND tenant_id = $1 AND environment_id = $2 AND key = $4",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             day,
             key.as_slice(),
             row.tat_ms,

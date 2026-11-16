@@ -1,6 +1,6 @@
 //! Audit leaves and the tree step (OP-37): pure.
 
-pub mod realm;
+pub mod environment;
 pub mod record;
 pub mod taxonomy;
 pub mod tier;
@@ -31,7 +31,10 @@ fn uint(v: i64) -> Result<Value, AuditError> {
 pub fn leaf(row: &AuditRow) -> Result<Hash, AuditError> {
     let value = Value::Map(vec![
         (Value::text("tenant"), Value::Bytes(row.tenant.to_vec())),
-        (Value::text("realm"), Value::Bytes(row.realm.to_vec())),
+        (
+            Value::text("environment"),
+            Value::Bytes(row.environment.to_vec()),
+        ),
         (Value::text("at"), uint(row.at_ms)?),
         (Value::text("id"), uint(row.id)?),
         (Value::text("event_type"), Value::text(&row.event_type)),

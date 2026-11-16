@@ -5,14 +5,14 @@
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:account.created`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
   "type": "object",
   "required": [
-    "realm",
+    "environment",
     "account",
     "at",
     "access_position"
   ],
   "additionalProperties": false,
   "properties": {
-    "realm": {
+    "environment": {
       "$ref": "#/$defs/uuid"
     },
     "account": {

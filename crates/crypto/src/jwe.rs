@@ -1,6 +1,6 @@
 //! Compact JWE of the identity plane (RFC 7516, RFC 7518; CR-4, OP-155 m.3 (k)): ID tokens,
 //! userinfo answers and JARM responses encrypted to a client, and request objects a client
-//! encrypted to the realm. Key management is `ECDH-ES+A256KW` (primary) or `RSA-OAEP-256`
+//! encrypted to the environment. Key management is `ECDH-ES+A256KW` (primary) or `RSA-OAEP-256`
 //! (per-client opt-in); content encryption is `A256GCM`. `RSA1_5` and every other algorithm
 //! are refused, and the authority plane never uses JWE.
 

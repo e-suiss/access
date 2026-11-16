@@ -8,16 +8,22 @@
 )]
 
 use access_store::dpop::open_dpop_replay_day;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::testing::{TestDb, fresh};
 use sqlx::Executor;
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 const DAY: u32 = 20_833;
 
-async fn first_use(db: &TestDb, tenant: TenantId, realm: RealmId, day: u32, key: [u8; 32]) -> bool {
-    let mut t = TenantTx::begin(&db.app, tenant, realm).await.unwrap();
+async fn first_use(
+    db: &TestDb,
+    tenant: TenantId,
+    environment: EnvironmentId,
+    day: u32,
+    key: [u8; 32],
+) -> bool {
+    let mut t = TenantTx::begin(&db.app, tenant, environment).await.unwrap();
     let fresh = t.dpop_first_use(day, &key).await.unwrap();
     t.commit().await.unwrap();
     fresh
@@ -31,7 +37,7 @@ async fn a_replayed_key_is_reported_once_seen() {
     assert!(first_use(&db, T, R, DAY, [7; 32]).await);
     assert!(!first_use(&db, T, R, DAY, [7; 32]).await);
     assert!(first_use(&db, T, R, DAY, [8; 32]).await);
-    assert!(first_use(&db, T, RealmId::from_bytes([3; 16]), DAY, [7; 32]).await);
+    assert!(first_use(&db, T, EnvironmentId::from_bytes([3; 16]), DAY, [7; 32]).await);
     assert!(first_use(&db, TenantId::from_bytes([4; 16]), R, DAY, [7; 32]).await);
 }
 

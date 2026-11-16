@@ -1,6 +1,6 @@
-//! The realm's client certificate checks over `identity-x509` (RFC 8705 §2.1, MD-8, OP-155
-//! m.3 (k), (m)): the chain must lead to one of the CAs the realm named in its certificate
-//! setting (`idp.realm.certificate_login`), the governing domain must hold an actor-binding
+//! The environment's client certificate checks over `identity-x509` (RFC 8705 §2.1, MD-8, OP-155
+//! m.3 (k), (m)): the chain must lead to one of the CAs the environment named in its certificate
+//! setting (`idp.environment.certificate_login`), the governing domain must hold an actor-binding
 //! Acceptance of that CA, and every certificate of the path must be known not revoked (OCSP,
 //! then CRL; unknown, unreachable or stale refuses). Only then are the leaf's names read.
 
@@ -17,9 +17,9 @@ use access_store::identity::TenantTx;
 use crate::domain::fapi::CertificateNames;
 use crate::ports::oauth::Held;
 use crate::ports::profile::{CertificateRefused, ClientCertificates};
-use crate::ports::{RealmEntry, Unavailable};
+use crate::ports::{EnvironmentEntry, Unavailable};
 
-/// Client certificates checked against the realm's CAs, their Acceptance and revocation.
+/// Client certificates checked against the environment's CAs, their Acceptance and revocation.
 pub struct X509ClientCertificates {
     app: Pool,
     revocation: Arc<Revocation>,
@@ -40,10 +40,10 @@ impl X509ClientCertificates {
 
     async fn anchors(
         &self,
-        realm: &RealmEntry,
+        environment: &EnvironmentEntry,
     ) -> Result<Option<(Vec<Vec<u8>>, [u8; 32])>, Unavailable> {
         let down = |_| Unavailable;
-        let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
+        let mut t = TenantTx::begin(&self.app, environment.tenant, environment.environment)
             .await
             .map_err(down)?;
         let row = t.certificate_login().await.map_err(down)?;
@@ -74,13 +74,13 @@ fn names(leaf: &[u8]) -> Option<CertificateNames> {
 impl ClientCertificates for X509ClientCertificates {
     fn verify<'a>(
         &'a self,
-        realm: &'a RealmEntry,
+        environment: &'a EnvironmentEntry,
         chain: &'a [Vec<u8>],
         now_ms: u64,
     ) -> Held<'a, Result<CertificateNames, CertificateRefused>> {
         Box::pin(async move {
             let now = now_ms / 1000;
-            let Some((anchors, domain)) = self.anchors(realm).await? else {
+            let Some((anchors, domain)) = self.anchors(environment).await? else {
                 return Ok(Err(CertificateRefused::Untrusted));
             };
             let Ok(path) = verify(chain, &anchors, now) else {

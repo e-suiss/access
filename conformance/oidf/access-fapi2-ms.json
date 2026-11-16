@@ -1,6 +1,6 @@
 {
   "alias": "access-fapi2-ms",
-  "description": "Access realm acme, OIDF FAPI 2.0 Message Signing: signed request objects through PAR, JARM, DPoP, private_key_jwt (OP-155 m.3 (q)); the client keys are made by the target at run time",
+  "description": "Access environment acme, OIDF FAPI 2.0 Message Signing: signed request objects through PAR, JARM, DPoP, private_key_jwt (OP-155 m.3 (q)); the client keys are made by the target at run time",
   "server": {
     "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
   },

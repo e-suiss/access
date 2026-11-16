@@ -1,4 +1,4 @@
-//! The login surface on axum: realm selection by `Host`, cookies, JSON bodies and replies.
+//! The login surface on axum: environment selection by `Host`, cookies, JSON bodies and replies.
 
 #![allow(
     clippy::result_large_err,
@@ -10,7 +10,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use access_identity_oauth::ports::{Directory, Keys, RealmEntry};
+use access_identity_oauth::ports::{Directory, EnvironmentEntry, Keys};
 use access_identity_ui::app::{
     Body, Browser, FLOW_COOKIE, LOGIN_COOKIE, MARKER_COOKIE, Reply, SESSION_COOKIE,
 };
@@ -222,13 +222,13 @@ pub(crate) fn authority<'a>(uri: &'a Uri, headers: &'a HeaderMap) -> &'a str {
         .unwrap_or_default()
 }
 
-/// The realm the request reached; the plain 404 names none (§17.9.6).
-pub(super) async fn realm<D: Directory, K: Keys, KI, C, M>(
+/// The environment the request reached; the plain 404 names none (§17.9.6).
+pub(super) async fn environment<D: Directory, K: Keys, KI, C, M>(
     s: &Shared<D, K, KI, C, M>,
     params: &HashMap<String, String>,
     uri: &Uri,
     headers: &HeaderMap,
-) -> Result<RealmEntry, Response> {
+) -> Result<EnvironmentEntry, Response> {
     let slug = params.get("slug").map(String::as_str);
     // OP-156 m.3 (i)
     match s
@@ -247,7 +247,7 @@ pub(super) async fn realm<D: Directory, K: Keys, KI, C, M>(
 }
 
 /// The Frontend API is same-origin only (OP-150 m.3 (r), §14.5, CSRF): a state-changing request
-/// that names an `Origin` must name the realm host over `https`, and one that names a
+/// that names an `Origin` must name the environment host over `https`, and one that names a
 /// `Sec-Fetch-Site` must be `same-origin` or `none` (a direct navigation or a product's own
 /// client). No CORS is ever granted, so a browser on another origin never gets past its
 /// preflight; this check refuses what a browser sends without one. Cookies are `__Host-`,
@@ -345,7 +345,7 @@ macro_rules! handler {
             C: Clock + Sync,
             M: Messages,
         {
-            let $entry = match realm(&$s, &$p, &uri, &$headers).await {
+            let $entry = match environment(&$s, &$p, &uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };
@@ -741,7 +741,7 @@ handler! {
     }
 }
 
-/// `GET /login/theme.css`: the realm's colours as CSS custom properties (TN-106).
+/// `GET /login/theme.css`: the environment's colours as CSS custom properties (TN-106).
 pub(super) async fn theme_css<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
     Path(p): Params,
@@ -755,7 +755,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -775,7 +775,7 @@ where
     }
 }
 
-/// `GET /.well-known/webauthn`: the realm's Related Origins document (TN-18).
+/// `GET /.well-known/webauthn`: the environment's Related Origins document (TN-18).
 pub(super) async fn related_origins<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
     Path(p): Params,
@@ -789,7 +789,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -815,7 +815,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    if let Err(r) = realm(&s, &p, &uri, &headers).await {
+    if let Err(r) = environment(&s, &p, &uri, &headers).await {
         return r;
     }
     crate::problem::codes::NOT_YET_SERVED
@@ -824,7 +824,7 @@ where
 }
 
 /// Whether the page at `uri` has the person's device Instance sign with the Kernel (Wasm): the
-/// consent screen of a client the realm did not register (EI-18, OP-154 m.3 (k)) and the CIBA
+/// consent screen of a client the environment did not register (EI-18, OP-154 m.3 (k)) and the CIBA
 /// approval page (OP-155 m.3 (l)).
 fn signs(uri: &Uri) -> bool {
     uri.query()
@@ -862,7 +862,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -926,7 +926,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    if let Err(r) = realm(&s, &p, &uri, &headers).await {
+    if let Err(r) = environment(&s, &p, &uri, &headers).await {
         return r;
     }
     s.assets
@@ -1044,7 +1044,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s, &p, &uri, &headers).await {
+    let entry = match environment(&s, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

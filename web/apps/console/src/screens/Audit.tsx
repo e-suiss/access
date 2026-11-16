@@ -286,7 +286,7 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
-            exportAudit(ctx.instance, ctx.confirm, ctx.session.account, ctx.session.realm, {
+            exportAudit(ctx.instance, ctx.confirm, ctx.session.account, ctx.session.environment, {
               from: Number(from),
               to: Number(to),
               disclosure,

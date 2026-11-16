@@ -1,12 +1,12 @@
-//! The read-only LDAP directory of a realm (§10.6.3, IDP-16, OP-155 m.3 (n)). Sans-I/O.
+//! The read-only LDAP directory of an environment (§10.6.3, IDP-16, OP-155 m.3 (n)). Sans-I/O.
 //!
-//! - The naming context is `o=<realm slug>`, with `ou=people` and `ou=groups` under it.
+//! - The naming context is `o=<environment slug>`, with `ou=people` and `ou=groups` under it.
 //! - A person is `uid=<uid>,ou=people,…`: `inetOrgPerson` and `posixAccount`; the uid is the
 //!   account's username, else its e-mail address.
 //! - A group is `cn=<name>,ou=groups,…`: `groupOfNames` and `posixGroup` in one entry.
 //!   `memberOf` is operational.
 //! - `uidNumber` and `gidNumber` are 65 536 + (the first four bytes of SHA-256(uuid) mod
-//!   (2^31 − 65 536)); a group's uuid is derived from the realm and its name.
+//!   (2^31 − 65 536)); a group's uuid is derived from the environment and its name.
 //! - Filters are evaluated in RFC 4511 three-valued logic. Groups do not nest, so the in-chain
 //!   rule `1.2.840.113556.1.4.1941` matches direct membership.
 
@@ -29,13 +29,13 @@ pub fn posix_id(uuid: &[u8; 16]) -> u32 {
     ID_BASE.saturating_add(first.checked_rem(span).unwrap_or(0))
 }
 
-/// The stable uuid of group `name` of a realm.
+/// The stable uuid of group `name` of an environment.
 #[must_use]
-pub fn group_uuid(tenant: &[u8; 16], realm: &[u8; 16], name: &str) -> [u8; 16] {
+pub fn group_uuid(tenant: &[u8; 16], environment: &[u8; 16], name: &str) -> [u8; 16] {
     let mut m = b"access/ldap-group/v1".to_vec();
     m.push(0);
     m.extend_from_slice(tenant);
-    m.extend_from_slice(realm);
+    m.extend_from_slice(environment);
     m.extend_from_slice(name.as_bytes());
     let h = suiss_crypto::digest::sha256(&m);
     let mut out = [0_u8; 16];
@@ -226,7 +226,7 @@ pub fn uuid_text(b: &[u8; 16]) -> String {
     out
 }
 
-/// The directory tree of a realm.
+/// The directory tree of an environment.
 #[derive(Clone, Debug)]
 pub struct Tree {
     /// The naming context.
@@ -235,7 +235,7 @@ pub struct Tree {
     pub entries: Vec<Node3>,
 }
 
-/// The naming context of realm `slug`.
+/// The naming context of environment `slug`.
 #[must_use]
 pub fn suffix(slug: &str) -> Dn {
     Dn(vec![(s("o"), fold(slug))])
@@ -281,7 +281,7 @@ fn person_entry(people_ou: &Dn, p: &Person, member_of: Vec<String>) -> Node3 {
 }
 
 impl Tree {
-    /// The tree of realm `slug` over `people` and `groups`.
+    /// The tree of environment `slug` over `people` and `groups`.
     #[must_use]
     pub fn build(slug: &str, people: &[Person], groups: &[Group]) -> Self {
         let root = suffix(slug);

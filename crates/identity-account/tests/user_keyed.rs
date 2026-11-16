@@ -9,7 +9,7 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::testing::fresh;
 use access_store::user_keyed::KeyCopy;
 use suiss_retention::user_keyed::{
@@ -21,7 +21,7 @@ use suiss_retention::{
 };
 
 const T: TenantId = TenantId::from_bytes([0x71; 16]);
-const R: RealmId = RealmId::from_bytes([0x72; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([0x72; 16]);
 const NOW: Timestamp = Timestamp::from_unix_millis(1_800_000_000_000);
 
 fn subject() -> [u8; 16] {

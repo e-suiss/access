@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_ciba_requests SET used_ms = $4\n              WHERE tenant_id = $1 AND environment_id = $2 AND ciba_id = $3\n                AND decision = 'approved' AND used_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "583cd6c97f00e7ce006d871c424eab73599d7503d3f09ae7bc8108eb8675efa2"
+}

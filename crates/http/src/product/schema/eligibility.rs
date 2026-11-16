@@ -29,7 +29,7 @@ pub(super) fn components() -> Value {
             &["context"],
         ),
         "SuissCoordinator": object(
-            &json!({ "attention": text("The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue.") }),
+            &json!({ "attention": text("The coordinator's public Needs Attention endpoint the environment named (`idp.environment.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue.") }),
             &["attention"],
         ),
         "EligibleSet": object(

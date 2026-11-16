@@ -20,7 +20,7 @@ The domain decides what the product's statements mean. Its schema counts only on
 
 | Call | What happens over the wire |
 |---|---|
-| `Twin::register` | Pairs with a tenant as a platform client (`private_key_jwt`): one challenge per realm, then the product signs its own `party_register` and `instance_create` with its service key. |
+| `Twin::register` | Pairs with a tenant as a platform client (`private_key_jwt`): one challenge per environment, then the product signs its own `party_register` and `instance_create` with its service key. |
 | `Twin::publish_schema` | Publishes a Schema Publication Package with a `check` statement as its own publisher. |
 | `Twin::accepted` | Reads whether a domain accepted that package. |
 | `Twin::issue_claim` | Signs a Claim with its Instance key and sends it to Claim Ingest. |

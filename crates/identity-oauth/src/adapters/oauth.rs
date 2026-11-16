@@ -1,14 +1,14 @@
-//! Adapters of the authorization server ports: the realm's PostgreSQL rows, the back-channel
+//! Adapters of the authorization server ports: the environment's PostgreSQL rows, the back-channel
 //! courier's outbox, the identity signer, the hosted login's paths and the operating system's
 //! randomness.
 
 use access_crypto::jose::JwsAlg;
-use access_identity_signer::protocol::{Realm, Request, Response};
-use access_identity_signer::service::UNKNOWN_REALM;
+use access_identity_signer::protocol::{Environment, Request, Response};
+use access_identity_signer::service::UNKNOWN_ENVIRONMENT;
 use access_store::Pool;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
-use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
+use access_store::identity::{self, Cursor, EnvironmentId, OutboxEvent, TenantId, TenantTx};
 use access_store::idp::{self, ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -22,7 +22,7 @@ use crate::domain::tokens::LoginReason;
 use crate::ports::oauth::{LoginPages, LogoutQueue, OAuthDb, OAuthTx, Random, TokenSigner};
 use crate::ports::{Keys, Unavailable};
 
-/// The realm rows over the application pool; platform product clients of every tenant over
+/// The environment rows over the application pool; platform product clients of every tenant over
 /// the outbox reader (OP-149 m.26 (a)).
 #[derive(Clone)]
 pub struct PgOAuth {
@@ -58,8 +58,12 @@ fn down<E>(_: E) -> Unavailable {
 impl OAuthDb for PgOAuth {
     type Tx = PgOAuthTx;
 
-    async fn begin(&self, tenant: TenantId, realm: RealmId) -> Result<PgOAuthTx, Unavailable> {
-        TenantTx::begin(&self.pool, tenant, realm)
+    async fn begin(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<PgOAuthTx, Unavailable> {
+        TenantTx::begin(&self.pool, tenant, environment)
             .await
             .map(PgOAuthTx)
             .map_err(down)
@@ -193,7 +197,7 @@ impl OAuthTx for PgOAuthTx {
     }
 
     async fn previous_secret(&mut self, client_id: &str) -> Result<Option<[u8; 32]>, Unavailable> {
-        idp::realm::previous_secret(&mut self.0, client_id)
+        idp::environment::previous_secret(&mut self.0, client_id)
             .await
             .map_err(down)
     }
@@ -212,7 +216,7 @@ impl OAuthTx for PgOAuthTx {
 
     // OP-159 m.3 (o)
     async fn signing_profile(&mut self) -> Result<Option<JwsAlg>, Unavailable> {
-        let s = self.0.realm_signing().await.map_err(down)?;
+        let s = self.0.environment_signing().await.map_err(down)?;
         Ok(s.profile.as_deref().and_then(profile_alg))
     }
 
@@ -769,26 +773,33 @@ fn refused(code: &str, typ: &str) -> Unavailable {
 impl TokenSigner for SignerKeys {
     async fn sign(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> Result<String, Unavailable> {
-        let r = Realm(*realm.as_bytes());
+        let r = Environment(*environment.as_bytes());
         let request = Request::Sign {
-            realm: r,
+            environment: r,
             typ: String::from(typ),
             payload: payload.to_vec(),
             at: at_ms,
         };
         match self.ask(&request).await? {
             Response::Signed { token, .. } => return Ok(token),
-            Response::Error(code) if code == UNKNOWN_REALM => {}
+            Response::Error(code) if code == UNKNOWN_ENVIRONMENT => {}
             Response::Error(code) => return Err(refused(&code, typ)),
             _ => return Err(Unavailable),
         }
-        if self.ask(&Request::Open { realm: r, alg }).await? != Response::Opened {
+        if self
+            .ask(&Request::Open {
+                environment: r,
+                alg,
+            })
+            .await?
+            != Response::Opened
+        {
             return Err(refused("open", typ));
         }
         match self.ask(&request).await? {
@@ -798,23 +809,23 @@ impl TokenSigner for SignerKeys {
         }
     }
 
-    async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
-        Keys::jwks(self, realm).await
+    async fn jwks(&self, environment: EnvironmentId) -> Result<String, Unavailable> {
+        Keys::jwks(self, environment).await
     }
 
     // CR-41, OP-159 m.3 (o)
     async fn sign_pq(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         alg: JwsAlg,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> Result<String, Unavailable> {
         use access_identity_signer::pq::{NO_PQ, PqRequest};
-        let r = Realm(*realm.as_bytes());
+        let r = Environment(*environment.as_bytes());
         let request = Request::Pq(PqRequest::Sign {
-            realm: r,
+            environment: r,
             typ: String::from(typ),
             payload: payload.to_vec(),
             at: at_ms,
@@ -825,7 +836,7 @@ impl TokenSigner for SignerKeys {
             Response::Error(code) => return Err(refused(&code, typ)),
             _ => return Err(Unavailable),
         }
-        self.pq_open(realm, alg).await?;
+        self.pq_open(environment, alg).await?;
         match self.ask(&request).await? {
             Response::Signed { token, .. } => Ok(token),
             Response::Error(code) => Err(refused(&code, typ)),
@@ -836,13 +847,13 @@ impl TokenSigner for SignerKeys {
     // MD-6, OP-155 m.3 (k)
     async fn sign_rs256(
         &self,
-        realm: RealmId,
+        environment: EnvironmentId,
         typ: &str,
         payload: &[u8],
         at_ms: u64,
     ) -> Result<String, Unavailable> {
         let request = Request::SignRs256 {
-            realm: Realm(*realm.as_bytes()),
+            environment: Environment(*environment.as_bytes()),
             typ: String::from(typ),
             payload: payload.to_vec(),
             at: at_ms,
@@ -856,7 +867,7 @@ impl TokenSigner for SignerKeys {
 }
 
 /// The back-channel courier's outbox and cursor as `access_outbox_reader` (OP-131 m.3), its
-/// records as `access_app` under the realm's scope (OP-12).
+/// records as `access_app` under the environment's scope (OP-12).
 #[derive(Clone)]
 pub struct PgLogoutQueue {
     /// Logged in as a member of `access_outbox_reader`.
@@ -885,10 +896,10 @@ impl LogoutQueue for PgLogoutQueue {
     async fn undelivered(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         record: &LogoutUndelivered,
     ) -> Result<(), Unavailable> {
-        let mut tx = TenantTx::begin(&self.app, tenant, realm)
+        let mut tx = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         tx.backchannel_undelivered(record).await.map_err(down)?;
@@ -896,7 +907,7 @@ impl LogoutQueue for PgLogoutQueue {
     }
 }
 
-/// The hosted login at fixed paths under the realm issuer: `/login`, `/sign-out` and
+/// The hosted login at fixed paths under the environment issuer: `/login`, `/sign-out` and
 /// `/signed-out` (OP-146 I9).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HostedPages;
@@ -953,7 +964,7 @@ impl Random for OsRandom {
     }
 }
 
-/// The JWS algorithm of a realm signing profile's stored name (OP-159 m.3 (o)).
+/// The JWS algorithm of an environment signing profile's stored name (OP-159 m.3 (o)).
 #[must_use]
 pub fn profile_alg(name: &str) -> Option<JwsAlg> {
     match name {

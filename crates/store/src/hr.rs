@@ -7,14 +7,14 @@ use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::StoreError;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -150,15 +150,15 @@ impl TenantTx {
         live: bool,
         issuer: &[u8; 16],
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.hr_sources (tenant_id, realm_id, name, version, state, issuer,
+            "INSERT INTO access.hr_sources (tenant_id, environment_id, name, version, state, issuer,
                     domain_id, decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7
                FROM access.hr_sources
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             name,
             if live { "live" } else { "retired" },
             issuer.as_slice(),
@@ -175,14 +175,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_sources(&mut self) -> Result<Vec<SourceRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (name) name, state, issuer, version, decision_pos
                FROM access.hr_sources
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY name, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -222,15 +222,15 @@ impl TenantTx {
         live: bool,
         (source, vendor): (&str, &str),
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.hr_connectors (tenant_id, realm_id, name, version, state, source,
+            "INSERT INTO access.hr_connectors (tenant_id, environment_id, name, version, state, source,
                     vendor, domain_id, decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8
                FROM access.hr_connectors
-              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
             tenant,
-            realm,
+            environment,
             name,
             if live { "live" } else { "retired" },
             source,
@@ -248,14 +248,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_connectors(&mut self) -> Result<Vec<ConnectorRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (name) name, state, source, vendor, version, decision_pos
                FROM access.hr_connectors
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY name, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -283,13 +283,13 @@ impl TenantTx {
         (source, exercise): (&str, &[u8; 32]),
         (format, file, records): (&str, &[u8; 32], u32),
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.hr_imports (tenant_id, realm_id, domain_id, decision_pos, source,
+            "INSERT INTO access.hr_imports (tenant_id, environment_id, domain_id, decision_pos, source,
                     format, file, records, exercise)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             bound.domain().as_bytes().as_slice(),
             bound.raw_position(),
             source,
@@ -308,17 +308,17 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_hr_record(&mut self, r: &NewRecord<'_>) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let v = sqlx::query_scalar!(
-            "INSERT INTO access.hr_records (tenant_id, realm_id, source, person, version,
+            "INSERT INTO access.hr_records (tenant_id, environment_id, source, person, version,
                     subject_id, import_domain, import_pos, start_ms, end_ms, values_nonce,
                     values_ciphertext, issue_after_ms)
              SELECT $1, $2, $3, $4, COALESCE(MAX(version), 0) + 1, $5, $6, $7, $8, $9, $10, $11, $12
                FROM access.hr_records
-              WHERE tenant_id = $1 AND realm_id = $2 AND source = $3 AND person = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND source = $3 AND person = $4
              RETURNING version",
             tenant,
-            realm,
+            environment,
             r.source,
             r.person.as_slice(),
             Uuid::from_bytes(r.subject),
@@ -345,22 +345,22 @@ impl TenantTx {
         source: &str,
         person: &[u8; 32],
     ) -> Result<Vec<RecordRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT r.source, r.person, r.version, r.subject_id, r.start_ms, r.end_ms,
                       r.values_nonce, r.values_ciphertext, r.issue_after_ms,
                       c.outcome AS "outcome?", i.exercise
                  FROM access.hr_records r
                  JOIN access.hr_imports i
-                   ON i.tenant_id = r.tenant_id AND i.realm_id = r.realm_id
+                   ON i.tenant_id = r.tenant_id AND i.environment_id = r.environment_id
                   AND i.domain_id = r.import_domain AND i.decision_pos = r.import_pos
                  LEFT JOIN access.hr_record_claims c
-                   ON c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id
+                   ON c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id
                   AND c.source = r.source AND c.person = r.person AND c.version = r.version
-                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.source = $3 AND r.person = $4
+                WHERE r.tenant_id = $1 AND r.environment_id = $2 AND r.source = $3 AND r.person = $4
                 ORDER BY r.version"#,
             tenant,
-            realm,
+            environment,
             source,
             person.as_slice(),
         )
@@ -394,17 +394,17 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_unissued(&mut self, limit: u32) -> Result<Vec<(String, [u8; 32])>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT r.source, r.person FROM access.hr_records r
-              WHERE r.tenant_id = $1 AND r.realm_id = $2
+              WHERE r.tenant_id = $1 AND r.environment_id = $2
                 AND NOT EXISTS (SELECT 1 FROM access.hr_record_claims c
-                                 WHERE c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id
+                                 WHERE c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id
                                    AND c.source = r.source AND c.person = r.person
                                    AND c.version = r.version)
               ORDER BY r.source, r.person LIMIT $3",
             tenant,
-            realm,
+            environment,
             i64::from(limit),
         )
         .fetch_all(&mut *self.tx)
@@ -424,14 +424,14 @@ impl TenantTx {
         outcome: &str,
         at_ms: u64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.hr_record_claims (tenant_id, realm_id, source, person, version,
+            "INSERT INTO access.hr_record_claims (tenant_id, environment_id, source, person, version,
                     outcome, issued_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             source,
             person.as_slice(),
             signed(version)?,
@@ -453,15 +453,15 @@ impl TenantTx {
         person: &[u8; 32],
         change: &str,
     ) -> Result<Option<DueRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT source, person, change, version, subject_id, due_ms, state
                FROM access.hr_due
-              WHERE tenant_id = $1 AND realm_id = $2 AND source = $3 AND person = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND source = $3 AND person = $4
                 AND change = $5
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
             source,
             person.as_slice(),
             change,
@@ -493,16 +493,16 @@ impl TenantTx {
         due_ms: u64,
         state: &str,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.hr_due (tenant_id, realm_id, source, person, change, version,
+            "INSERT INTO access.hr_due (tenant_id, environment_id, source, person, change, version,
                     subject_id, due_ms, state)
              SELECT $1, $2, $3, $4, $5, COALESCE(MAX(version), 0) + 1, $6, $7, $8
                FROM access.hr_due
-              WHERE tenant_id = $1 AND realm_id = $2 AND source = $3 AND person = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND source = $3 AND person = $4
                 AND change = $5",
             tenant,
-            realm,
+            environment,
             source,
             person.as_slice(),
             change,
@@ -521,19 +521,19 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_due_now(&mut self, now_ms: u64, limit: u32) -> Result<Vec<DueRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT d.source, d.person, d.change, d.version, d.subject_id, d.due_ms, d.state
                FROM access.hr_due d
-              WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.state = 'pending'
+              WHERE d.tenant_id = $1 AND d.environment_id = $2 AND d.state = 'pending'
                 AND d.due_ms <= $3
                 AND NOT EXISTS (SELECT 1 FROM access.hr_due n
-                                 WHERE n.tenant_id = d.tenant_id AND n.realm_id = d.realm_id
+                                 WHERE n.tenant_id = d.tenant_id AND n.environment_id = d.environment_id
                                    AND n.source = d.source AND n.person = d.person
                                    AND n.change = d.change AND n.version > d.version)
               ORDER BY d.due_ms LIMIT $4",
             tenant,
-            realm,
+            environment,
             signed(now_ms)?,
             i64::from(limit),
         )
@@ -559,13 +559,13 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_sources_of(&mut self, subject: [u8; 16]) -> Result<Vec<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query_scalar!(
             "SELECT DISTINCT source FROM access.hr_records
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
               ORDER BY source",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -582,17 +582,17 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Vec<(bool, u64, u64)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             r#"SELECT one_time,
                       (extract(epoch FROM issued_at) * 1000)::bigint AS "issued_ms!",
                       (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
                  FROM access.recovery_tokens
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                   AND kind = 'temporary_access_pass'
                 ORDER BY issued_at"#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
         )
         .fetch_all(&mut *self.tx)
@@ -607,12 +607,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn hr_people(&mut self, source: &str) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query_scalar!(
             "SELECT COUNT(DISTINCT person) FROM access.hr_records
-              WHERE tenant_id = $1 AND realm_id = $2 AND source = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND source = $3",
             tenant,
-            realm,
+            environment,
             source,
         )
         .fetch_one(&mut *self.tx)
@@ -634,28 +634,28 @@ pub async fn decision_time(pool: &PgPool, bound: &Bound) -> Result<Option<u64>, 
         .map(|l| l.recorded_at))
 }
 
-/// The realms with HR work at `now_ms`: a pending date that came, or a record version whose
+/// The environments with HR work at `now_ms`: a pending date that came, or a record version whose
 /// Claims were not dealt with and may be issued. Read as `access_outbox_reader`.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realms_with_work(
+pub async fn environments_with_work(
     reader: &PgPool,
     now_ms: u64,
     limit: u32,
-) -> Result<Vec<(TenantId, RealmId)>, StoreError> {
+) -> Result<Vec<(TenantId, EnvironmentId)>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT tenant_id AS "tenant_id!", realm_id AS "realm_id!" FROM (
-             SELECT d.tenant_id, d.realm_id FROM access.hr_due d
+        r#"SELECT tenant_id AS "tenant_id!", environment_id AS "environment_id!" FROM (
+             SELECT d.tenant_id, d.environment_id FROM access.hr_due d
               WHERE d.state = 'pending' AND d.due_ms <= $1
                 AND NOT EXISTS (SELECT 1 FROM access.hr_due n
-                                 WHERE n.tenant_id = d.tenant_id AND n.realm_id = d.realm_id
+                                 WHERE n.tenant_id = d.tenant_id AND n.environment_id = d.environment_id
                                    AND n.source = d.source AND n.person = d.person
                                    AND n.change = d.change AND n.version > d.version)
              UNION
-             SELECT r.tenant_id, r.realm_id FROM access.hr_records r
+             SELECT r.tenant_id, r.environment_id FROM access.hr_records r
               WHERE NOT EXISTS (SELECT 1 FROM access.hr_record_claims c
-                                 WHERE c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id
+                                 WHERE c.tenant_id = r.tenant_id AND c.environment_id = r.environment_id
                                    AND c.source = r.source AND c.person = r.person
                                    AND c.version = r.version)
            ) w LIMIT $2"#,
@@ -669,7 +669,7 @@ pub async fn realms_with_work(
         .map(|r| {
             (
                 TenantId::from_bytes(*r.tenant_id.as_bytes()),
-                RealmId::from_bytes(*r.realm_id.as_bytes()),
+                EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             )
         })
         .collect())

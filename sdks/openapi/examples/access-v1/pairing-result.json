@@ -2,7 +2,7 @@
   "tenant": "tnt_0123456789abcdefghjkmnpqrs",
   "targets": [
     {
-      "realm": "019a0000-0000-7000-8000-0000000000a1",
+      "environment": "019a0000-0000-7000-8000-0000000000a1",
       "status": "paired",
       "party": "c3Vpc3Mtd29yay1wYXJ0eQ",
       "instance": "AZoAAAAAcACAAAAAAAAAsA",

@@ -1,4 +1,4 @@
-//! `idp.vault.*` changes (OP-154 m.3 (a), (t), MD-13): a Resource's next version and the realm's
+//! `idp.vault.*` changes (OP-154 m.3 (a), (t), MD-13): a Resource's next version and the environment's
 //! release mode, each written under its committed ALLOW; and the Resource read.
 
 use access_identity_vault::domain::resource::{Resource, VaultChange};
@@ -71,7 +71,7 @@ pub(crate) async fn write(
     Ok(true)
 }
 
-/// The realm's Resources as administrators read them, each with its decision position; a
+/// The environment's Resources as administrators read them, each with its decision position; a
 /// disabled one says so. Never a client secret, only its reference.
 ///
 /// # Errors

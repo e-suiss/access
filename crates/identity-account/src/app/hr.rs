@@ -24,7 +24,7 @@ use crate::AccountError;
 use crate::adapters::pg::PgTx;
 use crate::app::sealing::new_subject_key;
 use crate::app::vault::{self, PiiClass};
-use crate::app::{Actor, Realm, events};
+use crate::app::{Actor, Environment, events};
 use crate::domain::claims::{BINDING_TTL_MS, Bind, ClaimOrder, Content, line};
 use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::status::AccountStatus;
@@ -597,17 +597,21 @@ pub fn orders(
     out
 }
 
-/// The realm's blind index of `employee_id` under `source`: a record's key.
+/// The environment's blind index of `employee_id` under `source`: a record's key.
 ///
 /// # Errors
 /// [`AccountError::Vault`].
 pub fn person(
     v: &vault::Vault,
-    (tenant, realm): (&[u8; 16], &[u8; 16]),
+    (tenant, environment): (&[u8; 16], &[u8; 16]),
     source: &str,
     employee_id: &str,
 ) -> Result<[u8; 32], AccountError> {
-    v.index_of(tenant, realm, &format!("hr\u{0}{source}\u{0}{employee_id}"))
+    v.index_of(
+        tenant,
+        environment,
+        &format!("hr\u{0}{source}\u{0}{employee_id}"),
+    )
 }
 
 /// Seals `r` under `subject`'s profile key.
@@ -665,7 +669,7 @@ pub struct Imported {
     pub records: u64,
     /// Records that changed a person's record.
     pub changed: u64,
-    /// Accounts created for people new to the realm, `staged` until their start date.
+    /// Accounts created for people new to the environment, `staged` until their start date.
     pub created: u64,
     /// Records the same as the person's record already was.
     pub unchanged: u64,
@@ -673,16 +677,16 @@ pub struct Imported {
 
 async fn account(
     tx: &mut PgTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     r: &Record,
     who: &Actor<'_>,
 ) -> Result<([u8; 16], bool), AccountError> {
     if let Some(s) = tx.subject_by_identifier(&r.email).await? {
         return Ok((s, false));
     }
-    let wrapped = new_subject_key(realm)?;
+    let wrapped = new_subject_key(environment)?;
     let subject = tx
-        .insert_subject(AccountStatus::Staged, realm.kek.id(), &wrapped)
+        .insert_subject(AccountStatus::Staged, environment.kek.id(), &wrapped)
         .await?;
     let id = Identifier::new(IdentifierKind::Email, &r.email).map_err(|_| AccountError::Corrupt)?;
     if !tx.add_identifier(subject, &id).await? {
@@ -691,12 +695,12 @@ async fn account(
     tx.audit(&AuditEvent {
         event_type: "account.created",
         actor: who.actor,
-        target: &realm.external(subject)?,
+        target: &environment.external(subject)?,
         correlation: who.correlation,
     })
     .await?;
     // OP-151 m.3 (i)
-    events::created(tx, realm, subject).await?;
+    events::created(tx, environment, subject).await?;
     Ok((subject, true))
 }
 
@@ -754,7 +758,7 @@ async fn dates(
 }
 
 /// Writes `records` of an `idp.hr.import` of `source` bound by `bound`, in the decision's
-/// transaction: a person new to the realm gets a `staged` account, a changed record its next
+/// transaction: a person new to the environment gets a `staged` account, a changed record its next
 /// version, a mover's changed values first a version without them (TN-109), and a changed start
 /// or end date its date to apply. An unchanged record writes nothing.
 ///
@@ -762,13 +766,16 @@ async fn dates(
 /// [`AccountError`]; the caller rolls the decision's transaction back.
 pub async fn apply(
     tx: &mut PgTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     (source, bound): (&str, &Bound),
     records: &[Record],
     (now, who): (u64, &Actor<'_>),
 ) -> Result<Imported, AccountError> {
     let v = tx.vault()?.clone();
-    let scope = (*realm.tenant.as_bytes(), *realm.realm.as_bytes());
+    let scope = (
+        *environment.tenant.as_bytes(),
+        *environment.environment.as_bytes(),
+    );
     let mut out = Imported::default();
     for r in records {
         out.records = out.records.saturating_add(1);
@@ -782,7 +789,7 @@ pub async fn apply(
             Some((s, Some(b))) => (s, false, Some(b)),
             Some((_, None)) => continue,
             None => {
-                let (s, created) = account(tx, realm, r, who).await?;
+                let (s, created) = account(tx, environment, r, who).await?;
                 (s, created, None)
             }
         };

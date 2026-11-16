@@ -17,7 +17,7 @@ use super::parquet::{MESSAGE, write};
 const ACCESS_GROUP: &str = "
   required group access {
     required binary tenant (STRING);
-    required binary realm (STRING);
+    required binary environment (STRING);
     required int64 at_ms;
     required int64 id;
     required int64 xid;
@@ -48,7 +48,7 @@ fn value(row: &AuditRow) -> Result<Value, AuditError> {
         String::from("access"),
         json!({
             "tenant": uuid_text(&row.tenant),
-            "realm": uuid_text(&row.realm),
+            "environment": uuid_text(&row.environment),
             "at_ms": row.at_ms,
             "id": row.id,
             "xid": i64::try_from(row.xid).map_err(cold)?,
@@ -98,7 +98,7 @@ fn row_of(row: &Row) -> Option<AuditRow> {
     let g = group(row)?;
     Some(AuditRow {
         tenant: uuid_bytes(&text(g, "tenant")?)?,
-        realm: uuid_bytes(&text(g, "realm")?)?,
+        environment: uuid_bytes(&text(g, "environment")?)?,
         at_ms: long(g, "at_ms")?,
         id: long(g, "id")?,
         xid: u64::try_from(long(g, "xid")?).ok()?,

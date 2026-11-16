@@ -1,4 +1,4 @@
-//! `idp.federation.*` changes (OP-155 m.3 (j), IDP-19): the realm's federation settings and its
+//! `idp.federation.*` changes (OP-155 m.3 (j), IDP-19): the environment's federation settings and its
 //! trust anchors, each written under its committed ALLOW; and the trust anchors read.
 
 use access_kernel::json::b64url_encode;
@@ -87,7 +87,7 @@ pub(crate) async fn write(
     Ok(true)
 }
 
-/// The realm's trust anchors as administrators read them, keyed by the base64url of the entity
+/// The environment's trust anchors as administrators read them, keyed by the base64url of the entity
 /// identifier, with the federation settings beside each.
 ///
 /// # Errors

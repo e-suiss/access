@@ -21,7 +21,7 @@ use crate::schema::{ActionSchema, EffectClass, Reversibility};
 /// Digest context of a render.
 pub const CONTEXT: &str = "access/render/v1";
 
-/// The locale a surface renders in when the realm names none; localisations are Stage 8 and
+/// The locale a surface renders in when the environment names none; localisations are Stage 8 and
 /// change the tag, never the fields.
 pub const DEFAULT_LOCALE: &str = "en";
 

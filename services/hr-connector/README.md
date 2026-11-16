@@ -4,11 +4,11 @@ Keeps Access in step with an HR system. Each connector reads starts, leavers and
 
 ## What it does
 
-A connector reads the HR system's employee listing, maps each person to one record and pushes the records to `POST /admin/v1/realms/{slug}/hr-sources/{source}/records:batch` in batches of at most 1 000 records. Each batch is an ordinary `idp.hr.import` write: it is drafted, signed with the connector's Instance key and committed like any other administrator write. The connector decides nothing:
+A connector reads the HR system's employee listing, maps each person to one record and pushes the records to `POST /admin/v1/envs/{slug}/hr-sources/{source}/records:batch` in batches of at most 1 000 records. Each batch is an ordinary `idp.hr.import` write: it is drafted, signed with the connector's Instance key and committed like any other administrator write. The connector decides nothing:
 
 - Access reads every record and refuses a bad batch whole.
 - A record that did not change writes nothing.
-- An HR record selects people for roles only after the realm's domain accepts the HR source for `subject-selection`.
+- An HR record selects people for roles only after the environment's domain accepts the HR source for `subject-selection`.
 
 Start and end dates are applied by Access's HR job, not by the connector: a person is activated on their start date and gets a one-use passkey setup invitation, and is suspended on their end date.
 
@@ -34,7 +34,7 @@ Register the source and the connector first (`registerHrSource`, `registerHrConn
 |---|---|
 | `ACCESS_HR_LISTEN` | address to serve `/hr-connector/v1/*` on |
 | `ACCESS_HR_DATABASE_URL` | the connector's own PostgreSQL database |
-| `ACCESS_HR_CONNECTOR`, `ACCESS_HR_VENDOR`, `ACCESS_HR_REALM`, `ACCESS_HR_SOURCE` | registered connector name, vendor, realm slug, HR source |
+| `ACCESS_HR_CONNECTOR`, `ACCESS_HR_VENDOR`, `ACCESS_HR_ENVIRONMENT`, `ACCESS_HR_SOURCE` | registered connector name, vendor, environment slug, HR source |
 | `ACCESS_HR_ACCESS`, `ACCESS_HR_CA` | Access's public origin; PEM roots for Access and the HR system |
 | `ACCESS_HR_TOKEN` | file holding the DPoP-bound read token that drafts each write |
 | `ACCESS_HR_SIGNING_KEY`, `ACCESS_HR_BASIS` | PKCS#8 Ed25519 Instance key; base64url Anchor its writes are made under |

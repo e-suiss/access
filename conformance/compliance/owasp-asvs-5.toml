@@ -55,9 +55,9 @@ status = "met"
 rules = ["U22"]
 tests = [
   "crates/identity-account/src/app/artifacts/tests.rs::only_text_formats_are_taken_and_every_image_or_video_is_refused",
-  "bins/access-server/src/bootstrap/tests/product_twin/support.rs::a_large_artifact_streams_in_under_the_realm_limit_and_no_session_reads_no_body",
+  "bins/access-server/src/bootstrap/tests/product_twin/support.rs::a_large_artifact_streams_in_under_the_environment_limit_and_no_session_reads_no_body",
 ]
-note = "Uploads are text only, redacted, bounded by the realm's limit and read under their own grant."
+note = "Uploads are text only, redacted, bounded by the environment's limit and read under their own grant."
 
 [[control]]
 control = "V6 authentication"
@@ -123,7 +123,7 @@ tests = [
   "crates/crypto/tests/differential.rs::an_ml_dsa_cose_sign1_verifies_only_with_a_provider",
   "crates/crypto/tests/differential.rs::pq_and_classic_require_their_own_component",
 ]
-note = "Vetted primitives, a hybrid receipt carrier that needs both components and an ML-DSA COSE layer that needs a provider; realm post-quantum keys and the FIPS profile wait on lane J3, and the timing measurements run on the bench runner."
+note = "Vetted primitives, a hybrid receipt carrier that needs both components and an ML-DSA COSE layer that needs a provider; environment post-quantum keys and the FIPS profile wait on lane J3, and the timing measurements run on the bench runner."
 
 [[control]]
 control = "V12 secure communication"

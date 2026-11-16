@@ -52,7 +52,7 @@ pub const SESSION_MAX_MIN: u32 = 60;
 /// Longest read-only standing support access, minutes (TN-137 (2), OP-157 m.3 (c), PD).
 pub const STANDING_MAX_MIN: u32 = 24 * 60;
 
-/// The account page a request invitation opens, under the realm issuer; the operator cannot
+/// The account page a request invitation opens, under the environment issuer; the operator cannot
 /// open it (XI-7).
 pub const ACCOUNT_PATH: &str = "/account/support";
 
@@ -458,7 +458,7 @@ pub async fn ended(
 /// Most ends one sweep writes.
 const SWEEP: i64 = 200;
 
-/// Ends the realm's support access whose Grant reached its end by `now_ms` and shreds the
+/// Ends the environment's support access whose Grant reached its end by `now_ms` and shreds the
 /// support artifacts past their retention (§8.16 #5, OP-73); the requests that ended now.
 ///
 /// # Errors

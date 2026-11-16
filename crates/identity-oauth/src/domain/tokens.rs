@@ -79,7 +79,7 @@ pub enum LoginReason {
     StepUp(Aal),
     /// Ask whether to share identity claims with a third-party client (OP-153 m.3 (z)).
     Share,
-    /// Ask on the Approval Surface for a client the realm did not register: the Grant is the
+    /// Ask on the Approval Surface for a client the environment did not register: the Grant is the
     /// person's `grant.issue` with their AAS (§11.6, OP-154 m.3 (k), EI-18).
     Approve,
 }
@@ -133,13 +133,13 @@ pub fn needs_login(
 /// The facts behind every token of one grant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenFacts<'a> {
-    /// The realm issuer.
+    /// The environment issuer.
     pub issuer: &'a Issuer,
-    /// The `aud` of the access token: the realm issuer, or the platform product client the
+    /// The `aud` of the access token: the environment issuer, or the platform product client the
     /// grant named as its RFC 8707 resource (OP-149 m.26 (a)).
     pub audience: &'a str,
-    /// The realm's tenant, `tnt_…`, when the audience is a product: every product-facing
-    /// surface names the tenant (OP-149 m.19 (a), m.34 (a)); `None` for the realm's own token.
+    /// The environment's tenant, `tnt_…`, when the audience is a product: every product-facing
+    /// surface names the tenant (OP-149 m.19 (a), m.34 (a)); `None` for the environment's own token.
     pub tenant: Option<&'a str>,
     /// The client.
     pub client_id: &'a str,
@@ -188,10 +188,10 @@ pub fn id_token_claims(
     Value::Object(m).to_string().into_bytes()
 }
 
-/// The protocol-scope access token claims (RFC 9068 §2.2): one audience, the realm itself or
+/// The protocol-scope access token claims (RFC 9068 §2.2): one audience, the environment itself or
 /// the registered platform product the grant named as its resource (OP-149 m.26 (a)); always
 /// bound by `cnf.jkt` (TN-27, PI-11). A product's token also names the tenant in
-/// `access_tenant` (OP-149 m.34 (a)); the realm's own does not.
+/// `access_tenant` (OP-149 m.34 (a)); the environment's own does not.
 #[must_use]
 pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str) -> Vec<u8> {
     bound_claims(f, scope, jti, Some(json!({ "jkt": jkt })))
@@ -241,11 +241,11 @@ pub const SERVICE_TTL_MS: u64 = 5 * 60 * 1000;
 /// The facts behind a client's service token for a platform product (OP-149 m.31 (a), m.34 (b)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ServiceFacts<'a> {
-    /// The realm issuer: the caller's realm.
+    /// The environment issuer: the caller's environment.
     pub issuer: &'a Issuer,
     /// The `client_id` of the product the token is for: its one `aud` (AG-8).
     pub audience: &'a str,
-    /// The caller's `client_id`: a platform product or a tenant realm's confidential client.
+    /// The caller's `client_id`: a platform product or a tenant environment's confidential client.
     pub client_id: &'a str,
     /// The pairwise `sub` the audience reads of the caller: of its service Party when it has
     /// one, else of the client itself (MD-10, OP-149 m.34 (b)).

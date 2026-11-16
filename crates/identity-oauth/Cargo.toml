@@ -1,6 +1,6 @@
 [package]
 name = "access-identity-oauth"
-description = "OAuth 2.1 authorization server and OpenID Provider of a realm (CMP-15.1)."
+description = "OAuth 2.1 authorization server and OpenID Provider of an environment (CMP-15.1)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

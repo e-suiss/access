@@ -1,5 +1,5 @@
-//! Agent token exchange and identity assertions at the realm's real token endpoint (OP-154
-//! m.3 (m), (n), (o), (q), OP-153 m.3 (gg)): a bootstrapped realm whose sample subject P
+//! Agent token exchange and identity assertions at the environment's real token endpoint (OP-154
+//! m.3 (m), (n), (o), (q), OP-153 m.3 (gg)): a bootstrapped environment whose sample subject P
 //! delegates to an agent A1, which delegates on to an agent A2, all on the real sequencer;
 //! tokens decided and signed by the authority plane and its signer over `SoftHSM`; an issuer
 //! pinned by an `actor-binding` Acceptance at Genesis; every request through the real OAuth
@@ -41,8 +41,8 @@ use tower::ServiceExt as _;
 
 use super::*;
 
-pub(super) const ISSUER: &str = "https://access.test/realms/acme";
-const TOKEN: &str = "/realms/acme/token";
+pub(super) const ISSUER: &str = "https://access.test/env/acme";
+const TOKEN: &str = "/env/acme/token";
 const RS: &str = "https://mcp.access.test/mcp";
 pub(super) const UPSTREAM: &str = "https://upstream.access.test/api";
 pub(super) const IDP: &str = "https://idp.l2.test";
@@ -138,7 +138,7 @@ pub(super) fn idp_jwt(key: &EcdsaKeyPair, typ: &str, claims: &JsonValue) -> Stri
     format!("{input}.{}", b64url_encode(sig.as_ref()))
 }
 
-pub(super) struct Realm {
+pub(super) struct Environment {
     pub(super) w: World,
     oauth: axum::Router,
     pub(super) domain: Digest,
@@ -264,7 +264,7 @@ pub(super) async fn issue(
 /// address context, as an agent runtime on its own host would (§13.7.4).
 async fn enroll(
     w: &World,
-    (tenant, realm): (TenantId, RealmId),
+    (tenant, environment): (TenantId, EnvironmentId),
     domain: Digest,
     a: &Agent,
     n: usize,
@@ -275,7 +275,7 @@ async fn enroll(
         tenant: *tenant.as_bytes(),
         domain,
         registrant: Registrant::Device {
-            realm: *realm.as_bytes(),
+            environment: *environment.as_bytes(),
             subject: [0; 16],
         },
         party: a.party,
@@ -328,8 +328,11 @@ fn sorted(mut m: Vec<(Value, Value)>) -> Value {
     Value::Map(m)
 }
 
-impl Realm {
-    #[allow(clippy::too_many_lines, reason = "one realm and its delegation chain")]
+impl Environment {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one environment and its delegation chain"
+    )]
     pub(super) async fn open(name: &str) -> Self {
         let (w, signer) = World::open(name, true).await;
         let signer = signer.unwrap();
@@ -338,7 +341,7 @@ impl Realm {
             app: &w.db.app,
             router: &w.db.router,
             plane: &w.plane,
-            realm_keys: &w.keyring,
+            environment_keys: &w.keyring,
             hsm: &w.keys,
             base: &w.base,
             declared: &declared,
@@ -377,7 +380,7 @@ impl Realm {
         let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
         let (mut acceptances, predicate) = genesis_acceptances(Some(&sample), (None, None));
         acceptances.push(accepted);
-        b.realm(
+        b.environment(
             &b.admin(&ids, None),
             "acme",
             issuer_style(Style::Path),
@@ -412,7 +415,7 @@ impl Realm {
         let confidential = String::from(confidential_id.as_str());
         b.change(
             &admin,
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             domain,
             &root_key(&w.keys).unwrap(),
             Change::ClientRegister(access_identity_admin::domain::Client {
@@ -448,7 +451,7 @@ impl Realm {
             agent("l2-stranger"),
         );
         for (n, a) in [&a1, &a2, &stranger].into_iter().enumerate() {
-            enroll(&w, (route.tenant, route.realm), domain, a, n).await;
+            enroll(&w, (route.tenant, route.environment), domain, a, n).await;
         }
         let root = root_key(&w.keys).unwrap();
         // §9.9.4, AG-26
@@ -792,7 +795,7 @@ const JWT_TYPE: &str = "urn:ietf:params:oauth:token-type:jwt";
 // OP-154 m.3 (m), Ek B 4150, 4151, 4152, 4153, 4211, 4213, 4215, 4302, 4323, 4395, 4429, 4608
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_exchange_writes_act_from_the_lineage_only() {
-    let r = Realm::open("l2-exchange").await;
+    let r = Environment::open("l2-exchange").await;
     let subject = r.subject_token(ISSUER).await;
     let held = claims_of(&subject);
     assert!(held.get("act").is_none());
@@ -957,7 +960,7 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
     assert_eq!(body["error"], "invalid_scope");
 
     // §12.1.3 k.11
-    let foreign = r.subject_token("https://access.test/realms/other").await;
+    let foreign = r.subject_token("https://access.test/env/other").await;
     let (_, body) = r
         .exchange(
             &r.a2,
@@ -1015,7 +1018,7 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
 // OP-154 m.3 (n), (q), Ek B 4635, 4652
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_assertion_is_claim_input_used_once_and_never_a_grant() {
-    let r = Realm::open("l2-jwt-bearer").await;
+    let r = Environment::open("l2-jwt-bearer").await;
     let now_s = now_ms() / 1000;
     let jag = |jti: &str| {
         idp_jwt(
@@ -1127,7 +1130,7 @@ async fn an_assertion_is_claim_input_used_once_and_never_a_grant() {
 // OP-154 m.3 (n), (o), §11.11.2 (e), §11.12.3, Ek B 4155, 4401, 4653
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client() {
-    let r = Realm::open("l2-txn").await;
+    let r = Environment::open("l2-txn").await;
     let subject = r.subject_token(ISSUER).await;
     let (status, body) = r
         .exchange(
@@ -1336,15 +1339,15 @@ async fn transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client()
     assert_eq!(refused["error"], "invalid_target", "{refused}");
 }
 
-impl Realm {
-    /// Commits an `idp.client.cross_app_connection*` change as the realm's root.
+impl Environment {
+    /// Commits an `idp.client.cross_app_connection*` change as the environment's root.
     async fn cross_app(&self, change: Change) {
         let declared = DeclaredTargets::default();
         let b = Bootstrap {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -1357,7 +1360,7 @@ impl Realm {
         let ids = cell_ids(&self.w.db.app, &self.w.keys).await.unwrap();
         b.change(
             &b.admin(&ids, None),
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             self.domain,
             &root_key(&self.w.keys).unwrap(),
             change,

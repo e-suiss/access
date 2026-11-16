@@ -1,6 +1,6 @@
-//! A realm's identity Claim issuer key (§10.1.7, OP-144 carry-over, OP-150 L2): one Ed25519 key
-//! per realm, apart from the realm's JOSE key set so that token rotation never touches it,
-//! bound to the realm's issuer Party when it is made. It signs only `COSE_Sign1` Claims of the
+//! An environment's identity Claim issuer key (§10.1.7, OP-144 carry-over, OP-150 L2): one Ed25519 key
+//! per environment, apart from the environment's JOSE key set so that token rotation never touches it,
+//! bound to the environment's issuer Party when it is made. It signs only `COSE_Sign1` Claims of the
 //! identity issuer's classes about that Party's statements, and the two self-signed Exercises
 //! that open the Party and its Instance in a governing domain (OP-149 m.16 (a)); never a token,
 //! an AIS of anything else, or a regime Claim.
@@ -30,7 +30,7 @@ pub const LABEL: &str = "claim-issuer";
 /// and identity bindings, account status, device posture and the result of a recovery (OP-153
 /// m.3 (c)), the agent record's export: operator, sponsor and kind (OP-154 m.3 (c), AG-20),
 /// what a verified workload credential or hardware attestation shows (OP-154 m.3 (d), (s),
-/// U20), the realm issuer's registry classes (OP-153 m.2 N0, m.3 (o), (p), (q)) and the
+/// U20), the environment issuer's registry classes (OP-153 m.2 N0, m.3 (o), (p), (q)) and the
 /// `org_member` scalar beside `membership` (OP-153 m.25 (i)). Regime classes are never its own.
 pub const CLASSES: [&str; 16] = [
     "authentication",
@@ -69,7 +69,7 @@ pub fn issues(class: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum IssuerError {
-    /// The stored key belongs to another realm or another Party.
+    /// The stored key belongs to another environment or another Party.
     #[error("vault holds another issuer's key")]
     OtherIssuer,
     /// The stored key cannot be read or loaded.
@@ -138,9 +138,9 @@ pub struct Registration {
     pub step: Step,
 }
 
-/// A realm's Claim issuer key.
+/// An environment's Claim issuer key.
 pub struct IssuerKey {
-    realm: [u8; 16],
+    environment: [u8; 16],
     party: [u8; 16],
     signer: Box<dyn Signer + Send>,
     key: [u8; 32],
@@ -156,14 +156,14 @@ fn ed25519(key: &PublicKey) -> Option<[u8; 32]> {
 
 impl IssuerKey {
     fn of(
-        realm: [u8; 16],
+        environment: [u8; 16],
         party: [u8; 16],
         signer: Box<dyn Signer + Send>,
         sealed: Vec<u8>,
     ) -> Result<Self, IssuerError> {
         let key = ed25519(&signer.public_key()).ok_or(IssuerError::Stored)?;
         Ok(Self {
-            realm,
+            environment,
             party,
             signer,
             key,
@@ -171,28 +171,28 @@ impl IssuerKey {
         })
     }
 
-    /// A new key of `realm`'s issuer Party `party`, sealed by the factory (MD-3: Ed25519).
+    /// A new key of `environment`'s issuer Party `party`, sealed by the factory (MD-3: Ed25519).
     ///
     /// # Errors
     /// [`IssuerError::Generate`].
     pub fn generate(
-        realm: [u8; 16],
+        environment: [u8; 16],
         party: [u8; 16],
         factory: &mut dyn KeyFactory,
     ) -> Result<Self, IssuerError> {
         let generated = factory
             .generate(JwsAlg::Ed25519)
             .map_err(|_| IssuerError::Generate)?;
-        Self::of(realm, party, generated.signer, generated.sealed)
+        Self::of(environment, party, generated.signer, generated.sealed)
     }
 
-    /// The key of `realm` from its stored form; the stored public key must match the unsealed
-    /// one and the stored realm must be `realm`.
+    /// The key of `environment` from its stored form; the stored public key must match the unsealed
+    /// one and the stored environment must be `environment`.
     ///
     /// # Errors
     /// [`IssuerError`].
     pub fn restore(
-        realm: [u8; 16],
+        environment: [u8; 16],
         stored: &[u8],
         factory: &mut dyn KeyFactory,
     ) -> Result<Self, IssuerError> {
@@ -205,7 +205,7 @@ impl IssuerKey {
             Some(Value::Bytes(sealed)),
         ) = (
             v.get("label"),
-            v.get("realm"),
+            v.get("environment"),
             v.get("party"),
             v.get("key"),
             v.get("sealed"),
@@ -213,7 +213,7 @@ impl IssuerKey {
         else {
             return Err(IssuerError::Stored);
         };
-        if label != LABEL || r.as_slice() != realm.as_slice() {
+        if label != LABEL || r.as_slice() != environment.as_slice() {
             return Err(IssuerError::OtherIssuer);
         }
         let party = <[u8; 16]>::try_from(party.as_slice()).map_err(|_| IssuerError::Stored)?;
@@ -223,16 +223,19 @@ impl IssuerKey {
         if ed25519(&signer.public_key()).map(|k| k.to_vec()).as_ref() != Some(key) {
             return Err(IssuerError::Stored);
         }
-        Self::of(realm, party, signer, sealed.clone())
+        Self::of(environment, party, signer, sealed.clone())
     }
 
-    /// The stored form: label, realm, Party, public key and sealed private material, never
+    /// The stored form: label, environment, Party, public key and sealed private material, never
     /// plaintext.
     #[must_use]
     pub fn stored(&self) -> Option<Vec<u8>> {
         let v = Value::Map(vec![
             (Value::text("label"), Value::text(LABEL)),
-            (Value::text("realm"), Value::Bytes(self.realm.to_vec())),
+            (
+                Value::text("environment"),
+                Value::Bytes(self.environment.to_vec()),
+            ),
             (Value::text("party"), Value::Bytes(self.party.to_vec())),
             (Value::text("key"), Value::Bytes(self.key.to_vec())),
             (Value::text("sealed"), Value::Bytes(self.sealed.clone())),

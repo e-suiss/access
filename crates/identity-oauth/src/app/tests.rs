@@ -2,19 +2,19 @@
 
 use std::sync::Mutex;
 
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 
 use super::*;
 use crate::domain::issuer::Issuer;
 
 struct Rows {
-    realms: Vec<RealmEntry>,
+    environments: Vec<EnvironmentEntry>,
     hosts: Vec<(&'static str, usize)>,
     down: bool,
 }
 
 impl Directory for Rows {
-    async fn by_host(&self, host: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_host(&self, host: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         if self.down {
             return Err(Unavailable);
         }
@@ -22,25 +22,28 @@ impl Directory for Rows {
             .hosts
             .iter()
             .find(|(h, _)| *h == host)
-            .and_then(|(_, i)| self.realms.get(*i).cloned()))
+            .and_then(|(_, i)| self.environments.get(*i).cloned()))
     }
 
-    async fn by_slug(&self, slug: &str) -> Result<Option<RealmEntry>, Unavailable> {
+    async fn by_slug(&self, slug: &str) -> Result<Option<EnvironmentEntry>, Unavailable> {
         if self.down {
             return Err(Unavailable);
         }
-        Ok(self.realms.iter().find(|r| r.slug == slug).cloned())
+        Ok(self.environments.iter().find(|r| r.slug == slug).cloned())
     }
 
-    async fn all(&self) -> Result<Vec<RealmEntry>, Unavailable> {
+    async fn all(&self) -> Result<Vec<EnvironmentEntry>, Unavailable> {
         if self.down {
             return Err(Unavailable);
         }
-        Ok(self.realms.clone())
+        Ok(self.environments.clone())
     }
 
-    async fn facts(&self, realm: &RealmEntry) -> Result<crate::ports::Facts, Unavailable> {
-        let n = realm.realm.as_bytes()[0];
+    async fn facts(
+        &self,
+        environment: &EnvironmentEntry,
+    ) -> Result<crate::ports::Facts, Unavailable> {
+        let n = environment.environment.as_bytes()[0];
         Ok(crate::ports::Facts {
             public_sub_clients: u64::from(n == 3),
             domain: Some([n; 32]),
@@ -65,25 +68,25 @@ impl Keys for FakeKeys {
         if self.down { Err(Unavailable) } else { Ok(()) }
     }
 
-    async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
+    async fn jwks(&self, environment: EnvironmentId) -> Result<String, Unavailable> {
         if self.down {
             return Err(Unavailable);
         }
-        self.asked.lock().unwrap().push(*realm.as_bytes());
+        self.asked.lock().unwrap().push(*environment.as_bytes());
         if self.empty {
             return Ok(String::from(EMPTY_JWKS));
         }
         Ok(format!(
             r#"{{"keys":[{{"kid":"{}"}}]}}"#,
-            realm.as_bytes()[0]
+            environment.as_bytes()[0]
         ))
     }
 }
 
-fn realm(n: u8, slug: &str, issuer: &str) -> RealmEntry {
-    RealmEntry {
+fn environment(n: u8, slug: &str, issuer: &str) -> EnvironmentEntry {
+    EnvironmentEntry {
         tenant: TenantId::from_bytes([n; 16]),
-        realm: RealmId::from_bytes([n; 16]),
+        environment: EnvironmentId::from_bytes([n; 16]),
         slug: slug.to_owned(),
         issuer: Issuer::parse(issuer).unwrap(),
     }
@@ -91,10 +94,10 @@ fn realm(n: u8, slug: &str, issuer: &str) -> RealmEntry {
 
 fn rows() -> Rows {
     Rows {
-        realms: vec![
-            realm(1, "acme", "https://acme.id.example"),
-            realm(2, "beta", "https://id.example/realms/beta"),
-            realm(3, "gamma", "https://gamma.id.example"),
+        environments: vec![
+            environment(1, "acme", "https://acme.id.example"),
+            environment(2, "beta", "https://id.example/env/beta"),
+            environment(3, "gamma", "https://gamma.id.example"),
         ],
         hosts: vec![
             ("acme.id.example", 0),
@@ -119,7 +122,7 @@ fn issuer_of(reply: &Reply) -> String {
 
 // TN-10, §17.9.6, OP-132 m.3
 #[tokio::test]
-async fn host_selects_the_realm_and_the_row_names_the_issuer() {
+async fn host_selects_the_environment_and_the_row_names_the_issuer() {
     let s = service();
     for authority in ["acme.id.example", "ACME.ID.EXAMPLE", "acme.id.example:443"] {
         let reply = s
@@ -142,7 +145,7 @@ async fn host_selects_the_realm_and_the_row_names_the_issuer() {
 
 // §17.9.6
 #[tokio::test]
-async fn unknown_or_mismatched_hosts_find_no_realm() {
+async fn unknown_or_mismatched_hosts_find_no_environment() {
     let s = service();
     for authority in [
         "nope.id.example",
@@ -174,7 +177,7 @@ async fn path_issuers_resolve_by_slug_on_their_origin() {
     let r = s
         .serve(Document::OpenIdConfiguration, "id.example", Some("beta"))
         .await;
-    assert_eq!(issuer_of(&r), "https://id.example/realms/beta");
+    assert_eq!(issuer_of(&r), "https://id.example/env/beta");
     for (authority, slug) in [
         ("other.example", Some("beta")),
         ("acme.id.example", Some("acme")),
@@ -192,7 +195,7 @@ async fn path_issuers_resolve_by_slug_on_their_origin() {
 
 // CR-19, CMP-22b
 #[tokio::test]
-async fn jwks_is_the_realms_own_and_fails_closed() {
+async fn jwks_is_the_environments_own_and_fails_closed() {
     let s = service();
     assert_eq!(
         s.serve(Document::Jwks, "gamma.id.example", None).await,
@@ -227,17 +230,17 @@ async fn jwks_is_the_realms_own_and_fails_closed() {
 // OP-138, §17.9.7, CMP-22b
 #[tokio::test]
 async fn startup_checks_fail_fast() {
-    let base = RealmBase::parse("https://id.example").unwrap();
+    let base = EnvironmentBase::parse("https://id.example").unwrap();
     let s = service();
     assert_eq!(s.check(&base).await, Ok(3));
     assert_eq!(s.keys.asked.lock().unwrap().len(), 3);
-    let other = RealmBase::parse("https://login.example").unwrap();
+    let other = EnvironmentBase::parse("https://login.example").unwrap();
     assert_eq!(
         s.check(&other).await,
         Err(StartupError::Issuer(String::from("acme")))
     );
     let mut renamed = rows();
-    renamed.realms[1] = realm(2, "beta", "https://id.example/realms/gamma");
+    renamed.environments[1] = environment(2, "beta", "https://id.example/env/gamma");
     assert_eq!(
         Discovery::new(renamed, FakeKeys::default())
             .check(&base)
@@ -304,7 +307,7 @@ async fn public_sub_is_declared_only_where_a_client_opted_in() {
 
 // §11.3.3, AG-3, OP-148, Ek B 4167, 4654
 #[tokio::test]
-async fn cimd_support_is_declared_only_where_the_realm_accepts_cimd() {
+async fn cimd_support_is_declared_only_where_the_environment_accepts_cimd() {
     let s = service();
     for doc in [Document::OpenIdConfiguration, Document::AuthorizationServer] {
         let acme = metadata_of(&s.serve(doc, "acme.id.example", None).await);
@@ -320,7 +323,7 @@ async fn cimd_support_is_declared_only_where_the_realm_accepts_cimd() {
 
 // OP-155 m.3 (m), RFC 8705 §5, Ek B 4673
 #[tokio::test]
-async fn mtls_aliases_need_the_listener_and_the_realms_decision() {
+async fn mtls_aliases_need_the_listener_and_the_environments_decision() {
     let s = service();
     let gamma = metadata_of(
         &s.serve(Document::AuthorizationServer, "gamma.id.example", None)

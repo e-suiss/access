@@ -4,7 +4,7 @@
 // own sign-in of the bootstrap test user (signin.setup.ts) and one page whose device they set up
 // once. The test user gave the sample agent a Grant over the sample's whole namespace, a broad
 // delegation the Changes count as a suggestion only. The bootstrap made a support operator in its support organization, the
-// realm's case system and the test user's open case; before this run the image workflow had the
+// environment's case system and the test user's open case; before this run the image workflow had the
 // operator ask, the test user's device give and the operator's own Instance view the account
 // (access-local-client support-episode). Here the person reads that access and its use under the
 // operator's name, the operator asks again, the person gives it on the page and revokes both.
@@ -12,7 +12,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { type BrowserContext, expect, request as http, test, type Page } from "@playwright/test";
 
 import { OWN_DEVICE_SESSION } from "./session.js";
-import { PASSWORD, REALM, signInWithPassword } from "./signin.js";
+import { PASSWORD, ENVIRONMENT, signInWithPassword } from "./signin.js";
 
 const OPERATOR = process.env["ACCESS_LIVE_SUPPORT_OPERATOR"];
 const SUBJECT = process.env["ACCESS_LIVE_TEST_SUBJECT"];
@@ -34,7 +34,7 @@ const sign = (page: Page) =>
     .click();
 
 async function setUpDevice(page: Page): Promise<void> {
-  await page.goto(`${REALM}/account/authority`);
+  await page.goto(`${ENVIRONMENT}/account/authority`);
   await page.getByRole("button", { name: "Set up this device" }).click();
   await sign(page);
   await expect(page.getByTestId("hub")).toBeVisible();
@@ -61,7 +61,7 @@ test.describe("@live support access", () => {
   });
 
   test("@live the person's support page answers, blocks and is accessible", async () => {
-    await page.goto(`${REALM}/account/support`);
+    await page.goto(`${ENVIRONMENT}/account/support`);
     await expect(page.getByTestId("support-access")).toBeVisible();
     await axe(page);
     await page.getByTestId("support-block").click();
@@ -82,7 +82,7 @@ test.describe("@live support access", () => {
     const origin = baseURL ?? "";
 
     // §8.16 S6: the episode's view is the operator's, never the person's
-    await page.goto(`${REALM}/account/activity`);
+    await page.goto(`${ENVIRONMENT}/account/activity`);
     const use = page
       .getByTestId("activity")
       .getByTestId("use")
@@ -91,7 +91,7 @@ test.describe("@live support access", () => {
     await expect(use.first()).not.toContainText("You acted");
 
     // §8.16 S2: what the person gave, with whom and for which case
-    await page.goto(`${REALM}/account/support`);
+    await page.goto(`${ENVIRONMENT}/account/support`);
     const active = page.getByTestId("support-active");
     await expect(active.first()).toContainText(`${NAMED} · case ${CASE}`);
     await expect(active.first()).toContainText("View only");
@@ -99,7 +99,7 @@ test.describe("@live support access", () => {
     // XI-7: the operator only asks; the person is invited to their own page
     const operator = await http.newContext({ baseURL: origin, ignoreHTTPSErrors: true });
     await signInWithPassword(operator, origin, OPERATOR ?? "", PASSWORD);
-    const asked = await operator.post(`${REALM}/v1/support/requests`, {
+    const asked = await operator.post(`${ENVIRONMENT}/v1/support/requests`, {
       headers: {
         origin,
         "sec-fetch-site": "same-origin",
@@ -141,7 +141,7 @@ test.describe("@live support access", () => {
 
   // XI-19, Ek B 5566
   test("@live the person's Changes count the broad delegation as a suggestion only", async () => {
-    await page.goto(`${REALM}/account/authority`);
+    await page.goto(`${ENVIRONMENT}/account/authority`);
     await expect(page.getByTestId("hub")).toBeVisible();
     await page.getByRole("link", { name: "Changes" }).click();
     const hygiene = page.getByTestId("hygiene");

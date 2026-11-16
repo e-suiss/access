@@ -77,7 +77,7 @@ pub async fn open_tenant(
     .await?)
 }
 
-/// The partitions past their hot window whose rows the cell and realm checkpoints all cover
+/// The partitions past their hot window whose rows the cell and environment checkpoints all cover
 /// (archive role).
 ///
 /// # Errors
@@ -113,7 +113,7 @@ pub async fn rows(
     limit: u32,
 ) -> Result<Vec<AuditRow>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT tenant_id AS "tenant_id!", realm_id AS "realm_id!",
+        r#"SELECT tenant_id AS "tenant_id!", environment_id AS "environment_id!",
                   (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id AS "id!",
                   xid::text::bigint AS "xid!", event_type AS "event_type!", actor AS "actor!",
                   target AS "target!", correlation AS "correlation!"
@@ -129,7 +129,7 @@ pub async fn rows(
         .map(|r| {
             Ok(AuditRow {
                 tenant: *r.tenant_id.as_bytes(),
-                realm: *r.realm_id.as_bytes(),
+                environment: *r.environment_id.as_bytes(),
                 at_ms: r.at_ms,
                 id: r.id,
                 xid: unsigned(r.xid)?,
@@ -203,37 +203,37 @@ pub async fn moves(archive: &PgPool) -> Result<Vec<Moved>, StoreError> {
         .collect()
 }
 
-/// A realm's audit tier as `idp.realm.audit_tier` set it (OP-158 m.3 (a), (w)).
+/// An environment's audit tier as `idp.environment.audit_tier` set it (OP-158 m.3 (a), (w)).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RealmTier {
+pub struct EnvironmentTier {
     /// Days the hot window keeps.
     pub hot_days: u32,
-    /// The cold tier target the realm declared.
+    /// The cold tier target the environment declared.
     pub target: String,
 }
 
-/// Writes the next version of the realm's audit tier; `None` closes it (`audit_tier_close`).
+/// Writes the next version of the environment's audit tier; `None` closes it (`audit_tier_close`).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn put_realm_tier(
+pub async fn put_environment_tier(
     t: &mut crate::identity::TenantTx,
     bound: &crate::idp::Bound,
-    tier: Option<&RealmTier>,
+    tier: Option<&EnvironmentTier>,
 ) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let hot = tier
         .map(|x| i32::try_from(x.hot_days).map_err(|_| StoreError::Range))
         .transpose()?;
     sqlx::query!(
         "INSERT INTO access.idp_audit_tiers
-           (tenant_id, realm_id, version, hot_days, target, domain_id, decision_pos)
+           (tenant_id, environment_id, version, hot_days, target, domain_id, decision_pos)
          SELECT $1, $2,
                 COALESCE((SELECT max(version) FROM access.idp_audit_tiers
-                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                 $3, $4, $5, $6",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         hot,
         tier.map(|x| x.target.as_str()),
         bound.domain().as_bytes().as_slice(),
@@ -244,25 +244,25 @@ pub async fn put_realm_tier(
     Ok(())
 }
 
-/// The realm's audit tier in force, `None` when it was never set or is closed.
+/// The environment's audit tier in force, `None` when it was never set or is closed.
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn realm_tier(
+pub async fn environment_tier(
     t: &mut crate::identity::TenantTx,
-) -> Result<Option<RealmTier>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+) -> Result<Option<EnvironmentTier>, StoreError> {
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let row = sqlx::query!(
         "SELECT hot_days, target FROM access.idp_audit_tiers
-          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(&mut *t.tx)
     .await?;
     Ok(match row {
         Some(r) => match (r.hot_days, r.target) {
-            (Some(h), Some(target)) => Some(RealmTier {
+            (Some(h), Some(target)) => Some(EnvironmentTier {
                 hot_days: u32::try_from(h).map_err(|_| StoreError::Corrupt)?,
                 target,
             }),

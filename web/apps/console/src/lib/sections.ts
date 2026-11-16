@@ -40,7 +40,7 @@ export const SCREENS = {
   developer: ["schemas", "integrations", "lab", "logs"],
   audit: ["records", "replay", "revocation", "unknown", "containment", "export", "recovery"],
   // OP-159 m.41 (b)
-  platform: ["tenants", "realms", "sandboxes", "operator"],
+  platform: ["tenants", "envs", "sandboxes", "operator"],
 } as const satisfies Readonly<Record<Section, readonly string[]>>;
 
 export type Screen = (typeof SCREENS)[Section][number];
@@ -50,7 +50,7 @@ export interface Probe {
   readonly namespace: string;
   readonly name: string;
   readonly major: number;
-  readonly resource: "domain" | "realm" | "audit";
+  readonly resource: "domain" | "environment" | "audit";
 }
 
 const meta = (name: string): Probe => ({ namespace: "access", name, major: 1, resource: "domain" });
@@ -58,7 +58,7 @@ const idp = (namespace: string, name: string): Probe => ({
   namespace: `idp.${namespace}`,
   name,
   major: 1,
-  resource: "realm",
+  resource: "environment",
 });
 /**
  * A screen whose lane has not served it yet asks nothing and so is never shown: there are no
@@ -69,7 +69,7 @@ const planned = (probes: readonly Probe[]): readonly Probe[] => probes.slice(0, 
 const platform = (name: string): Probe => idp("platform", name);
 const PLATFORM: readonly Probe[] = [
   platform("tenant_create"),
-  platform("realm_create"),
+  platform("environment_create"),
   platform("sandbox_create"),
 ];
 // OP-151 m.8 (h)
@@ -77,7 +77,7 @@ const AUDIT: Probe = { namespace: "access", name: "read", major: 1, resource: "a
 
 /** The actions behind each screen; a screen appears when any one of them is eligible. */
 export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
-  roles: [meta("authority_set_define"), meta("grant_amend"), idp("realm", "delegated_admin")],
+  roles: [meta("authority_set_define"), meta("grant_amend"), idp("environment", "delegated_admin")],
   people: [meta("instance_terminate"), idp("account", "suspend")],
   sources: [meta("acceptance_establish"), meta("acceptance_amend")],
   restrictions: [meta("policy_set")],
@@ -120,20 +120,20 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
     idp("support", "artifact_policy"),
   ]),
   // OP-158 m.4 (a), m.3 (o)
-  placement: [idp("realm", "residency"), idp("realm", "rehome")],
+  placement: [idp("environment", "residency"), idp("environment", "rehome")],
   // OP-158 m.4 (a), m.3 (n), (p), (r)
-  durability: [idp("realm", "dr_profile"), idp("realm", "dr_profile_close")],
+  durability: [idp("environment", "dr_profile"), idp("environment", "dr_profile_close")],
   // OP-158 m.4 (a), m.3 (v)
-  ratelimits: [idp("realm", "rate_limit")],
+  ratelimits: [idp("environment", "rate_limit")],
   // OP-159 m.4 (a), m.3 (o), (r), (t)
   signing: [
-    idp("realm", "signing_profile"),
-    idp("realm", "signing_profile_close"),
-    idp("realm", "kex_share"),
+    idp("environment", "signing_profile"),
+    idp("environment", "signing_profile_close"),
+    idp("environment", "kex_share"),
   ],
   "sign-in": [
-    idp("realm", "signin_policy"),
-    idp("realm", "branding"),
+    idp("environment", "signin_policy"),
+    idp("environment", "branding"),
     idp("client", "register"),
     idp("upstream", "register"),
     // OP-156 m.3 (i)
@@ -155,23 +155,23 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   recovery: [AUDIT],
   // OP-159 m.41 (b)
   tenants: PLATFORM,
-  realms: [platform("realm_create")],
+  envs: [platform("environment_create")],
   sandboxes: [platform("sandbox_create")],
   operator: PLATFORM,
 };
 
-/** The intent `probe` asks about in `realm`. */
+/** The intent `probe` asks about in `environment`. */
 const RESOURCE: Readonly<Record<Probe["resource"], string>> = {
   domain: "access.domain",
-  // OP-151 m.19 (a): the realm's `idp` resources, as every `idp.*` change names them
-  realm: "idp",
+  // OP-151 m.19 (a): the environment's `idp` resources, as every `idp.*` change names them
+  environment: "idp",
   audit: "access.audit",
 };
 
-export function probeIntent(realm: string, probe: Probe): Wanted {
+export function probeIntent(environment: string, probe: Probe): Wanted {
   return {
     action: { namespace: probe.namespace, name: probe.name, major: probe.major },
-    resources: [{ namespace: RESOURCE[probe.resource], path: [realm] }],
+    resources: [{ namespace: RESOURCE[probe.resource], path: [environment] }],
   };
 }
 
@@ -195,7 +195,7 @@ async function asks(subject: string, set: unknown): Promise<boolean> {
 
 async function eligible(
   instance: Instance,
-  realm: string,
+  environment: string,
   probe: Probe,
   holdings: () => Promise<readonly Holding[]>,
 ): Promise<boolean> {
@@ -203,7 +203,7 @@ async function eligible(
   const subject = instance.party;
   if (subject === undefined) return false;
   try {
-    const d = await draft(instance, probeIntent(realm, probe), "check");
+    const d = await draft(instance, probeIntent(environment, probe), "check");
     // OP-151 m.20 (d): the set is the drafted probe, its domain, root basis and capacity
     if (d.probe === undefined) return false;
     // OP-152 m.7 (b), OP-159 m.43 (c), §13.7.4
@@ -221,24 +221,27 @@ async function eligible(
 }
 
 /**
- * One round of probes per device Instance and realm (§13.7.4): the check limit counts every
+ * One round of probes per device Instance and environment (§13.7.4): the check limit counts every
  * eligibility check of a console session, so a page that sets the same Instance again asks
  * nothing again.
  */
 const rounds = new Map<string, Promise<ReadonlySet<Screen>>>();
 
 /** The screens the viewer may see: any probe of the screen answered eligible. */
-export function visibleScreens(instance: Instance, realm: string): Promise<ReadonlySet<Screen>> {
-  const key = `${realm}/${instance.id}`;
+export function visibleScreens(
+  instance: Instance,
+  environment: string,
+): Promise<ReadonlySet<Screen>> {
+  const key = `${environment}/${instance.id}`;
   let round = rounds.get(key);
   if (round === undefined) {
-    round = probeScreens(instance, realm);
+    round = probeScreens(instance, environment);
     rounds.set(key, round);
   }
   return round;
 }
 
-async function probeScreens(instance: Instance, realm: string): Promise<ReadonlySet<Screen>> {
+async function probeScreens(instance: Instance, environment: string): Promise<ReadonlySet<Screen>> {
   const all = Object.keys(PROBES) as Screen[];
   const probes = new Map<string, Promise<boolean>>();
   let held: Promise<readonly Holding[]> | undefined;
@@ -253,7 +256,7 @@ async function probeScreens(instance: Instance, realm: string): Promise<Readonly
     const key = `${p.namespace}/${p.name}/${String(p.major)}/${p.resource}`;
     let answer = probes.get(key);
     if (answer === undefined) {
-      answer = eligible(instance, realm, p, holdings);
+      answer = eligible(instance, environment, p, holdings);
       probes.set(key, answer);
     }
     return answer;

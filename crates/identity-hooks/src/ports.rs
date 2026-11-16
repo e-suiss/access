@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use access_crypto::webhook::{WebhookSecret, WebhookSigningKey};
 use access_store::events::SealedKey;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use zeroize::Zeroizing;
 
 use crate::domain::{Call, HookPoint, Outcome, Registration, Reply};
@@ -23,8 +23,8 @@ pub type CallFuture<'a> = Pin<Box<dyn Future<Output = Outcome> + Send + 'a>>;
 /// at their call point and act on the [`Outcome`]. It never fails: whatever goes wrong is a
 /// refusal (MD-8), or, for `token_issuance` with `continue_without_claims`, no claims.
 pub trait HookCaller: Send + Sync {
-    /// Calls the realm's live hook at `call`'s point, if there is one.
-    fn call(&self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'_>;
+    /// Calls the environment's live hook at `call`'s point, if there is one.
+    fn call(&self, tenant: TenantId, environment: EnvironmentId, call: Call) -> CallFuture<'_>;
 }
 
 /// No hook anywhere: every call point goes on unchanged.
@@ -32,7 +32,7 @@ pub trait HookCaller: Send + Sync {
 pub struct NoHooks;
 
 impl HookCaller for NoHooks {
-    fn call(&self, _: TenantId, _: RealmId, _: Call) -> CallFuture<'_> {
+    fn call(&self, _: TenantId, _: EnvironmentId, _: Call) -> CallFuture<'_> {
         Box::pin(async { Outcome::proceed() })
     }
 }
@@ -69,17 +69,17 @@ pub struct LiveHook {
     pub registration: Registration,
     /// Its signing key.
     pub key: HookKey,
-    /// Whether the realm's extension policy permits disclosing the e-mail (OP-151 m.10 (e)).
-    pub realm_allows_disclosure: bool,
+    /// Whether the environment's extension policy permits disclosing the e-mail (OP-151 m.10 (e)).
+    pub environment_allows_disclosure: bool,
 }
 
 /// Where live hooks are found.
 pub trait HookRegistry: Send + Sync {
-    /// The realm's live hook at `point`.
+    /// The environment's live hook at `point`.
     fn live(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         point: HookPoint,
     ) -> impl Future<Output = Result<Option<LiveHook>, Unavailable>> + Send;
 }
@@ -103,7 +103,7 @@ pub trait HookClock: Send + Sync {
     fn now_ms(&self) -> Option<u64>;
 }
 
-/// Seals and opens hook and webhook keys under the realm KEK (OP-42, OP-135).
+/// Seals and opens hook and webhook keys under the environment KEK (OP-42, OP-135).
 pub trait KeyVault: Send + Sync {
     /// Seals `plain` for registration `id`.
     ///
@@ -112,7 +112,7 @@ pub trait KeyVault: Send + Sync {
     fn seal(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         plain: &[u8],
     ) -> Result<SealedKey, Unavailable>;
@@ -124,18 +124,18 @@ pub trait KeyVault: Send + Sync {
     fn open(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         id: &[u8; 16],
         sealed: &SealedKey,
     ) -> Result<Zeroizing<Vec<u8>>, Unavailable>;
 
-    /// The realm's current KEK, for a management write that must read or write the account's
+    /// The environment's current KEK, for a management write that must read or write the account's
     /// sealed data in the same transaction (a reset intent's address, TN-61); `None` when this
     /// vault does not hand it out, and the write fails closed.
-    fn realm_kek(
+    fn environment_kek(
         &self,
         _tenant: TenantId,
-        _realm: RealmId,
+        _environment: EnvironmentId,
     ) -> Option<std::sync::Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
         None
     }

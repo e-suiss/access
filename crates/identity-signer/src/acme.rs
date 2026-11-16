@@ -9,7 +9,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::signer::Signer;
 
 use crate::ports::KeyFactory;
-use crate::protocol::{FrameError, Realm};
+use crate::protocol::{Environment, FrameError};
 
 /// The key's label in the vault and in the protocol.
 pub const LABEL: &str = "acme";
@@ -17,13 +17,13 @@ pub const LABEL: &str = "acme";
 /// Largest signing input signed: an ACME request body is small (PD).
 pub const MAX_INPUT: usize = 64 * 1024;
 
-/// The vault slot the key is stored under, apart from every realm's.
+/// The vault slot the key is stored under, apart from every environment's.
 #[must_use]
-pub fn slot() -> Realm {
+pub fn slot() -> Environment {
     let d = suiss_crypto::digest::context_digest("access/identity-signer/acme/v1", b"cell");
     let mut out = [0; 16];
     out.copy_from_slice(d.0.get(..16).unwrap_or(&[0; 16]));
-    Realm(out)
+    Environment(out)
 }
 
 /// A request about the ACME account key.

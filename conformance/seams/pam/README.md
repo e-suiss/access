@@ -14,7 +14,7 @@ How a PAM product and a secret store connect to Access. Both are separate produc
 - **No Exercise, no effect.** A session opens and a secret leaves only for an ALLOW the product verified (`esuiss-access-sdk` `authorize::Pep::authorize`). A DENY, `REQUIRE_ACTION`, an Access that does not answer, or an answer for another intent is a refusal.
 - **An Exercise releases once.** A secret store hands a secret out through `resource::release::Releases::release`, which checks that the ALLOW is for exactly this secret, inside the intent's validity, and never used before.
 - **Just in time.** Standing access is not needed: the Grant is time boxed, can require an approval, and ends on revocation. The next session asks again.
-- **SSH.** The short-lived SSH certificate comes from the realm's Access SSH CA (`access ssh login`); the PAM keeps the session it opens.
+- **SSH.** The short-lived SSH certificate comes from the environment's Access SSH CA (`access ssh login`); the PAM keeps the session it opens.
 
 ## Files
 

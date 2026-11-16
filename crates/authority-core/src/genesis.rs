@@ -1,6 +1,6 @@
-//! The Genesis of a realm's governing domain (TN-111, §12.1.1 2a, §12.5.1, L0-META-7).
+//! The Genesis of an environment's governing domain (TN-111, §12.1.1 2a, §12.5.1, L0-META-7).
 //!
-//! A realm cannot exist without its governing domain, so creating a realm opens one. Its
+//! An environment cannot exist without its governing domain, so creating an environment opens one. Its
 //! Genesis roots the meta-anchor and the `idp` Anchor in the founding root, lets Parties
 //! register and create their Instances under a Public bootstrap Grant, and accepts the `idp.*`
 //! catalogs the identity plane publishes (E34, OP-141 m.35). The operator holds nothing in it
@@ -138,7 +138,7 @@ pub fn schemas(namespace: &str, founder: Id) -> Value {
 }
 
 /// The `schema-definition` Acceptance of one `idp.*` namespace as catalog `version` declared
-/// it: what a realm opened with that catalog was born with (OP-153 m.3 (a)).
+/// it: what an environment opened with that catalog was born with (OP-153 m.3 (a)).
 #[must_use]
 pub fn schemas_at(namespace: &str, founder: Id, version: u64) -> Value {
     published(
@@ -165,11 +165,11 @@ fn published(package: &Spp, founder: Id) -> Value {
     ])
 }
 
-/// The classes the realm issuer's default Acceptance covers: who acts, by which authenticator
+/// The classes the environment issuer's default Acceptance covers: who acts, by which authenticator
 /// and under which identity (§10.1.4 rule 3, §10.1.5), whether that account still stands,
 /// which only narrows (§12.3.1, TN-49, Ek B K04 default DENY overlay), and which key a recovery
 /// named (OP-153 m.3 (c)). In deterministic CBOR order, as a Genesis set must be.
-pub const REALM_ISSUER_CLASSES: [&str; 5] = [
+pub const ENVIRONMENT_ISSUER_CLASSES: [&str; 5] = [
     "account_status",
     "authentication",
     "recovery_result",
@@ -177,18 +177,18 @@ pub const REALM_ISSUER_CLASSES: [&str; 5] = [
     "identity_binding_person",
 ];
 
-/// The realm issuer's Acceptance of `recovery_result` for actor-binding alone: what a domain
-/// opened before the class joined [`REALM_ISSUER_CLASSES`] establishes (OP-153 m.3 (c),
+/// The environment issuer's Acceptance of `recovery_result` for actor-binding alone: what a domain
+/// opened before the class joined [`ENVIRONMENT_ISSUER_CLASSES`] establishes (OP-153 m.3 (c),
 /// m.13 (e)).
 #[must_use]
 pub fn recovery_acceptance(issuer: Id) -> Value {
     issuer_acceptance(issuer, &["recovery_result"])
 }
 
-/// The default Acceptance of the realm's identity issuer: `actor-binding` only; predicate
+/// The default Acceptance of the environment's identity issuer: `actor-binding` only; predicate
 /// input and subject selection are added explicitly (§10.1.4 rule 3, E18, OP-142).
-fn realm_issuer(issuer: Id) -> Value {
-    issuer_acceptance(issuer, &REALM_ISSUER_CLASSES)
+fn environment_issuer(issuer: Id) -> Value {
+    issuer_acceptance(issuer, &ENVIRONMENT_ISSUER_CLASSES)
 }
 
 fn issuer_acceptance(issuer: Id, classes: &[&str]) -> Value {
@@ -210,9 +210,9 @@ fn issuer_acceptance(issuer: Id, classes: &[&str]) -> Value {
     ])
 }
 
-/// The realm issuer's Acceptance for `classes` as predicate input (§10.1.4 rule 3, L2-CLM-3,
+/// The environment issuer's Acceptance for `classes` as predicate input (§10.1.4 rule 3, L2-CLM-3,
 /// SI-5): what its `authentication` Claims prove with in an approval.
-fn realm_issuer_predicates(issuer: Id, classes: &[String]) -> Value {
+fn environment_issuer_predicates(issuer: Id, classes: &[String]) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), issuer.to_value()),
         (
@@ -231,12 +231,12 @@ fn realm_issuer_predicates(issuer: Id, classes: &[String]) -> Value {
     ])
 }
 
-/// The Genesis fields of a realm's new governing domain.
+/// The Genesis fields of an environment's new governing domain.
 ///
 /// # Errors
 /// [`CoreError::Unavailable`] without randomness; [`CoreError::Protocol`] for a root that
 /// names no Party.
-pub fn realm(
+pub fn environment(
     order: &GenesisOrder,
     salts: &mut impl Salts,
 ) -> Result<BTreeMap<String, Opened>, CoreError> {
@@ -287,12 +287,12 @@ pub fn realm(
                 .iter()
                 .map(|ns| schemas(ns, founder))
                 .chain(order.schemas.iter().map(|p| published(p, founder)))
-                .chain(order.issuer.map(realm_issuer))
+                .chain(order.issuer.map(environment_issuer))
                 .chain(
                     order
                         .issuer
                         .filter(|_| !order.issuer_predicate_input.is_empty())
-                        .map(|i| realm_issuer_predicates(i, &order.issuer_predicate_input)),
+                        .map(|i| environment_issuer_predicates(i, &order.issuer_predicate_input)),
                 )
                 .chain(order.acceptances.iter().cloned())
                 .collect())?,

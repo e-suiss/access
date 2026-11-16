@@ -8,7 +8,7 @@ import { expect, test } from "@playwright/test";
 
 import { PASSWORD, registerAndOpen, signIn } from "./signin.js";
 
-const ADMIN = "/console/api/proxy/admin/realms/acme/breakglass";
+const ADMIN = "/console/api/proxy/admin/envs/acme/breakglass";
 const ORGANIZATION = process.env["ACCESS_LIVE_BREAKGLASS_ORGANIZATION"];
 
 test.describe("@live console break-glass", () => {

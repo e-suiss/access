@@ -8,12 +8,12 @@
 )]
 
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::tenancy::{
-    HostKind, add_hostname, create_realm, create_tenant, delete_realm, realm_tenant,
-    remove_hostname, resolve_host, route_by_host, route_by_slug, routes, set_issuer,
-    tenant as tenant_of, tenant_routes, tenants_after,
+    HostKind, add_hostname, create_environment, create_tenant, delete_environment,
+    environment_tenant, remove_hostname, resolve_host, route_by_host, route_by_slug, routes,
+    set_issuer, tenant as tenant_of, tenant_routes, tenants_after,
 };
 use access_store::testing::{TestDb, fresh};
 use sqlx::Row;
@@ -33,12 +33,12 @@ async fn domain(db: &TestDb, tenant: TenantId, seed: u8) -> DomainId {
     d
 }
 
-/// A tenant with one domain, one realm and one hostname.
-async fn tenant(db: &TestDb, seed: u8, slug: &str, host: &str) -> (TenantId, RealmId) {
+/// A tenant with one domain, one environment and one hostname.
+async fn tenant(db: &TestDb, seed: u8, slug: &str, host: &str) -> (TenantId, EnvironmentId) {
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(db, t, seed).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, &d, slug, "pool-default")
+    let r = create_environment(&mut tx, &d, slug, "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -50,7 +50,7 @@ async fn tenant(db: &TestDb, seed: u8, slug: &str, host: &str) -> (TenantId, Rea
     (t, r)
 }
 
-async fn visible(db: &TestDb, t: TenantId, r: Option<RealmId>, table: &str) -> Vec<[u8; 16]> {
+async fn visible(db: &TestDb, t: TenantId, r: Option<EnvironmentId>, table: &str) -> Vec<[u8; 16]> {
     let tx = match r {
         Some(r) => TenantTx::begin(&db.app, t, r).await.unwrap(),
         None => TenantTx::begin_tenant(&db.app, t).await.unwrap(),
@@ -64,7 +64,7 @@ async fn visible(db: &TestDb, t: TenantId, r: Option<RealmId>, table: &str) -> V
         .collect()
 }
 
-const TENANT_TABLES: [&str; 3] = ["tenants", "realms", "realm_hostnames"];
+const TENANT_TABLES: [&str; 3] = ["tenants", "environments", "environment_hostnames"];
 
 // §12.1.3 test 2
 #[tokio::test]
@@ -100,11 +100,14 @@ async fn no_scope_no_rows() {
 
 // OP-12
 #[tokio::test]
-async fn hostnames_need_the_realm_in_scope() {
+async fn hostnames_need_the_environment_in_scope() {
     let db = fresh().await.unwrap();
     let (t, _) = tenant(&db, 4, "acme-d", "d.acme.test").await;
-    assert_eq!(visible(&db, t, None, "realm_hostnames").await.len(), 0);
-    assert_eq!(visible(&db, t, None, "realms").await.len(), 1);
+    assert_eq!(
+        visible(&db, t, None, "environment_hostnames").await.len(),
+        0
+    );
+    assert_eq!(visible(&db, t, None, "environments").await.len(), 1);
 }
 
 // §12.1.3 test 5, TNI-10
@@ -115,29 +118,29 @@ async fn global_identifiers_leak_nothing_and_are_never_reused() {
     let b = create_tenant(&db.app, "pool-default").await.unwrap();
     let db_b = domain(&db, b, 6).await;
     let mut tx = TenantTx::begin_tenant(&db.app, b).await.unwrap();
-    let Err(err) = create_realm(&mut tx, &db_b, "acme-e", "pool-default").await else {
+    let Err(err) = create_environment(&mut tx, &db_b, "acme-e", "pool-default").await else {
         panic!("a taken slug was accepted");
     };
     let err = err.to_string();
     tx.rollback().await.unwrap();
     assert!(!err.contains(&format!("{:x?}", a.as_bytes())), "{err}");
     assert!(
-        !err.contains("acme-e") || err.contains("realms_slug"),
+        !err.contains("acme-e") || err.contains("environments_slug"),
         "{err}"
     );
     // INV-32
     let mut tx = TenantTx::begin_tenant(&db.app, a).await.unwrap();
-    assert!(delete_realm(&mut tx, ra).await.unwrap());
+    assert!(delete_environment(&mut tx, ra).await.unwrap());
     tx.commit().await.unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, b).await.unwrap();
     assert!(
-        create_realm(&mut tx, &db_b, "acme-e", "pool-default")
+        create_environment(&mut tx, &db_b, "acme-e", "pool-default")
             .await
             .is_err()
     );
     tx.rollback().await.unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, b).await.unwrap();
-    let rb = create_realm(&mut tx, &db_b, "acme-f", "pool-default")
+    let rb = create_environment(&mut tx, &db_b, "acme-f", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -160,14 +163,14 @@ async fn global_identifiers_leak_nothing_and_are_never_reused() {
 
 // MD-5a
 #[tokio::test]
-async fn a_realm_cannot_be_governed_by_another_tenants_domain() {
+async fn a_environment_cannot_be_governed_by_another_tenants_domain() {
     let db = fresh().await.unwrap();
     let a = create_tenant(&db.app, "pool-default").await.unwrap();
     let b = create_tenant(&db.app, "pool-default").await.unwrap();
     let foreign = domain(&db, a, 7).await;
     let mut tx = TenantTx::begin_tenant(&db.app, b).await.unwrap();
     assert!(
-        create_realm(&mut tx, &foreign, "acme-g", "pool-default")
+        create_environment(&mut tx, &foreign, "acme-g", "pool-default")
             .await
             .is_err()
     );
@@ -193,10 +196,10 @@ async fn the_router_sees_the_mapping_only() {
             .is_none()
     );
     for stmt in [
-        "SELECT governing_domain_id FROM access.realms",
-        "SELECT kind FROM access.realm_hostnames",
+        "SELECT governing_domain_id FROM access.environments",
+        "SELECT kind FROM access.environment_hostnames",
         "SELECT * FROM access.tenants",
-        "UPDATE access.realms SET status = 'active'",
+        "UPDATE access.environments SET status = 'active'",
     ] {
         let err = sqlx::query(stmt).execute(&db.router).await.unwrap_err();
         assert!(
@@ -205,7 +208,7 @@ async fn the_router_sees_the_mapping_only() {
         );
     }
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    delete_realm(&mut tx, r).await.unwrap();
+    delete_environment(&mut tx, r).await.unwrap();
     tx.commit().await.unwrap();
     assert!(
         resolve_host(&db.router, "h.acme.test")
@@ -215,7 +218,7 @@ async fn the_router_sees_the_mapping_only() {
     );
 }
 
-async fn with_issuer(db: &TestDb, t: TenantId, r: RealmId, issuer: &str) -> bool {
+async fn with_issuer(db: &TestDb, t: TenantId, r: EnvironmentId, issuer: &str) -> bool {
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let set = set_issuer(&mut tx, issuer).await.unwrap();
     tx.commit().await.unwrap();
@@ -230,9 +233,9 @@ async fn the_issuer_is_set_once_and_never_changes() {
     assert!(with_issuer(&db, t, r, "https://acme-i.id.test").await);
     assert!(!with_issuer(&db, t, r, "https://other.id.test").await);
     for stmt in [
-        "UPDATE access.realms SET issuer = 'https://evil.id.test'",
-        "UPDATE access.realms SET issuer = NULL",
-        "UPDATE access.realms SET slug = 'acme-renamed'",
+        "UPDATE access.environments SET issuer = 'https://evil.id.test'",
+        "UPDATE access.environments SET issuer = NULL",
+        "UPDATE access.environments SET slug = 'acme-renamed'",
     ] {
         let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
         let err = tx.raw_rows(stmt).await.err().unwrap();
@@ -247,7 +250,7 @@ async fn the_issuer_is_set_once_and_never_changes() {
 
 // OP-132 m.3, TN-10
 #[tokio::test]
-async fn the_router_routes_live_realms_with_an_issuer() {
+async fn the_router_routes_live_environments_with_an_issuer() {
     let db = fresh().await.unwrap();
     let (t, r) = tenant(&db, 10, "acme-j", "acme-j.id.test").await;
     assert!(
@@ -258,17 +261,21 @@ async fn the_router_routes_live_realms_with_an_issuer() {
     );
     assert!(with_issuer(&db, t, r, "https://acme-j.id.test").await);
     let (t2, r2) = tenant(&db, 11, "acme-k", "acme-k.id.test").await;
-    assert!(with_issuer(&db, t2, r2, "https://id.test/realms/acme-k").await);
+    assert!(with_issuer(&db, t2, r2, "https://id.test/env/acme-k").await);
     let got = route_by_host(&db.router, "ACME-J.id.test")
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
-        (got.realm.as_bytes(), got.slug.as_str(), got.issuer.as_str()),
+        (
+            got.environment.as_bytes(),
+            got.slug.as_str(),
+            got.issuer.as_str()
+        ),
         (r.as_bytes(), "acme-j", "https://acme-j.id.test")
     );
     let path = route_by_slug(&db.router, "acme-k").await.unwrap().unwrap();
-    assert_eq!(path.issuer, "https://id.test/realms/acme-k");
+    assert_eq!(path.issuer, "https://id.test/env/acme-k");
     let all: Vec<String> = routes(&db.router)
         .await
         .unwrap()
@@ -283,15 +290,15 @@ async fn the_router_routes_live_realms_with_an_issuer() {
         .into_iter()
         .map(|r| r.issuer)
         .collect();
-    assert_eq!(of_k, ["https://id.test/realms/acme-k"]);
+    assert_eq!(of_k, ["https://id.test/env/acme-k"]);
     assert_eq!(tenant_routes(&db.router, &[t, t2]).await.unwrap().len(), 2);
     assert!(tenant_routes(&db.router, &[]).await.unwrap().is_empty());
-    let owner = realm_tenant(&db.router, r2).await.unwrap().unwrap();
+    let owner = environment_tenant(&db.router, r2).await.unwrap().unwrap();
     assert_eq!(owner.as_bytes(), t2.as_bytes());
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    delete_realm(&mut tx, r).await.unwrap();
+    delete_environment(&mut tx, r).await.unwrap();
     tx.commit().await.unwrap();
-    assert!(realm_tenant(&db.router, r).await.unwrap().is_none());
+    assert!(environment_tenant(&db.router, r).await.unwrap().is_none());
     assert!(
         route_by_host(&db.router, "acme-j.id.test")
             .await

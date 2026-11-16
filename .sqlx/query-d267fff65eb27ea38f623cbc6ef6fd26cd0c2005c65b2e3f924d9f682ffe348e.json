@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT region, class FROM access.environment_residency\n          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "region",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environment_residency",
+            "name": "region"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environment_residency",
+            "name": "class"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "d267fff65eb27ea38f623cbc6ef6fd26cd0c2005c65b2e3f924d9f682ffe348e"
+}

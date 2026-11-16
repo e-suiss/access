@@ -12,8 +12,8 @@ test('a domain without a recovery entry says "Recovery not available"', async ({
   bff,
 }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/recovery", {
-    realm: "acme",
+  bff.admin.set("envs/acme/recovery", {
+    environment: "acme",
     recovery: "not_available",
     recovery_reason: "no-recovery-entry",
     history: [],
@@ -31,8 +31,8 @@ test("after a forced recovery the banner says what may be lost and the history l
   bff,
 }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/recovery", {
-    realm: "acme",
+  bff.admin.set("envs/acme/recovery", {
+    environment: "acme",
     recovery: "available",
     recovery_threshold: { k: 2, n: 3 },
     held_on: "device",

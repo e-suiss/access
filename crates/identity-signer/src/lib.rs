@@ -1,8 +1,8 @@
-//! CMP-22b identity signer: the realm JOSE key set, which rotates under publish-before-use and
+//! CMP-22b identity signer: the environment JOSE key set, which rotates under publish-before-use and
 //! is published as a JWKS, and the compact JWS signatures of identity tokens (MD-3, MD-6,
 //! CR-18 to CR-27, OP-143 m.1 E7), and the `COSE_Sign1` of identity plane artifacts such as
 //! `auth_context` (OP-149 m.8); the cell's `audit-checkpoint` key, which signs the identity
-//! audit log's checkpoints (OP-150 m.3 (h)); and each realm's Claim issuer key, which signs the
+//! audit log's checkpoints (OP-150 m.3 (h)); and each environment's Claim issuer key, which signs the
 //! identity plane's Claims (§10.1.7). Each key serves one purpose ([`purpose`]): the SAML,
 //! OpenID Federation, JWE decryption and RS256 keys of the enterprise protocols are apart from
 //! these and from every authority key (OP-155 m.1 (b)).
@@ -52,7 +52,7 @@ pub enum SignerError {
     #[error("policy: {0}")]
     Policy(#[from] crate::domain::PolicyError),
     /// An access token carrying authority: only the domain's operational key signs one, never
-    /// a realm key (§10.4.5, §12.1.2, TI-RT6).
+    /// an environment key (§10.4.5, §12.1.2, TI-RT6).
     #[error("authority token")]
     Authority,
 }

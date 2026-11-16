@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.environments SET kex_share = $3 WHERE tenant_id = $1 AND environment_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78be68f95189633b4c89916444d3ac933a2d09ddff818ada8794331973a34c5b"
+}

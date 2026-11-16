@@ -50,7 +50,7 @@ function ProfilePanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }
     setRefused(undefined);
     write(async () => {
       try {
-        return await change(ctx.instance, ctx.confirm, ctx.session.realm, {
+        return await change(ctx.instance, ctx.confirm, ctx.session.environment, {
           operation: "putSigningProfile",
           method: "PUT",
           path: "settings/signing-profile",
@@ -141,7 +141,7 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
         onSubmit={(e) => {
           e.preventDefault();
           write(() =>
-            change(ctx.instance, ctx.confirm, ctx.session.realm, {
+            change(ctx.instance, ctx.confirm, ctx.session.environment, {
               operation: "putKexShare",
               method: "PUT",
               path: "settings/kex-share",
@@ -178,8 +178,8 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
 
 /** The signing screen. */
 export function Signing({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
-  const view = useLoad(() => adminGet<SigningView>(ctx.instance, `realms/${realm}/signing`));
+  const environment = encodeURIComponent(ctx.session.environment);
+  const view = useLoad(() => adminGet<SigningView>(ctx.instance, `envs/${environment}/signing`));
   return (
     <div data-testid="signing" className="flex flex-col gap-6">
       <p>{t("signingIntro")}</p>

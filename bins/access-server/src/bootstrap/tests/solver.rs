@@ -103,7 +103,7 @@ async fn set(p: &Pdp, policy: Option<Id>, source: &str) -> (Vec<u8>, Result<u64,
         app: &p.w.db.app,
         router: &p.w.db.router,
         plane: &p.w.plane,
-        realm_keys: &p.w.keyring,
+        environment_keys: &p.w.keyring,
         hsm: &p.w.keys,
         base: &p.w.base,
         declared: &declared,
@@ -134,8 +134,8 @@ async fn tier(p: &Pdp, nonce: &[u8]) -> Option<u8> {
         .and_then(|n| n.tier)
 }
 
-/// The realm with one restriction policy, the solver behind its analysis port, and the policy.
-async fn realm(label: &str, cvc5: &Path) -> (Pdp, Solver, Id) {
+/// The environment with one restriction policy, the solver behind its analysis port, and the policy.
+async fn environment(label: &str, cvc5: &Path) -> (Pdp, Solver, Id) {
     let (s, socket) = solver(label, cvc5);
     let analysis = crate::analysis::Sibling::new(&socket, None).unwrap();
     let p = pdp_with(label, None, Arc::new(analysis)).await;
@@ -149,7 +149,7 @@ async fn realm(label: &str, cvc5: &Path) -> (Pdp, Solver, Id) {
     (p, s, policy)
 }
 
-/// A change raised to CT3 asks this realm's root for more than its own signature.
+/// A change raised to CT3 asks this environment's root for more than its own signature.
 fn raised(r: &Result<u64, String>) -> bool {
     matches!(r, Err(e) if e.contains("RequireAction"))
 }
@@ -183,7 +183,7 @@ async fn without_a_solver_the_structural_rule_keeps_a_narrowing_ct1() {
 // OP-157 m.8 (a), (b), OP-159 m.3 (aa), Ek B 5660
 #[tokio::test(flavor = "multi_thread")]
 async fn a_solver_without_an_answer_or_stopped_raises_a_structural_narrowing() {
-    let (p, mut s, policy) = realm("j6-solver-unknown", Path::new("/nonexistent/cvc5")).await;
+    let (p, mut s, policy) = environment("j6-solver-unknown", Path::new("/nonexistent/cvc5")).await;
     let r = set(&p, Some(policy), NARROWER).await.1;
     assert!(raised(&r), "no answer raises: {r:?}");
     s.stop();
@@ -197,7 +197,7 @@ async fn a_solver_without_an_answer_or_stopped_raises_a_structural_narrowing() {
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5 and the Linux solver sandbox; nightly `just test-full`"]
 async fn the_sibling_solver_keeps_a_proved_narrowing_ct1_and_a_stopped_one_raises_it() {
     let cvc5 = PathBuf::from(std::env::var_os("ACCESS_CVC5").unwrap());
-    let (p, mut s, policy) = realm("j6-solver-cvc5", &cvc5).await;
+    let (p, mut s, policy) = environment("j6-solver-cvc5", &cvc5).await;
     let (nonce, r) = set(&p, Some(policy), NARROWER).await;
     r.unwrap();
     assert_eq!(

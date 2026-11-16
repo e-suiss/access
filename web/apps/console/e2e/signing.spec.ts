@@ -25,7 +25,7 @@ test("the signing screen turns the post-quantum profile on as one change", async
   page,
   bff,
 }) => {
-  bff.admin.set("realms/acme/signing", VIEW);
+  bff.admin.set("envs/acme/signing", VIEW);
   await open(page, bff, "/console/acme/admin/signing");
   await expect(page.getByRole("heading", { level: 2, name: "Signing" })).toBeVisible();
   await expect(page.locator("#signing-profile-title")).toHaveText("Classical signatures only");
@@ -38,7 +38,7 @@ test("the signing screen turns the post-quantum profile on as one change", async
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(panel.getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.method, w.path, w.body["profile"]])).toEqual([
-    ["PUT", "realms/acme/settings/signing-profile", "ml-dsa-65"],
+    ["PUT", "envs/acme/settings/signing-profile", "ml-dsa-65"],
   ]);
   const a11y = await new AxeBuilder({ page }).include("main").analyze();
   expect(a11y.violations).toEqual([]);
@@ -49,7 +49,7 @@ test("an open profile shows its algorithm and anchor and turns off as one change
   page,
   bff,
 }) => {
-  bff.admin.set("realms/acme/signing", {
+  bff.admin.set("envs/acme/signing", {
     ...VIEW,
     signing_profile: "ml-dsa-65",
     algorithms: ["ES256", "ML-DSA-65"],
@@ -66,14 +66,14 @@ test("an open profile shows its algorithm and anchor and turns off as one change
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.locator(PROFILE).getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.path, w.body])).toEqual([
-    ["realms/acme/settings/signing-profile", expect.not.objectContaining({ profile: "" })],
+    ["envs/acme/settings/signing-profile", expect.not.objectContaining({ profile: "" })],
   ]);
   expect(bff.writes[0]?.body["profile"]).toBeUndefined();
 });
 
 // CR-44, HL-27, OP-159 m.3 (r)
-test("a FIPS realm cannot turn the post-quantum profile on", async ({ page, bff }) => {
-  bff.admin.set("realms/acme/signing", { ...VIEW, fips: true });
+test("a FIPS environment cannot turn the post-quantum profile on", async ({ page, bff }) => {
+  bff.admin.set("envs/acme/signing", { ...VIEW, fips: true });
   await open(page, bff, "/console/acme/admin/signing");
   await expect(page.getByTestId("signing-fips-exclusive")).toHaveText(
     "FIPS and post-quantum profiles can't be combined",
@@ -84,8 +84,8 @@ test("a FIPS realm cannot turn the post-quantum profile on", async ({ page, bff 
 
 // CR-18, TI-9, OP-159 m.3 (d)
 test("without an HSM that holds post-quantum keys the refusal is said", async ({ page, bff }) => {
-  bff.admin.set("realms/acme/signing", VIEW);
-  bff.refuse.set("realms/acme/settings/signing-profile", [409, "pq-key-unavailable"]);
+  bff.admin.set("envs/acme/signing", VIEW);
+  bff.refuse.set("envs/acme/settings/signing-profile", [409, "pq-key-unavailable"]);
   await open(page, bff, "/console/acme/admin/signing");
   const panel = page.locator(PROFILE);
   await panel.getByRole("button").click();
@@ -98,7 +98,7 @@ test("without an HSM that holds post-quantum keys the refusal is said", async ({
 
 // CR-12 m.3, OP-159 m.3 (t)
 test("the key exchange share policy is one change", async ({ page, bff }) => {
-  bff.admin.set("realms/acme/signing", VIEW);
+  bff.admin.set("envs/acme/signing", VIEW);
   await open(page, bff, "/console/acme/admin/signing");
   const kex = page.getByRole("region", { name: /Post-quantum key exchange/ });
   await kex.getByLabel("Send the classical key share first and offer post-quantum").check();
@@ -106,6 +106,6 @@ test("the key exchange share policy is one change", async ({ page, bff }) => {
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(kex.getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.path, w.body["mode"]])).toEqual([
-    ["realms/acme/settings/kex-share", "advertise-only"],
+    ["envs/acme/settings/kex-share", "advertise-only"],
   ]);
 });

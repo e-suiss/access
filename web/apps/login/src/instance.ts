@@ -4,7 +4,7 @@
 // (Wasm); WebCrypto signs them. The consent page signs only after it showed the decoding.
 import { loadKernel, type Kernel } from "@esuiss/access";
 
-import { REALM } from "./base.js";
+import { ENVIRONMENT } from "./base.js";
 
 const DB = "access-account";
 const STORE = "instances";
@@ -13,8 +13,8 @@ const CSRF_COOKIE = "__Host-access-account-csrf";
 // P-256 group order (SEC 2) for the low-S form the Kernel requires (CR-9)
 const N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
 
-/** The account BFF of this realm. */
-export const ACCOUNT_API = `${REALM}/account/api`;
+/** The account BFF of this environment. */
+export const ACCOUNT_API = `${ENVIRONMENT}/account/api`;
 
 /** A device Instance as this browser keeps it, in the account pages' record shape. */
 export interface Instance {
@@ -30,7 +30,7 @@ export interface Instance {
 
 /** The account session as the BFF reports it. */
 export interface Session {
-  readonly realm: string;
+  readonly environment: string;
   readonly account: string;
   readonly domain: string;
   readonly party: string | null;
@@ -152,7 +152,7 @@ export async function find(s: Session): Promise<Instance | undefined> {
   if (s.instance === null) return undefined;
   try {
     return await tx<Instance | undefined>("readonly", (st) =>
-      st.get(`${s.realm}/${s.account}/${s.instance ?? ""}`),
+      st.get(`${s.environment}/${s.account}/${s.instance ?? ""}`),
     );
   } catch {
     return undefined;
@@ -223,7 +223,7 @@ export async function register(
   if (signed[1] !== undefined) body["register_ais"] = signed[1];
   await account("/instances", body);
   const instance: Instance = {
-    id: `${s.realm}/${s.account}/${b64url(kid)}`,
+    id: `${s.environment}/${s.account}/${b64url(kid)}`,
     key: pair.privateKey,
     kid,
     domain,

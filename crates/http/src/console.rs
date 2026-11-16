@@ -1,5 +1,5 @@
 //! The console's Backend-for-Frontend (TN-128–TN-131, OP-151 m.2 M3, m.3 (b), (e), (f)), served
-//! on the management listener under `/console/*`, an origin of its own apart from every realm's
+//! on the management listener under `/console/*`, an origin of its own apart from every environment's
 //! login pages.
 //!
 //! # What the cookie can and cannot do
@@ -16,8 +16,8 @@
 //! - a **read** through the same proxy must carry a read proof: an AIS in `check` mode (CT0) by
 //!   the session's device Instance over this very request. Only then does the BFF present the
 //!   session's management read token, which is issued to that Instance, lives at most 60
-//!   minutes, carries one surface's read scope (`realm.read`, or `platform.read` for a
-//!   `platform/…` path of a session in the platform realm, OP-159 m.41) and is bound to a DPoP
+//!   minutes, carries one surface's read scope (`environment.read`, or `platform.read` for a
+//!   `platform/…` path of a session in the platform environment, OP-159 m.41) and is bound to a DPoP
 //!   key the BFF holds for the session. The token authorises CT0 reads only, so the BFF is not
 //!   an authority holder;
 //! - `/console/api/proxy/adp/*` (explain, search, eligibility) passes the body on as the browser

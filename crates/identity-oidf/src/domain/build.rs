@@ -1,6 +1,6 @@
 //! Payloads Access signs as a federation entity: its entity configuration as a leaf or trust
 //! anchor, subordinate statements, resolve and trust mark status answers, and list answers
-//! (§10.7.1 item 1). Signing is the identity signer's, with the realm's federation key and the
+//! (§10.7.1 item 1). Signing is the identity signer's, with the environment's federation key and the
 //! `typ` constants here.
 
 use access_crypto::jose::output::{self, int, text};

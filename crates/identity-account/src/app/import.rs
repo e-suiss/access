@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::AccountError;
 use crate::app::accounts::{change_status, create, store_password_as};
-use crate::app::{Actor, Realm};
+use crate::app::{Actor, Environment};
 use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::legacy::{self, ImportRejected};
 use crate::domain::status::AccountStatus;
@@ -111,7 +111,7 @@ fn stored(line: &Line) -> Result<legacy::Stored, Skipped> {
 /// [`Imported::Skipped`].
 pub async fn import_line<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     raw: &str,
     who: &Actor<'_>,
 ) -> Result<Imported, AccountError> {
@@ -126,15 +126,17 @@ pub async fn import_line<D: AccountDb>(
         Ok(s) => s,
         Err(s) => return Ok(Imported::Skipped(s)),
     };
-    let subject = match create(db, realm, &ids, who).await {
+    let subject = match create(db, environment, &ids, who).await {
         Ok(s) => s,
         Err(AccountError::IdentifierTaken) => return Ok(Imported::Skipped(Skipped::Taken)),
         Err(e) => return Err(e),
     };
-    let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let mut tx = db
+        .begin(environment.tenant, environment.environment)
+        .await?;
     store_password_as(
         &mut tx,
-        realm,
+        environment,
         subject,
         &secret.text,
         &secret.algorithm,
@@ -144,13 +146,13 @@ pub async fn import_line<D: AccountDb>(
     tx.audit(&access_store::audit::AuditEvent {
         event_type: "account.imported",
         actor: who.actor,
-        target: &realm.external(subject)?,
+        target: &environment.external(subject)?,
         correlation: who.correlation,
     })
     .await?;
     tx.commit().await?;
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(db, realm, subject, to, who).await?;
+        change_status(db, environment, subject, to, who).await?;
     }
     Ok(Imported::Created {
         subject,
@@ -186,7 +188,7 @@ pub fn file_of(text: &str) -> ([u8; 32], u64) {
     )
 }
 
-/// Imports every line of `text` into the realm, each its own account; a line that cannot be
+/// Imports every line of `text` into the environment, each its own account; a line that cannot be
 /// imported is reported and the rest go on (TN-85).
 ///
 /// # Errors
@@ -194,13 +196,13 @@ pub fn file_of(text: &str) -> ([u8; 32], u64) {
 /// lines already imported stay.
 pub async fn import_all<D: AccountDb>(
     db: &D,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     text: &str,
     who: &Actor<'_>,
 ) -> Result<Report, (u64, AccountError)> {
     let mut report = Report::default();
     for (n, line) in lines(text) {
-        match import_line(db, realm, line, who)
+        match import_line(db, environment, line, who)
             .await
             .map_err(|e| (n, e))?
         {

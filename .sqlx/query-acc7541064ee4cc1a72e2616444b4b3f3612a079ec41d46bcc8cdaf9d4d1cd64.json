@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_upstreams (tenant_id, environment_id, name, issuer, client_id,\n                    client_secret_ref, jwks_uri, ssf, domain_id, decision_pos, profile)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acc7541064ee4cc1a72e2616444b4b3f3612a079ec41d46bcc8cdaf9d4d1cd64"
+}

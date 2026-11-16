@@ -1,4 +1,4 @@
-//! Realm settings written through the admin REST surface end to end (OP-153 m.25 (b), m.22 (c),
+//! Environment settings written through the admin REST surface end to end (OP-153 m.25 (b), m.22 (c),
 //! (g), (k), m.3 (gg)): each write is drafted, signed by the browser's Instance, committed by the
 //! real decision point and read back from the settings view and the hosted pages.
 
@@ -6,7 +6,7 @@ use super::writes::Written;
 use super::*;
 
 impl Console {
-    /// A read of `target` (`/admin/v1/realms/acme/…`) through the BFF with a read proof: its
+    /// A read of `target` (`/admin/v1/envs/acme/…`) through the BFF with a read proof: its
     /// status, body and `ETag`.
     pub(super) async fn rest_read(
         &self,
@@ -54,7 +54,7 @@ impl Console {
         body: serde_json::Value,
         if_match: Option<&str>,
     ) -> Written {
-        let drafts = "/admin/v1/realms/acme/intents";
+        let drafts = "/admin/v1/envs/acme/intents";
         let proof = self.browser.ais(
             self.domain,
             &access_crypto::random::bytes::<16>().unwrap(),
@@ -68,7 +68,7 @@ impl Console {
             self.browser
                 .request(
                     &Method::POST,
-                    "/console/api/proxy/admin/realms/acme/intents",
+                    "/console/api/proxy/admin/envs/acme/intents",
                     "x",
                 )
                 .header("x-access-ais", proof)
@@ -121,10 +121,10 @@ impl Console {
         operation: &str,
         body: serde_json::Value,
     ) -> Written {
-        let (_, _, etag) = self.rest_read("/admin/v1/realms/acme/settings").await;
+        let (_, _, etag) = self.rest_read("/admin/v1/envs/acme/settings").await;
         self.rest_write(
             &Method::PUT,
-            &format!("/admin/v1/realms/acme/settings/{section}"),
+            &format!("/admin/v1/envs/acme/settings/{section}"),
             (operation, None),
             body,
             etag.as_deref(),
@@ -138,13 +138,13 @@ impl Console {
 async fn the_csp_mode_moves_through_admin_rest_and_the_page_policy_follows_it() {
     let c = console("rest-csp", false).await;
     let report_only = || async {
-        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
             .await
             .unwrap();
         let stored = idp::branding(&mut t).await.unwrap();
         t.commit().await.unwrap();
         let theme = access_identity_ui::domain::branding::Theme::decode(stored.as_deref());
-        theme.csp("/realms/acme").1.is_some()
+        theme.csp("/env/acme").1.is_some()
     };
     assert!(!report_only().await);
 
@@ -210,7 +210,7 @@ async fn related_origins_and_message_overrides_are_set_by_rest_and_the_pages_rea
     assert_eq!(protected.body["code"], "invalid-locale-overrides");
     let (r, body) = send(
         &app,
-        axum::http::Request::get("/realms/acme/v1/login/messages")
+        axum::http::Request::get("/env/acme/v1/login/messages")
             .header(header::HOST, "access.test")
             .body(Body::empty())
             .unwrap(),
@@ -251,7 +251,7 @@ async fn related_origins_and_message_overrides_are_set_by_rest_and_the_pages_rea
 
 // TN-33, OP-153 m.22 (c), m.25 (b), Ek B 4103
 #[tokio::test]
-async fn a_realm_without_dbsc_offers_no_registration_and_with_it_does() {
+async fn a_environment_without_dbsc_offers_no_registration_and_with_it_does() {
     use super::super::recovery::{Page, Recording, account, hosted};
     let c = console("rest-dbsc", false).await;
     let app = hosted(&c, Recording::default());
@@ -261,7 +261,7 @@ async fn a_realm_without_dbsc_offers_no_registration_and_with_it_does() {
         let flow = p.call(&app, &Method::POST, "/v1/login/flows", None).await;
         let action = |g: &super::super::recovery::Got| {
             let a = g.json["action"].as_str().unwrap();
-            a.strip_prefix("/realms/acme").unwrap_or(a).to_owned()
+            a.strip_prefix("/env/acme").unwrap_or(a).to_owned()
         };
         let id = p
             .call(
@@ -285,10 +285,10 @@ async fn a_realm_without_dbsc_offers_no_registration_and_with_it_does() {
     assert_eq!(on.status, StatusCode::OK, "{}", on.json);
     assert!(
         on.headers.contains_key("secure-session-registration"),
-        "a realm offers DBSC by default"
+        "an environment offers DBSC by default"
     );
 
-    let (_, settings, _) = c.rest_read("/admin/v1/realms/acme/settings").await;
+    let (_, settings, _) = c.rest_read("/admin/v1/envs/acme/settings").await;
     let mut policy = settings["signin_policy"].clone();
     policy["dbsc"] = serde_json::Value::Bool(false);
     let off = c
@@ -300,7 +300,7 @@ async fn a_realm_without_dbsc_offers_no_registration_and_with_it_does() {
     assert_eq!(without.status, StatusCode::OK, "{}", without.json);
     assert!(!without.headers.contains_key("secure-session-registration"));
 
-    let (_, settings, _) = c.rest_read("/admin/v1/realms/acme/settings").await;
+    let (_, settings, _) = c.rest_read("/admin/v1/envs/acme/settings").await;
     let mut policy = settings["signin_policy"].clone();
     policy["dbsc"] = serde_json::Value::Bool(true);
     let back = c
@@ -323,7 +323,7 @@ async fn the_direct_attestation_flag_reaches_the_passkey_registration() {
         let flow = p.call(&app, &Method::POST, "/v1/login/flows", None).await;
         let action = |g: &super::super::recovery::Got| {
             let a = g.json["action"].as_str().unwrap();
-            a.strip_prefix("/realms/acme").unwrap_or(a).to_owned()
+            a.strip_prefix("/env/acme").unwrap_or(a).to_owned()
         };
         let id = p
             .call(
@@ -356,7 +356,7 @@ async fn the_direct_attestation_flag_reaches_the_passkey_registration() {
         reg.json["options"]["attestation"].clone()
     };
     assert_eq!(begin(app.clone()).await, "none");
-    let (_, settings, _) = c.rest_read("/admin/v1/realms/acme/settings").await;
+    let (_, settings, _) = c.rest_read("/admin/v1/envs/acme/settings").await;
     let mut policy = settings["signin_policy"].clone();
     policy["attestation"] = serde_json::json!({"mode": "enterprise", "aaguids": []});
     let set = c

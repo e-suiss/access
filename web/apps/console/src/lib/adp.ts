@@ -148,13 +148,13 @@ export async function exportAudit(
   instance: Instance,
   confirm: Confirm,
   subject: string,
-  realm: string,
+  environment: string,
   range: { readonly from: number; readonly to: number; readonly disclosure: "redacted" | "full" },
 ): Promise<Exported> {
   const k = await loadKernel();
   const w: Wanted = {
     action: { namespace: "access", name: "audit_export", major: 1 },
-    resources: [{ namespace: "access.audit", path: [realm] }],
+    resources: [{ namespace: "access.audit", path: [environment] }],
     params: range,
   };
   const d = await draft(instance, w, "commit");
@@ -177,7 +177,7 @@ export async function exportAudit(
   const body = {
     subject: { type: "access_party", id: subject },
     action: { name: w.action.name },
-    resource: { type: "access.audit", id: realm },
+    resource: { type: "access.audit", id: environment },
     context: {
       domain: b64url(instance.domain),
       mode: "commit",

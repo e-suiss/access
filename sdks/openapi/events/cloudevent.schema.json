@@ -12,7 +12,7 @@
     "time",
     "datacontenttype",
     "accesstenant",
-    "accessrealm",
+    "accessenvironment",
     "data"
   ],
   "additionalProperties": false,
@@ -26,7 +26,7 @@
     },
     "source": {
       "type": "string",
-      "pattern": "^urn:suiss:access:realm:[0-9a-f-]{36}$"
+      "pattern": "^urn:suiss:access:environment:[0-9a-f-]{36}$"
     },
     "type": {
       "type": "string",
@@ -57,7 +57,7 @@
       "pattern": "^tnt_[0-9a-hjkmnp-tv-z]{26}$",
       "description": "The subscription's tenant by its opaque tnt_ id, as the tenant snapshot names it (OP-149 m.15 (i))."
     },
-    "accessrealm": {
+    "accessenvironment": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },

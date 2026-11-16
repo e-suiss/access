@@ -1,5 +1,5 @@
 ; SSH user certificate projection, version 1 (RFC 8610; OP-156 m.3 (o), IDP-32).
-; Deterministic CBOR (RFC 8949 §4.2.1). The fields of a `projection.issue` the realm SSH CA
+; Deterministic CBOR (RFC 8949 §4.2.1). The fields of a `projection.issue` the environment SSH CA
 ; encodes as `ssh-ed25519-cert-v01@openssh.com`; an agent's certificate is narrower than its
 ; principal's (projection ⊆ source).
 

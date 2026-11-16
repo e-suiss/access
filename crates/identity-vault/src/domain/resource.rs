@@ -1,6 +1,6 @@
-//! A vault Resource (§11.13, MD-13, OP-154 m.3 (t)): the realm's configuration of one upstream
+//! A vault Resource (§11.13, MD-13, OP-154 m.3 (t)): the environment's configuration of one upstream
 //! for connected accounts. It is the outbound `Connection` of the industry model: the
-//! upstream's OAuth metadata, the realm's client there, the scopes it may ask for, the
+//! upstream's OAuth metadata, the environment's client there, the scopes it may ask for, the
 //! `scope_mapping` from the domain's SPP actions to upstream scopes, and the registered
 //! executors that may receive a released token. Its inbound half is the domain's PEP, PRM and
 //! SPP actions, not a second policy store. Nothing in it is authority: `scope_mapping` only
@@ -29,8 +29,8 @@ pub const MAX_EXECUTORS: usize = 16;
 pub enum Origin {
     /// A shipped catalog entry (`idp.vault.resource_enable`).
     Catalog,
-    /// The realm's own upstream (`idp.vault.resource_register`, reserved).
-    Realm,
+    /// The environment's own upstream (`idp.vault.resource_register`, reserved).
+    Environment,
 }
 
 impl Origin {
@@ -39,7 +39,7 @@ impl Origin {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Catalog => "catalog",
-            Self::Realm => "realm",
+            Self::Environment => "environment",
         }
     }
 }
@@ -71,17 +71,17 @@ impl MappedAction {
     }
 }
 
-/// A realm's Resource.
+/// An environment's Resource.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Resource {
-    /// The realm's name for it.
+    /// The environment's name for it.
     pub name: String,
     /// Where its upstream comes from.
     pub origin: Origin,
     /// The upstream, its placeholders filled in.
     pub upstream: Upstream,
-    /// The realm's client at the upstream.
+    /// The environment's client at the upstream.
     pub client_id: String,
     /// The `secret://…` reference of that client's secret; the secret is never stored.
     pub client_secret_ref: String,
@@ -170,7 +170,7 @@ const MEMBERS: [&str; 8] = [
 
 impl Resource {
     /// The Resource `name` from its `putVaultResource` body: `upstream` names a catalog entry
-    /// (with `params` for its placeholders), or `custom` is the realm's own upstream in the
+    /// (with `params` for its placeholders), or `custom` is the environment's own upstream in the
     /// catalog format.
     ///
     /// # Errors
@@ -199,7 +199,7 @@ impl Resource {
                     return Err(Invalid::Resource);
                 }
                 u.placeholders = Vec::new();
-                (Origin::Realm, u)
+                (Origin::Environment, u)
             }
             _ => return Err(Invalid::Resource),
         };
@@ -222,7 +222,7 @@ impl Resource {
     }
 
     /// Whether it is inside the rules: names, a client and its secret reference, scopes the
-    /// upstream knows (any scope for the realm's own), every action's scopes among them, no
+    /// upstream knows (any scope for the environment's own), every action's scopes among them, no
     /// action of the `access` or `idp` namespaces, executors as `x5t#S256`.
     ///
     /// # Errors
@@ -230,7 +230,9 @@ impl Resource {
     pub fn check(&self) -> Result<(), Invalid> {
         let known = |s: &String| match self.origin {
             Origin::Catalog => self.upstream.knows(s),
-            Origin::Realm => s.len() <= 256 && s.bytes().all(|c| c.is_ascii_graphic() && c != b','),
+            Origin::Environment => {
+                s.len() <= 256 && s.bytes().all(|c| c.is_ascii_graphic() && c != b',')
+            }
         };
         let mut seen = BTreeSet::new();
         let actions_ok = (1..=MAX_ACTIONS).contains(&self.actions.len())
@@ -306,7 +308,7 @@ impl Resource {
 pub enum VaultChange {
     /// `idp.vault.resource_enable` (CT2): a catalog upstream, enabled or changed.
     Enable(Box<Resource>),
-    /// `idp.vault.resource_register` (reserved, CT3): the realm's own upstream.
+    /// `idp.vault.resource_register` (reserved, CT3): the environment's own upstream.
     Register(Box<Resource>),
     /// `idp.vault.resource_disable` (CT1): no new connection or release under it.
     Disable(String),
@@ -315,7 +317,7 @@ pub enum VaultChange {
 }
 
 impl VaultChange {
-    /// The `putVaultResource` change: a catalog upstream is enabled, the realm's own is
+    /// The `putVaultResource` change: a catalog upstream is enabled, the environment's own is
     /// registered.
     ///
     /// # Errors
@@ -324,7 +326,7 @@ impl VaultChange {
         let r = Resource::from_json(name, body, catalog)?;
         Ok(match r.origin {
             Origin::Catalog => Self::Enable(Box::new(r)),
-            Origin::Realm => Self::Register(Box::new(r)),
+            Origin::Environment => Self::Register(Box::new(r)),
         })
     }
 
@@ -385,7 +387,7 @@ impl VaultChange {
         }
     }
 
-    /// Its resource path below the realm's slug: `vault/<name>`, or `vault` for the mode.
+    /// Its resource path below the environment's slug: `vault/<name>`, or `vault` for the mode.
     #[must_use]
     pub fn path(&self) -> Vec<String> {
         match self {

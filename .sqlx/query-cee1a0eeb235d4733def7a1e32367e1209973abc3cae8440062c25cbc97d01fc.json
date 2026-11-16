@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_environment_policies\n               (tenant_id, environment_id, policy, domain_id, decision_pos)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cee1a0eeb235d4733def7a1e32367e1209973abc3cae8440062c25cbc97d01fc"
+}

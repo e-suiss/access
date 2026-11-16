@@ -14,7 +14,7 @@ use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::{change_status, create};
 use access_identity_account::app::privacy;
 use access_identity_account::app::vault::{self, Vault};
-use access_identity_account::app::{Actor, Realm};
+use access_identity_account::app::{Actor, Environment};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb, AccountTx};
@@ -35,8 +35,8 @@ const WHO: Actor<'static> = Actor {
 };
 
 fn vault_of(c: &Console) -> Vault {
-    crate::login::RealmKeks::new(c.w.keys.clone())
-        .vault(c.route.realm)
+    crate::login::EnvironmentKeks::new(c.w.keys.clone())
+        .vault(c.route.environment)
         .unwrap()
 }
 
@@ -50,26 +50,28 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     let c = console("privacy-delete", false).await;
     let route = c.route.clone();
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
-    let keks = crate::login::RealmKeks::new(c.w.keys.clone());
+    let keks = crate::login::EnvironmentKeks::new(c.w.keys.clone());
     let v = vault_of(&c);
-    let realm = Realm {
+    let environment = Environment {
         tenant: route.tenant,
-        realm: route.realm,
+        environment: route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
     let db = PgAccounts::sealed(c.w.db.app.clone(), v.clone());
     let email = Identifier::new(IdentifierKind::Email, "Erin@Example.com").unwrap();
-    let victim = create(&db, &realm, &[email], &WHO).await.unwrap();
+    let victim = create(&db, &environment, &[email], &WHO).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, victim, to, &WHO).await.unwrap();
+        change_status(&db, &environment, victim, to, &WHO)
+            .await
+            .unwrap();
     }
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     vault::set_profile(&mut tx.0, &v, victim, "name", "Erin Example")
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let account = realm.external(victim).unwrap();
+    let account = environment.external(victim).unwrap();
 
     // TN-110, OP-153 m.3 (bb)
     let domain = c.domain;
@@ -82,7 +84,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     let proof = c.browser.ais(
         domain,
         &access_crypto::random::bytes::<16>().unwrap(),
-        read_intent(&Method::POST, "/admin/v1/realms/acme/intents"),
+        read_intent(&Method::POST, "/admin/v1/envs/acme/intents"),
         Mode::Check,
         basis,
     );
@@ -91,7 +93,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
         c.browser
             .request(
                 &Method::POST,
-                "/console/api/proxy/admin/realms/acme/intents",
+                "/console/api/proxy/admin/envs/acme/intents",
                 "x",
             )
             .header("x-access-ais", proof)
@@ -118,7 +120,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
         c.browser
             .request(
                 &Method::POST,
-                &format!("/console/api/proxy/admin/realms/acme/accounts/{account}/delete"),
+                &format!("/console/api/proxy/admin/envs/acme/accounts/{account}/delete"),
                 "x",
             )
             .header("x-access-ais", ais)
@@ -137,7 +139,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     let position: u64 = written["position"].as_str().unwrap().parse().unwrap();
     assert!(position > before, "one recorded Exercise");
 
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let d = t.deletions(victim).await.unwrap();
@@ -177,7 +179,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     .unwrap();
     assert_eq!(pass.tombstoned, 1, "{pass:?}");
     assert_eq!(pass.destroyed, 0, "the destruction delay runs");
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     assert_eq!(
@@ -185,7 +187,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
         "tombstone"
     );
     assert!(
-        access_store::idp::realm::account(&mut t, victim)
+        access_store::idp::environment::account(&mut t, victim)
             .await
             .unwrap()
             .is_none(),
@@ -194,7 +196,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     t.commit().await.unwrap();
 
     // OP-74 m.3, OP-147 m.2
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     let hold = t
@@ -213,7 +215,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
         .await
         .unwrap();
     let mut kept = crate::retention::Pass::default();
-    crate::retention::retain_realm(&c.w.db.app, &keks, &ids, &route, &mut kept)
+    crate::retention::retain_environment(&c.w.db.app, &keks, &ids, &route, &mut kept)
         .await
         .unwrap();
     assert_eq!(
@@ -221,7 +223,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
         (0, 1),
         "the hold keeps the keys past their period"
     );
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     assert!(
@@ -237,11 +239,11 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
 
     // U58, TN-77, OP-42, HL-9
     let mut after = crate::retention::Pass::default();
-    crate::retention::retain_realm(&c.w.db.app, &keks, &ids, &route, &mut after)
+    crate::retention::retain_environment(&c.w.db.app, &keks, &ids, &route, &mut after)
         .await
         .unwrap();
     assert_eq!(after.destroyed, 1, "{after:?}");
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     let row = tx.subject(victim, false).await.unwrap().unwrap();
     assert_eq!(row.status, "purging");
     assert!(row.wrapped_dek.is_none());
@@ -279,7 +281,7 @@ async fn an_account_deletion_runs_from_the_exercise_to_destruction_with_proof() 
     tx.commit().await.unwrap();
 }
 
-/// The realm's hosted surface over the token's realm keys, as `main` mounts it.
+/// The environment's hosted surface over the token's environment keys, as `main` mounts it.
 fn hosted_router(c: &Console) -> axum::Router {
     use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
     use access_identity_account::app::hasher::{Hasher, HasherConfig};
@@ -288,14 +290,14 @@ fn hosted_router(c: &Console) -> axum::Router {
     use access_identity_account::domain::password::Argon2Params;
     use access_identity_account::domain::throttle::ThrottlePolicy;
     use access_identity_oauth::adapters::PgDirectory;
-    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_oauth::app::Discovery as EnvironmentDiscovery;
     use access_identity_session::domain::session::SessionPolicy;
     use access_identity_ui::adapters::Outbox;
     use access_identity_ui::app::Hosted;
     let w = &c.w;
     let hosted = Arc::new(Hosted {
         kits: crate::login::HsmKits::new(
-            crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             w.db.router.clone(),
             w.db.app.clone(),
             SessionPolicy::DEFAULT,
@@ -316,7 +318,7 @@ fn hosted_router(c: &Console) -> axum::Router {
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     access_http::login::router(
-        RealmDiscovery::new(
+        EnvironmentDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
         ),
@@ -328,7 +330,7 @@ fn hosted_router(c: &Console) -> axum::Router {
 fn call(method: &Method, path: &str, cookie: &str, body: &str) -> axum::http::Request<Body> {
     let mut b = axum::http::Request::builder()
         .method(method.clone())
-        .uri(format!("/realms/acme{path}"))
+        .uri(format!("/env/acme{path}"))
         .header(axum::http::header::HOST, "access.test")
         .header(
             axum::http::header::COOKIE,
@@ -368,22 +370,24 @@ async fn the_s11_privacy_surface_keeps_records_never_authority() {
     let route = c.route.clone();
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let v = vault_of(&c);
-    let realm = Realm {
+    let environment = Environment {
         tenant: route.tenant,
-        realm: route.realm,
+        environment: route.environment,
         kek: &*v.kek,
         ids: &ids,
     };
     let db = PgAccounts::sealed(c.w.db.app.clone(), v.clone());
     let email = Identifier::new(IdentifierKind::Email, "Pia@Example.com").unwrap();
-    let pia = create(&db, &realm, &[email], &WHO).await.unwrap();
+    let pia = create(&db, &environment, &[email], &WHO).await.unwrap();
     for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(&db, &realm, pia, to, &WHO).await.unwrap();
+        change_status(&db, &environment, pia, to, &WHO)
+            .await
+            .unwrap();
     }
-    let account = realm.external(pia).unwrap();
+    let account = environment.external(pia).unwrap();
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     t.insert_session(&access_store::sessions::NewSession {
@@ -504,12 +508,12 @@ async fn the_s11_privacy_surface_keeps_records_never_authority() {
         .unwrap()
         .to_owned();
     assert!(
-        privacy_must_accept(&c, &realm, pia, "2026-12").await,
+        privacy_must_accept(&c, &environment, pia, "2026-12").await,
         "a new version asks again"
     );
-    assert!(!privacy_must_accept(&c, &realm, pia, "2026-11").await);
+    assert!(!privacy_must_accept(&c, &environment, pia, "2026-11").await);
 
-    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.realm)
+    let mut t = TenantTx::begin(&c.w.db.app, route.tenant, route.environment)
         .await
         .unwrap();
     // IDP-37
@@ -571,10 +575,10 @@ async fn the_s11_privacy_surface_keeps_records_never_authority() {
     .await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(json(&body)["scheduled"], false);
-    let mut tx = db.begin(route.tenant, route.realm).await.unwrap();
+    let mut tx = db.begin(route.tenant, route.environment).await.unwrap();
     privacy::request_deletion(
         &mut tx,
-        &realm,
+        &environment,
         pia,
         privacy::DeletionSource::SelfService,
         None,
@@ -639,13 +643,13 @@ async fn the_s11_privacy_surface_keeps_records_never_authority() {
 
 async fn privacy_must_accept(
     c: &Console,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     version: &str,
 ) -> bool {
     privacy::must_accept(
         &PgAccounts::sealed(c.w.db.app.clone(), vault_of(c)),
-        realm,
+        environment,
         subject,
         "terms",
         version,

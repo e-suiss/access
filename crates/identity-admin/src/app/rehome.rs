@@ -1,8 +1,8 @@
-//! Realm rehome and residency (§5.16, §12.1.1 2a, E14, MD-5a, CMP-26, OP-30, OP-158 m.3 (o)):
-//! `idp.realm.rehome` is reserved, CT3 and two-ended. One Exercise is committed in the realm's
-//! governing domain and one in the domain it moves to; the realm moves only when both are
+//! Environment rehome and residency (§5.16, §12.1.1 2a, E14, MD-5a, CMP-26, OP-30, OP-158 m.3 (o)):
+//! `idp.environment.rehome` is reserved, CT3 and two-ended. One Exercise is committed in the environment's
+//! governing domain and one in the domain it moves to; the environment moves only when both are
 //! committed, in the transaction that records the second, and its placement then follows the
-//! new domain's cell. One end alone leaves the realm where it is. A residency names a region
+//! new domain's cell. One end alone leaves the environment where it is. A residency names a region
 //! this cell is in; declaring another one is a cell move first.
 
 use access_internal_api::idp::{Submission, Verdict};
@@ -17,13 +17,13 @@ use super::{Admin, Applied, Proposal};
 use crate::AdminError;
 use crate::domain::resilience::{DrClass, Rehome, Residency};
 use crate::domain::{Change, Invalid};
-use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 
-/// The rehome target must be another domain of the realm's tenant in this cell (E14).
+/// The rehome target must be another domain of the environment's tenant in this cell (E14).
 ///
 /// # Errors
 /// [`Invalid::PlacementMismatch`] for a domain this cell does not hold for the tenant;
-/// [`AdminError::Conflict`] for the realm's own governing domain.
+/// [`AdminError::Conflict`] for the environment's own governing domain.
 pub(crate) async fn current(t: &mut TenantTx, g: &Governing, r: &Rehome) -> Result<(), AdminError> {
     let to = DomainId::from_bytes(r.domain);
     if to == g.domain {
@@ -60,7 +60,7 @@ fn statement(ais: &[u8]) -> Result<access_kernel::ais::Statement, AdminError> {
         .ok_or_else(|| AdminError::Refused(String::from("ais-invalid")))
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     async fn decide_end(
         &self,
         p: &Proposal,
@@ -71,7 +71,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Vec<u8>,
         ),
     ) -> Result<Result<access_internal_api::idp::Committed, Applied>, AdminError> {
-        self.standing((p.tenant, p.realm), domain, &ais, None)
+        self.standing((p.tenant, p.environment), domain, &ais, None)
             .await?;
         let verdict = self
             .decider
@@ -107,10 +107,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
     }
 
-    /// Commits a rehome's from end with `ais` in the realm's governing domain and, with
-    /// `target_ais`, its to end in the new domain; the realm moves when both are committed
+    /// Commits a rehome's from end with `ais` in the environment's governing domain and, with
+    /// `target_ais`, its to end in the new domain; the environment moves when both are committed
     /// (E14, OP-158 m.3 (o)). A DENY of the from end is [`Applied::NotAllowed`]; with only the
-    /// from end committed, the realm stays and the answer is [`Invalid::RehomeIncomplete`].
+    /// from end committed, the environment stays and the answer is [`Invalid::RehomeIncomplete`].
     ///
     /// # Errors
     /// [`AdminError`].
@@ -164,7 +164,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let change = proposal.change.digest().map_err(|_| AdminError::Encode)?;
         let label = proposal.change.action().label();
         let (from, to) = ends.ids();
-        let mut tx = TenantTx::begin(self.app, proposal.tenant, proposal.realm).await?;
+        let mut tx = TenantTx::begin(self.app, proposal.tenant, proposal.environment).await?;
         let bound = idp::bind(
             &mut tx,
             &Bind {
@@ -221,14 +221,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 tracing::info!(
                     event = "rehome.incomplete",
                     decision = ?denied,
-                    "the new governing domain did not commit its end; the realm stays (E14)"
+                    "the new governing domain did not commit its end; the environment stays (E14)"
                 );
                 Err(Invalid::RehomeIncomplete.into())
             }
         }
     }
 
-    /// Records the to end and moves the realm when both ends are there (E14); its placement
+    /// Records the to end and moves the environment when both ends are there (E14); its placement
     /// then follows the new domain's cell (TI-17).
     async fn complete(
         &self,
@@ -237,7 +237,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         second: &access_internal_api::idp::Committed,
     ) -> Result<(), AdminError> {
         let (from, to) = ends.ids();
-        let mut tx = TenantTx::begin(self.app, proposal.tenant, proposal.realm).await?;
+        let mut tx = TenantTx::begin(self.app, proposal.tenant, proposal.environment).await?;
         placement::record_end(
             &mut tx,
             &End {
@@ -268,7 +268,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         if let Some((cell, dedicated)) = cell {
             placement::place(
                 &mut tx,
-                &Subject::Realm(*proposal.realm.as_bytes()),
+                &Subject::Environment(*proposal.environment.as_bytes()),
                 (&cell, dedicated),
                 at,
             )
@@ -277,7 +277,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let target = access_kernel::json::b64url_encode(&ends.to.0);
         let correlation = access_kernel::json::b64url_encode(&second.exercise.0);
         tx.audit(&access_store::audit::AuditEvent {
-            event_type: "realm.rehomed",
+            event_type: "environment.rehomed",
             actor: super::DECIDED_BY,
             target: &target,
             correlation: &correlation,
@@ -311,20 +311,20 @@ fn placed(p: Option<&placement::Placed>) -> serde_json::Value {
     )
 }
 
-/// `getPlacement`: the cell this realm, its governing domain and its tenant are placed in, this
-/// cell's own profile and the realm's residency (TI-17, CMP-26, OP-158 m.3 (o)). An absent
+/// `getPlacement`: the cell this environment, its governing domain and its tenant are placed in, this
+/// cell's own profile and the environment's residency (TI-17, CMP-26, OP-158 m.3 (o)). An absent
 /// placement reads as this cell: the cell that leads a domain serves it.
 ///
 /// # Errors
 /// [`AdminError`].
 pub(crate) async fn placement_view(t: &mut TenantTx) -> Result<serde_json::Value, AdminError> {
-    let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
-    let realm = t.realm().ok_or(AdminError::NoRealm)?;
+    let g = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
+    let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
     let cell = placement::cell_profile_in(t).await?;
     let mut latest = Vec::new();
     for subject in [
         Subject::Tenant(*t.tenant().as_bytes()),
-        Subject::Realm(*realm.as_bytes()),
+        Subject::Environment(*environment.as_bytes()),
         Subject::Domain(*g.domain.as_bytes()),
     ] {
         latest.push(placement::history(t, &subject).await?.pop());
@@ -336,7 +336,7 @@ pub(crate) async fn placement_view(t: &mut TenantTx) -> Result<serde_json::Value
         "region": cell.as_ref().and_then(|c| c.region.clone()),
         "dedicated_cell": cell.as_ref().is_some_and(|c| c.dedicated_to.is_some()),
         "tenant": placed(latest.first().and_then(Option::as_ref)),
-        "realm": placed(latest.get(1).and_then(Option::as_ref)),
+        "environment": placed(latest.get(1).and_then(Option::as_ref)),
         "domain": placed(latest.get(2).and_then(Option::as_ref)),
         "governing_domain": access_kernel::json::b64url_encode(g.domain.as_bytes()),
         "residency": residency.map(|(region, class)| serde_json::json!({ "region": region, "class": class })),
@@ -349,14 +349,14 @@ pub(crate) async fn placement_view(t: &mut TenantTx) -> Result<serde_json::Value
     }))
 }
 
-/// `getDurability`: the cell's durability profile, the realm's DR class and RPO (HL-40, OP-29,
+/// `getDurability`: the cell's durability profile, the environment's DR class and RPO (HL-40, OP-29,
 /// OP-158 m.3 (n), (p)). A synchronous cell declares RPO 0; an async DR profile its own RPO.
 /// What the governing domain declares about witnesses and replicas is added by the server.
 ///
 /// # Errors
 /// [`AdminError`].
 pub(crate) async fn durability_view(t: &mut TenantTx) -> Result<serde_json::Value, AdminError> {
-    let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+    let g = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
     let cell = placement::cell_profile_in(t).await?;
     let residency = placement::residency(t).await?;
     let dr = access_store::cells::dr_profile(t).await?;

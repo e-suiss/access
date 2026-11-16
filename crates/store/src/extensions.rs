@@ -7,7 +7,7 @@ use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::events::SealedKey;
-use crate::identity::{RealmId, TenantId, TenantTx};
+use crate::identity::{EnvironmentId, TenantId, TenantTx};
 use crate::idp::Bound;
 
 fn uuid(b: &[u8; 16]) -> Uuid {
@@ -19,8 +19,8 @@ fn ms(v: u64) -> Result<i64, StoreError> {
 }
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
-    Ok((uuid(t.tenant.as_bytes()), uuid(realm.as_bytes())))
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    Ok((uuid(t.tenant.as_bytes()), uuid(environment.as_bytes())))
 }
 
 fn sealed(
@@ -70,14 +70,14 @@ pub struct HookRow {
 /// # Errors
 /// [`StoreError`]; another live hook at the same point is a unique violation.
 pub async fn insert_hook(t: &mut TenantTx, bound: &Bound, h: &HookRow) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_hooks
-            (tenant_id, realm_id, hook_id, point, url, on_no_answer, disclose, signing, key_kek_id,
+            (tenant_id, environment_id, hook_id, point, url, on_no_answer, disclose, signing, key_kek_id,
              key_wrapped_dek, key_nonce, key_ciphertext, public_key, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
         tenant,
-        realm,
+        environment,
         uuid(&h.id),
         h.point,
         h.url,
@@ -106,13 +106,13 @@ pub async fn retire_hook(
     bound: &Bound,
     id: &[u8; 16],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_hooks SET status = 'retired', retired_at = now(), domain_id = $4,
                 decision_pos = $5
-          WHERE tenant_id = $1 AND realm_id = $2 AND hook_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND hook_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         uuid(id),
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -123,19 +123,19 @@ pub async fn retire_hook(
     Ok(done == 1)
 }
 
-/// The live hook at `point` of this realm.
+/// The live hook at `point` of this environment.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn live_hook(t: &mut TenantTx, point: &str) -> Result<Option<HookRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT hook_id, point, url, on_no_answer, disclose, signing, key_kek_id, key_wrapped_dek,
                 key_nonce, key_ciphertext, public_key, status
            FROM access.idp_hooks
-          WHERE tenant_id = $1 AND realm_id = $2 AND point = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND point = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         point,
     )
     .fetch_optional(&mut *t.tx)
@@ -164,8 +164,8 @@ pub async fn live_hook(t: &mut TenantTx, point: &str) -> Result<Option<HookRow>,
 /// A webhook registration as stored.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WebhookRow {
-    /// Its realm.
-    pub realm: [u8; 16],
+    /// Its environment.
+    pub environment: [u8; 16],
     /// Its id.
     pub id: [u8; 16],
     /// The tenant's HTTPS endpoint.
@@ -203,13 +203,13 @@ pub async fn insert_webhook(
     w: &WebhookRow,
     key: &WebhookKeyRow,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_webhooks
-            (tenant_id, realm_id, webhook_id, url, events, signing, domain_id, decision_pos)
+            (tenant_id, environment_id, webhook_id, url, events, signing, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         tenant,
-        realm,
+        environment,
         uuid(&w.id),
         w.url,
         &w.events,
@@ -228,14 +228,14 @@ async fn insert_key(
     webhook: &[u8; 16],
     k: &WebhookKeyRow,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_webhook_keys
-            (tenant_id, realm_id, webhook_id, key_id, signing, key_kek_id, key_wrapped_dek,
+            (tenant_id, environment_id, webhook_id, key_id, signing, key_kek_id, key_wrapped_dek,
              key_nonce, key_ciphertext, public_key, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         tenant,
-        realm,
+        environment,
         uuid(webhook),
         uuid(&k.id),
         k.signing,
@@ -264,13 +264,13 @@ pub async fn update_webhook(
     w: &WebhookRow,
     rotate: Option<(&WebhookKeyRow, u64)>,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_webhooks SET url = $4, events = $5, domain_id = $6, decision_pos = $7,
                 updated_at = now()
-          WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         uuid(&w.id),
         w.url,
         &w.events,
@@ -287,9 +287,9 @@ pub async fn update_webhook(
         sqlx::query!(
             "UPDATE access.idp_webhook_keys
                 SET not_after = to_timestamp($4::bigint / 1000.0), domain_id = $5, decision_pos = $6
-              WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND not_after IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND not_after IS NULL",
             tenant,
-            realm,
+            environment,
             uuid(&w.id),
             ms(old_until_ms)?,
             bound.domain.as_bytes().as_slice(),
@@ -312,13 +312,13 @@ pub async fn retire_webhook(
     bound: &Bound,
     id: &[u8; 16],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_webhooks SET status = 'retired', retired_at = now(), domain_id = $4,
                 decision_pos = $5, updated_at = now()
-          WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         uuid(id),
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -329,23 +329,23 @@ pub async fn retire_webhook(
     Ok(done == 1)
 }
 
-/// One webhook of this realm, live or retired.
+/// One webhook of this environment, live or retired.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn webhook(t: &mut TenantTx, id: &[u8; 16]) -> Result<Option<WebhookRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT realm_id, webhook_id, url, events, signing, status FROM access.idp_webhooks
-          WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3",
+        "SELECT environment_id, webhook_id, url, events, signing, status FROM access.idp_webhooks
+          WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3",
         tenant,
-        realm,
+        environment,
         uuid(id),
     )
     .fetch_optional(&mut *t.tx)
     .await?;
     Ok(row.map(|r| WebhookRow {
-        realm: *r.realm_id.as_bytes(),
+        environment: *r.environment_id.as_bytes(),
         id: *r.webhook_id.as_bytes(),
         url: r.url,
         events: r.events,
@@ -377,8 +377,8 @@ pub struct HookListing {
     pub position: u64,
 }
 
-/// The realm's hooks, live or retired, in id order after `after`; only `only` when given
-/// (OP-151 m.11, TN-113: the transaction's realm is the filter).
+/// The environment's hooks, live or retired, in id order after `after`; only `only` when given
+/// (OP-151 m.11, TN-113: the transaction's environment is the filter).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -388,16 +388,16 @@ pub async fn hooks(
     after: &[u8; 16],
     limit: u32,
 ) -> Result<Vec<HookListing>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT hook_id, point, url, on_no_answer, disclose, signing, public_key, status,
                 decision_pos
            FROM access.idp_hooks
-          WHERE tenant_id = $1 AND realm_id = $2 AND ($3::uuid IS NULL OR hook_id = $3)
+          WHERE tenant_id = $1 AND environment_id = $2 AND ($3::uuid IS NULL OR hook_id = $3)
             AND hook_id > $4
           ORDER BY hook_id LIMIT $5",
         tenant,
-        realm,
+        environment,
         only.map(uuid),
         uuid(after),
         i64::from(limit),
@@ -430,7 +430,7 @@ pub struct WebhookListing {
     pub position: u64,
 }
 
-/// The realm's webhooks, live or retired, in id order after `after`; only `only` when given.
+/// The environment's webhooks, live or retired, in id order after `after`; only `only` when given.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -440,15 +440,15 @@ pub async fn webhooks(
     after: &[u8; 16],
     limit: u32,
 ) -> Result<Vec<WebhookListing>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
-        "SELECT realm_id, webhook_id, url, events, signing, status, decision_pos
+        "SELECT environment_id, webhook_id, url, events, signing, status, decision_pos
            FROM access.idp_webhooks
-          WHERE tenant_id = $1 AND realm_id = $2 AND ($3::uuid IS NULL OR webhook_id = $3)
+          WHERE tenant_id = $1 AND environment_id = $2 AND ($3::uuid IS NULL OR webhook_id = $3)
             AND webhook_id > $4
           ORDER BY webhook_id LIMIT $5",
         tenant,
-        realm,
+        environment,
         only.map(uuid),
         uuid(after),
         i64::from(limit),
@@ -459,7 +459,7 @@ pub async fn webhooks(
         .map(|r| {
             Ok(WebhookListing {
                 webhook: WebhookRow {
-                    realm: *r.realm_id.as_bytes(),
+                    environment: *r.environment_id.as_bytes(),
                     id: *r.webhook_id.as_bytes(),
                     url: r.url,
                     events: r.events,
@@ -481,16 +481,16 @@ pub async fn webhook_keys(
     id: &[u8; 16],
     now_ms: u64,
 ) -> Result<Vec<WebhookKeyRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT key_id, signing, key_kek_id, key_wrapped_dek, key_nonce, key_ciphertext,
                   public_key, (extract(epoch FROM not_after) * 1000)::bigint AS not_after_ms
              FROM access.idp_webhook_keys
-            WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3
+            WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3
               AND (not_after IS NULL OR not_after > to_timestamp($4::bigint / 1000.0))
             ORDER BY not_after NULLS FIRST, created_at DESC"#,
         tenant,
-        realm,
+        environment,
         uuid(id),
         ms(now_ms)?,
     )
@@ -517,15 +517,15 @@ pub async fn webhook_keys(
         .collect()
 }
 
-/// The live webhooks of this tenant, every realm.
+/// The live webhooks of this tenant, every environment.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn live_webhooks(t: &mut TenantTx) -> Result<Vec<WebhookRow>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT realm_id, webhook_id, url, events, signing FROM access.idp_webhooks
+        "SELECT environment_id, webhook_id, url, events, signing FROM access.idp_webhooks
           WHERE tenant_id = $1 AND status = 'active'
-          ORDER BY realm_id, webhook_id",
+          ORDER BY environment_id, webhook_id",
         uuid(t.tenant.as_bytes()),
     )
     .fetch_all(&mut *t.tx)
@@ -533,7 +533,7 @@ pub async fn live_webhooks(t: &mut TenantTx) -> Result<Vec<WebhookRow>, StoreErr
     Ok(rows
         .into_iter()
         .map(|r| WebhookRow {
-            realm: *r.realm_id.as_bytes(),
+            environment: *r.environment_id.as_bytes(),
             id: *r.webhook_id.as_bytes(),
             url: r.url,
             events: r.events,
@@ -546,8 +546,8 @@ pub async fn live_webhooks(t: &mut TenantTx) -> Result<Vec<WebhookRow>, StoreErr
 /// One queued webhook delivery.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WebhookDelivery {
-    /// Realm.
-    pub realm: [u8; 16],
+    /// Environment.
+    pub environment: [u8; 16],
     /// Webhook.
     pub webhook: [u8; 16],
     /// The event id: the dedup key and `webhook-id`.
@@ -620,13 +620,13 @@ impl TenantTx {
     ) -> Result<bool, StoreError> {
         let done = sqlx::query!(
             "INSERT INTO access.idp_webhook_deliveries
-                (tenant_id, realm_id, webhook_id, event_id, event_type, payload, occurred_at,
+                (tenant_id, environment_id, webhook_id, event_id, event_type, payload, occurred_at,
                  next_attempt_at, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7::bigint / 1000.0),
                      to_timestamp($8::bigint / 1000.0), to_timestamp($8::bigint / 1000.0))
-             ON CONFLICT (tenant_id, realm_id, webhook_id, event_id) DO NOTHING",
+             ON CONFLICT (tenant_id, environment_id, webhook_id, event_id) DO NOTHING",
             uuid(self.tenant.as_bytes()),
-            uuid(&d.realm),
+            uuid(&d.environment),
             uuid(&d.webhook),
             d.event_id,
             d.event_type,
@@ -639,7 +639,7 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
-    /// One webhook delivery of this realm.
+    /// One webhook delivery of this environment.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -648,15 +648,15 @@ impl TenantTx {
         webhook: &[u8; 16],
         event_id: &str,
     ) -> Result<Option<WebhookDelivery>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             r#"SELECT event_type, payload, attempts, state,
                       (extract(epoch FROM occurred_at) * 1000)::bigint AS "occurred_ms!",
                       (extract(epoch FROM created_at) * 1000)::bigint AS "queued_ms!"
                  FROM access.idp_webhook_deliveries
-                WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND event_id = $4"#,
+                WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND event_id = $4"#,
             tenant,
-            realm,
+            environment,
             uuid(webhook),
             event_id,
         )
@@ -664,7 +664,7 @@ impl TenantTx {
         .await?;
         row.map(|r| {
             Ok(WebhookDelivery {
-                realm: *realm.as_bytes(),
+                environment: *environment.as_bytes(),
                 webhook: *webhook,
                 event_id: String::from(event_id),
                 event_type: r.event_type,
@@ -688,7 +688,7 @@ impl TenantTx {
         event_id: &str,
         a: &Attempt<'_>,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let state = match a.outcome {
             "retry" => "pending",
             other => other,
@@ -704,11 +704,11 @@ impl TenantTx {
                     last_reason = $8,
                     next_attempt_at = coalesce(to_timestamp($9::bigint / 1000.0), next_attempt_at),
                     updated_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND event_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND event_id = $4
                 AND state = 'pending'
           RETURNING attempts",
             tenant,
-            realm,
+            environment,
             uuid(webhook),
             event_id,
             state,
@@ -724,11 +724,11 @@ impl TenantTx {
         };
         sqlx::query!(
             "INSERT INTO access.idp_webhook_attempts
-                (tenant_id, realm_id, webhook_id, event_id, attempt, outcome, status, latency_ms,
+                (tenant_id, environment_id, webhook_id, event_id, attempt, outcome, status, latency_ms,
                  reason)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
-            realm,
+            environment,
             uuid(webhook),
             event_id,
             attempt,
@@ -753,7 +753,7 @@ impl TenantTx {
         after: Option<(&str, &str)>,
         limit: u32,
     ) -> Result<Vec<DeliveryLogRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let (at, id) = after.map_or((None, None), |(a, i)| (Some(a), Some(i)));
         let rows = sqlx::query!(
             r#"SELECT event_id, event_type, state, attempts, last_status, last_latency_ms,
@@ -762,12 +762,12 @@ impl TenantTx {
                       (extract(epoch FROM created_at) * 1000)::bigint AS "queued_ms!",
                       created_at::text AS "queued_at!"
                  FROM access.idp_webhook_deliveries
-                WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3
                   AND ($4::text IS NULL OR (created_at, event_id) < ($4::text::timestamptz, $5::text))
                 ORDER BY created_at DESC, event_id DESC
                 LIMIT $6"#,
             tenant,
-            realm,
+            environment,
             uuid(webhook),
             at,
             id,
@@ -808,13 +808,13 @@ impl TenantTx {
         webhook: &[u8; 16],
         event_id: &str,
     ) -> Result<Vec<(String, Option<u16>, Option<u32>)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT outcome, status, latency_ms FROM access.idp_webhook_attempts
-              WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3 AND event_id = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND webhook_id = $3 AND event_id = $4
               ORDER BY attempt",
             tenant,
-            realm,
+            environment,
             uuid(webhook),
             event_id,
         )
@@ -841,8 +841,8 @@ impl TenantTx {
 pub struct DueWebhook {
     /// Tenant.
     pub tenant: TenantId,
-    /// Realm.
-    pub realm: RealmId,
+    /// Environment.
+    pub environment: EnvironmentId,
     /// Webhook.
     pub webhook: [u8; 16],
     /// Event id.
@@ -860,7 +860,7 @@ pub async fn due_webhooks(
     limit: u32,
 ) -> Result<Vec<DueWebhook>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT tenant_id, realm_id, webhook_id, event_id FROM access.idp_webhook_deliveries
+        "SELECT tenant_id, environment_id, webhook_id, event_id FROM access.idp_webhook_deliveries
           WHERE state = 'pending' AND next_attempt_at <= to_timestamp($1::bigint / 1000.0)
           ORDER BY next_attempt_at, created_at LIMIT $2",
         ms(now_ms)?,
@@ -872,7 +872,7 @@ pub async fn due_webhooks(
         .into_iter()
         .map(|r| DueWebhook {
             tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.environment_id.as_bytes()),
             webhook: *r.webhook_id.as_bytes(),
             event_id: r.event_id,
         })

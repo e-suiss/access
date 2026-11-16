@@ -4,7 +4,7 @@ The OpenTelemetry facade of Access. The rest of the code base logs and traces th
 
 - **Logs.** One JSON object per line on standard output: `timestamp`, `level`, `target`, `service`, `version`, `trace_id`, `span_id`, `event`, `outcome`, `message`, the event's own `fields` and the current `span`. `event` is a permanent name from `conformance/catalog/events.toml`; a published name is never renamed. `log_format = "text"` prints the same events for a terminal.
 - **Traces.** `tracing` spans are bridged to OpenTelemetry and exported over OTLP/gRPC. A request continues a well-formed W3C `traceparent` and starts a new trace for anything else; its trace id is the response's `Request-Id`. The trace travels on outbound HTTP requests, on outbox rows (`trace_parent` column) to their consumers, and on signer requests. Sampling is decided from the trace id alone (`trace_sample_ratio`), so a caller cannot force sampling. Sampled traces are operator telemetry, never an authority record.
-- **Metrics.** `Counter`, `Gauge` and `Histogram` take their label names from the closed `Label` set and their label values as `&'static str`, so no identifier, address, tenant, realm or domain can become a series. The same SDK pipeline is read by `/metrics` (Prometheus text) and pushed over OTLP.
+- **Metrics.** `Counter`, `Gauge` and `Histogram` take their label names from the closed `Label` set and their label values as `&'static str`, so no identifier, address, tenant, environment or domain can become a series. The same SDK pipeline is read by `/metrics` (Prometheus text) and pushed over OTLP.
 - **Oracle watch.** Advisory `check` and explain volume per Instance is kept in a bounded per-process table, never as a label, and exported to security tooling at `/internal/v1/oracle-watch`.
 
 ## Configuration
@@ -60,7 +60,7 @@ Every metric name starts with `access_`. The section column is the row of the op
 | `access_login_cpu_ratio_permille` | gauge | | Process CPU over password hash CPU in thousandths, per 10 s window (target below 1 100) |
 | `access_secret_memory_backend` | gauge | `kind` | A signer's key memory backend (`memfd_secret` or `mlock`); a signer without one does not start |
 
-Tenant, realm and domain breakdowns come from the analytics summary tables, not from metric labels.
+Tenant, environment and domain breakdowns come from the analytics summary tables, not from metric labels.
 
 ## Retention
 

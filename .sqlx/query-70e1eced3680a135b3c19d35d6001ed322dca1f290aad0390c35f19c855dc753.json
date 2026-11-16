@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.linux_hosts (tenant_id, environment_id, name, version, state, host_group,\n                    certificate, nss_ttl_s, console_ttl_s, sudo_ct, shell, break_glass, domain_id,\n                    decision_pos)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11,\n                    $12, $13\n               FROM access.linux_hosts\n              WHERE tenant_id = $1 AND environment_id = $2 AND name = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int2",
+        "Text",
+        "Bool",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70e1eced3680a135b3c19d35d6001ed322dca1f290aad0390c35f19c855dc753"
+}

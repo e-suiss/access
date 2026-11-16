@@ -1,7 +1,7 @@
 // OP-159 m.42, TN-113
 import { API } from "./api.js";
 
-/** The console's own page, which names no realm. */
+/** The console's own page, which names no environment. */
 export const HOME = "/console";
 
 const BASE = "/console/";
@@ -11,12 +11,12 @@ const SLUG = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 // OP-159 m.42 (e)
 const RESERVED: ReadonlySet<string> = new Set(["api", "assets"]);
 
-const LAST_REALM = "access-console-realm";
+const LAST_ENVIRONMENT = "access-console-environment";
 
 // OP-159 m.43 (b)
-const KNOWN_REALMS = "access-console-realms";
+const KNOWN_ENVIRONMENTS = "access-console-environments";
 
-/** How many realms this browser signed in to the console keeps. */
+/** How many environments this browser signed in to the console keeps. */
 const MAX_KNOWN = 12;
 
 const SIGN_IN_STARTED = "access-console-sign-in";
@@ -24,51 +24,51 @@ const SIGN_IN_STARTED = "access-console-sign-in";
 /** How long a started sign-in keeps the console from starting another on its own. */
 const SIGN_IN_GRACE_MS = 60_000;
 
-/** Whether `s` can name a realm in a console address. */
-export function isRealm(s: string): boolean {
+/** Whether `s` can name an environment in a console address. */
+export function isEnvironment(s: string): boolean {
   return SLUG.test(s) && !RESERVED.has(s);
 }
 
-/** The address of `route` (`""`, `admin`, `admin/roles`, …) in `realm`'s console. */
-export function consoleHref(realm: string, route = ""): string {
-  const base = `${BASE}${encodeURIComponent(realm)}`;
+/** The address of `route` (`""`, `admin`, `admin/roles`, …) in `environment`'s console. */
+export function consoleHref(environment: string, route = ""): string {
+  const base = `${BASE}${encodeURIComponent(environment)}`;
   return route === "" ? base : `${base}/${route}`;
 }
 
-/** A realm's console address as people share it, on this origin. */
-export function consoleLink(realm: string): string {
-  return `${location.origin}${consoleHref(realm)}`;
+/** An environment's console address as people share it, on this origin. */
+export function consoleLink(environment: string): string {
+  return `${location.origin}${consoleHref(environment)}`;
 }
 
-/** The realm `path` names and the rest after it; `undefined` when it names none. */
+/** The environment `path` names and the rest after it; `undefined` when it names none. */
 export function splitPath(path: string): {
-  readonly realm: string | undefined;
+  readonly environment: string | undefined;
   readonly rest: string;
 } {
-  if (!path.startsWith(BASE)) return { realm: undefined, rest: "" };
+  if (!path.startsWith(BASE)) return { environment: undefined, rest: "" };
   const [head = "", ...rest] = path.slice(BASE.length).split("/");
-  if (!isRealm(head)) return { realm: undefined, rest: "" };
-  return { realm: head, rest: rest.join("/") };
+  if (!isEnvironment(head)) return { environment: undefined, rest: "" };
+  return { environment: head, rest: rest.join("/") };
 }
 
-/** The realm this browser last signed in to, if it remembers one (OP-159 m.42 (b)). */
-export function lastRealm(): string | undefined {
+/** The environment this browser last signed in to, if it remembers one (OP-159 m.42 (b)). */
+export function lastEnvironment(): string | undefined {
   try {
-    const r = localStorage.getItem(LAST_REALM);
-    return r !== null && isRealm(r) ? r : undefined;
+    const r = localStorage.getItem(LAST_ENVIRONMENT);
+    return r !== null && isEnvironment(r) ? r : undefined;
   } catch {
     return undefined;
   }
 }
 
-/** The realms this browser signed in to, the latest first (OP-159 m.43 (b)). */
-export function knownRealms(): readonly string[] {
+/** The environments this browser signed in to, the latest first (OP-159 m.43 (b)). */
+export function knownEnvironments(): readonly string[] {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(KNOWN_REALMS) ?? "[]");
+    const v: unknown = JSON.parse(localStorage.getItem(KNOWN_ENVIRONMENTS) ?? "[]");
     if (!Array.isArray(v)) return [];
     const out: string[] = [];
     for (const r of v) {
-      if (typeof r === "string" && isRealm(r) && !out.includes(r)) out.push(r);
+      if (typeof r === "string" && isEnvironment(r) && !out.includes(r)) out.push(r);
     }
     return out.slice(0, MAX_KNOWN);
   } catch {
@@ -76,16 +76,19 @@ export function knownRealms(): readonly string[] {
   }
 }
 
-/** Remembers `realm` as the one this browser last signed in to, and among those it signed in to. */
-export function rememberRealm(realm: string): void {
+/** Remembers `environment` as the one this browser last signed in to, and among those it signed in to. */
+export function rememberEnvironment(environment: string): void {
   try {
-    localStorage.setItem(LAST_REALM, realm);
+    localStorage.setItem(LAST_ENVIRONMENT, environment);
   } catch {
     // OP-159 m.42 (b)
   }
   try {
-    const known = [realm, ...knownRealms().filter((r) => r !== realm)].slice(0, MAX_KNOWN);
-    localStorage.setItem(KNOWN_REALMS, JSON.stringify(known));
+    const known = [environment, ...knownEnvironments().filter((r) => r !== environment)].slice(
+      0,
+      MAX_KNOWN,
+    );
+    localStorage.setItem(KNOWN_ENVIRONMENTS, JSON.stringify(known));
   } catch {
     // OP-159 m.43 (b)
   }
@@ -120,9 +123,9 @@ export function signInJustStarted(): boolean {
 }
 
 // TN-128, OP-159 m.29: a navigation, not a form submission, since `form-action 'self'` also
-// governs the redirect to the realm's hosted login on another origin
-/** Starts the sign-in of `realm` at its hosted login. */
-export function startSignIn(realm: string): void {
+// governs the redirect to the environment's hosted login on another origin
+/** Starts the sign-in of `environment` at its hosted login. */
+export function startSignIn(environment: string): void {
   noteSignInStarted();
-  window.location.assign(`${API}/sign-in?realm=${encodeURIComponent(realm)}`);
+  window.location.assign(`${API}/sign-in?environment=${encodeURIComponent(environment)}`);
 }

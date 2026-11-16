@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.risk_subject (tenant_id, environment_id, subject_id, last_at_ms, level)\n             VALUES ($1, $2, $3, $4, $5)\n             ON CONFLICT (tenant_id, environment_id, subject_id) DO UPDATE\n                SET level = EXCLUDED.level, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7fa67e23b5b67d307f8da2de75b091ddbb3f314c6abecafa175654bedd57b3cb"
+}

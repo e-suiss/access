@@ -30,7 +30,7 @@ pub(crate) const REQUIRED: &[&str] = &[
     "parser-worker",
     "co-tenant",
     "support-staff",
-    "realm-signing-key",
+    "environment-signing-key",
     "operational-key",
     "binding-key",
 ];

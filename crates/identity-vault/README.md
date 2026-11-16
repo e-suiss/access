@@ -8,11 +8,11 @@ services, and Access decides every single use.
 
 Each upstream is one TOML file in `catalog/`: authorization and token endpoints, the RFC 7009
 revocation endpoint when the service has one, the documented token lifetime, how refreshes behave,
-and the scopes it offers. A realm turns one on with `idp.vault.resource_enable`; a service the
-catalog does not have is the realm's own upstream, `idp.vault.resource_register`. A catalog entry
+and the scopes it offers. An environment turns one on with `idp.vault.resource_enable`; a service the
+catalog does not have is the environment's own upstream, `idp.vault.resource_register`. A catalog entry
 grants nothing to anyone.
 
-A realm's Resource names its client at the upstream (the secret is a `secret://` reference, never
+An environment's Resource names its client at the upstream (the secret is a `secret://` reference, never
 stored), the scopes a connection may hold, the `scope_mapping` from the domain's actions to
 upstream scopes, and the registered executors a token may go to. The mapping says which scopes an
 action needs; it is not authority.
@@ -41,7 +41,7 @@ five minutes before they expire, under a lease; a refused refresh marks the conn
 
 The token stays with the executor, which makes the call itself (broker as PEP), for every action of
 consequence tier CT2 or above and for every action without an accepted schema. Only at CT0–CT1, with
-the realm's release mode open (`idp.vault.release_mode_open`), a known expiry within the horizon and
+the environment's release mode open (`idp.vault.release_mode_open`), a known expiry within the horizon and
 either a lifetime of at most one hour or an upstream revocation endpoint, may the executor hand the
 token to the agent's code. Anything less goes to the executor.
 

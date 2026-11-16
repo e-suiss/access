@@ -20,7 +20,7 @@ use axum::routing::post;
 use serde::Deserialize;
 use serde_json::json;
 
-use super::approval::{CSRF_HEADER, json_reply, realm_of, refused, same_origin_json};
+use super::approval::{CSRF_HEADER, environment_of, json_reply, refused, same_origin_json};
 use super::session_cookie;
 
 type Shared<E> = State<Arc<OAuth<E>>>;
@@ -40,10 +40,10 @@ struct Decide {
     approval: Option<String>,
 }
 
-/// The CIBA routes, at the host root and under `/realms/{slug}`.
+/// The CIBA routes, at the host root and under `/env/{slug}`.
 pub(super) fn routes<E: Env>() -> Router<Arc<OAuth<E>>> {
     let mut r = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         r = r
             .route(&format!("{prefix}/v1/ciba/preview"), post(preview::<E>))
             .route(&format!("{prefix}/v1/ciba/approval"), post(decide::<E>));
@@ -93,7 +93,8 @@ async fn preview<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await
+    {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -105,7 +106,7 @@ async fn preview<E: Env>(
     }
     let cookie = session_cookie(&headers);
     match s
-        .ciba_preview(&realm, cookie.as_deref(), &ask.request)
+        .ciba_preview(&environment, cookie.as_deref(), &ask.request)
         .await
     {
         Ok(Ok(v)) => {
@@ -159,7 +160,8 @@ async fn decide<E: Env>(
     if let Err(r) = same_origin_json(&headers) {
         return r;
     }
-    let realm = match realm_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await {
+    let environment = match environment_of(&s, &uri, &headers, p.map(|Path(x)| x).as_deref()).await
+    {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -185,7 +187,7 @@ async fn decide<E: Env>(
         );
     }
     match s
-        .ciba_decide(&realm, cookie.as_deref(), &d.request, approval)
+        .ciba_decide(&environment, cookie.as_deref(), &d.request, approval)
         .await
     {
         Ok(Ok(())) => json_reply(

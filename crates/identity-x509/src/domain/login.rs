@@ -1,8 +1,8 @@
 //! What a verified client certificate says for sign-in (§10.2.5, OP-155 m.3 (m)).
 //!
-//! - The realm's rule maps exactly one subjectAltName entry of one kind to the account's
+//! - The environment's rule maps exactly one subjectAltName entry of one kind to the account's
 //!   identifier; none or several refuse.
-//! - Assurance: the issuer policy OIDs the realm mapped as hardware-bound PIV make the
+//! - Assurance: the issuer policy OIDs the environment mapped as hardware-bound PIV make the
 //!   certificate a device-bound key activated by the card's PIN (AAL3, CT3); any other
 //!   certificate is a software key and never reaches CT3.
 //! - The CA a path ends at is trusted only through the governing domain's actor-binding
@@ -26,7 +26,7 @@ pub enum Rule {
 }
 
 impl Rule {
-    /// The rule's name in realm settings.
+    /// The rule's name in environment settings.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -95,7 +95,7 @@ pub fn ca_issuer(ca: &[u8]) -> Result<[u8; 16], X509Error> {
     Ok(id)
 }
 
-/// Whether `oid` is a dotted OID a realm may map.
+/// Whether `oid` is a dotted OID an environment may map.
 #[must_use]
 pub fn policy_oid(oid: &str) -> bool {
     let arcs: Vec<&str> = oid.split('.').collect();

@@ -1,6 +1,6 @@
 # access-identity-oauth
 
-The OAuth 2.1 authorization server and OpenID Provider of an Access realm: `/authorize`, `/par`,
+The OAuth 2.1 authorization server and OpenID Provider of an Access environment: `/authorize`, `/par`,
 `/token`, `/userinfo`, `/revoke`, `/introspect`, RP-initiated and back-channel logout, and the
 discovery documents.
 
@@ -8,10 +8,10 @@ discovery documents.
 
 Every `client_id` goes through one resolver:
 
-- an opaque `cli_…` id is a client the realm registered;
-- a URL is never looked up in the realm's own registry. A federation request (`trust_chain`) is
+- an opaque `cli_…` id is a client the environment registered;
+- a URL is never looked up in the environment's own registry. A federation request (`trust_chain`) is
   refused, and anything else is resolved through its Client ID Metadata Document (CIMD,
-  `draft-ietf-oauth-client-id-metadata-document-02`) when the realm accepts CIMD clients from
+  `draft-ietf-oauth-client-id-metadata-document-02`) when the environment accepts CIMD clients from
   that domain.
 
 Where a client comes from (`registered` or `cimd`) is a policy input. It is never authority.
@@ -25,7 +25,7 @@ outbound client as every other client URL:
   check applies to every URL the document names (`jwks_uri`, `logo_uri`, `policy_uri`, …).
 - No redirects are followed and only `200` is a document.
 - The read stops at 5 KB. The whole fetch has 5 s and the connection 2 s.
-- At most 10 fetches per URL and 100 per realm per minute, with the `User-Agent`
+- At most 10 fetches per URL and 100 per environment per minute, with the `User-Agent`
   `Suiss-Access-CIMD/1`.
 
 The document must name its own URL as `client_id` and carry `client_name` and `redirect_uris`.
@@ -38,14 +38,14 @@ When the snapshot changes:
 - a change to `redirect_uris`, `token_endpoint_auth_method`, `scope`, `grant_types`, `jwks` or
   `jwks_uri` ends the client's consent records, and the person is asked again;
 - a change to `client_name` or `logo_uri` is only shown as a warning;
-- a domain the realm's CIMD policy no longer admits retires its clients, ending their consent
+- a domain the environment's CIMD policy no longer admits retires its clients, ending their consent
   records and identity grants. The same URL seen again later is a new client.
 
-The metadata declares `client_id_metadata_document_supported` only for a realm that accepts CIMD.
+The metadata declares `client_id_metadata_document_supported` only for an environment that accepts CIMD.
 
 ## MCP clients and consent
 
-A client the realm did not register must name one registered protected resource in `resource`.
+A client the environment did not register must name one registered protected resource in `resource`.
 That resource becomes the token's only audience, and an unknown one is `invalid_target`.
 
 Such a client gets a code only while the person's consent record for it covers the requested
@@ -57,7 +57,7 @@ claim. Every authorization response carries `iss`.
 ## Token exchange and assertions
 
 An agent trades a token for another with RFC 8693. The subject token can be an Access token of
-this realm, an ID token this realm issued to the same client, or a JWT of an issuer the realm's
+this environment, an ID token this environment issued to the same client, or a JWT of an issuer the environment's
 domain accepts. SAML assertions are not read yet. The subject token is only input: the new token
 is the agent's own decision on its own Grant, for the resource it asks for, and never names more
 actions or lives longer than an Access subject token. Its `act` lists the agents that delegated
@@ -69,7 +69,7 @@ forwards the token it received; it exchanges it for its own token to the upstrea
 
 - an ID-JAG (`oauth-id-jag+jwt`) for another authorization server: only for a client that
   authenticates with `private_key_jwt`, only for an `audience` and `resource` a live cross-app
-  connection of the realm names for that client (`idp.client.cross_app_connection`; its scopes
+  connection of the environment names for that client (`idp.client.cross_app_connection`; its scopes
   are a hint), only after the caller's decision for the `resource` allowed it, five minutes at
   most, and with no authority in it;
 - a Transaction Token (`txntoken+jwt`): sixty seconds of audit context naming the Exercise; it is
@@ -88,13 +88,13 @@ A workload authenticates with its SPIFFE credential instead of a secret
 
 - a **JWT-SVID** as `client_assertion` with `client_assertion_type`
   `urn:ietf:params:oauth:client-assertion-type:jwt-spiffe`. Its `sub` is the SPIFFE ID, `aud` is
-  the realm's issuer and nothing else, `exp` is at most five minutes ahead, and the signature is
+  the environment's issuer and nothing else, `exp` is at most five minutes ahead, and the signature is
   ES256 under a `jwt-svid` key of the trust domain's bundle. Each JWT-SVID is used once;
 - an **X.509-SVID** over mutual TLS, with `client_id` the SPIFFE ID in the certificate's URI SAN.
   The chain must verify to the bundle's `x509-svid` roots; the leaf is not a CA and has
   `digitalSignature`. Such a certificate is never a PEP certificate.
 
-The realm registers a workload client with `idp.client.register`: its SPIFFE ID or a
+The environment registers a workload client with `idp.client.register`: its SPIFFE ID or a
 whole-segment prefix written `spiffe://acme.example/agent/finance/*`, the trust domain's Bundle
 Endpoint and the agent the workloads act as. A wildcard anywhere else selects nothing. The
 trust domain itself must also be accepted: the governing domain's root establishes an
@@ -107,10 +107,10 @@ per trust domain and refreshed after its `spiffe_refresh_hint`, kept within 5 mi
 24 hours; its sequence never goes back. A bundle older than twice its refresh interval verifies
 nothing, so a Bundle Endpoint that stays down eventually stops every SVID of its trust domain.
 
-A verified workload with a DPoP proof is the workload's first presentation: the realm issuer
+A verified workload with a DPoP proof is the workload's first presentation: the environment issuer
 issues an `identity_binding_workload` Claim about the agent naming the workload URI and the DPoP
 key. That key can then open its own Instance of the agent with a self-signed `instance_create`,
-sent to `POST /v1/workloads/instances` on the realm; a key without a live binding gets `403`.
+sent to `POST /v1/workloads/instances` on the environment; a key without a live binding gets `403`.
 Authentication is all this gives: the Instance acts only through a Grant.
 
 ## Client interop notes (2026-11-09)

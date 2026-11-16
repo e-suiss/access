@@ -1,13 +1,13 @@
 //! The start-up report (OP-148, OP-138, §17.9.6, §17.9.7, MD-8): before the server serves, it
 //! checks that its issuer and management origin are in their one form and covered by its TLS
 //! certificate, that the admin interface is on its own listener, that the signers answer and
-//! every realm's issuer and JWKS load. It writes one structured line, `event =
+//! every environment's issuer and JWKS load. It writes one structured line, `event =
 //! "startup.checks"`, naming every check, and refuses to serve when any failed.
 
 use std::path::Path;
 
 use access_identity_oauth::app::StartupError;
-use access_identity_oauth::domain::issuer::{Issuer, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, Issuer};
 use rustls_pki_types::pem::PemObject as _;
 use rustls_pki_types::{CertificateDer, ServerName};
 
@@ -117,8 +117,8 @@ pub(crate) fn origins(config: &Config) -> Result<Vec<String>, String> {
     let management = Issuer::parse(management)
         .map_err(|_| "management_api is not an https origin".to_owned())?;
     if let Some(identity) = &config.identity {
-        RealmBase::parse(&identity.realm_base)
-            .map_err(|_| "identity.realm_base is not an https origin".to_owned())?;
+        EnvironmentBase::parse(&identity.environment_base)
+            .map_err(|_| "identity.environment_base is not an https origin".to_owned())?;
     }
     let mut hosts = vec![
         host(issuer.authority()).to_owned(),
@@ -185,8 +185,8 @@ pub(crate) fn identity(outcome: &Result<usize, StartupError>, report: &mut Repor
         ),
     };
     report.record("identity-signer", signer);
-    report.record("realm-issuers", issuers);
-    report.record("realm-jwks", jwks);
+    report.record("environment-issuers", issuers);
+    report.record("environment-jwks", jwks);
 }
 
 #[cfg(test)]

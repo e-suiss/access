@@ -769,7 +769,7 @@ jobs:
         if: always()
         run: scripts/ci/pebble-env.sh down
 
-  # OP-156 m.3 (o), m.5: the realm SSH CA's certificates and KRL against a real OpenSSH sshd,
+  # OP-156 m.3 (o), m.5: the environment SSH CA's certificates and KRL against a real OpenSSH sshd,
   # unprivileged on a loopback port
   ssh-ca:
     name: ssh-ca

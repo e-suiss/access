@@ -263,7 +263,7 @@ pub enum Proof<'a> {
         rebind: Option<&'a str>,
     },
     /// Names the device key that becomes the successor Instance in the rebind window: the
-    /// realm issuer's `recovery_result` Claim names it (OP-153 m.3 (c), INV-40).
+    /// environment issuer's `recovery_result` Claim names it (OP-153 m.3 (c), INV-40).
     Successor {
         /// The key's RFC 7638 thumbprint, `x5t#S256`.
         kid: [u8; 32],
@@ -511,14 +511,14 @@ where
         }
     }
 
-    async fn realm_policy(&self, tx: &mut D::Tx) -> Result<RecoveryPolicy, SessionError> {
-        match tx.recovery_realm_policy().await? {
+    async fn environment_policy(&self, tx: &mut D::Tx) -> Result<RecoveryPolicy, SessionError> {
+        match tx.recovery_environment_policy().await? {
             Some(b) => RecoveryPolicy::from_bytes(&b).map_err(|_| SessionError::Corrupt),
             None => Ok(RecoveryPolicy::DEFAULT),
         }
     }
 
-    /// The AAL the account needs (TN-53 rule 1): the realm's sign-in floor, AAL2 once any
+    /// The AAL the account needs (TN-53 rule 1): the environment's sign-in floor, AAL2 once any
     /// second factor is enrolled, and the domain's extra rebind term (§10.1.3).
     async fn required(
         &self,
@@ -696,12 +696,15 @@ where
         }
         let folded = Self::folded(identifier)?;
         let now = self.now();
-        let (tenant, realm) = (self.realm.tenant.as_bytes(), self.realm.realm.as_bytes());
+        let (tenant, environment) = (
+            self.environment.tenant.as_bytes(),
+            self.environment.environment.as_bytes(),
+        );
         let mut tx = self.begin().await?;
         let ip = counter_key(
             KeyKind::Ip,
             tenant,
-            realm,
+            environment,
             None,
             Some(&[b"recovery-start:".as_slice(), network].concat()),
         );
@@ -712,7 +715,7 @@ where
         let account = counter_key(
             KeyKind::Account,
             tenant,
-            realm,
+            environment,
             Some(&folded),
             Some(b"recovery-start"),
         );
@@ -729,7 +732,7 @@ where
         {
             subject = Some(s);
         }
-        let policy = self.realm_policy(&mut tx).await?;
+        let policy = self.environment_policy(&mut tx).await?;
         let mut live = subject.filter(|_| !limited);
         // TN-60
         if let Some(s) = live
@@ -1103,10 +1106,10 @@ where
             .subject(subject, true)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let mut matched = None;
         for c in tx.credentials(subject, RECOVERY_CODE).await? {
-            let secret = open(&self.realm, &dek, &subject, RECOVERY_CODE, &c.sealed)?;
+            let secret = open(&self.environment, &dek, &subject, RECOVERY_CODE, &c.sealed)?;
             let Some(presented) = Password::presented(&canonical_recovery_code(typed)) else {
                 continue;
             };
@@ -1127,7 +1130,7 @@ where
             Password::presented(&canonical_recovery_code(&fresh)).ok_or(SessionError::Corrupt)?;
         let phc = self.hasher.hash(&typed_fresh, self.random.salt()?).await?;
         let sealed = seal(
-            &self.realm,
+            &self.environment,
             &dek,
             &subject,
             RECOVERY_CODE,
@@ -1170,11 +1173,11 @@ where
             .subject(subject, false)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
+        let dek = subject_key(&self.environment, &row)?;
         let mut ok = false;
         for c in tx.credentials(subject, PASSWORD).await? {
             let (secret, _) = access_identity_account::app::sealing::open_password(
-                &self.realm,
+                &self.environment,
                 &dek,
                 &subject,
                 &c.sealed,
@@ -1365,7 +1368,7 @@ where
         Ok(())
     }
 
-    /// `REBIND_OPEN`: queues the realm issuer's `recovery_result` Claim naming `kid` as the
+    /// `REBIND_OPEN`: queues the environment issuer's `recovery_result` Claim naming `kid` as the
     /// successor that may self-sign `instance_recover` (OP-153 m.3 (c), INV-40, §7.7). The
     /// rebind token proves the browser and is not spent; naming another key supersedes the
     /// first (one line per attempt). An account without a Party has no Instance to recover.
@@ -1425,7 +1428,7 @@ where
     }
 
     /// The successor the signed-in subject of `cookie` may now recover in `domain` (OP-153
-    /// m.3 (c)): its attempt is in the grace period that followed the rebind and the realm
+    /// m.3 (c)): its attempt is in the grace period that followed the rebind and the environment
     /// issuer's `recovery_result` of that attempt reached Claim Ingest. The authority plane
     /// checks that the Claim names the key.
     ///
@@ -1523,7 +1526,7 @@ where
             actor: &target,
             correlation,
         };
-        store_password(tx, &self.realm, subject, phc.expose(), &who).await?;
+        store_password(tx, &self.environment, subject, phc.expose(), &who).await?;
         let until = now.saturating_add(GRACE_MS);
         if !tx
             .transition(
@@ -1551,7 +1554,7 @@ where
             .end_sessions_because(subject, "recovery")
             .await?
             .ok_or(SessionError::Corrupt)?;
-        events::sessions_ended(tx, &self.realm, subject, epoch).await?;
+        events::sessions_ended(tx, &self.environment, subject, epoch).await?;
         for s in ended {
             emit(tx, &authentication_ended(subject, s.id, now)).await?;
         }
@@ -1650,7 +1653,7 @@ where
         } else {
             RecoveryPath::ResetIntent
         };
-        let policy = self.realm_policy(&mut tx).await?;
+        let policy = self.environment_policy(&mut tx).await?;
         let required = self.required(&mut tx, subject, &policy).await?;
         // TN-53 rule 1, TN-60
         if label(start) < required || !self.assisted(&mut tx, subject).await? {
@@ -1788,7 +1791,7 @@ where
         subject: [u8; 16],
     ) -> Result<RecoverySetup, SessionError> {
         let rows = tx.notice_addresses(subject).await?;
-        let policy = self.realm_policy(tx).await?;
+        let policy = self.environment_policy(tx).await?;
         let required = self.required(tx, subject, &policy).await?;
         let classes = self.configured(tx, subject).await?;
         let weakest = classes.iter().map(|c| label(*c)).min();
@@ -1867,7 +1870,7 @@ where
         if !tx.credentials(subject, PASSWORD).await?.is_empty() {
             planned.push(RecoveryPath::SecondAuthenticator);
         }
-        let policy = self.realm_policy(&mut tx).await?;
+        let policy = self.environment_policy(&mut tx).await?;
         let required = self.required(&mut tx, subject, &policy).await?;
         // TN-53 rule 1, INV-40 (i), TNI-4
         if !planned.is_empty() && too_weak(required, &planned) {

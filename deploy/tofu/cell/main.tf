@@ -1,5 +1,5 @@
 # OP-51, T36, OP-158 m.3 (p): one Access cell's infrastructure: its namespace and the chart release.
-# Realm and domain configuration is never here (tofu-infra-only).
+# Environment and domain configuration is never here (tofu-infra-only).
 terraform {
   required_version = ">= 1.8.0"
   required_providers {

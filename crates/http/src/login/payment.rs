@@ -1,6 +1,6 @@
 //! Payment-class authentication on axum (OP-156 m.3 (e), (f)): the SMS activation code and the
-//! activation of an approver as the app-controlled factor, at the realm's host and under
-//! `/realms/{slug}`. Both ride on the login surface's cookies and same-origin rule and take an
+//! activation of an approver as the app-controlled factor, at the environment's host and under
+//! `/env/{slug}`. Both ride on the login surface's cookies and same-origin rule and take an
 //! `Idempotency-Key`.
 
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ use axum::response::Response;
 use axum::routing::post;
 use axum::{Extension, Router};
 
-use super::web::{Jar, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 type Params = Path<HashMap<String, String>>;
@@ -55,7 +55,7 @@ where
         roots,
     });
     let mut writes = Router::new();
-    for prefix in ["", "/realms/{slug}"] {
+    for prefix in ["", "/env/{slug}"] {
         writes = writes
             .route(
                 &format!("{prefix}/v1/sms/activation"),
@@ -95,7 +95,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s.shared, &p, &uri, &headers).await {
+    let entry = match environment(&s.shared, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };
@@ -131,7 +131,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    let entry = match realm(&s.shared, &p, &uri, &headers).await {
+    let entry = match environment(&s.shared, &p, &uri, &headers).await {
         Ok(e) => e,
         Err(r) => return r,
     };

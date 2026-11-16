@@ -73,7 +73,7 @@ async fn drain<L: AuditLog + Sync, S: NoteSigner + Sync>(
     Ok(n)
 }
 
-/// [`drain`] on the identity audit log, each step followed by the tree checkpoints of the realms
+/// [`drain`] on the identity audit log, each step followed by the tree checkpoints of the environments
 /// it touched (OP-152 m.7 (d)).
 async fn drain_identity<S: NoteSigner + Sync>(
     log: &Held<PgAudit>,
@@ -85,10 +85,10 @@ async fn drain_identity<S: NoteSigner + Sync>(
         let Some(done) = identity_step(log, signer, now).await? else {
             break;
         };
-        if done.realms_failed > 0 {
+        if done.environments_failed > 0 {
             tracing::warn!(
-                failed = done.realms_failed,
-                "realm audit checkpoints not appended; they catch up later"
+                failed = done.environments_failed,
+                "environment audit checkpoints not appended; they catch up later"
             );
         }
         n = n.saturating_add(1);

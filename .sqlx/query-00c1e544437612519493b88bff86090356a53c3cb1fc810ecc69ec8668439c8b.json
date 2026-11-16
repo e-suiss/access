@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.proxy_registrations (tenant_id, environment_id, name, version, state,\n                engine, host, pep, body, plain_headers, domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11\n           FROM access.proxy_registrations\n          WHERE tenant_id = $1 AND environment_id = $2 AND name = $3\n         RETURNING version AS \"version!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_registrations",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "00c1e544437612519493b88bff86090356a53c3cb1fc810ecc69ec8668439c8b"
+}

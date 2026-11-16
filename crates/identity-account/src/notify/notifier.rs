@@ -5,7 +5,7 @@
 use access_store::identity::TenantTx;
 use suiss_crypto::envelope::Dek;
 
-use crate::app::Realm;
+use crate::app::Environment;
 use crate::app::sealing::subject_key;
 use crate::notify::NotifyError;
 use crate::notify::envelope::{EventId, Header, seal};
@@ -13,23 +13,23 @@ use crate::notify::message::Message;
 use crate::notify::ports::Notifier;
 use crate::ports::{Clock, Entropy};
 
-/// The production [`Notifier`] for one realm.
+/// The production [`Notifier`] for one environment.
 pub struct OutboxNotifier<'a> {
-    realm: &'a Realm<'a>,
+    environment: &'a Environment<'a>,
     entropy: &'a (dyn Entropy + Sync),
     clock: &'a (dyn Clock + Sync),
 }
 
 impl<'a> OutboxNotifier<'a> {
-    /// A notifier for `realm`.
+    /// A notifier for `environment`.
     #[must_use]
     pub const fn new(
-        realm: &'a Realm<'a>,
+        environment: &'a Environment<'a>,
         entropy: &'a (dyn Entropy + Sync),
         clock: &'a (dyn Clock + Sync),
     ) -> Self {
         Self {
-            realm,
+            environment,
             entropy,
             clock,
         }
@@ -42,12 +42,12 @@ impl<'a> OutboxNotifier<'a> {
 /// # Errors
 /// [`NotifyError::NoSubject`] when neither exists or the key was shredded; [`NotifyError`].
 pub(crate) async fn recipient_key(
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     tx: &mut TenantTx,
     subject: [u8; 16],
 ) -> Result<Dek, NotifyError> {
     if let Some(row) = tx.subject(subject, false).await? {
-        return subject_key(realm, &row).map_err(|_| NotifyError::NoSubject);
+        return subject_key(environment, &row).map_err(|_| NotifyError::NoSubject);
     }
     // OP-153 m.3 (g)
     let key = tx
@@ -55,23 +55,28 @@ pub(crate) async fn recipient_key(
         .await?
         .ok_or(NotifyError::NoSubject)?;
     let wrapped = key.wrapped_dek.ok_or(NotifyError::NoSubject)?;
-    if !realm.kek.opens(&key.kek_id) {
+    if !environment.kek.opens(&key.kek_id) {
         return Err(NotifyError::NoSubject);
     }
-    realm.kek.unwrap(&wrapped).map_err(|_| NotifyError::Seal)
+    environment
+        .kek
+        .unwrap(&wrapped)
+        .map_err(|_| NotifyError::Seal)
 }
 
 impl Notifier for OutboxNotifier<'_> {
     async fn notify(&self, tx: &mut TenantTx, message: &Message) -> Result<EventId, NotifyError> {
         message.validate()?;
-        if tx.tenant() != self.realm.tenant || tx.realm() != Some(self.realm.realm) {
+        if tx.tenant() != self.environment.tenant
+            || tx.environment() != Some(self.environment.environment)
+        {
             return Err(NotifyError::NoSubject);
         }
-        let dek = recipient_key(self.realm, tx, message.subject).await?;
+        let dek = recipient_key(self.environment, tx, message.subject).await?;
         let event = EventId::from_random(self.entropy.salt().map_err(|_| NotifyError::Random)?);
         let header = Header {
-            tenant: *self.realm.tenant.as_bytes(),
-            realm: *self.realm.realm.as_bytes(),
+            tenant: *self.environment.tenant.as_bytes(),
+            environment: *self.environment.environment.as_bytes(),
             event,
             subject: message.subject,
             occurred_ms: self.clock.now_ms(),

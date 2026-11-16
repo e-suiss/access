@@ -1,5 +1,5 @@
-# OP-69, OP-149 m.21: what `access-server bootstrap` makes sure of. Every realm gets a path
-# issuer under https://access-server:8443/realms/<slug>.
+# OP-69, OP-149 m.21: what `access-server bootstrap` makes sure of. Every environment gets a path
+# issuer under https://access-server:8443/env/<slug>.
 platform = "platform"
 tenants = ["acme"]
 issuer_style = "path"
@@ -11,12 +11,12 @@ issuer_style = "path"
 # approval requirement, with the Grant to contribute that approval; the bootstrap prints what
 # an Exercise of it names as `test_user.allowed`, and `access-local-client approve` runs one
 # through the hosted Approval Surface. The catalog is a Genesis fact: changing `allowed` on an
-# existing realm needs a fresh volume.
+# existing environment needs a fresh volume.
 # OP-149 m.30 (a): the allowed Grant covers the resources of `resource_namespace` whose first
 # path element starts with `resource_path_prefix` (Work E-45 item 5); the summary reports both
 # as `test_user.allowed.resource`, and an intent names `{namespace, path: ["led_…"]}`.
 [sample]
-realm = "acme"
+environment = "acme"
 namespace = "work"
 action = "approve"
 allowed = "commit"
@@ -34,12 +34,12 @@ resource_path_prefix = "led_"
 # Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
 # against one; the bootstrap says so.
 # With `totp_seed_file` the user also has an authenticator app (RFC 6238: SHA-1, 6 digits, 30 s),
-# enrolled through the realm's own TOTP enrollment with a seed the realm draws at random; the
+# enrolled through the environment's own TOTP enrollment with a seed the environment draws at random; the
 # seed is written to that file in base32, owner-only, and never printed. A browser test signs in
 # with the password and a code from it. The summary says `test_user.totp` (seed_file, algorithm,
 # digits, period).
 [test_user]
-realm = "acme"
+environment = "acme"
 identifier = "test@acme.example"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 client_display_name = "Local test client"
@@ -51,28 +51,28 @@ totp_seed_file = "/var/lib/access/bootstrap/test-user-totp"
 # receive `party.compromised`. The bootstrap prints the declarant as `compromise.issuer`;
 # `access-local-client compromise` sends the Claim.
 [compromise]
-realm = "acme"
+environment = "acme"
 
-# OP-154 m.15 (i): a sample agent in acme, operated by the realm's root, with the test user as
+# OP-154 m.15 (i): a sample agent in acme, operated by the environment's root, with the test user as
 # its sponsor. Its key (`access/bootstrap/sample-agent`) signs its own `party_register` and the
 # root signs `idp.agent.register`; its runtime key (`access/bootstrap/sample-agent-runtime`)
 # opens one Instance under the test user's account; the test user's device issues it a Grant of
 # the sample action for the test user, and it makes one allowed Exercise of it. No executor runs
 # here, so nothing reports that Exercise's outcome. The summary says `sample_agent` (party,
-# operator, instance, basis, exercise). Leave the section out for a realm without an agent.
+# operator, instance, basis, exercise). Leave the section out for an environment without an agent.
 [sample_agent]
-realm = "acme"
+environment = "acme"
 display_name = "Local sample agent"
 
 # OP-157 m.6 (i): a support operator in acme, a member of its support organization, with the
-# realm's registered case system and an open case of the test user, so a support request can be
+# environment's registered case system and an open case of the test user, so a support request can be
 # made; the operator signs in with the test user's password (this deployment's own, not a
 # secret). Its device key (`access/bootstrap/support-operator-device`) is its Party's, and the
 # case system's key (`access/bootstrap/support-case-system`) signs the `support_case` Claim,
 # which holds for a week and is stated again by a later day's run. The summary says
 # `support_operator` (identifier, subject, party, organisation, case_system, case, acceptance).
 [support_operator]
-realm = "acme"
+environment = "acme"
 display_name = "Mehmet Y."
 organisation = "Acme Support"
 identifier = "support@acme.example"
@@ -86,7 +86,7 @@ case = "4411"
 # approvals from distinct Parties), and the test user may review break-glass uses. The summary
 # says `breakglass_account` (identifier, subject, party, organisation, grants).
 [breakglass_account]
-realm = "acme"
+environment = "acme"
 identifier = "oncall@acme.example"
 organisation = "Acme Security"
 
@@ -94,33 +94,33 @@ organisation = "Acme Security"
 # agent's Grant, so its campaign shows one item, and the console offers it the screen. The
 # summary says `review_schedule` (name, period_days, manager, items).
 [review_schedule]
-realm = "acme"
+environment = "acme"
 name = "local-review"
 period_days = 90
 
-# OP-159 m.4 (a): the sample realm's post-quantum signing profile, opened by its own
-# `idp.realm.signing_profile` and `idp.realm.kex_share` Exercises; the Signing screen's `@live`
-# spec reads it. The summary says `pq_profile` (realm, profile, kex_share).
+# OP-159 m.4 (a): the sample environment's post-quantum signing profile, opened by its own
+# `idp.environment.signing_profile` and `idp.environment.kex_share` Exercises; the Signing screen's `@live`
+# spec reads it. The summary says `pq_profile` (environment, profile, kex_share).
 [pq_profile]
-realm = "acme"
+environment = "acme"
 profile = "ml-dsa-65"
 kex_share = "optimistic"
 
-# OP-159 m.41 (a): the local platform administrator, an account in the platform realm with the
+# OP-159 m.41 (a): the local platform administrator, an account in the platform environment with the
 # test user's password and an authenticator app (its seed in `totp_seed_file`, owner-only, never
-# printed). The platform realm's root grants its Party the `idp.platform.*` actions
-# (`tenant_create`, `realm_create`, `sandbox_create`) by a `grant_issue` Exercise: nobody holds
-# them by default (INV-29). It signs in to the console with the realm `platform`; the summary says
-# `platform_admin` (realm, issuer, identifier, subject, party, instance, actions, basis, totp).
-# OP-159 m.43 (c): in each of `realms` the same person also has an account with the same
+# printed). The platform environment's root grants its Party the `idp.platform.*` actions
+# (`tenant_create`, `environment_create`, `sandbox_create`) by a `grant_issue` Exercise: nobody holds
+# them by default (INV-29). It signs in to the console with the environment `platform`; the summary says
+# `platform_admin` (environment, issuer, identifier, subject, party, instance, actions, basis, totp).
+# OP-159 m.43 (c): in each of `environments` the same person also has an account with the same
 # identifier, password and authenticator app (`just totp platform` answers for both), and that
-# realm's root grants its Party every realm administration action the console asks about (the
+# environment's root grants its Party every environment administration action the console asks about (the
 # `idp.*` actions and the Admin, Developer and Audit screens' meta-actions and reads; never
-# `idp.platform.*`), after opening the realm's delegated administration. The platform realm
+# `idp.platform.*`), after opening the environment's delegated administration. The platform environment
 # gives it nothing there (TN-119, INV-29). It signs in at `/console/acme`; the summary says
-# `platform_admin.realms` (realm, issuer, subject, party, instance, grants, totp).
+# `platform_admin.environments` (environment, issuer, subject, party, instance, grants, totp).
 [platform_admin]
 identifier = "admin@platform.local"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 totp_seed_file = "/var/lib/access/bootstrap/platform-admin-totp"
-realms = ["acme"]
+environments = ["acme"]

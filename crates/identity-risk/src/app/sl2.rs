@@ -67,13 +67,13 @@ pub struct Sl2<'a> {
 pub struct SignIn {
     /// The tenant.
     pub tenant: [u8; 16],
-    /// The realm.
-    pub realm: [u8; 16],
+    /// The environment.
+    pub environment: [u8; 16],
     /// The account.
     pub subject: [u8; 16],
     /// Now.
     pub now_ms: u64,
-    /// Whether the browser has a valid device marker; `None` when the realm has none.
+    /// Whether the browser has a valid device marker; `None` when the environment has none.
     pub device_known: Option<bool>,
     /// Failed password attempts counted before this sign-in.
     pub prior_failures: Option<u32>,
@@ -140,9 +140,9 @@ pub async fn evaluate<T: RiskTx + Send>(
     s: &SignIn,
 ) -> Result<Assessment, RiskError> {
     let canary = tx.store().is_canary(s.subject).await?;
-    let realm_mode = mode(tx.store()).await?;
-    let created = tx.store().realm_created_ms().await?;
-    let stage = realm_mode.effective_sl2(created, s.now_ms);
+    let environment_mode = mode(tx.store()).await?;
+    let created = tx.store().environment_created_ms().await?;
+    let stage = environment_mode.effective_sl2(created, s.now_ms);
     let last = tx.store().risk_subject(s.subject).await?;
     let inputs = Inputs {
         client_place: sl2.client.map(|ip| sl2.services.geo.locate(ip)),
@@ -154,7 +154,7 @@ pub async fn evaluate<T: RiskTx + Send>(
         breach: s.breach,
         canary,
     };
-    let a = assess(&inputs, &realm_mode, stage);
+    let a = assess(&inputs, &environment_mode, stage);
     emit(tx, &claims::level(s.subject, a.level, s.now_ms)).await?;
     for signal in a.signals.iter().filter(|x| **x != RiskSignal::NewDevice) {
         emit(tx, &claims::signal(s.subject, *signal, s.now_ms)).await?;
@@ -227,7 +227,7 @@ pub async fn record_sign_in<T: RiskTx + Send>(
         last_at_ms: s.now_ms.max(1),
         ip_pseudonym: sl2
             .client
-            .and_then(|ip| sl2.services.ips.pseudonym(&s.tenant, &s.realm, ip)),
+            .and_then(|ip| sl2.services.ips.pseudonym(&s.tenant, &s.environment, ip)),
         ip_prefix: sl2.client.map(prefix),
         country: place.country_code(),
         asn: place.asn,

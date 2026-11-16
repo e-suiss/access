@@ -13,7 +13,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SessionEpoch(pub i64);
 
-/// A realm signing key window (T20, TN-12).
+/// An environment signing key window (T20, TN-12).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KeyEpoch(pub u32);
 

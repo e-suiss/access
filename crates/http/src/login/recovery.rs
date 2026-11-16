@@ -23,7 +23,7 @@ use axum::response::Response;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::web::{Jar, cookies, json_only, problem, realm, same_origin, send};
+use super::web::{Jar, cookies, environment, json_only, problem, same_origin, send};
 use super::{Peer, Shared};
 
 type St<D, K, KI, C, M> = State<Arc<Shared<D, K, KI, C, M>>>;
@@ -90,7 +90,7 @@ macro_rules! route {
             C: Clock + Sync,
             M: Messages,
         {
-            let $entry = match realm(&$s, &$p, &uri, &$headers).await {
+            let $entry = match environment(&$s, &$p, &uri, &$headers).await {
                 Ok(e) => e,
                 Err(r) => return r,
             };

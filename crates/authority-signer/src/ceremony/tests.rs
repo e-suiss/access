@@ -373,7 +373,7 @@ fn a_binding_key_is_neither_made_nor_used_outside_an_activation() {
 
     let other_policy = Permit::draft(
         Op::Activate {
-            policy: policy_digest(&Policy::REALM),
+            policy: policy_digest(&Policy::ENVIRONMENT),
             until: NOW + HOUR,
         },
         NOW,

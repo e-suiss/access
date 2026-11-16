@@ -10,10 +10,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -107,16 +107,16 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn put_saml_sp(&mut self, bound: &Bound, sp: &NewSp<'_>) -> Result<u64, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let version = sqlx::query_scalar!(
-            r#"INSERT INTO access.saml_sps (tenant_id, realm_id, sp_id, version, entity_id, protocol,
+            r#"INSERT INTO access.saml_sps (tenant_id, environment_id, sp_id, version, entity_id, protocol,
                     state, definition, domain_id, decision_pos)
              SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9
                FROM access.saml_sps
-              WHERE tenant_id = $1 AND realm_id = $2 AND sp_id = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND sp_id = $3
              RETURNING version AS "version!""#,
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(sp.sp_id),
             sp.entity_id,
             sp.protocol,
@@ -130,20 +130,20 @@ impl TenantTx {
         u64::try_from(version).map_err(|_| StoreError::Corrupt)
     }
 
-    /// The newest version of every registration of the realm, live and retired.
+    /// The newest version of every registration of the environment, live and retired.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn saml_sps(&mut self) -> Result<Vec<SpRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let rows = sqlx::query!(
             "SELECT DISTINCT ON (sp_id) sp_id, version, entity_id, protocol, state, definition,
                     decision_pos
                FROM access.saml_sps
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY sp_id, version DESC",
             tenant,
-            realm,
+            environment,
         )
         .fetch_all(&mut *self.tx)
         .await?;
@@ -186,15 +186,15 @@ impl TenantTx {
         bound: &Bound,
         p: &CertPolicy,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.saml_cert_policies (tenant_id, realm_id, version, rotate_days,
+            "INSERT INTO access.saml_cert_policies (tenant_id, environment_id, version, rotate_days,
                     overlap_days, alg, emergency, domain_id, decision_pos)
              SELECT $1, $2, COALESCE(MAX(version), 0) + 1, $3, $4, $5, $6, $7, $8
                FROM access.saml_cert_policies
-              WHERE tenant_id = $1 AND realm_id = $2",
+              WHERE tenant_id = $1 AND environment_id = $2",
             tenant,
-            realm,
+            environment,
             p.rotate_days,
             p.overlap_days,
             if p.p256 { "p-256" } else { "rsa-3072" },
@@ -212,14 +212,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn saml_cert_policy(&mut self) -> Result<Option<(CertPolicy, u64)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT rotate_days, overlap_days, alg, emergency, decision_pos
                FROM access.saml_cert_policies
-              WHERE tenant_id = $1 AND realm_id = $2
+              WHERE tenant_id = $1 AND environment_id = $2
               ORDER BY version DESC LIMIT 1",
             tenant,
-            realm,
+            environment,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
@@ -248,14 +248,14 @@ impl TenantTx {
         logout: bool,
         now_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
-            "INSERT INTO access.saml_request_ids (tenant_id, realm_id, entity_id, request_id, kind,
+            "INSERT INTO access.saml_request_ids (tenant_id, environment_id, entity_id, request_id, kind,
                     seen_ms)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT DO NOTHING",
             tenant,
-            realm,
+            environment,
             entity_id,
             request_id,
             if logout { "logout" } else { "authn" },
@@ -280,13 +280,13 @@ impl TenantTx {
         now_ms: i64,
         expires_ms: i64,
     ) -> Result<(), StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         sqlx::query!(
-            "INSERT INTO access.saml_flows (tenant_id, realm_id, flow_hash, binding, kind, params,
+            "INSERT INTO access.saml_flows (tenant_id, environment_id, flow_hash, binding, kind, params,
                     created_ms, expires_ms)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tenant,
-            realm,
+            environment,
             flow_hash.as_slice(),
             binding,
             kind,
@@ -304,14 +304,14 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn saml_flow(&mut self, flow_hash: &[u8; 32]) -> Result<Option<FlowRow>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT binding, kind, params, expires_ms, session_id, subject_id, session_epoch,
                     auth_time_ms, aal, handle_expires_ms, outcome
                FROM access.saml_flows
-              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3",
             tenant,
-            realm,
+            environment,
             flow_hash.as_slice(),
         )
         .fetch_optional(&mut *self.tx)
@@ -357,15 +357,15 @@ impl TenantTx {
         session: Option<&FlowSession>,
         now_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.saml_flows
                 SET handle_hash = $4, handle_expires_ms = $5, session_id = $6, subject_id = $7,
                     session_epoch = $8, auth_time_ms = $9, aal = $10
-              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3
                 AND decided_ms IS NULL AND expires_ms > $11",
             tenant,
-            realm,
+            environment,
             flow_hash.as_slice(),
             handle_hash.as_slice(),
             handle_expires_ms,
@@ -391,14 +391,14 @@ impl TenantTx {
         handle_hash: &[u8; 32],
         now_ms: i64,
     ) -> Result<Option<([u8; 32], FlowRow)>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let row = sqlx::query!(
             "SELECT flow_hash FROM access.saml_flows
-              WHERE tenant_id = $1 AND realm_id = $2 AND handle_hash = $3
+              WHERE tenant_id = $1 AND environment_id = $2 AND handle_hash = $3
                 AND decided_ms IS NULL AND handle_expires_ms > $4 AND expires_ms > $4
               FOR UPDATE",
             tenant,
-            realm,
+            environment,
             handle_hash.as_slice(),
             now_ms,
         )
@@ -421,12 +421,12 @@ impl TenantTx {
         outcome: &[u8],
         now_ms: i64,
     ) -> Result<bool, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         let n = sqlx::query!(
             "UPDATE access.saml_flows SET decided_ms = $4, outcome = $5
-              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3 AND decided_ms IS NULL",
+              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3 AND decided_ms IS NULL",
             tenant,
-            realm,
+            environment,
             flow_hash.as_slice(),
             now_ms,
             outcome,
@@ -447,12 +447,12 @@ impl TenantTx {
         subject: [u8; 16],
         sector: [u8; 16],
     ) -> Result<Option<String>, StoreError> {
-        let (tenant, realm) = scope(self)?;
+        let (tenant, environment) = scope(self)?;
         Ok(sqlx::query_scalar!(
             "SELECT value FROM access.pairwise_subjects
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND sector = $4",
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND sector = $4",
             tenant,
-            realm,
+            environment,
             Uuid::from_bytes(subject),
             Uuid::from_bytes(sector),
         )

@@ -31,7 +31,7 @@ interface Preferences {
     readonly granted: boolean;
     readonly at: string;
   }[];
-  /** OP-156 m.3 (c): present when the realm records consent with İYS through Relay. */
+  /** OP-156 m.3 (c): present when the environment records consent with İYS through Relay. */
   readonly iys?: {
     readonly channels: Readonly<
       Record<

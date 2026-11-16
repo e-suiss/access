@@ -85,7 +85,7 @@ fn encode(v: &Value) -> Vec<u8> {
     dcbor::encode(v, Limits::CEILING).unwrap_or_default()
 }
 
-/// What the key signs when it is registered on the realm `issuer` (ES256).
+/// What the key signs when it is registered on the environment `issuer` (ES256).
 #[must_use]
 pub fn registration_message(issuer: &str, thumbprint: &[u8; 32]) -> Vec<u8> {
     encode(&Value::Array(vec![

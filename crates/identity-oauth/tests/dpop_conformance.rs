@@ -20,7 +20,7 @@ use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
 use access_kernel::json::b64url_encode;
 use access_kernel::verify::dpop::ath;
 use access_store::dpop::open_dpop_replay_day;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use access_store::testing::{TestDb, fresh};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
@@ -29,7 +29,7 @@ const NOW: u64 = 1_800_000_000_000;
 const DAY: u32 = 20_833;
 const HOUR: u64 = 60 * 60 * 1000;
 const T: TenantId = TenantId::from_bytes([1; 16]);
-const R: RealmId = RealmId::from_bytes([2; 16]);
+const R: EnvironmentId = EnvironmentId::from_bytes([2; 16]);
 const TOKEN_URI: &str = "https://login.example.com/token";
 const API_URI: &str = "https://api.example.com/v1/items";
 
@@ -41,9 +41,9 @@ impl Clock for Fixed {
     }
 }
 
-fn ring(realm: &RealmId, role: Role, key: u8) -> NonceRing {
+fn ring(environment: &EnvironmentId, role: Role, key: u8) -> NonceRing {
     NonceRing::new(
-        *realm.as_bytes(),
+        *environment.as_bytes(),
         role,
         NoncePolicy::new(HOUR, MAX_STALE_MS).unwrap(),
         1,
@@ -227,10 +227,10 @@ async fn resource_server_runs_its_own_replay_check() {
 
 // K19, TN-29, TN-30
 #[tokio::test]
-async fn realms_are_separate() {
+async fn environments_are_separate() {
     let db = db().await;
     let profile = DpopProfile::default();
-    let other = RealmId::from_bytes([3; 16]);
+    let other = EnvironmentId::from_bytes([3; 16]);
     let nonces = ring(&R, Role::AuthorizationServer, 1);
     let other_nonces = ring(&other, Role::AuthorizationServer, 1);
     let clock = Fixed(NOW);

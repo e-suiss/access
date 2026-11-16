@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.upstream_subject SET status = 'released'\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8763af66f4a5a3ee038f87d59a2e517c4103d0f5ce43ccb911a1a0ed168f6a2e"
+}

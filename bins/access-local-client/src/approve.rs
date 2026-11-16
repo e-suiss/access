@@ -50,11 +50,11 @@ const SKEW_MS: u64 = 60 * 1_000;
 
 /// What an approval needs.
 pub struct Approve<'a> {
-    /// The realm issuer the test user signs in at.
+    /// The environment issuer the test user signs in at.
     pub issuer: &'a str,
     /// The deployment's API base.
     pub api_base: &'a str,
-    /// A redirect URI a client of the realm registered.
+    /// A redirect URI a client of the environment registered.
     pub redirect_uri: &'a str,
     /// The test user's login identifier.
     pub identifier: &'a str,

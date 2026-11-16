@@ -1,8 +1,8 @@
 use serde_json::Value;
 
-use super::issuer::{Issuer, IssuerError, IssuerStyle, RealmBase, check_slug, with_iss};
+use super::issuer::{EnvironmentBase, Issuer, IssuerError, IssuerStyle, check_slug, with_iss};
 use super::metadata::{
-    Document, Endpoint, Feature, RealmFacts, SERVED, Served, authorization_server,
+    Document, Endpoint, EnvironmentFacts, Feature, SERVED, Served, authorization_server,
     authorization_server_of, paths, protected_resource,
 };
 
@@ -19,7 +19,7 @@ fn issuers_are_canonical_https_urls() {
     for ok in [
         "https://acme.id.example",
         "https://acme.id.localhost:8443",
-        "https://id.example/realms/acme",
+        "https://id.example/env/acme",
     ] {
         assert_eq!(Issuer::parse(ok).unwrap().as_str(), ok);
     }
@@ -45,15 +45,15 @@ fn issuers_are_canonical_https_urls() {
 
 // TN-10, TN-16
 #[test]
-fn realm_issuers_are_formed_from_the_slug() {
-    let base = RealmBase::parse("https://id.example").unwrap();
+fn environment_issuers_are_formed_from_the_slug() {
+    let base = EnvironmentBase::parse("https://id.example").unwrap();
     let sub = base.issuer("acme", IssuerStyle::Subdomain).unwrap();
     assert_eq!(sub.as_str(), "https://acme.id.example");
     assert_eq!((sub.authority(), sub.path()), ("acme.id.example", ""));
     let path = base.issuer("acme", IssuerStyle::Path).unwrap();
-    assert_eq!(path.as_str(), "https://id.example/realms/acme");
-    assert_eq!(path.path(), "/realms/acme");
-    let local = RealmBase::parse("https://localhost:8443").unwrap();
+    assert_eq!(path.as_str(), "https://id.example/env/acme");
+    assert_eq!(path.path(), "/env/acme");
+    let local = EnvironmentBase::parse("https://localhost:8443").unwrap();
     assert_eq!(
         local
             .issuer("acme", IssuerStyle::Subdomain)
@@ -62,7 +62,7 @@ fn realm_issuers_are_formed_from_the_slug() {
         "https://acme.localhost:8443"
     );
     assert_eq!(
-        RealmBase::parse("https://id.example/x"),
+        EnvironmentBase::parse("https://id.example/x"),
         Err(IssuerError::Path)
     );
     for slug in ["ab", "-acme", "acme-", "Acme", "ac_me"] {
@@ -84,14 +84,14 @@ fn an_issuer_serves_its_own_origin_only() {
 // RFC 9207, TN-11, AG-7
 #[test]
 fn the_iss_parameter_carries_the_issuer() {
-    let i = Issuer::parse("https://id.example/realms/acme").unwrap();
+    let i = Issuer::parse("https://id.example/env/acme").unwrap();
     assert_eq!(
         with_iss("https://rp.example/cb", &i),
-        "https://rp.example/cb?iss=https%3A%2F%2Fid.example%2Frealms%2Facme"
+        "https://rp.example/cb?iss=https%3A%2F%2Fid.example%2Fenv%2Facme"
     );
     assert_eq!(
         with_iss("https://rp.example/cb?code=x&state=y", &i),
-        "https://rp.example/cb?code=x&state=y&iss=https%3A%2F%2Fid.example%2Frealms%2Facme"
+        "https://rp.example/cb?code=x&state=y&iss=https%3A%2F%2Fid.example%2Fenv%2Facme"
     );
 }
 
@@ -183,10 +183,10 @@ fn served_endpoints_carry_the_access_corrections() {
         ],
         features: &[Feature::Dpop, Feature::ClientIdMetadataDocument],
     };
-    let i = Issuer::parse("https://id.example/realms/acme").unwrap();
-    let cimd = RealmFacts {
+    let i = Issuer::parse("https://id.example/env/acme").unwrap();
+    let cimd = EnvironmentFacts {
         cimd: true,
-        ..RealmFacts::default()
+        ..EnvironmentFacts::default()
     };
     let m = json(&authorization_server_of(&i, &all, &cimd));
     assert_eq!(
@@ -220,7 +220,7 @@ fn served_endpoints_carry_the_access_corrections() {
         ("revocation_endpoint", "/revoke"),
         ("introspection_endpoint", "/introspect"),
     ] {
-        assert_eq!(m[key], format!("https://id.example/realms/acme{path}"));
+        assert_eq!(m[key], format!("https://id.example/env/acme{path}"));
     }
     let text = authorization_server(&i, &all);
     assert!(!text.contains("EdDSA"), "{text}");
@@ -228,7 +228,7 @@ fn served_endpoints_carry_the_access_corrections() {
 
 // RFC 9728, §9.4
 #[test]
-fn protected_resource_metadata_names_the_realm() {
+fn protected_resource_metadata_names_the_environment() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
     let m = json(&protected_resource(&i, &NONE));
     assert_eq!(m["resource"], "https://acme.id.example");
@@ -242,23 +242,23 @@ fn protected_resource_metadata_names_the_realm() {
 // TN-10, §11.4.5
 #[test]
 fn path_issuers_serve_every_well_known_variant() {
-    let p = Issuer::parse("https://id.example/realms/acme").unwrap();
+    let p = Issuer::parse("https://id.example/env/acme").unwrap();
     assert_eq!(
         paths(&p, Document::OpenIdConfiguration),
         [
-            "/.well-known/openid-configuration/realms/acme",
-            "/realms/acme/.well-known/openid-configuration"
+            "/.well-known/openid-configuration/env/acme",
+            "/env/acme/.well-known/openid-configuration"
         ]
     );
     assert_eq!(
         paths(&p, Document::AuthorizationServer),
-        ["/.well-known/oauth-authorization-server/realms/acme"]
+        ["/.well-known/oauth-authorization-server/env/acme"]
     );
     assert_eq!(
         paths(&p, Document::ProtectedResource),
-        ["/.well-known/oauth-protected-resource/realms/acme"]
+        ["/.well-known/oauth-protected-resource/env/acme"]
     );
-    assert_eq!(paths(&p, Document::Jwks), ["/realms/acme/jwks.json"]);
+    assert_eq!(paths(&p, Document::Jwks), ["/env/acme/jwks.json"]);
     let h = Issuer::parse("https://acme.id.example").unwrap();
     assert_eq!(
         paths(&h, Document::OpenIdConfiguration),
@@ -270,41 +270,41 @@ fn path_issuers_serve_every_well_known_variant() {
 // OP-155 m.3 (m), RFC 8705 §5, §10.2.5, Ek B 4673
 #[test]
 fn mtls_endpoint_aliases_are_declared_only_with_a_port_to_name() {
-    let i = Issuer::parse("https://id.example/realms/acme").unwrap();
+    let i = Issuer::parse("https://id.example/env/acme").unwrap();
     let m = json(&authorization_server_of(
         &i,
         &SERVED,
-        &RealmFacts::default(),
+        &EnvironmentFacts::default(),
     ));
     assert!(!m.contains_key("mtls_endpoint_aliases"));
-    let on = RealmFacts {
+    let on = EnvironmentFacts {
         mtls_port: Some(8443),
-        ..RealmFacts::default()
+        ..EnvironmentFacts::default()
     };
     let m = json(&authorization_server_of(&i, &SERVED, &on));
     let a = m["mtls_endpoint_aliases"].as_object().unwrap();
     assert_eq!(
         a["token_endpoint"],
-        "https://id.example:8443/realms/acme/token"
+        "https://id.example:8443/env/acme/token"
     );
     assert_eq!(
         a["pushed_authorization_request_endpoint"],
-        "https://id.example:8443/realms/acme/par"
+        "https://id.example:8443/env/acme/par"
     );
     assert_eq!(
         a["revocation_endpoint"],
-        "https://id.example:8443/realms/acme/revoke"
+        "https://id.example:8443/env/acme/revoke"
     );
     assert_eq!(
         a["introspection_endpoint"],
-        "https://id.example:8443/realms/acme/introspect"
+        "https://id.example:8443/env/acme/introspect"
     );
     assert_eq!(
         a["userinfo_endpoint"],
-        "https://id.example:8443/realms/acme/userinfo"
+        "https://id.example:8443/env/acme/userinfo"
     );
     assert!(!a.contains_key("device_authorization_endpoint"));
-    assert_eq!(m["token_endpoint"], "https://id.example/realms/acme/token");
+    assert_eq!(m["token_endpoint"], "https://id.example/env/acme/token");
     let ported = Issuer::parse("https://acme.id.localhost:4443").unwrap();
     assert_eq!(
         ported.endpoint_on_port(9443, "/token"),

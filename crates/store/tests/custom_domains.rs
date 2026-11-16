@@ -1,5 +1,5 @@
 //! OP-156 m.3 (i), TN-16, TN-20, EI-25, OP-73: custom domains are registered, retired and bound
-//! only under their own committed ALLOWs; one realm holds a host verified; a certificate's key is
+//! only under their own committed ALLOWs; one environment holds a host verified; a certificate's key is
 //! shredded when it ends; the router reads verified domains and open challenges only.
 
 #![allow(
@@ -20,10 +20,10 @@ use access_store::custom_domains::{
     route_by_custom_host,
 };
 use access_store::events::SealedKey;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::{Bound, Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -89,12 +89,12 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
     d
 }
 
-async fn realm(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> RealmId {
+async fn environment(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> EnvironmentId {
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    let r = create_realm(&mut tx, d, slug, "pool-default")
+    let r = create_environment(&mut tx, d, slug, "pool-default")
         .await
         .unwrap();
-    tx.enter_realm(r).await.unwrap();
+    tx.enter_environment(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
     assert!(
         set_issuer(&mut tx, &format!("https://{slug}.suiss.id"))
@@ -169,7 +169,7 @@ async fn registrations_retirement_and_binding_need_their_own_allows() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 40, 4).await;
-    let r = realm(&db, t, &d, "acme").await;
+    let r = environment(&db, t, &d, "acme").await;
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let wrong = allow(&mut tx, &d, 1, "idp.client.register").await;
@@ -212,7 +212,7 @@ async fn registrations_retirement_and_binding_need_their_own_allows() {
     tx.commit().await.unwrap();
     assert!(
         sqlx::query(
-            "UPDATE access.realm_domains SET bound_as = NULL, bind_pos = NULL, bound_at = NULL"
+            "UPDATE access.environment_domains SET bound_as = NULL, bind_pos = NULL, bound_at = NULL"
         )
         .execute(&db.owner)
         .await
@@ -222,13 +222,13 @@ async fn registrations_retirement_and_binding_need_their_own_allows() {
 
 // TN-20, §12.3.8
 #[tokio::test]
-async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
+async fn one_environment_serves_a_host_and_the_router_reads_only_verified_domains() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d1 = domain(&db, t, 50, 2).await;
     let d2 = domain(&db, t, 60, 2).await;
-    let r1 = realm(&db, t, &d1, "acme").await;
-    let r2 = realm(&db, t, &d2, "other").await;
+    let r1 = environment(&db, t, &d1, "acme").await;
+    let r2 = environment(&db, t, &d2, "other").await;
     for (r, d) in [(r1, &d1), (r2, &d2)] {
         let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
         let b = allow(&mut tx, d, 1, "idp.domain.register").await;
@@ -258,7 +258,7 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(route.route.realm.as_bytes(), r1.as_bytes());
+    assert_eq!(route.route.environment.as_bytes(), r1.as_bytes());
     assert_eq!(route.route.issuer, "https://acme.suiss.id");
     assert_eq!(
         cd::served_hosts(&db.router).await.unwrap(),
@@ -309,7 +309,7 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(route.route.realm.as_bytes(), r2.as_bytes());
+    assert_eq!(route.route.environment.as_bytes(), r2.as_bytes());
 }
 
 // OP-73, OP-156 m.3 (i)
@@ -318,7 +318,7 @@ async fn an_ended_certificate_keeps_its_chain_and_loses_its_key() {
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 70, 2).await;
-    let r = realm(&db, t, &d, "acme").await;
+    let r = environment(&db, t, &d, "acme").await;
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let b = allow(&mut tx, &d, 1, "idp.domain.register").await;
     cd::register(&mut tx, &b, &new_domain(1)).await.unwrap();

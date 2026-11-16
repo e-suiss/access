@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_device_misses (tenant_id, environment_id, ip_prefix, subject_id, at_ms)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4b15ac70eb0c5fed26ac26cd532315993e6c69bac12a291a01cbf7b0577b57dc"
+}

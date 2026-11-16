@@ -1,6 +1,6 @@
-//! The hosted Frontend API route table (TN-133, OP-65, OP-153 m.4): every realm-scoped route
-//! the hosted pages and the embedded components call, served under the realm's host and under
-//! `/realms/{slug}`. The table is the source of `sdks/openapi/frontend-v1.json`; a route not
+//! The hosted Frontend API route table (TN-133, OP-65, OP-153 m.4): every environment-scoped route
+//! the hosted pages and the embedded components call, served under the environment's host and under
+//! `/env/{slug}`. The table is the source of `sdks/openapi/frontend-v1.json`; a route not
 //! yet served answers `501 not-yet-served` until its lane fills its handler and marks it live.
 
 use serde_json::{Map, Value, json};
@@ -62,7 +62,7 @@ pub enum Owner {
     L5,
     /// Stage 9 L6: Access Executor and Web Bot Auth.
     L6,
-    /// Stage 9 L1b: the hosted consent of clients the realm did not register.
+    /// Stage 9 L1b: the hosted consent of clients the environment did not register.
     L1,
     /// Stage 9 L4: workload Instances and runtime attestation.
     L4,
@@ -111,7 +111,7 @@ pub enum Owner {
 pub struct Route {
     /// Method.
     pub verb: Verb,
-    /// Path below the realm, `{name}` for a parameter.
+    /// Path below the environment, `{name}` for a parameter.
     pub path: &'static str,
     /// `operationId`.
     pub operation: &'static str,
@@ -455,7 +455,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/organizations/{organization}/sign-in",
         "getOrganizationSignIn",
-        "Home realm discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the realm's sign-in policy still decides.",
+        "Home environment discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the environment's sign-in policy still decides.",
     ),
     live(
         Owner::N3,
@@ -588,28 +588,28 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/account/bindings",
         "listBindings",
-        "This realm's halves of the account's cross-realm bindings (§12.1.3).",
+        "This environment's halves of the account's cross-environment bindings (§12.1.3).",
     ),
     live(
         Owner::N4,
         Verb::Post,
         "/v1/account/bindings",
         "offerBinding",
-        "Offers to bind the account to one in another realm, after re-authentication (§12.1.3, TN-65).",
+        "Offers to bind the account to one in another environment, after re-authentication (§12.1.3, TN-65).",
     ),
     live(
         Owner::N4,
         Verb::Post,
         "/v1/account/bindings/accept",
         "acceptBinding",
-        "Commits this realm's half with the other realm's offer token (§12.1.3).",
+        "Commits this environment's half with the other environment's offer token (§12.1.3).",
     ),
     live(
         Owner::N4,
         Verb::Post,
         "/v1/account/bindings/complete",
         "completeBinding",
-        "Commits the offering realm's half with the accepting realm's token (§12.1.3).",
+        "Commits the offering environment's half with the accepting environment's token (§12.1.3).",
     ),
     live(
         Owner::N5,
@@ -637,21 +637,21 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/csp-reports",
         "reportCsp",
-        "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
+        "Receives CSP reports, 100 a minute per environment (OP-153 m.3 (t)).",
     ),
     live(
         Owner::N5,
         Verb::Get,
         "/v1/login/branding",
         "getBranding",
-        "The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
+        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
     ),
     live(
         Owner::N5,
         Verb::Get,
         "/v1/login/messages",
         "getMessageOverrides",
-        "The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
+        "The environment's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
     ),
     live(
         Owner::N5,
@@ -763,7 +763,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/login/approval/preview",
         "previewApproval",
-        "What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
+        "What the consent screen of a client the environment did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
     ),
     live(
         Owner::L1,
@@ -791,14 +791,14 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/workloads/instances",
         "openWorkloadInstance",
-        "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the realm issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
+        "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the environment issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
     ),
     live(
         Owner::L4,
         Verb::Post,
         "/v1/workloads/attestations",
         "attestWorkload",
-        "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the realm issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
+        "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the environment issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
     ),
     live(
         Owner::P3,
@@ -959,7 +959,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/saml/metadata",
         "samlMetadata",
-        "The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)).",
+        "The SAML IdP metadata, signed with the environment's saml key (OP-155 m.3 (e)).",
     ),
     live(
         Owner::P2,
@@ -1029,7 +1029,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/login/upstream/{connection}",
         "startUpstreamSignIn",
-        "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
+        "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home environment discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
     ),
     live(
         Owner::P4,
@@ -1071,7 +1071,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/.well-known/openid-federation",
         "oidfEntityConfiguration",
-        "The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
+        "The environment issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
     ),
     live(
         Owner::P6,
@@ -1106,7 +1106,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/federation/register",
         "oidfRegister",
-        "Explicit OIDF client registration, when the realm opened it.",
+        "Explicit OIDF client registration, when the environment opened it.",
     ),
     live(
         Owner::P8,
@@ -1239,7 +1239,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/first-contact/keys",
         "getFirstContactKeys",
-        "The realm's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)).",
+        "The environment's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)).",
     ),
     live(
         Owner::Q9,
@@ -1260,14 +1260,14 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/ssh/krl",
         "getSshKrl",
-        "The realm's OpenSSH key revocation list.",
+        "The environment's OpenSSH key revocation list.",
     ),
     live(
         Owner::Q8,
         Verb::Get,
         "/ssh/ca.pub",
         "getSshCaKey",
-        "The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
+        "The environment's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
     ),
     live(
         Owner::Q13,
@@ -1365,7 +1365,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/support/artifacts",
         "uploadSupportArtifact",
-        "Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the realm's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)).",
+        "Uploads a support artifact for the support request named by the `request` query parameter: the body is the artifact itself, HAR, JSON or a text log only, and the person's signed idp.account.artifact_upload Exercise rides in the access-exercise header. The session, the environment's artifact policy and the request are checked before the body is read; the body then streams in under the policy's max_bytes (at most 10 MiB, 413 artifact-too-large past it) and is redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (OP-157 m.3 (g), OP-159 m.3 (mm)).",
     ),
     live(
         Owner::V2,
@@ -1400,7 +1400,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/approve/batch",
         "startBatchApproval",
-        "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
+        "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in an environment that opened idp.environment.approval_batch (OP-157 m.3 (m)).",
     ),
     live(
         Owner::V7,
@@ -1414,7 +1414,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/approve/inline",
         "answerInlineApproval",
-        "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17).",
+        "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) and is recorded as a contribution, without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in an environment that opened idp.environment.approval_inline (OP-157 m.3 (m), m.17).",
     ),
     live(
         Owner::V6,
@@ -1498,7 +1498,7 @@ pub fn openapi() -> Value {
         "info": {
             "title": "Access hosted Frontend API",
             "version": VERSION,
-            "description": "The realm-scoped routes of the hosted pages and embedded components (TN-133), served under the realm's host and under /realms/{slug}. A planned route answers 501 not-yet-served.",
+            "description": "The environment-scoped routes of the hosted pages and embedded components (TN-133), served under the environment's host and under /env/{slug}. A planned route answers 501 not-yet-served.",
         },
         "paths": Value::Object(paths),
         "components": {

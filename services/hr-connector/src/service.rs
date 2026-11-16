@@ -125,7 +125,7 @@ async fn connectors<P: Pull, A: Access, S: Sign, R: Random, C: Clock>(
         "connectors": [{
             "name": s.connector.name,
             "vendor": s.connector.vendor.name(),
-            "realm": s.connector.realm,
+            "environment": s.connector.environment,
             "source": s.connector.source,
             "last_run": last.as_ref().map(run_json),
         }],

@@ -8,7 +8,7 @@ use access_crypto::dpop::Role;
 use access_kernel::json::b64url_encode;
 use serde_json::json;
 
-use super::{Env, OAuth, Realm, Reply};
+use super::{Env, Environment, OAuth, Reply};
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
 use crate::domain::dpop::{ClientType, Failure, Jkt};
@@ -52,12 +52,12 @@ impl<E: Env> OAuth<E> {
                 .is_some_and(|a| params.get("resource") == Some(a))
     }
 
-    /// Issues a PEP token (RFC 6749 §4.4.3, RFC 9068): `iss` the client's realm, `aud` the ADP,
+    /// Issues a PEP token (RFC 6749 §4.4.3, RFC 9068): `iss` the client's environment, `aud` the ADP,
     /// `sub` and `client_id` the client, `access_tenant` its tenant, `cnf.jkt` its proof key;
     /// no scope, no details, no refresh token. Only a confidential client gets one.
     pub(crate) async fn pep_token(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         client: &Client,
         jkt: Jkt,
         now: u64,
@@ -72,12 +72,12 @@ impl<E: Env> OAuth<E> {
                 "a PEP token needs a confidential client",
             ));
         }
-        let tenant = self.tenant_name(realm)?;
-        let mut tx = self.begin(realm).await?;
+        let tenant = self.tenant_name(environment)?;
+        let mut tx = self.begin(environment).await?;
         let alg = tx.jose_alg().await?;
         tx.commit().await?;
         let facts = ServiceFacts {
-            issuer: &realm.issuer,
+            issuer: &environment.issuer,
             audience,
             client_id: &client.id,
             sub: &client.id,
@@ -89,7 +89,7 @@ impl<E: Env> OAuth<E> {
             .env()
             .signer()
             .sign(
-                realm.realm,
+                environment.environment,
                 alg,
                 ACCESS_TYP,
                 &service_token_claims(&facts, &jti, &jkt.text()),
@@ -107,16 +107,16 @@ impl<E: Env> OAuth<E> {
     }
 
     /// The PEP an ADP request authenticates as by `authorization` (`DPoP <token>`) and its one
-    /// DPoP proof for `method` on `uri` (OP-155 m.3 (q)): a live PEP token of `realm` for this
+    /// DPoP proof for `method` on `uri` (OP-155 m.3 (q)): a live PEP token of `environment` for this
     /// deployment's ADP, its proof by the bound key with a current server nonce, used once, and
-    /// a client that is still a confidential client of the realm's tenant. A bearer token, a
+    /// a client that is still a confidential client of the environment's tenant. A bearer token, a
     /// certificate-bound or grant token, or any token for another audience is refused.
     ///
     /// # Errors
-    /// [`Unavailable`] when the realm's keys, nonces, replay store or directory do not answer.
+    /// [`Unavailable`] when the environment's keys, nonces, replay store or directory do not answer.
     pub async fn pep_identity(
         &self,
-        realm: &Realm,
+        environment: &Environment,
         method: &str,
         uri: &str,
         authorization: &str,
@@ -132,7 +132,7 @@ impl<E: Env> OAuth<E> {
         };
         let now = self.now()?;
         let Some(at) = self
-            .access_token(realm, token, now, true)
+            .access_token(environment, token, now, true)
             .await?
             .filter(|at| at.aud == audience && at.sid.is_none())
         else {
@@ -143,7 +143,7 @@ impl<E: Env> OAuth<E> {
         };
         let proof = self
             .dpop(
-                realm,
+                environment,
                 Role::ResourceServer,
                 &DpopRequest {
                     proofs: dpop,
@@ -168,10 +168,10 @@ impl<E: Env> OAuth<E> {
                 });
             }
         };
-        if at.access_tenant.as_deref() != Some(self.tenant_name(realm)?.as_str()) {
+        if at.access_tenant.as_deref() != Some(self.tenant_name(environment)?.as_str()) {
             return Ok(refused("invalid_token"));
         }
-        let mut tx = self.begin(realm).await?;
+        let mut tx = self.begin(environment).await?;
         let client = tx.client(&at.client_id).await?.and_then(Client::from_row);
         tx.commit().await?;
         if !client.is_some_and(|c| c.client_type() == ClientType::Confidential) {

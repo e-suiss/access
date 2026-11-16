@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.webauthn_users (tenant_id, environment_id, subject_id, user_handle)\n             VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id, environment_id, subject_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c8dfb781cfa2a838e16c9dc63f535a229abdf090a04ce00cb60d60df2f286bdb"
+}

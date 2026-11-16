@@ -40,10 +40,10 @@ pub struct Erasure {
 
 impl TenantTx {
     fn scoped(&self, subject: [u8; 16]) -> Result<(Uuid, Uuid, Uuid), StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         Ok((
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(subject),
         ))
     }
@@ -60,7 +60,7 @@ impl TenantTx {
         let (t, r, s) = self.scoped(subject)?;
         sqlx::query!(
             "INSERT INTO access.user_keyed_copies
-               (tenant_id, realm_id, subject_id, class, record_key, holder, holder_id, wrapped)
+               (tenant_id, environment_id, subject_id, class, record_key, holder, holder_id, wrapped)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             t,
             r,
@@ -86,7 +86,7 @@ impl TenantTx {
             r#"SELECT class, record_key, holder, holder_id, wrapped,
                       destroyed_at IS NOT NULL AS "destroyed!"
                  FROM access.user_keyed_copies
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                 ORDER BY class, record_key, holder, holder_id"#,
             t,
             r,
@@ -120,7 +120,7 @@ impl TenantTx {
         let (t, r, s) = self.scoped(subject)?;
         let n = sqlx::query!(
             "UPDATE access.user_keyed_copies SET wrapped = NULL, destroyed_at = clock_timestamp()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND class = $4
                 AND record_key = $5 AND holder = $6 AND holder_id = $7 AND destroyed_at IS NULL",
             t,
             r,
@@ -149,7 +149,7 @@ impl TenantTx {
         let (t, r, s) = self.scoped(subject)?;
         let id = sqlx::query_scalar!(
             "INSERT INTO access.user_keyed_erasures
-               (tenant_id, realm_id, subject_id, target, class, record_key, state, waiting, closed_at)
+               (tenant_id, environment_id, subject_id, target, class, record_key, state, waiting, closed_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'applied' THEN clock_timestamp() END)
              RETURNING erasure_id",
             t,
@@ -171,12 +171,12 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn erasure(&mut self, id: [u8; 16]) -> Result<Option<Erasure>, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let row = sqlx::query!(
             "SELECT erasure_id, target, state, waiting FROM access.user_keyed_erasures
-              WHERE tenant_id = $1 AND realm_id = $2 AND erasure_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND erasure_id = $3",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(id),
         )
         .fetch_optional(&mut *self.tx)
@@ -199,14 +199,14 @@ impl TenantTx {
         state: &str,
         waiting: &[String],
     ) -> Result<bool, StoreError> {
-        let realm = self.realm().ok_or(StoreError::Range)?;
+        let environment = self.environment().ok_or(StoreError::Range)?;
         let n = sqlx::query!(
             "UPDATE access.user_keyed_erasures
                 SET state = $4, waiting = $5,
                     closed_at = CASE WHEN $4 = 'applied' THEN clock_timestamp() END
-              WHERE tenant_id = $1 AND realm_id = $2 AND erasure_id = $3",
+              WHERE tenant_id = $1 AND environment_id = $2 AND erasure_id = $3",
             Uuid::from_bytes(*self.tenant.as_bytes()),
-            Uuid::from_bytes(*realm.as_bytes()),
+            Uuid::from_bytes(*environment.as_bytes()),
             Uuid::from_bytes(id),
             state,
             waiting,

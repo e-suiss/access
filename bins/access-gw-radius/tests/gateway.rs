@@ -219,7 +219,7 @@ async fn a_primary_password_never_authenticates_over_radius() {
             .unwrap();
         access_identity_account::app::accounts::store_password(
             &mut tx,
-            &w.realm(),
+            &w.environment(),
             ada,
             phc.expose(),
             &ADMIN,

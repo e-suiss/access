@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.acme_orders (tenant_id, environment_id, order_uuid, domain_uuid, hostname,\n                alpn_digest)\n         VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0f5b46cbfbacf10abaed8a7ab78d30625efcada7c085f17798a26f33e60c7c1"
+}

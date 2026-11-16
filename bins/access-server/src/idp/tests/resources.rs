@@ -1,4 +1,4 @@
-//! The realm resources the management API adds, through commit against real PostgreSQL and the
+//! The environment resources the management API adds, through commit against real PostgreSQL and the
 //! authority plane (OP-151 m.2 M1): groups and their one membership issuer, account
 //! suspension, upstream registrations, the sign-in and session policies and secret rotation.
 
@@ -9,16 +9,16 @@ use serde_json::json;
 
 use super::*;
 
-async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest) {
+async fn ready(slug: &str) -> (World, (TenantId, EnvironmentId), Digest) {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm(slug).await;
+    let (tenant, environment, d) = w.environment(slug).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
-    (w, (tenant, realm), d)
+    (w, (tenant, environment), d)
 }
 
 async fn run(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -26,10 +26,10 @@ async fn run(
     exercise(w, &proposal(at, change, nonce, idp_anchor(d), 1), ROOT_KEY).await
 }
 
-/// Why the realm refuses `change` before anything is signed or committed.
+/// Why the environment refuses `change` before anything is signed or committed.
 async fn refused(
     w: &World,
-    at: (TenantId, RealmId),
+    at: (TenantId, EnvironmentId),
     d: Digest,
     change: Change,
     nonce: u8,
@@ -237,10 +237,10 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
 
 // TN-129, TN-132, OP-151 m.3 (f)
 #[tokio::test]
-async fn the_realm_policies_change_through_commit() {
+async fn the_environment_policies_change_through_commit() {
     let (w, at, d) = ready("policies").await;
     // TN-129, OP-151 m.3 (f), m.11 (d)
-    let network = crate::console::sessions::RealmBinding {
+    let network = crate::console::sessions::EnvironmentBinding {
         app: w.db.app.clone(),
         directory: access_identity_oauth::adapters::PgDirectory::new(w.db.router.clone()),
     };
@@ -285,7 +285,7 @@ async fn the_realm_policies_change_through_commit() {
     assert!(*version > 0);
     assert!(
         binding().await,
-        "the console reads the realm's full-address binding"
+        "the console reads the environment's full-address binding"
     );
     assert!(
         access_http::console::ports::Network::policy(&network, "nowhere")
@@ -331,7 +331,7 @@ async fn a_client_secret_rotates_with_a_new_one_shown_once() {
     let mut t = access_store::identity::TenantTx::begin(&w.db.app, at.0, at.1)
         .await
         .unwrap();
-    let previous = access_store::idp::realm::previous_secret(&mut t, c.id.as_str())
+    let previous = access_store::idp::environment::previous_secret(&mut t, c.id.as_str())
         .await
         .unwrap();
     t.commit().await.unwrap();
@@ -374,7 +374,7 @@ async fn the_protection_mode_action_follows_its_tier() {
     )
     .unwrap();
     let tighten = w.admin().resolve(at.0, at.1, tighten).await.unwrap();
-    assert_eq!(tighten.action(), IdpAction::RealmProtectionMode);
+    assert_eq!(tighten.action(), IdpAction::EnvironmentProtectionMode);
     written(&run(&w, at, d, tighten, 1).await.unwrap());
     let view = w
         .admin()
@@ -395,7 +395,7 @@ async fn the_protection_mode_action_follows_its_tier() {
     .unwrap();
     let mislabelled = loosen.clone();
     let loosen = w.admin().resolve(at.0, at.1, loosen).await.unwrap();
-    assert_eq!(loosen.action(), IdpAction::RealmProtectionModeLoosen);
+    assert_eq!(loosen.action(), IdpAction::EnvironmentProtectionModeLoosen);
     assert!(matches!(
         w.admin()
             .prepare(&proposal(at, mislabelled, 2, idp_anchor(d), 1))
@@ -462,7 +462,7 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
         .unwrap();
     let taken = w
         .admin()
-        .create_realm(&NewRealm {
+        .create_environment(&NewEnvironment {
             tenant,
             slug: "first-application",
             style: IssuerStyle::Subdomain,
@@ -477,7 +477,7 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
         })
         .await;
     let Err(conflict) = taken else {
-        panic!("a taken slug opened a second realm");
+        panic!("a taken slug opened a second environment");
     };
     assert!(matches!(conflict, AdminError::Conflict), "{conflict:?}");
     assert_eq!(conflict.problem().0, 409);
@@ -575,12 +575,17 @@ fn reserved_operations_compile_to_nothing() {
     );
     // OP-158 m.3 (a), (o)
     assert_eq!(
-        compile(Op::RehomeRealm, None, &json!({}), &ids),
+        compile(Op::RehomeEnvironment, None, &json!({}), &ids),
         Err(Invalid::Body)
     );
     let domain = access_kernel::json::b64url_encode(&[7; 32]);
     assert!(matches!(
-        compile(Op::RehomeRealm, None, &json!({ "domain": domain }), &ids),
+        compile(
+            Op::RehomeEnvironment,
+            None,
+            &json!({ "domain": domain }),
+            &ids
+        ),
         Ok(Change::Rehome(_))
     ));
 }
@@ -589,7 +594,7 @@ mod inbound {
     use std::sync::Arc;
 
     use access_identity_account::domain::signal::SignalKind;
-    use access_identity_events::adapters::{KekSealer, RealmKek};
+    use access_identity_events::adapters::{EnvironmentKek, KekSealer};
     use access_identity_events::app::Db;
     use access_identity_events::app::receiver::Receiver;
     use access_identity_events::domain::mapping::signal_uri;
@@ -620,8 +625,8 @@ mod inbound {
 
     struct OneKek(Arc<SoftKek>);
 
-    impl RealmKek for OneKek {
-        fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+    impl EnvironmentKek for OneKek {
+        fn kek(&self, _: TenantId, _: EnvironmentId) -> Option<Arc<dyn Kek + Send + Sync>> {
             Some(self.0.clone())
         }
     }
@@ -657,7 +662,7 @@ mod inbound {
         format!("{input}.{}", b64url_encode(sig.as_ref())).into_bytes()
     }
 
-    async fn epoch(w: &World, at: (TenantId, RealmId), subject: [u8; 16]) -> i64 {
+    async fn epoch(w: &World, at: (TenantId, EnvironmentId), subject: [u8; 16]) -> i64 {
         let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
         let e = t
             .subject(subject, false)
@@ -719,7 +724,7 @@ mod inbound {
                 ids: Arc::new(IdKey::new(Secret::new([4; 32]))),
             },
             Keys(jwks(&k)),
-            KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32])))),
+            KekSealer(OneKek(Arc::new(SoftKek::new("environment-kek-1", [9; 32])))),
             SystemClock,
         );
         let before = epoch(&w, at, subject).await;
@@ -778,7 +783,7 @@ async fn the_csp_mode_action_follows_its_tier_and_keeps_the_branding() {
         .resolve(at.0, at.1, mode(CspMode::ReportOnly))
         .await
         .unwrap();
-    assert_eq!(loosen.action(), IdpAction::RealmCspModeLoosen);
+    assert_eq!(loosen.action(), IdpAction::EnvironmentCspModeLoosen);
     assert!(matches!(
         w.admin()
             .prepare(&proposal(
@@ -800,7 +805,7 @@ async fn the_csp_mode_action_follows_its_tier_and_keeps_the_branding() {
         .resolve(at.0, at.1, mode(CspMode::Enforce))
         .await
         .unwrap();
-    assert_eq!(tighten.action(), IdpAction::RealmCspMode);
+    assert_eq!(tighten.action(), IdpAction::EnvironmentCspMode);
     written(&run(&w, at, d, tighten, 5).await.unwrap());
     let back = stored().await;
     assert_eq!(CspMode::of(back.as_ref()), CspMode::Enforce);

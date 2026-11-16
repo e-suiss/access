@@ -6,10 +6,10 @@ pub(crate) mod admin;
 pub(crate) mod apply;
 pub(crate) mod diff;
 pub(crate) mod domain;
+pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod incident;
 pub(crate) mod migrate;
-pub(crate) mod realm;
 pub(crate) mod relay;
 pub(crate) mod replay;
 pub(crate) mod ssh;
@@ -29,7 +29,7 @@ use crate::gitops::{KINDS, Runtime};
 use crate::http::Transport;
 use crate::keys::{InstanceKey, KeySource, Pkcs11Uri};
 
-/// Where the realm's management surface is and which Instance key the command line acts with
+/// Where the environment's management surface is and which Instance key the command line acts with
 /// (OP-151 m.3 (c), (h)). There is deliberately no token option: reads use a DPoP-bound token the
 /// key obtains, writes an AIS the key signs (TN-130).
 #[derive(Debug, Args)]
@@ -37,10 +37,10 @@ pub(crate) struct Connect {
     /// The management API origin (`suiss.management_api`), `https://host[:port]`.
     #[arg(long, value_name = "URL")]
     pub(crate) api: String,
-    /// The realm slug.
+    /// The environment slug.
     #[arg(long, value_name = "SLUG")]
-    pub(crate) realm: String,
-    /// The realm issuer; its metadata names the token endpoint and the governing domain.
+    pub(crate) environment: String,
+    /// The environment issuer; its metadata names the token endpoint and the governing domain.
     #[arg(long, value_name = "URL")]
     pub(crate) issuer: String,
     /// PEM file of the CA the management API and the issuer chain to.
@@ -115,7 +115,7 @@ impl Connect {
         }
         Ok(Target {
             api: self.api.clone(),
-            realm: self.realm.clone(),
+            environment: self.environment.clone(),
             issuer: self.issuer.clone(),
             basis,
         })
@@ -148,13 +148,13 @@ pub(crate) fn failed(e: &ClientError) -> Code {
     }
 }
 
-/// Reads the realm's runtime configuration: every resource list and the settings with their
+/// Reads the environment's runtime configuration: every resource list and the settings with their
 /// `ETag` (reads only, TN-123 item 4).
 pub(crate) async fn runtime<T: Transport, E: Env>(
     client: &Client<'_, T, E>,
-    realm: &str,
+    environment: &str,
 ) -> Result<Runtime, ClientError> {
-    let base = format!("/admin/v1/realms/{}", crate::api::segment(realm));
+    let base = format!("/admin/v1/envs/{}", crate::api::segment(environment));
     let mut lists = Map::new();
     for kind in KINDS {
         let items = client

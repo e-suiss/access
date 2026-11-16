@@ -2,7 +2,7 @@
 //! invitation a pushed request sends, one per approver and intent and at most five an hour from a
 //! requester, and the approver device's in-notification CT1 answer. A refusal is recorded. An
 //! approval is checked in full and counts only with the approver's passkey assertion over H(AAS)
-//! for the realm's RP ID, verified as the Approval Surface verifies it (verifier name binding,
+//! for the environment's RP ID, verified as the Approval Surface verifies it (verifier name binding,
 //! §10.3.1); it then becomes the `authentication` Claim bound to the statement and the
 //! contribution, and uses the invitation up. A device key's signature alone is never one.
 
@@ -11,7 +11,7 @@ use access_identity_account::app::vault::reveal_with_kek;
 use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::message::{Address, Body, Message, Prompt};
 use access_identity_account::notify::ports::Notifier;
-use access_identity_oauth::ports::RealmEntry;
+use access_identity_oauth::ports::EnvironmentEntry;
 use access_internal_api::approvals::Contribution;
 use access_kernel::aas::{self, Act};
 use access_kernel::assurance;
@@ -32,7 +32,7 @@ use crate::domain::approval::{
     ApprovalPush, Envelope, INVITE_WINDOW_MS, INVITES_PER_HOUR, InlineAnswer, InlineDecision, Kept,
     Pushed, SDK_SURFACE_PROFILE, envelope, inline_answer, requester_party,
 };
-use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
+use crate::ports::{ApprovalClaims, Approvals, EnvironmentKit, Kits, Messages};
 
 /// `approval-inline-assertion-required`: every check passed, but the answer carries no
 /// passkey assertion bound to H(AAS) (§10.2, §10.3.1, MD-11, OP-157 m.17).
@@ -132,7 +132,7 @@ where
     pub(super) async fn approval_invitation<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         request: &Value,
         p: &Pushed,
         env: &Envelope,
@@ -152,7 +152,7 @@ where
         let Some(tier) = tier_of(opening.tier) else {
             return Ok(None);
         };
-        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
             .await
             .map_err(|_| unavailable())?;
         let approver = idp::party_subject(&mut t, &h.holder.0)
@@ -191,7 +191,7 @@ where
         Ok(count < INVITES_PER_HOUR)
     }
 
-    /// Records the invitation and sends it, once: inside the notification only for CT1 in a realm
+    /// Records the invitation and sends it, once: inside the notification only for CT1 in an environment
     /// that opened it and to a registered, activated approver device, otherwise a link to the
     /// Approval Surface.
     #[expect(clippy::too_many_arguments, reason = "one push's facts")]
@@ -201,7 +201,7 @@ where
     )]
     pub(super) async fn invite(
         &self,
-        kit: &RealmKit,
+        kit: &EnvironmentKit,
         t: &mut TenantTx,
         i: &Invitation,
         request_id: [u8; 16],
@@ -224,8 +224,8 @@ where
         if !new {
             return Ok(());
         }
-        let realm = kit.realm();
-        let notifier = self.messages.notifier(&realm);
+        let environment = kit.environment();
+        let notifier = self.messages.notifier(&environment);
         let inline = inline_tier(tier_code(i.tier))
             && store::approval_channel_enabled(t, ApprovalChannel::Inline).await?;
         if inline
@@ -323,7 +323,7 @@ where
     pub async fn answer_inline<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
-        entry: &RealmEntry,
+        entry: &EnvironmentEntry,
         body: &InlineAnswer,
     ) -> Reply {
         let kit = match self.kit(entry).await {
@@ -355,7 +355,7 @@ where
             },
         };
         let found = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let enabled = store::approval_channel_enabled(&mut t, ApprovalChannel::Inline).await?;
             let key = t.device_key_by_thumbprint(&answer.device_key).await?;
             let factor = match &key {
@@ -372,7 +372,7 @@ where
             return problem(
                 409,
                 "approval-inline-off",
-                "Notification approval is not open in this realm",
+                "Notification approval is not open in this environment",
             );
         }
         let (Some(key), Some(factor)) = (key, factor) else {
@@ -391,7 +391,7 @@ where
         }
         // OP-157 m.3 (m)
         let row = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let invite = store::invite(&mut t, &key.subject, &answer.intent).await?;
             let row = match &invite {
                 Some(i) => store::approval(&mut t, &i.request).await?,
@@ -419,7 +419,7 @@ where
         let InlineDecision::Approve(act) = answer.decision else {
             // C30
             let done = async {
-                let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+                let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
                 store::answer_invite(&mut t, &invite.id, "denied", now).await?;
                 t.commit().await
             };
@@ -542,7 +542,7 @@ where
         }
         // C30, OP-157 m.17
         let used = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
             let used = store::answer_invite(&mut t, &invite.id, "approved", now).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(used)

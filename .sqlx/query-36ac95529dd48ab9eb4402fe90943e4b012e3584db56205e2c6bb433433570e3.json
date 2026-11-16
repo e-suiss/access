@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT anchor FROM access.org_party_anchors\n                WHERE tenant_id = $1 AND environment_id = $2 AND party = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "anchor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_party_anchors",
+            "name": "anchor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "36ac95529dd48ab9eb4402fe90943e4b012e3584db56205e2c6bb433433570e3"
+}

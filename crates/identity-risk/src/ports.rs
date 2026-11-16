@@ -52,14 +52,14 @@ pub trait GeoResolver: Send + Sync {
     fn status(&self) -> GeoStatus;
 }
 
-/// Keyed pseudonyms of addresses, per realm (OP-151 m.1 (b)).
+/// Keyed pseudonyms of addresses, per environment (OP-151 m.1 (b)).
 pub trait IpPseudonyms: Send + Sync {
-    /// The pseudonym of `ip` in `realm`; `None` when no key is available.
-    fn pseudonym(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
+    /// The pseudonym of `ip` in `environment`; `None` when no key is available.
+    fn pseudonym(&self, tenant: &[u8; 16], environment: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
 
-    /// The pseudonym of the IPv4 /24 or IPv6 /48 holding `ip` in `realm`, the bootstrap rate
+    /// The pseudonym of the IPv4 /24 or IPv6 /48 holding `ip` in `environment`, the bootstrap rate
     /// context (OP-152 m.5 (b)); `None` when no key is available.
-    fn prefix(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
+    fn prefix(&self, tenant: &[u8; 16], environment: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
 }
 
 /// The breached-password check of a sign-in (IDP-3, OP-151 m.3 (o)).
@@ -95,8 +95,8 @@ pub trait RangeFetch: Send + Sync {
 }
 
 /// One transaction over the identity tables that SL2 reads and writes with the business change
-/// (OP-10, OP-63): the account transaction and its realm-scoped store transaction.
+/// (OP-10, OP-63): the account transaction and its environment-scoped store transaction.
 pub trait RiskTx: AccountTx {
-    /// The realm-scoped store transaction.
+    /// The environment-scoped store transaction.
     fn store(&mut self) -> &mut TenantTx;
 }

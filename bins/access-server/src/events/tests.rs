@@ -22,10 +22,10 @@ use access_kernel::model::Id;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, OutboxRow, acquire_lease, commit_batch, create_domain,
 };
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::idp::create_settings;
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+use access_store::tenancy::{create_environment, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 use serde_json::Value as Json;
 use suiss_crypto::pkcs11::KeyStore;
@@ -36,7 +36,7 @@ use super::*;
 use crate::login::kek_label;
 use crate::testing::hsm;
 
-const ISSUER: &str = "https://id.test/realms/shop";
+const ISSUER: &str = "https://id.test/env/shop";
 
 /// The token stays open for the process: `SoftHSM` does not survive closing it under a test.
 static STORE: std::sync::OnceLock<Arc<KeyStore>> = std::sync::OnceLock::new();
@@ -120,8 +120,8 @@ impl Transport for Local {
     }
 }
 
-/// A tenant with one realm, its issuer and governing domain.
-async fn realm(db: &TestDb) -> (TenantId, RealmId, DomainId) {
+/// A tenant with one environment, its issuer and governing domain.
+async fn environment(db: &TestDb) -> (TenantId, EnvironmentId, DomainId) {
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let domain = DomainId::from_bytes(access_crypto::random::bytes::<32>().unwrap());
     let genesis = LogRecord {
@@ -135,14 +135,14 @@ async fn realm(db: &TestDb) -> (TenantId, RealmId, DomainId) {
         .await
         .unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+    let environment = create_environment(&mut t, &domain, "shop", "pool-default")
         .await
         .unwrap();
-    t.enter_realm(realm).await.unwrap();
+    t.enter_environment(environment).await.unwrap();
     assert!(set_issuer(&mut t, ISSUER).await.unwrap());
     create_settings(&mut t).await.unwrap();
     t.commit().await.unwrap();
-    (tenant, realm, domain)
+    (tenant, environment, domain)
 }
 
 /// Commits one record with `event` in its outbox, as the sequencer does.
@@ -198,7 +198,7 @@ async fn authority_event(db: &TestDb, tenant: TenantId, domain: &DomainId, event
 async fn the_server_delivers_events_to_a_webhook() {
     // OP-149 m.17 (b), OP-42, OP-135
     let db = fresh().await.unwrap();
-    let (tenant, realm, domain) = realm(&db).await;
+    let (tenant, environment, domain) = environment(&db).await;
     let store = STORE
         .get_or_init(|| {
             let (module, label) = hsm("events");
@@ -206,11 +206,13 @@ async fn the_server_delivers_events_to_a_webhook() {
             Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
         })
         .clone();
-    store.generate_kek(&kek_label(realm.as_bytes())).unwrap();
+    store
+        .generate_kek(&kek_label(environment.as_bytes()))
+        .unwrap();
     if store.mac(crate::login::ID_KEY_ROOT).is_err() {
         store.generate_mac(crate::login::ID_KEY_ROOT).unwrap();
     }
-    let keks = RealmKeks::new(store.clone());
+    let keks = EnvironmentKeks::new(store.clone());
     let pools = EventPools {
         app: db.app.clone(),
         reader: db.reader.clone(),
@@ -232,20 +234,20 @@ async fn the_server_delivers_events_to_a_webhook() {
     let hook = Streams::new(pools.db(), KekSealer(keks.clone()), OsRandom)
         .create(
             tenant,
-            realm,
+            environment,
             &parse_stream(&serde_json::to_vec(&request).unwrap()).unwrap(),
         )
         .await
         .unwrap();
     let secret = WebhookSecret::parse(&hook.secret.clone().unwrap()).unwrap();
 
-    let mut t = TenantTx::begin(&db.app, tenant, realm).await.unwrap();
+    let mut t = TenantTx::begin(&db.app, tenant, environment).await.unwrap();
     let event = IdentityEvent::api_client(
         IdentityKind::ApiClientCreated,
         [1; 32],
         &ClientChange {
             tenant: &tenant_id,
-            realm: realm.as_bytes(),
+            environment: environment.as_bytes(),
             client_id: "cli_shop",
             exercise: &[3; 32],
             platform_product: None,

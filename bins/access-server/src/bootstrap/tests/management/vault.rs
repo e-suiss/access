@@ -29,14 +29,14 @@ async fn a_catalog_upstream_is_enabled_read_and_disabled_by_rest() {
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/vault/resources/github",
+            "/admin/v1/envs/acme/vault/resources/github",
             ("putVaultResource", Some("github")),
             resource(),
             None,
         )
         .await;
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
-    let list = c.admin_get("/admin/v1/realms/acme/vault/resources").await;
+    let list = c.admin_get("/admin/v1/envs/acme/vault/resources").await;
     assert_eq!(list.status, StatusCode::OK, "{}", list.body);
     let item = &list.body["items"][0];
     assert_eq!(item["resource"], "github");
@@ -52,7 +52,7 @@ async fn a_catalog_upstream_is_enabled_read_and_disabled_by_rest() {
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/vault/resources/nowhere",
+            "/admin/v1/envs/acme/vault/resources/nowhere",
             ("putVaultResource", Some("nowhere")),
             bad,
             None,
@@ -64,7 +64,7 @@ async fn a_catalog_upstream_is_enabled_read_and_disabled_by_rest() {
     let w = c
         .rest_write(
             &Method::PUT,
-            "/admin/v1/realms/acme/settings/vault-release-mode",
+            "/admin/v1/envs/acme/settings/vault-release-mode",
             ("putVaultReleaseMode", None),
             serde_json::json!({ "mode": "open" }),
             None,
@@ -74,14 +74,14 @@ async fn a_catalog_upstream_is_enabled_read_and_disabled_by_rest() {
     let w = c
         .rest_write(
             &Method::POST,
-            "/admin/v1/realms/acme/vault/resources/github/disable",
+            "/admin/v1/envs/acme/vault/resources/github/disable",
             ("disableVaultResource", Some("github")),
             serde_json::json!({}),
             None,
         )
         .await;
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
-    let list = c.admin_get("/admin/v1/realms/acme/vault/resources").await;
+    let list = c.admin_get("/admin/v1/envs/acme/vault/resources").await;
     assert_eq!(list.body["items"][0]["status"], "disabled", "{}", list.body);
     assert_eq!(list.body["items"][0]["release_mode"], "open");
     c.w.domains.release().await;

@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -37,16 +37,16 @@ pub async fn put_pins(
     proxy: &str,
     tools: &str,
 ) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let version = sqlx::query_scalar!(
-        r#"INSERT INTO access.mcp_tool_pins (tenant_id, realm_id, proxy, version, tools,
+        r#"INSERT INTO access.mcp_tool_pins (tenant_id, environment_id, proxy, version, tools,
                 domain_id, decision_pos)
          SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6
            FROM access.mcp_tool_pins
-          WHERE tenant_id = $1 AND realm_id = $2 AND proxy = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND proxy = $3
          RETURNING version AS "version!""#,
         tenant,
-        realm,
+        environment,
         proxy,
         tools,
         bound.domain().as_bytes().as_slice(),
@@ -62,13 +62,13 @@ pub async fn put_pins(
 /// # Errors
 /// [`StoreError`].
 pub async fn pins(t: &mut TenantTx, proxy: &str) -> Result<Option<PinsRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT version, tools, decision_pos FROM access.mcp_tool_pins
-          WHERE tenant_id = $1 AND realm_id = $2 AND proxy = $3
+          WHERE tenant_id = $1 AND environment_id = $2 AND proxy = $3
           ORDER BY version DESC LIMIT 1",
         tenant,
-        realm,
+        environment,
         proxy,
     )
     .fetch_optional(&mut *t.tx)

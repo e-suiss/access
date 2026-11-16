@@ -1,5 +1,5 @@
 //! CIBA as an invitation on the real server (OP-155 m.3 (l), IDP-14, §10.5.3, §9.14.5 k.2,
-//! OP-153 m.3 (gg)): the realm's authorization server with the authority plane's openings, the
+//! OP-153 m.3 (gg)): the environment's authorization server with the authority plane's openings, the
 //! person's Relay invitation sealed in the identity outbox, the hosted Approval Surface over TLS
 //! with the software passkey and device Instance, and the agent's own commit on the same nonce.
 //! Only the ping transport is recorded instead of sent: the SSRF guard keeps loopback out.
@@ -23,7 +23,7 @@ use access_local_client::login::{Credential, Jar, post_json, sign_in};
 use access_local_client::passkey::{Passkey, relying_party};
 use access_sdk::auth::dpop::{ProofFor, ProofKey, proof};
 use access_sdk::auth::{Random, RandomUnavailable};
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{EnvironmentId, TenantId};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
 use serde_json::{Value as JsonValue, json};
@@ -31,7 +31,7 @@ use suiss_crypto::signer::SoftSigner;
 
 use super::*;
 
-/// The pings the realm sent: endpoint, bearer token and `auth_req_id`.
+/// The pings the environment sent: endpoint, bearer token and `auth_req_id`.
 pub(super) type Pings = Arc<Mutex<Vec<(String, String, String)>>>;
 
 /// The server's CIBA services, with the ping recorded.
@@ -52,10 +52,10 @@ impl CibaServices for RecordingCiba {
     fn login_hint(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         hint: String,
     ) -> Held<'_, Option<[u8; 16]>> {
-        self.inner.login_hint(tenant, realm, hint)
+        self.inner.login_hint(tenant, environment, hint)
     }
 
     fn ping(&self, endpoint: String, token: String, auth_req_id: String) -> Held<'_, bool> {
@@ -69,7 +69,7 @@ impl CibaServices for RecordingCiba {
     }
 }
 
-/// The realm authorization server and discovery of the deployment, CIBA wired as in `main`.
+/// The environment authorization server and discovery of the deployment, CIBA wired as in `main`.
 pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
     let pings: Pings = Arc::new(Mutex::new(Vec::new()));
     let ids = Arc::new(crate::ids::CellIds::new(w.keys.clone()));
@@ -77,7 +77,7 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
         inner: crate::ciba::ServerCiba {
             plane: w.plane.clone(),
             app: w.db.app.clone(),
-            keks: crate::login::RealmKeks::new(Arc::clone(&w.keys)),
+            keks: crate::login::EnvironmentKeks::new(Arc::clone(&w.keys)),
             ids: Arc::clone(&ids),
             outbound: Outbound::disabled(Duration::from_secs(5)),
         },
@@ -123,7 +123,7 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
         crate::linux::Linux::new(w.db.app.clone(), w.plane.clone()),
     );
     let router = router.merge(ssh).merge(linux);
-    let discovery = access_http::realm::router(access_identity_oauth::app::Discovery::new(
+    let discovery = access_http::environment::router(access_identity_oauth::app::Discovery::new(
         PgDirectory::new(w.db.router.clone()).with_facts(w.db.app.clone()),
         SignerKeys::new(w.identity_signer.clone()),
     ));
@@ -158,7 +158,7 @@ impl ProofKey for DpopKey {
     }
 }
 
-/// A registered confidential client of the realm: its `client_id`, its `private_key_jwt` key, its
+/// A registered confidential client of the environment: its `client_id`, its `private_key_jwt` key, its
 /// internal id and its DPoP key.
 pub(super) struct CibaClient {
     pub(super) id: String,
@@ -199,14 +199,14 @@ fn form(pairs: &[(&str, &str)]) -> String {
 }
 
 impl Desk {
-    /// The root's `change` of the realm.
+    /// The root's `change` of the environment.
     pub(super) async fn root_change(&self, change: Change) {
         let declared = DeclaredTargets::default();
         let b = Bootstrap {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -219,7 +219,7 @@ impl Desk {
             .unwrap();
         b.change(
             &b.admin(&ids, None),
-            (route.tenant, route.realm),
+            (route.tenant, route.environment),
             self.domain,
             &root_key(&self.w.keys).unwrap(),
             change,
@@ -228,7 +228,7 @@ impl Desk {
         .unwrap();
     }
 
-    /// `idp.realm.ciba` with the free `login_hint` flag and the clients told by ping.
+    /// `idp.environment.ciba` with the free `login_hint` flag and the clients told by ping.
     pub(super) async fn ciba_on(&self, login_hint: bool, ping: &[(&CibaClient, &str)]) {
         self.root_change(Change::Ciba(CibaSetting {
             enabled: true,
@@ -241,7 +241,7 @@ impl Desk {
         .await;
     }
 
-    /// A confidential client of the realm, under FAPI 2.0 when `fapi`.
+    /// A confidential client of the environment, under FAPI 2.0 when `fapi`.
     pub(super) async fn ciba_client(&self, name: &str, fapi: bool) -> CibaClient {
         let key = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
         let declared = DeclaredTargets::default();
@@ -249,7 +249,7 @@ impl Desk {
             app: &self.w.db.app,
             router: &self.w.db.router,
             plane: &self.w.plane,
-            realm_keys: &self.w.keyring,
+            environment_keys: &self.w.keyring,
             hsm: &self.w.keys,
             base: &self.w.base,
             declared: &declared,
@@ -284,7 +284,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let uuid = access_store::idp::client(&mut t, &text)
@@ -304,7 +304,7 @@ impl Desk {
         }
     }
 
-    /// The client's `private_key_jwt` assertion for the realm.
+    /// The client's `private_key_jwt` assertion for the environment.
     fn assertion(&self, c: &CibaClient) -> String {
         Self::assertion_to(c, &self.user.issuer)
     }
@@ -346,7 +346,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let candidate = b64url_encode(&access_crypto::random::bytes::<32>().unwrap());
@@ -492,7 +492,7 @@ impl Desk {
             .await
             .unwrap()
             .unwrap();
-        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.environment)
             .await
             .unwrap();
         let handle = b64url_decode(auth_req_id).unwrap();

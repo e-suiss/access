@@ -4,8 +4,8 @@
 //! standard RSASSA-PSS check and keeps the spent set. A token produces no authority: it is never
 //! a Claim, a Grant or a decision input.
 //!
-//! - One issuer key per realm and 30-day period, made when its period first needs it and sealed
-//!   under the realm KEK; the directory lists the current and the previous period's key.
+//! - One issuer key per environment and 30-day period, made when its period first needs it and sealed
+//!   under the environment KEK; the directory lists the current and the previous period's key.
 //! - At most [`DAILY_LIMIT`] tokens per identity and day (POLICY DEFAULT); the count is one row
 //!   per token, naming no blinded message.
 
@@ -17,7 +17,7 @@ use suiss_crypto::envelope::{Dek, Sealed, open_body, seal_body};
 
 use crate::AccountError;
 use crate::adapters::pg::PgTx;
-use crate::app::{Actor, Realm};
+use crate::app::{Actor, Environment};
 use crate::domain::status::AccountStatus;
 use crate::ports::AccountTx;
 
@@ -73,12 +73,15 @@ fn period_of(ms: u64) -> Result<i64, AccountError> {
     i64::try_from(ms / PERIOD_MS).map_err(|_| AccountError::Corrupt)
 }
 
-fn seal(realm: &Realm<'_>, doc: &[u8]) -> Result<Vec<u8>, AccountError> {
+fn seal(environment: &Environment<'_>, doc: &[u8]) -> Result<Vec<u8>, AccountError> {
     let dek = Dek::generate().map_err(|_| AccountError::Corrupt)?;
-    let wrapped = realm.kek.wrap(&dek).map_err(|_| AccountError::Corrupt)?;
+    let wrapped = environment
+        .kek
+        .wrap(&dek)
+        .map_err(|_| AccountError::Corrupt)?;
     let sealed = seal_body(dek, KEY_CONTEXT, doc).map_err(|_| AccountError::Corrupt)?;
     let v = Value::Map(vec![
-        (Value::text("kek"), Value::text(realm.kek.id())),
+        (Value::text("kek"), Value::text(environment.kek.id())),
         (Value::text("wrapped"), Value::Bytes(wrapped)),
         (Value::text("nonce"), Value::Bytes(sealed.nonce.to_vec())),
         (Value::text("ciphertext"), Value::Bytes(sealed.ciphertext)),
@@ -86,13 +89,13 @@ fn seal(realm: &Realm<'_>, doc: &[u8]) -> Result<Vec<u8>, AccountError> {
     dcbor::encode(&v, Limits::CEILING).map_err(|_| AccountError::Corrupt)
 }
 
-fn open(realm: &Realm<'_>, sealed: &[u8]) -> Result<IssuerKey, AccountError> {
+fn open(environment: &Environment<'_>, sealed: &[u8]) -> Result<IssuerKey, AccountError> {
     let v = dcbor::decode(sealed, Limits::CEILING).map_err(|_| AccountError::Corrupt)?;
     let bytes = |k: &str| match v.get(k) {
         Some(Value::Bytes(b)) => Ok(b.clone()),
         _ => Err(AccountError::Corrupt),
     };
-    let dek = realm
+    let dek = environment
         .kek
         .unwrap(&bytes("wrapped")?)
         .map_err(|_| AccountError::Corrupt)?;
@@ -110,7 +113,7 @@ fn open(realm: &Realm<'_>, sealed: &[u8]) -> Result<IssuerKey, AccountError> {
 /// concurrent maker's key wins.
 async fn current(
     tx: &mut PgTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     now_ms: u64,
 ) -> Result<FirstContactKey, AccountError> {
     let period = period_of(now_ms)?;
@@ -128,7 +131,7 @@ async fn current(
         period,
         token_key_id: access_crypto::privacy_pass::token_key_id(&token_key),
         token_key,
-        sealed_key: seal(realm, &der)?,
+        sealed_key: seal(environment, &der)?,
     };
     tx.0.insert_first_contact_key(&made).await?;
     tx.0.first_contact_keys(period)
@@ -145,10 +148,10 @@ async fn current(
 /// [`AccountError`].
 pub async fn directory(
     tx: &mut PgTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
 ) -> Result<Vec<PublishedKey>, AccountError> {
     let now = tx.server_time().await?;
-    current(tx, realm, now).await?;
+    current(tx, environment, now).await?;
     let from = period_of(now)?.saturating_sub(1);
     tx.0.first_contact_keys(from)
         .await?
@@ -175,7 +178,7 @@ pub async fn directory(
 /// [`AccountError`].
 pub async fn issue(
     tx: &mut PgTx,
-    realm: &Realm<'_>,
+    environment: &Environment<'_>,
     subject: [u8; 16],
     request: &TokenRequest,
     who: &Actor<'_>,
@@ -191,7 +194,7 @@ pub async fn issue(
     }
     let now = tx.server_time().await?;
     let day = i32::try_from(now / DAY_MS).map_err(|_| AccountError::Corrupt)?;
-    let target = realm.external(subject)?;
+    let target = environment.external(subject)?;
     if tx.0.first_contact_issued(subject, day).await? >= DAILY_LIMIT {
         tx.audit(&AuditEvent {
             event_type: "first_contact.limit_reached",
@@ -202,11 +205,11 @@ pub async fn issue(
         .await?;
         return Ok(Err(Refused::Limit));
     }
-    let key = current(tx, realm, now).await?;
+    let key = current(tx, environment, now).await?;
     if key.token_key_id.last() != Some(&request.truncated_key_id) {
         return Ok(Err(Refused::Key));
     }
-    let sig = match open(realm, &key.sealed_key)?.blind_sign(&request.blinded_msg) {
+    let sig = match open(environment, &key.sealed_key)?.blind_sign(&request.blinded_msg) {
         Ok(s) => s,
         Err(BlindError::Input) => return Ok(Err(Refused::Request)),
         Err(_) => return Err(AccountError::Corrupt),

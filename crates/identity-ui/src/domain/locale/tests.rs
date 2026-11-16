@@ -26,21 +26,21 @@ fn every_text_id_has_its_default_text_in_english_and_a_turkish_text() {
 
 // OP-153 m.3 (s), TN-108
 #[test]
-fn the_chain_runs_realm_locale_realm_language_access_locale_access_language_english() {
+fn the_chain_runs_environment_locale_environment_language_access_locale_access_language_english() {
     let c = catalogs();
     let k = key_of(TextId::Continue);
-    let mut realm = Overrides::new();
-    realm.insert(
+    let mut environment = Overrides::new();
+    environment.insert(
         String::from("tr-tr"),
         Messages::from([(k.clone(), String::from("İlerle"))]),
     );
-    realm.insert(
+    environment.insert(
         String::from("tr"),
         Messages::from([(k.clone(), String::from("Sürdür"))]),
     );
-    c.check(&realm).unwrap();
-    assert_eq!(c.pattern(&k, "tr-TR", Some(&realm)), Some("İlerle"));
-    assert_eq!(c.pattern(&k, "tr-CY", Some(&realm)), Some("Sürdür"));
+    c.check(&environment).unwrap();
+    assert_eq!(c.pattern(&k, "tr-TR", Some(&environment)), Some("İlerle"));
+    assert_eq!(c.pattern(&k, "tr-CY", Some(&environment)), Some("Sürdür"));
     assert_eq!(c.pattern(&k, "tr-CY", None), Some("Devam"));
     assert_eq!(c.pattern(&k, "de-DE", None), Some("Continue"));
     assert_eq!(c.pattern(&k, "not a tag", None), Some("Continue"));
@@ -53,13 +53,16 @@ fn a_protected_key_is_never_overridden() {
     let c = catalogs();
     let k = key_of(TextId::LoginFailed);
     assert!(c.is_protected(&k));
-    let realm = Overrides::from([(
+    let environment = Overrides::from([(
         String::from("en"),
         Messages::from([(k.clone(), String::from("Wrong password."))]),
     )]);
-    assert_eq!(c.check(&realm), Err(LocaleError::Protected(k.clone())));
     assert_eq!(
-        c.pattern(&k, "en", Some(&realm)),
+        c.check(&environment),
+        Err(LocaleError::Protected(k.clone()))
+    );
+    assert_eq!(
+        c.pattern(&k, "en", Some(&environment)),
         Some(TextId::LoginFailed.default_text())
     );
     let unknown = Overrides::from([(

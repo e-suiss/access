@@ -3,22 +3,22 @@ use super::*;
 // CMP-22b, OP-143 m.9 (e), OP-149 m.8, OP-150
 #[test]
 fn messages_round_trip() {
-    let realm = Realm([3; 16]);
+    let environment = Environment([3; 16]);
     let requests = [
         Request::Ping,
         Request::Open {
-            realm,
+            environment,
             alg: JwsAlg::Ed25519,
         },
-        Request::Jwks(realm),
+        Request::Jwks(environment),
         Request::Sign {
-            realm,
+            environment,
             typ: String::from("JWT"),
             payload: b"{}".to_vec(),
             at: 42,
         },
         Request::SignCose {
-            realm,
+            environment,
             content_type: String::from("application/access-auth-context+cbor"),
             payload: vec![0xa0],
             at: 42,
@@ -28,23 +28,23 @@ fn messages_round_trip() {
             body: String::from("cell/identity-audit\n1\nAAAA\n"),
         },
         Request::OpenIssuer {
-            realm,
+            environment,
             party: [4; 16],
         },
         Request::SignClaim {
-            realm,
+            environment,
             payload: vec![0xa0],
             at: 42,
         },
         // OP-155 m.3 (k)
         Request::SignRs256 {
-            realm,
+            environment,
             typ: String::from("JWT"),
             payload: b"{}".to_vec(),
             at: 42,
         },
         Request::SignIssuerRegistration {
-            realm,
+            environment,
             registration: crate::issuer::Registration {
                 domain: [5; 32],
                 nonce: vec![6; 32],
@@ -99,18 +99,21 @@ fn bad_frames_are_refused() {
     let too_big = u32::try_from(MAX_FRAME + 1).unwrap().to_be_bytes();
     assert_eq!(frame_len(too_big), Err(FrameError::TooLarge));
     assert_eq!(decode_request(&[0xff]), Err(FrameError::Malformed));
-    let short_realm = dcbor::encode(
+    let short_environment = dcbor::encode(
         &map(vec![("jwks", Value::Bytes(vec![1; 15]))]),
         Limits::CEILING,
     )
     .unwrap();
-    assert_eq!(decode_request(&short_realm), Err(FrameError::Malformed));
+    assert_eq!(
+        decode_request(&short_environment),
+        Err(FrameError::Malformed)
+    );
     // MD-3
     let eddsa = dcbor::encode(
         &map(vec![(
             "open",
             map(vec![
-                ("realm", Value::Bytes(vec![1; 16])),
+                ("environment", Value::Bytes(vec![1; 16])),
                 ("alg", Value::text("EdDSA")),
             ]),
         )]),
@@ -123,19 +126,19 @@ fn bad_frames_are_refused() {
 // TN-118, §13.2
 #[test]
 fn key_changes_round_trip() {
-    let realm = Realm([3; 16]);
+    let environment = Environment([3; 16]);
     for r in [
         Request::Rotate {
-            realm,
+            environment,
             retire: [5; 32],
         },
         Request::DropKey {
-            realm,
+            environment,
             kid: [4; 32],
         },
         Request::SetPolicy {
-            realm,
-            policy: Policy::REALM,
+            environment,
+            policy: Policy::ENVIRONMENT,
         },
     ] {
         let f = encode_request(&r).unwrap();

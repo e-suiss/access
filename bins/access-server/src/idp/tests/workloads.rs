@@ -1,6 +1,6 @@
 //! Workload and attestation Acceptances on the real commit path (OP-154 m.3 (d), (r), (s),
 //! AG-30, AG-31, L21, U20): a trust domain is accepted by the domain root's actor-binding
-//! Acceptance of its issuer id and by nothing else; a new realm accepts its issuer's workload
+//! Acceptance of its issuer id and by nothing else; a new environment accepts its issuer's workload
 //! bindings for actor binding and its runtime attestations as predicate input; an attester's
 //! Acceptance admits only the classes it lists.
 
@@ -93,7 +93,7 @@ pub(super) fn issuer_gate(issuer: Id, use_: &str, classes: &[&str]) -> Value {
 #[tokio::test]
 async fn a_trust_domain_is_accepted_by_the_roots_actor_binding_acceptance_alone() {
     let w = World::new().await;
-    let (_, _, d) = w.realm_with("trust", Some(0)).await;
+    let (_, _, d) = w.environment_with("trust", Some(0)).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let acme = trust_domain_issuer(Scheme::Spiffe, "acme.example");
     let beta = trust_domain_issuer(Scheme::Spiffe, "beta.example");
@@ -122,7 +122,7 @@ async fn a_trust_domain_is_accepted_by_the_roots_actor_binding_acceptance_alone(
 #[tokio::test]
 async fn an_attester_signing_a_class_outside_its_acceptance_is_ignored() {
     let w = World::new().await;
-    let (_, _, d) = w.realm_with("attester", Some(0)).await;
+    let (_, _, d) = w.environment_with("attester", Some(0)).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let attester = Id([0x7a; 16]);
     let gate = issuer_gate(
@@ -149,9 +149,9 @@ async fn an_attester_signing_a_class_outside_its_acceptance_is_ignored() {
 
 // OP-154 m.3 (d), (s), §5.9, L21, U20, Ek B 4200, 4262, 4324, 4524, 4547
 #[tokio::test]
-async fn the_realm_issuer_binds_workloads_and_runtime_attestations_as_claims() {
+async fn the_environment_issuer_binds_workloads_and_runtime_attestations_as_claims() {
     let w = World::new().await;
-    let (t, r, d) = w.realm("bindings").await;
+    let (t, r, d) = w.environment("bindings").await;
     access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
         .await
         .unwrap();

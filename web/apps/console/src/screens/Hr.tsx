@@ -1,4 +1,4 @@
-// IDP-35, OP-156 m.3 (q), §8.17.9.8: the realm's HR sources, their imports and the HR
+// IDP-35, OP-156 m.3 (q), §8.17.9.8: the environment's HR sources, their imports and the HR
 // connectors. Registering, retiring and importing are each one signed change; an HR source's
 // records select people for roles only through the domain's protected subject-selection
 // acceptance of its issuer, so a role a rule over them holds shows "Sync from HR".
@@ -103,12 +103,12 @@ function accepted(report: SourcesReport | undefined, issuer: string): boolean {
 
 /** The HR screen. */
 export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const realm = encodeURIComponent(ctx.session.realm);
+  const environment = encodeURIComponent(ctx.session.environment);
   const sources = useLoad(() =>
-    adminGet<Page<HrSource>>(ctx.instance, `realms/${realm}/hr-sources`),
+    adminGet<Page<HrSource>>(ctx.instance, `envs/${environment}/hr-sources`),
   );
   const connectors = useLoad(() =>
-    adminGet<Page<HrConnector>>(ctx.instance, `realms/${realm}/hr-connectors`),
+    adminGet<Page<HrConnector>>(ctx.instance, `envs/${environment}/hr-connectors`),
   );
   const report = useLoad(() =>
     search<SourcesReport>(ctx.instance, "sources", {}).then((a) => a.results[0]),
@@ -123,7 +123,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [w, write] = useRun<WriteResult>();
   const send = (operation: string, path: string, body: Record<string, unknown>, key?: string) => {
     write(() =>
-      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method: "POST",
         path,
@@ -140,7 +140,7 @@ export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
       const content = await file.text();
       const operation = format === "csv" ? "importHrCsv" : "importHrBatch";
       const route = format === "csv" ? "records:csv" : "records:batch";
-      return change(ctx.instance, ctx.confirm, ctx.session.realm, {
+      return change(ctx.instance, ctx.confirm, ctx.session.environment, {
         operation,
         method: "POST",
         path: `hr-sources/${encodeURIComponent(into)}/${route}`,

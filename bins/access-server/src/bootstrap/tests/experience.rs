@@ -1,5 +1,5 @@
 //! The experience backend against the real decision point (CMP-16, OP-153 m.3 (v), (gg)): a
-//! bootstrapped realm whose root signed in to the console and registered the browser's key as a
+//! bootstrapped environment whose root signed in to the console and registered the browser's key as a
 //! device Instance; the experience service reads the hub with the browser's signed reads through
 //! ADP's public search route, as its own transport-authenticated PEP; a revoke goes from the
 //! browser to ADP directly and the hub shows its outcome only once recorded.

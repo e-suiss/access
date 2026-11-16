@@ -199,8 +199,13 @@ where
                 access_identity_account::AccountError::NotFound,
             ))?;
         // OP-151 m.3 (i)
-        access_identity_account::app::events::sessions_ended(&mut tx, &self.realm, subject, epoch)
-            .await?;
+        access_identity_account::app::events::sessions_ended(
+            &mut tx,
+            &self.environment,
+            subject,
+            epoch,
+        )
+        .await?;
         let target = self.external(subject)?;
         audit(
             &mut tx,

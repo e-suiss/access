@@ -1,11 +1,11 @@
-//! Adapters: live hooks from PostgreSQL through `access-store`, keys opened under the realm
+//! Adapters: live hooks from PostgreSQL through `access-store`, keys opened under the environment
 //! KEK. The HTTPS transport is the identity plane's outbound client
 //! (`access_identity_oauth::adapters::hooks`).
 
 use access_crypto::webhook::{WebhookSecret, WebhookSigningKey};
 use access_store::Pool;
 use access_store::extensions::live_hook;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 
 use crate::domain::{Disclosure, ExtensionPolicy, HookPoint, OnNoAnswer, Registration, Signing};
 use crate::ports::{HookKey, HookRegistry, KeyVault, LiveHook, Unavailable};
@@ -31,14 +31,14 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
     async fn live(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         point: HookPoint,
     ) -> Result<Option<LiveHook>, Unavailable> {
-        let mut t = TenantTx::begin(&self.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
             .await
             .map_err(down)?;
         let row = live_hook(&mut t, point.name()).await.map_err(down)?;
-        let stored = access_store::idp::realm::policies(&mut t)
+        let stored = access_store::idp::environment::policies(&mut t)
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
@@ -47,7 +47,7 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
         let Some(row) = row else {
             return Ok(None);
         };
-        let raw = self.keys.open(tenant, realm, &row.id, &row.key)?;
+        let raw = self.keys.open(tenant, environment, &row.id, &row.key)?;
         let key = match Signing::from_name(&row.signing).ok_or(Unavailable)? {
             Signing::Ed25519 => HookKey::Ed25519(WebhookSigningKey::from_seed(&raw).map_err(down)?),
             Signing::Hmac => HookKey::Hmac(WebhookSecret::from_bytes(raw.to_vec()).map_err(down)?),
@@ -65,7 +65,7 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
                     .collect::<Result<_, _>>()?,
             },
             key,
-            realm_allows_disclosure: policy.permits(&[Disclosure::Email]),
+            environment_allows_disclosure: policy.permits(&[Disclosure::Email]),
         }))
     }
 }

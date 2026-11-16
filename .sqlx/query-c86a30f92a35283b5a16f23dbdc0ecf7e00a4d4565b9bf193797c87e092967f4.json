@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_identifiers\n               (tenant_id, environment_id, subject_id, kind, value_index, pii_class, nonce, ciphertext)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n             ON CONFLICT (tenant_id, environment_id, value_index) WHERE status = 'active' AND value_index IS NOT NULL\n             DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c86a30f92a35283b5a16f23dbdc0ecf7e00a4d4565b9bf193797c87e092967f4"
+}

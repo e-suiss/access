@@ -12,7 +12,7 @@ const COPY = Buffer.alloc(16, 13).toString("base64url");
 
 test.beforeEach(async ({ context, bff }) => {
   await bff.signIn(context, BASE);
-  bff.admin.set("realms/acme/agents", {
+  bff.admin.set("envs/acme/agents", {
     items: [
       {
         agent: AGENT,
@@ -24,7 +24,7 @@ test.beforeEach(async ({ context, bff }) => {
       },
     ],
   });
-  bff.admin.set(`realms/acme/agents/${AGENT}`, {
+  bff.admin.set(`envs/acme/agents/${AGENT}`, {
     agent: AGENT,
     display_name: "Mail helper",
     description: null,

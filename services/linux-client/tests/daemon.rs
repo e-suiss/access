@@ -67,7 +67,7 @@ impl Access for &Fake {
             Reached::Answer(DeviceStart {
                 device_code: String::from("device"),
                 user_code: String::from("BCDF-GHJK"),
-                verification_uri: String::from("https://access.test/realms/acme/device"),
+                verification_uri: String::from("https://access.test/env/acme/device"),
                 expires_in: 600,
                 interval: 5,
             })

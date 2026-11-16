@@ -1,12 +1,12 @@
 //! Management read tokens (TN-130, TN-27, OP-151 m.3 (a), (c)): RFC 9068 access tokens the
-//! realm issues for the management surfaces, one audience each (`access-admin:realm:<slug>`
-//! with scope `realm.read`, `access-admin:platform` with scope `platform.read`), always bound
+//! environment issues for the management surfaces, one audience each (`access-admin:environment:<slug>`
+//! with scope `environment.read`, `access-admin:platform` with scope `platform.read`), always bound
 //! by `cnf.jkt` (RFC 9449), living at most 60 minutes, and naming the Instance they were issued
 //! to so that its termination ends them. They read; nothing writes with them (MD-14).
 //!
 //! A caller with its own Instance key gets one by an RFC 8693 token exchange whose subject
 //! token is an AIS in `check` mode over [`exchange_intent`], signed by a live Instance key of
-//! the realm's governing domain, with a DPoP proof by that same key: the token's `cnf.jkt` is
+//! the environment's governing domain, with a DPoP proof by that same key: the token's `cnf.jkt` is
 //! the Instance key itself. The console BFF gets one for a signed-in session's device Instance,
 //! bound to the BFF's own DPoP key of that session (TN-128).
 
@@ -26,8 +26,8 @@ use suiss_crypto::digest::context_digest;
 use super::jwt::{JwtError, SKEW_MS};
 use super::tokens::ACCESS_TYP;
 
-/// The read scope of the realm-admin surface.
-pub const REALM_READ: &str = "realm.read";
+/// The read scope of the environment-admin surface.
+pub const ENVIRONMENT_READ: &str = "environment.read";
 
 /// The read scope of the platform-admin surface.
 pub const PLATFORM_READ: &str = "platform.read";
@@ -35,13 +35,13 @@ pub const PLATFORM_READ: &str = "platform.read";
 /// The platform-admin surface's audience.
 pub const PLATFORM_AUDIENCE: &str = "access-admin:platform";
 
-/// The realm-admin surface's audience prefix; the slug follows.
-pub const REALM_AUDIENCE_PREFIX: &str = "access-admin:realm:";
+/// The environment-admin surface's audience prefix; the slug follows.
+pub const ENVIRONMENT_AUDIENCE_PREFIX: &str = "access-admin:environment:";
 
 /// Longest lifetime of a management read token (TN-130, OP-151 m.3 (c)).
 pub const MAX_READ_TTL_MS: u64 = 60 * 60 * 1000;
 
-/// Lifetime of the read tokens this realm issues (PD, within [`MAX_READ_TTL_MS`]).
+/// Lifetime of the read tokens this environment issues (PD, within [`MAX_READ_TTL_MS`]).
 pub const READ_TTL_MS: u64 = 15 * 60 * 1000;
 
 /// RFC 8693 §2.1 `grant_type`.
@@ -71,8 +71,8 @@ pub const MAX_SUBJECT_TOKEN: usize = 16 * 1024;
 /// A management surface a read token is for (OP-151 m.3 (a)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Surface {
-    /// The realm-admin surface of the realm with this slug.
-    Realm(String),
+    /// The environment-admin surface of the environment with this slug.
+    Environment(String),
     /// The platform-admin surface.
     Platform,
 }
@@ -82,7 +82,7 @@ impl Surface {
     #[must_use]
     pub fn audience(&self) -> String {
         match self {
-            Self::Realm(slug) => format!("{REALM_AUDIENCE_PREFIX}{slug}"),
+            Self::Environment(slug) => format!("{ENVIRONMENT_AUDIENCE_PREFIX}{slug}"),
             Self::Platform => String::from(PLATFORM_AUDIENCE),
         }
     }
@@ -91,7 +91,7 @@ impl Surface {
     #[must_use]
     pub const fn scope(&self) -> &'static str {
         match self {
-            Self::Realm(_) => REALM_READ,
+            Self::Environment(_) => ENVIRONMENT_READ,
             Self::Platform => PLATFORM_READ,
         }
     }
@@ -102,10 +102,10 @@ impl Surface {
         if audience == PLATFORM_AUDIENCE {
             return Some(Self::Platform);
         }
-        let slug = audience.strip_prefix(REALM_AUDIENCE_PREFIX)?;
+        let slug = audience.strip_prefix(ENVIRONMENT_AUDIENCE_PREFIX)?;
         super::issuer::check_slug(slug)
             .is_ok()
-            .then(|| Self::Realm(String::from(slug)))
+            .then(|| Self::Environment(String::from(slug)))
     }
 }
 
@@ -127,7 +127,7 @@ pub enum SubjectError {
     #[error("format")]
     Format,
     /// Not signed by the named Instance key, not a `check` statement over this exchange's
-    /// intent in the realm's domain, or not signed within the skew.
+    /// intent in the environment's domain, or not signed within the skew.
     #[error("rejected")]
     Rejected,
 }
@@ -212,7 +212,7 @@ pub fn replay_slot(statement: &Statement) -> Option<(u32, [u8; 32])> {
 /// The facts behind one read token.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadFacts<'a> {
-    /// The issuing realm's issuer.
+    /// The issuing environment's issuer.
     pub issuer: &'a str,
     /// The surface it reads.
     pub surface: &'a Surface,
@@ -302,7 +302,7 @@ fn millis(c: &Json, name: &str) -> Option<u64> {
         .and_then(|s| s.checked_mul(1000))
 }
 
-/// The unverified `aud` of a token, to pick the realm whose keys verify it; nothing is trusted
+/// The unverified `aud` of a token, to pick the environment whose keys verify it; nothing is trusted
 /// before [`read_claims`].
 #[must_use]
 pub fn unverified_audience(token: &str) -> Option<String> {
@@ -312,7 +312,7 @@ pub fn unverified_audience(token: &str) -> Option<String> {
     text(&c, "aud")
 }
 
-/// Verifies a read token's signature with the issuing realm's `keys` and `typ` `at+jwt`, and
+/// Verifies a read token's signature with the issuing environment's `keys` and `typ` `at+jwt`, and
 /// reads its claims; `issuer` must be its `iss`. Time, audience and scope are the caller's
 /// checks (`access_http::api::domain::caller::check_read`).
 ///

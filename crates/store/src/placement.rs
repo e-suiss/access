@@ -1,6 +1,6 @@
 //! The Placement Directory and what a cell declares (OP-158 m.3 (o), (p), CMP-26, OP-30, TI-17,
-//! HL-40): where a tenant, realm or domain is served, one version per move; the cell's own
-//! profile; a realm's residency; and the two ends of a realm rehome (E14). The directory routes
+//! HL-40): where a tenant, environment or domain is served, one version per move; the cell's own
+//! profile; an environment's residency; and the two ends of an environment rehome (E14). The directory routes
 //! requests and is never a decision input: a cell that does not lead a domain refuses it.
 //! Nothing here is changed or removed (OP-73).
 
@@ -25,8 +25,8 @@ fn unsigned(v: i64) -> Result<u64, StoreError> {
 pub enum Subject {
     /// A tenant, by its id.
     Tenant([u8; 16]),
-    /// A realm, by its id.
-    Realm([u8; 16]),
+    /// An environment, by its id.
+    Environment([u8; 16]),
     /// An authority domain, by its id.
     Domain([u8; 32]),
 }
@@ -37,7 +37,7 @@ impl Subject {
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::Tenant(_) => "tenant",
-            Self::Realm(_) => "realm",
+            Self::Environment(_) => "environment",
             Self::Domain(_) => "domain",
         }
     }
@@ -46,7 +46,7 @@ impl Subject {
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
         match self {
-            Self::Tenant(b) | Self::Realm(b) => b,
+            Self::Tenant(b) | Self::Environment(b) => b,
             Self::Domain(b) => b,
         }
     }
@@ -246,8 +246,8 @@ pub async fn declare_cell(app: &PgPool, profile: &CellProfile) -> Result<bool, S
     Ok(true)
 }
 
-/// Writes the next version of the realm's residency against its committed
-/// `idp.realm.residency` (OP-158 m.3 (o)).
+/// Writes the next version of the environment's residency against its committed
+/// `idp.environment.residency` (OP-158 m.3 (o)).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -256,15 +256,15 @@ pub async fn put_residency(
     bound: &Bound,
     (region, class): (&str, &str),
 ) -> Result<(), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     sqlx::query!(
-        "INSERT INTO access.realm_residency (tenant_id, realm_id, version, region, class, domain_id, decision_pos)
+        "INSERT INTO access.environment_residency (tenant_id, environment_id, version, region, class, domain_id, decision_pos)
          SELECT $1, $2,
-                COALESCE((SELECT max(version) FROM access.realm_residency
-                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                COALESCE((SELECT max(version) FROM access.environment_residency
+                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                 $3, $4, $5, $6",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         region,
         class,
         bound.domain().as_bytes().as_slice(),
@@ -283,17 +283,17 @@ pub async fn cell_profile_in(t: &mut TenantTx) -> Result<Option<CellProfile>, St
     cell_profile(&mut *t.tx).await
 }
 
-/// The realm's declared residency `(region, class)`, when one is.
+/// The environment's declared residency `(region, class)`, when one is.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn residency(t: &mut TenantTx) -> Result<Option<(String, String)>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let row = sqlx::query!(
-        "SELECT region, class FROM access.realm_residency
-          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+        "SELECT region, class FROM access.environment_residency
+          WHERE tenant_id = $1 AND environment_id = $2 ORDER BY version DESC LIMIT 1",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_optional(&mut *t.tx)
     .await?;
@@ -303,17 +303,17 @@ pub async fn residency(t: &mut TenantTx) -> Result<Option<(String, String)>, Sto
 /// Which end of a rehome a committed ALLOW is (E14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
-    /// Decided in the realm's governing domain.
+    /// Decided in the environment's governing domain.
     From,
-    /// Decided in the domain the realm moves to.
+    /// Decided in the domain the environment moves to.
     To,
 }
 
-/// One end of a rehome: a committed ALLOW of `idp.realm.rehome` (E14, OP-158 m.3 (o)).
+/// One end of a rehome: a committed ALLOW of `idp.environment.rehome` (E14, OP-158 m.3 (o)).
 pub struct End<'a> {
     /// Which end.
     pub side: Side,
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub from: &'a DomainId,
     /// The domain it moves to.
     pub to: &'a DomainId,
@@ -325,24 +325,24 @@ pub struct End<'a> {
     pub intent: [u8; 32],
 }
 
-/// Records `end` for the transaction's realm. `false` when it is already recorded.
+/// Records `end` for the transaction's environment. `false` when it is already recorded.
 ///
 /// # Errors
 /// [`StoreError`]; an end that is not a committed ALLOW of this intent in its domain, or a from
-/// end outside the realm's governing domain, fails in the database.
+/// end outside the environment's governing domain, fails in the database.
 pub async fn record_end(t: &mut TenantTx, end: &End<'_>) -> Result<bool, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let (side, domain) = match end.side {
         Side::From => ("from", end.from),
         Side::To => ("to", end.to),
     };
     let done = sqlx::query!(
         "INSERT INTO access.rehome_ends
-           (tenant_id, realm_id, side, from_domain, to_domain, domain_id, decision_pos, nonce, intent_digest)
+           (tenant_id, environment_id, side, from_domain, to_domain, domain_id, decision_pos, nonce, intent_digest)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (tenant_id, domain_id, decision_pos) DO NOTHING",
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
         side,
         end.from.as_bytes().as_slice(),
         end.to.as_bytes().as_slice(),
@@ -359,7 +359,7 @@ pub async fn record_end(t: &mut TenantTx, end: &End<'_>) -> Result<bool, StoreEr
 /// A completed rehome.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rehomed {
-    /// Its version among the realm's rehomes.
+    /// Its version among the environment's rehomes.
     pub version: u64,
     /// The from end's position in the old domain.
     pub from_pos: u64,
@@ -367,8 +367,8 @@ pub struct Rehomed {
     pub to_pos: u64,
 }
 
-/// Moves the transaction's realm from `from` to `to` when both ends of that move are recorded,
-/// unused and younger than 24 h; otherwise nothing changes and the realm stays (E14, OP-158
+/// Moves the transaction's environment from `from` to `to` when both ends of that move are recorded,
+/// unused and younger than 24 h; otherwise nothing changes and the environment stays (E14, OP-158
 /// m.18 (e)).
 ///
 /// # Errors
@@ -378,31 +378,31 @@ pub async fn complete_rehome(
     from: &DomainId,
     to: &DomainId,
 ) -> Result<Option<Rehomed>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
-    let (tenant, realm) = (
+    let environment = t.environment().ok_or(StoreError::Range)?;
+    let (tenant, environment) = (
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     );
     let ends = sqlx::query!(
         r#"SELECT
              (SELECT e.decision_pos FROM access.rehome_ends e
-               WHERE e.tenant_id = $1 AND e.realm_id = $2 AND e.side = 'from'
+               WHERE e.tenant_id = $1 AND e.environment_id = $2 AND e.side = 'from'
                  AND e.from_domain = $3 AND e.to_domain = $4
-                 AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
+                 AND NOT EXISTS (SELECT 1 FROM access.environment_rehomes h
                                   WHERE h.tenant_id = $1 AND h.from_domain = e.domain_id
                                     AND h.from_pos = e.decision_pos)
                  AND e.created_at > now() - interval '24 hours'
                ORDER BY e.decision_pos LIMIT 1) AS from_pos,
              (SELECT e.decision_pos FROM access.rehome_ends e
-               WHERE e.tenant_id = $1 AND e.realm_id = $2 AND e.side = 'to'
+               WHERE e.tenant_id = $1 AND e.environment_id = $2 AND e.side = 'to'
                  AND e.from_domain = $3 AND e.to_domain = $4
-                 AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
+                 AND NOT EXISTS (SELECT 1 FROM access.environment_rehomes h
                                   WHERE h.tenant_id = $1 AND h.to_domain = e.domain_id
                                     AND h.to_pos = e.decision_pos)
                  AND e.created_at > now() - interval '24 hours'
                ORDER BY e.decision_pos LIMIT 1) AS to_pos"#,
         tenant,
-        realm,
+        environment,
         from.as_bytes().as_slice(),
         to.as_bytes().as_slice(),
     )
@@ -412,23 +412,23 @@ pub async fn complete_rehome(
         return Ok(None);
     };
     sqlx::query!(
-        "INSERT INTO access.realm_governors (tenant_id, realm_id, domain_id) VALUES ($1, $2, $3)
+        "INSERT INTO access.environment_governors (tenant_id, environment_id, domain_id) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING",
         tenant,
-        realm,
+        environment,
         to.as_bytes().as_slice(),
     )
     .execute(&mut *t.tx)
     .await?;
     let version = sqlx::query_scalar!(
-        "INSERT INTO access.realm_rehomes (tenant_id, realm_id, version, from_domain, to_domain, from_pos, to_pos)
+        "INSERT INTO access.environment_rehomes (tenant_id, environment_id, version, from_domain, to_domain, from_pos, to_pos)
          SELECT $1, $2,
-                COALESCE((SELECT max(version) FROM access.realm_rehomes
-                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                COALESCE((SELECT max(version) FROM access.environment_rehomes
+                           WHERE tenant_id = $1 AND environment_id = $2), 0) + 1,
                 $3, $4, $5, $6
          RETURNING version",
         tenant,
-        realm,
+        environment,
         from.as_bytes().as_slice(),
         to.as_bytes().as_slice(),
         from_pos,
@@ -437,10 +437,10 @@ pub async fn complete_rehome(
     .fetch_one(&mut *t.tx)
     .await?;
     let moved = sqlx::query!(
-        "UPDATE access.realms SET governing_domain_id = $4
-          WHERE tenant_id = $1 AND realm_id = $2 AND governing_domain_id = $3 AND status = 'active'",
+        "UPDATE access.environments SET governing_domain_id = $4
+          WHERE tenant_id = $1 AND environment_id = $2 AND governing_domain_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         from.as_bytes().as_slice(),
         to.as_bytes().as_slice(),
     )
@@ -456,7 +456,7 @@ pub async fn complete_rehome(
     }))
 }
 
-/// The realm's rehome ends not yet used by a completed rehome and not expired, 24 h after they
+/// The environment's rehome ends not yet used by a completed rehome and not expired, 24 h after they
 /// were recorded (OP-158 m.18 (e)): (side, from, to, position).
 ///
 /// # Errors
@@ -464,19 +464,19 @@ pub async fn complete_rehome(
 pub async fn open_ends(
     t: &mut TenantTx,
 ) -> Result<Vec<(Side, DomainId, DomainId, u64)>, StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     let tenant = Uuid::from_bytes(*t.tenant.as_bytes());
     sqlx::query!(
         "SELECT e.side, e.from_domain, e.to_domain, e.decision_pos FROM access.rehome_ends e
-          WHERE e.tenant_id = $1 AND e.realm_id = $2
+          WHERE e.tenant_id = $1 AND e.environment_id = $2
             AND e.created_at > now() - interval '24 hours'
-            AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
+            AND NOT EXISTS (SELECT 1 FROM access.environment_rehomes h
                              WHERE h.tenant_id = $1
                                AND ((h.from_domain = e.domain_id AND h.from_pos = e.decision_pos)
                                  OR (h.to_domain = e.domain_id AND h.to_pos = e.decision_pos)))
           ORDER BY e.created_at, e.decision_pos",
         tenant,
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     )
     .fetch_all(&mut *t.tx)
     .await?

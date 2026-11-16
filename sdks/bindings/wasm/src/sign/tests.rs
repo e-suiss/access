@@ -33,7 +33,7 @@ fn envelope() -> IntentEnvelope {
             schema: Digest([7; 32]),
         },
         resources: vec![ResourceRef {
-            namespace: "idp.realm".to_owned(),
+            namespace: "idp.environment".to_owned(),
             path: vec!["acme".to_owned(), "\"ops\"\n".to_owned()],
             incarnation: 0,
         }],

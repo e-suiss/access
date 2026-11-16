@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: `rotation::Policy::REALM` is now `rotation::Policy::ENVIRONMENT` (OP-159 m.45); the defaults are unchanged.
+
 ## 0.7.4
 
 Released with `esuiss-access-kernel` 0.7.4 (Kernel 0.7.0 semantics, unchanged). No API change from 0.7.0; 0.7.0 to 0.7.3 were never published.

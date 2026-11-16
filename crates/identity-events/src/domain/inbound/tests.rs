@@ -56,7 +56,7 @@ fn declared() -> Vec<String> {
 fn expect(events: &[String]) -> Expect<'_> {
     Expect {
         issuer: ISS,
-        audience: "https://access.example/realms/shop",
+        audience: "https://access.example/env/shop",
         events,
         now_ms: NOW,
     }
@@ -258,7 +258,7 @@ fn transmitter_declarations_are_checked() {
     let ok = serde_json::json!({
         "issuer": ISS,
         "jwks_uri": "https://idp.example/jwks",
-        "aud": "https://access.example/realms/shop",
+        "aud": "https://access.example/env/shop",
         "events": [signal_uri(SignalKind::SessionRevoked)],
     });
     let c = TransmitterConfig::parse(&ok).unwrap();

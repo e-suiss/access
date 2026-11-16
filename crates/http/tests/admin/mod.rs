@@ -21,12 +21,12 @@ use access_http::api::adapters::{MemoryIdempotency, MemoryLimiter, SivCursors};
 use access_http::api::app::Ctx;
 use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
-use access_http::api::manifest::{PLATFORM_ROOT, REALM_ROOT, Route};
+use access_http::api::manifest::{ENVIRONMENT_ROOT, PLATFORM_ROOT, Route};
 use access_http::api::ports::{
-    AuditProofQuery, AuditQuery, Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem,
-    JobView, Jobs, Listing, NewJob, Pending, PlatformKind, PlatformQuery, PlatformResources,
-    PlatformWrite, Presented, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
-    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
+    AuditProofQuery, AuditQuery, Clock, CursorSeal, Draft, Drafted, Entropy, Env,
+    EnvironmentResources, Item, JobItem, JobView, Jobs, Listing, NewJob, Pending, PlatformKind,
+    PlatformQuery, PlatformResources, PlatformWrite, Presented, RateLimiter, ReadToken, ReadTokens,
+    ResourceKind, ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -56,13 +56,13 @@ pub const ORIGIN: &str = "https://admin.access.test";
 /// Trusted time, settable.
 pub const START_MS: u64 = 1_800_000_000_000;
 
-/// The realm the tests administer.
-pub const REALM: &str = "acme";
+/// The environment the tests administer.
+pub const ENVIRONMENT: &str = "acme";
 
-/// A realm with no governing domain the fake knows: missing.
+/// An environment with no governing domain the fake knows: missing.
 pub const MISSING: &str = "ghost";
 
-pub fn realm_domain() -> Digest {
+pub fn environment_domain() -> Digest {
     Digest([7; 32])
 }
 
@@ -132,8 +132,8 @@ impl Surfaces for Shared {
     ) -> impl Future<Output = Result<Option<Digest>, Unavailable>> + Send {
         let d = match scope {
             SurfaceScope::Platform => Some(platform_domain()),
-            SurfaceScope::Realm(s) if s == REALM => Some(realm_domain()),
-            SurfaceScope::Realm(_) => None,
+            SurfaceScope::Environment(s) if s == ENVIRONMENT => Some(environment_domain()),
+            SurfaceScope::Environment(_) => None,
         };
         std::future::ready(Ok(d))
     }
@@ -169,13 +169,13 @@ impl access_http::api::ports::IdempotencyStore for Shared {
     }
 }
 
-/// The key a fake realm resource is hidden behind: it belongs to another realm (TN-113).
+/// The key a fake environment resource is hidden behind: it belongs to another environment (TN-113).
 pub const HIDDEN_KEY: &str = "elsewhere";
 
-/// The key a fake realm write is refused under, before a decision.
+/// The key a fake environment write is refused under, before a decision.
 pub const REFUSED_KEY: &str = "refuse";
 
-/// The key a fake realm write fails under: the write path is unavailable.
+/// The key a fake environment write fails under: the write path is unavailable.
 pub const FAILING_KEY: &str = "fail";
 
 fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
@@ -248,15 +248,17 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         }
         ResourceKind::Reviews => json!({ "name": key, "period_days": 90, "status": "live" }),
         ResourceKind::OffboardingPreviews => json!({ "party": key, "channels": [] }),
-        ResourceKind::Placement => json!({ "realm": key, "cell": "pool-default" }),
-        ResourceKind::Signing => json!({ "realm": key, "profile": "classic" }),
-        ResourceKind::Durability => json!({ "realm": key, "durability": "replicated" }),
-        ResourceKind::Recovery => json!({ "realm": key, "recovery": "not_available",
+        ResourceKind::Placement => json!({ "environment": key, "cell": "pool-default" }),
+        ResourceKind::Signing => json!({ "environment": key, "profile": "classic" }),
+        ResourceKind::Durability => json!({ "environment": key, "durability": "replicated" }),
+        ResourceKind::Recovery => json!({ "environment": key, "recovery": "not_available",
                                           "recovery_reason": "no-recovery-entry", "history": [] }),
-        ResourceKind::RateLimits => json!({ "realm": key, "rate_limit_rps": 200, "default": true,
+        ResourceKind::RateLimits => {
+            json!({ "environment": key, "rate_limit_rps": 200, "default": true,
                                             "tenant_rps": 1000, "burst_s": 2,
                                             "usage": { "buckets": [], "top_consumers": [],
-                                                       "events": [], "threshold_percent": 80 } }),
+                                                       "events": [], "threshold_percent": 80 } })
+        }
         ResourceKind::SsoEnforcementPreviews => json!({ "organization": key, "enforced": false,
                                                         "members": [], "service_accounts": [],
                                                         "pending_invitations": 0 }),
@@ -265,10 +267,10 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
 }
 
 // TN-113
-impl RealmResources for Shared {
+impl EnvironmentResources for Shared {
     fn read(&self, q: ResourceQuery) -> Pending<'_, Option<Listing>> {
         let version = self.0.ledger.position.load(Ordering::SeqCst);
-        let listing = (q.slug == REALM).then(|| {
+        let listing = (q.slug == ENVIRONMENT).then(|| {
             let keys: Vec<String> = match q.key {
                 Some(k) if k == HIDDEN_KEY => Vec::new(),
                 Some(k) => vec![k],
@@ -302,7 +304,7 @@ impl RealmResources for Shared {
     }
 
     fn audit(&self, q: AuditQuery) -> Pending<'_, Option<Listing>> {
-        let listing = (q.slug == REALM).then(|| Listing {
+        let listing = (q.slug == ENVIRONMENT).then(|| Listing {
             items: vec![Item {
                 body: json!({ "format": format!("{:?}", q.format), "reader": q.reader }),
                 version: 0,
@@ -313,7 +315,7 @@ impl RealmResources for Shared {
     }
 
     fn audit_proof(&self, q: AuditProofQuery) -> Pending<'_, Option<serde_json::Value>> {
-        let proof = (q.slug == REALM && q.event != "8")
+        let proof = (q.slug == ENVIRONMENT && q.event != "8")
             .then(|| json!({ "event_id": q.event, "reader": q.reader, "size": 3 }));
         Box::pin(async move { Ok(proof) })
     }
@@ -349,7 +351,7 @@ impl RealmResources for Shared {
                 return Err(Unavailable);
             }
             let position = ledger.position.fetch_add(1, Ordering::SeqCst) + 1;
-            let kind = access_http::api::realm::spec(w.operation).unwrap().0;
+            let kind = access_http::api::environment::spec(w.operation).unwrap().0;
             Ok(Written::Committed {
                 exercise_id: caller.statement.intent,
                 position,
@@ -371,7 +373,7 @@ fn fake_platform(kind: PlatformKind, key: &str) -> Item {
     let body = match kind {
         PlatformKind::Tenants => json!({ "tenant_id": key, "status": "active",
                                          "placement": "pool-default", LEAKED: "a@b.example" }),
-        PlatformKind::Realms | PlatformKind::SandboxDomains => json!({
+        PlatformKind::Environments | PlatformKind::SandboxDomains => json!({
             "slug": key, "tenant_id": "tnt_x", "status": "active", "sandbox": false,
             "domain": b64url_encode(&[7; 32]), "key_state": "pending",
             "signing_available_at": null, "sub": "leak", "redirect_uris": ["https://x"],
@@ -455,7 +457,7 @@ impl Env for TestEnv {
     fn origin(&self) -> &str {
         ORIGIN
     }
-    fn realm(&self) -> &dyn RealmResources {
+    fn environment(&self) -> &dyn EnvironmentResources {
         &self.0
     }
     fn platform(&self) -> &dyn PlatformResources {
@@ -471,7 +473,7 @@ impl Jobs for Shared {
     fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>> {
         let mut jobs = self.0.jobs.lock().unwrap();
         let id = format!("00000000-0000-0000-0000-{:012}", jobs.len() + 1);
-        let created = (slug == REALM).then(|| {
+        let created = (slug == ENVIRONMENT).then(|| {
             let items = job
                 .items
                 .iter()
@@ -548,7 +550,7 @@ impl Jobs for Shared {
                     expires_ms: now_ms + 1,
                 })
             })
-            .filter(|v| slug == REALM && v.expires_ms > now_ms);
+            .filter(|v| slug == ENVIRONMENT && v.expires_ms > now_ms);
         Box::pin(async move { Ok(found) })
     }
 
@@ -647,7 +649,7 @@ impl Harness {
         self.fake.ledger.position.load(Ordering::SeqCst)
     }
 
-    /// The writes the realm and platform resources were asked to commit.
+    /// The writes the environment and platform resources were asked to commit.
     pub fn commits(&self) -> u64 {
         self.fake.ledger.calls.load(Ordering::SeqCst)
     }
@@ -721,7 +723,7 @@ pub async fn send(router: &Router, request: Request<Body>) -> (Response<Body>, s
     (Response::from_parts(parts, Body::empty()), json)
 }
 
-pub static ROWS: &[Route] = &[PLATFORM_ROOT, REALM_ROOT];
+pub static ROWS: &[Route] = &[PLATFORM_ROOT, ENVIRONMENT_ROOT];
 
 #[allow(clippy::unused_async, reason = "an axum handler")]
 pub async fn surface(Extension(_ctx): Extension<Ctx<TestEnv>>) -> axum::response::Response {

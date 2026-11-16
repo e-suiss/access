@@ -17,11 +17,11 @@ use access_identity_hooks::ports::KeyVault;
 use access_store::extensions::{
     self as store, Attempt, WebhookDelivery, WebhookKeyRow, WebhookRow,
 };
-use access_store::identity::{self, RealmId, TenantId, TenantTx};
+use access_store::identity::{self, EnvironmentId, TenantId, TenantTx};
 use access_store::idp::Bound;
 use serde_json::Value;
 
-use crate::app::{Db, down, realm_signing};
+use crate::app::{Db, down, environment_signing};
 use crate::domain::catalog::{IdentityEvent, OUTBOX_PREFIX, Ready, urn, uuid};
 use crate::domain::set::{CLOUDEVENT_CONTENT_TYPE, cloud_event, set_claims};
 use crate::domain::webhook::{
@@ -53,8 +53,8 @@ fn key_row(
     id: [u8; 16],
     signing: Signing,
 ) -> Result<(WebhookKeyRow, ShownKey), WriteError> {
-    let realm = t.realm().ok_or(WriteError::Unavailable)?;
-    let (key, public_key, shown) = new_key(vault, t.tenant(), realm, &id, signing)?;
+    let environment = t.environment().ok_or(WriteError::Unavailable)?;
+    let (key, public_key, shown) = new_key(vault, t.tenant(), environment, &id, signing)?;
     Ok((
         WebhookKeyRow {
             id,
@@ -88,12 +88,12 @@ pub async fn write(
     change
         .check(allow_private)
         .map_err(|i| WriteError::Invalid(access_identity_hooks::domain::Invalid(i.0)))?;
-    let realm = *t.realm().ok_or(WriteError::Unavailable)?.as_bytes();
+    let environment = *t.environment().ok_or(WriteError::Unavailable)?.as_bytes();
     match change {
         WebhookChange::Register { id, spec } => {
             let (key, shown) = key_row(vault, t, fresh_id()?, spec.signing)?;
             let row = WebhookRow {
-                realm,
+                environment,
                 id: *id,
                 url: spec.url.clone(),
                 events: spec.events.clone(),
@@ -213,10 +213,10 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
     }
 
     /// One delivery per live webhook of `tenant` that asked for the event; an event that names
-    /// its realm reaches only that realm's webhooks.
+    /// its environment reaches only that environment's webhooks.
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
-        let event_realm = ready.payload.get("realm").and_then(Value::as_str);
+        let event_environment = ready.payload.get("environment").and_then(Value::as_str);
         // OP-132 m.5
         let mut wide = TenantTx::begin_tenant_wide(&self.db.app, tenant)
             .await
@@ -228,22 +228,26 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
         let mut open: Option<([u8; 16], TenantTx)> = None;
         for w in hooks.iter().filter(|w| {
             w.events.iter().any(|n| n == ready.name)
-                && event_realm.is_none_or(|r| r == uuid(&w.realm))
+                && event_environment.is_none_or(|r| r == uuid(&w.environment))
         }) {
-            if open.as_ref().is_none_or(|(r, _)| *r != w.realm) {
+            if open.as_ref().is_none_or(|(r, _)| *r != w.environment) {
                 if let Some((_, t)) = open.take() {
                     t.commit().await.map_err(down)?;
                 }
-                let t = TenantTx::begin(&self.db.app, tenant, RealmId::from_bytes(w.realm))
-                    .await
-                    .map_err(down)?;
-                open = Some((w.realm, t));
+                let t = TenantTx::begin(
+                    &self.db.app,
+                    tenant,
+                    EnvironmentId::from_bytes(w.environment),
+                )
+                .await
+                .map_err(down)?;
+                open = Some((w.environment, t));
             }
             let Some((_, t)) = open.as_mut() else {
                 return Err(Unavailable);
             };
             let d = WebhookDelivery {
-                realm: w.realm,
+                environment: w.environment,
                 webhook: w.id,
                 event_id: ready.id.clone(),
                 event_type: urn(ready.name),
@@ -319,7 +323,7 @@ where
         let mut step = Step::default();
         for d in due {
             match self
-                .deliver(d.tenant, d.realm, &d.webhook, &d.event_id)
+                .deliver(d.tenant, d.environment, &d.webhook, &d.event_id)
                 .await
             {
                 Ok(Some("delivered")) => step.delivered = step.delivered.saturating_add(1),
@@ -349,12 +353,12 @@ where
     async fn deliver(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         webhook: &[u8; 16],
         event_id: &str,
     ) -> Result<Option<&'static str>, Unavailable> {
         let now = self.clock.now().map_err(down)?;
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         let d = t.webhook_delivery(webhook, event_id).await.map_err(down)?;
@@ -370,7 +374,7 @@ where
             return Ok(None);
         }
         let sent = if w.active {
-            self.send(tenant, realm, &w, &d, &keys, now).await
+            self.send(tenant, environment, &w, &d, &keys, now).await
         } else {
             Sent::Retired
         };
@@ -384,7 +388,7 @@ where
                 "webhook delivery given up"
             );
         }
-        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+        let mut t = TenantTx::begin(&self.db.app, tenant, environment)
             .await
             .map_err(down)?;
         t.record_webhook_attempt(webhook, event_id, &attempt)
@@ -397,19 +401,19 @@ where
     async fn send(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         w: &WebhookRow,
         d: &WebhookDelivery,
         keys: &[WebhookKeyRow],
         now: u64,
     ) -> Sent {
-        let Ok(Some(body)) = self.body(tenant, realm, w, d, now).await else {
+        let Ok(Some(body)) = self.body(tenant, environment, w, d, now).await else {
             return Sent::Unsigned;
         };
         let ts = now / 1000;
         let mut signatures = Vec::with_capacity(keys.len());
         for k in keys {
-            let Ok(raw) = self.vault.open(tenant, realm, &k.id, &k.key) else {
+            let Ok(raw) = self.vault.open(tenant, environment, &k.id, &k.key) else {
                 continue;
             };
             let sig = match Signing::from_name(&k.signing) {
@@ -455,12 +459,13 @@ where
     async fn body(
         &self,
         tenant: TenantId,
-        realm: RealmId,
+        environment: EnvironmentId,
         w: &WebhookRow,
         d: &WebhookDelivery,
         now: u64,
     ) -> Result<Option<Vec<u8>>, Unavailable> {
-        let Some((issuer, _)) = realm_signing(&self.db.app, tenant, realm).await? else {
+        let Some((issuer, _)) = environment_signing(&self.db.app, tenant, environment).await?
+        else {
             return Ok(None);
         };
         let Some(name) = crate::domain::catalog::name_of(&d.event_type) else {
@@ -476,7 +481,7 @@ where
         };
         let claims = set_claims(&ready, issuer.as_str(), &uuid(&w.id), now / 1000);
         let external = self.db.tenant(tenant)?;
-        cloud_event(&claims, &external, realm.as_bytes(), d.occurred_ms)
+        cloud_event(&claims, &external, environment.as_bytes(), d.occurred_ms)
             .map(Some)
             .map_err(down)
     }
@@ -489,7 +494,7 @@ fn subject(p: &Value) -> String {
         "client_id",
         "organization",
         "tenant",
-        "realm",
+        "environment",
     ]
     .into_iter()
     .find_map(|k| p.get(k).and_then(Value::as_str))

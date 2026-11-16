@@ -1,6 +1,6 @@
 //! Tenant analytics on a real PostgreSQL (IDP-36, OP-151 m.3 (n), TI-18, OP-47): the daily
 //! counters derived from the day's flows and audit rows, the failed-login surge and the
-//! realm-scoped read.
+//! environment-scoped read.
 
 #![allow(
     clippy::unwrap_used,
@@ -11,10 +11,10 @@
 use access_identity_risk::app::analytics::{aggregate, read};
 use access_store::audit::AuditEvent;
 use access_store::authority::{LogRecord, create_domain};
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::sessions::{FlowUpdate, NewFlow};
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_environment, create_tenant};
 use access_store::testing::{TestDb, fresh};
 
 fn today() -> u32 {
@@ -25,7 +25,7 @@ fn today() -> u32 {
     u32::try_from(ms / 86_400_000).unwrap()
 }
 
-async fn realms(db: &TestDb) -> (TenantId, RealmId, RealmId) {
+async fn environments(db: &TestDb) -> (TenantId, EnvironmentId, EnvironmentId) {
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([0x5a; 32]);
     let g = LogRecord {
@@ -39,10 +39,10 @@ async fn realms(db: &TestDb) -> (TenantId, RealmId, RealmId) {
         .await
         .unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    let a = create_realm(&mut tx, &d, "an-alpha", "pool-default")
+    let a = create_environment(&mut tx, &d, "an-alpha", "pool-default")
         .await
         .unwrap();
-    let b = create_realm(&mut tx, &d, "an-beta", "pool-default")
+    let b = create_environment(&mut tx, &d, "an-beta", "pool-default")
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -82,7 +82,7 @@ async fn flow(tx: &mut TenantTx, day: u32, n: u8, state: &str, done: bool) {
 #[tokio::test]
 async fn daily_counters_surge_and_viewer_scope() {
     let db = fresh().await.unwrap();
-    let (tenant, a, b) = realms(&db).await;
+    let (tenant, a, b) = environments(&db).await;
     let day = today();
     let mut tx = TenantTx::begin(&db.app, tenant, a).await.unwrap();
     let pw = r#"{"purpose":"login","identifier":[1,2],"factors":[{"method":"password"}]}"#;

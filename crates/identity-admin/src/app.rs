@@ -1,4 +1,4 @@
-//! Use cases over the domain and its ports (OP-63): realm creation (TN-111) and the `idp.*`
+//! Use cases over the domain and its ports (OP-63): environment creation (TN-111) and the `idp.*`
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod accounts;
@@ -44,7 +44,7 @@ use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::recovery_policy::{self, RecoveryPolicy};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
-use access_identity_oauth::domain::issuer::{Issuer, IssuerError, IssuerStyle, RealmBase};
+use access_identity_oauth::domain::issuer::{EnvironmentBase, Issuer, IssuerError, IssuerStyle};
 use access_internal_api::idp::{ACTOR_BINDING, GenesisOrder, Submission, Verdict};
 use access_internal_api::instances::PlatformProduct;
 use access_kernel::claim::body::Class;
@@ -57,8 +57,8 @@ use access_kernel::model::Id;
 use access_kernel::model::Window;
 use access_kernel::schema::Spp;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
-use access_store::idp::realm::{self as resources, GroupRow, UpstreamRow};
+use access_store::identity::{EnvironmentId, TenantId, TenantTx};
+use access_store::idp::environment::{self as resources, GroupRow, UpstreamRow};
 use access_store::idp::{self, ClientRow, Decision as Bind, Governing, KeyChange, SettingsRow};
 use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
@@ -86,12 +86,12 @@ fn setting(e: access_identity_edge::adapters::SettingError) -> AdminError {
     }
 }
 
-/// Clients that opted in to their realm's public `sub` (MD-10, OP-151 m.9 (h)); no realm label
+/// Clients that opted in to their environment's public `sub` (MD-10, OP-151 m.9 (h)); no environment label
 /// (OP-47).
 pub static PUBLIC_SUB_OPT_IN: access_telemetry::metrics::Counter<0> =
     access_telemetry::metrics::Counter::new(
         "access_public_sub_opt_in_total",
-        "Clients that opted in to their realm's public sub (MD-10)",
+        "Clients that opted in to their environment's public sub (MD-10)",
         [],
     );
 
@@ -104,12 +104,12 @@ const DAY_S: i64 = 86_400;
 
 /// How long a rotated client secret stays valid next to its successor (CR-38, PD).
 pub const SECRET_OVERLAP_MS: u64 = 24 * 3_600_000;
-use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_hooks::ports::KeyVault;
-use access_store::idp::realm::PolicyKind;
+use access_store::idp::environment::PolicyKind;
 
-/// A realm to create (TN-111, TN-16, TN-10).
-pub struct NewRealm<'a> {
+/// An environment to create (TN-111, TN-16, TN-10).
+pub struct NewEnvironment<'a> {
     /// The tenant.
     pub tenant: TenantId,
     /// The immutable slug.
@@ -129,18 +129,18 @@ pub struct NewRealm<'a> {
     /// Further Acceptances its Genesis establishes, each an `acceptance-content` (L0-META-5,
     /// OP-149 m.26 (c)).
     pub acceptances: Vec<suiss_crypto::dcbor::Value>,
-    /// Classes of the realm issuer's Claims its Genesis accepts as predicate input besides
-    /// `authentication`, which every realm accepts (SI-5, OP-149 m.29 (b), OP-152 m.5 (i)).
+    /// Classes of the environment issuer's Claims its Genesis accepts as predicate input besides
+    /// `authentication`, which every environment accepts (SI-5, OP-149 m.29 (b), OP-152 m.5 (i)).
     pub issuer_predicate_input: Vec<String>,
     /// The `idp.platform.*` Exercise that opens it, recorded with it (TN-110, EI-25); `None`
-    /// for a realm the local plan opens.
+    /// for an environment the local plan opens.
     pub provisioned_by: Option<Digest>,
 }
 
-/// A created realm.
-pub struct CreatedRealm {
-    /// The realm.
-    pub realm: RealmId,
+/// A created environment.
+pub struct CreatedEnvironment {
+    /// The environment.
+    pub environment: EnvironmentId,
     /// Its governing domain.
     pub domain: Digest,
     /// Its fixed issuer.
@@ -151,8 +151,8 @@ pub struct CreatedRealm {
 pub struct Proposal {
     /// The tenant.
     pub tenant: TenantId,
-    /// The realm.
-    pub realm: RealmId,
+    /// The environment.
+    pub environment: EnvironmentId,
     /// The change.
     pub change: Change,
     /// The Exercise nonce.
@@ -163,13 +163,13 @@ pub struct Proposal {
     pub basis: ExerciseBasis,
     /// The actor's declared capacity.
     pub capacity: Capacity,
-    /// The realm subject whose authenticated session asks for the change: the AIS must be
+    /// The environment subject whose authenticated session asks for the change: the AIS must be
     /// signed by a live Instance of the Party that subject is bound to (§13.4 G54, OP-149
     /// m.16 (a)). `None` only for the operator's own root key, which has no session.
     pub subject: Option<[u8; 16]>,
 }
 
-/// What the actor signs: the realm's governing domain and the intent of the change.
+/// What the actor signs: the environment's governing domain and the intent of the change.
 pub struct Prepared {
     /// The domain the AIS names.
     pub domain: Digest,
@@ -243,9 +243,9 @@ pub struct Admin<'a, D, G, K> {
     pub governance: &'a G,
     /// The identity plane's PEP name.
     pub pep: &'a str,
-    /// Where realm issuers are formed.
-    pub base: &'a RealmBase,
-    /// The realms' keys outside the database.
+    /// Where environment issuers are formed.
+    pub base: &'a EnvironmentBase,
+    /// The environments' keys outside the database.
     pub keys: &'a K,
     /// The platform tenant: only its administrators register platform product clients
     /// (OP-149 m.4). `None` allows none.
@@ -253,7 +253,7 @@ pub struct Admin<'a, D, G, K> {
     /// The operator's declared delivery targets: a `suiss_event_receiver` on a private
     /// address or another port than 443 must be one (OP-149 m.23).
     pub declared: DeclaredTargets,
-    /// Seals hook and webhook signing keys under the realm KEK (OP-42, OP-135); without it no
+    /// Seals hook and webhook signing keys under the environment KEK (OP-42, OP-135); without it no
     /// hook or webhook is registered and no webhook key rotates (MD-8).
     pub vault: Option<&'a dyn KeyVault>,
 }
@@ -275,28 +275,31 @@ fn host_of(authority: &str) -> &str {
         .map_or(authority, |(host, _)| host)
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
-    /// Creates a realm: opens its governing domain with a Genesis, then writes the realm with
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
+    /// Creates an environment: opens its governing domain with a Genesis, then writes the environment with
     /// its fixed issuer and the Genesis default settings (TN-111, TN-16, OP-146 m.8 (c)). There
-    /// is no master realm; every realm is created this way. A tenant's first realm also queues
+    /// is no master environment; every environment is created this way. A tenant's first environment also queues
     /// `tenant.created` (OP-149 m.4): from then on the tenant can be paired with.
     ///
     /// # Errors
-    /// [`AdminError`]; a slug taken by another realm leaves the new domain without a realm.
-    pub async fn create_realm(&self, r: &NewRealm<'_>) -> Result<CreatedRealm, AdminError> {
-        self.create_realm_with(r, None).await
+    /// [`AdminError`]; a slug taken by another environment leaves the new domain without an environment.
+    pub async fn create_environment(
+        &self,
+        r: &NewEnvironment<'_>,
+    ) -> Result<CreatedEnvironment, AdminError> {
+        self.create_environment_with(r, None).await
     }
 
-    /// [`Self::create_realm`] whose governing domain's meta-anchor carries the rootTerms
+    /// [`Self::create_environment`] whose governing domain's meta-anchor carries the rootTerms
     /// recovery entry `recovery` the template built (§13.6, OP-158 m.3 (m)).
     ///
     /// # Errors
     /// [`AdminError`].
-    pub async fn create_realm_with(
+    pub async fn create_environment_with(
         &self,
-        r: &NewRealm<'_>,
+        r: &NewEnvironment<'_>,
         recovery: Option<access_kernel::recovery::RecoveryEntry>,
-    ) -> Result<CreatedRealm, AdminError> {
+    ) -> Result<CreatedEnvironment, AdminError> {
         // OP-159 m.42 (e)
         if crate::domain::provision::RESERVED_SLUGS.contains(&r.slug) {
             return Err(IssuerError::Slug.into());
@@ -340,12 +343,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .map_err(|e| AdminError::Unavailable(e.0))?;
         let domain = DomainId::from_bytes(opened.domain.0);
         let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
-        let realm = tenancy::create_realm(&mut t, &domain, r.slug, r.placement).await?;
-        t.enter_realm(realm).await?;
+        let environment = tenancy::create_environment(&mut t, &domain, r.slug, r.placement).await?;
+        t.enter_environment(environment).await?;
         if let Some(exercise) = &r.provisioned_by {
             tenancy::record_provision(&mut t, &exercise.0).await?;
         }
-        access_store::issuer::set_realm_issuer(&mut t, &claim_issuer).await?;
+        access_store::issuer::set_environment_issuer(&mut t, &claim_issuer).await?;
         if r.style == IssuerStyle::Subdomain {
             tenancy::add_hostname(&mut t, host_of(issuer.authority()), HostKind::Subdomain).await?;
         }
@@ -354,7 +357,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
         idp::create_settings(&mut t).await?;
         // OP-149 m.4, m.17 (e)
-        if tenancy::realm_count(&mut t).await? == 1 {
+        if tenancy::environment_count(&mut t).await? == 1 {
             let at = access_store::authority::server_time(self.app).await?;
             let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
             let tenant = self.ids.encode(TENANT_PREFIX, *r.tenant.as_bytes())?;
@@ -363,29 +366,33 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
         t.commit().await?;
         // OP-146 m.16 (m)
-        self.open_keys(r.tenant, realm).await?;
-        Ok(CreatedRealm {
-            realm,
+        self.open_keys(r.tenant, environment).await?;
+        Ok(CreatedEnvironment {
+            environment,
             domain: opened.domain,
             issuer,
         })
     }
 
-    /// Opens the realm's keys outside the database with its JOSE algorithm (OP-146 m.16 (m),
-    /// m.15 (e), m.7 (b)): realm creation does it, and this repeats it when that step failed
-    /// after the realm was written. The realm's tokens are signed once its first key is past
+    /// Opens the environment's keys outside the database with its JOSE algorithm (OP-146 m.16 (m),
+    /// m.15 (e), m.7 (b)): environment creation does it, and this repeats it when that step failed
+    /// after the environment was written. The environment's tokens are signed once its first key is past
     /// its publish lead (SAI-46).
     ///
     /// # Errors
     /// [`AdminError`].
-    pub async fn open_keys(&self, tenant: TenantId, realm: RealmId) -> Result<(), AdminError> {
-        let alg = jose_alg(self.app, tenant, realm).await?;
+    pub async fn open_keys(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<(), AdminError> {
+        let alg = jose_alg(self.app, tenant, environment).await?;
         self.keys
-            .open(realm, alg)
+            .open(environment, alg)
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
         // OP-150 L2
-        Box::pin(self.register_issuer(tenant, realm))
+        Box::pin(self.register_issuer(tenant, environment))
             .await
             .map(drop)
     }
@@ -400,8 +407,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     async fn governing(&self, p: &Proposal, state: bool) -> Result<Governing, AdminError> {
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
-        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
+        let g = idp::governance(&mut t)
+            .await?
+            .ok_or(AdminError::NoEnvironment)?;
         let current =
             Self::current(&mut t, &p.change, &g, state, (&self.declared, self.base)).await;
         t.commit().await?;
@@ -409,7 +418,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         Ok(g)
     }
 
-    /// Checks the change against the realm; with `state`, also against its current
+    /// Checks the change against the environment; with `state`, also against its current
     /// configuration, which a retry of an applied change no longer matches.
     #[expect(
         clippy::too_many_lines,
@@ -420,7 +429,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         change: &Change,
         g: &Governing,
         state: bool,
-        (declared, base): (&DeclaredTargets, &RealmBase),
+        (declared, base): (&DeclaredTargets, &EnvironmentBase),
     ) -> Result<(), AdminError> {
         change.check(declared)?;
         match change {
@@ -438,7 +447,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // OP-153 m.18 (e), m.25 (b)
             Change::AccountBind(b) => {
-                if t.realm().is_some_and(|r| *r.as_bytes() == b.peer_realm)
+                if t.environment()
+                    .is_some_and(|r| *r.as_bytes() == b.peer_environment)
                     || resources::account(t, b.subject).await?.is_none()
                 {
                     return Err(Invalid::NoAccount.into());
@@ -447,7 +457,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
 
             // TN-18, OP-153 m.3 (u)
             Change::RelatedOrigins(r) => {
-                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
                 let issuer_host = g
                     .issuer
                     .as_deref()
@@ -478,7 +488,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .issuer
                     .as_deref()
                     .and_then(|i| Issuer::parse(i).ok())
-                    .ok_or(AdminError::NoRealm)?;
+                    .ok_or(AdminError::NoEnvironment)?;
                 let verified = access_store::custom_domains::verified_hosts(t).await?;
                 let base = access_identity_domain::domain::host::Base::new(host_of(
                     base.as_str().strip_prefix("https://").unwrap_or_default(),
@@ -550,7 +560,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .and_then(access_identity_oauth::domain::fapi::IdAlg::ml_dsa)
                 {
                     let held = t
-                        .realm_signing()
+                        .environment_signing()
                         .await?
                         .profile
                         .as_deref()
@@ -561,7 +571,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
                 // CR-15, OP-159 m.3 (r)
                 if r.access_token_alg == Some(access_identity_oauth::domain::fapi::IdAlg::Ed25519)
-                    && t.realm_crypto().await?.fips
+                    && t.environment_crypto().await?.fips
                 {
                     return Err(Invalid::AlgorithmProfileConflict.into());
                 }
@@ -670,7 +680,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::Argon2(new) => {
-                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
                 let current = Argon2Params {
                     m_kib: s.argon2_m_kib,
                     t: s.argon2_t,
@@ -822,7 +832,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     _ => {}
                 }
                 // IDP-31 (4), OP-153 m.3 (l)
-                if s.client.is_none() && !t.realm_is_sandbox().await? {
+                if s.client.is_none() && !t.environment_is_sandbox().await? {
                     return Err(Invalid::SharedSocialKey.into());
                 }
             }
@@ -880,7 +890,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     && let Some(pq) = a.ml_dsa()
                 {
                     let held = t
-                        .realm_signing()
+                        .environment_signing()
                         .await?
                         .profile
                         .as_deref()
@@ -892,13 +902,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // CR-44, HL-27, OP-159 m.3 (r)
             Change::SigningProfile(Some(_)) => {
-                if t.realm_crypto().await?.fips {
+                if t.environment_crypto().await?.fips {
                     return Err(Invalid::FipsPqExclusive.into());
                 }
             }
             // CR-15, CR-44, HL-27, OP-158 m.9, OP-159 m.3 (r)
             Change::CryptoProfile(c) => {
-                if c.fips && t.realm_signing().await?.profile.is_some() {
+                if c.fips && t.environment_signing().await?.profile.is_some() {
                     return Err(Invalid::FipsPqExclusive.into());
                 }
                 let ed25519 = idp::settings(t)
@@ -910,7 +920,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // CR-15, OP-158 m.9, OP-159 m.3 (r)
             Change::JoseAlg(alg) => {
-                if *alg != JoseAlg::Es256 && t.realm_crypto().await?.fips {
+                if *alg != JoseAlg::Es256 && t.environment_crypto().await?.fips {
                     return Err(Invalid::AlgorithmProfileConflict.into());
                 }
             }
@@ -920,7 +930,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Residency(r) => rehome::residency_current(t, r).await?,
             // OP-33, OP-158 m.3 (a), m.6 (b)
             Change::HashProfileSet(p) => {
-                let now = t.realm_crypto().await?;
+                let now = t.environment_crypto().await?;
                 if p.profile.name() != now.hash_profile
                     && !(p.profile == crate::domain::resilience::HashProfile::HighMemory
                         && now.hash_profile == "canonical")
@@ -937,19 +947,23 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         Ok(())
     }
 
-    /// How many passkeys the realm's accounts hold: an RP ID change makes every one of them
+    /// How many passkeys the environment's accounts hold: an RP ID change makes every one of them
     /// unusable (IDI-4).
     ///
     /// # Errors
     /// [`AdminError`].
-    pub async fn passkey_count(&self, tenant: TenantId, realm: RealmId) -> Result<u64, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+    pub async fn passkey_count(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+    ) -> Result<u64, AdminError> {
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let n = resources::passkey_count(&mut t).await?;
         t.commit().await?;
         Ok(n)
     }
 
-    /// A rotation or drop names a key the realm publishes now; a retry of an applied one no
+    /// A rotation or drop names a key the environment publishes now; a retry of an applied one no
     /// longer has to (TN-118, §13.2).
     async fn published(&self, p: &Proposal) -> Result<(), AdminError> {
         // OP-159 m.3 (d)
@@ -970,7 +984,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         };
         let doc = self
             .keys
-            .jwks(p.realm)
+            .jwks(p.environment)
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
         if jwks_kids(&doc).contains(kid) {
@@ -980,7 +994,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
     }
 
-    /// The intent the actor signs for `p` (EI-25), once the change fits the realm's current
+    /// The intent the actor signs for `p` (EI-25), once the change fits the environment's current
     /// configuration.
     ///
     /// # Errors
@@ -1031,7 +1045,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         })
     }
 
-    /// An organization is created only for a live organization Party of the realm's domain
+    /// An organization is created only for a live organization Party of the environment's domain
     /// (OP-153 m.3 (b), m.10 (e)), by a founder with a session, at most
     /// [`ORGS_PER_FOUNDER_PER_DAY`] a day (OP-153 m.3 (o), HL-41).
     async fn org_creatable(
@@ -1053,7 +1067,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }) {
             return Err(Invalid::NotOrganization.into());
         }
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
         let today = t.orgs_founded_since(founder, DAY_S).await?;
         t.commit().await?;
         if today >= ORGS_PER_FOUNDER_PER_DAY {
@@ -1065,13 +1079,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// Records an organization's Party from the `party_register` its founder's client signed
     /// with a one-time key (OP-153 m.3 (b), L0-META-7): the Party is an organization rooted
     /// solely in the founder's Party, so it never has an Instance (C6). The founder's session
-    /// subject must be bound to a Party of the realm.
+    /// subject must be bound to a Party of the environment.
     ///
     /// # Errors
     /// [`AdminError`]; a refusal by the domain is [`AdminError::Refused`].
     pub async fn register_organization(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         founder: [u8; 16],
         party: Id,
         key: access_kernel::verify::cose::PublicKey,
@@ -1080,8 +1094,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Option<access_internal_api::context::RateContext>,
         ),
     ) -> Result<bool, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
-        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+        let g = idp::governance(&mut t)
+            .await?
+            .ok_or(AdminError::NoEnvironment)?;
         let root = idp::subject_party(&mut t, &founder).await?;
         let today = t.orgs_founded_since(founder, DAY_S).await?;
         t.commit().await?;
@@ -1112,7 +1128,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .map_err(|_| AdminError::Encode)?;
             let anchor =
                 access_kernel::meta::object_id(&exercise, access_kernel::meta::kind::ANCHOR, 0);
-            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            let mut t = TenantTx::begin(self.app, tenant, environment).await?;
             t.record_party_anchor(party.0, anchor.0).await?;
             t.commit().await?;
         }
@@ -1122,22 +1138,22 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
     }
 
-    /// Has the realm's governing domain commit one core meta-action write `w`, such as a Grant
+    /// Has the environment's governing domain commit one core meta-action write `w`, such as a Grant
     /// revoke or amend of a bulk job (E17, TN-125): the signer's account must still be able to
-    /// act in the realm (§13.4 G54), and the plane decides it like any other Exercise. Nothing
+    /// act in the environment (§13.4 G54), and the plane decides it like any other Exercise. Nothing
     /// is written on the identity side.
     ///
     /// # Errors
     /// [`AdminError`]; a DENY or a pending decision is [`Applied::NotAllowed`].
     pub async fn meta(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         w: Submission,
     ) -> Result<Applied, AdminError> {
         if w.payload.is_none() {
             return Err(AdminError::Encode);
         }
-        self.standing((tenant, realm), w.domain, &w.ais, None)
+        self.standing((tenant, environment), w.domain, &w.ais, None)
             .await?;
         let nonce = w.nonce.clone();
         let verdict = self
@@ -1177,7 +1193,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
     }
 
-    /// Has the realm's governing domain commit `p` with the actor's `ais`, then writes the
+    /// Has the environment's governing domain commit `p` with the actor's `ais`, then writes the
     /// change against the committed ALLOW in one transaction (MD-14, EI-25, TN-110).
     ///
     /// # Errors
@@ -1185,7 +1201,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     pub async fn apply(&self, p: &Proposal, ais: Vec<u8>) -> Result<Applied, AdminError> {
         let prepared = self.prepared(p, false).await?;
         let actor = self.actor(p).await?;
-        self.standing((p.tenant, p.realm), prepared.domain, &ais, actor)
+        self.standing((p.tenant, p.environment), prepared.domain, &ais, actor)
             .await?;
         self.recovery_grace(p, prepared.domain, &ais, actor).await?;
         let issuer = self
@@ -1233,7 +1249,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let change = p.change.digest().map_err(|_| AdminError::Encode)?;
         let domain = DomainId::from_bytes(committed.domain.0);
         let label = p.change.action().label();
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
         let bound = idp::bind(
             &mut t,
             &Bind {
@@ -1266,7 +1282,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// The first application of a bound decision, in the transaction that bound it: the change
-    /// must fit the realm's current configuration, which only a retry no longer matches (TN-110,
+    /// must fit the environment's current configuration, which only a retry no longer matches (TN-110,
     /// EI-25); then the write, its effects and its events, committed together.
     #[expect(
         clippy::too_many_lines,
@@ -1283,7 +1299,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let mut t = PgTx::new(t);
         let g = idp::governance(&mut t.0)
             .await?
-            .ok_or(AdminError::NoRealm)?;
+            .ok_or(AdminError::NoEnvironment)?;
         Self::current(&mut t.0, &p.change, &g, true, (&self.declared, self.base)).await?;
         self.published(p).await?;
         let moved = account_move(&mut t.0, &p.change).await?;
@@ -1304,7 +1320,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 correlation: &correlation,
             };
             let named = access_identity_account::app::Named {
-                realm: p.realm,
+                environment: p.environment,
                 ids: self.ids,
             };
             status_moved(&mut t, &named, subject, (from, to), &who)
@@ -1317,7 +1333,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (q), IDP-35
             let vault = self
                 .keys
-                .vault(p.realm)
+                .vault(p.environment)
                 .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
             // TN-109
             let now = access_store::hr::decision_time(self.app, bound)
@@ -1329,7 +1345,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (c)
             let kek = self
                 .vault
-                .and_then(|v| v.realm_kek(p.tenant, p.realm))
+                .and_then(|v| v.environment_kek(p.tenant, p.environment))
                 .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
             let correlation = access_kernel::json::b64url_encode(&exercise.0);
             let who = access_identity_account::app::Actor {
@@ -1346,7 +1362,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 correlation: &correlation,
             };
             let named = access_identity_account::app::Named {
-                realm: p.realm,
+                environment: p.environment,
                 ids: self.ids,
             };
             access_identity_account::app::privacy::request_deletion(
@@ -1399,12 +1415,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         // OP-154 m.3 (c), (e), (g)
         if let Change::Agent(a) = &p.change {
             let at = access_store::authority::server_time(self.app).await?;
-            agents::committed(&mut t, p.realm, a, exercise, at).await?;
+            agents::committed(&mut t, p.environment, a, exercise, at).await?;
         }
         // OP-154 m.3 (e), AG-41, X13
         if let Change::AccountSuspend(s) | Change::AccountDelete(s) = &p.change {
             let at = access_store::authority::server_time(self.app).await?;
-            agents::sponsor_left(&mut t, p.realm, *s, at).await?;
+            agents::sponsor_left(&mut t, p.environment, *s, at).await?;
         }
         let mut secret = secret;
         if let Change::AccountResetIntent { .. } | Change::AccountTapIssue(_) = &p.change {
@@ -1442,7 +1458,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// Writes a committed invitation and queues its mail (TN-89, OP-153 m.3 (o)): the inviter
-    /// is the session's subject and its Party, and the realm's vault keys must be at hand.
+    /// is the session's subject and its Party, and the environment's vault keys must be at hand.
     async fn invite(
         &self,
         t: &mut TenantTx,
@@ -1459,9 +1475,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
         let vault = self
             .keys
-            .vault(p.realm)
+            .vault(p.environment)
             .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
-        let issuer = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+        let issuer = g.issuer.as_deref().ok_or(AdminError::NoEnvironment)?;
         let at = access_store::authority::server_time(self.app).await?;
         orgs::invite(
             t,
@@ -1510,7 +1526,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .await
                 .map_err(|e| AdminError::Unavailable(e.0))?,
         };
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
         let subject = match (p.subject, party) {
             (Some(s), _) => Some(s),
             (None, Some(party)) => idp::party_subject(&mut t, &party.0).await?,
@@ -1536,12 +1552,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// The Party the session subject of `p` is bound to (§13.4 G54, OP-149 m.16 (a)); a subject
-    /// without one cannot change the realm.
+    /// without one cannot change the environment.
     async fn actor(&self, p: &Proposal) -> Result<Option<Id>, AdminError> {
         let Some(subject) = &p.subject else {
             return Ok(None);
         };
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
         let party = idp::subject_party(&mut t, subject).await?;
         t.commit().await?;
         party
@@ -1549,17 +1565,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))
     }
 
-    /// The Party that signs a change in `(tenant, realm)` stands only while its account there
+    /// The Party that signs a change in `(tenant, environment)` stands only while its account there
     /// can act (§13.4 G54, §12.3.1, TN-49): a Party bound to a suspended, locked or deleted
     /// account changes nothing, whether a session or an Instance key alone asks. A Party bound
-    /// to no account of the realm, such as the operator's root, is not narrowed here (OP-150
+    /// to no account of the environment, such as the operator's root, is not narrowed here (OP-150
     /// m.11 (f)); a key no live Instance holds is the authority plane's to refuse.
     ///
     /// # Errors
     /// [`AdminError::Refused`] with `actor-binding`; [`AdminError`].
     pub async fn standing(
         &self,
-        (tenant, realm): (TenantId, RealmId),
+        (tenant, environment): (TenantId, EnvironmentId),
         domain: Digest,
         ais: &[u8],
         actor: Option<Id>,
@@ -1575,7 +1591,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let Some(party) = party else {
             return Ok(());
         };
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let status = match idp::party_subject(&mut t, &party.0).await? {
             Some(subject) => Some(resources::account(&mut t, subject).await?.map(|a| a.status)),
             None => None,
@@ -1593,26 +1609,26 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// What follows a written change outside the database: a new JOSE algorithm reaches the
-    /// identity signer for the realm's next keys (OP-146 m.8 (e), m.16 (m)), and a decided key
-    /// policy, rotation or drop reaches the realm's key set (TN-118, §13.2). A retry of the
+    /// identity signer for the environment's next keys (OP-146 m.8 (e), m.16 (m)), and a decided key
+    /// policy, rotation or drop reaches the environment's key set (TN-118, §13.2). A retry of the
     /// change repeats it; each of them is idempotent.
     async fn after(&self, p: &Proposal) -> Result<(), AdminError> {
         let done = match &p.change {
-            Change::JoseAlg(alg) => self.keys.open(p.realm, *alg).await,
+            Change::JoseAlg(alg) => self.keys.open(p.environment, *alg).await,
             // CR-41, OP-159 m.3 (o), (d)
-            Change::SigningProfile(Some(s)) => self.keys.pq_open(p.realm, s.profile).await,
-            Change::SigningProfile(None) => self.keys.pq_close(p.realm).await,
+            Change::SigningProfile(Some(s)) => self.keys.pq_open(p.environment, s.profile).await,
+            Change::SigningProfile(None) => self.keys.pq_close(p.environment).await,
             // TN-118, §13.2
-            Change::KeyPolicy(policy) => self.keys.set_policy(p.realm, *policy).await,
-            Change::KeyRotate { retire } => self.keys.rotate(p.realm, *retire).await,
-            Change::KeyDrop { kid, .. } => self.keys.drop_key(p.realm, *kid).await,
+            Change::KeyPolicy(policy) => self.keys.set_policy(p.environment, *policy).await,
+            Change::KeyRotate { retire } => self.keys.rotate(p.environment, *retire).await,
+            Change::KeyDrop { kid, .. } => self.keys.drop_key(p.environment, *kid).await,
             // MD-6, OP-155 m.3 (d), (e)
             Change::Saml(
                 crate::domain::saml::SamlChange::Register(_, sp)
                 | crate::domain::saml::SamlChange::Update(_, sp),
-            ) => self.keys.saml_open(p.realm, sp.alg().ecdsa()).await,
+            ) => self.keys.saml_open(p.environment, sp.alg().ecdsa()).await,
             Change::Saml(crate::domain::saml::SamlChange::CertEmergency { p256 }) => {
-                self.keys.saml_emergency(p.realm, *p256).await
+                self.keys.saml_emergency(p.environment, *p256).await
             }
             _ => Ok(()),
         };
@@ -1652,7 +1668,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             id,
             &ClientChange {
                 tenant: &tenant,
-                realm: p.realm.as_bytes(),
+                environment: p.environment.as_bytes(),
                 client_id,
                 exercise: &exercise.0,
                 platform_product: platform_product.as_ref(),
@@ -1713,7 +1729,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// Registers or updates `c`; counts a new public `sub` opt-in (MD-10), never labelled by
-    /// realm (OP-47).
+    /// environment (OP-47).
     async fn write_client(
         &self,
         t: &mut TenantTx,
@@ -1769,12 +1785,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // CR-15, CR-36, OP-158 m.3 (y)
             Change::CryptoProfile(c) => {
-                t.put_realm_crypto(bound, Some(c.fips), None).await?;
+                t.put_environment_crypto(bound, Some(c.fips), None).await?;
                 true
             }
             // OP-33, OP-158 m.3 (a), m.6 (b)
             Change::HashProfileSet(p) => {
-                t.put_realm_crypto(bound, None, Some(p.profile.name()))
+                t.put_environment_crypto(bound, None, Some(p.profile.name()))
                     .await?;
                 true
             }
@@ -1803,11 +1819,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // OP-158 m.3 (w)
             Change::AuditTier(tier) => {
-                let row = tier.as_ref().map(|x| access_store::audit_tier::RealmTier {
-                    hot_days: x.hot_days,
-                    target: x.target.clone(),
-                });
-                access_store::audit_tier::put_realm_tier(t, bound, row.as_ref()).await?;
+                let row = tier
+                    .as_ref()
+                    .map(|x| access_store::audit_tier::EnvironmentTier {
+                        hot_days: x.hot_days,
+                        target: x.target.clone(),
+                    });
+                access_store::audit_tier::put_environment_tier(t, bound, row.as_ref()).await?;
                 true
             }
             // OP-35, OP-158 m.3 (v)
@@ -1874,7 +1892,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 true
             }
             Change::CimdPolicy(_) | Change::JoseAlg(_) | Change::Argon2(_) | Change::RpId(_) => {
-                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let s = idp::settings(t).await?.ok_or(AdminError::NoEnvironment)?;
                 // RR-45, TN-17
                 if let Change::RpId(r) = change
                     && s.rp_id.as_deref() != Some(r.as_str())
@@ -2025,7 +2043,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Saml(s) => saml::write(t, bound, s).await?,
             // OP-156 m.3 (i)
             Change::Domain(d) => {
-                let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                let g = idp::governance(t).await?.ok_or(AdminError::NoEnvironment)?;
                 let exercise = bound.position().to_be_bytes();
                 custom_domains::write(t, bound, d, (&g, self.base, &exercise)).await?
             }
@@ -2112,7 +2130,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // TN-98, OP-155 m.3 (h)
             Change::Hrd(on) => {
-                t.put_realm_hrd(bound, *on).await?;
+                t.put_environment_hrd(bound, *on).await?;
                 true
             }
             // OP-156 m.3 (c), IDP-37 (4)
@@ -2301,7 +2319,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::RecoveryPolicy { policy, .. } => {
                 let bytes = policy.to_bytes().map_err(|_| AdminError::Encode)?;
-                t.insert_recovery_realm_policy(&bytes, bound).await?;
+                t.insert_recovery_environment_policy(&bytes, bound).await?;
                 true
             }
         };
@@ -2364,7 +2382,7 @@ async fn org_member_current(
     Ok(())
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     /// The account that issues a reset intent or a pass: the subject of the Party whose
     /// Instance signed the write. Nobody issues one for their own account (TN-62); `None` for
     /// every other change, or a signer without an account.
@@ -2391,7 +2409,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let Some(party) = party else {
             return Ok(p.subject);
         };
-        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
         let subject = idp::party_subject(&mut t, &party.0).await?;
         t.commit().await?;
         // TN-62
@@ -2423,15 +2441,15 @@ pub(crate) async fn mailbox_since(
     ))
 }
 
-/// The realm's recovery policy, or the default one (OP-153 m.3 (e)).
+/// The environment's recovery policy, or the default one (OP-153 m.3 (e)).
 async fn recovery_policy(t: &mut TenantTx) -> Result<RecoveryPolicy, AdminError> {
-    match t.recovery_realm_policy().await? {
+    match t.recovery_environment_policy().await? {
         Some(b) => RecoveryPolicy::from_bytes(&b).map_err(|_| AdminError::Encode),
         None => Ok(RecoveryPolicy::DEFAULT),
     }
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     /// What a committed organization SSO change writes besides its row (TN-94, TN-95, TN-134,
     /// OP-155 m.3 (i)): enforcement's sweep, a setup link and its Relay message, a SCIM source.
     async fn sso_committed(
@@ -2447,11 +2465,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         }
         let kek = self
             .vault
-            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .and_then(|v| v.environment_kek(p.tenant, p.environment))
             .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
-        let realm = access_identity_account::app::Realm {
+        let environment = access_identity_account::app::Environment {
             tenant: p.tenant,
-            realm: p.realm,
+            environment: p.environment,
             kek: &*kek,
             ids: self.ids,
         };
@@ -2461,18 +2479,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let correlation = access_kernel::json::b64url_encode(&exercise.0);
                 let vault = self
                     .keys
-                    .vault(p.realm)
+                    .vault(p.environment)
                     .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
                 let prior = tx.1.replace(vault);
-                let swept = sso::sweep(tx, &realm, e, (&correlation, at)).await;
+                let swept = sso::sweep(tx, &environment, e, (&correlation, at)).await;
                 tx.1 = prior;
                 swept?;
                 Ok(None)
             }
             Change::OrgSetupLink(order) => {
-                let issuer = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+                let issuer = g.issuer.as_deref().ok_or(AdminError::NoEnvironment)?;
                 let w = sso::Issue {
-                    realm: &realm,
+                    environment: &environment,
                     issuer,
                     exercise: &exercise.0,
                     at,
@@ -2497,11 +2515,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         use access_identity_account::notify::ports::Notifier as _;
         let kek = self
             .vault
-            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .and_then(|v| v.environment_kek(p.tenant, p.environment))
             .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
-        let realm = access_identity_account::app::Realm {
+        let environment = access_identity_account::app::Environment {
             tenant: p.tenant,
-            realm: p.realm,
+            environment: p.environment,
             kek: &*kek,
             ids: self.ids,
         };
@@ -2522,7 +2540,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         };
         let valid_since_ms = mailbox_since(&mut t.0, subject, &to).await?;
         let now = access_store::authority::server_time(self.app).await?;
-        OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+        OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock)
             .notify(
                 &mut t.0,
                 &Message {
@@ -2565,19 +2583,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         use access_store::recovery::NewToken;
         let kek = self
             .vault
-            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .and_then(|v| v.environment_kek(p.tenant, p.environment))
             .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
-        let realm = access_identity_account::app::Realm {
+        let environment = access_identity_account::app::Environment {
             tenant: p.tenant,
-            realm: p.realm,
+            environment: p.environment,
             kek: &*kek,
             ids: self.ids,
         };
-        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        let notifier = OutboxNotifier::new(&environment, &SystemEntropy, &SystemClock);
         let now = access_store::authority::server_time(self.app).await?;
         let correlation = access_kernel::json::b64url_encode(&exercise.0);
         let issuer = match issuer.or(p.subject) {
-            Some(s) => realm.external(s).map_err(account)?,
+            Some(s) => environment.external(s).map_err(account)?,
             None => String::from(DECIDED_BY),
         };
         let (subject, out) = match &p.change {
@@ -2617,7 +2635,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 })
                 .await
                 .map_err(|_| AdminError::Conflict)?;
-                let base = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+                let base = g.issuer.as_deref().ok_or(AdminError::NoEnvironment)?;
                 let link = format!(
                     "{}/login/recovery#intent={token}",
                     base.trim_end_matches('/')
@@ -2639,7 +2657,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     )
                     .await
                     .map_err(|_| AdminError::Unavailable(String::from("relay")))?;
-                let target = realm.external(*subject).map_err(account)?;
+                let target = environment.external(*subject).map_err(account)?;
                 t.0.audit(&access_store::audit::AuditEvent {
                     event_type: "recovery.reset_intent.issued",
                     actor: &issuer,
@@ -2668,7 +2686,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 })
                 .await
                 .map_err(|_| AdminError::Conflict)?;
-                let target = realm.external(tap.subject).map_err(account)?;
+                let target = environment.external(tap.subject).map_err(account)?;
                 t.0.audit(&access_store::audit::AuditEvent {
                     event_type: "recovery.tap.issued",
                     actor: &issuer,
@@ -2758,7 +2776,7 @@ fn risk(e: access_identity_risk::RiskError) -> AdminError {
     }
 }
 
-impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
     /// A new hook or webhook id: a fresh UUID as an opaque external id under `prefix`
     /// (OP-65, OP-137).
     ///
@@ -2770,7 +2788,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// TN-135, TN-136, OP-151 m.10 (e): writes a hook or webhook change with M6's use cases, the
-    /// realm's extension policy read in the same transaction; a registration's or rotation's key
+    /// environment's extension policy read in the same transaction; a registration's or rotation's key
     /// is shown once.
     async fn write_extension(
         &self,
@@ -2814,8 +2832,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 }
 
-/// Stores one of the realm's policies under `bound`.
-/// Whether a decision denies a new admin Grant for the realm's closed flag (OP-157 m.3 (t)).
+/// Stores one of the environment's policies under `bound`.
+/// Whether a decision denies a new admin Grant for the environment's closed flag (OP-157 m.3 (t)).
 fn delegated_admin_off(decision: &Decision) -> bool {
     decision
         .blockers
@@ -2843,14 +2861,14 @@ fn extension_error(e: &access_identity_hooks::app::WriteError) -> AdminError {
     }
 }
 
-/// The realm's extension policy; nothing stored is the default (OP-151 m.10 (e)).
+/// The environment's extension policy; nothing stored is the default (OP-151 m.10 (e)).
 async fn extension_policy(t: &mut TenantTx) -> Result<ExtensionPolicy, AdminError> {
     let stored = resources::policies(t).await?;
     ExtensionPolicy::from_stored(stored.extension.as_deref())
         .map_err(|_| AdminError::Store(access_store::StoreError::Corrupt))
 }
 
-/// OP-151 m.10 (e), OP-149 m.23: a private target needs the realm's permission and the
+/// OP-151 m.10 (e), OP-149 m.23: a private target needs the environment's permission and the
 /// operator's declaration of that very URL.
 fn allow_private(policy: &ExtensionPolicy, declared: &DeclaredTargets, h: &HookChange) -> bool {
     match h {
@@ -2872,7 +2890,7 @@ fn webhook_allow_private(
     policy.private_allowed(declared.declares(url))
 }
 
-/// The hook or webhook change against the realm: its target and disclosures under the realm's
+/// The hook or webhook change against the environment: its target and disclosures under the environment's
 /// extension policy; with `state`, also the hook or webhook it names (OP-151 m.10 (d)).
 async fn extension_current(
     t: &mut TenantTx,
@@ -2940,7 +2958,7 @@ async fn extension_current(
 /// Context of an upstream provider's transmitter id.
 pub const TRANSMITTER_CONTEXT: &str = "access/upstream-transmitter/v1";
 
-/// The inbound transmitter id of the realm's upstream provider `name`: the same for every
+/// The inbound transmitter id of the environment's upstream provider `name`: the same for every
 /// declaration of it.
 #[must_use]
 pub fn transmitter_id(name: &str) -> [u8; 16] {
@@ -2957,7 +2975,7 @@ impl access_identity_events::ports::Sealer for NoCredential {
     fn seal(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &[u8; 16],
         _: &[u8],
     ) -> Result<access_store::events::SealedKey, access_identity_events::ports::Unavailable> {
@@ -2967,7 +2985,7 @@ impl access_identity_events::ports::Sealer for NoCredential {
     fn open(
         &self,
         _: TenantId,
-        _: RealmId,
+        _: EnvironmentId,
         _: &[u8; 16],
         _: &access_store::events::SealedKey,
     ) -> Result<zeroize::Zeroizing<Vec<u8>>, access_identity_events::ports::Unavailable> {
@@ -3052,14 +3070,14 @@ fn upstream_row(u: &Upstream) -> UpstreamRow {
         ssf: u
             .ssf
             .as_ref()
-            .map(|s| crate::domain::realm::ssf_json(s).to_string()),
+            .map(|s| crate::domain::environment::ssf_json(s).to_string()),
         profile: Some(u.profile.to_json()),
         active: true,
         position: 0,
     }
 }
 
-/// AG-5, §11.3.6: a CIMD client the realm's new policy no longer admits retires now: its
+/// AG-5, §11.3.6: a CIMD client the environment's new policy no longer admits retires now: its
 /// consent records end and its identity grants are revoked, so introspection answers inactive.
 async fn retire_cimd_outside(
     t: &mut TenantTx,
@@ -3157,13 +3175,19 @@ pub fn jwks_kids(doc: &str) -> Vec<[u8; 32]> {
         .collect()
 }
 
-/// The realm's JOSE algorithm, ES256 until a decision changes it (OP-146 m.8 (e)).
+/// The environment's JOSE algorithm, ES256 until a decision changes it (OP-146 m.8 (e)).
 ///
 /// # Errors
 /// [`AdminError`].
-pub async fn jose_alg(app: &Pool, tenant: TenantId, realm: RealmId) -> Result<JoseAlg, AdminError> {
-    let mut t = TenantTx::begin(app, tenant, realm).await?;
-    let s = idp::settings(&mut t).await?.ok_or(AdminError::NoRealm)?;
+pub async fn jose_alg(
+    app: &Pool,
+    tenant: TenantId,
+    environment: EnvironmentId,
+) -> Result<JoseAlg, AdminError> {
+    let mut t = TenantTx::begin(app, tenant, environment).await?;
+    let s = idp::settings(&mut t)
+        .await?
+        .ok_or(AdminError::NoEnvironment)?;
     t.commit().await?;
     JoseAlg::from_name(&s.jose_alg).ok_or(AdminError::Store(access_store::StoreError::Corrupt))
 }

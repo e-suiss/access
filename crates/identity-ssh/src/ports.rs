@@ -1,4 +1,4 @@
-//! What the certificate authority needs from the outside world (OP-63): the realm's CA key in
+//! What the certificate authority needs from the outside world (OP-63): the environment's CA key in
 //! the identity signer, and randomness for serials and nonces. Each fails closed (MD-8).
 
 use std::future::Future;
@@ -13,7 +13,7 @@ pub struct Unavailable;
 /// Why the CA key did not sign.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CaRefusal {
-    /// The realm's CA is off: no key signs.
+    /// The environment's CA is off: no key signs.
     #[error("certificate authority off")]
     Off,
     /// Another key signs now (a rotation happened in between).
@@ -24,18 +24,18 @@ pub enum CaRefusal {
     Unavailable,
 }
 
-/// The realm's SSH CA key, held by the identity signer under its `ssh-ca` purpose.
+/// The environment's SSH CA key, held by the identity signer under its `ssh-ca` purpose.
 pub trait CaKey: Send + Sync {
-    /// The key that signs certificates of `realm` now; `None` while the CA is off.
+    /// The key that signs certificates of `environment` now; `None` while the CA is off.
     fn active(
         &self,
-        realm: [u8; 16],
+        environment: [u8; 16],
     ) -> impl Future<Output = Result<Option<Ed25519Public>, Unavailable>> + Send;
 
     /// The Ed25519 signature of `data` by `key`, only while `key` is the one that signs.
     fn sign(
         &self,
-        realm: [u8; 16],
+        environment: [u8; 16],
         key: Ed25519Public,
         data: Vec<u8>,
     ) -> impl Future<Output = Result<[u8; 64], CaRefusal>> + Send;

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.event_subscription_ssf (tenant_id, environment_id, subscription_id, profile, alg)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "37bc877fd8a44cc20fe511d29ee59ab395246a0c5425e73a6d2ac6ec1d6eaf87"
+}

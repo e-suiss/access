@@ -1,16 +1,16 @@
-// OP-153 m.3 (w), TN-131: the account pages speak to their BFF and to the realm's Frontend API,
-// both on the realm's own origin; every state change carries the session's CSRF token.
+// OP-153 m.3 (w), TN-131: the account pages speak to their BFF and to the environment's Frontend API,
+// both on the environment's own origin; every state change carries the session's CSRF token.
 
-const SLUG = /^\/realms\/([a-z0-9-]+)\/account(?:\/|$)/.exec(location.pathname)?.[1];
+const SLUG = /^\/env\/([a-z0-9-]+)\/account(?:\/|$)/.exec(location.pathname)?.[1];
 
-/** The page's own path: `/account` at a host issuer, `/realms/{slug}/account` at a path one. */
-export const PAGE = SLUG === undefined ? "/account" : `/realms/${SLUG}/account`;
+/** The page's own path: `/account` at a host issuer, `/env/{slug}/account` at a path one. */
+export const PAGE = SLUG === undefined ? "/account" : `/env/${SLUG}/account`;
 
 /** The BFF's API. */
 export const API = `${PAGE}/api`;
 
-/** The realm's Frontend API prefix. */
-export const FRONTEND = SLUG === undefined ? "" : `/realms/${SLUG}`;
+/** The environment's Frontend API prefix. */
+export const FRONTEND = SLUG === undefined ? "" : `/env/${SLUG}`;
 
 const CSRF_COOKIE = "__Host-access-account-csrf";
 
@@ -86,7 +86,7 @@ export async function json<T>(r: Response | Promise<Response>): Promise<T> {
 
 /** What `GET …/account/api/session` answers. */
 export interface SessionInfo {
-  readonly realm: string;
+  readonly environment: string;
   readonly domain: string;
   readonly account: string;
   readonly expires_at: string;

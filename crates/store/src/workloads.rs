@@ -1,5 +1,5 @@
-//! Workload clients and the SPIFFE bundles a realm keeps (OP-154 m.3 (d), (r), AG-30, L25). A
-//! workload client's selector, Bundle Endpoint and agent Party are realm configuration bound
+//! Workload clients and the SPIFFE bundles an environment keeps (OP-154 m.3 (d), (r), AG-30, L25). A
+//! workload client's selector, Bundle Endpoint and agent Party are environment configuration bound
 //! to an `idp.client.*` decision; a kept bundle is a cache. Nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
@@ -9,10 +9,10 @@ use crate::identity::TenantTx;
 use crate::idp::Bound;
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -29,7 +29,7 @@ pub struct ClientWorkload {
     pub agent: [u8; 16],
 }
 
-/// An active workload client of the realm, with its `client_id`.
+/// An active workload client of the environment, with its `client_id`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkloadClient {
     /// The opaque `client_id`.
@@ -49,17 +49,17 @@ pub async fn put_client_workload(
     bound: &Bound,
     w: &ClientWorkload,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_client_workloads (tenant_id, realm_id, client_uuid, spiffe_id,
+        "INSERT INTO access.idp_client_workloads (tenant_id, environment_id, client_uuid, spiffe_id,
                 bundle_endpoint, agent_party, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (tenant_id, realm_id, client_uuid) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id, client_uuid) DO UPDATE
             SET spiffe_id = EXCLUDED.spiffe_id, bundle_endpoint = EXCLUDED.bundle_endpoint,
                 agent_party = EXCLUDED.agent_party, domain_id = EXCLUDED.domain_id,
                 decision_pos = EXCLUDED.decision_pos",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(w.client_uuid),
         w.spiffe_id,
         w.bundle_endpoint,
@@ -80,13 +80,13 @@ pub async fn client_workload(
     t: &mut TenantTx,
     client_uuid: [u8; 16],
 ) -> Result<Option<ClientWorkload>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT client_uuid, spiffe_id, bundle_endpoint, agent_party
            FROM access.idp_client_workloads
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(client_uuid),
     )
     .fetch_optional(&mut *t.tx)
@@ -102,28 +102,28 @@ pub async fn client_workload(
     .transpose()
 }
 
-/// Most workload clients one realm is read with (PD).
+/// Most workload clients one environment is read with (PD).
 pub const MAX_WORKLOAD_CLIENTS: i64 = 1_000;
 
-/// The realm's active workload clients.
+/// The environment's active workload clients.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn workload_clients(t: &mut TenantTx) -> Result<Vec<WorkloadClient>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT c.client_id, c.auth_method, w.client_uuid, w.spiffe_id, w.bundle_endpoint,
                 w.agent_party
            FROM access.idp_client_workloads w
            JOIN access.idp_clients c
-             ON c.tenant_id = w.tenant_id AND c.realm_id = w.realm_id
+             ON c.tenant_id = w.tenant_id AND c.environment_id = w.environment_id
             AND c.client_uuid = w.client_uuid
-          WHERE w.tenant_id = $1 AND w.realm_id = $2 AND c.status = 'active'
+          WHERE w.tenant_id = $1 AND w.environment_id = $2 AND c.status = 'active'
             AND c.auth_method IN ('spiffe_jwt', 'spiffe_x509')
           ORDER BY c.client_id
           LIMIT $3",
         tenant,
-        realm,
+        environment,
         MAX_WORKLOAD_CLIENTS,
     )
     .fetch_all(&mut *t.tx)
@@ -144,7 +144,7 @@ pub async fn workload_clients(t: &mut TenantTx) -> Result<Vec<WorkloadClient>, S
         .collect()
 }
 
-/// A bundle the realm keeps for one trust domain.
+/// A bundle the environment keeps for one trust domain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeptBundle {
     /// The Bundle Endpoint it was fetched from.
@@ -163,12 +163,12 @@ pub async fn kept_bundle(
     t: &mut TenantTx,
     trust_domain: &str,
 ) -> Result<Option<KeptBundle>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT bundle_endpoint, document, fetched_ms FROM access.oauth_workload_bundles
-          WHERE tenant_id = $1 AND realm_id = $2 AND trust_domain = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND trust_domain = $3",
         tenant,
-        realm,
+        environment,
         trust_domain,
     )
     .fetch_optional(&mut *t.tx)
@@ -189,16 +189,16 @@ pub async fn keep_bundle(
     trust_domain: &str,
     bundle: &KeptBundle,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.oauth_workload_bundles (tenant_id, realm_id, trust_domain,
+        "INSERT INTO access.oauth_workload_bundles (tenant_id, environment_id, trust_domain,
                 bundle_endpoint, document, fetched_ms)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (tenant_id, realm_id, trust_domain) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id, trust_domain) DO UPDATE
             SET bundle_endpoint = EXCLUDED.bundle_endpoint, document = EXCLUDED.document,
                 fetched_ms = EXCLUDED.fetched_ms",
         tenant,
-        realm,
+        environment,
         trust_domain,
         bundle.bundle_endpoint,
         bundle.document,

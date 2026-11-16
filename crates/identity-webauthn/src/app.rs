@@ -17,7 +17,7 @@ use crate::domain::decoy::decoy_descriptors;
 use crate::domain::ids::{CredentialId, UserHandle};
 use crate::domain::mds::{MdsBlob, MdsError, verify_blob};
 use crate::domain::options::{CredentialDescriptor, UserEntity, creation_options, request_options};
-use crate::domain::policy::{AttestationPolicy, RealmPolicy};
+use crate::domain::policy::{AttestationPolicy, EnvironmentPolicy};
 use crate::domain::prf::{PrfConfig, PrfSalt};
 use crate::domain::rp::RelyingParty;
 use crate::ports::{
@@ -154,7 +154,7 @@ where
     pub async fn start_registration(
         &self,
         rp: &RelyingParty,
-        policy: &RealmPolicy,
+        policy: &EnvironmentPolicy,
         user: &UserEntity<'_>,
         conditional: bool,
         prf_purpose: Option<&str>,
@@ -163,7 +163,7 @@ where
         let challenge = self.challenge()?;
         let exclude: Vec<CredentialDescriptor> = self
             .registry
-            .list(rp.realm, user.handle)
+            .list(rp.environment, user.handle)
             .await?
             .iter()
             .map(descriptor)
@@ -184,7 +184,7 @@ where
         );
         Ok(RegistrationStart {
             state: RegistrationState {
-                realm: rp.realm,
+                environment: rp.environment,
                 user: *user.handle,
                 challenge,
                 conditional,
@@ -203,7 +203,7 @@ where
     pub async fn finish_registration(
         &self,
         rp: &RelyingParty,
-        policy: &RealmPolicy,
+        policy: &EnvironmentPolicy,
         state: &RegistrationState,
         response: &RegistrationResponse<'_>,
         sources: &(dyn AttestationSources + Sync),
@@ -228,7 +228,7 @@ where
     pub async fn start_authentication(
         &self,
         rp: &RelyingParty,
-        policy: &RealmPolicy,
+        policy: &EnvironmentPolicy,
         who: Identified<'_>,
         require_user_verification: bool,
     ) -> Result<AuthenticationStart, WebAuthnError> {
@@ -238,12 +238,12 @@ where
             Identified::Discoverable => (None, Vec::new()),
             Identified::Identifier { normalized, user } => {
                 let real = match user {
-                    Some(u) => self.registry.list(rp.realm, &u).await?,
+                    Some(u) => self.registry.list(rp.environment, &u).await?,
                     None => Vec::new(),
                 };
                 let allow = if real.is_empty() {
-                    decoy_descriptors(rp.realm, normalized, |input| {
-                        self.decoys.derive(rp.realm, input)
+                    decoy_descriptors(rp.environment, normalized, |input| {
+                        self.decoys.derive(rp.environment, input)
                     })?
                 } else {
                     real.iter().map(descriptor).collect()
@@ -254,7 +254,7 @@ where
         let options = request_options(rp, policy, &challenge, &allow);
         Ok(AuthenticationStart {
             state: AuthenticationState {
-                realm: rp.realm,
+                environment: rp.environment,
                 challenge,
                 user,
                 allowed: allow.into_iter().map(|d| d.id).collect(),
@@ -272,7 +272,7 @@ where
     pub async fn finish_authentication(
         &self,
         rp: &RelyingParty,
-        policy: &RealmPolicy,
+        policy: &EnvironmentPolicy,
         state: &AuthenticationState,
         response: &AssertionResponse<'_>,
     ) -> Result<AuthenticationOutcome, WebAuthnError> {
@@ -282,7 +282,7 @@ where
                 Rejection::UnknownCredential,
             ));
         };
-        let Some(stored) = self.registry.find(rp.realm, &id).await? else {
+        let Some(stored) = self.registry.find(rp.environment, &id).await? else {
             return Ok(AuthenticationOutcome::Rejected(
                 Rejection::UnknownCredential,
             ));
@@ -296,17 +296,17 @@ where
                     stored: stored.sign_count,
                     presented,
                 };
-                self.signals.emit(rp.realm, &id, signal).await?;
+                self.signals.emit(rp.environment, &id, signal).await?;
                 return Ok(AuthenticationOutcome::Rejected(Rejection::SignCount));
             }
             Err(e) => return Ok(AuthenticationOutcome::Rejected(e)),
         };
         for signal in &verified.signals {
-            self.signals.emit(rp.realm, &id, *signal).await?;
+            self.signals.emit(rp.environment, &id, *signal).await?;
         }
         self.registry
             .record_use(
-                rp.realm,
+                rp.environment,
                 &id,
                 verified.sign_count,
                 verified.backup_state,
@@ -329,10 +329,10 @@ where
     }
 }
 
-/// What a `direct` realm verifies `response` against: nothing under `none`, where attestation
+/// What a `direct` environment verifies `response` against: nothing under `none`, where attestation
 /// is never a trust input (§10.2.4, OP-159 m.3 (ll)).
 pub async fn attestation_evidence(
-    policy: &RealmPolicy,
+    policy: &EnvironmentPolicy,
     response: &RegistrationResponse<'_>,
     sources: &(dyn AttestationSources + Sync),
 ) -> Evidence {
@@ -376,7 +376,7 @@ pub async fn refresh_metadata(
     Ok(blob)
 }
 
-/// The cached blob if it is still fresh; `direct` realms fail closed without it.
+/// The cached blob if it is still fresh; `direct` environments fail closed without it.
 ///
 /// # Errors
 /// [`WebAuthnError`].

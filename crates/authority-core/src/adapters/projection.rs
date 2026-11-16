@@ -1,4 +1,4 @@
-//! Authority token projections (§9.9, CMP-7): an access token the realm's authorization
+//! Authority token projections (§9.9, CMP-7): an access token the environment's authorization
 //! server asks for is a `projection.issue` commit of its holder, and only its ALLOW makes a
 //! token (§9.9 "her token issuance bir karardır"). The token is the RFC 9068 `at+jwt` whose
 //! authority is the RAR `authorization_details` of the contract the decision made (§9.13.5),

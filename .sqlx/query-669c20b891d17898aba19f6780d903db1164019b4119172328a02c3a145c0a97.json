@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.upstream_subject_conflicts SET resolved_ms = $5, resolution = 'linked'\n              WHERE tenant_id = $1 AND environment_id = $2 AND connection = $3 AND identity_key = $4\n                AND resolved_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "669c20b891d17898aba19f6780d903db1164019b4119172328a02c3a145c0a97"
+}

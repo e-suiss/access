@@ -1,8 +1,8 @@
-//! Identity plane configuration (MD-14, E34, EI-25, OP-146 I10): clients, realm settings and
+//! Identity plane configuration (MD-14, E34, EI-25, OP-146 I10): clients, environment settings and
 //! claim mappers. Every write names a committed ALLOW of an `idp.*` action that was bound in
 //! the same transaction; the database refuses any other write.
 
-pub mod realm;
+pub mod environment;
 
 use sqlx::types::Uuid;
 
@@ -23,10 +23,10 @@ fn uint(v: i32) -> Result<u32, StoreError> {
 }
 
 fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
-    let realm = t.realm().ok_or(StoreError::Range)?;
+    let environment = t.environment().ok_or(StoreError::Range)?;
     Ok((
         Uuid::from_bytes(*t.tenant.as_bytes()),
-        Uuid::from_bytes(*realm.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
     ))
 }
 
@@ -39,12 +39,12 @@ pub async fn subject_party(
     t: &mut TenantTx,
     subject: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT party_id FROM access.subject_party
-          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
     )
     .fetch_optional(&mut *t.tx)
@@ -53,7 +53,7 @@ pub async fn subject_party(
         .transpose()
 }
 
-/// The session subject bound to `party` in this realm (OP-149 m.16 (a), A11).
+/// The session subject bound to `party` in this environment (OP-149 m.16 (a), A11).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -61,12 +61,12 @@ pub async fn party_subject(
     t: &mut TenantTx,
     party: &[u8; 16],
 ) -> Result<Option<[u8; 16]>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT subject_id FROM access.subject_party
-          WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND party_id = $3",
         tenant,
-        realm,
+        environment,
         party.as_slice(),
     )
     .fetch_optional(&mut *t.tx)
@@ -84,12 +84,12 @@ pub async fn bind_subject_party(
     subject: &[u8; 16],
     party: &[u8; 16],
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "INSERT INTO access.subject_party (tenant_id, realm_id, subject_id, party_id)
+        "INSERT INTO access.subject_party (tenant_id, environment_id, subject_id, party_id)
          VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(*subject),
         party.as_slice(),
     )
@@ -100,7 +100,7 @@ pub async fn bind_subject_party(
 
 /// A committed ALLOW as the identity plane binds it (EI-25).
 pub struct Decision<'a> {
-    /// The realm's governing domain.
+    /// The environment's governing domain.
     pub domain: &'a DomainId,
     /// Position of the decision record.
     pub position: u64,
@@ -137,7 +137,7 @@ impl Bound {
     }
 }
 
-/// A realm as its configuration is governed (MD-5a).
+/// An environment as its configuration is governed (MD-5a).
 pub struct Governing {
     /// The governing domain.
     pub domain: DomainId,
@@ -147,17 +147,17 @@ pub struct Governing {
     pub issuer: Option<String>,
 }
 
-/// The transaction realm's governing domain, slug and issuer, when the realm is active.
+/// The transaction environment's governing domain, slug and issuer, when the environment is active.
 ///
 /// # Errors
-/// [`StoreError`]; [`StoreError::Range`] for a transaction without a realm.
+/// [`StoreError`]; [`StoreError::Range`] for a transaction without an environment.
 pub async fn governance(t: &mut TenantTx) -> Result<Option<Governing>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT governing_domain_id, slug, issuer FROM access.realms
-          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'",
+        "SELECT governing_domain_id, slug, issuer FROM access.environments
+          WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active'",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?;
@@ -173,23 +173,23 @@ pub async fn governance(t: &mut TenantTx) -> Result<Option<Governing>, StoreErro
     .transpose()
 }
 
-/// Binds a committed ALLOW to the transaction's realm. `None` when it is already bound: a
+/// Binds a committed ALLOW to the transaction's environment. `None` when it is already bound: a
 /// retry of a decision already applied.
 ///
 /// # Errors
-/// [`StoreError`]; a decision that is not an ALLOW of this intent in the realm's governing
+/// [`StoreError`]; a decision that is not an ALLOW of this intent in the environment's governing
 /// domain fails in the database.
 pub async fn bind(t: &mut TenantTx, d: &Decision<'_>) -> Result<Option<Bound>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let position = signed(d.position)?;
     let bound = sqlx::query_scalar!(
         r#"INSERT INTO access.idp_config_log
-             (tenant_id, realm_id, domain_id, decision_pos, nonce, intent_digest, change_digest, action)
+             (tenant_id, environment_id, domain_id, decision_pos, nonce, intent_digest, change_digest, action)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (tenant_id, domain_id, decision_pos) DO NOTHING
            RETURNING decision_pos"#,
         tenant,
-        realm,
+        environment,
         d.domain.as_bytes().as_slice(),
         position,
         d.nonce,
@@ -253,11 +253,11 @@ pub struct ClientRow {
     pub event_receiver: Option<String>,
     /// Whether its authorization requests are accepted only from `/par` (RFC 9126 §6).
     pub require_par: bool,
-    /// Whether it reads the realm's public `sub` instead of a pairwise one (MD-10 opt-in).
+    /// Whether it reads the environment's public `sub` instead of a pairwise one (MD-10 opt-in).
     pub public_sub: bool,
     /// Its sector identifier URI, checked when it was registered (OIDC Core §8.1).
     pub sector_identifier_uri: Option<String>,
-    /// Whether the realm registered it as a third party, which asks before it receives identity
+    /// Whether the environment registered it as a third party, which asks before it receives identity
     /// claims (OP-153 m.3 (z)).
     pub third_party: bool,
 }
@@ -271,9 +271,9 @@ pub async fn insert_client(
     bound: &Bound,
     c: &ClientRow,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
+        "INSERT INTO access.idp_clients (tenant_id, environment_id, client_uuid, client_id, display_name,
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
                 post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
                 service_key, suiss_event_receiver, require_pushed_authorization_requests,
@@ -281,7 +281,7 @@ pub async fn insert_client(
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
                  $19, $20, $21)",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(c.client_uuid),
         c.client_id,
         c.display_name,
@@ -316,7 +316,7 @@ pub async fn update_client(
     bound: &Bound,
     c: &ClientRow,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,
                 redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,
@@ -324,9 +324,9 @@ pub async fn update_client(
                 platform_product = $14, service_key = $15, suiss_event_receiver = $16,
                 require_pushed_authorization_requests = $17, subject_type = $18,
                 sector_identifier_uri = $19, third_party = $20
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         c.client_id,
         c.display_name,
         c.auth_method,
@@ -365,13 +365,13 @@ pub async fn retire_client(
     bound: &Bound,
     client_id: &str,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_clients SET status = 'retired', retired_at = now(), domain_id = $4,
                 decision_pos = $5
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
-        realm,
+        environment,
         client_id,
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -382,21 +382,21 @@ pub async fn retire_client(
     Ok(done == 1)
 }
 
-/// The realm's client with `client_id`, active or retired.
+/// The environment's client with `client_id`, active or retired.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
                 secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
                 platform_product, service_key, suiss_event_receiver,
                 require_pushed_authorization_requests, subject_type, sector_identifier_uri,
                 third_party
-           FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
+           FROM access.idp_clients WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3",
         tenant,
-        realm,
+        environment,
         client_id,
     )
     .fetch_optional(&mut *t.tx)
@@ -429,7 +429,7 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
     .transpose()
 }
 
-/// An active platform product client as the authorization server of any realm sees it (OP-149
+/// An active platform product client as the authorization server of any environment sees it (OP-149
 /// m.26 (a), (f), m.34 (b)): its internal id, the pairwise sector of the `sub`s it reads, and its
 /// product.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -485,7 +485,7 @@ pub async fn platform_clients_with_redirect(
     .await?)
 }
 
-/// The active clients of the realm that registered `redirect_uri` exactly (IDP-7).
+/// The active clients of the environment that registered `redirect_uri` exactly (IDP-7).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -493,20 +493,20 @@ pub async fn clients_with_redirect(
     t: &mut TenantTx,
     redirect_uri: &str,
 ) -> Result<Vec<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
         "SELECT client_id FROM access.idp_clients
-          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active' AND $3 = ANY (redirect_uris)
+          WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active' AND $3 = ANY (redirect_uris)
           ORDER BY client_id",
         tenant,
-        realm,
+        environment,
         redirect_uri,
     )
     .fetch_all(&mut *t.tx)
     .await?)
 }
 
-/// The realm's client with internal id `uuid`, active or retired.
+/// The environment's client with internal id `uuid`, active or retired.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -514,12 +514,12 @@ pub async fn client_by_uuid(
     t: &mut TenantTx,
     uuid: [u8; 16],
 ) -> Result<Option<ClientRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let id = sqlx::query_scalar!(
         "SELECT client_id FROM access.idp_clients
-          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3",
+          WHERE tenant_id = $1 AND environment_id = $2 AND client_uuid = $3",
         tenant,
-        realm,
+        environment,
         Uuid::from_bytes(uuid),
     )
     .fetch_optional(&mut *t.tx)
@@ -530,29 +530,29 @@ pub async fn client_by_uuid(
     }
 }
 
-/// How many active clients of the transaction's realm read its public `sub` (MD-10): discovery
+/// How many active clients of the transaction's environment read its public `sub` (MD-10): discovery
 /// lists `public` among `subject_types_supported` only when at least one does.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn public_sub_clients(t: &mut TenantTx) -> Result<u64, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let n = sqlx::query_scalar!(
         r#"SELECT count(*) AS "n!" FROM access.idp_clients
-            WHERE tenant_id = $1 AND realm_id = $2 AND subject_type = 'public'
+            WHERE tenant_id = $1 AND environment_id = $2 AND subject_type = 'public'
               AND status = 'active'"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_one(&mut *t.tx)
     .await?;
     u64::try_from(n).map_err(|_| StoreError::Corrupt)
 }
 
-/// A realm's settings (OP-146 m.4 (f), m.8 (e), IDP-5, §11.3).
+/// An environment's settings (OP-146 m.4 (f), m.8 (e), IDP-5, §11.3).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettingsRow {
-    /// JOSE signing algorithm of the realm's tokens.
+    /// JOSE signing algorithm of the environment's tokens.
     pub jose_alg: String,
     /// Argon2id memory in KiB.
     pub argon2_m_kib: u32,
@@ -568,33 +568,33 @@ pub struct SettingsRow {
     pub cimd_domains: Vec<String>,
 }
 
-/// Writes the Genesis defaults of the transaction's realm.
+/// Writes the Genesis defaults of the transaction's environment.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn create_settings(t: &mut TenantTx) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_realm_settings (tenant_id, realm_id) VALUES ($1, $2)",
+        "INSERT INTO access.idp_environment_settings (tenant_id, environment_id) VALUES ($1, $2)",
         tenant,
-        realm,
+        environment,
     )
     .execute(&mut *t.tx)
     .await?;
     Ok(())
 }
 
-/// The transaction realm's settings.
+/// The transaction environment's settings.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn settings(t: &mut TenantTx) -> Result<Option<SettingsRow>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let row = sqlx::query!(
         "SELECT jose_alg, argon2_m_kib, argon2_t, argon2_p, rp_id, cimd_enabled, cimd_domains
-           FROM access.idp_realm_settings WHERE tenant_id = $1 AND realm_id = $2",
+           FROM access.idp_environment_settings WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?;
@@ -612,7 +612,7 @@ pub async fn settings(t: &mut TenantTx) -> Result<Option<SettingsRow>, StoreErro
     .transpose()
 }
 
-/// Replaces the transaction realm's settings under `bound`.
+/// Replaces the transaction environment's settings under `bound`.
 ///
 /// # Errors
 /// [`StoreError`]; lower Argon2 parameters fail (OP-33).
@@ -621,14 +621,14 @@ pub async fn update_settings(
     bound: &Bound,
     s: &SettingsRow,
 ) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let done = sqlx::query!(
-        "UPDATE access.idp_realm_settings SET jose_alg = $3, argon2_m_kib = $4, argon2_t = $5,
+        "UPDATE access.idp_environment_settings SET jose_alg = $3, argon2_m_kib = $4, argon2_t = $5,
                 argon2_p = $6, rp_id = $7, cimd_enabled = $8, cimd_domains = $9, domain_id = $10,
                 decision_pos = $11
-          WHERE tenant_id = $1 AND realm_id = $2",
+          WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
         s.jose_alg,
         int(s.argon2_m_kib)?,
         int(s.argon2_t)?,
@@ -655,18 +655,18 @@ pub async fn set_mapper(
     claim: &str,
     source: Option<&str>,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_claim_mappers (tenant_id, realm_id, claim, source, status,
+        "INSERT INTO access.idp_claim_mappers (tenant_id, environment_id, claim, source, status,
                 removed_at, domain_id, decision_pos)
          VALUES ($1, $2, $3, $4, CASE WHEN $4::text IS NULL THEN 'removed' ELSE 'active' END,
                  CASE WHEN $4::text IS NULL THEN now() END, $5, $6)
-         ON CONFLICT (tenant_id, realm_id, claim) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id, claim) DO UPDATE
             SET source = EXCLUDED.source, status = EXCLUDED.status,
                 removed_at = EXCLUDED.removed_at, domain_id = EXCLUDED.domain_id,
                 decision_pos = EXCLUDED.decision_pos",
         tenant,
-        realm,
+        environment,
         claim,
         source,
         bound.domain.as_bytes().as_slice(),
@@ -677,24 +677,24 @@ pub async fn set_mapper(
     Ok(())
 }
 
-/// The realm's active mappers as `(claim, source)`, by claim.
+/// The environment's active mappers as `(claim, source)`, by claim.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn mappers(t: &mut TenantTx) -> Result<Vec<(String, String)>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         r#"SELECT claim, source AS "source!" FROM access.idp_claim_mappers
-            WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active' ORDER BY claim"#,
+            WHERE tenant_id = $1 AND environment_id = $2 AND status = 'active' ORDER BY claim"#,
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
     Ok(rows.into_iter().map(|r| (r.claim, r.source)).collect())
 }
 
-/// Writes the realm's branding under `bound` (TN-106); `branding` is its deterministic CBOR.
+/// Writes the environment's branding under `bound` (TN-106); `branding` is its deterministic CBOR.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -703,16 +703,16 @@ pub async fn set_branding(
     bound: &Bound,
     branding: &[u8],
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_realm_branding (tenant_id, realm_id, branding, domain_id,
+        "INSERT INTO access.idp_environment_branding (tenant_id, environment_id, branding, domain_id,
                 decision_pos)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id) DO UPDATE
             SET branding = EXCLUDED.branding, domain_id = EXCLUDED.domain_id,
                 decision_pos = EXCLUDED.decision_pos",
         tenant,
-        realm,
+        environment,
         branding,
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -722,25 +722,25 @@ pub async fn set_branding(
     Ok(())
 }
 
-/// The realm's branding as its deterministic CBOR, once one was decided.
+/// The environment's branding as its deterministic CBOR, once one was decided.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn branding(t: &mut TenantTx) -> Result<Option<Vec<u8>>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        "SELECT branding FROM access.idp_realm_branding WHERE tenant_id = $1 AND realm_id = $2",
+        "SELECT branding FROM access.idp_environment_branding WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?)
 }
 
-/// A decided change of the realm's JOSE keys (TN-118, §13.2).
+/// A decided change of the environment's JOSE keys (TN-118, §13.2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyChange {
-    /// `idp.realm.key_policy`, `idp.realm.key_rotate` or `idp.realm.key_drop`.
+    /// `idp.environment.key_policy`, `idp.environment.key_rotate` or `idp.environment.key_drop`.
     pub action: String,
     /// The key rotated out or dropped.
     pub kid: Option<[u8; 32]>,
@@ -776,13 +776,13 @@ pub async fn record_key_change(
     bound: &Bound,
     c: &KeyChange,
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_realm_key_changes (tenant_id, realm_id, domain_id, decision_pos,
+        "INSERT INTO access.idp_environment_key_changes (tenant_id, environment_id, domain_id, decision_pos,
                 action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         tenant,
-        realm,
+        environment,
         bound.domain.as_bytes().as_slice(),
         bound.position,
         c.action,
@@ -797,18 +797,18 @@ pub async fn record_key_change(
     Ok(())
 }
 
-/// The realm's decided key changes, oldest first.
+/// The environment's decided key changes, oldest first.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn key_changes(t: &mut TenantTx) -> Result<Vec<KeyChange>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     let rows = sqlx::query!(
         "SELECT action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms
-           FROM access.idp_realm_key_changes WHERE tenant_id = $1 AND realm_id = $2
+           FROM access.idp_environment_key_changes WHERE tenant_id = $1 AND environment_id = $2
           ORDER BY declared_at_ms, decision_pos",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -826,7 +826,7 @@ pub async fn key_changes(t: &mut TenantTx) -> Result<Vec<KeyChange>, StoreError>
         .collect()
 }
 
-/// N5: writes the realm's Related Origins under `bound` (TN-18, OP-153 m.3 (u)).
+/// N5: writes the environment's Related Origins under `bound` (TN-18, OP-153 m.3 (u)).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -835,16 +835,16 @@ pub async fn set_related_origins(
     bound: &Bound,
     origins: &[String],
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_realm_related_origins (tenant_id, realm_id, origins, domain_id,
+        "INSERT INTO access.idp_environment_related_origins (tenant_id, environment_id, origins, domain_id,
                 decision_pos)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id) DO UPDATE
             SET origins = EXCLUDED.origins, domain_id = EXCLUDED.domain_id,
                 decision_pos = EXCLUDED.decision_pos",
         tenant,
-        realm,
+        environment,
         origins,
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -854,24 +854,24 @@ pub async fn set_related_origins(
     Ok(())
 }
 
-/// N5: the realm's Related Origins, once decided.
+/// N5: the environment's Related Origins, once decided.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn related_origins(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        "SELECT origins FROM access.idp_realm_related_origins
-          WHERE tenant_id = $1 AND realm_id = $2",
+        "SELECT origins FROM access.idp_environment_related_origins
+          WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?
     .unwrap_or_default())
 }
 
-/// N5: writes the realm's message overrides under `bound` (OP-153 m.3 (s)); `overrides` is
+/// N5: writes the environment's message overrides under `bound` (OP-153 m.3 (s)); `overrides` is
 /// their deterministic CBOR.
 ///
 /// # Errors
@@ -881,16 +881,16 @@ pub async fn set_locale_overrides(
     bound: &Bound,
     overrides: &[u8],
 ) -> Result<(), StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     sqlx::query!(
-        "INSERT INTO access.idp_realm_locale_overrides (tenant_id, realm_id, overrides, domain_id,
+        "INSERT INTO access.idp_environment_locale_overrides (tenant_id, environment_id, overrides, domain_id,
                 decision_pos)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+         ON CONFLICT (tenant_id, environment_id) DO UPDATE
             SET overrides = EXCLUDED.overrides, domain_id = EXCLUDED.domain_id,
                 decision_pos = EXCLUDED.decision_pos",
         tenant,
-        realm,
+        environment,
         overrides,
         bound.domain.as_bytes().as_slice(),
         bound.position,
@@ -900,35 +900,35 @@ pub async fn set_locale_overrides(
     Ok(())
 }
 
-/// N5: the realm's message overrides as their deterministic CBOR, once decided.
+/// N5: the environment's message overrides as their deterministic CBOR, once decided.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn locale_overrides(t: &mut TenantTx) -> Result<Option<Vec<u8>>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
-        "SELECT overrides FROM access.idp_realm_locale_overrides
-          WHERE tenant_id = $1 AND realm_id = $2",
+        "SELECT overrides FROM access.idp_environment_locale_overrides
+          WHERE tenant_id = $1 AND environment_id = $2",
         tenant,
-        realm,
+        environment,
     )
     .fetch_optional(&mut *t.tx)
     .await?)
 }
 
-/// N5: the domains the realm's organizations hold verified now (TN-90, OP-153 m.3 (u)).
+/// N5: the domains the environment's organizations hold verified now (TN-90, OP-153 m.3 (u)).
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn verified_domains(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
-    let (tenant, realm) = scope(t)?;
+    let (tenant, environment) = scope(t)?;
     Ok(sqlx::query_scalar!(
         "SELECT DISTINCT domain FROM access.org_domains
-          WHERE tenant_id = $1 AND realm_id = $2 AND released_at IS NULL
+          WHERE tenant_id = $1 AND environment_id = $2 AND released_at IS NULL
             AND verified_at IS NOT NULL AND reverify_by > clock_timestamp()
           ORDER BY domain",
         tenant,
-        realm,
+        environment,
     )
     .fetch_all(&mut *t.tx)
     .await?)

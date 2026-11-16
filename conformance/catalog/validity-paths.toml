@@ -54,7 +54,7 @@ code = ["crates/identity-oauth/src/app/oauth/resource.rs"]
 id = "EP-4"
 path = "JWT-only resource server"
 rows = ["U36", "N-39", "HL-22"]
-cache_miss = "not applicable: the resource server keeps no revocation cache, only realm JWKS keys"
+cache_miss = "not applicable: the resource server keeps no revocation cache, only environment JWKS keys"
 partition = "accepted within the token lifetime; without a JWKS refresh only with the keys it already has, within key_epoch"
 restart = "as above"
 staleness = "horizon = access token lifetime + clock skew (PD: at most 60 min admin, 5 min fast profile)"

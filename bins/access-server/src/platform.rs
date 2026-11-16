@@ -1,5 +1,5 @@
 //! The platform product API of this process (OP-149 m.4, m.16 (a), m.17 (e), (g)): pairing and
-//! event streams for platform clients, over the identity plane's stores, the realm directory,
+//! event streams for platform clients, over the identity plane's stores, the environment directory,
 //! clients' JWKS documents and the authority plane. The same API verifies the client assertions
 //! the product routes accept (OP-149 m.37).
 
@@ -17,18 +17,18 @@ use access_identity_oauth::adapters::outbound::Outbound;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 
 use crate::events::EventPools;
-use crate::login::RealmKeks;
+use crate::login::EnvironmentKeks;
 
 /// The platform API of this process over the authority plane `I`.
 pub(crate) type Api<I> =
-    PlatformApi<PgDirectory, HttpClientKeys, I, KekSealer<RealmKeks>, OsRandom, SystemClock>;
+    PlatformApi<PgDirectory, HttpClientKeys, I, KekSealer<EnvironmentKeks>, OsRandom, SystemClock>;
 
 /// The platform routes under `api_base`, and the API behind them for the product routes'
 /// assertion verification (OP-149 m.37).
 pub(crate) fn routes<I: Instances + 'static>(
     pools: &EventPools,
     outbound: Outbound,
-    keks: RealmKeks,
+    keks: EnvironmentKeks,
     instances: I,
     api_base: String,
 ) -> (axum::Router, Arc<Api<I>>) {

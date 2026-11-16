@@ -2,7 +2,7 @@
 
 Sign-in risk of the Access identity plane: signals, a deterministic score, shadow and monitor
 modes, the GeoIP/ASN source, breached-password checks, canary credentials, a human review queue,
-and per-realm analytics.
+and per-environment analytics.
 
 Risk only narrows. It can ask a user for one more step, tell a relying party that the level
 changed, and put an item in front of a person. It never allows anything, and it never locks an
@@ -25,7 +25,7 @@ requirements; nothing SL1 asks for is ever removed.
 |---|---|---|
 | `canary_hit` | a canary account's credential matched | 100 |
 | `impossible_travel` | more than 500 km from the last sign-in place, faster than 1000 km/h | 60 |
-| `suspicious_ip` | the address's ASN is on the realm's deny list (no third-party reputation feed) | 40 |
+| `suspicious_ip` | the address's ASN is on the environment's deny list (no third-party reputation feed) | 40 |
 | `breached_password` | the presented password is in the k-anonymity breach range | 40 |
 | `brute_force` | the account counted 5 or more failed password attempts before this one | 30 |
 | `new_device` | the browser has no valid device marker for the account | 20 |
@@ -48,7 +48,7 @@ emotion inference are not inputs.
 
 ## Modes
 
-The realm setting `idp.realm.protection_mode` is configuration like any other `idp.*` action:
+The environment setting `idp.environment.protection_mode` is configuration like any other `idp.*` action:
 written only against a committed decision. Tightening is CT1, loosening is CT2.
 
 | Setting | Values | Default |
@@ -57,7 +57,7 @@ written only against a committed decision. Tightening is CT1, loosening is CT2.
 | `brute_force` | always `enforce`: the login throttle is never switched off | `enforce` |
 | `sl2` | `shadow` → `stepup` → `stepup_caep` | `shadow` |
 
-A new realm stays in `shadow` for 14 days whatever is set. Reviewers mark items `confirmed`,
+A new environment stays in `shadow` for 14 days whatever is set. Reviewers mark items `confirmed`,
 `false_positive` or `dismissed`; the false-positive budget is 0.5 % of step-up requests over 30
 days, exported as `access_risk_fp_ratio_ppm` with an alert above 5000.
 
@@ -78,13 +78,13 @@ days, exported as `access_risk_fp_ratio_ppm` with an alert above 5000.
 
 ## Privacy
 
-- An address is never stored. SL2 keeps a keyed pseudonym (HMAC in the token, per realm) and the
+- An address is never stored. SL2 keeps a keyed pseudonym (HMAC in the token, per environment) and the
   `/24` or `/48` prefix, with a coarse place (a hundredth of a degree), and nothing of it reaches
   telemetry.
-- Metrics carry no tenant, realm or domain label.
-- Analytics are daily counters per realm (funnel, method distribution, passkey adoption, MFA
+- Metrics carry no tenant, environment or domain label.
+- Analytics are daily counters per environment (funnel, method distribution, passkey adoption, MFA
   setup, failed logins, risk step-ups and false positives) with no identifier and no pseudonym.
-  They are read only through a realm-scoped transaction and are never a decision input.
+  They are read only through an environment-scoped transaction and are never a decision input.
 
 ## Incident order
 

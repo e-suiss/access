@@ -1,6 +1,6 @@
 //! The primitives of XML Signature and XML Encryption for the SAML identity provider (OP-155
 //! m.3 (d), (e), §10.6.1, §13.2, CR-4, TI-9): SHA-2 digests; RSA PKCS#1 v1.5 and ECDSA
-//! verification for the parser worker; the realm's RSA-3072 and P-256 SAML keys for the identity
+//! verification for the parser worker; the environment's RSA-3072 and P-256 SAML keys for the identity
 //! signer; and AES-256-GCM with RSA-OAEP (SHA-256, MGF1 SHA-256) for encrypted assertions. SHA-1,
 //! RSA 1.5 encryption, PSS and Ed25519 have no entry here.
 

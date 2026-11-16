@@ -1,4 +1,4 @@
-//! Realm profile checks (OP-159 m.3 (ii), §10.3.4): a read-only report of a realm's settings
+//! Environment profile checks (OP-159 m.3 (ii), §10.3.4): a read-only report of an environment's settings
 //! view against the authentication requirements of PCI DSS 4.0 Req 8 or OMB M-22-09. The
 //! report is evidence for the operator's own assessment; it changes nothing and claims no
 //! conformity (SA-53).
@@ -65,11 +65,11 @@ pub struct Finding {
     pub control: &'static str,
     /// The outcome.
     pub result: Outcome,
-    /// What the realm's settings say.
+    /// What the environment's settings say.
     pub observed: String,
 }
 
-/// The report of one realm under one profile.
+/// The report of one environment under one profile.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Report {
     /// The profile's name.
@@ -92,12 +92,12 @@ impl Outcome {
 }
 
 impl Report {
-    /// The report as JSON, for `access-cli realm check`.
+    /// The report as JSON, for `access-cli environment check`.
     #[must_use]
-    pub fn to_json(&self, realm: &str) -> Value {
+    pub fn to_json(&self, environment: &str) -> Value {
         json!({
             "profile": self.profile,
-            "realm": realm,
+            "environment": environment,
             "passed": self.passed,
             "checks": self.checks.iter().map(|c| json!({
                 "check": c.check,
@@ -280,7 +280,7 @@ fn m2209(v: &View) -> Vec<Finding> {
     vec![mfa(v, "M-22-09 2.B"), phishing, sms]
 }
 
-/// The report of `settings`, a realm's settings view (`GET …/settings`), under `profile`.
+/// The report of `settings`, an environment's settings view (`GET …/settings`), under `profile`.
 #[must_use]
 pub fn check(profile: Profile, settings: &Value) -> Report {
     let v = View::read(settings);
@@ -318,7 +318,7 @@ mod tests {
 
     // OP-159 m.3 (ii), §10.3.4
     #[test]
-    fn a_weak_realm_fails_req_8_and_a_hardened_one_passes() {
+    fn a_weak_environment_fails_req_8_and_a_hardened_one_passes() {
         let weak = view(&["email", "passkey"], false, 1_800_000, true, true);
         let r = check(Profile::PciDss4, &weak);
         assert!(!r.passed);

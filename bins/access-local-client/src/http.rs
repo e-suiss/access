@@ -365,10 +365,10 @@ mod tests {
     // OP-149 m.22, m.26 (b)
     #[test]
     fn urls_are_https_only() {
-        let u = Url::parse("https://access-server:8443/realms/acme/authorize?a=1").unwrap();
+        let u = Url::parse("https://access-server:8443/env/acme/authorize?a=1").unwrap();
         assert_eq!(
             (u.host.as_str(), u.port, u.path.as_str()),
-            ("access-server", 8443, "/realms/acme/authorize?a=1")
+            ("access-server", 8443, "/env/acme/authorize?a=1")
         );
         assert_eq!(u.host_header(), "access-server:8443");
         assert_eq!(u.origin(), "https://access-server:8443");

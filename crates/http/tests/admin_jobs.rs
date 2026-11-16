@@ -19,9 +19,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
 
-use admin::{HIDDEN_KEY, Harness, REALM, ais, ais_over, read, realm_domain, send};
+use admin::{ENVIRONMENT, HIDDEN_KEY, Harness, ais, ais_over, environment_domain, read, send};
 
-const JOBS: &str = "/admin/v1/realms/acme/jobs";
+const JOBS: &str = "/admin/v1/envs/acme/jobs";
 
 fn post(path: &str, nonce: [u8; 16], body: &Value) -> Request<Body> {
     Request::builder()
@@ -34,7 +34,12 @@ fn post(path: &str, nonce: [u8; 16], body: &Value) -> Request<Body> {
 }
 
 async fn settle(h: &Harness, id: &str) -> Value {
-    let token = h.token("jobs", "access-admin:realm:acme", &["realm.read"], 600_000);
+    let token = h.token(
+        "jobs",
+        "access-admin:environment:acme",
+        &["environment.read"],
+        600_000,
+    );
     let router = h.router();
     for _ in 0..10_000 {
         let (_, body) = send(&router, read(&format!("{JOBS}/{id}"), &token)).await;
@@ -51,11 +56,16 @@ async fn settle(h: &Harness, id: &str) -> Value {
 async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     let h = Harness::new();
     let router = h.router();
-    let own = h.instance(realm_domain());
-    let token = h.token("t", "access-admin:realm:acme", &["realm.read"], 600_000);
+    let own = h.instance(environment_domain());
+    let token = h.token(
+        "t",
+        "access-admin:environment:acme",
+        &["environment.read"],
+        600_000,
+    );
     let item = |n: u8, key: &str| {
         json!({"operation": "suspendAccount", "key": key,
-               "body": {"ais": ais(&own, realm_domain(), [n; 16], h.now())}})
+               "body": {"ais": ais(&own, environment_domain(), [n; 16], h.now())}})
     };
     let body = json!({"mode": "sequential",
                       "operations": [item(1, "a1"), item(2, HIDDEN_KEY), item(3, "a3")]});
@@ -64,11 +74,11 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
         &router,
         Request::builder()
             .method("POST")
-            .uri(format!("/admin/v1/realms/{REALM}/intents"))
+            .uri(format!("/admin/v1/envs/{ENVIRONMENT}/intents"))
             .header("authorization", format!("DPoP {token}"))
             .header(
                 "dpop",
-                admin::proof("POST", &format!("/admin/v1/realms/{REALM}/intents")),
+                admin::proof("POST", &format!("/admin/v1/envs/{ENVIRONMENT}/intents")),
             )
             .header("content-type", "application/json")
             .body(Body::from(
@@ -83,7 +93,7 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
         .try_into()
         .unwrap();
     let mut wrong = body.clone();
-    wrong["ais"] = json!(ais(&own, realm_domain(), [9; 16], h.now()));
+    wrong["ais"] = json!(ais(&own, environment_domain(), [9; 16], h.now()));
     let (r, refused) = send(&router, post(JOBS, [9; 16], &wrong)).await;
     assert_eq!(
         (r.status(), refused["code"].as_str()),
@@ -93,7 +103,7 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     let mut envelope = body.clone();
     envelope["ais"] = json!(ais_over(
         &own,
-        realm_domain(),
+        environment_domain(),
         [10; 16],
         h.now(),
         Mode::Commit,
@@ -128,16 +138,21 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
 async fn a_parallel_job_keeps_going_and_refuses_a_foreign_item_ais() {
     let h = Harness::new();
     let router = h.router();
-    let own = h.instance(realm_domain());
-    let other = h.instance(realm_domain());
+    let own = h.instance(environment_domain());
+    let other = h.instance(environment_domain());
     let body = json!({"mode": "parallel", "operations": [
         {"operation": "suspendAccount", "key": "a1",
-         "body": {"ais": ais(&other, realm_domain(), [1; 16], h.now())}},
+         "body": {"ais": ais(&other, environment_domain(), [1; 16], h.now())}},
         {"operation": "suspendAccount", "key": "a2",
-         "body": {"ais": ais(&own, realm_domain(), [2; 16], h.now())}},
+         "body": {"ais": ais(&own, environment_domain(), [2; 16], h.now())}},
     ]});
-    let token = h.token("t", "access-admin:realm:acme", &["realm.read"], 600_000);
-    let path = format!("/admin/v1/realms/{REALM}/intents");
+    let token = h.token(
+        "t",
+        "access-admin:environment:acme",
+        &["environment.read"],
+        600_000,
+    );
+    let path = format!("/admin/v1/envs/{ENVIRONMENT}/intents");
     let (_, drafted) = send(
         &router,
         Request::builder()
@@ -159,7 +174,7 @@ async fn a_parallel_job_keeps_going_and_refuses_a_foreign_item_ais() {
     let mut envelope = body;
     envelope["ais"] = json!(ais_over(
         &own,
-        realm_domain(),
+        environment_domain(),
         [5; 16],
         h.now(),
         Mode::Commit,

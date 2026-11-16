@@ -36,12 +36,12 @@ pub const ALGORITHM_PROFILE_CONFLICT: Code = code(
     "The domain declares the FIPS crypto profile, so ML-DSA cannot join its algorithm allowlist (CR-44, HL-27, OP-159 m.3 (r)).",
 );
 
-/// The realm's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r)).
+/// The environment's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r)).
 pub const FIPS_PQ_EXCLUSIVE: Code = code(
     "fips-pq-exclusive",
     409,
     "Conflict",
-    "The realm's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r)).",
+    "The environment's FIPS crypto profile and its post-quantum signing profile cannot both be on, whichever comes first (CR-44, HL-27, OP-159 m.3 (r)).",
 );
 
 /// The offline projection would exceed its carrier's size budget, so it is not produced (CR-43, OP-159 m.3 (p)).
@@ -60,12 +60,12 @@ pub const PROJECTION_REF_EXPIRED: Code = code(
     "The referenced projection expired and its blob was shredded; ask for a new projection (CR-43, OP-73, OP-159 m.3 (q)).",
 );
 
-/// The attestation statement's format is not supported or does not verify under the realm's direct attestation policy (§10.2.4, OP-159 m.3 (ll)).
+/// The attestation statement's format is not supported or does not verify under the environment's direct attestation policy (§10.2.4, OP-159 m.3 (ll)).
 pub const ATTESTATION_FORMAT: Code = code(
     "attestation-format",
     422,
     "Unprocessable Content",
-    "The attestation statement's format is not supported or does not verify under the realm's direct attestation policy (§10.2.4, OP-159 m.3 (ll)).",
+    "The attestation statement's format is not supported or does not verify under the environment's direct attestation policy (§10.2.4, OP-159 m.3 (ll)).",
 );
 
 /// The revocation status of the attestation chain could not be read, so the direct attestation policy refuses the registration (§10.2.4, OP-159 m.3 (ll)).
