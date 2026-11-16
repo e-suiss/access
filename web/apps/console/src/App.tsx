@@ -1,4 +1,4 @@
-// TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b), m.42: the console shell. Admin, Developer, Audit and
+// TN-128, IA-5, §8.17.4.1, OP-159 m.41 (b), m.42, m.43 (b): the console shell. Admin, Developer, Audit and
 // Platform appear only when the eligibility check says the viewer can exercise one of their actions; without this browser's
 // device key nothing is probed and nothing appears.
 import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } from "react";
@@ -23,6 +23,7 @@ import { find, type Instance } from "./lib/instance.js";
 import {
   clearSignInStarted,
   consoleHref,
+  knownRealms,
   lastRealm,
   rememberRealm,
   signInJustStarted,
@@ -36,12 +37,14 @@ import {
   visibleScreens,
   visibleSections,
 } from "./lib/sections.js";
+import { platformRealms } from "./lib/realms.js";
+import { RealmSwitcher } from "./RealmSwitcher.js";
 import { Authority } from "./screens/Authority.js";
 import { About, Profile, Sessions } from "./screens/Own.js";
 import { SectionPage } from "./screens/Section.js";
 import { NoRealm, OtherRealm, SignIn, SigningIn } from "./screens/SignIn.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
-import { Busy, Failure, MONO } from "./ui.js";
+import { Busy, Failure } from "./ui.js";
 
 const SECTIONS: ReadonlySet<string> = new Set<Section>(["admin", "developer", "audit", "platform"]);
 
@@ -201,6 +204,7 @@ export function App(): ReactElement {
   const [where, setWhere] = useState<Where>(() => routeOf(location.pathname));
   const [instance, setInstance] = useState<Instance | undefined>(undefined);
   const [screens, setScreens] = useState<ReadonlySet<Screen>>(new Set());
+  const [platform, setPlatform] = useState<readonly string[]>([]);
   const [confirm, signatureScreen] = useSignatureScreen();
   const [justStarted] = useState(signInJustStarted);
 
@@ -282,6 +286,19 @@ export function App(): ReactElement {
       active = false;
     };
   }, [session, instance]);
+
+  // OP-159 m.43 (b), TN-119
+  const platformViewer = instance !== undefined && visibleSections(screens).has("platform");
+  useEffect(() => {
+    if (!platformViewer) return;
+    let active = true;
+    void platformRealms(instance).then((r) => {
+      if (active) setPlatform(r);
+    });
+    return () => {
+      active = false;
+    };
+  }, [platformViewer, instance]);
 
   const go = (r: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -391,9 +408,15 @@ export function App(): ReactElement {
           <p className="font-semibold md:hidden">{t("brand")}</p>
           <p className="ms-auto min-w-0 truncate text-sm">
             <span data-testid="who">{s.display_name}</span>
-            <span className="text-muted-foreground"> · </span>
-            <span className={`${MONO} text-muted-foreground`}>{s.realm}</span>
           </p>
+          <RealmSwitcher
+            current={s.realm}
+            platform={platformViewer ? platform : []}
+            known={knownRealms()}
+            onGo={(r) => {
+              navigate(consoleHref(r));
+            }}
+          />
           <Button variant="outline" size="sm" onClick={signOut}>
             {t("signOut")}
           </Button>

@@ -112,7 +112,15 @@ kex_share = "optimistic"
 # (`tenant_create`, `realm_create`, `sandbox_create`) by a `grant_issue` Exercise: nobody holds
 # them by default (INV-29). It signs in to the console with the realm `platform`; the summary says
 # `platform_admin` (realm, issuer, identifier, subject, party, instance, actions, basis, totp).
+# OP-159 m.43 (c): in each of `realms` the same person also has an account with the same
+# identifier, password and authenticator app (`just totp platform` answers for both), and that
+# realm's root grants its Party every realm administration action the console asks about (the
+# `idp.*` actions and the Admin, Developer and Audit screens' meta-actions and reads; never
+# `idp.platform.*`), after opening the realm's delegated administration. The platform realm
+# gives it nothing there (TN-119, INV-29). It signs in at `/console/acme`; the summary says
+# `platform_admin.realms` (realm, issuer, subject, party, instance, grants, totp).
 [platform_admin]
 identifier = "admin@platform.local"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 totp_seed_file = "/var/lib/access/bootstrap/platform-admin-totp"
+realms = ["acme"]

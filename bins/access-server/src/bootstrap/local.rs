@@ -41,11 +41,14 @@ use access_identity_events::adapters::RealmKek as _;
 use access_identity_events::domain::catalog::IdentityKind;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::RealmEntry;
+use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::mfa::TOTP_SEED_BYTES;
 use access_identity_session::app::{Auth, Passkeys, TOTP};
 use access_identity_session::domain::codes::base32;
 use access_identity_session::domain::session::SessionPolicy;
+use access_identity_session::ports::Random;
 use access_identity_ui::adapters::{LogSignals, Outbox};
 use access_identity_ui::app::devices::{self, DeviceKey};
 use access_identity_ui::ports::{Kits as _, Messages as _, RealmKit};
@@ -83,6 +86,41 @@ pub(crate) const TEST_DEVICE_LABEL: &str = "access/bootstrap/test-user-device";
 
 /// The token label of the test user's software passkey (OP-149 m.26 (e)).
 pub(crate) const TEST_PASSKEY_LABEL: &str = "access/bootstrap/test-user-passkey";
+
+/// Where the seed of an authenticator app the bootstrap enrolls comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Seed {
+    /// The realm draws it, and the seed file receives it.
+    Drawn,
+    /// The seed file already holds it, the seed of the same person's app in another realm
+    /// (OP-159 m.43 (c)); `redrawn` when that realm drew it in this run.
+    Shared {
+        /// Whether the other realm drew the seed in this run.
+        redrawn: bool,
+    },
+}
+
+/// The operating system's randomness, except that the first TOTP seed drawn is the one it holds.
+struct SharedSeed(std::sync::Mutex<Option<Secret<Vec<u8>>>>);
+
+impl Random for SharedSeed {
+    fn fill(&self, out: &mut [u8]) -> Result<(), SessionError> {
+        if let Ok(out) = <&mut [u8; TOTP_SEED_BYTES]>::try_from(&mut *out) {
+            let held = self.0.lock().map_err(|_| SessionError::Random)?.take();
+            if let Some(seed) =
+                held.and_then(|s| <[u8; TOTP_SEED_BYTES]>::try_from(s.expose().as_slice()).ok())
+            {
+                *out = seed;
+                return Ok(());
+            }
+        }
+        OsRandom.fill(out)
+    }
+
+    fn salt(&self) -> Result<[u8; 16], SessionError> {
+        OsRandom.salt()
+    }
+}
 
 /// Who the bootstrap is in the account audit log (OP-10).
 const BOOTSTRAP: Actor<'static> = Actor {
@@ -287,7 +325,7 @@ where
                 &u.realm,
                 subject,
                 identifier.value(),
-                (true, u.totp.as_ref()),
+                (true, u.totp.as_ref().map(|f| (f, Seed::Drawn))),
             )
             .await?;
         let passkey = passkey.ok_or(BootstrapError::Encode)?;
@@ -340,6 +378,8 @@ where
     /// authenticator app (OP-149 m.26 (b), OP-159 m.41 (a), §10.2.2): the realm's own TOTP
     /// enrollment makes the seed, a code computed from it confirms it, and the seed goes to the
     /// plan's file; an account with an authenticator app and a file holding a seed keeps both.
+    /// With [`Seed::Shared`] the enrollment takes the seed the file already holds instead
+    /// (OP-159 m.43 (c)), and leaves the file as it is.
     /// Returns the passkey's credential id and the authenticator app.
     #[expect(
         clippy::too_many_lines,
@@ -350,8 +390,12 @@ where
         slug: &str,
         subject: [u8; 16],
         identifier: &str,
-        (passkey, totp): (bool, Option<&TotpSeedFile>),
+        (passkey, totp): (bool, Option<(&TotpSeedFile, Seed)>),
     ) -> Result<(Option<[u8; 32]>, Option<TotpOut>), BootstrapError> {
+        let random = SharedSeed(std::sync::Mutex::new(match totp {
+            Some((file, Seed::Shared { .. })) => Some(file.seed()?),
+            _ => None,
+        }));
         let authenticator = if passkey {
             let key = token_key(self.hsm, TEST_PASSKEY_LABEL)?;
             let PublicKey::Ed25519(public) = key.public_key() else {
@@ -404,7 +448,7 @@ where
             policy: kit.auth,
             lifetimes: kit.lifetimes,
             clock: &SystemClock,
-            random: &OsRandom,
+            random: &random,
             notifier: &notifier,
             link_base: &link_base,
             gate: &gate,
@@ -460,7 +504,7 @@ where
             }
         }
         let credential = authenticator.as_ref().map(|a| a.credential_id);
-        let Some(file) = totp else {
+        let Some((file, seed)) = totp else {
             return Ok((credential, None));
         };
         let params = TotpParams::DEFAULT;
@@ -470,7 +514,10 @@ where
             .map_err(down)?
             .iter()
             .any(|m| m.kind == TOTP);
-        let created = !(enrolled && file.held);
+        let created = match seed {
+            Seed::Drawn => !(enrolled && file.held),
+            Seed::Shared { redrawn } => !enrolled || redrawn,
+        };
         if created {
             let start = auth.start_totp(subject).await.map_err(down)?;
             let step = step_of(SystemClock.now_ms() / 1000, params.step_s);
@@ -482,7 +529,9 @@ where
             {
                 return Err(BootstrapError::Refused(format!("totp: {refused:?}")));
             }
-            file.write(&base32(start.seed.expose()))?;
+            if seed == Seed::Drawn {
+                file.write(&base32(start.seed.expose()))?;
+            }
         }
         Ok((
             credential,

@@ -35,6 +35,9 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       { tenant_id: "tnt_acme", status: "active", placement: "pool-default" },
     ],
   });
+  bff.admin.set("platform/tenants/tnt_platform/realms", {
+    items: [{ slug: "platform", tenant_id: "tnt_platform", status: "active", sandbox: false }],
+  });
   bff.admin.set("platform/tenants/tnt_acme/realms", {
     items: [{ slug: "acme", tenant_id: "tnt_acme", status: "active", sandbox: false }],
   });
@@ -112,10 +115,29 @@ test("the platform section shows only for a viewer whose Grant covers a platform
     "Sandbox domains",
     "Operator health",
   ]);
+  // OP-159 m.43 (c), §13.7.4: asked on the Grant naming it, which answers, and not again
   for (const a of ACTIONS) {
-    expect(bff.probesAsked).toContain(`idp.platform/${a}|anchor`);
     expect(bff.probesAsked).toContain(`idp.platform/${a}|holding`);
+    expect(bff.probesAsked).not.toContain(`idp.platform/${a}|anchor`);
   }
+});
+
+// OP-159 m.43 (b), TN-119: in a platform session the switcher lists the platform's realms
+test("in a platform session the switcher lists the platform's realms and opens one", async ({
+  page,
+  bff,
+}) => {
+  seedPlatform(bff);
+  await openPlatform(page, "/console/platform/platform");
+  const switcher = page.getByRole("button", { name: "Realm platform: switch realm" });
+  await switcher.click();
+  const menu = page.getByRole("menu");
+  const listed = menu.getByRole("group", { name: "Realms on this platform" });
+  await expect(listed.getByRole("menuitemradio")).toHaveText(["acme", "platform"]);
+  await expect(menu.getByRole("group", { name: "Signed in from this browser" })).toHaveCount(0);
+  await listed.getByRole("menuitemradio", { name: "acme" }).click();
+  await expect(page).toHaveURL(/\/console\/acme$/);
+  await expect(page.getByRole("button", { name: "Sign out and sign in to acme" })).toBeVisible();
 });
 
 // IA-5, fail closed: a Grant of one action shows only its screens
@@ -154,6 +176,11 @@ test("a new tenant is drafted, shown, signed on the platform Grant and listed", 
   seedPlatform(bff);
   await openPlatform(page, "/console/platform/platform/tenants");
   await expect(page.getByTestId("tenant-list")).toContainText("tnt_acme");
+  const listings = () =>
+    bff.seen.filter((x) => x.method === "GET" && x.path.endsWith("/tenants")).length;
+  // OP-159 m.43 (b)
+  await expect.poll(() => bff.seen.some((x) => x.path.endsWith("/tnt_platform/realms"))).toBe(true);
+  const before = listings();
   const panel = page.getByRole("region", { name: "New tenant" });
   await panel.getByRole("button", { name: "Create tenant" }).click();
   const dialog = page.getByRole("dialog");
@@ -166,9 +193,7 @@ test("a new tenant is drafted, shown, signed on the platform Grant and listed", 
   expect(w?.path).toBe("platform/tenants");
   expect(w?.body["tenant_id"]).toBe("tnt_new");
   expect(bff.bases[0]).toEqual({ holding: { grant: GRANT, holder: PARTY, since: "7" } });
-  await expect
-    .poll(() => bff.seen.filter((x) => x.method === "GET" && x.path.endsWith("/tenants")).length)
-    .toBe(2);
+  await expect.poll(listings).toBe(before + 1);
 });
 
 // TN-111, §13.7.7: a realm is opened with the viewer's founding root, never the operator's

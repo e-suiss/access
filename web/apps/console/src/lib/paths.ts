@@ -13,6 +13,12 @@ const RESERVED: ReadonlySet<string> = new Set(["api", "assets"]);
 
 const LAST_REALM = "access-console-realm";
 
+// OP-159 m.43 (b)
+const KNOWN_REALMS = "access-console-realms";
+
+/** How many realms this browser signed in to the console keeps. */
+const MAX_KNOWN = 12;
+
 const SIGN_IN_STARTED = "access-console-sign-in";
 
 /** How long a started sign-in keeps the console from starting another on its own. */
@@ -55,12 +61,33 @@ export function lastRealm(): string | undefined {
   }
 }
 
-/** Remembers `realm` as the one this browser last signed in to. */
+/** The realms this browser signed in to, the latest first (OP-159 m.43 (b)). */
+export function knownRealms(): readonly string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(KNOWN_REALMS) ?? "[]");
+    if (!Array.isArray(v)) return [];
+    const out: string[] = [];
+    for (const r of v) {
+      if (typeof r === "string" && isRealm(r) && !out.includes(r)) out.push(r);
+    }
+    return out.slice(0, MAX_KNOWN);
+  } catch {
+    return [];
+  }
+}
+
+/** Remembers `realm` as the one this browser last signed in to, and among those it signed in to. */
 export function rememberRealm(realm: string): void {
   try {
     localStorage.setItem(LAST_REALM, realm);
   } catch {
     // OP-159 m.42 (b)
+  }
+  try {
+    const known = [realm, ...knownRealms().filter((r) => r !== realm)].slice(0, MAX_KNOWN);
+    localStorage.setItem(KNOWN_REALMS, JSON.stringify(known));
+  } catch {
+    // OP-159 m.43 (b)
   }
 }
 

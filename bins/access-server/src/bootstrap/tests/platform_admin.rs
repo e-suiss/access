@@ -7,7 +7,11 @@ use access_identity_admin::app::provision::{Created, Order, Platform, Provisione
 use access_identity_admin::domain::provision::PlatformChange;
 
 use super::*;
-use crate::bootstrap::platform_admin::{DEVICE_LABEL, PlatformAdminPlan};
+use access_internal_api::idp::IdpAction;
+
+use crate::bootstrap::platform_admin::{
+    DEVICE_LABEL, META_GRANTS, PlatformAdminPlan, RealmAdminOut, realm_device_label,
+};
 
 const IDENTIFIER: &str = "admin@platform.local";
 
@@ -17,6 +21,7 @@ fn admin_plan(totp: &Path) -> Plan {
             identifier: String::from(IDENTIFIER),
             password: Secret::new(String::from("platform horse battery staple")),
             totp: Some(TotpSeedFile::open(totp).unwrap()),
+            realms: Vec::new(),
         }),
         ..plan()
     }
@@ -176,5 +181,135 @@ async fn the_platform_admin_is_made_once_and_provisions_only_on_its_grant() {
             .is_some()
     );
 
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+// OP-159 m.43 (c), TN-119, INV-29, TN-114, §10.2.2
+#[tokio::test]
+async fn the_platform_admin_has_the_same_account_in_acme_and_acmes_root_grants_it_once() {
+    let w = World::new("bootstrap-realm-admin").await;
+    let dir = std::env::temp_dir().join(format!("abs-realm-admin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("platform-admin-totp");
+    let with_acme = || {
+        let mut plan = admin_plan(&path);
+        plan.tenants = vec![String::from("acme"), String::from("globex")];
+        if let Some(p) = plan.platform_admin.as_mut() {
+            p.realms = vec![String::from("acme")];
+        }
+        plan
+    };
+
+    let first = w.run(&with_acme()).await;
+    let out = first.platform_admin.clone().unwrap();
+    let [acme] = out.realms.as_slice() else {
+        panic!("{:?}", out.realms);
+    };
+    assert!(acme.created);
+    assert!(acme.delegated_admin_opened);
+    assert_eq!(acme.realm, "acme");
+    assert!(acme.issuer.ends_with("/realms/acme"), "{}", acme.issuer);
+    let device = token_key(&w.keys, &realm_device_label("acme")).unwrap();
+    assert_eq!(
+        acme.party,
+        b64url_encode(&root_party(&device.public_key()).0)
+    );
+    let resources: Vec<&str> = acme.grants.iter().map(|g| g.resource.as_str()).collect();
+    assert_eq!(resources.first(), Some(&"idp"));
+    for (namespace, _) in META_GRANTS {
+        assert!(resources.contains(&namespace), "{namespace}");
+    }
+    let idp_actions = &acme.grants[0].actions;
+    assert_eq!(idp_actions.len(), IdpAction::ALL.len());
+    assert!(
+        idp_actions
+            .iter()
+            .all(|a| a.starts_with("idp.") && !a.starts_with("idp.platform."))
+    );
+    // §10.2.2
+    let seed = std::fs::read_to_string(&path)
+        .unwrap()
+        .trim_end()
+        .to_owned();
+    assert!(acme.totp.as_ref().unwrap().created);
+    assert_eq!(
+        totp_seeds_in(&w, "platform", IDENTIFIER).await,
+        vec![seed.clone()]
+    );
+    assert_eq!(
+        totp_seeds_in(&w, "acme", IDENTIFIER).await,
+        vec![seed.clone()]
+    );
+    let summary = serde_json::to_string(&first).unwrap();
+    assert!(!summary.contains(&seed));
+    assert!(!summary.contains("platform horse battery staple"));
+
+    let second = w.run(&with_acme()).await;
+    let again = second.platform_admin.unwrap();
+    let [acme_again] = again.realms.as_slice() else {
+        panic!("{:?}", again.realms);
+    };
+    assert!(!acme_again.created);
+    assert!(!acme_again.delegated_admin_opened);
+    assert!(!acme_again.totp.as_ref().unwrap().created);
+    assert_eq!(acme_again.instance, acme.instance);
+    let bases = |a: &RealmAdminOut| a.grants.iter().map(|g| g.basis.clone()).collect::<Vec<_>>();
+    assert_eq!(bases(acme_again), bases(acme));
+    assert_eq!(totp_seeds_in(&w, "acme", IDENTIFIER).await, vec![seed]);
+
+    // TN-119, INV-29
+    assert_eq!(again.basis, out.basis);
+    let globex = route_by_slug(&w.db.router, "globex")
+        .await
+        .unwrap()
+        .unwrap();
+    let keks = crate::login::RealmKeks::new(w.keys.clone());
+    let accounts = access_identity_account::adapters::pg::PgAccounts::sealed(
+        w.db.app.clone(),
+        keks.vault(globex.realm).unwrap(),
+    );
+    {
+        use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+        let mut tx = accounts.begin(globex.tenant, globex.realm).await.unwrap();
+        assert!(
+            tx.subject_by_identifier(IDENTIFIER)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        tx.commit().await.unwrap();
+    }
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+// OP-159 m.43 (c)
+#[test]
+fn a_platform_admin_realm_is_a_tenant_of_the_plan_named_once() {
+    let dir = std::env::temp_dir().join(format!("abs-realm-admin-plan-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let head = "platform = \"platform\"\ntenants = [\"acme\"]\n[platform_admin]\nidentifier = \"admin@platform.local\"\npassword = \"x\"\n";
+    let ok = dir.join("ok.toml");
+    std::fs::write(&ok, format!("{head}realms = [\"acme\"]\n")).unwrap();
+    assert_eq!(
+        Plan::load(&ok).unwrap().platform_admin.unwrap().realms,
+        ["acme"]
+    );
+    let none = dir.join("none.toml");
+    std::fs::write(&none, head).unwrap();
+    assert_eq!(
+        Plan::load(&none).unwrap().platform_admin.unwrap().realms,
+        Vec::<String>::new()
+    );
+    for (name, realms, want) in [
+        ("elsewhere", "[\"globex\"]", "platform_admin"),
+        ("platform", "[\"platform\"]", "platform_admin"),
+        ("twice", "[\"acme\", \"acme\"]", "named twice"),
+    ] {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(&path, format!("{head}realms = {realms}\n")).unwrap();
+        let err = Plan::load(&path).unwrap_err().to_string();
+        assert!(err.contains(want), "{name}: {err}");
+    }
     std::fs::remove_dir_all(&dir).unwrap();
 }

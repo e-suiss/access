@@ -206,8 +206,7 @@ async function eligible(
     const d = await draft(instance, probeIntent(realm, probe), "check");
     // OP-151 m.20 (d): the set is the drafted probe, its domain, root basis and capacity
     if (d.probe === undefined) return false;
-    if (await asks(subject, { ...d.probe, intent: d.intent })) return true;
-    // OP-152 m.7 (b): a delegated admin is asked on each of its own holdings naming the action
+    // OP-152 m.7 (b), OP-159 m.43 (c), §13.7.4
     for (const h of await holdings()) {
       if (!h.actions.some((a) => a.namespace === probe.namespace && a.name === probe.name)) {
         continue;
@@ -215,7 +214,7 @@ async function eligible(
       const basis = { holding: { grant: h.grant, holder: h.holder, since: h.since } };
       if (await asks(subject, { ...d.probe, basis, intent: d.intent })) return true;
     }
-    return false;
+    return await asks(subject, { ...d.probe, intent: d.intent });
   } catch {
     return false;
   }

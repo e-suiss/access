@@ -13,6 +13,10 @@ export const tr: Record<Key, string> = {
   navSessions: "Girişleriniz",
   navAbout: "Hakkında",
   signOut: "Çıkış yap",
+  realmSwitch: "Realm {realm}: realm değiştir",
+  realmSwitchPlatform: "Bu platformdaki realm'ler",
+  realmSwitchKnown: "Bu tarayıcıdan girilenler",
+  realmSwitchNote: "Her realm'in kendi girişi vardır.",
   loading: "Yükleniyor…",
   unavailable:
     "Konsol şu anda Access'e ulaşamıyor. Hiçbir şey değiştirilmedi. Biraz sonra yeniden deneyin.",

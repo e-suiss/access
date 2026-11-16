@@ -417,6 +417,7 @@ start:
     echo "Test user:       the sample realm's test user above, password: $ACCESS_LOCAL_TEST_PASSWORD"
     echo "Second factor:   just totp (the code of the test user's authenticator app; its key is in target/local-test-totp)"
     echo "Platform admin:  realm platform, user admin@platform.local, the same password; second factor: just totp platform (its key is in target/local-platform-totp)"
+    echo "                 the same account also administers acme: https://access-server.local:9443/console/acme (same password, same just totp platform)"
     echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
     echo "Stop:            just stop"
 
@@ -424,7 +425,7 @@ start:
 web-dev: wasm
     node scripts/web-dev.mjs
 
-# OP-149 m.26 (b), OP-159 m.29, m.41 (a): the current code of a local authenticator app (RFC 6238, SHA-1, 6 digits, 30 s): the test user's, or with `platform` the platform admin's
+# OP-149 m.26 (b), OP-159 m.29, m.41 (a), m.43 (c): the current code of a local authenticator app (RFC 6238, SHA-1, 6 digits, 30 s): the test user's, or with `platform` the platform admin's (in the platform realm and in acme)
 totp who="test":
     #!/usr/bin/env bash
     set -euo pipefail

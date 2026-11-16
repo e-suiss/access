@@ -299,6 +299,47 @@ impl TotpSeedFile {
                 BootstrapError::Unavailable(format!("totp_seed_file {}: {e}", self.path.display()))
             })
     }
+
+    /// The seed the file holds now, decoded.
+    ///
+    /// # Errors
+    /// [`BootstrapError::Plan`] when it holds none.
+    pub(crate) fn seed(&self) -> Result<Secret<Vec<u8>>, BootstrapError> {
+        use std::os::unix::fs::FileExt as _;
+        let mut text = [0; TOTP_SEED_CHARS];
+        let none = || {
+            BootstrapError::Plan(format!(
+                "totp_seed_file {}: holds no seed",
+                self.path.display()
+            ))
+        };
+        self.file.read_exact_at(&mut text, 0).map_err(|_| none())?;
+        let text = core::str::from_utf8(&text).map_err(|_| none())?;
+        if !is_seed(text) {
+            return Err(none());
+        }
+        base32_decode(text).map(Secret::new).ok_or_else(none)
+    }
+}
+
+/// The bytes of the unpadded RFC 4648 base32 `text`; `None` when it is not base32.
+fn base32_decode(text: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mut bits = Vec::with_capacity(text.len().checked_mul(5)?);
+    for c in text.bytes() {
+        let v = ALPHABET.iter().position(|a| *a == c)?;
+        for i in (0..5).rev() {
+            bits.push(v.checked_shr(i)? & 1 == 1);
+        }
+    }
+    let (bytes, _) = bits.as_chunks::<8>();
+    bytes
+        .iter()
+        .map(|byte| {
+            byte.iter()
+                .try_fold(0_u8, |acc, b| acc.checked_mul(2)?.checked_add(u8::from(*b)))
+        })
+        .collect()
 }
 
 /// Whether `text` is one unpadded base32 seed of 160 bits.
@@ -904,6 +945,8 @@ impl Plan {
             }
         };
         Ok(Self {
+            // OP-159 m.41 (a), m.43 (c)
+            platform_admin: platform_admin::check(file.platform_admin, &file.tenants)?,
             platform: file.platform,
             tenants: file.tenants,
             style: file.issuer_style,
@@ -916,8 +959,6 @@ impl Plan {
             breakglass_account,
             review_schedule,
             pq_profile,
-            // OP-159 m.41 (a)
-            platform_admin: platform_admin::check(file.platform_admin)?,
         })
     }
 }
@@ -1596,6 +1637,29 @@ where
                     self.pq_profile(&admin, (tenant, realm), (domain, &root), p)
                         .await?,
                 );
+            }
+            // OP-159 m.43 (c), TN-119, INV-29
+            if let Some(p) = plan
+                .platform_admin
+                .as_ref()
+                .filter(|p| !is_platform && p.realms.contains(slug))
+            {
+                let redrawn = platform_admin
+                    .as_ref()
+                    .and_then(|o: &platform_admin::PlatformAdminOut| o.totp.as_ref())
+                    .is_some_and(|t| t.created);
+                let out = self
+                    .realm_admin(
+                        &admin,
+                        &ids,
+                        (tenant, realm),
+                        (domain, &root, slug, &route.issuer),
+                        (p, redrawn),
+                    )
+                    .await?;
+                if let Some(o) = platform_admin.as_mut() {
+                    o.realms.push(out);
+                }
             }
             let mut out = realm_out(
                 &ids,
