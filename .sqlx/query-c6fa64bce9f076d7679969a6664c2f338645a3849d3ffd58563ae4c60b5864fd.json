@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admins SET ended_at = clock_timestamp(), ended_exercise = $4\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c6fa64bce9f076d7679969a6664c2f338645a3849d3ffd58563ae4c60b5864fd"
+}

@@ -8,6 +8,7 @@ mod custom_domains;
 pub mod domains;
 mod export_sinks;
 pub mod federation;
+pub mod founding;
 pub mod household;
 pub mod hr;
 pub mod issuer;
@@ -27,6 +28,7 @@ mod signals;
 pub mod ssh;
 mod sso;
 mod support;
+pub mod tenant;
 pub mod transfers;
 pub mod vault;
 pub mod workloads;
@@ -135,6 +137,25 @@ pub struct NewEnvironment<'a> {
     /// The `idp.platform.*` Exercise that opens it, recorded with it (TN-110, EI-25); `None`
     /// for an environment the local plan opens.
     pub provisioned_by: Option<Digest>,
+    /// The tenant administrator rule its Genesis carries (OP-159 m.47 (d), (k) (4)).
+    pub administered: Option<Administered>,
+    /// For the tenant's management environment, the id its founding drew (TN-138, TN-141).
+    pub management: Option<EnvironmentId>,
+}
+
+/// Whose `tenant_administration` Claims an environment's administrator rule selects by (OP-159
+/// m.47 (d)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Administered {
+    /// The environment's own issuer: the management environment itself, covering `actions`.
+    Own(Vec<access_kernel::model::ActionRef>),
+    /// The management environment's issuer `issuer`, covering `actions` (TN-4 consuming binding).
+    By {
+        /// The management environment's Claim issuer Party.
+        issuer: [u8; 16],
+        /// The `idp` actions the rule covers.
+        actions: Vec<access_kernel::model::ActionRef>,
+    },
 }
 
 /// A created environment.
@@ -145,6 +166,9 @@ pub struct CreatedEnvironment {
     pub domain: Digest,
     /// Its fixed issuer.
     pub issuer: Issuer,
+    /// The Acceptance through which its domain selects the tenant's administrators (OP-159 m.47
+    /// (d)).
+    pub admin_acceptance: Option<access_kernel::model::Id>,
 }
 
 /// An `idp.*` change as an actor proposes it: what the intent is built from (EI-25).
@@ -338,12 +362,37 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                     .collect(),
                 issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
                 recovery,
+                // OP-159 m.47 (d), (k) (4)
+                admin_rule: r.administered.as_ref().map(|a| match a {
+                    Administered::Own(actions) => access_internal_api::idp::AdminRule {
+                        issuer: access_kernel::model::Id(claim_issuer),
+                        foreign: false,
+                        actions: actions.clone(),
+                    },
+                    Administered::By { issuer, actions } => access_internal_api::idp::AdminRule {
+                        issuer: access_kernel::model::Id(*issuer),
+                        foreign: true,
+                        actions: actions.clone(),
+                    },
+                }),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
         let domain = DomainId::from_bytes(opened.domain.0);
         let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
-        let environment = tenancy::create_environment(&mut t, &domain, r.slug, r.placement).await?;
+        let environment = match r.management {
+            // TN-138, TN-141
+            Some(id) => {
+                access_store::tenant_admin::create_management_environment(
+                    &mut t,
+                    id,
+                    &domain,
+                    (r.slug, r.placement),
+                )
+                .await?
+            }
+            None => tenancy::create_environment(&mut t, &domain, r.slug, r.placement).await?,
+        };
         t.enter_environment(environment).await?;
         if let Some(exercise) = &r.provisioned_by {
             tenancy::record_provision(&mut t, &exercise.0).await?;
@@ -371,6 +420,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             environment,
             domain: opened.domain,
             issuer,
+            admin_acceptance: opened.admin_acceptance,
         })
     }
 
@@ -1024,6 +1074,17 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             return Err(Invalid::PlatformTenant.into());
         }
         let g = self.governing(p, state).await?;
+        // TN-138, OP-159 m.47 (b)
+        if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &p.change
+            && c.third_party
+        {
+            let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
+            let kind = access_store::tenant_admin::environment_kind(&mut t).await?;
+            t.commit().await?;
+            if kind.as_deref() == Some(crate::domain::tenant::MANAGEMENT) {
+                return Err(Invalid::ManagementEnvironment.into());
+            }
+        }
         if let Change::OrgCreate(o) = &p.change {
             self.org_creatable(p, Digest(*g.domain.as_bytes()), o.party)
                 .await?;
@@ -1598,7 +1659,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         };
         t.commit().await?;
         match status {
-            None => Ok(()),
+            // OP-159 m.47 (e), (f)
+            None => self.administers(tenant, domain, party).await,
             Some(Some(s))
                 if AccountStatus::parse(&s).is_some_and(AccountStatus::can_authenticate) =>
             {
@@ -1606,6 +1668,35 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             }
             Some(_) => Err(AdminError::Refused(String::from(ACTOR_BINDING))),
         }
+    }
+
+    /// The extended standing of a Party bound to no account of the environment (OP-159 m.47 (e),
+    /// (f)): a Party with a `tenant_administration` line in the environment's domain, kept by a
+    /// management environment whose Claims the domain consumes, stands only while that line has not
+    /// ended and its administrator is one; a removed owner stops at once although it still roots
+    /// the domain. Whether an unstated or lapsed line selects anything is the authority plane's
+    /// (its episode). Any other Party, such as the operator's root, is not narrowed here.
+    async fn administers(
+        &self,
+        tenant: TenantId,
+        domain: Digest,
+        party: Id,
+    ) -> Result<(), AdminError> {
+        let d = DomainId::from_bytes(domain.0);
+        let mut t = TenantTx::begin_tenant(self.app, tenant).await?;
+        let managers = access_store::environment_binding::consumed_by(&mut t, &d).await?;
+        t.commit().await?;
+        for management in managers {
+            let mut t = TenantTx::begin(self.app, tenant, management).await?;
+            let line = access_store::tenant_admin::line_of_party(&mut t, &d, &party.0).await?;
+            t.commit().await?;
+            if let Some((line, admin_live)) = line
+                && (!admin_live || line.ended_ms.is_some())
+            {
+                return Err(AdminError::Refused(String::from(ACTOR_BINDING)));
+            }
+        }
+        Ok(())
     }
 
     /// What follows a written change outside the database: a new JOSE algorithm reaches the

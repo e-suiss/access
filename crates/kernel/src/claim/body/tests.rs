@@ -543,7 +543,7 @@ fn cases() -> Vec<(String, Case)> {
             body: None,
         },
     ));
-    let scalar: [(&str, &str, Option<EqValue>, bool); 16] = [
+    let scalar: [(&str, &str, Option<EqValue>, bool); 19] = [
         (
             "account-status-suspended",
             "account_status",
@@ -609,6 +609,24 @@ fn cases() -> Vec<(String, Case)> {
             "org-member-digest",
             "org_member",
             Some(EqValue::Bytes(vec![7; 32])),
+            false,
+        ),
+        (
+            "tenant-administration",
+            "tenant_administration",
+            Some(EqValue::Bool(true)),
+            true,
+        ),
+        (
+            "tenant-administration-ended",
+            "tenant_administration",
+            Some(EqValue::Bool(false)),
+            true,
+        ),
+        (
+            "tenant-administration-party",
+            "tenant_administration",
+            Some(EqValue::Bytes(vec![7; 16])),
             false,
         ),
         (

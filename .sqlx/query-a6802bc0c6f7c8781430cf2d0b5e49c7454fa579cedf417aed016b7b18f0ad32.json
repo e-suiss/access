@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.founding_tenant($1) AS \"t\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "t",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a6802bc0c6f7c8781430cf2d0b5e49c7454fa579cedf417aed016b7b18f0ad32"
+}

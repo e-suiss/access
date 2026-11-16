@@ -155,6 +155,17 @@ pub trait EnvironmentKeys: Send + Sync {
         None
     }
 
+    /// The environment's blind index key alone (OP-153 m.3 (aa)): what a founding indexes its
+    /// founder by before the management environment and its KEK exist (TN-141); `None` when the
+    /// token refuses it.
+    fn blind_index(
+        &self,
+        environment: EnvironmentId,
+    ) -> Option<std::sync::Arc<access_crypto::environment_index::EnvironmentIndexKey>> {
+        let _ = environment;
+        None
+    }
+
     /// The AIS of one self-signed registration Exercise of the issuer Party, by the environment's
     /// Claim issuer key (OP-149 m.16 (a)).
     fn sign_issuer_registration(

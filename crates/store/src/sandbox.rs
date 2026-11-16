@@ -152,6 +152,8 @@ pub struct EnvironmentMeta {
     pub sandbox: Option<Budget>,
     /// Its hybrid key share policy, `optimistic` or `advertise-only` (CR-12 m.3, OP-159 m.3 (t)).
     pub kex_share: String,
+    /// `standard` or `management` (TN-138).
+    pub kind: String,
 }
 
 /// The live environments: the one with slug `slug`, or those of `tenant` after the slug `after`, at
@@ -203,7 +205,7 @@ pub async fn environments(
         let tenant = TenantId::from_bytes(*r.tenant_id.as_bytes());
         let mut t = TenantTx::begin_tenant(app, tenant).await?;
         let own = sqlx::query!(
-            r#"SELECT r.placement_id, r.governing_domain_id, r.kex_share,
+            r#"SELECT r.placement_id, r.governing_domain_id, r.kex_share, r.kind,
                       (extract(epoch FROM r.created_at) * 1000)::bigint AS "created_ms!",
                       s.exercises_per_day AS "exercises_per_day?",
                       s.projections_per_day AS "projections_per_day?"
@@ -234,9 +236,34 @@ pub async fn environments(
             created_ms: unsigned(own.created_ms)?,
             sandbox,
             kex_share: own.kex_share,
+            kind: own.kind,
         });
     }
     Ok(out)
+}
+
+/// Creates `tenant` in `placement` awaiting its founder (OP-159 m.47 (c), TN-141): `false` when it
+/// exists.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn create_tenant_provisioning(
+    app: &PgPool,
+    tenant: TenantId,
+    placement: &str,
+) -> Result<bool, StoreError> {
+    let mut t = TenantTx::begin_tenant(app, tenant).await?;
+    let done = sqlx::query!(
+        "INSERT INTO access.tenants (tenant_id, placement_id, status) VALUES ($1, $2, 'provisioning')
+         ON CONFLICT (tenant_id) DO NOTHING",
+        Uuid::from_bytes(*tenant.as_bytes()),
+        placement,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    t.commit().await?;
+    Ok(done == 1)
 }
 
 /// Creates the tenant `tenant` in `placement` when it does not exist; `false` when it did.

@@ -2112,6 +2112,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
+            Invalid::ManagementEnvironment => &codes::platform::MANAGEMENT_ENVIRONMENT,
             Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,

@@ -47,6 +47,23 @@ fn digests_pin_schemas_and_catalogs() {
     assert!(Spp::from_value(&bad).is_err());
 }
 
+// L0-ENC-13, OP-141 m.35 (e), OP-159 m.47 (h)
+#[test]
+fn retirements_round_trip_in_canonical_order() {
+    let mut retiring = spp(alloc::vec![refund()]);
+    for name in ["sandbox_create", "environment_create", "a"] {
+        let mut s = refund();
+        s.name = name.to_string();
+        retiring.retirements.insert(ActionRef {
+            namespace: "shop".to_string(),
+            name: name.to_string(),
+            major: 1,
+            schema: action_digest(&s),
+        });
+    }
+    assert_eq!(Spp::from_value(&retiring.to_value()).unwrap(), retiring);
+}
+
 // E47 (1), OP-154 m.3 (b)
 #[test]
 fn an_undeclared_reversibility_is_irreversible_and_keeps_the_digest() {

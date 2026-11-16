@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admins SET owner = true, owner_since = clock_timestamp()\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND NOT owner\n            AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aed0878886996c4f67ed2559cf54d94928c6a4de4cd911a9c2f35396c83fc041"
+}

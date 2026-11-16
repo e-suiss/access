@@ -102,3 +102,27 @@ pub async fn domains(
         })
         .collect()
 }
+
+/// The environments of the transaction's tenant whose Claims `domain` consumes (TN-4, OP-159 m.47
+/// (d)): for a tenant environment, its management environment.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn consumed_by(
+    t: &mut TenantTx,
+    domain: &DomainId,
+) -> Result<Vec<EnvironmentId>, StoreError> {
+    let rows = sqlx::query_scalar!(
+        "SELECT environment_id FROM access.environment_domain_binding
+          WHERE tenant_id = $1 AND domain_id = $2 AND role = 'consuming' AND retired_at IS NULL
+          ORDER BY environment_id",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|u| EnvironmentId::from_bytes(*u.as_bytes()))
+        .collect())
+}

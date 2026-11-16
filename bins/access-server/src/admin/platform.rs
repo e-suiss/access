@@ -1,10 +1,8 @@
-//! The platform-admin surface's resources in this process (OP-151 m.2 M2): tenant and environment
-//! metadata read across tenants by the router role, never environment content (INV-29, X31), the state
-//! of an environment's signing keys (CR-25, CR-59), and provisioning writes that are `idp.platform.*`
-//! Exercises in the platform environment's governing domain (TN-110), each followed by the Genesis it
-//! names (TN-111).
-
-use std::collections::BTreeSet;
+//! The platform-admin surface's resources in this process (OP-151 m.2 M2, OP-159 m.47 (c), (h)):
+//! tenant and environment metadata read across tenants by the router role, never environment
+//! content (INV-29, X31), the state of an environment's signing keys (CR-25, CR-59), and
+//! provisioning writes that are `idp.platform.*` Exercises in the platform environment's governing
+//! domain (TN-110): a tenant with its founder's invitation, its suspension and its placement.
 
 use access_crypto::opaque_id::IdKey;
 use access_http::api::domain::caller::WriteCaller;
@@ -15,20 +13,17 @@ use access_http::api::ports::{
 };
 use access_http::problem::{Code, codes};
 use access_identity_admin::app::provision::{
-    Created, Order, Platform, ProvisionError, Provisioned, style,
+    Created, FounderMail, FoundingSecrets, Order, Platform, ProvisionError, Provisioned,
 };
 use access_identity_admin::app::rest::{self, default_validity, rfc3339};
 use access_identity_admin::domain::provision::{
-    DEFAULT_PLACEMENT, EnvironmentOrder, PlatformChange, ProvisionInvalid, Recovery, RecoveryKey,
-    RecoveryKeys,
+    DEFAULT_PLACEMENT, PlatformChange, ProvisionInvalid, TenantOrder,
 };
 use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_kernel::codec::Canonical;
-use access_kernel::json::{b64url_decode, b64url_encode};
-use access_kernel::meta::Root;
-use access_kernel::model::Id;
+use access_kernel::json::b64url_encode;
 use access_store::identity::TenantId;
 use access_store::sandbox::{self, Budget, EnvironmentMeta, TenantMeta};
 use serde_json::{Map, Value, json};
@@ -38,25 +33,24 @@ use suiss_crypto::rotation::Policy;
 use super::environment::Environments;
 use crate::idp::EnvironmentKeyring;
 
-/// The members a tenant creation takes.
-const TENANT_BODY: &[&str] = &["tenant_id", "placement", rest::VALIDITY];
-
-/// The members an environment or sandbox creation takes.
-const ENVIRONMENT_BODY: &[&str] = &[
-    "slug",
-    "issuer_style",
+/// The members a tenant creation takes (OP-159 m.47 (c)).
+const TENANT_BODY: &[&str] = &[
+    "tenant_id",
+    "display_name",
+    "management_slug",
+    "founder_email",
     "placement",
-    "root",
-    "ct3_delay_s",
-    "causal_binding",
-    "acknowledge_no_recovery",
-    "recovery",
-    "sandbox",
     rest::VALIDITY,
 ];
 
-/// Most recovery keys an environment creation names (§13.6).
-const MAX_RECOVERY_KEYS: usize = 16;
+/// The members a founder reinvitation takes (TN-141).
+const REINVITE_BODY: &[&str] = &["founder_email", rest::VALIDITY];
+
+/// The members a suspension or a reactivation takes.
+const STATE_BODY: &[&str] = &[rest::VALIDITY];
+
+/// The members a placement move takes.
+const PLACEMENT_BODY: &[&str] = &["placement", rest::VALIDITY];
 
 fn invalid(i: ProvisionInvalid) -> &'static Code {
     use codes::platform as p;
@@ -68,6 +62,9 @@ fn invalid(i: ProvisionInvalid) -> &'static Code {
         ProvisionInvalid::TimeLock => &p::INVALID_TIME_LOCK,
         ProvisionInvalid::NoTenant => &codes::NOT_FOUND,
         ProvisionInvalid::SlugTaken => &p::SLUG_TAKEN,
+        ProvisionInvalid::Name => &p::INVALID_TENANT_NAME,
+        ProvisionInvalid::Email => &p::INVALID_EMAIL,
+        ProvisionInvalid::TenantState => &p::TENANT_STATE,
     }
 }
 
@@ -97,68 +94,6 @@ fn only(m: &Map<String, Value>, allowed: &[&str]) -> Result<(), &'static Code> {
     }
 }
 
-fn party(v: &Value) -> Option<Id> {
-    let bytes = b64url_decode(v.as_str()?).ok()?;
-    Some(Id(<[u8; 16]>::try_from(bytes.as_slice()).ok()?))
-}
-
-/// `{"sole": <party>}` or `{"joint": {"k": n, "parties": [<party>, …]}}` (TN-111).
-fn root(v: Option<&Value>) -> Result<Root, &'static Code> {
-    let bad = &codes::platform::INVALID_ROOT;
-    let o = v.and_then(Value::as_object).ok_or(bad)?;
-    match (o.get("sole"), o.get("joint"), o.len()) {
-        (Some(p), None, 1) => party(p).map(Root::Sole).ok_or(bad),
-        (None, Some(Value::Object(j)), 1) => {
-            only(j, &["k", "parties"]).map_err(|_| bad)?;
-            let k = j.get("k").and_then(Value::as_u64).ok_or(bad)?;
-            let list = j.get("parties").and_then(Value::as_array).ok_or(bad)?;
-            let parties: BTreeSet<Id> = list.iter().map(party).collect::<Option<_>>().ok_or(bad)?;
-            if parties.len() != list.len() {
-                return Err(bad);
-            }
-            Ok(Root::Joint { parties, k })
-        }
-        _ => Err(bad),
-    }
-}
-
-/// `{"held_on": "device" | "offline", "keys": [{"party": <party>, "kid": <thumbprint>}, …]}`: the
-/// founders' recovery keys by thumbprint only (§13.6, SEC20, OP-158 m.3 (m)).
-fn recovery_keys(v: Option<&Value>) -> Result<Option<RecoveryKeys>, &'static Code> {
-    let bad = &codes::environment::INVALID_BODY;
-    let o = match v {
-        None | Some(Value::Null) => return Ok(None),
-        Some(Value::Object(o)) => o,
-        Some(_) => return Err(bad),
-    };
-    only(o, &["held_on", "keys"])?;
-    let held_on = match o.get("held_on").and_then(Value::as_str) {
-        None | Some("device") => access_kernel::recovery::KeyHolding::Device,
-        Some("offline") => access_kernel::recovery::KeyHolding::Offline,
-        Some(_) => return Err(bad),
-    };
-    let list = o.get("keys").and_then(Value::as_array).ok_or(bad)?;
-    if list.len() > MAX_RECOVERY_KEYS {
-        return Err(bad);
-    }
-    let mut keys = Vec::with_capacity(list.len());
-    for k in list {
-        let k = k.as_object().ok_or(bad)?;
-        only(k, &["party", "kid"])?;
-        let kid = k
-            .get("kid")
-            .and_then(Value::as_str)
-            .and_then(|t| b64url_decode(t).ok())
-            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
-            .ok_or(bad)?;
-        keys.push(RecoveryKey {
-            party: k.get("party").and_then(party).ok_or(bad)?,
-            kid,
-        });
-    }
-    Ok(Some(RecoveryKeys { held_on, keys }))
-}
-
 fn text<'a>(m: &'a Map<String, Value>, k: &str) -> Result<Option<&'a str>, &'static Code> {
     match m.get(k) {
         None | Some(Value::Null) => Ok(None),
@@ -171,64 +106,108 @@ fn tenant_of(ids: &IdKey, text: Option<&str>) -> Option<[u8; 16]> {
     ids.decode(TENANT_PREFIX, text?).ok()
 }
 
-/// The change a provisioning write compiles to (TN-110).
-fn change(
+/// A provisioning write as its body names it, before the founder commitment (TN-110).
+#[derive(PartialEq, Eq)]
+enum Parsed {
+    /// `createTenant`.
+    Tenant {
+        tenant: [u8; 16],
+        display_name: String,
+        slug: String,
+        email: String,
+        placement: String,
+    },
+    /// `reinviteFounder`.
+    Reinvite { tenant: [u8; 16], email: String },
+    /// `suspendTenant`.
+    Suspend { tenant: [u8; 16] },
+    /// `reactivateTenant`.
+    Reactivate { tenant: [u8; 16] },
+    /// `moveTenantPlacement`.
+    Placement { tenant: [u8; 16], placement: String },
+}
+
+impl core::fmt::Debug for Parsed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Tenant { tenant, slug, .. } => f
+                .debug_struct("Tenant")
+                .field("tenant", tenant)
+                .field("slug", slug)
+                .finish_non_exhaustive(),
+            Self::Reinvite { tenant, .. } => f
+                .debug_struct("Reinvite")
+                .field("tenant", tenant)
+                .finish_non_exhaustive(),
+            Self::Suspend { tenant } => f.debug_struct("Suspend").field("tenant", tenant).finish(),
+            Self::Reactivate { tenant } => f
+                .debug_struct("Reactivate")
+                .field("tenant", tenant)
+                .finish(),
+            Self::Placement { tenant, placement } => f
+                .debug_struct("Placement")
+                .field("tenant", tenant)
+                .field("placement", placement)
+                .finish(),
+        }
+    }
+}
+
+fn email(m: &Map<String, Value>) -> Result<String, &'static Code> {
+    let raw = text(m, "founder_email")?.ok_or(&codes::platform::INVALID_EMAIL)?;
+    access_identity_admin::domain::tenant::folded_email(raw).ok_or(&codes::platform::INVALID_EMAIL)
+}
+
+/// What a provisioning write's body names (TN-110).
+fn parse(
     ids: &IdKey,
     operation: &str,
     tenant: Option<&str>,
     body: &Map<String, Value>,
-) -> Result<PlatformChange, &'static Code> {
-    let placement = String::from(text(body, "placement")?.unwrap_or(DEFAULT_PLACEMENT));
+) -> Result<Parsed, &'static Code> {
     if operation == "createTenant" {
         only(body, TENANT_BODY)?;
         let tenant =
             tenant_of(ids, text(body, "tenant_id")?).ok_or(&codes::environment::INVALID_BODY)?;
-        return Ok(PlatformChange::Tenant { tenant, placement });
+        return Ok(Parsed::Tenant {
+            tenant,
+            display_name: String::from(
+                text(body, "display_name")?.ok_or(&codes::platform::INVALID_TENANT_NAME)?,
+            ),
+            slug: String::from(
+                text(body, "management_slug")?.ok_or(&codes::platform::INVALID_SLUG)?,
+            ),
+            email: email(body)?,
+            placement: String::from(text(body, "placement")?.unwrap_or(DEFAULT_PLACEMENT)),
+        });
     }
-    only(body, ENVIRONMENT_BODY)?;
     let tenant = tenant_of(ids, tenant).ok_or(&codes::NOT_FOUND)?;
-    let order = EnvironmentOrder {
-        tenant,
-        slug: String::from(text(body, "slug")?.ok_or(&codes::platform::INVALID_SLUG)?),
-        style: style(text(body, "issuer_style")?).ok_or(&codes::environment::INVALID_BODY)?,
-        placement,
-        root: root(body.get("root"))?,
-        ct3_delay_s: match body.get("ct3_delay_s") {
-            None | Some(Value::Null) => None,
-            Some(v) => Some(v.as_u64().ok_or(&codes::platform::INVALID_TIME_LOCK)?),
-        },
-        // OP-152 m.7 (d) E11
-        causal_binding: match body.get("causal_binding") {
-            None | Some(Value::Null) => false,
-            Some(Value::Bool(b)) => *b,
-            Some(_) => return Err(&codes::environment::INVALID_BODY),
-        },
-        acknowledge_no_recovery: match body.get("acknowledge_no_recovery") {
-            None | Some(Value::Null) => false,
-            Some(Value::Bool(b)) => *b,
-            Some(_) => return Err(&codes::environment::INVALID_BODY),
-        },
-        // §13.6, OP-158 m.3 (m)
-        recovery: recovery_keys(body.get("recovery"))?,
-    };
-    // OP-151 m.3 (m)
-    let sandbox = match body.get("sandbox") {
-        None | Some(Value::Null) => operation == "createSandboxDomain",
-        Some(Value::Bool(b)) => *b,
-        Some(_) => return Err(&codes::environment::INVALID_BODY),
-    };
-    match (operation, sandbox) {
-        ("createEnvironment", false) => Ok(PlatformChange::Environment(order)),
-        ("createEnvironment" | "createSandboxDomain", true) => Ok(PlatformChange::Sandbox(order)),
-        ("createSandboxDomain", false) => Err(&codes::environment::INVALID_BODY),
+    match operation {
+        "reinviteFounder" => {
+            only(body, REINVITE_BODY)?;
+            Ok(Parsed::Reinvite {
+                tenant,
+                email: email(body)?,
+            })
+        }
+        "suspendTenant" => {
+            only(body, STATE_BODY)?;
+            Ok(Parsed::Suspend { tenant })
+        }
+        "reactivateTenant" => {
+            only(body, STATE_BODY)?;
+            Ok(Parsed::Reactivate { tenant })
+        }
+        "moveTenantPlacement" => {
+            only(body, PLACEMENT_BODY)?;
+            Ok(Parsed::Placement {
+                tenant,
+                placement: String::from(
+                    text(body, "placement")?.ok_or(&codes::platform::INVALID_PLACEMENT)?,
+                ),
+            })
+        }
         _ => Err(&codes::environment::UNKNOWN_OPERATION),
-    }
-}
-
-fn root_view(r: &Root) -> Value {
-    match r {
-        Root::Sole(_) => json!({ "kind": "sole", "k": 1, "n": 1 }),
-        Root::Joint { parties, k } => json!({ "kind": "joint", "k": k, "n": parties.len() }),
     }
 }
 
@@ -259,6 +238,7 @@ async fn key_state(keys: &EnvironmentKeyring, m: &EnvironmentMeta, now_ms: u64) 
 fn environment_view(ids: &IdKey, m: &EnvironmentMeta) -> Result<Value, Unavailable> {
     Ok(json!({
         "slug": m.slug,
+        "kind": m.kind,
         "tenant_id": ids.encode(TENANT_PREFIX, *m.tenant.as_bytes()).map_err(|e| unavailable(&e))?,
         "issuer": m.issuer,
         "status": "active",
@@ -270,15 +250,6 @@ fn environment_view(ids: &IdKey, m: &EnvironmentMeta) -> Result<Value, Unavailab
         "signing_available_at": rfc3339(signing_available_ms(m.created_ms)),
         // CR-12 m.3, OP-159 m.3 (t)
         "kex_share": m.kex_share,
-    }))
-}
-
-fn tenant_view(ids: &IdKey, t: &TenantMeta) -> Result<Value, Unavailable> {
-    Ok(json!({
-        "tenant_id": ids.encode(TENANT_PREFIX, *t.tenant.as_bytes()).map_err(|e| unavailable(&e))?,
-        "status": t.status,
-        "placement": t.placement,
-        "created_at": rfc3339(t.created_ms),
     }))
 }
 
@@ -348,10 +319,13 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
                     ids.encode(TENANT_PREFIX, *t.tenant.as_bytes())
                         .unwrap_or_default()
                 });
-                let items = rows
-                    .iter()
-                    .map(|t| tenant_view(&ids, t).map(|body| Item { body, version: 0 }))
-                    .collect::<Result<_, _>>()?;
+                let mut items = Vec::with_capacity(rows.len());
+                for t in &rows {
+                    items.push(Item {
+                        body: self.tenant_view(&ids, t).await?,
+                        version: 0,
+                    });
+                }
                 Ok(Some(Listing { items, last }))
             }
             PlatformKind::Environments | PlatformKind::SandboxDomains => {
@@ -437,13 +411,15 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         })
     }
 
-    /// The write's change and its body as the caller signs it.
+    /// The write's change and its body as the caller signs it, with the founder's address and
+    /// secrets for a tenant creation or a reinvitation (TN-141): the commitment is derived the
+    /// same way at the draft and at the write.
     async fn platform_compile(
         &self,
         ids: &IdKey,
         w: &PlatformWrite,
         draft: bool,
-    ) -> Result<Result<(PlatformChange, Value), &'static Code>, Unavailable> {
+    ) -> Result<Result<Compiled, &'static Code>, Unavailable> {
         let Some(mut body) = w.body.as_object().cloned() else {
             return Ok(Err(&codes::environment::INVALID_BODY));
         };
@@ -458,12 +434,66 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
                 body.insert("tenant_id".to_owned(), Value::String(text));
             }
         }
-        Ok(change(ids, w.operation, w.tenant.as_deref(), &body).map(|c| (c, Value::Object(body))))
+        let parsed = match parse(ids, w.operation, w.tenant.as_deref(), &body) {
+            Ok(p) => p,
+            Err(code) => return Ok(Err(code)),
+        };
+        let admin = self.admin(ids);
+        let commit = |tenant: [u8; 16], email: &str, round: u32| {
+            admin
+                .founder_commitment(tenant, email, round)
+                .map_err(|e| unavailable(&e))
+        };
+        let (change, mail) = match parsed {
+            Parsed::Tenant {
+                tenant,
+                display_name,
+                slug,
+                email,
+                placement,
+            } => {
+                let (founder, secrets) = commit(tenant, &email, 0)?;
+                (
+                    PlatformChange::Tenant(TenantOrder {
+                        tenant,
+                        display_name,
+                        management_slug: slug,
+                        placement,
+                        founder,
+                    }),
+                    Some((email, secrets)),
+                )
+            }
+            Parsed::Reinvite { tenant, email } => {
+                let round = admin
+                    .founding_round(TenantId::from_bytes(tenant))
+                    .await
+                    .map_err(|e| unavailable(&e))?;
+                let Some(round) = round else {
+                    return Ok(Err(&codes::platform::TENANT_STATE));
+                };
+                let (founder, secrets) = commit(tenant, &email, round.saturating_add(1))?;
+                (
+                    PlatformChange::Reinvite { tenant, founder },
+                    Some((email, secrets)),
+                )
+            }
+            Parsed::Suspend { tenant } => (PlatformChange::Suspend { tenant }, None),
+            Parsed::Reactivate { tenant } => (PlatformChange::Reactivate { tenant }, None),
+            Parsed::Placement { tenant, placement } => {
+                (PlatformChange::Placement { tenant, placement }, None)
+            }
+        };
+        Ok(Ok(Compiled {
+            change,
+            body: Value::Object(body),
+            mail,
+        }))
     }
 
     async fn platform_draft(&self, w: PlatformWrite) -> Result<Drafted, Unavailable> {
         let ids = self.ids.key().ok_or(Unavailable)?;
-        let (change, body) = match self.platform_compile(&ids, &w, true).await? {
+        let Compiled { change, body, .. } = match self.platform_compile(&ids, &w, true).await? {
             Ok(c) => c,
             Err(code) => return Ok(Drafted::Rejected(code)),
         };
@@ -501,7 +531,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         caller: WriteCaller,
     ) -> Result<Written, Unavailable> {
         let ids = self.ids.key().ok_or(Unavailable)?;
-        let (change, body) = match self.platform_compile(&ids, &w, false).await? {
+        let Compiled { change, body, mail } = match self.platform_compile(&ids, &w, false).await? {
             Ok(c) => c,
             Err(code) => return Ok(Written::Rejected(code)),
         };
@@ -518,6 +548,9 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
             validity,
             basis: statement.basis,
             capacity: statement.capacity,
+            mail: mail
+                .as_ref()
+                .map(|(email, secrets)| FounderMail { email, secrets }),
         };
         let done = Box::pin(self.admin(&ids).provision(&platform, order, caller.ais)).await;
         let (exercise_id, position, created) = match done {
@@ -529,7 +562,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
             Ok(Provisioned::NotAllowed { .. }) => return Ok(Written::NotAllowed),
             Err(e) => return refusal(&e).map(Written::Rejected),
         };
-        let resource = self.created_view(&ids, &change, created).await?;
+        let resource = self.created_view(&ids, created).await?;
         Ok(Written::Committed {
             exercise_id,
             position,
@@ -538,78 +571,58 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         })
     }
 
-    /// The created tenant or environment as the platform shows it, and an environment's Genesis summary.
-    async fn created_view(
-        &self,
-        ids: &IdKey,
-        change: &PlatformChange,
-        created: Created,
-    ) -> Result<Item, Unavailable> {
-        let body = match created {
-            Created::Tenant(t) => {
-                let rows = sandbox::tenants((&self.router, &self.app), Some(t), None, 1)
-                    .await
-                    .map_err(|e| unavailable(&e))?;
-                let t = rows.first().ok_or(Unavailable)?;
-                tenant_view(ids, t)?
-            }
-            Created::Environment {
-                domain, recovery, ..
-            } => {
-                let slug = match change {
-                    PlatformChange::Environment(o) | PlatformChange::Sandbox(o) => o.slug.as_str(),
-                    PlatformChange::Tenant { .. } => return Err(Unavailable),
-                };
-                let rows = sandbox::environments(
-                    (&self.router, &self.app),
-                    Some(slug),
-                    None,
-                    None,
-                    (1, false),
-                )
-                .await
-                .map_err(|e| unavailable(&e))?;
-                let m = rows.first().ok_or(Unavailable)?;
-                let mut view = environment_view(ids, m)?;
-                let root = match change {
-                    PlatformChange::Environment(o) | PlatformChange::Sandbox(o) => {
-                        root_view(&o.root)
-                    }
-                    PlatformChange::Tenant { .. } => Value::Null,
-                };
-                if let Value::Object(o) = &mut view {
-                    o.insert(
-                        "key_state".to_owned(),
-                        json!(key_state(&self.keys, m, crate::admin::WallClock::now()).await),
-                    );
-                    // HL-8, HL-17, OP-159 m.3 (s)
-                    o.insert("hosting".to_owned(), self.hosting(m.domain).await);
-                    // TN-111, §13.6, §13.7.7, OP-158 m.3 (m)
-                    let mut genesis = json!({
-                        "digest": b64url_encode(&domain.0),
-                        "root": root,
-                        "recovery": recovery.name(),
-                    });
-                    if let Some(g) = genesis.as_object_mut() {
-                        match recovery {
-                            Recovery::Available { threshold, keys } => {
-                                g.insert(
-                                    "recovery_threshold".to_owned(),
-                                    json!({ "k": threshold, "n": keys }),
-                                );
-                            }
-                            Recovery::NotAvailable(r) => {
-                                g.insert("recovery_reason".to_owned(), json!(r.code()));
-                            }
-                        }
-                    }
-                    o.insert("genesis".to_owned(), genesis);
-                }
-                view
-            }
-        };
+    /// The created or changed tenant as the platform shows it.
+    async fn created_view(&self, ids: &IdKey, created: Created) -> Result<Item, Unavailable> {
+        let Created::Tenant(t) = created;
+        let rows = sandbox::tenants((&self.router, &self.app), Some(t), None, 1)
+            .await
+            .map_err(|e| unavailable(&e))?;
+        let t = rows.first().ok_or(Unavailable)?;
+        let body = self.tenant_view(ids, t).await?;
         Ok(Item { body, version: 0 })
     }
+
+    /// A tenant's metadata (INV-29): its state, placement, display name, the slug of its
+    /// management environment and its founding's state; never its content.
+    async fn tenant_view(&self, ids: &IdKey, t: &TenantMeta) -> Result<Value, Unavailable> {
+        let mut tx = access_store::identity::TenantTx::begin_tenant(&self.app, t.tenant)
+            .await
+            .map_err(|e| unavailable(&e))?;
+        let profile = access_store::tenant_admin::tenant_profile(&mut tx)
+            .await
+            .map_err(|e| unavailable(&e))?;
+        let founding = access_store::tenant_admin::founding(&mut tx)
+            .await
+            .map_err(|e| unavailable(&e))?;
+        tx.commit().await.map_err(|e| unavailable(&e))?;
+        let now = crate::admin::WallClock::now();
+        let state = founding.as_ref().map(|f| {
+            if f.founder.is_some() {
+                "completed"
+            } else if now >= f.expires_ms {
+                "expired"
+            } else {
+                "pending"
+            }
+        });
+        Ok(json!({
+            "tenant_id": ids.encode(TENANT_PREFIX, *t.tenant.as_bytes()).map_err(|e| unavailable(&e))?,
+            "display_name": profile.and_then(|(n, _)| n),
+            "management_slug": founding.map(|f| f.slug),
+            "founding": state,
+            "status": t.status,
+            "placement": t.placement,
+            "created_at": rfc3339(t.created_ms),
+        }))
+    }
+}
+
+/// A compiled provisioning write: its change, the body the caller signs and, for a founding,
+/// the founder's address and secrets.
+struct Compiled {
+    change: PlatformChange,
+    body: Value,
+    mail: Option<(String, FoundingSecrets)>,
 }
 
 impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> PlatformResources

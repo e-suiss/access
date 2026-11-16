@@ -1,14 +1,14 @@
-//! What the platform-admin surface provisions (OP-151 m.2 M2): tenants, environments whose governing
-//! domain a Genesis opens (TN-111, §12.5.1) and sandbox domains (OP-151 m.3 (m), X21). Each is
-//! an `idp.platform.*` Exercise in the platform environment's governing domain, so the platform surface
-//! has no write path of its own (TN-110, PI-4, INV-2). The operator holds nothing in the domains
-//! it opens (INV-29): the founding root is the caller's.
+//! What the platform-admin surface provisions (OP-151 m.2 M2, OP-159 m.47 (c), (h)): tenants with an
+//! invited founder, their suspension and placement. Each is an `idp.platform.*` Exercise in the
+//! platform environment's governing domain, so the platform surface has no write path of its own
+//! (TN-110, PI-4, INV-2). The platform opens no environment: a tenant's founder opens its
+//! management environment and its administrators the rest (TN-141, TN-140); the operator holds
+//! nothing in them (INV-29, TNI-15).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_oauth::domain::issuer::{IssuerStyle, check_slug};
 use access_internal_api::idp::RESOURCE_NAMESPACE;
-use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
 use access_kernel::meta::Root;
@@ -23,7 +23,11 @@ use super::{CHANGE_CONTEXT, CHANGE_PARAM};
 pub const NAMESPACE: &str = "idp.platform";
 
 /// Version of the platform catalog; the `idp.*` catalogs are versioned apart (OP-153 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 1;
+/// Version 2 retires `environment_create` and `sandbox_create` (OP-159 m.47 (h)).
+pub const CATALOG_VERSION: u64 = 2;
+
+/// How long a founder invitation holds (TN-89, TN-141, PD): seven days; at most thirty.
+pub const FOUNDING_TTL_S: i64 = 7 * 86_400;
 
 /// Slugs no environment can take: the console's own paths under `/console/` (OP-159 m.42 (e)).
 pub const RESERVED_SLUGS: [&str; 2] = ["api", "assets"];
@@ -44,23 +48,29 @@ pub fn check_new_slug(slug: &str) -> Result<(), ProvisionInvalid> {
 /// The placement new tenants and environments take unless the caller names one (OP-40).
 pub const DEFAULT_PLACEMENT: &str = "pool-default";
 
-/// One `idp.platform.*` action. Each opens something that is never removed (OP-73): CT2.
+/// One `idp.platform.*` action (OP-159 m.47 (h)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PlatformAction {
-    /// Creates a tenant (TN-1).
+    /// Creates a tenant with an invited founder (TN-1, TN-141); never removed (OP-73): CT2.
     TenantCreate,
-    /// Creates an environment by opening its governing domain with a Genesis (TN-111, §5.16).
-    EnvironmentCreate,
-    /// Creates a sandbox domain from the sandbox template (OP-151 m.3 (m), X21).
-    SandboxCreate,
+    /// Suspends a tenant: its environments stop serving (CT2).
+    TenantSuspend,
+    /// Lifts a tenant's suspension (CT1).
+    TenantReactivate,
+    /// Moves where a tenant's new environments are placed (OP-40, CT2).
+    TenantPlacement,
 }
+
+/// The actions catalog version 1 published and version 2 retires (OP-159 m.47 (h)).
+pub const RETIRED: [&str; 2] = ["environment_create", "sandbox_create"];
 
 impl PlatformAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 4] = [
         Self::TenantCreate,
-        Self::EnvironmentCreate,
-        Self::SandboxCreate,
+        Self::TenantSuspend,
+        Self::TenantReactivate,
+        Self::TenantPlacement,
     ];
 
     /// Its name within the namespace.
@@ -68,8 +78,9 @@ impl PlatformAction {
     pub const fn name(self) -> &'static str {
         match self {
             Self::TenantCreate => "tenant_create",
-            Self::EnvironmentCreate => "environment_create",
-            Self::SandboxCreate => "sandbox_create",
+            Self::TenantSuspend => "tenant_suspend",
+            Self::TenantReactivate => "tenant_reactivate",
+            Self::TenantPlacement => "tenant_placement",
         }
     }
 
@@ -79,20 +90,17 @@ impl PlatformAction {
         format!("{NAMESPACE}.{}", self.name())
     }
 
-    /// Its Action Schema: irreversible, not reserved.
+    /// Its Action Schema: not reserved; a reactivation is reversible, the rest are not.
     #[must_use]
     pub fn schema(self) -> ActionSchema {
-        ActionSchema {
-            reversibility: None,
-            name: String::from(self.name()),
-            major: 1,
-            effect: EffectClass::Irreversible,
-            reserved: false,
-            consumption_bearing: false,
-            params: BTreeMap::new(),
-            resource_types: BTreeSet::new(),
-            render: None,
-        }
+        schema_named(
+            self.name(),
+            if self == Self::TenantReactivate {
+                EffectClass::Reversible
+            } else {
+                EffectClass::Irreversible
+            },
+        )
     }
 
     /// The reference an intent names it by.
@@ -107,6 +115,34 @@ impl PlatformAction {
     }
 }
 
+fn schema_named(name: &str, effect: EffectClass) -> ActionSchema {
+    ActionSchema {
+        reversibility: None,
+        name: String::from(name),
+        major: 1,
+        effect,
+        reserved: false,
+        consumption_bearing: false,
+        params: BTreeMap::new(),
+        resource_types: BTreeSet::new(),
+        render: None,
+    }
+}
+
+/// The references of the retired version 1 actions.
+#[must_use]
+pub fn retired() -> BTreeSet<ActionRef> {
+    RETIRED
+        .iter()
+        .map(|n| ActionRef {
+            namespace: String::from(NAMESPACE),
+            name: String::from(*n),
+            major: 1,
+            schema: action_digest(&schema_named(n, EffectClass::Irreversible)),
+        })
+        .collect()
+}
+
 /// The catalog of the platform actions, published by the platform environment's founder in its Genesis
 /// (OP-141 m.35 (c)); no other environment's domain accepts it.
 #[must_use]
@@ -119,7 +155,7 @@ pub fn catalog(publisher: Id) -> Spp {
             .into_iter()
             .map(PlatformAction::schema)
             .collect(),
-        retirements: BTreeSet::new(),
+        retirements: retired(),
         core_spec_min: None,
     }
 }
@@ -150,6 +186,15 @@ pub enum ProvisionInvalid {
     /// The slug is taken, now or by a deleted environment (TN-16, INV-32).
     #[error("slug taken")]
     SlugTaken,
+    /// A display name that is empty or longer than 120 characters (TN-131).
+    #[error("invalid name")]
+    Name,
+    /// A founder address that is not one (TN-89 (4)).
+    #[error("invalid email")]
+    Email,
+    /// The tenant is not in the state the change needs.
+    #[error("tenant state")]
+    TenantState,
 }
 
 impl ProvisionInvalid {
@@ -164,6 +209,9 @@ impl ProvisionInvalid {
             Self::TimeLock => "invalid-time-lock",
             Self::NoTenant => "not-found",
             Self::SlugTaken => "slug-taken",
+            Self::Name => "invalid-tenant-name",
+            Self::Email => "invalid-email",
+            Self::TenantState => "tenant-state",
         }
     }
 }
@@ -411,69 +459,98 @@ impl EnvironmentOrder {
         }
         Ok(())
     }
+}
 
-    fn value(&self) -> Value {
-        let mut fields = vec![
-            (Value::text("tenant"), Value::Bytes(self.tenant.to_vec())),
-            (Value::text("slug"), Value::text(&self.slug)),
-            (
-                Value::text("style"),
-                Value::text(match self.style {
-                    IssuerStyle::Subdomain => "subdomain",
-                    IssuerStyle::Path => "path",
-                }),
-            ),
-            (Value::text("placement"), Value::text(&self.placement)),
-            (Value::text("root"), root_value(&self.root)),
-            (
-                Value::text("acknowledge_no_recovery"),
-                Value::Bool(self.acknowledge_no_recovery),
-            ),
-        ];
-        if let Some(d) = self.ct3_delay_s {
-            fields.push((Value::text("ct3_delay_s"), Value::Unsigned(d)));
-        }
-        if self.causal_binding {
-            fields.push((Value::text("causal_binding"), Value::Bool(true)));
-        }
-        // §13.6, OP-158 m.3 (m)
-        if let (_, Some(entry)) = recovery(&self.root, self.recovery.as_ref()) {
-            fields.push((Value::text("recovery"), entry.to_value()));
-        }
-        Value::Map(fields)
+/// What a tenant's founding commits to (TN-89 (1), (8), TN-141): the management environment's
+/// blind index of the founder's identifier and the SHA-256 of the link token and of the magic
+/// code. The secrets themselves exist only in the mail.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct FounderCommitment {
+    /// The blind index of the founder's folded identifier.
+    pub index: [u8; 32],
+    /// SHA-256 of the link token.
+    pub token: [u8; 32],
+    /// SHA-256 of the magic code.
+    pub code: [u8; 32],
+}
+
+impl core::fmt::Debug for FounderCommitment {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FounderCommitment").finish_non_exhaustive()
     }
 }
 
-fn root_value(r: &Root) -> Value {
-    match r {
-        Root::Sole(p) => Value::Map(vec![(Value::text("sole"), p.to_value())]),
-        Root::Joint { parties, k } => Value::Map(vec![(
-            Value::text("joint"),
-            Value::Map(vec![
-                (Value::text("k"), Value::Unsigned(*k)),
-                (
-                    Value::text("parties"),
-                    Value::Array(parties.iter().map(Canonical::to_value).collect()),
-                ),
-            ]),
-        )]),
+impl FounderCommitment {
+    fn value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("index"), Value::Bytes(self.index.to_vec())),
+            (Value::text("token"), Value::Bytes(self.token.to_vec())),
+            (Value::text("code"), Value::Bytes(self.code.to_vec())),
+        ])
+    }
+}
+
+/// A tenant to create (OP-159 m.47 (c)): a server-assigned id, its display name, the slug its
+/// management environment will take, its placement and the founder commitment. The management
+/// environment's id is the tenant's own (TN-141): the founder's blind index is that
+/// environment's before it exists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TenantOrder {
+    /// The new tenant's id.
+    pub tenant: [u8; 16],
+    /// Its display name: its own text, never authority (TN-1, TN-131).
+    pub display_name: String,
+    /// The management environment's slug (TN-138).
+    pub management_slug: String,
+    /// Its placement.
+    pub placement: String,
+    /// What its founding commits to.
+    pub founder: FounderCommitment,
+}
+
+/// Checks a tenant's display name (TN-131): 1 to 120 characters, no control characters.
+///
+/// # Errors
+/// [`ProvisionInvalid::Name`].
+pub fn check_name(name: &str) -> Result<(), ProvisionInvalid> {
+    let n = name.chars().count();
+    if (1..=120).contains(&n) && !name.chars().any(char::is_control) && name.trim() == name {
+        Ok(())
+    } else {
+        Err(ProvisionInvalid::Name)
     }
 }
 
 /// One provisioning change: what an `idp.platform.*` intent binds (EI-25).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlatformChange {
-    /// A tenant with a server-assigned id.
-    Tenant {
-        /// The new tenant's id.
+    /// A tenant with an invited founder (TN-141).
+    Tenant(TenantOrder),
+    /// New secrets for the founder of a tenant whose founding did not complete (TN-141): the
+    /// tenant creation's action over the same tenant.
+    Reinvite {
+        /// The tenant.
         tenant: [u8; 16],
-        /// Its placement.
+        /// The new commitment; the identifier index stays the founding's.
+        founder: FounderCommitment,
+    },
+    /// Suspends a tenant.
+    Suspend {
+        /// The tenant.
+        tenant: [u8; 16],
+    },
+    /// Lifts a tenant's suspension.
+    Reactivate {
+        /// The tenant.
+        tenant: [u8; 16],
+    },
+    /// Moves a tenant's placement for its new environments (OP-40).
+    Placement {
+        /// The tenant.
+        tenant: [u8; 16],
+        /// The placement.
         placement: String,
     },
-    /// A production environment.
-    Environment(EnvironmentOrder),
-    /// A sandbox environment and its domain, from the sandbox template.
-    Sandbox(EnvironmentOrder),
 }
 
 impl PlatformChange {
@@ -481,9 +558,22 @@ impl PlatformChange {
     #[must_use]
     pub const fn action(&self) -> PlatformAction {
         match self {
-            Self::Tenant { .. } => PlatformAction::TenantCreate,
-            Self::Environment(_) => PlatformAction::EnvironmentCreate,
-            Self::Sandbox(_) => PlatformAction::SandboxCreate,
+            Self::Tenant(_) | Self::Reinvite { .. } => PlatformAction::TenantCreate,
+            Self::Suspend { .. } => PlatformAction::TenantSuspend,
+            Self::Reactivate { .. } => PlatformAction::TenantReactivate,
+            Self::Placement { .. } => PlatformAction::TenantPlacement,
+        }
+    }
+
+    /// The tenant it is about.
+    #[must_use]
+    pub const fn tenant(&self) -> [u8; 16] {
+        match self {
+            Self::Tenant(t) => t.tenant,
+            Self::Reinvite { tenant, .. }
+            | Self::Suspend { tenant }
+            | Self::Reactivate { tenant }
+            | Self::Placement { tenant, .. } => *tenant,
         }
     }
 
@@ -493,34 +583,39 @@ impl PlatformChange {
     /// [`ProvisionInvalid`].
     pub fn check(&self) -> Result<(), ProvisionInvalid> {
         match self {
-            Self::Tenant { placement, .. } => check_placement(placement),
-            Self::Environment(r) | Self::Sandbox(r) => r.check(),
+            Self::Tenant(t) => {
+                check_name(&t.display_name)?;
+                check_new_slug(&t.management_slug)?;
+                check_placement(&t.placement)
+            }
+            Self::Placement { placement, .. } => check_placement(placement),
+            Self::Reinvite { .. } | Self::Suspend { .. } | Self::Reactivate { .. } => Ok(()),
         }
     }
 
     fn body(&self) -> Value {
         match self {
-            Self::Tenant { tenant, placement } => Value::Map(vec![
+            Self::Tenant(t) => Value::Map(vec![
+                (Value::text("tenant"), Value::Bytes(t.tenant.to_vec())),
+                (Value::text("display_name"), Value::text(&t.display_name)),
+                (
+                    Value::text("management_slug"),
+                    Value::text(&t.management_slug),
+                ),
+                (Value::text("placement"), Value::text(&t.placement)),
+                (Value::text("founder"), t.founder.value()),
+            ]),
+            Self::Reinvite { tenant, founder } => Value::Map(vec![
+                (Value::text("tenant"), Value::Bytes(tenant.to_vec())),
+                (Value::text("reinvite"), founder.value()),
+            ]),
+            Self::Suspend { tenant } | Self::Reactivate { tenant } => {
+                Value::Map(vec![(Value::text("tenant"), Value::Bytes(tenant.to_vec()))])
+            }
+            Self::Placement { tenant, placement } => Value::Map(vec![
                 (Value::text("tenant"), Value::Bytes(tenant.to_vec())),
                 (Value::text("placement"), Value::text(placement)),
             ]),
-            Self::Environment(r) => r.value(),
-            Self::Sandbox(r) => {
-                let budget = Value::Map(vec![
-                    (
-                        Value::text("exercises_per_day"),
-                        Value::Unsigned(SANDBOX_BUDGET.exercises_per_day),
-                    ),
-                    (
-                        Value::text("projections_per_day"),
-                        Value::Unsigned(SANDBOX_BUDGET.projections_per_day),
-                    ),
-                ]);
-                Value::Map(vec![
-                    (Value::text("environment"), r.value()),
-                    (Value::text("budget"), budget),
-                ])
-            }
         }
     }
 
@@ -537,22 +632,17 @@ impl PlatformChange {
         Ok(Digest(context_digest(CHANGE_CONTEXT, &bytes).0))
     }
 
-    /// The resource it creates, under the platform environment `platform`'s `idp` Anchor:
-    /// `idp:[platform, "platform", kind, key]`.
+    /// The resource it acts on, under the platform environment `platform`'s `idp` Anchor:
+    /// `idp:[platform, "platform", "tenant", key]`.
     #[must_use]
     pub fn resource(&self, platform: &str) -> ResourceRef {
-        let (kind, key) = match self {
-            Self::Tenant { tenant, .. } => ("tenant", hex(tenant)),
-            Self::Environment(r) => ("environment", r.slug.clone()),
-            Self::Sandbox(r) => ("sandbox", r.slug.clone()),
-        };
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),
             path: vec![
                 String::from(platform),
                 String::from("platform"),
-                String::from(kind),
-                key,
+                String::from("tenant"),
+                hex(&self.tenant()),
             ],
             incarnation: 0,
         }

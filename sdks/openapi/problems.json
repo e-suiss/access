@@ -501,6 +501,62 @@
       "description": "The slug is taken, now or by a deleted environment; slugs are never reused (TN-16, INV-32)."
     },
     {
+      "code": "invalid-tenant-name",
+      "type": "urn:suiss:access:problem:invalid-tenant-name",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The tenant's display name is 1 to 120 characters without control characters or surrounding white space (TN-131)."
+    },
+    {
+      "code": "invalid-email",
+      "type": "urn:suiss:access:problem:invalid-email",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The address is not an e-mail address (TN-89 (4))."
+    },
+    {
+      "code": "tenant-state",
+      "type": "urn:suiss:access:problem:tenant-state",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The tenant is not in the state this change needs: a new tenant exists already, a reinvitation is only for a tenant awaiting its founder, a suspension only for an active one, a reactivation only for a suspended one (OP-159 m.47 (c), (h))."
+    },
+    {
+      "code": "management-environment",
+      "type": "urn:suiss:access:problem:management-environment",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b))."
+    },
+    {
+      "code": "founding-expired",
+      "type": "urn:suiss:access:problem:founding-expired",
+      "status": 410,
+      "title": "Gone",
+      "description": "The founder invitation expired; the platform can send a new one (TN-141)."
+    },
+    {
+      "code": "founding-state",
+      "type": "urn:suiss:access:problem:founding-state",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The founding is completed already, or its address is not proven yet (TN-141)."
+    },
+    {
+      "code": "invalid-code",
+      "type": "urn:suiss:access:problem:invalid-code",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The address or the code does not match the invitation (TN-89 (5))."
+    },
+    {
+      "code": "last-tenant-owner",
+      "type": "urn:suiss:access:problem:last-tenant-owner",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e))."
+    },
+    {
       "code": "public-sub-not-opted-in",
       "type": "urn:suiss:access:problem:public-sub-not-opted-in",
       "status": 400,

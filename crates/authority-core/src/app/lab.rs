@@ -188,9 +188,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let digest =
             intent_digest(&inc.request.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let viewer = self.actor(inc, &digest, now).await?.map(|a| a.party);
+        let held = match viewer {
+            Some(p) => self.rule_held(&p, now).await?,
+            None => std::collections::BTreeSet::new(),
+        };
         let basis = inc.request.basis;
         let (path, hidden, selection) = settle(&self.reader, |snap| {
-            let sees = viewer.is_some_and(|p| crate::domain::views(snap, &basis, &p));
+            let sees = viewer.is_some_and(|p| crate::domain::views(snap, &basis, &p, &held));
             let (grant, since) = match basis {
                 ExerciseBasis::Holding(h) => (Some(h.grant), h.since),
                 ExerciseBasis::Public(g) => (Some(g), 0),

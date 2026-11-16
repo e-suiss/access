@@ -382,8 +382,7 @@ impl Environment {
         acceptances.push(accepted);
         b.environment(
             &b.admin(&ids, None),
-            "acme",
-            issuer_style(Style::Path),
+            ("acme", issuer_style(Style::Path), None),
             founder,
             vec![sample.catalog(founder)],
             (acceptances, predicate),

@@ -43,7 +43,10 @@ impl Governance for OldCatalog<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 
@@ -101,6 +104,8 @@ async fn environment_with<G: Governance + access_identity_admin::ports::Instance
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
+            administered: None,
+            management: None,
         })
         .await
         .unwrap();
@@ -233,7 +238,10 @@ impl Governance for FirstCatalog<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 
@@ -967,7 +975,10 @@ impl Governance for PreRecovery<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 
@@ -1062,7 +1073,10 @@ impl Governance for PreOrgMember<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 
@@ -1124,7 +1138,10 @@ impl Governance for PreAgents<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 
@@ -1187,7 +1204,10 @@ impl Governance for PreAgentsLocked<'_> {
             .create(order.tenant, fields, now)
             .await
             .unwrap();
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: None,
+        })
     }
 }
 

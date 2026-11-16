@@ -1,6 +1,7 @@
 //! Use cases over the domain and its ports (OP-63).
 
 pub mod accounts;
+pub mod administration;
 pub mod approver;
 pub mod artifacts;
 pub mod binding;

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT environment_id FROM access.environment_domain_binding\n          WHERE tenant_id = $1 AND domain_id = $2 AND role = 'consuming' AND retired_at IS NULL\n          ORDER BY environment_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.environment_domain_binding",
+            "name": "environment_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "98eb612f80f7d0017b611adbbd41641dbd8cb7520debeccf17834eb933ff9af2"
+}

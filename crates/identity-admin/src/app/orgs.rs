@@ -57,7 +57,7 @@ const DAY_S: i64 = 86_400;
 const BASE32: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 /// An invitation's magic code: 40 random bits as 8 base32 characters (OP-153 m.3 (o)).
-fn magic_code(bits: [u8; 5]) -> String {
+pub(crate) fn magic_code(bits: [u8; 5]) -> String {
     let v = bits.iter().fold(0u64, |v, b| (v << 8) | u64::from(*b));
     (0..8u32)
         .rev()

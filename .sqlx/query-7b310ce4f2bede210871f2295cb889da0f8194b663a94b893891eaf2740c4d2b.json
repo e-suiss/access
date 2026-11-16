@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT placement_id FROM access.tenants WHERE tenant_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "placement_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.tenants",
+            "name": "placement_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7b310ce4f2bede210871f2295cb889da0f8194b663a94b893891eaf2740c4d2b"
+}

@@ -8,14 +8,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use access_internal_api::idp::{GenesisOrder, NAMESPACES, RESOURCE_NAMESPACE, spp};
+use access_internal_api::idp::{
+    AdminRule, GenesisOrder, MANAGEMENT_BINDING_CLASSES, NAMESPACES, RESOURCE_NAMESPACE,
+    TENANT_ADMINISTRATION, spp,
+};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
 pub use access_kernel::meta::core_action;
 use access_kernel::meta::{self, Root};
 use access_kernel::model::{
-    ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
-    ResourceSelector, Structural, SubjectSelector, Window,
+    ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, Conjunct, ConstraintSet,
+    DelegationTerms, EqValue, Id, ResourceSelector, Structural, SubjectSelector, Window,
 };
 use access_kernel::record::Opened;
 use access_kernel::schema::Spp;
@@ -231,6 +234,150 @@ fn environment_issuer_predicates(issuer: Id, classes: &[String]) -> Value {
     ])
 }
 
+/// The core meta-actions and reads the console's Admin, Developer and Audit screens ask about,
+/// by the resource namespace their intents name (OP-159 m.43 (d), m.47 (d), (k) (2)): what a tenant
+/// administrator rule covers on the meta-anchor. The writes among them stay the root's (OP-141
+/// m.3); the rule makes them eligible, and the audit Grant makes its holders auditors.
+pub const ADMIN_RULE_META: [(&str, &[&str]); 8] = [
+    (
+        "access.domain",
+        &[
+            "authority_set_define",
+            "grant_issue",
+            "grant_amend",
+            "grant_revoke",
+            "acceptance_establish",
+            "acceptance_amend",
+            "policy_set",
+            "instance_terminate",
+            "party_depart",
+            "anchor_amend",
+        ],
+    ),
+    ("access.role", &["authority_set_define"]),
+    ("access.grant", &["grant_amend", "grant_revoke"]),
+    ("access.acceptance", &["acceptance_amend"]),
+    ("access.instance", &["instance_terminate"]),
+    ("access.party", &["party_depart"]),
+    ("access.policy", &["policy_set", "policy_retire"]),
+    ("access.audit", &["read", "audit_export"]),
+];
+
+/// The holder of every Grant of a tenant administrator rule (OP-159 m.47 (d)): the Parties a
+/// live `tenant_administration = true` Claim selects.
+#[must_use]
+pub fn admin_holder() -> SubjectSelector {
+    SubjectSelector::Pred(BTreeSet::from([Conjunct {
+        claim_class: String::from(TENANT_ADMINISTRATION),
+        value: Some(EqValue::Bool(true)),
+    }]))
+}
+
+fn unbounded(actions: BTreeSet<ActionRef>, resource: ResourceSelector) -> CanonicalAuthority {
+    let mut a = bootstrap_authority();
+    a.authority.actions = ActionSet {
+        exact: actions,
+        prefix: BTreeSet::new(),
+    };
+    a.authority.resource = resource;
+    a
+}
+
+fn rule_grant(anchor: u64, authority: &CanonicalAuthority) -> Value {
+    Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(anchor)),
+        (Value::text("holder"), admin_holder().to_value()),
+        (Value::text("authority"), authority.to_value()),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ])
+}
+
+/// The Grant set of a tenant administrator rule over the environment `slug` (OP-159 m.47 (d),
+/// (k) (4)): one Grant per meta namespace on the meta-anchor and one of `rule.actions` on the
+/// `idp` Anchor over `idp:[slug]`.
+#[must_use]
+pub fn admin_rule_grants(slug: &str, rule: &AdminRule) -> Vec<Value> {
+    let mut out: Vec<Value> = ADMIN_RULE_META
+        .iter()
+        .map(|(ns, names)| {
+            rule_grant(
+                0,
+                &unbounded(
+                    names.iter().map(|n| core_action(n)).collect(),
+                    structural(ns, Vec::new()),
+                ),
+            )
+        })
+        .collect();
+    if !rule.actions.is_empty() {
+        out.push(rule_grant(
+            IDP_ANCHOR,
+            &unbounded(
+                rule.actions.iter().cloned().collect(),
+                structural(RESOURCE_NAMESPACE, vec![String::from(slug)]),
+            ),
+        ));
+    }
+    out
+}
+
+fn issuer_use(issuer: Id, use_: &str, classes: &[&str]) -> Value {
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (Value::text("use"), Value::text(use_)),
+        (
+            Value::text("classes"),
+            Value::Array(classes.iter().map(|c| Value::text(c)).collect()),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
+/// The Acceptances of a tenant administrator rule (OP-159 m.47 (d)): `subject-selection` of
+/// `tenant_administration` from the management environment's issuer and, when that issuer is
+/// another environment's, its `actor-binding` of who the administrator is and its
+/// `authentication` Claims as predicate input.
+#[must_use]
+pub fn admin_rule_acceptances(rule: &AdminRule) -> Vec<Value> {
+    let mut out = vec![issuer_use(
+        rule.issuer,
+        access_kernel::claim::SUBJECT_SELECTION,
+        &[TENANT_ADMINISTRATION],
+    )];
+    if rule.foreign {
+        out.push(issuer_use(
+            rule.issuer,
+            access_kernel::claim::ACTOR_BINDING,
+            &MANAGEMENT_BINDING_CLASSES,
+        ));
+        out.push(issuer_use(
+            rule.issuer,
+            access_kernel::claim::PREDICATE_INPUT,
+            &["authentication"],
+        ));
+    }
+    out
+}
+
+/// The position, among the Genesis Acceptances in `fields`, of the rule's `subject-selection`
+/// Acceptance (OP-159 m.47 (d)): its `AcceptanceID` is `object_id(domain, ACCEPTANCE, position)`.
+#[must_use]
+pub fn admin_acceptance_index(fields: &BTreeMap<String, Opened>, rule: &AdminRule) -> Option<u64> {
+    let wanted = admin_rule_acceptances(rule).into_iter().next()?;
+    let Some(Value::Array(list)) = fields.get("acceptances").map(|o| &o.value) else {
+        return None;
+    };
+    let at = list.iter().position(|a| *a == wanted)?;
+    u64::try_from(at).ok()
+}
+
 /// The Genesis fields of an environment's new governing domain.
 ///
 /// # Errors
@@ -280,7 +427,17 @@ pub fn environment(
     let mut fields = vec![
         ("meta_anchor", Value::Map(meta_anchor)),
         ("anchors", set(vec![idp])?),
-        ("grants", set(vec![bootstrap()])?),
+        (
+            "grants",
+            set(std::iter::once(bootstrap())
+                .chain(
+                    order
+                        .admin_rule
+                        .iter()
+                        .flat_map(|r| admin_rule_grants(&order.slug, r)),
+                )
+                .collect())?,
+        ),
         (
             "acceptances",
             set(NAMESPACES
@@ -295,6 +452,7 @@ pub fn environment(
                         .map(|i| environment_issuer_predicates(i, &order.issuer_predicate_input)),
                 )
                 .chain(order.acceptances.iter().cloned())
+                .chain(order.admin_rule.iter().flat_map(admin_rule_acceptances))
                 .collect())?,
         ),
         (

@@ -457,10 +457,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let catalog = self
             .settled(|snap| accepted_catalog(snap, namespace, now, &Catalog::default()))
             .await?;
+        let held = self.rule_held(&actor.party, now).await?;
         let mut hits = BTreeSet::new();
         for g in &candidates {
             let hit = self
-                .settled(|snap| Self::hit(snap, g, query, &actor, &catalog))
+                .settled(|snap| Self::hit(snap, g, query, (&actor, &held), &catalog))
                 .await?;
             if let Some(hit) = hit
                 && (matches!(query, Query::Subject { .. }) || self.holds(g, &actor, now).await?)
@@ -644,7 +645,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         view: &Snapshot,
         g: &Id,
         query: &Query,
-        actor: &Actor,
+        (actor, held): (&Actor, &BTreeSet<Id>),
         catalog: &Catalog,
     ) -> Option<Vec<Hit>> {
         let grant = live(view, g)?;
@@ -654,7 +655,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         match query {
             Query::Subject { action, resource } => {
                 // OP-141 m.22 (j), m.41 (c)
-                if !crate::domain::views(view, &ExerciseBasis::Public(*g), &actor.party) {
+                if !crate::domain::views(view, &ExerciseBasis::Public(*g), &actor.party, held) {
                     return None;
                 }
                 (actions.contains(action) && on(resource))
@@ -707,13 +708,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             Query::AdminGrant { grant } => {
                 let view = self.admin_grant(grant, now).await?;
-                let holder = self
+                let named = self
                     .settled(|snap| {
                         read::<GrantState>(snap, kind::GRANT, grant).is_some_and(|g| {
                             g.content.holder == SubjectSelector::Party(actor.party)
                         })
                     })
                     .await?;
+                // OP-159 m.47 (k)
+                let holder = named || self.rule_held(&actor.party, now).await?.contains(grant);
                 Ok(Some(Found {
                     hits: view
                         .filter(|_| auditor || holder)
@@ -743,6 +746,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 revoked: Revoked::Grant(g),
                 ..
             } => {
+                let held = self.rule_held(&actor.party, now).await?;
                 self.settled(|snap| {
                     read::<GrantState>(snap, kind::GRANT, g).is_some_and(|s| {
                         let above = match s.content.basis {
@@ -751,7 +755,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                                 ExerciseBasis::Holding(h)
                             }
                         };
-                        crate::domain::views(snap, &above, &actor.party)
+                        crate::domain::views(snap, &above, &actor.party, &held)
                     })
                 })
                 .await?

@@ -1278,3 +1278,5 @@ mod redteam;
 mod profile_check;
 // OP-159 m.41
 mod platform;
+// OP-159 m.47 (g)
+mod tenant;

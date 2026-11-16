@@ -234,13 +234,7 @@ fn anything_else_is_refused() {
             DraftError::Action,
         ),
         (
-            wanted(
-                "idp.platform",
-                "environment_create",
-                "idp",
-                &["acme"],
-                "commit",
-            ),
+            wanted("idp.platform", "tenant_create", "idp", &["acme"], "commit"),
             DraftError::Mode,
         ),
         (

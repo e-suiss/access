@@ -217,6 +217,59 @@ pub trait Devices: Send + Sync {
         &self,
         session: &ConsoleSession,
     ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
+
+    /// A challenge for the device key the browser generated for the domain of `environment`,
+    /// an environment the session's management environment administers (OP-159 m.47 (g),
+    /// TN-142); answered as [`Self::challenge`] does, with that domain.
+    fn challenge_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        body: Bytes,
+    ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send {
+        let _ = (session, environment, body);
+        std::future::ready(Ok(DeviceAnswer {
+            status: 404,
+            body: serde_json::json!({
+                "type": "urn:suiss:access:problem:not-found",
+                "title": "Not Found",
+                "status": 404,
+            }),
+            instance: None,
+        }))
+    }
+
+    /// Registers the device key in the domain of `environment` (TN-142); the administrator's
+    /// `tenant_administration` line there opens with it.
+    fn register_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        body: Bytes,
+    ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send {
+        self.challenge_in(session, environment, body)
+    }
+
+    /// The session's Instance in the domain of `environment` and that domain, when it has one
+    /// (TN-142).
+    fn instance_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+    ) -> impl Future<Output = Result<Option<(Digest, SessionInstance, [u8; 16])>, Unavailable>> + Send
+    {
+        let _ = (session, environment);
+        std::future::ready(Ok(None))
+    }
+
+    /// The environments other than the session's own where it holds an Instance (TN-142).
+    fn instances(
+        &self,
+        session: &ConsoleSession,
+    ) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send {
+        let _ = session;
+        std::future::ready(Ok(Vec::new()))
+    }
 }
 
 /// A management read token issued to a session (TN-130): at most 60 minutes, bound to the
@@ -241,6 +294,21 @@ pub trait ReadGrants: Send + Sync {
         jkt: [u8; 32],
         surface: Surface,
     ) -> impl Future<Output = Result<Option<IssuedRead>, Unavailable>> + Send;
+
+    /// A token on the environment surface of `environment`, an environment the session's
+    /// management environment administers, issued by that environment's own authorization
+    /// server to the session's Instance in its domain (OP-159 m.47 (g), TN-142); `None` when
+    /// the session may not have one.
+    fn issue_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        instance: &SessionInstance,
+        jkt: [u8; 32],
+    ) -> impl Future<Output = Result<Option<IssuedRead>, Unavailable>> + Send {
+        let _ = (session, environment, instance, jkt);
+        std::future::ready(Ok(None))
+    }
 }
 
 /// The DPoP keys the BFF holds, one per session, server side (RFC 9449). The key proves the

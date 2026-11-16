@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.placement_id, r.governing_domain_id, r.kex_share,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.exercises_per_day AS \"exercises_per_day?\",\n                      s.projections_per_day AS \"projections_per_day?\"\n                 FROM access.environments r\n                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id\n                WHERE r.tenant_id = $1 AND r.environment_id = $2",
+  "query": "SELECT r.placement_id, r.governing_domain_id, r.kex_share, r.kind,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.exercises_per_day AS \"exercises_per_day?\",\n                      s.projections_per_day AS \"projections_per_day?\"\n                 FROM access.environments r\n                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id\n                WHERE r.tenant_id = $1 AND r.environment_id = $2",
   "describe": {
     "columns": [
       {
@@ -38,12 +38,23 @@
       },
       {
         "ordinal": 3,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "created_ms!",
         "type_info": "Int8",
         "origin": "Expression"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "exercises_per_day?",
         "type_info": "Int8",
         "origin": {
@@ -54,7 +65,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "projections_per_day?",
         "type_info": "Int8",
         "origin": {
@@ -75,10 +86,11 @@
       false,
       false,
       false,
+      false,
       null,
       true,
       true
     ]
   },
-  "hash": "2a2743242a503f4a82b8c604ac13c77dd41b0dbc07774b43f34dfbc3273123f8"
+  "hash": "ba8b73f0d75f3bf924f69541b9f0a267022443fbcb5f7c9cef0c71c8a3e66b13"
 }

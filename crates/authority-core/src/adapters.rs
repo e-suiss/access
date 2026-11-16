@@ -2245,13 +2245,22 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
     while at < head {
         let to = head.min(at.saturating_add(DERIVE_STEP));
         let mut records = Vec::new();
-        for r in read_log(deriver, &id, at.saturating_add(1), to).await? {
+        // OP-159 m.47 (k)
+        let first = if at == 0 { 0 } else { at.saturating_add(1) };
+        for r in read_log(deriver, &id, first, to).await? {
             let record = RecordEnvelope::from_bytes(&r.envelope)
                 .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
             let mut one = crate::index::Pending::default();
-            for (key, value) in
+            let effects: Vec<fold::Effect> = if r.pos == 0 {
+                fold::genesis(&record)
+                    .map_err(|_| CoreError::Store(StoreError::Corrupt))?
+                    .into_iter()
+                    .map(|(k, e)| (k, e.value))
+                    .collect()
+            } else {
                 fold::effects(&record).map_err(|_| CoreError::Store(StoreError::Corrupt))?
-            {
+            };
+            for (key, value) in effects {
                 let Ok(Value::Array(k)) = dcbor::decode(&key, Limits::CEILING) else {
                     continue;
                 };

@@ -274,6 +274,8 @@ SCALARS = {
     "org_member": lambda v: isinstance(v, bytes) and len(v) == 16,
     # AG-31: the attested runtime class's digest
     "attestation_runtime": lambda v: isinstance(v, bytes) and len(v) == 32,
+    # OP-159 m.47 (d)
+    "tenant_administration": lambda v: isinstance(v, bool),
 }
 
 

@@ -454,4 +454,342 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
             None => Ok(None),
         }
     }
+
+    async fn challenge_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        body: Bytes,
+    ) -> Result<DeviceAnswer, Unavailable> {
+        let Some(cose) = serde_json::from_slice::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| {
+                v.get("key")
+                    .and_then(|k| k.as_str())
+                    .and_then(|k| bytes(k, 1, MAX_KEY))
+            })
+        else {
+            return Ok(invalid());
+        };
+        let Ok(key) = instance_key(&cose) else {
+            return Ok(problem(
+                400,
+                "key-invalid",
+                "The device key could not be verified",
+            ));
+        };
+        let target = match self.administered(session, environment).await? {
+            Ok(t) => t,
+            Err(refused) => return Ok(refused),
+        };
+        let now = crate::admin::now_ms()?;
+        let challenge = access_crypto::random::bytes::<32>().map_err(down)?;
+        let validity = Window {
+            from: now,
+            until: now.saturating_add(CHALLENGE_MS),
+        };
+        access_store::tenant_admin::put_domain_challenge(
+            &self.app,
+            &session.id,
+            &access_store::tenant_admin::DomainChallenge {
+                challenge,
+                domain: access_store::scope::DomainId::from_bytes(target.domain.0),
+                slug: String::from(environment),
+                key: cose,
+                party: target.party,
+                from_ms: validity.from,
+                until_ms: validity.until,
+            },
+        )
+        .await
+        .map_err(down)?;
+        let ExerciseBasis::Public(grant) = bootstrap_basis(&target.domain) else {
+            return Err(Unavailable);
+        };
+        let register = access_kernel::meta::Payload::PartyRegister {
+            party: Id(target.party),
+            root: access_kernel::meta::Root::Sole(Id(target.party)),
+            actor_kind: access_kernel::meta::ActorKind::Human,
+        };
+        let mut out = json!({
+            "challenge": b64url_encode(&challenge),
+            "domain": b64url_encode(&target.domain.0),
+            "environment": environment,
+            "basis": b64url_encode(&grant.0),
+            "pep": IDENTITY_PEP,
+            "party": b64url_encode(&target.party),
+            "valid_from": rfc3339(validity.from),
+            "valid_until": rfc3339(validity.until),
+            "expires_at": rfc3339(validity.until),
+            "create": envelope(
+                &access_kernel::meta::Payload::InstanceCreate {
+                    party: Id(target.party),
+                    key,
+                    mandate: None,
+                },
+                target.party,
+                validity,
+            )?,
+        });
+        if !target.registered
+            && let Some(m) = out.as_object_mut()
+        {
+            m.insert(
+                String::from("register"),
+                envelope(&register, target.party, validity)?.into(),
+            );
+        }
+        Ok(answer(201, out))
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the challenge taken, the registration, the Instance attached and the line opened, in order"
+    )]
+    async fn register_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        body: Bytes,
+    ) -> Result<DeviceAnswer, Unavailable> {
+        let Some(Parsed {
+            challenge,
+            party,
+            cose,
+            ais,
+            validity,
+            register_ais,
+        }) = parsed(&body)
+        else {
+            return Ok(invalid());
+        };
+        let target = match self.administered(session, environment).await? {
+            Ok(t) => t,
+            Err(refused) => return Ok(refused),
+        };
+        let now = crate::admin::now_ms()?;
+        let Some(pending) = access_store::tenant_admin::take_domain_challenge(
+            &self.app,
+            &session.id,
+            &challenge,
+            now,
+        )
+        .await
+        .map_err(down)?
+        else {
+            return Ok(problem(400, "invalid-challenge", "Ask for a new challenge"));
+        };
+        if pending.key != cose
+            || pending.party != party
+            || party != target.party
+            || pending.slug != environment
+            || pending.from_ms != validity.from
+            || pending.until_ms != validity.until
+            || register_ais.is_some() == target.registered
+        {
+            return Ok(problem(400, "invalid-challenge", "Ask for a new challenge"));
+        }
+        let Ok(key) = instance_key(&cose) else {
+            return Ok(problem(
+                400,
+                "key-invalid",
+                "The device key could not be verified",
+            ));
+        };
+        let verdict = self
+            .instances
+            .register(Registration {
+                tenant: *target.row.tenant.as_bytes(),
+                domain: target.domain,
+                registrant: Registrant::Device {
+                    environment: *target.environment.as_bytes(),
+                    subject: target.row.subject,
+                },
+                party: Id(party),
+                key: key.clone(),
+                register: register_ais.map(|a| SelfSigned {
+                    nonce: register_nonce(&challenge),
+                    validity,
+                    ais: a,
+                }),
+                create: SelfSigned {
+                    nonce: challenge.to_vec(),
+                    validity,
+                    ais,
+                },
+                pep: String::from(IDENTITY_PEP),
+                context: self.context(&target.row, session),
+            })
+            .await
+            .map_err(down)?;
+        let registered = match verdict {
+            RegistrationVerdict::Registered(r) => r,
+            RegistrationVerdict::Refused { code } => return Ok(refusal(&code)),
+        };
+        let instance = SessionInstance {
+            kid: thumbprint(&key),
+            key,
+        };
+        access_store::tenant_admin::attach_instance(
+            &self.app,
+            &session.id,
+            &access_store::tenant_admin::SessionInstance {
+                domain: access_store::scope::DomainId::from_bytes(target.domain.0),
+                slug: String::from(environment),
+                party,
+                kid: instance.kid,
+                key: cose,
+            },
+            now,
+        )
+        .await
+        .map_err(down)?;
+        // OP-159 m.47 (d), (f)
+        let mut t = TenantTx::begin(&self.app, target.row.tenant, target.row.environment)
+            .await
+            .map_err(down)?;
+        access_store::tenant_admin::open_line(
+            &mut t,
+            &target.row.subject,
+            &access_store::scope::DomainId::from_bytes(target.domain.0),
+            &party,
+        )
+        .await
+        .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        tracing::info!(
+            event = "console.device.registered_in",
+            outcome = "ok",
+            "console device registered in an administered environment"
+        );
+        Ok(DeviceAnswer {
+            status: 201,
+            body: json!({
+                "environment": environment,
+                "instance": b64url_encode(&registered.instance.0),
+                "kid": b64url_encode(&registered.kid),
+                "party": b64url_encode(&registered.party.0),
+            }),
+            instance: Some(instance),
+        })
+    }
+
+    async fn instance_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+    ) -> Result<Option<(Digest, SessionInstance, [u8; 16])>, Unavailable> {
+        let all = access_store::tenant_admin::session_instances(&self.app, &session.id)
+            .await
+            .map_err(down)?;
+        let Some(found) = all.into_iter().find(|i| i.slug == environment) else {
+            return Ok(None);
+        };
+        let key = instance_key(&found.key).map_err(down)?;
+        if thumbprint(&key) != found.kid {
+            return Err(Unavailable);
+        }
+        Ok(Some((
+            Digest(*found.domain.as_bytes()),
+            SessionInstance {
+                kid: found.kid,
+                key,
+            },
+            found.party,
+        )))
+    }
+
+    async fn instances(&self, session: &ConsoleSession) -> Result<Vec<String>, Unavailable> {
+        Ok(
+            access_store::tenant_admin::session_instances(&self.app, &session.id)
+                .await
+                .map_err(down)?
+                .into_iter()
+                .map(|i| i.slug)
+                .collect(),
+        )
+    }
+}
+
+/// An environment a console session's management environment administers, as a registration
+/// there needs it (OP-159 m.47 (d), (g), TN-142).
+struct Administered {
+    row: ConsoleSessionRow,
+    environment: access_store::identity::EnvironmentId,
+    domain: Digest,
+    /// The administrator's Party: its Party in the management environment.
+    party: [u8; 16],
+    /// Whether that Party is registered in the domain already.
+    registered: bool,
+}
+
+impl<I: DeviceInstances> ConsoleDevices<I> {
+    /// `environment` when the session's environment is its tenant's management environment, the
+    /// environment's domain consumes it, and the session's subject is one of its live
+    /// administrators with a Party; otherwise the refusal to answer.
+    async fn administered(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+    ) -> Result<Result<Administered, DeviceAnswer>, Unavailable> {
+        let not_found = || problem(404, "not-found", "Not Found");
+        let Some(row) = console::by_id(&self.app, &session.id)
+            .await
+            .map_err(down)?
+            .filter(|r| r.ended_ms.is_none() && r.instance.is_some())
+        else {
+            return Ok(Err(problem(
+                403,
+                "console-instance-required",
+                "Register this sign-in's device first",
+            )));
+        };
+        let mut t = TenantTx::begin_tenant(&self.app, row.tenant)
+            .await
+            .map_err(down)?;
+        let target = access_store::tenant_admin::tenant_environments(&mut t)
+            .await
+            .map_err(down)?
+            .into_iter()
+            .find(|e| e.slug == environment && e.kind == "standard");
+        let consumers = match &target {
+            Some(e) => access_store::environment_binding::consumed_by(&mut t, &e.domain)
+                .await
+                .map_err(down)?,
+            None => Vec::new(),
+        };
+        t.commit().await.map_err(down)?;
+        let Some(target) = target.filter(|_| consumers.contains(&row.environment)) else {
+            return Ok(Err(not_found()));
+        };
+        let mut t = TenantTx::begin(&self.app, row.tenant, row.environment)
+            .await
+            .map_err(down)?;
+        let admin = access_store::tenant_admin::admin(&mut t, &row.subject)
+            .await
+            .map_err(down)?;
+        let party = access_store::idp::subject_party(&mut t, &row.subject)
+            .await
+            .map_err(down)?;
+        let registered = access_store::tenant_admin::lines(&mut t, Some(&row.subject))
+            .await
+            .map_err(down)?
+            .iter()
+            .any(|l| l.domain == target.domain);
+        t.commit().await.map_err(down)?;
+        let (Some(_), Some(party)) = (admin.filter(|a| a.ended_ms.is_none()), party) else {
+            return Ok(Err(problem(
+                403,
+                "not-an-administrator",
+                "This account does not administer the environment",
+            )));
+        };
+        Ok(Ok(Administered {
+            row,
+            environment: target.environment,
+            domain: Digest(*target.domain.as_bytes()),
+            party,
+            registered,
+        }))
+    }
 }

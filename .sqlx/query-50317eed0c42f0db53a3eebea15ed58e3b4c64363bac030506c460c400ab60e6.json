@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admins SET party_id = $4\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND party_id IS NULL\n            AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "50317eed0c42f0db53a3eebea15ed58e3b4c64363bac030506c460c400ab60e6"
+}

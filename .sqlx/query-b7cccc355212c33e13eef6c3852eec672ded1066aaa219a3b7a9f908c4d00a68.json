@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenant_admin_claims\n            SET ended_ms = coalesce(ended_ms, $5), ended_claim_id = coalesce(ended_claim_id, $6)\n          WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND domain_id = $4\n            AND (ended_ms IS NULL OR (ended_claim_id IS NULL AND $6::bytea IS NOT NULL))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b7cccc355212c33e13eef6c3852eec672ded1066aaa219a3b7a9f908c4d00a68"
+}

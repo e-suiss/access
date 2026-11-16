@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.console_instance_challenges SET taken_ms = $3\n          WHERE challenge = $1 AND session_id = $2 AND taken_ms IS NULL AND until_ms >= $3\n        RETURNING domain_id, environment_slug, key, party_id, from_ms, until_ms",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "environment_slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "environment_slug"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "party_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_instance_challenges",
+            "name": "until_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "366ba21e5b9e0a3aa6d14d472fc4ffc99dcce2faabeeb1e24d258223dfe8cf3a"
+}

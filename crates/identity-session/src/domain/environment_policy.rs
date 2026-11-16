@@ -56,6 +56,18 @@ impl Default for EnvironmentSignin {
     }
 }
 
+impl EnvironmentSignin {
+    /// No stored policy in a management environment (TN-138, OP-159 m.47 (b)): the default with
+    /// a second factor required; a decided `idp.environment.signin_policy` replaces it.
+    #[must_use]
+    pub fn management() -> Self {
+        Self {
+            mfa_required: true,
+            ..Self::default()
+        }
+    }
+}
+
 /// `{mode: direct | enterprise, aaguids: [text]}` as `idp.environment.signin_policy` writes it.
 fn attestation(v: Option<&Value>) -> Option<AttestationPolicy> {
     let Some(v) = v else {

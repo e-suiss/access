@@ -23,8 +23,12 @@ pub(crate) struct Running {
     task: tokio::task::JoinHandle<()>,
     scim: tokio::task::JoinHandle<()>,
     hr: tokio::task::JoinHandle<()>,
+    administration: tokio::task::JoinHandle<()>,
     renewing: tokio::task::JoinHandle<()>,
 }
+
+/// How often the administration courier looks for lines to renew or end (OP-159 m.47 (f), PD).
+pub(crate) const ADMINISTRATION_INTERVAL: Duration = Duration::from_secs(10);
 
 /// The environment issuer's courier of this process.
 pub(crate) type ClaimsCourier<L> =
@@ -34,7 +38,7 @@ pub(crate) type ClaimsCourier<L> =
 /// outbox with the event pools' reader; both stop together. The courier is also returned, for
 /// the approvals that need their Claim at once (SI-5, OP-150 L6).
 pub(crate) fn start<L, R, F>(
-    signer: SignerKeys,
+    (signer, administration_signer): (SignerKeys, SignerKeys),
     pools: &EventPools,
     (domains, hr): (Arc<L>, (crate::hr::Vaults, Arc<crate::ids::CellIds>)),
     renew: R,
@@ -69,6 +73,19 @@ where
         )),
     );
     let hr_pools = (app.clone(), reader.clone());
+    // OP-159 m.47 (f)
+    let administration = access_identity_account::app::administration::Administration {
+        app: app.clone(),
+        signer: administration_signer,
+        ingest: Ingest::new(
+            Arc::clone(&domains),
+            PgSubmissions(app.clone()),
+            Trusted(tokio::sync::Mutex::new(
+                access_authority_sequencer::adapters::SourcesClock::new(app.clone()),
+            )),
+        ),
+        clock: SystemClock,
+    };
     let courier = Arc::new(Courier {
         app: app.clone(),
         reader,
@@ -84,15 +101,22 @@ where
     let running = Arc::clone(&courier);
     let scim_stopped = stopped.clone();
     let hr_stopped = stopped.clone();
+    let administration_stopped = stopped.clone();
     let task = tokio::spawn(async move { running.run(INTERVAL, &stopped).await });
     let scim = tokio::spawn(async move { scim.run(INTERVAL, &scim_stopped).await });
     let hr = tokio::spawn(crate::hr::run(hr_pools, hr_ingest, hr, hr_stopped));
+    let administration = tokio::spawn(async move {
+        administration
+            .run(ADMINISTRATION_INTERVAL, &administration_stopped)
+            .await;
+    });
     (
         Running {
             stop,
             task,
             scim,
             hr,
+            administration,
             renewing,
         },
         courier,
@@ -106,6 +130,7 @@ impl Running {
         let _ = self.task.await;
         let _ = self.scim.await;
         let _ = self.hr.await;
+        let _ = self.administration.await;
         self.renewing.abort();
     }
 }

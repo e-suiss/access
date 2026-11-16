@@ -17,80 +17,87 @@ fn body(v: &Value) -> Map<String, Value> {
     v.as_object().unwrap().clone()
 }
 
-const SOLE: &str = "AQEBAQEBAQEBAQEBAQEBAQ";
-const OTHER: &str = "AgICAgICAgICAgICAgICAg";
-
-// OP-151 m.3 (m)
+// OP-159 m.47 (c), TN-89 (4)
 #[test]
-fn the_sandbox_flag_picks_the_template() {
+fn a_tenant_creation_names_its_founder_and_management_slug() {
     let k = ids();
     let tenant = k.encode(TENANT_PREFIX, [3; 16]).unwrap();
-    let joint =
-        json!({ "slug": "shop", "root": { "joint": { "k": 2, "parties": [SOLE, OTHER] } } });
-    let prod = change(&k, "createEnvironment", Some(&tenant), &body(&joint)).unwrap();
-    assert!(matches!(prod, PlatformChange::Environment(_)));
-    let mut flagged = joint.clone();
-    flagged["sandbox"] = json!(true);
-    let sandbox = change(&k, "createEnvironment", Some(&tenant), &body(&flagged)).unwrap();
-    assert!(matches!(sandbox, PlatformChange::Sandbox(_)));
-    assert!(matches!(
-        change(&k, "createSandboxDomain", Some(&tenant), &body(&joint)).unwrap(),
-        PlatformChange::Sandbox(_)
-    ));
-    let mut refused = joint;
-    refused["sandbox"] = json!(false);
+    let ok = json!({
+        "tenant_id": tenant,
+        "display_name": "Acme",
+        "management_slug": "acme-admin",
+        "founder_email": " Admin@Acme.Example ",
+    });
     assert_eq!(
-        change(&k, "createSandboxDomain", Some(&tenant), &body(&refused)).err(),
+        parse(&k, "createTenant", None, &body(&ok)).unwrap(),
+        Parsed::Tenant {
+            tenant: [3; 16],
+            display_name: String::from("Acme"),
+            slug: String::from("acme-admin"),
+            email: String::from("admin@acme.example"),
+            placement: String::from(DEFAULT_PLACEMENT),
+        }
+    );
+    let mut bad = ok.clone();
+    bad["founder_email"] = json!("not-an-address");
+    assert_eq!(
+        parse(&k, "createTenant", None, &body(&bad)).err(),
+        Some(&codes::platform::INVALID_EMAIL)
+    );
+    let mut extra = ok;
+    extra["root"] = json!({ "sole": "AQEBAQEBAQEBAQEBAQEBAQ" });
+    assert_eq!(
+        parse(&k, "createTenant", None, &body(&extra)).err(),
         Some(&codes::environment::INVALID_BODY)
     );
 }
 
-// TN-111
+// TN-112, OP-159 m.47 (h)
 #[test]
-fn roots_are_read_strictly() {
-    assert!(matches!(
-        root(Some(&json!({ "sole": SOLE }))),
-        Ok(Root::Sole(_))
-    ));
-    assert!(matches!(
-        root(Some(
-            &json!({ "joint": { "k": 2, "parties": [SOLE, OTHER] } })
-        )),
-        Ok(Root::Joint { k: 2, .. })
-    ));
-    for bad in [
-        json!({ "joint": { "k": 2, "parties": [SOLE, SOLE] } }),
-        json!({ "sole": SOLE, "joint": { "k": 2, "parties": [SOLE, OTHER] } }),
-        json!({ "sole": "short" }),
-        json!({ "joint": { "k": 2, "parties": [SOLE, OTHER], "extra": 1 } }),
-        json!("sole"),
-    ] {
-        assert_eq!(
-            root(Some(&bad)).err(),
-            Some(&codes::platform::INVALID_ROOT),
-            "{bad}"
-        );
-    }
-    assert_eq!(root(None).err(), Some(&codes::platform::INVALID_ROOT));
-}
-
-// TN-112
-#[test]
-fn unknown_members_and_foreign_tenant_ids_are_refused() {
+fn tenant_changes_take_their_own_members_and_a_known_tenant() {
     let k = ids();
     let tenant = k.encode(TENANT_PREFIX, [3; 16]).unwrap();
-    let extra = json!({ "slug": "shop", "root": { "sole": SOLE }, "owner_email": "x@y.example" });
     assert_eq!(
-        change(&k, "createEnvironment", Some(&tenant), &body(&extra)).err(),
+        parse(&k, "suspendTenant", Some(&tenant), &body(&json!({}))).unwrap(),
+        Parsed::Suspend { tenant: [3; 16] }
+    );
+    assert_eq!(
+        parse(&k, "reactivateTenant", Some(&tenant), &body(&json!({}))).unwrap(),
+        Parsed::Reactivate { tenant: [3; 16] }
+    );
+    assert_eq!(
+        parse(
+            &k,
+            "moveTenantPlacement",
+            Some(&tenant),
+            &body(&json!({ "placement": "pool-eu" }))
+        )
+        .unwrap(),
+        Parsed::Placement {
+            tenant: [3; 16],
+            placement: String::from("pool-eu")
+        }
+    );
+    assert_eq!(
+        parse(
+            &k,
+            "suspendTenant",
+            Some(&tenant),
+            &body(&json!({ "placement": "x" }))
+        )
+        .err(),
         Some(&codes::environment::INVALID_BODY)
     );
-    let ok = json!({ "slug": "shop", "root": { "sole": SOLE } });
     assert_eq!(
-        change(&k, "createEnvironment", Some("tnt_forged"), &body(&ok)).err(),
+        parse(&k, "suspendTenant", Some("tnt_forged"), &body(&json!({}))).err(),
         Some(&codes::NOT_FOUND)
     );
     assert_eq!(
-        change(&k, "createTenant", None, &body(&json!({}))).err(),
+        parse(&k, "createEnvironment", Some(&tenant), &body(&json!({}))).err(),
+        Some(&codes::environment::UNKNOWN_OPERATION)
+    );
+    assert_eq!(
+        parse(&k, "createTenant", None, &body(&json!({}))).err(),
         Some(&codes::environment::INVALID_BODY)
     );
 }

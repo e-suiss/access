@@ -26,6 +26,7 @@ mod doorbell;
 mod edge;
 mod events;
 mod export;
+mod founding;
 mod handles;
 mod hr;
 mod idp;
@@ -2278,7 +2279,7 @@ async fn serve(
     });
     // OP-150 L2, CMP-8
     let (renewing, courier) = claims::start(
-        signer(),
+        (signer(), signer()),
         &platform_pools,
         (domains.clone(), (hr::Vaults(hr_keks), cell_ids.clone())),
         renew,
@@ -2486,6 +2487,16 @@ async fn serve(
         .as_ref()
         .map(|s| s.management_api.clone())
         .ok_or("no suiss section")?;
+    // OP-159 m.47 (c), TN-141
+    let founding = founding::router(founding::Founding {
+        app: admin_app.clone(),
+        ids: admin_ids.clone(),
+        plane: idp_plane.clone(),
+        base: EnvironmentBase::parse(&identity_section.environment_base)
+            .map_err(|e| e.to_string())?,
+        keys: environment_keys.clone(),
+        keks: login::EnvironmentKeks::new(prepared.identity_keys.clone()),
+    });
     let management = admin::router(
         (management_origin, identity_section.signer.clone()),
         &prepared.identity_keys,
@@ -2641,6 +2652,7 @@ async fn serve(
                 environment_quotas.clone(),
             ))
             .merge(edge_calls)
+            .merge(founding)
             .merge(access_http::quota::meter(scim_calls, environment_quotas))
             .merge(declared(&Declarations::of(config.provider)))
             .merge(access_http::stage11::router())

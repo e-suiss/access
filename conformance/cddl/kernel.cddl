@@ -1083,6 +1083,10 @@ pap-presentation = {
 ;                            `pred` holder selects one organization's members (OP-153 m.17 (c))
 ;   attestation_runtime      bstr .size 32: the digest of the attested runtime class; a
 ;                            narrowing input only (AG-31, OP-154 m.3 (s))
+;   tenant_administration    bool: true while the subject administers the tenant of the
+;                            management environment whose issuer states it, false once it no
+;                            longer does; a `pred` holder selects the tenant's administrators
+;                            (OP-159 m.47 (d), (f))
 ; Every other Stage 6 class has a body: its `value` is the 32-byte digest of the
 ; claim-body-binding, and the body travels beside the Claim. A withheld body leaves a
 ; digest-valued Claim (E26).

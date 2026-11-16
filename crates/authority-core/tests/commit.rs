@@ -40,6 +40,9 @@ mod payee;
 // OP-159 m.3 (k)
 #[path = "commit/holding_terms.rs"]
 mod holding_terms;
+// OP-159 m.47
+#[path = "commit/tenant_admin.rs"]
+mod tenant_admin;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;

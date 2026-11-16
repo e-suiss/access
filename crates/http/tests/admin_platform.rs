@@ -100,7 +100,11 @@ fn platform_responses_are_content_free_by_contract() {
     let doc = openapi();
     for row in platform_rows() {
         let op = &doc["paths"][row.path][row.verb.name()];
-        let ok = if row.verb == Verb::Get || row.access != Access::Write {
+        let acts = matches!(
+            access_http::api::platform::spec(row.operation_id),
+            Some((_, access_http::api::platform::Shape::Act))
+        );
+        let ok = if row.verb == Verb::Get || row.access != Access::Write || acts {
             &op["responses"]["200"]
         } else {
             &op["responses"]["201"]
@@ -167,9 +171,9 @@ async fn platform_reads_drop_what_the_kind_may_not_show() {
     }
 }
 
-// TN-110, TN-111, INV-29
+// TN-110, TN-141, INV-29, OP-159 m.47 (c)
 #[tokio::test]
-async fn a_environment_creation_answers_with_its_exercise_and_genesis() {
+async fn a_tenant_creation_answers_with_its_exercise_and_tenant() {
     let h = Harness::new();
     let router = h.router();
     let token = h.token("p", "access-admin:platform", &["platform.read"], 600_000);
@@ -178,21 +182,21 @@ async fn a_environment_creation_answers_with_its_exercise_and_genesis() {
         .header("dpop", admin::proof("POST", "/admin/v1/platform/intents"))
         .header("content-type", "application/json")
         .body(Body::from(
-            json!({ "operation": "createEnvironment", "key": "t1",
-                    "body": { "slug": "shop", "root": { "sole": "AQEBAQEBAQEBAQEBAQEBAQ" },
-                              "acknowledge_no_recovery": true } })
+            json!({ "operation": "createTenant",
+                    "body": { "display_name": "Acme", "management_slug": "acme-admin",
+                              "founder_email": "admin@acme.example" } })
             .to_string(),
         ))
         .unwrap();
     let (r, drafted) = send(&router, draft).await;
     assert_eq!(r.status(), StatusCode::OK, "{drafted}");
-    assert_eq!(drafted["operation"], "createEnvironment");
+    assert_eq!(drafted["operation"], "createTenant");
     assert_eq!(drafted["domain"], b64url_encode(&platform_domain().0));
     assert_eq!(h.position(), 0, "drafting changes nothing");
 
     let me = h.instance(platform_domain());
     let nonce = [9; 16];
-    let path = "/admin/v1/platform/tenants/t1/envs";
+    let path = "/admin/v1/platform/tenants";
     let request = Request::post(path)
         .header("content-type", "application/json")
         .header("idempotency-key", b64url_encode(&nonce))
@@ -202,8 +206,8 @@ async fn a_environment_creation_answers_with_its_exercise_and_genesis() {
     let (r, body) = send(&router, request).await;
     assert_eq!(r.status(), StatusCode::CREATED, "{body}");
     assert_eq!(body["position"], "1");
-    assert_eq!(body["genesis"]["recovery"], "not_available");
-    assert_eq!(body["resource"]["slug"], "new");
+    assert!(body.get("genesis").is_none());
+    assert!(body["resource"]["tenant_id"].is_string());
     let mut all = Vec::new();
     keys(&body, &mut all);
     for banned in CONTENT_FIELDS.iter().chain([&"client_secret"]) {
@@ -252,7 +256,17 @@ fn the_platform_surface_has_no_super_admin_shortcut() {
         if first == "tenants" {
             let last = rest.rsplit('/').next().unwrap();
             assert!(
-                ["tenants", "{tenant_id}", "envs", "sandbox-domains"].contains(&last),
+                [
+                    "tenants",
+                    "{tenant_id}",
+                    "envs",
+                    "sandbox-domains",
+                    "reinvite-founder",
+                    "suspend",
+                    "reactivate",
+                    "placement"
+                ]
+                .contains(&last),
                 "{}",
                 row.operation_id
             );

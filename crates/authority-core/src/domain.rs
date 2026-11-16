@@ -781,8 +781,14 @@ fn in_line(view: &Snapshot, id: &Id, s: &Statement) -> bool {
 }
 
 /// Whether `party` may view decisions made on `basis`: the root of its Anchor, or the root of
-/// the top Anchor or the extensional holder of a live Grant in its lineage (OP-141 m.38 (c)).
-pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool {
+/// the top Anchor or the holder of a live Grant in its lineage, by name or as one of the
+/// rule-shaped Grants `held` whose episode is live for it (OP-141 m.38 (c), OP-159 m.47 (k)).
+pub(crate) fn views(
+    view: &Snapshot,
+    basis: &ExerciseBasis,
+    party: &Id,
+    held: &BTreeSet<access_kernel::model::Id>,
+) -> bool {
     let actor = Actor {
         party: *party,
         instance: Id([0; 16]),
@@ -801,17 +807,26 @@ pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool 
     };
     let holds = ids.iter().any(|id| {
         read::<GrantState>(view, kind::GRANT, id).is_some_and(|g| {
-            g.ended.is_none() && g.content.holder == SubjectSelector::Party(*party)
+            g.ended.is_none()
+                && (g.content.holder == SubjectSelector::Party(*party)
+                    || (matches!(g.content.holder, SubjectSelector::Pred(_)) && held.contains(id)))
         })
     });
     holds || top_anchor(view, basis).is_some_and(|a| root_of(&a))
 }
 
-/// Whether Grant `g` is held by `party` and makes it an auditor of `domain` at `now`: it
+/// Whether Grant `g` is held by `party`, by name or as a rule-shaped Grant whose episode is
+/// live for it (`rule_held`, OP-159 m.47 (k)), and makes it an auditor of `domain` at `now`: it
 /// names `access:audit_export`, rests on the meta-anchor or covers the whole `access.audit`
 /// namespace, and every hop of its lineage is live, in its validity window and free of
 /// conditions and requirements an audit read cannot satisfy (OP-141 m.38 (d), m.39 (b)).
-pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id, domain: &Digest, now: u64) -> bool {
+pub(crate) fn audit_grant(
+    view: &Snapshot,
+    g: &Id,
+    (party, rule_held): (&Id, bool),
+    domain: &Digest,
+    now: u64,
+) -> bool {
     let Some(state) = read::<GrantState>(view, kind::GRANT, g) else {
         return false;
     };
@@ -823,7 +838,9 @@ pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id, domain: &Digest, 
         .exact
         .iter()
         .any(|a| a.namespace == meta::NAMESPACE && a.name == export::EXPORT_ACTION);
-    if !named || state.content.holder != SubjectSelector::Party(*party) {
+    let holds = state.content.holder == SubjectSelector::Party(*party)
+        || (rule_held && matches!(state.content.holder, SubjectSelector::Pred(_)));
+    if !named || !holds {
         return false;
     }
     let audit = ResourceSelector::Structural(Structural {

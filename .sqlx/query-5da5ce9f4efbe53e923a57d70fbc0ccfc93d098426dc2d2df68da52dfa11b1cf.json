@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,\n                  a.ended_at IS NULL AS \"admin_live!\"\n             FROM access.tenant_admin_claims c\n             JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id\n              AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id\n            WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4\n            ORDER BY c.created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "stated_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "stated_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "valid_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "valid_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "ended_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "ended_claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "ended_claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "admin_live!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "5da5ce9f4efbe53e923a57d70fbc0ccfc93d098426dc2d2df68da52dfa11b1cf"
+}

@@ -1109,6 +1109,10 @@ where
     async fn open(&self, order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
         let fields =
             genesis::environment(&order, &mut OsSalts).map_err(|e| Unavailable(e.to_string()))?;
+        let admin_acceptance = order
+            .admin_rule
+            .as_ref()
+            .and_then(|r| genesis::admin_acceptance_index(&fields, r));
         // OP-129 m.1
         let now = self
             .clock
@@ -1128,7 +1132,12 @@ where
         {
             tracing::warn!(event = "authority.recovery.undeclared", outcome = "error", error = %e, "recovery entry not declared in the metadata");
         }
-        Ok(GenesisOpened { domain })
+        Ok(GenesisOpened {
+            domain,
+            admin_acceptance: admin_acceptance.map(|i| {
+                access_kernel::meta::object_id(&domain, access_kernel::meta::kind::ACCEPTANCE, i)
+            }),
+        })
     }
 }
 
@@ -1332,6 +1341,16 @@ impl EnvironmentKeys for EnvironmentKeyring {
     ) -> Option<access_identity_account::app::vault::Vault> {
         // OP-153 m.3 (aa)
         crate::login::EnvironmentKeks::new(self.keys.clone()).vault(environment)
+    }
+
+    fn blind_index(
+        &self,
+        environment: EnvironmentId,
+    ) -> Option<Arc<access_crypto::environment_index::EnvironmentIndexKey>> {
+        // OP-153 m.3 (aa), TN-141
+        crate::login::EnvironmentKeks::new(self.keys.clone())
+            .index(environment.as_bytes())
+            .ok()
     }
 }
 

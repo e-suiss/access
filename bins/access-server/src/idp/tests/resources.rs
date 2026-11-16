@@ -474,6 +474,8 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
+            administered: None,
+            management: None,
         })
         .await;
     let Err(conflict) = taken else {

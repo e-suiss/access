@@ -359,6 +359,8 @@ impl World {
                     acceptances: Vec::new(),
                     issuer_predicate_input: Vec::new(),
                     provisioned_by: None,
+                    administered: None,
+                    management: None,
                 },
                 recovery,
             )
@@ -421,7 +423,107 @@ fn plan() -> Plan {
         review_schedule: None,
         pq_profile: None,
         platform_admin: None,
+        managed: Vec::new(),
     }
+}
+
+/// The management environments' administration courier of the test world (OP-159 m.47 (f)).
+type Courier = access_identity_account::app::administration::Administration<
+    SignerKeys,
+    access_authority_ingest::app::Ingest<
+        Arc<TestDomains>,
+        crate::ingest::PgSubmissions,
+        crate::ingest::Trusted,
+    >,
+    access_identity_account::adapters::system::SystemClock,
+>;
+
+/// The administration courier over the test world.
+fn administration(w: &World) -> Courier {
+    access_identity_account::app::administration::Administration {
+        app: w.db.app.clone(),
+        signer: SignerKeys::new(w.identity_signer.clone()),
+        ingest: access_authority_ingest::app::Ingest::new(
+            Arc::clone(&w.domains),
+            crate::ingest::PgSubmissions(w.db.app.clone()),
+            crate::ingest::Trusted(tokio::sync::Mutex::new(SourcesClock::new(w.db.app.clone()))),
+        ),
+        clock: access_identity_account::adapters::system::SystemClock,
+    }
+}
+
+/// Opens today's Claim Ingest partition, as the server's maintenance does.
+async fn open_ingest_day(w: &World) {
+    let day = server_time(&w.db.app).await.unwrap() / 86_400_000;
+    access_store::claims::open_claim_ingest_day(&w.db.archive, u32::try_from(day).unwrap())
+        .await
+        .unwrap();
+}
+
+/// One step of the administration courier: the opened lines get their `tenant_administration`
+/// Claims, as the server's restate job does.
+async fn administer(w: &World) -> access_identity_account::app::administration::Restated {
+    open_ingest_day(w).await;
+    let done = administration(w).step().await.unwrap();
+    w.domains.release().await;
+    done
+}
+
+/// The holding of `party` on the administrator rule Grant of `slug`'s domain that covers
+/// `namespace.name`, from its live `tenant_administration` episode (OP-159 m.47 (d)), in the
+/// summary's `basis` shape.
+async fn rule_basis(
+    w: &World,
+    slug: &str,
+    party: Id,
+    (namespace, name): (&str, &str),
+) -> serde_json::Value {
+    let route = route_by_slug(&w.db.router, slug).await.unwrap().unwrap();
+    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
+        .await
+        .unwrap();
+    let g = idp::governance(&mut t).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    let rows = access_store::authority::state(&w.db.sequencer, &g.domain)
+        .await
+        .unwrap();
+    let decode =
+        |v: &[u8]| suiss_crypto::dcbor::decode(v, suiss_crypto::dcbor::Limits::CEILING).ok();
+    let mut grant = None;
+    let mut since = None;
+    for r in &rows {
+        let Some(v) = r.value.as_deref().and_then(decode) else {
+            continue;
+        };
+        if let Ok(state) = meta::GrantState::from_value(&v)
+            && state.content.holder == access_authority_core::genesis::admin_holder()
+            && state
+                .content
+                .authority
+                .authority
+                .actions
+                .exact
+                .iter()
+                .any(|a| a.namespace == namespace && a.name == name)
+            && let Some(suiss_crypto::dcbor::Value::Array(k)) = decode(&r.key)
+            && let Some(suiss_crypto::dcbor::Value::Bytes(id)) = k.get(1)
+        {
+            grant = Some(Id(<[u8; 16]>::try_from(id.as_slice()).unwrap()));
+        }
+        if let Ok(c) = access_kernel::claim::ClaimState::from_value(&v)
+            && c.statement.class == "tenant_administration"
+            && c.statement.subject == party
+            && c.ended.is_none()
+            && c.statement.value == Some(access_kernel::model::EqValue::Bool(true))
+        {
+            since = Some(since.map_or(c.since, |s: u64| s.max(c.since)));
+        }
+    }
+    holding_json(&HoldingRef {
+        grant: grant.unwrap(),
+        holder: party,
+        since: since.unwrap(),
+    })
 }
 
 /// The plan with the local fixtures of OP-149 m.26 (b), (c).
@@ -1297,6 +1399,8 @@ async fn admin_environment_creation_opens_the_domain_keys() {
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
+            administered: None,
+            management: None,
         })
         .await
         .unwrap();
@@ -2284,481 +2388,8 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     );
 }
 
-mod provision {
-    use access_identity_admin::app::provision::{
-        Created, Order, Platform, ProvisionError, Provisioned,
-    };
-    use access_identity_admin::domain::provision::{
-        EnvironmentOrder, NotAvailable, PlatformChange, ProvisionInvalid, Recovery, RecoveryKey,
-        RecoveryKeys, SANDBOX_BUDGET,
-    };
-    use access_store::sandbox;
-
-    use super::*;
-
-    /// Signs `change` as the platform root and has the platform environment's domain commit it.
-    async fn provision(
-        w: &World,
-        admin: &Admin<'_, TestPlane, TestPlane, EnvironmentKeyring>,
-        platform: &Platform<'_>,
-        change: &PlatformChange,
-        nonce: [u8; 16],
-    ) -> Result<Provisioned, ProvisionError> {
-        let root = root_key(&w.keys).unwrap();
-        let m = Moment::at(server_time(&w.db.app).await.unwrap());
-        let prepared = admin
-            .prepare_provision(platform, change, m.validity)
-            .await?;
-        MetaExercises::lead(&w.plane, prepared.domain)
-            .await
-            .unwrap();
-        let basis =
-            ExerciseBasis::Anchor(meta::object_id(&prepared.domain, kind::ANCHOR, IDP_ANCHOR));
-        let ais = sign(
-            &root,
-            &m.statement(prepared.domain, &nonce, prepared.digest, basis),
-        )
-        .unwrap();
-        let order = Order {
-            change,
-            nonce: nonce.to_vec(),
-            validity: m.validity,
-            basis,
-            capacity: Capacity::Own,
-        };
-        Box::pin(admin.provision(platform, order, ais)).await
-    }
-
-    fn environment(tenant: TenantId, slug: &str, root: Root, ack: bool) -> EnvironmentOrder {
-        EnvironmentOrder {
-            tenant: *tenant.as_bytes(),
-            slug: String::from(slug),
-            style: IssuerStyle::Path,
-            placement: String::from(PLACEMENT),
-            root,
-            ct3_delay_s: None,
-            causal_binding: false,
-            acknowledge_no_recovery: ack,
-            recovery: None,
-        }
-    }
-
-    // TN-110, TN-111, OP-151 m.2 M2, m.3 (m)
-    #[tokio::test]
-    async fn platform_provisioning_commits_then_opens_a_genesis() {
-        let w = World::new("provision").await;
-        w.run(&plan()).await;
-        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-        let declared = DeclaredTargets::default();
-        let bootstrap = Bootstrap {
-            app: &w.db.app,
-            router: &w.db.router,
-            plane: &w.plane,
-            environment_keys: &w.keyring,
-            hsm: &w.keys,
-            base: &w.base,
-            declared: &declared,
-            console: None,
-        };
-        let admin = bootstrap.admin(&ids, None);
-        let route = route_by_slug(&w.db.router, "platform")
-            .await
-            .unwrap()
-            .unwrap();
-        let platform = Platform {
-            tenant: route.tenant,
-            environment: route.environment,
-            router: &w.db.router,
-        };
-        let founder = root_party(&root_key(&w.keys).unwrap().public_key());
-
-        let tenant = TenantId::from_bytes(idp::new_uuid(&w.db.app).await.unwrap());
-        let change = PlatformChange::Tenant {
-            tenant: *tenant.as_bytes(),
-            placement: String::from(PLACEMENT),
-        };
-        let Provisioned::Done { created, .. } = provision(&w, &admin, &platform, &change, [1; 16])
-            .await
-            .unwrap()
-        else {
-            panic!("tenant creation not allowed");
-        };
-        assert!(created == Created::Tenant(tenant));
-        assert!(
-            access_store::tenancy::tenant(&w.db.router, tenant)
-                .await
-                .unwrap()
-                .is_some()
-        );
-
-        // TN-111, §13.7.7
-        let sole =
-            PlatformChange::Environment(environment(tenant, "solo", Root::Sole(founder), false));
-        assert!(matches!(
-            provision(&w, &admin, &platform, &sole, [2; 16]).await,
-            Err(ProvisionError::Invalid(
-                ProvisionInvalid::RecoveryNotAcknowledged
-            ))
-        ));
-
-        let joint = Root::Joint {
-            parties: [founder, Id([0x42; 16])].into_iter().collect(),
-            k: 2,
-        };
-        // §13.6, SEC20, OP-158 m.3 (m), Ek B 6030
-        let mut with_keys = environment(tenant, "shop", joint.clone(), false);
-        with_keys.recovery = Some(RecoveryKeys {
-            held_on: access_kernel::recovery::KeyHolding::Device,
-            keys: [
-                (founder, b"a".as_slice()),
-                (founder, b"b"),
-                (Id([0x42; 16]), b"c"),
-            ]
-            .into_iter()
-            .map(|(party, seed)| RecoveryKey {
-                party,
-                kid: suiss_crypto::digest::sha256(seed),
-            })
-            .collect(),
-        });
-        let shop = PlatformChange::Environment(with_keys);
-        let Provisioned::Done {
-            exercise, created, ..
-        } = provision(&w, &admin, &platform, &shop, [3; 16])
-            .await
-            .unwrap()
-        else {
-            panic!("environment creation not allowed");
-        };
-        let Created::Environment {
-            environment: shop_environment,
-            domain,
-            recovery,
-            sandbox: None,
-            ..
-        } = created
-        else {
-            panic!("not a production environment");
-        };
-        assert_eq!(
-            recovery,
-            Recovery::Available {
-                threshold: 2,
-                keys: 3
-            }
-        );
-        let entry = access_store::authority::state_of(
-            &w.db.app,
-            &DomainId::from_bytes(domain.0),
-            &[access_kernel::recovery::entry_key()],
-        )
-        .await
-        .unwrap()
-        .into_iter()
-        .find_map(|r| r.value)
-        .map(|v| {
-            access_kernel::recovery::RecoveryEntry::from_value(
-                &suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).unwrap(),
-            )
-            .unwrap()
-        })
-        .unwrap();
-        assert_eq!((entry.threshold, entry.keys.len()), (2, 3));
-
-        assert_eq!(
-            access_identity_admin::domain::provision::recovery(&joint, None).0,
-            Recovery::NotAvailable(NotAvailable::NoKeys)
-        );
-        // OP-149 m.29 (b), SI-5, §10.1.4 rule 3
-        let gates: Vec<access_kernel::claim::Gate> =
-            access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(domain.0))
-                .await
-                .unwrap()
-                .into_iter()
-                .filter_map(|r| r.value)
-                .filter_map(|v| {
-                    suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok()
-                })
-                .filter_map(|v| meta::ContentState::from_value(&v).ok())
-                .filter_map(|c| access_kernel::claim::Gate::of(&c.content).ok())
-                .collect();
-        let issuer = gates
-            .iter()
-            .find(|g| g.use_ == access_kernel::claim::ACTOR_BINDING && g.issuer.is_some())
-            .and_then(|g| g.issuer)
-            .unwrap();
-        assert!(gates.iter().any(|g| g.issuer == Some(issuer)
-            && g.use_ == access_kernel::claim::PREDICATE_INPUT
-            && g.classes == [String::from("authentication")]));
-        let shop_route = route_by_slug(&w.db.router, "shop").await.unwrap().unwrap();
-        assert!(shop_route.tenant == tenant && shop_route.environment == shop_environment);
-        assert_ne!(domain.0, [0; 32]);
-        assert!(
-            sandbox::budget(&w.db.router, &domain.0)
-                .await
-                .unwrap()
-                .is_none()
-        );
-
-        // TN-16, INV-32
-        let again = provision(&w, &admin, &platform, &shop, [3; 16]).await;
-        assert!(matches!(
-            again,
-            Err(ProvisionError::Invalid(ProvisionInvalid::SlugTaken))
-        ));
-
-        // OP-151 m.3 (m)
-        let play = PlatformChange::Sandbox(environment(tenant, "shop-sandbox", joint, false));
-        let Provisioned::Done {
-            exercise: sandbox_exercise,
-            created,
-            ..
-        } = provision(&w, &admin, &platform, &play, [4; 16])
-            .await
-            .unwrap()
-        else {
-            panic!("sandbox creation not allowed");
-        };
-        let Created::Environment {
-            domain: sandbox_domain,
-            sandbox: Some(budget),
-            ..
-        } = created
-        else {
-            panic!("not a sandbox");
-        };
-        assert_ne!(sandbox_domain, domain);
-        assert_ne!(sandbox_exercise, exercise);
-        assert_eq!(budget.exercises_per_day, SANDBOX_BUDGET.exercises_per_day);
-        assert_eq!(
-            sandbox::budget(&w.db.router, &sandbox_domain.0)
-                .await
-                .unwrap(),
-            Some(budget)
-        );
-        let listed = sandbox::environments(
-            (&w.db.router, &w.db.app),
-            None,
-            Some(tenant),
-            None,
-            (10, true),
-        )
-        .await
-        .unwrap();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].slug, "shop-sandbox");
-        w.domains.release().await;
-    }
-
-    /// The platform-admin surface of this process, governed by the platform environment.
-    fn surface(w: &World) -> crate::admin::environment::Environments<TestPlane> {
-        crate::admin::environment::Environments {
-            app: w.db.app.clone(),
-            reads: access_store::replica_reads::ReplicaReads::primary_only(w.db.app.clone()),
-            checkpointer: w.db.checkpointer.clone(),
-            router: w.db.router.clone(),
-            ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),
-            plane: w.plane.clone(),
-            base: w.base.clone(),
-            keys: Arc::new(EnvironmentKeyring::new(
-                SignerKeys::new(w.identity_signer.clone()),
-                w.keys.clone(),
-            )),
-            declared: DeclaredTargets::default(),
-            platform: Some(String::from("platform")),
-            outbound: access_identity_oauth::adapters::outbound::Outbound::disabled(
-                std::time::Duration::from_secs(5),
-            ),
-            vault: access_identity_events::adapters::KekSealer(crate::login::EnvironmentKeks::new(
-                w.keys.clone(),
-            )),
-            geo: Arc::new(access_identity_risk::adapters::NoGeoSource),
-            ips: Arc::new(access_identity_risk::adapters::NoPseudonyms),
-            authority_signer: None,
-        }
-    }
-
-    /// A sandbox creation of `body` for the platform surface's commit, signed by the platform
-    /// root: the intent is built here, never drafted (no `prepare_provision`).
-    async fn signed_write(
-        w: &World,
-        (operation, tenant): (&'static str, &str),
-        mut body: serde_json::Value,
-        nonce: [u8; 16],
-    ) -> (
-        access_http::api::ports::PlatformWrite,
-        access_http::api::domain::caller::WriteCaller,
-    ) {
-        use access_http::api::ports::PlatformWrite;
-        let root = root_key(&w.keys).unwrap();
-        let now = server_time(&w.db.app).await.unwrap();
-        body["validity"] = access_identity_admin::app::rest::default_validity(now);
-        let route = route_by_slug(&w.db.router, "platform")
-            .await
-            .unwrap()
-            .unwrap();
-        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.environment)
-            .await
-            .unwrap();
-        let g = idp::governance(&mut t).await.unwrap().unwrap();
-        t.commit().await.unwrap();
-        let domain = Digest(*g.domain.as_bytes());
-        let validity = access_identity_admin::app::rest::validity(&body).unwrap();
-        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-        let tenant = TenantId::from_bytes(
-            ids.decode(
-                access_identity_events::domain::catalog::TENANT_PREFIX,
-                tenant,
-            )
-            .unwrap(),
-        );
-        let joint = Root::Joint {
-            parties: [root_party(&root.public_key()), Id([0x42; 16])]
-                .into_iter()
-                .collect(),
-            k: 2,
-        };
-        let slug = body["slug"].as_str().unwrap().to_owned();
-        let change = PlatformChange::Sandbox(environment(tenant, &slug, joint, false));
-        let intent = change.intent(&g.slug, validity).unwrap();
-        let digest = access_kernel::intent::intent_digest(&intent).unwrap();
-        MetaExercises::lead(&w.plane, domain).await.unwrap();
-        let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
-        let statement = Moment::at(now).statement(domain, &nonce, digest, basis);
-        let ais = sign(&root, &statement).unwrap();
-        let caller = access_http::api::domain::caller::WriteCaller {
-            kid: thumbprint(&root.public_key()),
-            statement,
-            ais,
-        };
-        let write = PlatformWrite {
-            domain,
-            operation,
-            tenant: Some(
-                ids.encode(
-                    access_identity_events::domain::catalog::TENANT_PREFIX,
-                    *tenant.as_bytes(),
-                )
-                .unwrap(),
-            ),
-            body,
-            now_ms: now,
-        };
-        (write, caller)
-    }
-
-    async fn commit_write(
-        surface: &crate::admin::environment::Environments<TestPlane>,
-        (write, caller): (
-            access_http::api::ports::PlatformWrite,
-            access_http::api::domain::caller::WriteCaller,
-        ),
-    ) -> access_http::api::ports::Written {
-        use access_http::api::ports::PlatformResources as _;
-        surface.commit(write, caller).await.unwrap()
-    }
-
-    // TN-110, TN-16, INV-32, OP-151 m.3 (m)
-    #[tokio::test]
-    async fn a_commit_without_a_draft_never_turns_a_taken_slug_into_a_sandbox() {
-        use access_http::api::ports::Written;
-        let w = World::new("provision-commit").await;
-        w.run(&plan()).await;
-        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-        let declared = DeclaredTargets::default();
-        let bootstrap = Bootstrap {
-            app: &w.db.app,
-            router: &w.db.router,
-            plane: &w.plane,
-            environment_keys: &w.keyring,
-            hsm: &w.keys,
-            base: &w.base,
-            declared: &declared,
-            console: None,
-        };
-        let admin = bootstrap.admin(&ids, None);
-        let route = route_by_slug(&w.db.router, "platform")
-            .await
-            .unwrap()
-            .unwrap();
-        let platform = Platform {
-            tenant: route.tenant,
-            environment: route.environment,
-            router: &w.db.router,
-        };
-        let founder = root_party(&root_key(&w.keys).unwrap().public_key());
-        let tenant = TenantId::from_bytes(idp::new_uuid(&w.db.app).await.unwrap());
-        let change = PlatformChange::Tenant {
-            tenant: *tenant.as_bytes(),
-            placement: String::from(PLACEMENT),
-        };
-        assert!(matches!(
-            provision(&w, &admin, &platform, &change, [1; 16]).await,
-            Ok(Provisioned::Done { .. })
-        ));
-        let joint = Root::Joint {
-            parties: [founder, Id([0x42; 16])].into_iter().collect(),
-            k: 2,
-        };
-        let shop = PlatformChange::Environment(environment(tenant, "shop", joint, false));
-        let Ok(Provisioned::Done {
-            created: Created::Environment { domain, .. },
-            ..
-        }) = provision(&w, &admin, &platform, &shop, [2; 16]).await
-        else {
-            panic!("environment creation not allowed");
-        };
-
-        let surface = surface(&w);
-        let tenant_text = ids
-            .encode(
-                access_identity_events::domain::catalog::TENANT_PREFIX,
-                *tenant.as_bytes(),
-            )
-            .unwrap();
-        let joint_body = serde_json::json!({
-            "joint": {
-                "k": 2,
-                "parties": [b64url_encode(&founder.0), b64url_encode(&[0x42; 16])],
-            }
-        });
-        let signed = signed_write(
-            &w,
-            ("createSandboxDomain", &tenant_text),
-            serde_json::json!({ "slug": "shop", "root": joint_body, "issuer_style": "path", "placement": PLACEMENT }),
-            [3; 16],
-        )
-        .await;
-        let taken = commit_write(&surface, signed).await;
-        assert!(
-            matches!(taken, Written::Rejected(c) if c == &access_http::problem::codes::platform::SLUG_TAKEN),
-            "{taken:?}"
-        );
-        assert!(
-            sandbox::budget(&w.db.router, &domain.0)
-                .await
-                .unwrap()
-                .is_none()
-        );
-
-        let signed = signed_write(
-            &w,
-            ("createSandboxDomain", &tenant_text),
-            serde_json::json!({ "slug": "shop-play", "root": joint_body, "issuer_style": "path", "placement": PLACEMENT }),
-            [4; 16],
-        )
-        .await;
-        let first = commit_write(&surface, signed.clone()).await;
-        let again = commit_write(&surface, signed).await;
-        let (Written::Committed { exercise_id: a, .. }, Written::Committed { exercise_id: b, .. }) =
-            (first, again)
-        else {
-            panic!("sandbox creation not committed");
-        };
-        assert_eq!(a, b);
-        w.domains.release().await;
-    }
-}
+// OP-159 m.47
+mod tenants;
 
 mod account;
 mod agent;

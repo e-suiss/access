@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 
-use crate::codec::{Canonical, Fields, ModelError, ident, map, set_of, text, uint};
+use crate::codec::{Canonical, Fields, ModelError, ident, map, set_of, set_value, text, uint};
 use crate::digest::Digest;
 use crate::model::{ActionRef, Id};
 
@@ -244,11 +244,11 @@ impl Canonical for Spp {
                     self.actions.iter().map(Canonical::to_value).collect(),
                 )),
             ),
+            // L0-ENC-13: a set in canonical order, as `from_value` reads it
             (
                 "retirements",
-                (!self.retirements.is_empty()).then(|| {
-                    Value::Array(self.retirements.iter().map(Canonical::to_value).collect())
-                }),
+                (!self.retirements.is_empty())
+                    .then(|| set_value(self.retirements.iter().map(Canonical::to_value))),
             ),
             ("core_spec_min", self.core_spec_min.map(Value::Unsigned)),
         ])

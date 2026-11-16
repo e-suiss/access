@@ -3372,7 +3372,7 @@ export interface paths {
         /** Tenants and their states; metadata only. */
         get: operations["listTenants"];
         put?: never;
-        /** Creates a tenant. */
+        /** Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)). */
         post: operations["createTenant"];
         delete?: never;
         options?: never;
@@ -3397,6 +3397,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/platform/tenants/{tenant_id}/reinvite-founder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sends a tenant whose founding did not complete a new founder invitation; the old link and code stop working (TN-141). */
+        post: operations["reinviteFounder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspends a tenant: its environments stop serving (OP-159 m.47 (h)). */
+        post: operations["suspendTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lifts a tenant's suspension (OP-159 m.47 (h)). */
+        post: operations["reactivateTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Moves where a tenant's new environments are placed (OP-40, OP-159 m.47 (h)). */
+        post: operations["moveTenantPlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/tenants/{tenant_id}/envs": {
         parameters: {
             query?: never;
@@ -3407,8 +3475,7 @@ export interface paths {
         /** A tenant's environments; metadata only. */
         get: operations["listTenantEnvironments"];
         put?: never;
-        /** Creates an environment by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered. */
-        post: operations["createEnvironment"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3425,8 +3492,7 @@ export interface paths {
         /** A tenant's sandbox domains. */
         get: operations["listSandboxDomains"];
         put?: never;
-        /** Creates a sandbox environment whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget. */
-        post: operations["createSandboxDomain"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4018,6 +4084,15 @@ export interface components {
         Tenant: {
             /** @description Opaque `tnt_` id (OP-137). */
             tenant_id?: string;
+            /** @description The tenant's own name: untrusted text, never authority (TN-1, TN-131). */
+            display_name?: string | null;
+            /** @description The slug of its management environment, the tenant's handle (OP-159 m.47 (a)). */
+            management_slug?: string | null;
+            /**
+             * @description Its founder's invitation: waiting, used, or expired and waiting for a reinvitation (TN-141).
+             * @enum {string|null}
+             */
+            founding?: "pending" | "completed" | "expired" | null;
             /** @enum {string} */
             status?: "provisioning" | "active" | "suspended" | "deleted";
             /** @description Its placement (OP-40). */
@@ -4033,6 +4108,11 @@ export interface components {
         EnvironmentMetadata: {
             /** @description The immutable slug (TN-16). */
             slug?: string;
+            /**
+             * @description A tenant's management environment or one of its other environments (TN-138).
+             * @enum {string}
+             */
+            kind?: "standard" | "management";
             /** @description Opaque `tnt_` id of its tenant. */
             tenant_id?: string;
             issuer?: string | null;
@@ -4078,131 +4158,51 @@ export interface components {
         EnvironmentPage: {
             items: components["schemas"]["EnvironmentMetadata"][];
         };
-        /** @description The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url. */
-        FoundingRoot: {
-            sole?: string;
-            joint?: {
-                k: number;
-                parties: string[];
-            };
-        };
         /**
-         * @description A new tenant; the draft assigns its `tenant_id`.
+         * @description A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.
          * @example {
+         *       "display_name": "Acme",
+         *       "management_slug": "acme-admin",
+         *       "founder_email": "admin@acme.example",
          *       "placement": "pool-default"
          *     }
          */
         TenantCreate: {
             /** @description Assigned by the draft; send it back unchanged. */
             tenant_id?: string;
+            /** @description The tenant's name, 1 to 120 characters (TN-131). */
+            display_name: string;
+            /** @description The slug its management environment will take, reserved now (TN-16). */
+            management_slug: string;
+            /** @description The founder's address; the invitation is sent to it and matched by its blind index (TN-89 (4), (5)). */
+            founder_email: string;
             /** @description Its placement; `pool-default` when omitted (OP-40). */
             placement?: string;
             validity?: components["schemas"]["Validity"];
             /** @description The caller's AIS, when not in the header. */
             ais?: string;
         };
-        /**
-         * @description A new environment and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).
-         * @example {
-         *       "slug": "shop",
-         *       "issuer_style": "subdomain",
-         *       "root": {
-         *         "joint": {
-         *           "k": 2,
-         *           "parties": [
-         *             "AQEBAQEBAQEBAQEBAQEBAQ",
-         *             "AgICAgICAgICAgICAgICAg"
-         *           ]
-         *         }
-         *       }
-         *     }
-         * @example {
-         *       "slug": "lab",
-         *       "root": {
-         *         "sole": "AQEBAQEBAQEBAQEBAQEBAQ"
-         *       },
-         *       "acknowledge_no_recovery": true
-         *     }
-         */
-        EnvironmentCreate: {
-            /** @description The immutable slug (TN-16). */
-            slug: string;
-            /**
-             * @default subdomain
-             * @enum {string}
-             */
-            issuer_style: "subdomain" | "path";
-            /** @description Its placement; `pool-default` when omitted (OP-40). */
-            placement?: string;
-            root: components["schemas"]["FoundingRoot"];
-            ct3_delay_s?: number;
-            /**
-             * @description Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17).
-             * @default false
-             */
-            causal_binding: boolean;
-            /** @default false */
-            acknowledge_no_recovery: boolean;
-            /** @description The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party; a sole root recovers with its own keys. Without them the Genesis says `recovery: not_available`. */
-            recovery?: {
-                /**
-                 * @default device
-                 * @enum {string}
-                 */
-                held_on: "device" | "offline";
-                keys: {
-                    /** @description The root Party that holds the key. */
-                    party: string;
-                    /** @description The key's RFC 7638 thumbprint. */
-                    kid: string;
-                }[];
-            };
-            /** @description Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`. */
-            sandbox?: boolean;
+        /** @description A new founder invitation for a tenant whose founding did not complete; the address must be the founding's (TN-141). */
+        TenantReinvite: {
+            /** @description The founder's address. */
+            founder_email: string;
             validity?: components["schemas"]["Validity"];
             /** @description The caller's AIS, when not in the header. */
             ais?: string;
         };
-        /**
-         * @description What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.
-         * @example {
-         *       "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
-         *       "root": {
-         *         "kind": "joint",
-         *         "k": 2,
-         *         "n": 2
-         *       },
-         *       "recovery": "not_available",
-         *       "recovery_reason": "no-recovery-keys"
-         *     }
-         */
-        Genesis: {
-            digest?: string;
-            root?: {
-                /** @enum {string} */
-                kind?: "sole" | "joint";
-                k?: number;
-                n?: number;
-            };
-            /**
-             * @description `available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says "Recovery not available".
-             * @enum {string}
-             */
-            recovery?: "available" | "not_available";
-            /** @description How many of the entry's keys a recovery needs. */
-            recovery_threshold?: {
-                k?: number;
-                n?: number;
-            };
-            /** @description Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`. */
-            recovery_reason?: string;
+        /** @description A tenant's suspension, reactivation or placement move (OP-159 m.47 (h)). */
+        TenantChange: {
+            /** @description The new placement (`moveTenantPlacement` only, OP-40). */
+            placement?: string;
+            validity?: components["schemas"]["Validity"];
+            /** @description The caller's AIS, when not in the header. */
+            ais?: string;
         };
-        /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for an environment its Genesis. */
+        /** @description The `idp.platform.*` Exercise the write compiled to (TN-110) and the tenant it created or changed. */
         PlatformWriteResult: {
             exercise_id: string;
             position: components["schemas"]["Position"];
-            resource?: components["schemas"]["Tenant"] | components["schemas"]["EnvironmentMetadata"];
-            genesis?: components["schemas"]["Genesis"];
+            resource?: components["schemas"]["Tenant"];
         };
         SurfaceRoot: {
             /** @enum {string} */
@@ -14782,6 +14782,186 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    reinviteFounder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantReinvite"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    suspendTenant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantChange"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    reactivateTenant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantChange"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    moveTenantPlacement: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantChange"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     listTenantEnvironments: {
         parameters: {
             query?: {
@@ -14824,51 +15004,6 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    createEnvironment: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
-                traceparent?: components["parameters"]["Traceparent"];
-                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
-                "X-Access-AIS"?: components["parameters"]["Ais"];
-            };
-            path: {
-                /** @description The resource's natural key. */
-                tenant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnvironmentCreate"];
-            };
-        };
-        responses: {
-            /** @description Committed: the Exercise record (TN-110). */
-            201: {
-                headers: {
-                    "Request-Id": components["headers"]["Request-Id"];
-                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
-                    RateLimit: components["headers"]["RateLimit"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlatformWriteResult"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
     listSandboxDomains: {
         parameters: {
             query?: {
@@ -14907,51 +15042,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    createSandboxDomain: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
-                traceparent?: components["parameters"]["Traceparent"];
-                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
-                "X-Access-AIS"?: components["parameters"]["Ais"];
-            };
-            path: {
-                /** @description The resource's natural key. */
-                tenant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnvironmentCreate"];
-            };
-        };
-        responses: {
-            /** @description Committed: the Exercise record (TN-110). */
-            201: {
-                headers: {
-                    "Request-Id": components["headers"]["Request-Id"];
-                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
-                    RateLimit: components["headers"]["RateLimit"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlatformWriteResult"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };

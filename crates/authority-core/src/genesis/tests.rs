@@ -43,6 +43,7 @@ fn order(root: Root) -> GenesisOrder {
         acceptances: Vec::new(),
         issuer_predicate_input: Vec::new(),
         recovery: None,
+        admin_rule: None,
     }
 }
 
@@ -414,4 +415,90 @@ fn the_idp_anchor_covers_its_environment_only() {
         environment(&bad, &mut Fixed),
         Err(CoreError::Protocol("genesis-slug"))
     ));
+}
+
+// OP-159 m.47 (d), (k) (4), L0-META-7, TN-139
+#[test]
+fn a_consuming_genesis_carries_the_admin_rule_and_keeps_the_bootstrap_grant_first() {
+    use access_internal_api::idp::AdminRule;
+    let d = Digest([7; 32]);
+    let issuer = Id([9; 16]);
+    let mut o = order(Root::Sole(Id([2; 16])));
+    o.issuer = Some(Id([8; 16]));
+    o.admin_rule = Some(AdminRule {
+        issuer,
+        foreign: true,
+        actions: vec![IdpAction::AccountSuspend.action_ref()],
+    });
+    let fields = values(&o);
+    let effects = meta::genesis_effects(&d, &fields).unwrap();
+    let grant = |i: u64| {
+        effects
+            .iter()
+            .find(|(k, _)| *k == meta::key(kind::GRANT, &object_id(&d, kind::GRANT, i)))
+            .and_then(|(_, v)| v.as_ref())
+            .map(|v| meta::GrantState::from_value(v).unwrap())
+            .unwrap()
+    };
+    assert_eq!(
+        grant(BOOTSTRAP_GRANT).content.holder,
+        SubjectSelector::Public
+    );
+    let n = u64::try_from(ADMIN_RULE_META.len() + 1).unwrap();
+    for i in 1..=n {
+        let g = grant(i);
+        assert_eq!(g.content.holder, admin_holder(), "{i}");
+        let platform = g
+            .content
+            .authority
+            .authority
+            .actions
+            .exact
+            .iter()
+            .any(|a| a.namespace == "idp.platform");
+        assert!(!platform, "INV-29");
+    }
+    assert!(
+        effects
+            .iter()
+            .all(|(k, _)| *k != meta::key(kind::GRANT, &object_id(&d, kind::GRANT, n + 1)))
+    );
+    let Some(Value::Array(acceptances)) = fields.get("acceptances") else {
+        panic!("acceptances");
+    };
+    let uses: Vec<(Id, String, Vec<String>)> = acceptances
+        .iter()
+        .filter_map(|a| {
+            let gate = access_kernel::claim::Gate::of(a).ok()?;
+            Some((gate.issuer?, gate.use_.clone(), gate.classes.clone()))
+        })
+        .filter(|(i, _, _)| *i == issuer)
+        .collect();
+    assert_eq!(uses.len(), 3, "{uses:?}");
+    assert!(
+        uses.iter().any(|(_, u, c)| u == "subject-selection"
+            && c == &vec![String::from("tenant_administration")])
+    );
+    assert!(uses.iter().any(|(_, u, _)| u == "actor-binding"));
+    assert!(
+        uses.iter()
+            .any(|(_, u, c)| u == "predicate-input" && c == &vec![String::from("authentication")])
+    );
+
+    o.admin_rule = Some(AdminRule {
+        issuer,
+        foreign: false,
+        actions: Vec::new(),
+    });
+    let fields = values(&o);
+    let Some(Value::Array(own)) = fields.get("acceptances") else {
+        panic!("acceptances");
+    };
+    let mine = own
+        .iter()
+        .filter_map(|a| access_kernel::claim::Gate::of(a).ok())
+        .filter(|g| g.issuer == Some(issuer))
+        .count();
+    assert_eq!(mine, 1);
+    assert!(meta::genesis_effects(&d, &fields).is_ok());
 }

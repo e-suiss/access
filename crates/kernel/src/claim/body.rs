@@ -95,9 +95,13 @@ pub enum Class {
     /// `executor_control`: body [`ExecutorControl`], an executor's confirmation that an
     /// Exercise's job is paused or stopped (U5, OP-154 m.3 (u)).
     ExecutorControl,
+    /// `tenant_administration`: bool value, `true` while the subject administers the tenant of
+    /// the management environment whose issuer states it, `false` once it no longer does, so a
+    /// `Pred` holder selects the tenant's administrators (OP-159 m.47 (d), (f)).
+    TenantAdministration,
 }
 
-const SIMPLE: [(&str, Class); 20] = [
+const SIMPLE: [(&str, Class); 21] = [
     ("authentication", Class::Authentication),
     ("authenticator_binding", Class::AuthenticatorBinding),
     ("posture_device", Class::PostureDevice),
@@ -118,6 +122,7 @@ const SIMPLE: [(&str, Class); 20] = [
     ("attestation_runtime", Class::AttestationRuntime),
     ("effect_attestation", Class::EffectAttestation),
     ("executor_control", Class::ExecutorControl),
+    ("tenant_administration", Class::TenantAdministration),
 ];
 
 const IDENTITY_BINDING: &str = "identity_binding_";
@@ -1393,7 +1398,10 @@ pub fn body_digest(class: Class, body: &Value) -> Result<[u8; 32], dcbor::Encode
 fn scalar_ok(class: Class, value: Option<&EqValue>) -> bool {
     match (class, value) {
         (Class::AccountStatus, Some(EqValue::Text(t))) => ACCOUNT_STATUSES.contains(&t.as_str()),
-        (Class::PartyCompromise, None) => true,
+        // OP-159 m.47 (d)
+        (Class::PartyCompromise, None) | (Class::TenantAdministration, Some(EqValue::Bool(_))) => {
+            true
+        }
         (Class::PartyCompromise | Class::PartyTerminated, Some(EqValue::Int(n))) => *n >= 0,
         (Class::PartyIdentityBreak | Class::AgentKind, Some(EqValue::Text(t))) => {
             ident(&Value::text(t)).is_ok()

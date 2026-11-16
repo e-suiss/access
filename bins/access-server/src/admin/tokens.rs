@@ -149,14 +149,145 @@ impl<P: LiveKeys> ManagementTokens<P> {
             .instance
             .as_ref()
             .is_some_and(|(kid, _)| *kid == c.instance);
-        let live = s.ended_ms.is_none()
-            && s.created_ms.saturating_add(ABSOLUTE_MS) > now
-            && s.environment == environment.environment
-            && held;
+        let open = s.ended_ms.is_none() && s.created_ms.saturating_add(ABSOLUTE_MS) > now;
+        // OP-159 m.47 (g), TN-142
+        if open && s.environment != environment.environment {
+            let administered = self.administered(&s, environment, c.instance).await?;
+            let epoch = self.epoch_of(s.tenant, s.environment, s.subject).await?;
+            if !administered || c.rev.is_none() || epoch != c.rev {
+                return Ok(Standing::Ended);
+            }
+            return Ok(Standing::Live);
+        }
+        let live = open && s.environment == environment.environment && held;
         if !live || c.rev.is_none() || self.epoch(environment, s.subject).await? != c.rev {
             return Ok(Standing::Ended);
         }
         Ok(Standing::Live)
+    }
+
+    /// The account's `session_epoch` in `(tenant, environment)` while it is active.
+    async fn epoch_of(
+        &self,
+        tenant: access_store::identity::TenantId,
+        environment: access_store::identity::EnvironmentId,
+        subject: [u8; 16],
+    ) -> Result<Option<i64>, Unavailable> {
+        let mut t = TenantTx::begin(&self.app, tenant, environment)
+            .await
+            .map_err(down)?;
+        let s = t.subject(subject, false).await.map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(s.filter(|s| s.status == "active").map(|s| s.session_epoch))
+    }
+
+    /// Whether the console session `s` holds `instance` in the domain of `environment`, an
+    /// environment its management environment administers, with a `tenant_administration` line
+    /// there that has not ended (OP-159 m.47 (f), (g), TN-142).
+    async fn administered(
+        &self,
+        s: &ConsoleSessionRow,
+        environment: &EnvironmentEntry,
+        instance: [u8; 32],
+    ) -> Result<bool, Unavailable> {
+        if environment.tenant != s.tenant {
+            return Ok(false);
+        }
+        let Some(domain) = self.governing(environment).await? else {
+            return Ok(false);
+        };
+        let d = access_store::scope::DomainId::from_bytes(domain.0);
+        let held = access_store::tenant_admin::session_instances(&self.app, &s.id)
+            .await
+            .map_err(down)?
+            .into_iter()
+            .find(|i| i.domain == d && i.kid == instance);
+        let Some(held) = held else {
+            return Ok(false);
+        };
+        let mut t = TenantTx::begin_tenant(&self.app, s.tenant)
+            .await
+            .map_err(down)?;
+        let consumers = access_store::environment_binding::consumed_by(&mut t, &d)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        if !consumers.contains(&s.environment) {
+            return Ok(false);
+        }
+        let mut t = TenantTx::begin(&self.app, s.tenant, s.environment)
+            .await
+            .map_err(down)?;
+        let line = access_store::tenant_admin::line_of_party(&mut t, &d, &held.party)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(line.is_some_and(|(l, admin)| admin && l.ended_ms.is_none())
+            && self.plane.live_key(domain, instance).await?.is_some())
+    }
+
+    /// A read token on the environment surface of `slug`, an environment the console session
+    /// `row`'s management environment administers, signed by that environment's own key for the
+    /// session's Instance in its domain and bound to the BFF's DPoP key `jkt` (OP-159 m.47 (g),
+    /// TN-142); `sub` is the administrator's alias there, never an account of it (TNI-14).
+    pub(crate) async fn issue_administered(
+        &self,
+        row: &ConsoleSessionRow,
+        slug: &str,
+        instance: &SessionInstance,
+        jkt: [u8; 32],
+    ) -> Result<Option<IssuedRead>, Unavailable> {
+        let now = WallClock.now_ms()?;
+        let surface = Surface::Environment(String::from(slug));
+        let Some(environment) = self.environment_of(&surface).await? else {
+            return Ok(None);
+        };
+        if row.ended_ms.is_some()
+            || row.created_ms.saturating_add(ABSOLUTE_MS) <= now
+            || !self.administered(row, &environment, instance.kid).await?
+        {
+            return Ok(None);
+        }
+        let Some(rev) = self
+            .epoch_of(row.tenant, row.environment, row.subject)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let alg = self.alg(&environment).await?;
+        let jti = b64url_encode(&access_crypto::random::bytes::<16>().map_err(down)?);
+        let mut alias = environment.environment.as_bytes().to_vec();
+        alias.extend_from_slice(&row.subject);
+        let sub = format!(
+            "adm_{}",
+            b64url_encode(
+                &suiss_crypto::digest::context_digest("access/tenant-admin-sub/v1", &alias).0[..16]
+            )
+        );
+        let claims = read_token_claims(
+            &ReadFacts {
+                issuer: environment.issuer.as_str(),
+                surface: &surface,
+                sub: &sub,
+                client_id: CONSOLE_CLIENT,
+                instance: instance.kid,
+                jkt,
+                console_session: Some(row.id),
+                rev: Some(rev),
+                now_ms: now,
+                ttl_ms: READ_TTL_MS,
+            },
+            &jti,
+        );
+        let token = self
+            .signer
+            .sign(environment.environment, alg, ACCESS_TYP, &claims, now)
+            .await
+            .map_err(down)?;
+        Ok(Some(IssuedRead {
+            token: Secret::new(token.into_bytes()),
+            expires_ms: now.saturating_add(READ_TTL_MS),
+        }))
     }
 
     /// A read token on `surface` for the console session `row` and its device Instance, bound
@@ -258,6 +389,24 @@ impl<P: LiveKeys + 'static> access_http::console::ports::ReadGrants for ConsoleG
             return Ok(None);
         };
         self.0.issue_console(&row, instance, jkt, surface).await
+    }
+
+    async fn issue_in(
+        &self,
+        session: &ConsoleSession,
+        environment: &str,
+        instance: &SessionInstance,
+        jkt: [u8; 32],
+    ) -> Result<Option<IssuedRead>, Unavailable> {
+        let Some(row) = console::by_id(&self.0.app, &session.id)
+            .await
+            .map_err(down)?
+        else {
+            return Ok(None);
+        };
+        self.0
+            .issue_administered(&row, environment, instance, jkt)
+            .await
     }
 }
 

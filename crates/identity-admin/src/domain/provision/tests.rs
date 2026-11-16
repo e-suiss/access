@@ -165,8 +165,9 @@ fn the_template_builds_the_recovery_entry_or_says_why_not() {
     );
     let mut o = order(joint(2, 3), false);
     o.recovery = Some(keys(&[1, 2, 3]));
-    assert!(o.value().get("recovery").is_some());
-    assert!(order(joint(2, 3), false).value().get("recovery").is_none());
+    assert!(recovery(&o.root, o.recovery.as_ref()).1.is_some());
+    let none = order(joint(2, 3), false);
+    assert!(recovery(&none.root, none.recovery.as_ref()).1.is_none());
 }
 
 // TN-16, OP-40, OP-159 m.42 (e)
@@ -188,33 +189,93 @@ fn orders_are_checked_before_a_decision() {
     let mut o = order(joint(2, 2), false);
     o.ct3_delay_s = Some(60);
     assert_eq!(o.check(), Err(ProvisionInvalid::TimeLock));
-    let t = PlatformChange::Tenant {
+    let t = PlatformChange::Placement {
         tenant: [2; 16],
         placement: String::from("-x"),
     };
     assert_eq!(t.check(), Err(ProvisionInvalid::Placement));
 }
 
-// EI-25
+fn tenant_order(name: &str, slug: &str) -> TenantOrder {
+    TenantOrder {
+        tenant: [2; 16],
+        display_name: String::from(name),
+        management_slug: String::from(slug),
+        placement: String::from(DEFAULT_PLACEMENT),
+        founder: FounderCommitment {
+            index: [4; 32],
+            token: [5; 32],
+            code: [6; 32],
+        },
+    }
+}
+
+// OP-159 m.47 (a), (c), TN-131, TN-141
+#[test]
+fn a_tenant_order_checks_its_name_and_management_slug() {
+    assert_eq!(
+        PlatformChange::Tenant(tenant_order("Acme", "acme-admin")).check(),
+        Ok(())
+    );
+    for bad in ["", " Acme", "A\u{7}cme"] {
+        assert_eq!(
+            PlatformChange::Tenant(tenant_order(bad, "acme-admin")).check(),
+            Err(ProvisionInvalid::Name),
+            "{bad:?}"
+        );
+    }
+    assert_eq!(
+        PlatformChange::Tenant(tenant_order(&"a".repeat(121), "acme-admin")).check(),
+        Err(ProvisionInvalid::Name)
+    );
+    assert_eq!(
+        PlatformChange::Tenant(tenant_order("Acme", "api")).check(),
+        Err(ProvisionInvalid::Slug)
+    );
+}
+
+// EI-25, OP-159 m.47 (c)
 #[test]
 fn the_intent_binds_the_change() {
     let w = Window { from: 1, until: 2 };
-    let a = PlatformChange::Environment(order(joint(2, 3), false));
-    let b = PlatformChange::Environment(order(joint(3, 3), false));
-    let s = PlatformChange::Sandbox(order(joint(2, 3), false));
+    let a = PlatformChange::Tenant(tenant_order("Acme", "acme-admin"));
+    let mut other = tenant_order("Acme", "acme-admin");
+    other.founder.token = [7; 32];
+    let b = PlatformChange::Tenant(other);
     let ia = a.intent("platform", w).unwrap();
     assert_eq!(ia.action.namespace, NAMESPACE);
-    assert_eq!(ia.action.name, "environment_create");
+    assert_eq!(ia.action.name, "tenant_create");
     assert_eq!(
         ia.resources[0].path,
-        ["platform", "platform", "environment", "acme"]
+        [
+            "platform",
+            "platform",
+            "tenant",
+            "02020202020202020202020202020202"
+        ]
     );
     assert_ne!(a.digest().unwrap(), b.digest().unwrap());
-    assert_ne!(a.digest().unwrap(), s.digest().unwrap());
+    let r = PlatformChange::Reinvite {
+        tenant: [2; 16],
+        founder: tenant_order("Acme", "acme-admin").founder,
+    };
     assert_eq!(
-        s.intent("platform", w).unwrap().action.name,
-        "sandbox_create"
+        r.intent("platform", w).unwrap().action.name,
+        "tenant_create"
     );
+    assert_ne!(a.digest().unwrap(), r.digest().unwrap());
+    for (c, name) in [
+        (
+            PlatformChange::Suspend { tenant: [2; 16] },
+            "tenant_suspend",
+        ),
+        (
+            PlatformChange::Reactivate { tenant: [2; 16] },
+            "tenant_reactivate",
+        ),
+    ] {
+        assert_eq!(c.intent("platform", w).unwrap().action.name, name);
+    }
 }
 
 // OP-151 m.3 (m), X21
@@ -232,10 +293,15 @@ fn only_the_platform_environment_publishes_the_platform_catalog() {
     assert!(!NAMESPACES.contains(&NAMESPACE));
     let spp = catalog(Id([5; 16]));
     assert_eq!(spp.namespace, NAMESPACE);
+    assert_eq!(spp.catalog_version, 2);
     assert_eq!(spp.actions.len(), PlatformAction::ALL.len());
+    assert!(spp.actions.iter().all(|a| !a.reserved));
+    // OP-159 m.47 (h)
+    let retired: Vec<&str> = spp.retirements.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(retired, ["environment_create", "sandbox_create"]);
     assert!(
         spp.actions
             .iter()
-            .all(|a| !a.reserved && a.effect == EffectClass::Irreversible)
+            .all(|a| !RETIRED.contains(&a.name.as_str()))
     );
 }

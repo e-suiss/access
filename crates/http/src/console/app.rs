@@ -66,6 +66,10 @@ struct Held {
     expires_ms: u64,
 }
 
+/// What a held token is for: the session, the surface and, for an environment the session's
+/// management environment administers, that environment (TN-142).
+type HeldKey = ([u8; 16], Surface, Option<String>);
+
 /// Renew a held token this long before its end.
 const RENEW_MS: u64 = 60_000;
 
@@ -74,7 +78,7 @@ pub struct Console<E> {
     env: E,
     limits: Limits,
     assets: Option<Assets>,
-    held: Mutex<HashMap<([u8; 16], Surface), Held>>,
+    held: Mutex<HashMap<HeldKey, Held>>,
 }
 
 impl<E: ConsoleEnv> Console<E> {
@@ -96,7 +100,7 @@ impl<E: ConsoleEnv> Console<E> {
 
     fn forget(&self, session: [u8; 16]) {
         if let Ok(mut held) = self.held.lock() {
-            held.retain(|(id, _), _| *id != session);
+            held.retain(|(id, _, _), _| *id != session);
         }
         self.env.dpop().forget(session);
     }
@@ -385,9 +389,14 @@ async fn session_info<E: ConsoleEnv>(
     };
     let s = &live.session;
     let absolute = s.facts.created_ms.saturating_add(policy::ABSOLUTE_MS);
+    // TN-142
+    let Ok(environments) = c.env.devices().instances(s).await else {
+        return unavailable();
+    };
     json_reply(
         StatusCode::OK,
         &json!({
+            "environments": environments,
             "account": s.who.account,
             "display_name": s.who.display_name,
             "environment": s.who.environment,
@@ -713,6 +722,63 @@ async fn register<E: ConsoleEnv>(
     device_reply(&answer)
 }
 
+/// `POST /console/api/environments/{environment}/instances/challenge` (OP-159 m.47 (g), TN-142): a
+/// challenge for the browser's key in the domain of an environment the session's management
+/// environment administers.
+async fn challenge_in<E: ConsoleEnv>(
+    State(c): St<E>,
+    Path(environment): Path<String>,
+    method: Method,
+    headers: HeaderMap,
+    peer: Option<Extension<Peer>>,
+    body: Bytes,
+) -> Response {
+    let live = match authed(&c, &method, &headers, peer.as_ref()).await {
+        Ok(l) => l,
+        Err(r) => return r,
+    };
+    if check_slug(&environment).is_err() || environment == live.session.who.environment {
+        return not_found();
+    }
+    match c
+        .env
+        .devices()
+        .challenge_in(&live.session, &environment, body)
+        .await
+    {
+        Ok(a) => device_reply(&a),
+        Err(Unavailable) => unavailable(),
+    }
+}
+
+/// `POST /console/api/environments/{environment}/instances` (OP-159 m.47 (g), TN-142): registers
+/// the browser's key in that environment's domain as the session's Instance there.
+async fn register_in<E: ConsoleEnv>(
+    State(c): St<E>,
+    Path(environment): Path<String>,
+    method: Method,
+    headers: HeaderMap,
+    peer: Option<Extension<Peer>>,
+    body: Bytes,
+) -> Response {
+    let live = match authed(&c, &method, &headers, peer.as_ref()).await {
+        Ok(l) => l,
+        Err(r) => return r,
+    };
+    if check_slug(&environment).is_err() || environment == live.session.who.environment {
+        return not_found();
+    }
+    match c
+        .env
+        .devices()
+        .register_in(&live.session, &environment, body)
+        .await
+    {
+        Ok(a) => device_reply(&a),
+        Err(Unavailable) => unavailable(),
+    }
+}
+
 fn forwarded(f: Forwarded) -> Response {
     let mut r = (
         StatusCode::from_u16(f.status).unwrap_or(StatusCode::BAD_GATEWAY),
@@ -744,39 +810,70 @@ fn path_and_query(path: &str, uri: &Uri) -> String {
 }
 
 /// The session's read token for `surface`, held or newly issued to its device Instance and
-/// bound to the BFF's DPoP key of the session (TN-130, OP-151 m.3 (c)).
+/// bound to the BFF's DPoP key of the session (TN-130, OP-151 m.3 (c)); for an environment the
+/// session's management environment administers, issued by that environment to the session's
+/// Instance in its domain (OP-159 m.47 (g), TN-142).
 async fn read_token<E: ConsoleEnv>(
     c: &Console<E>,
     session: &ConsoleSession,
-    instance: &SessionInstance,
+    (instance, environment): (&SessionInstance, Option<&str>),
     surface: Surface,
     now: u64,
 ) -> Result<Option<Secret<Vec<u8>>>, Unavailable> {
+    let key: HeldKey = (session.id, surface, environment.map(String::from));
     if let Ok(held) = c.held.lock()
-        && let Some(h) = held.get(&(session.id, surface))
+        && let Some(h) = held.get(&key)
         && h.expires_ms > now.saturating_add(RENEW_MS)
     {
         return Ok(Some(h.token.clone()));
     }
     let jkt = c.env.dpop().jkt(session.id)?;
-    let Some(issued) = c
-        .env
-        .grants()
-        .issue(session, instance, jkt, surface)
-        .await?
-    else {
+    let issued = match environment {
+        Some(e) => c.env.grants().issue_in(session, e, instance, jkt).await?,
+        None => {
+            c.env
+                .grants()
+                .issue(session, instance, jkt, surface)
+                .await?
+        }
+    };
+    let Some(issued) = issued else {
         return Ok(None);
     };
     let token = issued.token.clone();
     let mut held = c.held.lock().map_err(|_| Unavailable)?;
     held.insert(
-        (session.id, surface),
+        key,
         Held {
             token: issued.token,
             expires_ms: issued.expires_ms,
         },
     );
     Ok(Some(token))
+}
+
+/// The environment a management path names when it is not the session's own: `envs/{slug}/…`
+/// (OP-159 m.47 (g), TN-142).
+fn foreign<'a>(rest: &'a str, own: &str) -> Option<&'a str> {
+    let slug = rest.strip_prefix("envs/")?.split('/').next()?;
+    (slug != own && check_slug(slug).is_ok()).then_some(slug)
+}
+
+/// The session's Instance and domain for the environment `foreign` names, or its own.
+async fn instance_for<E: ConsoleEnv>(
+    c: &Console<E>,
+    session: &ConsoleSession,
+    foreign: Option<&str>,
+) -> Result<Option<(access_kernel::digest::Digest, SessionInstance)>, Unavailable> {
+    match foreign {
+        None => Ok(session.instance.clone().map(|i| (session.who.domain, i))),
+        Some(e) => Ok(c
+            .env
+            .devices()
+            .instance_in(session, e)
+            .await?
+            .map(|(d, i, _)| (d, i))),
+    }
 }
 
 /// `/console/api/proxy/admin/{rest}` → `/admin/v1/{rest}` (TN-128, OP-151 m.3 (c), (e)). Only
@@ -805,8 +902,12 @@ async fn admin_proxy<E: ConsoleEnv>(
         Ok(a) => a,
         Err(r) => return r,
     };
-    let Some(instance) = live.session.instance.clone() else {
-        return problems::instance_required().into_response();
+    // OP-159 m.47 (g), TN-142
+    let foreign = foreign(rest, &live.session.who.environment);
+    let (domain, instance) = match instance_for(&c, &live.session, foreign).await {
+        Ok(Some(found)) => found,
+        Ok(None) => return problems::instance_required().into_response(),
+        Err(Unavailable) => return unavailable(),
     };
     // OP-156 m.3 (q)
     let limit = if rest.ends_with("/records:batch") || rest.ends_with("/records:csv") {
@@ -841,7 +942,7 @@ async fn admin_proxy<E: ConsoleEnv>(
         match verify_read_proof(
             &ais,
             Some((&instance.kid, &instance.key)),
-            &live.session.who.domain,
+            &domain,
             &intent,
             now,
         ) {
@@ -855,7 +956,7 @@ async fn admin_proxy<E: ConsoleEnv>(
         } else {
             Surface::Environment
         };
-        let token = match read_token(&c, &live.session, &instance, surface, now).await {
+        let token = match read_token(&c, &live.session, (&instance, foreign), surface, now).await {
             Ok(Some(t)) => t,
             Ok(None) => return problems::read_not_granted().into_response(),
             Err(Unavailable) => return unavailable(),
@@ -922,6 +1023,30 @@ async fn own_read<E: ConsoleEnv>(
             headers,
         )),
         Err(ReadRefusal::Foreign) => {
+            // OP-159 m.47 (g), TN-142
+            let environments = match c.env.devices().instances(session).await {
+                Ok(e) => e,
+                Err(Unavailable) => return Err(unavailable()),
+            };
+            for e in environments {
+                let found = match c.env.devices().instance_in(session, &e).await {
+                    Ok(f) => f,
+                    Err(Unavailable) => return Err(unavailable()),
+                };
+                if let Some((domain, instance, party)) = found
+                    && adp_read_scope(
+                        rest,
+                        body,
+                        c.limits.max_body_bytes,
+                        &domain,
+                        Some(party),
+                        Some(&instance.kid),
+                    )
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            }
             tracing::info!(
                 event = "console.adp.refused",
                 outcome = "refused",
@@ -996,6 +1121,7 @@ pub const INTENTS_PATH: &str = "/console/api/intents";
 async fn intents<E: ConsoleEnv>(
     State(c): St<E>,
     method: Method,
+    uri: Uri,
     headers: HeaderMap,
     peer: Option<Extension<Peer>>,
     body: Bytes,
@@ -1011,11 +1137,30 @@ async fn intents<E: ConsoleEnv>(
     let Ok(now) = c.env.clock().now_ms() else {
         return unavailable();
     };
-    let instance = live.session.instance.as_ref().map(|i| (&i.kid, &i.key));
+    // OP-159 m.47 (g), TN-142
+    let asked = uri
+        .query()
+        .and_then(|q| q.strip_prefix("environment="))
+        .filter(|e| *e != live.session.who.environment);
+    let (environment, domain, instance) = match instance_for(&c, &live.session, asked).await {
+        Ok(Some((d, i))) => (
+            asked.unwrap_or(&live.session.who.environment).to_owned(),
+            d,
+            Some(i),
+        ),
+        Ok(None) if asked.is_none() => (
+            live.session.who.environment.clone(),
+            live.session.who.domain,
+            None,
+        ),
+        Ok(None) => return problems::instance_required().into_response(),
+        Err(Unavailable) => return unavailable(),
+    };
+    let instance = instance.as_ref().map(|i| (&i.kid, &i.key));
     match verify_read_proof(
         &ais,
         instance,
-        &live.session.who.domain,
+        &domain,
         &read_intent(&Method::POST, INTENTS_PATH),
         now,
     ) {
@@ -1028,7 +1173,7 @@ async fn intents<E: ConsoleEnv>(
         Some((namespace, name, major)) => match c
             .env
             .accepted()
-            .action(live.session.who.domain, &namespace, &name, major)
+            .action(domain, &namespace, &name, major)
             .await
         {
             Ok(t) => t,
@@ -1036,8 +1181,8 @@ async fn intents<E: ConsoleEnv>(
         },
         None => None,
     };
-    match super::drafts::draft_with(&body, &live.session.who.environment, now, tenant.as_ref()) {
-        Ok(d) => json_reply(StatusCode::OK, &d.answer(&live.session.who.domain)),
+    match super::drafts::draft_with(&body, &environment, now, tenant.as_ref()) {
+        Ok(d) => json_reply(StatusCode::OK, &d.answer(&domain)),
         Err(e) => problems::draft(e).into_response(),
     }
 }
@@ -1075,6 +1220,14 @@ pub fn router<E: ConsoleEnv>(console: &Arc<Console<E>>) -> Router {
         .route("/console/api/sign-out", post(sign_out::<E>))
         .route("/console/api/instances/challenge", post(challenge::<E>))
         .route("/console/api/instances", post(register::<E>))
+        .route(
+            "/console/api/environments/{environment}/instances/challenge",
+            post(challenge_in::<E>),
+        )
+        .route(
+            "/console/api/environments/{environment}/instances",
+            post(register_in::<E>),
+        )
         .route(INTENTS_PATH, post(intents::<E>))
         .route("/console/api/proxy/admin/{*rest}", any(admin_proxy::<E>))
         .route("/console/api/proxy/adp/{*rest}", post(adp_proxy::<E>))

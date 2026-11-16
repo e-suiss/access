@@ -284,7 +284,7 @@ impl EnvironmentKeks {
     }
 
     /// The environment's blind index key, made in the token on first use (OP-153 m.3 (aa)).
-    fn index(&self, environment: &[u8; 16]) -> Result<Arc<EnvironmentIndexKey>, String> {
+    pub(crate) fn index(&self, environment: &[u8; 16]) -> Result<Arc<EnvironmentIndexKey>, String> {
         let mut loaded = self.indexes.lock().map_err(|_| "index cache")?;
         if let Some(k) = loaded.get(environment) {
             return Ok(k.clone());
@@ -378,6 +378,8 @@ impl EnvironmentKek for EnvironmentKeks {
 /// sign-in policy and the pinned RP ID. A kit is rebuilt when either changes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Settings {
+    /// The environment's kind (TN-138).
+    kind: Option<String>,
     signin: Option<Vec<u8>>,
     rp_id: Option<String>,
     related: Vec<String>,
@@ -473,8 +475,13 @@ impl HsmKits {
         let spc = t.spc_enabled().await.map_err(|_| Unavailable)?;
         // OP-158 m.3 (y), m.6 (b)
         let crypto = t.environment_crypto().await.map_err(|_| Unavailable)?;
+        // TN-138
+        let kind = access_store::tenant_admin::environment_kind(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
+            kind,
             signin,
             rp_id,
             related,
@@ -510,6 +517,12 @@ impl HsmKits {
         // TN-132, MD-8
         let signin = match &settings.signin {
             Some(bytes) => EnvironmentSignin::decode(bytes).ok_or("sign-in policy")?,
+            // TN-138, OP-159 m.47 (b)
+            None if settings.kind.as_deref()
+                == Some(access_identity_admin::domain::tenant::MANAGEMENT) =>
+            {
+                EnvironmentSignin::management()
+            }
             None => EnvironmentSignin::default(),
         };
         // IDP-5, IDI-4, OP-156 m.3 (i)

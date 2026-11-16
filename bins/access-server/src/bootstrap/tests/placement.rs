@@ -363,6 +363,8 @@ async fn e14_a_rehome_moves_the_environment_only_with_an_exercise_in_both_govern
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
+            administered: None,
+            management: None,
         })
         .await
         .unwrap();

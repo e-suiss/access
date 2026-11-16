@@ -39,6 +39,7 @@ pub mod linux;
 pub mod org;
 pub mod profile_check;
 pub mod provision;
+pub mod tenant;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
 pub mod environment;
@@ -378,6 +379,10 @@ pub enum Invalid {
     /// (OP-153 m.3 (a)).
     #[error("catalog upgrade required")]
     CatalogUpgradeRequired,
+    /// A third-party client in a management environment, which keeps only the first-party
+    /// console and account clients (TN-138, OP-159 m.47 (b)).
+    #[error("management environment")]
+    ManagementEnvironment,
     /// The actor's account is in the grace period after a recovery, which refuses this change
     /// (TN-56, OP-153 m.3 (e)).
     #[error("recovery grace")]
@@ -797,6 +802,7 @@ impl Invalid {
             Self::UpstreamSubject => "invalid-upstream-subject",
             Self::UpstreamSubjectLinked => "upstream-subject-linked",
             Self::CatalogUpgradeRequired => access_internal_api::idp::CATALOG_UPGRADE_REQUIRED,
+            Self::ManagementEnvironment => "management-environment",
             Self::RecoveryPolicy => "invalid-recovery-policy",
             Self::RecoveryOption => "recovery-option-off",
             Self::SelfIssue => "self-issue-refused",

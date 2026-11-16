@@ -21273,7 +21273,7 @@
       },
       "post": {
         "operationId": "createTenant",
-        "summary": "Creates a tenant.",
+        "summary": "Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
         "tags": [
           "platform"
         ],
@@ -21432,6 +21432,390 @@
         "x-access-visibility": "forbidden"
       }
     },
+    "/admin/v1/platform/tenants/{tenant_id}/reinvite-founder": {
+      "post": {
+        "operationId": "reinviteFounder",
+        "summary": "Sends a tenant whose founding did not complete a new founder invitation; the old link and code stop working (TN-141).",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantReinvite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}/suspend": {
+      "post": {
+        "operationId": "suspendTenant",
+        "summary": "Suspends a tenant: its environments stop serving (OP-159 m.47 (h)).",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantChange"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}/reactivate": {
+      "post": {
+        "operationId": "reactivateTenant",
+        "summary": "Lifts a tenant's suspension (OP-159 m.47 (h)).",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantChange"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}/placement": {
+      "post": {
+        "operationId": "moveTenantPlacement",
+        "summary": "Moves where a tenant's new environments are placed (OP-40, OP-159 m.47 (h)).",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantChange"
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/v1/platform/tenants/{tenant_id}/envs": {
       "get": {
         "operationId": "listTenantEnvironments",
@@ -21518,100 +21902,6 @@
         "x-access-surface": "platform",
         "x-access-scope": "platform.read",
         "x-access-visibility": "forbidden"
-      },
-      "post": {
-        "operationId": "createEnvironment",
-        "summary": "Creates an environment by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered.",
-        "tags": [
-          "platform"
-        ],
-        "security": [
-          {
-            "ais": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "name": "tenant_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            },
-            "description": "The resource's natural key."
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/Ais"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Committed: the Exercise record (TN-110).",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlatformWriteResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "platform",
-        "x-access-scope": null,
-        "x-access-visibility": "forbidden",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnvironmentCreate"
-              }
-            }
-          }
-        }
       }
     },
     "/admin/v1/platform/tenants/{tenant_id}/sandbox-domains": {
@@ -21700,100 +21990,6 @@
         "x-access-surface": "platform",
         "x-access-scope": "platform.read",
         "x-access-visibility": "forbidden"
-      },
-      "post": {
-        "operationId": "createSandboxDomain",
-        "summary": "Creates a sandbox environment whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget.",
-        "tags": [
-          "platform"
-        ],
-        "security": [
-          {
-            "ais": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "name": "tenant_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            },
-            "description": "The resource's natural key."
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/Ais"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Committed: the Exercise record (TN-110).",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlatformWriteResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "platform",
-        "x-access-scope": null,
-        "x-access-visibility": "forbidden",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnvironmentCreate"
-              }
-            }
-          }
-        }
       }
     },
     "/admin/v1/platform/envs/{environment_slug}": {
@@ -23817,6 +24013,33 @@
             "type": "string",
             "description": "Opaque `tnt_` id (OP-137)."
           },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The tenant's own name: untrusted text, never authority (TN-1, TN-131)."
+          },
+          "management_slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The slug of its management environment, the tenant's handle (OP-159 m.47 (a))."
+          },
+          "founding": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pending",
+              "completed",
+              "expired",
+              null
+            ],
+            "description": "Its founder's invitation: waiting, used, or expired and waiting for a reinvitation (TN-141)."
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -23856,6 +24079,14 @@
           "slug": {
             "type": "string",
             "description": "The immutable slug (TN-16)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "management"
+            ],
+            "description": "A tenant's management environment or one of its other environments (TN-138)."
           },
           "tenant_id": {
             "type": "string",
@@ -24001,45 +24232,20 @@
           }
         }
       },
-      "FoundingRoot": {
-        "type": "object",
-        "additionalProperties": false,
-        "description": "The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url.",
-        "properties": {
-          "sole": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{22}$"
-          },
-          "joint": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "k",
-              "parties"
-            ],
-            "properties": {
-              "k": {
-                "type": "integer",
-                "minimum": 2
-              },
-              "parties": {
-                "type": "array",
-                "minItems": 2,
-                "items": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{22}$"
-                }
-              }
-            }
-          }
-        }
-      },
       "TenantCreate": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A new tenant; the draft assigns its `tenant_id`.",
+        "required": [
+          "display_name",
+          "management_slug",
+          "founder_email"
+        ],
+        "description": "A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.",
         "examples": [
           {
+            "display_name": "Acme",
+            "management_slug": "acme-admin",
+            "founder_email": "admin@acme.example",
             "placement": "pool-default"
           }
         ],
@@ -24048,6 +24254,19 @@
             "type": "string",
             "description": "Assigned by the draft; send it back unchanged."
           },
+          "display_name": {
+            "type": "string",
+            "description": "The tenant's name, 1 to 120 characters (TN-131)."
+          },
+          "management_slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$",
+            "description": "The slug its management environment will take, reserved now (TN-16)."
+          },
+          "founder_email": {
+            "type": "string",
+            "description": "The founder's address; the invitation is sent to it and matched by its blind index (TN-89 (4), (5))."
+          },
           "placement": {
             "type": "string",
             "description": "Its placement; `pool-default` when omitted (OP-40)."
@@ -24061,115 +24280,17 @@
           }
         }
       },
-      "EnvironmentCreate": {
+      "TenantReinvite": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "slug",
-          "root"
+          "founder_email"
         ],
-        "description": "A new environment and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
-        "examples": [
-          {
-            "slug": "shop",
-            "issuer_style": "subdomain",
-            "root": {
-              "joint": {
-                "k": 2,
-                "parties": [
-                  "AQEBAQEBAQEBAQEBAQEBAQ",
-                  "AgICAgICAgICAgICAgICAg"
-                ]
-              }
-            }
-          },
-          {
-            "slug": "lab",
-            "root": {
-              "sole": "AQEBAQEBAQEBAQEBAQEBAQ"
-            },
-            "acknowledge_no_recovery": true
-          }
-        ],
+        "description": "A new founder invitation for a tenant whose founding did not complete; the address must be the founding's (TN-141).",
         "properties": {
-          "slug": {
+          "founder_email": {
             "type": "string",
-            "description": "The immutable slug (TN-16)."
-          },
-          "issuer_style": {
-            "type": "string",
-            "enum": [
-              "subdomain",
-              "path"
-            ],
-            "default": "subdomain"
-          },
-          "placement": {
-            "type": "string",
-            "description": "Its placement; `pool-default` when omitted (OP-40)."
-          },
-          "root": {
-            "$ref": "#/components/schemas/FoundingRoot"
-          },
-          "ct3_delay_s": {
-            "type": "integer",
-            "minimum": 3600,
-            "maximum": 2592000
-          },
-          "causal_binding": {
-            "type": "boolean",
-            "default": false,
-            "description": "Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17)."
-          },
-          "acknowledge_no_recovery": {
-            "type": "boolean",
-            "default": false
-          },
-          "recovery": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "keys"
-            ],
-            "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party; a sole root recovers with its own keys. Without them the Genesis says `recovery: not_available`.",
-            "properties": {
-              "held_on": {
-                "type": "string",
-                "enum": [
-                  "device",
-                  "offline"
-                ],
-                "default": "device"
-              },
-              "keys": {
-                "type": "array",
-                "maxItems": 16,
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "party",
-                    "kid"
-                  ],
-                  "properties": {
-                    "party": {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9_-]{22}$",
-                      "description": "The root Party that holds the key."
-                    },
-                    "kid": {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9_-]{43}$",
-                      "description": "The key's RFC 7638 thumbprint."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "sandbox": {
-            "type": "boolean",
-            "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`."
+            "description": "The founder's address."
           },
           "validity": {
             "$ref": "#/components/schemas/Validity"
@@ -24180,70 +24301,21 @@
           }
         }
       },
-      "Genesis": {
+      "TenantChange": {
         "type": "object",
         "additionalProperties": false,
-        "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
-        "examples": [
-          {
-            "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
-            "root": {
-              "kind": "joint",
-              "k": 2,
-              "n": 2
-            },
-            "recovery": "not_available",
-            "recovery_reason": "no-recovery-keys"
-          }
-        ],
+        "description": "A tenant's suspension, reactivation or placement move (OP-159 m.47 (h)).",
         "properties": {
-          "digest": {
+          "placement": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{43}$"
+            "description": "The new placement (`moveTenantPlacement` only, OP-40)."
           },
-          "root": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "sole",
-                  "joint"
-                ]
-              },
-              "k": {
-                "type": "integer"
-              },
-              "n": {
-                "type": "integer"
-              }
-            }
+          "validity": {
+            "$ref": "#/components/schemas/Validity"
           },
-          "recovery": {
+          "ais": {
             "type": "string",
-            "enum": [
-              "available",
-              "not_available"
-            ],
-            "description": "`available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says \"Recovery not available\"."
-          },
-          "recovery_threshold": {
-            "type": "object",
-            "additionalProperties": false,
-            "description": "How many of the entry's keys a recovery needs.",
-            "properties": {
-              "k": {
-                "type": "integer"
-              },
-              "n": {
-                "type": "integer"
-              }
-            }
-          },
-          "recovery_reason": {
-            "type": "string",
-            "description": "Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."
+            "description": "The caller's AIS, when not in the header."
           }
         }
       },
@@ -24254,7 +24326,7 @@
           "exercise_id",
           "position"
         ],
-        "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for an environment its Genesis.",
+        "description": "The `idp.platform.*` Exercise the write compiled to (TN-110) and the tenant it created or changed.",
         "properties": {
           "exercise_id": {
             "type": "string",
@@ -24264,17 +24336,7 @@
             "$ref": "#/components/schemas/Position"
           },
           "resource": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/Tenant"
-              },
-              {
-                "$ref": "#/components/schemas/EnvironmentMetadata"
-              }
-            ]
-          },
-          "genesis": {
-            "$ref": "#/components/schemas/Genesis"
+            "$ref": "#/components/schemas/Tenant"
           }
         }
       },

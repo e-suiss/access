@@ -60,12 +60,33 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         environment: EnvironmentId,
     ) -> Result<Option<[u8; 16]>, AdminError> {
         let mut t = TenantTx::begin(self.app, tenant, environment).await?;
-        let party = store::environment_issuer(&mut t).await?;
         let g = access_store::idp::governance(&mut t).await?;
         t.commit().await?;
-        let (Some(party), Some(g)) = (party, g) else {
+        let Some(g) = g else {
             return Ok(None);
         };
+        self.register_issuer_in(tenant, environment, Digest(*g.domain.as_bytes()))
+            .await
+    }
+
+    /// Opens the environment's Claim issuer Instance in `domain`, its governing domain or a domain of
+    /// the tenant that consumes its Claims (TN-4, OP-159 m.47 (d)), unless the key holds one there.
+    ///
+    /// # Errors
+    /// [`AdminError::Refused`] when the domain refuses the registration; [`AdminError`].
+    pub async fn register_issuer_in(
+        &self,
+        tenant: TenantId,
+        environment: EnvironmentId,
+        domain: Digest,
+    ) -> Result<Option<[u8; 16]>, AdminError> {
+        let mut t = TenantTx::begin(self.app, tenant, environment).await?;
+        let party = store::environment_issuer(&mut t).await?;
+        t.commit().await?;
+        let Some(party) = party else {
+            return Ok(None);
+        };
+        let g = DomainId::from_bytes(domain.0);
         let key = self
             .keys
             .open_issuer(environment, party)
@@ -73,8 +94,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             .map_err(|e| AdminError::Unavailable(e.0))?;
         let kid = thumbprint(&key);
         let mut t = TenantTx::begin(self.app, tenant, environment).await?;
-        let known = store::issuer_instance(&mut t, &g.domain, &kid).await?;
-        let registered = store::has_issuer_instance(&mut t, &g.domain).await?;
+        let known = store::issuer_instance(&mut t, &g, &kid).await?;
+        let registered = store::has_issuer_instance(&mut t, &g).await?;
         t.commit().await?;
         if let Some(instance) = known {
             return Ok(Some(instance));
@@ -82,7 +103,6 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let now = Instances::now(self.governance)
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
-        let domain = Digest(*g.domain.as_bytes());
         let validity = Window {
             from: now.saturating_sub(SKEW_MS),
             until: now.saturating_add(VALIDITY_MS),

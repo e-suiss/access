@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.tenants (tenant_id, placement_id, status) VALUES ($1, $2, 'provisioning')\n         ON CONFLICT (tenant_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3c6e5d904f7045753b22a76a0924791a8f177acc51be9394e2b0eafa9d15d3c8"
+}

@@ -19,6 +19,7 @@ mod governance;
 pub(crate) mod local;
 pub(crate) mod platform_admin;
 mod pq_profile;
+pub(crate) mod tenants;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -32,7 +33,7 @@ use access_crypto::Secret;
 use access_crypto::oauth::ClientKey;
 use access_crypto::opaque_id::IdKey;
 use access_identity_admin::AdminError;
-use access_identity_admin::app::{Admin, Applied, NewEnvironment, Proposal};
+use access_identity_admin::app::{Admin, Administered, Applied, NewEnvironment, Proposal};
 use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId, Platform, RedirectUri};
 use access_identity_admin::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
@@ -180,6 +181,8 @@ struct PlanFile {
     second_provider: Option<durability::SecondProviderFile>,
     pq_profile: Option<pq_profile::PqProfileFile>,
     platform_admin: Option<platform_admin::PlatformAdminFile>,
+    #[serde(default)]
+    tenant: Vec<tenants::TenantFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -299,47 +302,6 @@ impl TotpSeedFile {
                 BootstrapError::Unavailable(format!("totp_seed_file {}: {e}", self.path.display()))
             })
     }
-
-    /// The seed the file holds now, decoded.
-    ///
-    /// # Errors
-    /// [`BootstrapError::Plan`] when it holds none.
-    pub(crate) fn seed(&self) -> Result<Secret<Vec<u8>>, BootstrapError> {
-        use std::os::unix::fs::FileExt as _;
-        let mut text = [0; TOTP_SEED_CHARS];
-        let none = || {
-            BootstrapError::Plan(format!(
-                "totp_seed_file {}: holds no seed",
-                self.path.display()
-            ))
-        };
-        self.file.read_exact_at(&mut text, 0).map_err(|_| none())?;
-        let text = core::str::from_utf8(&text).map_err(|_| none())?;
-        if !is_seed(text) {
-            return Err(none());
-        }
-        base32_decode(text).map(Secret::new).ok_or_else(none)
-    }
-}
-
-/// The bytes of the unpadded RFC 4648 base32 `text`; `None` when it is not base32.
-fn base32_decode(text: &str) -> Option<Vec<u8>> {
-    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    let mut bits = Vec::with_capacity(text.len().checked_mul(5)?);
-    for c in text.bytes() {
-        let v = ALPHABET.iter().position(|a| *a == c)?;
-        for i in (0..5).rev() {
-            bits.push(v.checked_shr(i)? & 1 == 1);
-        }
-    }
-    let (bytes, _) = bits.as_chunks::<8>();
-    bytes
-        .iter()
-        .map(|byte| {
-            byte.iter()
-                .try_fold(0_u8, |acc, b| acc.checked_mul(2)?.checked_add(u8::from(*b)))
-        })
-        .collect()
 }
 
 /// Whether `text` is one unpadded base32 seed of 160 bits.
@@ -792,6 +754,8 @@ pub(crate) struct Plan {
     pub(crate) pq_profile: Option<pq_profile::PqProfilePlan>,
     /// OP-159 m.41 (a)
     pub(crate) platform_admin: Option<platform_admin::PlatformAdminPlan>,
+    /// The tenants with administrators, each founded headless (OP-159 m.47 (i)).
+    pub(crate) managed: Vec<tenants::TenantPlan>,
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
@@ -861,9 +825,20 @@ impl Plan {
     /// Reads the plan at `path` and the key files it names; before the lockdown.
     #[expect(clippy::too_many_lines, reason = "one block per section of the plan")]
     pub(crate) fn load(path: &Path) -> Result<Self, BootstrapError> {
-        let file: PlanFile = Figment::from(Toml::file_exact(path))
+        let mut file: PlanFile = Figment::from(Toml::file_exact(path))
             .extract()
             .map_err(|e| BootstrapError::Plan(e.to_string()))?;
+        // OP-159 m.47 (i)
+        let taken: Vec<String> = std::iter::once(file.platform.clone())
+            .chain(file.tenants.iter().cloned())
+            .collect();
+        let managed = tenants::check(std::mem::take(&mut file.tenant), &taken)?;
+        let known: Vec<String> = file
+            .tenants
+            .iter()
+            .cloned()
+            .chain(managed.iter().flat_map(|t| t.environments.iter().cloned()))
+            .collect();
         let mut products = Vec::new();
         for p in file.products {
             let product = PlatformProduct::parse(&p.product).ok_or_else(|| {
@@ -889,9 +864,9 @@ impl Plan {
             replica: file.replica.as_ref(),
             second_provider: file.second_provider.as_ref(),
         }
-        .check(&file.tenants)?;
+        .check(&known)?;
         // OP-159 m.4 (a)
-        let pq_profile = pq_profile::check(file.pq_profile, &file.tenants)?;
+        let pq_profile = pq_profile::check(file.pq_profile, &known)?;
         // OP-157 m.4 (a), m.6 (i)
         let (support_operator, breakglass_account, review_schedule) = governance::Fixtures {
             support_operator: file.support_operator,
@@ -899,7 +874,7 @@ impl Plan {
             review_schedule: file.review_schedule,
         }
         .plans(
-            &file.tenants,
+            &known,
             file.test_user.as_ref().map(|u| u.environment.as_str()),
             file.sample_agent.as_ref().map(|a| a.environment.as_str()),
         )?;
@@ -914,16 +889,12 @@ impl Plan {
         };
         let sample = match file.sample {
             None => None,
-            Some(s) => Some(SamplePlan::from_file(
-                s,
-                &file.tenants,
-                file.test_user.as_ref(),
-            )?),
+            Some(s) => Some(SamplePlan::from_file(s, &known, file.test_user.as_ref())?),
         };
         let test_user = match file.test_user {
             None => None,
             Some(u) => {
-                sample_tenant(&file.tenants, "test_user", &u.environment)?;
+                sample_tenant(&known, "test_user", &u.environment)?;
                 let password = test_password(&u)?;
                 Some(TestUserPlan {
                     environment: u.environment,
@@ -946,15 +917,16 @@ impl Plan {
         let compromise = match file.compromise {
             None => None,
             Some(c) => {
-                sample_tenant(&file.tenants, "compromise", &c.environment)?;
+                sample_tenant(&known, "compromise", &c.environment)?;
                 Some(CompromisePlan {
                     environment: c.environment,
                 })
             }
         };
         Ok(Self {
-            // OP-159 m.41 (a), m.43 (c)
-            platform_admin: platform_admin::check(file.platform_admin, &file.tenants)?,
+            // OP-159 m.41 (a), m.47 (i)
+            platform_admin: platform_admin::check(file.platform_admin)?,
+            managed,
             platform: file.platform,
             tenants: file.tenants,
             style: file.issuer_style,
@@ -1196,6 +1168,18 @@ pub(crate) struct Summary {
     /// Present when the plan names the platform administrator (OP-159 m.41 (a)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) platform_admin: Option<platform_admin::PlatformAdminOut>,
+    /// The tenants with administrators (OP-159 m.47 (i)).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) tenants: Vec<tenants::TenantOut>,
+}
+
+/// One environment of the run: the platform's, a sample tenant's, or a managed tenant's already
+/// opened by its founder (OP-159 m.47 (i)), whose key then roots it.
+struct Task {
+    slug: String,
+    is_platform: bool,
+    opened: Option<(TenantId, EnvironmentId, Digest, bool)>,
+    founder: Option<String>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -1458,17 +1442,57 @@ where
         let party = root_party(&key);
         let style = issuer_style(plan.style);
         let mut environments = Vec::new();
-        let slugs =
-            std::iter::once((&plan.platform, true)).chain(plan.tenants.iter().map(|s| (s, false)));
-        let mut platform = None;
-        let mut sample = None;
-        let mut test_user = None;
-        let mut compromise = None;
-        let mut sample_agent = None;
-        let mut pq_profile = None;
-        let mut platform_admin = None;
-        let (mut support_operator, mut breakglass_account, mut review_schedule) =
-            (None, None, None);
+        // OP-159 m.47 (i): the platform environment is the platform tenant's management environment
+        let opening = self.admin(&ids, None);
+        let platform_opened = self
+            .environment(
+                &opening,
+                (
+                    &plan.platform,
+                    style,
+                    Some(Administered::Own(
+                        access_identity_admin::app::founding::management_actions()
+                            .into_iter()
+                            .chain(
+                                access_identity_admin::domain::provision::PlatformAction::ALL
+                                    .into_iter()
+                                    .map(
+                                        access_identity_admin::domain::provision::PlatformAction::action_ref,
+                                    ),
+                            )
+                            .collect(),
+                    )),
+                ),
+                party,
+                vec![
+                    access_identity_admin::domain::provision::catalog(party),
+                    access_identity_admin::domain::tenant::catalog(party),
+                ],
+                (Vec::new(), Vec::new()),
+            )
+            .await?;
+        self.onboard(
+            platform_opened.0,
+            platform_opened.1,
+            platform_opened.2,
+            &root,
+            party,
+        )
+        .await?;
+        let mut managed = Vec::new();
+        let mut tasks: Vec<Task> = std::iter::once(Task {
+            slug: plan.platform.clone(),
+            is_platform: true,
+            opened: Some(platform_opened),
+            founder: None,
+        })
+        .chain(plan.tenants.iter().map(|s| Task {
+            slug: s.clone(),
+            is_platform: false,
+            opened: None,
+            founder: None,
+        }))
+        .collect();
         // OP-149 m.26 (c)
         let declarant = match &plan.compromise {
             Some(_) => Some(self.declarant()?),
@@ -1479,7 +1503,82 @@ where
             Some(_) => Some(self.case_system()?.1),
             None => None,
         };
-        for (slug, is_platform) in slugs {
+        // OP-159 m.47 (i): a managed environment's Genesis carries the plan's local fixtures
+        let genesis = |slug: &str, founder: Id| -> tenants::Genesis {
+            let catalog = plan.sample.as_ref().filter(|s| s.environment == slug);
+            let accepted = plan
+                .compromise
+                .as_ref()
+                .filter(|c| c.environment == slug)
+                .zip(declarant.as_ref());
+            let (acceptances, predicate) = genesis_acceptances(
+                catalog,
+                (
+                    accepted.map(|(_, (_, issuer))| *issuer),
+                    case_system.filter(|_| {
+                        plan.support_operator
+                            .as_ref()
+                            .is_some_and(|s| s.environment == slug)
+                    }),
+                ),
+            );
+            (
+                catalog
+                    .map(|s| s.catalog(founder))
+                    .into_iter()
+                    .chain(std::iter::once(
+                        access_identity_ssh::domain::schema::catalog(founder),
+                    ))
+                    .collect(),
+                acceptances,
+                predicate,
+            )
+        };
+        for t in &plan.managed {
+            let (opened, _, out) = self
+                .managed_tenant(
+                    &opening,
+                    &ids,
+                    &tenants::PlatformRoot {
+                        tenant: platform_opened.0,
+                        environment: platform_opened.1,
+                        root: &root,
+                    },
+                    (t, &genesis),
+                )
+                .await?;
+            for o in opened {
+                tasks.push(Task {
+                    slug: o.slug,
+                    is_platform: false,
+                    opened: Some((o.tenant, o.environment, o.domain, o.created)),
+                    founder: Some(tenants::founder_label(&t.management)),
+                });
+            }
+            managed.push(out);
+        }
+        let operator_party = party;
+        let mut platform = None;
+        let mut sample = None;
+        let mut test_user = None;
+        let mut compromise = None;
+        let mut sample_agent = None;
+        let mut pq_profile = None;
+        let mut platform_admin = None;
+        let (mut support_operator, mut breakglass_account, mut review_schedule) =
+            (None, None, None);
+        for task in &tasks {
+            let (slug, is_platform) = (&task.slug, task.is_platform);
+            // OP-159 m.47 (i): a managed tenant's environments are rooted in its founder
+            let root = match &task.founder {
+                Some(label) => token_key(self.hsm, label)?,
+                None => root_key(self.hsm)?,
+            };
+            let party = if task.founder.is_some() {
+                root_party(&root.public_key())
+            } else {
+                operator_party
+            };
             let admin = self.admin(&ids, None);
             let catalog = plan
                 .sample
@@ -1490,11 +1589,12 @@ where
                 .as_ref()
                 .filter(|c| !is_platform && c.environment == *slug)
                 .zip(declarant.as_ref());
-            let (tenant, environment, domain, created) = self
-                .environment(
+            let (tenant, environment, domain, created) = if let Some(opened) = task.opened {
+                opened
+            } else {
+                self.environment(
                     &admin,
-                    slug,
-                    style,
+                    (slug, style, None),
                     party,
                     // OP-151 m.2 M2
                     if is_platform {
@@ -1523,7 +1623,8 @@ where
                         ),
                     ),
                 )
-                .await?;
+                .await?
+            };
             self.onboard(tenant, environment, domain, &root, party)
                 .await?;
             // OP-151 m.18 (g)
@@ -1562,7 +1663,7 @@ where
                         self.platform_admin(
                             &ids,
                             (tenant, environment),
-                            (domain, &root, slug, &route.issuer),
+                            (domain, slug, &route.issuer),
                             p,
                         )
                         .await?,
@@ -1664,29 +1765,6 @@ where
                         .await?,
                 );
             }
-            // OP-159 m.43 (c), TN-119, INV-29
-            if let Some(p) = plan
-                .platform_admin
-                .as_ref()
-                .filter(|p| !is_platform && p.environments.contains(slug))
-            {
-                let redrawn = platform_admin
-                    .as_ref()
-                    .and_then(|o: &platform_admin::PlatformAdminOut| o.totp.as_ref())
-                    .is_some_and(|t| t.created);
-                let out = self
-                    .environment_admin(
-                        &admin,
-                        &ids,
-                        (tenant, environment),
-                        (domain, &root, slug, &route.issuer),
-                        (p, redrawn),
-                    )
-                    .await?;
-                if let Some(o) = platform_admin.as_mut() {
-                    o.environments.push(out);
-                }
-            }
             let mut out = environment_out(
                 &ids,
                 (tenant, environment, domain),
@@ -1715,6 +1793,7 @@ where
             review_schedule,
             pq_profile,
             platform_admin,
+            tenants: managed,
         })
     }
 
@@ -2003,8 +2082,7 @@ where
     async fn environment(
         &self,
         admin: &Admin<'_, P, P, K>,
-        slug: &str,
-        style: IssuerStyle,
+        (slug, style, administered): (&str, IssuerStyle, Option<Administered>),
         root: Id,
         schemas: Vec<Spp>,
         (acceptances, issuer_predicate_input): (Vec<suiss_crypto::dcbor::Value>, Vec<String>),
@@ -2037,6 +2115,11 @@ where
                 acceptances,
                 issuer_predicate_input,
                 provisioned_by: None,
+                // TN-138, OP-159 m.47 (i)
+                management: administered
+                    .as_ref()
+                    .map(|_| EnvironmentId::from_bytes(*tenant.as_bytes())),
+                administered,
             })
             .await?;
         Ok((tenant, created.environment, created.domain, true))

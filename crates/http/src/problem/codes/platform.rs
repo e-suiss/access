@@ -1,4 +1,5 @@
-//! The platform-admin surface's codes (OP-151 m.2 M2): what a provisioning write refuses.
+//! The platform-admin surface's codes (OP-151 m.2 M2) and the tenant administration's (OP-159 m.47):
+//! what a provisioning, founding or tenant write refuses.
 
 use super::{Code, code};
 
@@ -43,4 +44,61 @@ pub const SLUG_TAKEN: Code = code(
     409,
     "Conflict",
     "The slug is taken, now or by a deleted environment; slugs are never reused (TN-16, INV-32).",
+);
+/// A tenant display name that is empty, too long or has control characters (TN-131).
+pub const INVALID_TENANT_NAME: Code = code(
+    "invalid-tenant-name",
+    400,
+    "Bad Request",
+    "The tenant's display name is 1 to 120 characters without control characters or surrounding white space (TN-131).",
+);
+/// An address that is not one (TN-89 (4)).
+pub const INVALID_EMAIL: Code = code(
+    "invalid-email",
+    400,
+    "Bad Request",
+    "The address is not an e-mail address (TN-89 (4)).",
+);
+/// The tenant is not in the state the change needs.
+pub const TENANT_STATE: Code = code(
+    "tenant-state",
+    409,
+    "Conflict",
+    "The tenant is not in the state this change needs: a new tenant exists already, a reinvitation is only for a tenant awaiting its founder, a suspension only for an active one, a reactivation only for a suspended one (OP-159 m.47 (c), (h)).",
+);
+/// A tenant write sent to an environment that is not the tenant's management environment, or a
+/// third-party client in a management environment.
+pub const MANAGEMENT_ENVIRONMENT: Code = code(
+    "management-environment",
+    409,
+    "Conflict",
+    "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b)).",
+);
+/// The founder invitation expired.
+pub const FOUNDING_EXPIRED: Code = code(
+    "founding-expired",
+    410,
+    "Gone",
+    "The founder invitation expired; the platform can send a new one (TN-141).",
+);
+/// A founding step out of order.
+pub const FOUNDING_STATE: Code = code(
+    "founding-state",
+    409,
+    "Conflict",
+    "The founding is completed already, or its address is not proven yet (TN-141).",
+);
+/// The address or the code does not match the founder invitation.
+pub const INVALID_CODE: Code = code(
+    "invalid-code",
+    400,
+    "Bad Request",
+    "The address or the code does not match the invitation (TN-89 (5)).",
+);
+/// The tenant's last owner cannot be removed.
+pub const LAST_TENANT_OWNER: Code = code(
+    "last-tenant-owner",
+    409,
+    "Conflict",
+    "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e)).",
 );

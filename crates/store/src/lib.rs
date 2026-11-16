@@ -97,6 +97,7 @@ pub mod status;
 pub mod support;
 pub mod support_access;
 pub mod tenancy;
+pub mod tenant_admin;
 pub mod throttle;
 pub mod upstream;
 pub mod user_keyed;

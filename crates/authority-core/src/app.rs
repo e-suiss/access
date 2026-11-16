@@ -471,10 +471,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         let allowed_scope = match (scope, actor) {
             (Scope::Requester, _) => nonce.as_ref().is_some_and(|n| n.actor == actor_ref),
-            (Scope::Viewer, Some(a)) => {
-                self.settled(|snap| crate::domain::views(snap, &req.basis, &a.party))
-                    .await?
-            }
+            (Scope::Viewer, Some(a)) => self.viewer_views(&req.basis, &a.party, now).await?,
             (Scope::Audit, Some(a)) => self.audits(&a.party, now).await?,
             (_, None) => false,
         };
@@ -580,8 +577,43 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         })
     }
 
+    /// Whether `party` may view decisions made on `basis` now (OP-141 m.38 (c), OP-159 m.47 (k)).
+    async fn viewer_views(
+        &self,
+        basis: &meta::ExerciseBasis,
+        party: &Id,
+        now: u64,
+    ) -> Result<bool, CoreError> {
+        let held = self.rule_held(party, now).await?;
+        self.settled(|snap| crate::domain::views(snap, basis, party, &held))
+            .await
+    }
+
+    /// The rule-shaped Grants `party` holds now: those its live episode selects (OP-141 m.20,
+    /// OP-159 m.47 (k)).
+    pub(crate) async fn rule_held(&self, party: &Id, now: u64) -> Result<BTreeSet<Id>, CoreError> {
+        let mut out = BTreeSet::new();
+        for g in self.reader.grants_for(party, None, 1_000).await? {
+            let holder = self
+                .settled(|snap| {
+                    crate::domain::read::<meta::GrantState>(snap, kind::GRANT, &g)
+                        .filter(|s| s.ended.is_none())
+                        .map(|s| s.content.holder)
+                })
+                .await?;
+            if let Some(SubjectSelector::Pred(c)) = holder {
+                let mut snap = Snapshot::default();
+                if self.episode(&mut snap, &c, party, now).await?.is_some() {
+                    out.insert(g);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
-    /// Grant covering `access:audit_export` (OP-141 m.38 (d), m.39 (b)).
+    /// Grant covering `access:audit_export`, by name or by a live episode of a rule-shaped one
+    /// (OP-141 m.38 (d), m.39 (b), OP-159 m.47 (k)).
     pub(crate) async fn audits(&self, party: &Id, now: u64) -> Result<bool, CoreError> {
         let meta_anchor = meta::meta_anchor(&self.domain);
         let root = self
@@ -602,9 +634,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if root {
             return Ok(true);
         }
+        let held = self.rule_held(party, now).await?;
         for g in self.reader.grants_for(party, None, 1_000).await? {
+            let rule = held.contains(&g);
             let audit = self
-                .settled(|snap| crate::domain::audit_grant(snap, &g, party, &self.domain, now))
+                .settled(|snap| {
+                    crate::domain::audit_grant(snap, &g, (party, rule), &self.domain, now)
+                })
                 .await?;
             if audit {
                 return Ok(true);

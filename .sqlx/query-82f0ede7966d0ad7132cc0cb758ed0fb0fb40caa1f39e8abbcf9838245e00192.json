@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.console_instance_challenges (challenge, session_id, domain_id,\n           environment_slug, key, party_id, from_ms, until_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "82f0ede7966d0ad7132cc0cb758ed0fb0fb40caa1f39e8abbcf9838245e00192"
+}

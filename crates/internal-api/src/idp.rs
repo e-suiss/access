@@ -1694,13 +1694,46 @@ pub struct GenesisOrder {
     /// The meta-anchor's rootTerms recovery entry, when the template could build one (§13.6,
     /// SEC20, OP-158 m.3 (m)).
     pub recovery: Option<access_kernel::recovery::RecoveryEntry>,
+    /// The tenant administrator rule the domain is born with (OP-159 m.47 (d), (h), (k) (4)).
+    pub admin_rule: Option<AdminRule>,
 }
+
+/// The tenant administrator rule of a new governing domain (OP-159 m.47 (d), (k) (4)): a set of
+/// rule-shaped Grants whose holder is `Pred{tenant_administration = true}` from the management
+/// environment's issuer, covering the console's meta-actions and reads and `actions` on the
+/// environment's own `idp` resources; never `idp.platform.*` unless the domain is the platform
+/// environment's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminRule {
+    /// The management environment's Claim issuer Party.
+    pub issuer: Id,
+    /// Whether the issuer is another environment's: the domain is then born accepting it for
+    /// `actor-binding` and, as predicate input, `authentication` too (TN-4 consuming binding).
+    pub foreign: bool,
+    /// The `idp` actions the rule covers on the environment's `idp` resources.
+    pub actions: Vec<ActionRef>,
+}
+
+/// The class a tenant administrator rule selects by (OP-159 m.47 (d)).
+pub const TENANT_ADMINISTRATION: &str = "tenant_administration";
+
+/// The classes a consuming domain accepts from the management environment's issuer for
+/// `actor-binding` (OP-159 m.47 (d)): who the administrator's Party is and that its account
+/// stands.
+pub const MANAGEMENT_BINDING_CLASSES: [&str; 3] = [
+    "account_status",
+    "authentication",
+    "identity_binding_person",
+];
 
 /// The domain a Genesis opened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GenesisOpened {
     /// The `DomainID`.
     pub domain: Digest,
+    /// The Acceptance through which the domain selects the tenant's administrators, when its
+    /// Genesis carried an administrator rule (OP-159 m.47 (d)): what the consuming binding names.
+    pub admin_acceptance: Option<Id>,
 }
 
 /// The other plane could not be reached or failed.

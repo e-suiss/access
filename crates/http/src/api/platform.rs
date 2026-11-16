@@ -1,6 +1,7 @@
-//! The platform-admin resources under `/admin/v1/platform/…` (OP-151 m.2 M2): tenants, environment
-//! creation (a Genesis of the environment's governing domain, TN-111), environment metadata with the state
-//! of its keys (CR-25, CR-59), sandbox domains (OP-151 m.3 (m), X21) and the operator's health.
+//! The platform-admin resources under `/admin/v1/platform/…` (OP-151 m.2 M2, OP-159 m.47 (c), (h)):
+//! tenants with an invited founder, their suspension and placement, environment metadata with the
+//! state of its keys (CR-25, CR-59), sandbox domains (OP-151 m.3 (m), X21) and the operator's
+//! health. The platform opens no environment: a tenant's founder and administrators do (TN-140).
 //!
 //! Every read is metadata: no route returns account, client, grant, record or claim content, and
 //! no route reads an environment's settings or authority state (INV-29, X31, TN-119). The handler keeps
@@ -59,6 +60,10 @@ const fn create(path: &'static str, operation_id: &'static str, summary: &'stati
     }
 }
 
+const fn act(path: &'static str, operation_id: &'static str, summary: &'static str) -> Route {
+    create(path, operation_id, summary)
+}
+
 const T: &str = "/admin/v1/platform/tenants";
 const TR: &str = "/admin/v1/platform/tenants/{tenant_id}/envs";
 const TS: &str = "/admin/v1/platform/tenants/{tenant_id}/sandbox-domains";
@@ -74,28 +79,42 @@ pub const ROWS: &[Route] = &[
         )
     },
     list(T, "listTenants", "Tenants and their states; metadata only."),
-    create(T, "createTenant", "Creates a tenant."),
+    create(
+        T,
+        "createTenant",
+        "Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
+    ),
     read(
         "/admin/v1/platform/tenants/{tenant_id}",
         "getTenant",
         "One tenant's metadata.",
+    ),
+    act(
+        "/admin/v1/platform/tenants/{tenant_id}/reinvite-founder",
+        "reinviteFounder",
+        "Sends a tenant whose founding did not complete a new founder invitation; the old link and code stop working (TN-141).",
+    ),
+    act(
+        "/admin/v1/platform/tenants/{tenant_id}/suspend",
+        "suspendTenant",
+        "Suspends a tenant: its environments stop serving (OP-159 m.47 (h)).",
+    ),
+    act(
+        "/admin/v1/platform/tenants/{tenant_id}/reactivate",
+        "reactivateTenant",
+        "Lifts a tenant's suspension (OP-159 m.47 (h)).",
+    ),
+    act(
+        "/admin/v1/platform/tenants/{tenant_id}/placement",
+        "moveTenantPlacement",
+        "Moves where a tenant's new environments are placed (OP-40, OP-159 m.47 (h)).",
     ),
     list(
         TR,
         "listTenantEnvironments",
         "A tenant's environments; metadata only.",
     ),
-    create(
-        TR,
-        "createEnvironment",
-        "Creates an environment by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered.",
-    ),
     list(TS, "listSandboxDomains", "A tenant's sandbox domains."),
-    create(
-        TS,
-        "createSandboxDomain",
-        "Creates a sandbox environment whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget.",
-    ),
     read(
         "/admin/v1/platform/envs/{environment_slug}",
         "getEnvironmentMetadata",
@@ -117,17 +136,28 @@ pub enum Shape {
     Get,
     /// A provisioning write; a success creates (`201`).
     Create,
+    /// A provisioning write that changes a tenant; a success answers `200`.
+    Act,
     /// The intent draft.
     Draft,
 }
 
 /// The members a platform tenant may show (INV-29: metadata only).
-pub const TENANT_FIELDS: &[&str] = &["tenant_id", "status", "placement", "created_at"];
+pub const TENANT_FIELDS: &[&str] = &[
+    "tenant_id",
+    "display_name",
+    "management_slug",
+    "founding",
+    "status",
+    "placement",
+    "created_at",
+];
 
 /// The members a platform environment or sandbox domain may show (INV-29, X31: no settings, no
 /// content).
 pub const ENVIRONMENT_FIELDS: &[&str] = &[
     "slug",
+    "kind",
     "tenant_id",
     "issuer",
     "status",
@@ -144,9 +174,6 @@ pub const ENVIRONMENT_FIELDS: &[&str] = &[
 
 /// The members the health summary may show.
 pub const HEALTH_FIELDS: &[&str] = &["status", "checks"];
-
-/// The members an environment creation's `genesis` may show (TN-111).
-pub const GENESIS_FIELDS: &[&str] = &["digest", "root", "recovery", "recovery_reason"];
 
 /// Members no platform answer carries, at any depth (INV-29, X31): account, client, grant,
 /// record and claim content.
@@ -181,10 +208,11 @@ pub fn spec(operation_id: &str) -> Option<(PlatformKind, Shape)> {
         "listTenants" => (Tenants, Shape::List(&["tenant_id", "status", "placement"])),
         "createTenant" => (Tenants, Shape::Create),
         "getTenant" => (Tenants, Shape::Get),
+        "reinviteFounder" | "suspendTenant" | "reactivateTenant" | "moveTenantPlacement" => {
+            (Tenants, Shape::Act)
+        }
         "listTenantEnvironments" => (Environments, Shape::List(&["slug", "status", "sandbox"])),
-        "createEnvironment" => (Environments, Shape::Create),
         "listSandboxDomains" => (SandboxDomains, Shape::List(&["slug", "status"])),
-        "createSandboxDomain" => (SandboxDomains, Shape::Create),
         "getEnvironmentMetadata" => (Environments, Shape::Get),
         "getOperatorHealth" => (Health, Shape::Get),
         _ => return None,

@@ -768,6 +768,9 @@ fn base_schemas() -> Value {
             "description": "A tenant's metadata; never its environments' content (INV-29, X31).",
             "properties": {
                 "tenant_id": text("Opaque `tnt_` id (OP-137)."),
+                "display_name": { "type": ["string", "null"], "description": "The tenant's own name: untrusted text, never authority (TN-1, TN-131)." },
+                "management_slug": { "type": ["string", "null"], "description": "The slug of its management environment, the tenant's handle (OP-159 m.47 (a))." },
+                "founding": { "type": ["string", "null"], "enum": ["pending", "completed", "expired", null], "description": "Its founder's invitation: waiting, used, or expired and waiting for a reinvitation (TN-141)." },
                 "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
                 "placement": text("Its placement (OP-40)."),
                 "created_at": r("schemas", "Time"),
@@ -788,6 +791,7 @@ fn base_schemas() -> Value {
             "description": "An environment's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
             "properties": {
                 "slug": text("The immutable slug (TN-16)."),
+                "kind": { "type": "string", "enum": ["standard", "management"], "description": "A tenant's management environment or one of its other environments (TN-138)." },
                 "tenant_id": text("Opaque `tnt_` id of its tenant."),
                 "issuer": { "type": ["string", "null"] },
                 "status": { "type": "string", "enum": ["active", "suspended", "deleted"] },
@@ -831,115 +835,52 @@ fn base_schemas() -> Value {
             "description": "One page of environments or sandbox domains; the next is in the `Link` header (OP-65).",
             "properties": { "items": { "type": "array", "items": r("schemas", "EnvironmentMetadata") } },
         },
-        "FoundingRoot": {
-            "type": "object",
-            "additionalProperties": false,
-            "description": "The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url.",
-            "properties": {
-                "sole": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
-                "joint": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["k", "parties"],
-                    "properties": {
-                        "k": { "type": "integer", "minimum": 2 },
-                        "parties": { "type": "array", "minItems": 2, "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" } },
-                    },
-                },
-            },
-        },
         "TenantCreate": {
             "type": "object",
             "additionalProperties": false,
-            "description": "A new tenant; the draft assigns its `tenant_id`.",
-            "examples": [{ "placement": "pool-default" }],
+            "required": ["display_name", "management_slug", "founder_email"],
+            "description": "A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.",
+            "examples": [{ "display_name": "Acme", "management_slug": "acme-admin", "founder_email": "admin@acme.example", "placement": "pool-default" }],
             "properties": {
                 "tenant_id": text("Assigned by the draft; send it back unchanged."),
+                "display_name": text("The tenant's name, 1 to 120 characters (TN-131)."),
+                "management_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", "description": "The slug its management environment will take, reserved now (TN-16)." },
+                "founder_email": text("The founder's address; the invitation is sent to it and matched by its blind index (TN-89 (4), (5))."),
                 "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
                 "validity": r("schemas", "Validity"),
                 "ais": text("The caller's AIS, when not in the header."),
             },
         },
-        "EnvironmentCreate": {
+        "TenantReinvite": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["slug", "root"],
-            "description": "A new environment and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
-            "examples": [
-                { "slug": "shop", "issuer_style": "subdomain", "root": { "joint": { "k": 2, "parties": ["AQEBAQEBAQEBAQEBAQEBAQ", "AgICAgICAgICAgICAgICAg"] } } },
-                { "slug": "lab", "root": { "sole": "AQEBAQEBAQEBAQEBAQEBAQ" }, "acknowledge_no_recovery": true },
-            ],
+            "required": ["founder_email"],
+            "description": "A new founder invitation for a tenant whose founding did not complete; the address must be the founding's (TN-141).",
             "properties": {
-                "slug": text("The immutable slug (TN-16)."),
-                "issuer_style": { "type": "string", "enum": ["subdomain", "path"], "default": "subdomain" },
-                "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
-                "root": r("schemas", "FoundingRoot"),
-                "ct3_delay_s": { "type": "integer", "minimum": 3600, "maximum": 2_592_000 },
-                "causal_binding": { "type": "boolean", "default": false, "description": "Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17)." },
-                "acknowledge_no_recovery": { "type": "boolean", "default": false },
-                "recovery": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["keys"],
-                    "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party; a sole root recovers with its own keys. Without them the Genesis says `recovery: not_available`.",
-                    "properties": {
-                        "held_on": { "type": "string", "enum": ["device", "offline"], "default": "device" },
-                        "keys": {
-                            "type": "array",
-                            "maxItems": 16,
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["party", "kid"],
-                                "properties": {
-                                    "party": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "The root Party that holds the key." },
-                                    "kid": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "The key's RFC 7638 thumbprint." },
-                                },
-                            },
-                        },
-                    },
-                },
-                "sandbox": { "type": "boolean", "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`." },
+                "founder_email": text("The founder's address."),
                 "validity": r("schemas", "Validity"),
                 "ais": text("The caller's AIS, when not in the header."),
             },
         },
-        "Genesis": {
+        "TenantChange": {
             "type": "object",
             "additionalProperties": false,
-            "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
-            "examples": [{ "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc", "root": { "kind": "joint", "k": 2, "n": 2 }, "recovery": "not_available", "recovery_reason": "no-recovery-keys" }],
+            "description": "A tenant's suspension, reactivation or placement move (OP-159 m.47 (h)).",
             "properties": {
-                "digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
-                "root": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "kind": { "type": "string", "enum": ["sole", "joint"] },
-                        "k": { "type": "integer" },
-                        "n": { "type": "integer" },
-                    },
-                },
-                "recovery": { "type": "string", "enum": ["available", "not_available"], "description": "`available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says \"Recovery not available\"." },
-                "recovery_threshold": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "description": "How many of the entry's keys a recovery needs.",
-                    "properties": { "k": { "type": "integer" }, "n": { "type": "integer" } },
-                },
-                "recovery_reason": text("Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."),
+                "placement": text("The new placement (`moveTenantPlacement` only, OP-40)."),
+                "validity": r("schemas", "Validity"),
+                "ais": text("The caller's AIS, when not in the header."),
             },
         },
         "PlatformWriteResult": {
             "type": "object",
             "additionalProperties": false,
             "required": ["exercise_id", "position"],
-            "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for an environment its Genesis.",
+            "description": "The `idp.platform.*` Exercise the write compiled to (TN-110) and the tenant it created or changed.",
             "properties": {
                 "exercise_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
                 "position": r("schemas", "Position"),
-                "resource": { "oneOf": [r("schemas", "Tenant"), r("schemas", "EnvironmentMetadata")] },
-                "genesis": r("schemas", "Genesis"),
+                "resource": r("schemas", "Tenant"),
             },
         },
         "SurfaceRoot": {
@@ -1034,7 +975,7 @@ fn body_of(row: &Route) -> &'static str {
     if let Some((kind, shape)) = super::platform::spec(row.operation_id) {
         return match (kind, shape) {
             (_, P::Draft) => "IntentDraft",
-            (_, P::Create) => "PlatformWriteResult",
+            (_, P::Create | P::Act) => "PlatformWriteResult",
             (PlatformKind::Tenants, P::List(_)) => "TenantPage",
             (_, P::List(_)) => "EnvironmentPage",
             (PlatformKind::Tenants, P::Get) => "Tenant",
@@ -1200,10 +1141,11 @@ fn operation(row: &Route) -> Value {
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
         (Some((_, shape)), _) if takes_write_body(&shape) => Some("WriteBody"),
         (Some((_, super::environment::Shape::Planned(_))), _) if write => Some("WriteBody"),
-        (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
-            Some("TenantCreate")
+        (_, Some((_, super::platform::Shape::Create))) => Some("TenantCreate"),
+        (_, Some((_, super::platform::Shape::Act))) if row.operation_id == "reinviteFounder" => {
+            Some("TenantReinvite")
         }
-        (_, Some((_, super::platform::Shape::Create))) => Some("EnvironmentCreate"),
+        (_, Some((_, super::platform::Shape::Act))) => Some("TenantChange"),
         _ => None,
     };
     let mut op = json!({

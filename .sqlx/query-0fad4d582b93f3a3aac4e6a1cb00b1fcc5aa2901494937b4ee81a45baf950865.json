@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT environment_id, slug, kind, governing_domain_id, issuer,\n                  (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\"\n             FROM access.environments WHERE tenant_id = $1 AND status = 'active' ORDER BY slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "governing_domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "governing_domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.environments",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "0fad4d582b93f3a3aac4e6a1cb00b1fcc5aa2901494937b4ee81a45baf950865"
+}

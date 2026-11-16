@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT slug, management_environment_id, founder_index, code_hash, created_exercise,\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                  reinvites, verified_at IS NOT NULL AS \"verified!\", founder_subject\n             FROM access.tenant_foundings WHERE tenant_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "management_environment_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "management_environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "founder_index",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "founder_index"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "code_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "code_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "created_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "reinvites",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "reinvites"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "verified!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "founder_subject",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_foundings",
+            "name": "founder_subject"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "5117bff8d9cafa2d4a111b78056500a8d5e5281db76aba665fcb9681bf003f2d"
+}

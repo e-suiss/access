@@ -9,7 +9,7 @@ use axum::http::{StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value, json};
 
-use super::{GENESIS_FIELDS, ROWS, Shape, project, resources, spec};
+use super::{ROWS, Shape, project, resources, spec};
 use crate::api::app::rest::{next_link, page_request};
 use crate::api::app::{Caller, Committed, Ctx};
 use crate::api::domain::caller::AIS_FIELD;
@@ -49,7 +49,8 @@ pub async fn serve<E: Env>(
         Shape::List(attrs) => list(&ctx, kind, attrs, key, &uri).await,
         Shape::Get => get(&ctx, kind, key).await,
         Shape::Draft => draft(&ctx, &body).await,
-        Shape::Create => commit(&ctx, kind, key, &body).await,
+        Shape::Create => commit(&ctx, (kind, StatusCode::CREATED), key, &body).await,
+        Shape::Act => commit(&ctx, (kind, StatusCode::OK), key, &body).await,
     };
     answer.unwrap_or_else(problem)
 }
@@ -131,7 +132,7 @@ fn object(body: &[u8]) -> Result<Map<String, Value>, &'static Code> {
 }
 
 /// `POST /admin/v1/platform/intents`: `{operation, key?, body}` → the intent the provisioning
-/// write compiles to (TN-110). `key` is the tenant an environment or sandbox creation is in.
+/// write compiles to (TN-110). `key` is the tenant a change is about.
 async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Code> {
     let mut request = object(raw)?;
     let operation = request
@@ -181,19 +182,14 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .into_response())
 }
 
-/// The created resource and, for an environment, its Genesis summary, each limited to its members.
+/// The created or changed resource, limited to its members.
 fn created(kind: PlatformKind, item: Item, out: &mut Map<String, Value>) {
-    let mut body = item.body;
-    let genesis = body.as_object_mut().and_then(|o| o.remove("genesis"));
-    out.insert("resource".to_owned(), project(body, kind.fields()));
-    if let Some(g) = genesis {
-        out.insert("genesis".to_owned(), project(g, GENESIS_FIELDS));
-    }
+    out.insert("resource".to_owned(), project(item.body, kind.fields()));
 }
 
 async fn commit<E: Env>(
     ctx: &Ctx<E>,
-    kind: PlatformKind,
+    (kind, status): (PlatformKind, StatusCode),
     tenant: Option<String>,
     raw: &[u8],
 ) -> Result<Response, &'static Code> {
@@ -235,5 +231,5 @@ async fn commit<E: Env>(
     if let Some(item) = resource {
         created(kind, item, &mut out);
     }
-    Ok((StatusCode::CREATED, axum::Json(Value::Object(out))).into_response())
+    Ok((status, axum::Json(Value::Object(out))).into_response())
 }
