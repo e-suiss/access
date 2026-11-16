@@ -2,7 +2,10 @@
 // when the viewer can exercise at least one action of it, as the eligibility check answers through the
 // BFF's ADP read path for a drafted intent. No answer, an error or a refusal shows nothing
 // (fail closed); there are no disabled stubs.
-import { search } from "./adp.js";
+import { queryOptions, skipToken } from "@tanstack/react-query";
+import * as v from "valibot";
+
+import { Eligibility, type Holding, holdings as readHoldings } from "./adp.js";
 import { call } from "./api.js";
 import type { Instance } from "./instance.js";
 import { draft, type Wanted } from "./intents.js";
@@ -175,22 +178,14 @@ export function probeIntent(environment: string, probe: Probe): Wanted {
   };
 }
 
-/** One of the viewer's own holdings, as the `holdings` search answers (IA-5). */
-interface Holding {
-  readonly grant: string;
-  readonly holder: string;
-  readonly since: number;
-  readonly actions: readonly { readonly namespace?: string; readonly name?: string }[];
-}
-
 async function asks(subject: string, set: unknown): Promise<boolean> {
   const r = await call("/proxy/adp/eligibility:check", {
     method: "POST",
     body: { subject, set },
   });
   if (!r.ok) return false;
-  const v = (await r.json()) as { eligible?: unknown };
-  return v.eligible === true;
+  const a = v.safeParse(Eligibility, await r.json());
+  return a.success && a.output.eligible === true;
 }
 
 async function eligible(
@@ -220,25 +215,19 @@ async function eligible(
   }
 }
 
+// OP-159 m.46 (d), §13.7.4, m.43 (d)
 /**
- * One round of probes per device Instance and environment (§13.7.4): the check limit counts every
- * eligibility check of a console session, so a page that sets the same Instance again asks
- * nothing again.
+ * One round of probes per session, device Instance and environment: the check limit counts every
+ * eligibility check of a console session, so the answer is kept for the session and a page that
+ * shows the same Instance again asks nothing again. Signing out drops it.
  */
-const rounds = new Map<string, Promise<ReadonlySet<Screen>>>();
-
-/** The screens the viewer may see: any probe of the screen answered eligible. */
-export function visibleScreens(
-  instance: Instance,
-  environment: string,
-): Promise<ReadonlySet<Screen>> {
-  const key = `${environment}/${instance.id}`;
-  let round = rounds.get(key);
-  if (round === undefined) {
-    round = probeScreens(instance, environment);
-    rounds.set(key, round);
-  }
-  return round;
+export function screensQuery(instance: Instance | undefined, environment: string, account: string) {
+  return queryOptions({
+    queryKey: ["screens", environment, account, instance?.id] as const,
+    queryFn: instance === undefined ? skipToken : () => probeScreens(instance, environment),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
 }
 
 async function probeScreens(instance: Instance, environment: string): Promise<ReadonlySet<Screen>> {
@@ -246,10 +235,7 @@ async function probeScreens(instance: Instance, environment: string): Promise<Re
   const probes = new Map<string, Promise<boolean>>();
   let held: Promise<readonly Holding[]> | undefined;
   const holdings = (): Promise<readonly Holding[]> => {
-    held ??= search<Holding>(instance, "holdings", {}).then(
-      (a) => a.results,
-      () => [],
-    );
+    held ??= readHoldings(instance).catch(() => []);
     return held;
   };
   const ask = (p: Probe) => {

@@ -4,8 +4,9 @@
 // the drafted intent for the signature screen, and only after the user signs is the commit sent
 // to ADP as one Exercise. A bulk change is one Exercise per item, all shown on one screen.
 import { type Kernel, loadKernel } from "@esuiss/access";
+import * as v from "valibot";
 
-import { search } from "./adp.js";
+import { Eligibility, holdings } from "./adp.js";
 import { API, b64url, call, fromB64url, json, Problem } from "./api.js";
 import { draft } from "./intents.js";
 import {
@@ -24,14 +25,34 @@ import {
 /** A meta payload in the JSON form of L1-ADP-17: `{"<meta-action>": {...}}`. */
 export type MetaPayload = Readonly<Record<string, unknown>>;
 
-interface MetaDraft {
-  readonly intent: {
-    readonly resources: readonly { readonly namespace: string; readonly path: readonly string[] }[];
-  };
-  readonly envelope: string;
-  readonly payload: string;
-  readonly basis?: { readonly anchor: string };
-}
+/** A meta write the BFF drafted: its intent, envelope, payload bytes and root basis. */
+export const MetaDraft = v.looseObject({
+  intent: v.looseObject({
+    resources: v.array(v.looseObject({ namespace: v.string(), path: v.array(v.string()) })),
+  }),
+  envelope: v.string(),
+  payload: v.string(),
+  basis: v.exactOptional(v.looseObject({ anchor: v.string() })),
+});
+
+type MetaDraft = v.InferOutput<typeof MetaDraft>;
+
+const Evaluated = v.looseObject({
+  decision: v.optional(v.unknown()),
+  context: v.optional(
+    v.looseObject({ outcome: v.optional(v.unknown()), exercise: v.optional(v.unknown()) }),
+  ),
+});
+
+const CheckDraft = v.looseObject({ intent: v.unknown(), envelope: v.string() });
+
+const PublishAnswer = v.looseObject({
+  code: v.optional(v.unknown()),
+  warnings: v.optional(v.array(v.looseObject({ parameter: v.string(), reason: v.string() }))),
+  fingerprint: v.optional(v.unknown()),
+  new_actions: v.optional(v.array(v.string())),
+  existing_grants_unchanged: v.optional(v.unknown()),
+});
 
 /** A holding episode as ADP names it: the Grant, its holder and the position that opened it. */
 export interface HoldingRef {
@@ -43,15 +64,11 @@ export interface HoldingRef {
 /** The basis a meta write is signed on: a root Anchor, or one of the viewer's own holdings. */
 export type Basis = { readonly anchor: string } | { readonly holding: HoldingRef };
 
-interface HeldGrant extends HoldingRef {
-  readonly actions: readonly { readonly namespace?: string; readonly name?: string }[];
-}
-
 async function eligibleOn(subject: string, set: unknown): Promise<boolean> {
   const r = await call("/proxy/adp/eligibility:check", { method: "POST", body: { subject, set } });
   if (!r.ok) return false;
-  const v = (await r.json()) as { eligible?: unknown };
-  return v.eligible === true;
+  const a = v.safeParse(Eligibility, await r.json());
+  return a.success && a.output.eligible === true;
 }
 
 /**
@@ -76,8 +93,7 @@ export async function basisFor(
     );
     if (d.probe === undefined) return root;
     if (await eligibleOn(subject, { ...d.probe, intent: d.intent })) return root;
-    const held = await search<HeldGrant>(instance, "holdings", {});
-    for (const h of held.results) {
+    for (const h of await holdings(instance)) {
       if (!h.actions.some((a) => a.namespace === "access" && a.name === name)) continue;
       const holding = { grant: h.grant, holder: h.holder, since: h.since };
       if (await eligibleOn(subject, { ...d.probe, basis: { holding }, intent: d.intent })) {
@@ -118,7 +134,7 @@ interface Prepared {
 
 async function prepare(instance: Instance, payload: MetaPayload): Promise<Prepared> {
   const name = actionOf(payload);
-  const draft = await json<MetaDraft>("/intents", {
+  const draft = await json("/intents", MetaDraft, {
     method: "POST",
     body: { action: { namespace: "access", name, major: 1 }, payload, mode: "commit" },
     headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },
@@ -221,14 +237,11 @@ export async function metaWrites(
     };
     const r = await call("/proxy/adp/evaluation", { method: "POST", body });
     if (!r.ok) throw new Problem(r.status, "unavailable", undefined);
-    const v = (await r.json()) as {
-      decision?: unknown;
-      context?: { outcome?: unknown; exercise?: unknown };
-    };
+    const e = v.parse(Evaluated, await r.json());
     const result: MetaResult = {
-      decision: v.decision === true,
-      outcome: typeof v.context?.outcome === "string" ? v.context.outcome : "deny",
-      ...(typeof v.context?.exercise === "string" ? { exercise: v.context.exercise } : {}),
+      decision: e.decision === true,
+      outcome: typeof e.context?.outcome === "string" ? e.context.outcome : "deny",
+      ...(typeof e.context?.exercise === "string" ? { exercise: e.context.exercise } : {}),
     };
     out.push(result);
     if (!result.decision) break;
@@ -279,7 +292,7 @@ async function checkContext(
   ask: Readonly<Record<string, unknown>>,
 ): Promise<Record<string, unknown>> {
   const k = await loadKernel();
-  const d = await json<{ intent: unknown; envelope: string }>("/intents", {
+  const d = await json("/intents", CheckDraft, {
     method: "POST",
     body: { ...ask, mode: "check" },
     headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },
@@ -331,29 +344,26 @@ export async function publish(
     method: "POST",
     body: { context, package: pkg, domains },
   });
-  const v = (await r.json()) as Record<string, unknown>;
-  if (r.status === 422 && Array.isArray(v["warnings"])) {
-    return {
-      kept: false,
-      warnings: v["warnings"] as { parameter: string; reason: string }[],
-    };
-  }
+  const p = v.parse(PublishAnswer, await r.json());
+  if (r.status === 422 && p.warnings !== undefined) return { kept: false, warnings: p.warnings };
   if (r.status !== 201) {
-    throw new Problem(r.status, typeof v["code"] === "string" ? v["code"] : "unknown", undefined);
+    throw new Problem(r.status, typeof p.code === "string" ? p.code : "unknown", undefined);
   }
   return {
     kept: true,
-    fingerprint: String(v["fingerprint"]),
-    new_actions: (v["new_actions"] as string[] | undefined) ?? [],
-    existing_grants_unchanged: v["existing_grants_unchanged"] === true,
+    fingerprint: String(p.fingerprint),
+    new_actions: p.new_actions ?? [],
+    existing_grants_unchanged: p.existing_grants_unchanged === true,
   };
 }
 
 /** Where the caller's own publication stands (L1-ADP-18). */
-export interface PublicationStatus {
-  readonly pending_acceptance: readonly string[];
-  readonly accepted_in: readonly string[];
-}
+const PublicationStatus = v.looseObject({
+  pending_acceptance: v.array(v.string()),
+  accepted_in: v.array(v.string()),
+});
+
+export type PublicationStatus = v.InferOutput<typeof PublicationStatus>;
 
 export async function publicationStatus(
   instance: Instance,
@@ -365,7 +375,7 @@ export async function publicationStatus(
     action: { namespace: "access", name: "read", major: 1 },
     resources: [{ namespace: "access.publication", path: [namespace] }],
   });
-  return json<PublicationStatus>("/proxy/adp/publications:status", {
+  return json("/proxy/adp/publications:status", PublicationStatus, {
     method: "POST",
     body: { context, fingerprint, domains },
   });

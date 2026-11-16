@@ -8,14 +8,9 @@ import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
 import { cn } from "@access/ui/lib/utils";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactElement,
-  type SyntheticEvent,
-} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } from "react";
+import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
@@ -23,28 +18,39 @@ import { Actions, Loading, Meta, MONO, Panel, Part, RowItem, Rows } from "../lib
 import { useAnnouncer, when } from "./common.js";
 
 /** What `GET /v1/account/methods` answers. */
-export interface Methods {
-  readonly password: { readonly set: boolean };
-  readonly passkeys: readonly {
-    readonly id: string;
-    readonly name: string | null;
-    readonly created_at: string;
-    readonly synced: boolean;
-  }[];
-  readonly totp: readonly { readonly id: string; readonly created_at: string }[];
-  readonly recovery_codes: { readonly set: boolean; readonly acknowledged: boolean };
-}
+export const Methods = v.object({
+  password: v.object({ set: v.boolean() }),
+  passkeys: v.array(
+    v.object({
+      id: v.string(),
+      name: v.nullable(v.string()),
+      created_at: v.string(),
+      synced: v.boolean(),
+    }),
+  ),
+  totp: v.array(v.object({ id: v.string(), created_at: v.string() })),
+  recovery_codes: v.object({ set: v.boolean(), acknowledged: v.boolean() }),
+});
+export type Methods = v.InferOutput<typeof Methods>;
 
-interface Enrollment {
-  readonly enrollment: string;
-  readonly secret: string;
-  readonly uri: string;
-}
+const Enrollment = v.object({ enrollment: v.string(), secret: v.string(), uri: v.string() });
+type Enrollment = v.InferOutput<typeof Enrollment>;
 
-interface Registration {
-  readonly registration: string;
-  readonly options: Readonly<Record<string, unknown>>;
-}
+const Registration = v.object({
+  registration: v.string(),
+  options: v.record(v.string(), v.unknown()),
+});
+
+const Codes = v.object({ recovery_codes: v.array(v.string()) });
+const Enrolled = v.object({ recovery_codes: v.optional(v.array(v.string())) });
+
+const NewPassword = v.pipe(v.string(), v.nonEmpty());
+const Code = v.pipe(
+  v.string(),
+  v.transform((c) => c.replace(/\s+/g, "")),
+);
+
+const KEY = ["account", "methods"] as const;
 
 const REMOVE_CODES = { "last-sign-in-method": "methods.last_method" } as const;
 
@@ -69,42 +75,46 @@ function Passkeys(props: {
   readonly remove: (id: string) => void;
 }): ReactElement {
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const create = useMutation({
+    mutationFn: async (label: string): Promise<boolean> => {
+      const reg = await json(
+        frontend("/v1/account/passkeys", { method: "POST", body: { name: label } }),
+        Registration,
+      );
+      let credential: unknown;
+      try {
+        credential = await createPasskey(reg.options);
+      } catch {
+        return false;
+      }
+      await json(
+        frontend(`/v1/account/passkeys/${encodeURIComponent(reg.registration)}`, {
+          method: "POST",
+          body: { credential },
+        }),
+      );
+      return true;
+    },
+    onSuccess: (created) => {
+      if (!created) {
+        props.say(t("methods.passkey_failed"), true);
+        return;
+      }
+      setName("");
+      props.say(t("methods.added"));
+      props.reload();
+    },
+    onError: (err) => {
+      // OP-159 m.3 (ll)
+      props.fail(err, {
+        "attestation-format": t("passkey.attestation_refused"),
+        "attestation-revocation-unknown": t("passkey.attestation_unknown"),
+      });
+    },
+  });
   const add = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setBusy(true);
-    const label = name.trim() === "" ? t("methods.passkey_unnamed") : name.trim();
-    void json<Registration>(
-      frontend("/v1/account/passkeys", { method: "POST", body: { name: label } }),
-    )
-      .then(async (reg) => {
-        let credential: unknown;
-        try {
-          credential = await createPasskey(reg.options);
-        } catch {
-          props.say(t("methods.passkey_failed"), true);
-          return;
-        }
-        await json(
-          frontend(`/v1/account/passkeys/${encodeURIComponent(reg.registration)}`, {
-            method: "POST",
-            body: { credential },
-          }),
-        );
-        setName("");
-        props.say(t("methods.added"));
-        props.reload();
-      })
-      .catch((err: unknown) => {
-        // OP-159 m.3 (ll)
-        props.fail(err, {
-          "attestation-format": t("passkey.attestation_refused"),
-          "attestation-revocation-unknown": t("passkey.attestation_unknown"),
-        });
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+    create.mutate(name.trim() === "" ? t("methods.passkey_unnamed") : name.trim());
   };
   return (
     <Part aria-labelledby="passkeys-heading" data-testid="passkeys">
@@ -155,7 +165,7 @@ function Passkeys(props: {
             }}
           />
         </Field>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={create.isPending}>
           {t("action.passkey_create")}
         </Button>
       </form>
@@ -174,19 +184,22 @@ function Password(props: {
   useEffect(() => {
     if (open) field.current?.focus();
   }, [open]);
+  const change = useMutation({
+    mutationFn: (value: string) =>
+      json(frontend("/v1/account/password", { method: "PUT", body: { new_password: value } })),
+    onSuccess: () => {
+      setOpen(false);
+      props.say(t("methods.password_saved"));
+      props.reload();
+    },
+    onError: (err) => {
+      props.fail(err, { "password-rejected": "methods.password_rejected" });
+    },
+  });
   const save = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const value = new FormData(e.currentTarget).get("new_password");
-    if (typeof value !== "string" || value === "") return;
-    void json(frontend("/v1/account/password", { method: "PUT", body: { new_password: value } }))
-      .then(() => {
-        setOpen(false);
-        props.say(t("methods.password_saved"));
-        props.reload();
-      })
-      .catch((err: unknown) => {
-        props.fail(err, { "password-rejected": "methods.password_rejected" });
-      });
+    const value = v.safeParse(NewPassword, new FormData(e.currentTarget).get("new_password"));
+    if (value.success) change.mutate(value.output);
   };
   return (
     <Part aria-labelledby="password-heading" data-testid="password">
@@ -250,40 +263,51 @@ function Authenticator(props: {
   useEffect(() => {
     if (pending !== null) code.current?.focus();
   }, [pending]);
-  const begin = () => {
-    void json<Enrollment>(
-      frontend("/v1/account/totp", { method: "POST", body: { label: "account" } }),
-    )
-      .then(setPending)
-      .catch((err: unknown) => {
-        props.fail(err);
+  const start = useMutation({
+    mutationFn: () =>
+      json(
+        frontend("/v1/account/totp", { method: "POST", body: { label: "account" } }),
+        Enrollment,
+      ),
+    onSuccess: (e) => {
+      setPending(e);
+    },
+    onError: (err) => {
+      props.fail(err);
+    },
+  });
+  const verify = useMutation({
+    mutationFn: ({ enrollment, code }: { readonly enrollment: string; readonly code: string }) =>
+      json(
+        frontend(`/v1/account/totp/${encodeURIComponent(enrollment)}`, {
+          method: "POST",
+          body: { code },
+        }),
+        Enrolled,
+      ),
+    onSuccess: (done) => {
+      setPending(null);
+      props.say(t("methods.authenticator_added"));
+      if (done.recovery_codes !== undefined) props.onCodes(done.recovery_codes);
+      props.reload();
+    },
+    onError: (err) => {
+      props.fail(err, {
+        "code-invalid": "methods.code_failed",
+        "totp-invalid": "methods.code_failed",
+        "second-factor-failed": "methods.code_failed",
+        "invalid-code": "methods.code_failed",
       });
+    },
+  });
+  const begin = () => {
+    start.mutate();
   };
   const confirm = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (pending === null) return;
-    const value = new FormData(e.currentTarget).get("code");
-    if (typeof value !== "string") return;
-    void json<{ recovery_codes?: string[] }>(
-      frontend(`/v1/account/totp/${encodeURIComponent(pending.enrollment)}`, {
-        method: "POST",
-        body: { code: value.replace(/\s+/g, "") },
-      }),
-    )
-      .then((done) => {
-        setPending(null);
-        props.say(t("methods.authenticator_added"));
-        if (done.recovery_codes !== undefined) props.onCodes(done.recovery_codes);
-        props.reload();
-      })
-      .catch((err: unknown) => {
-        props.fail(err, {
-          "code-invalid": "methods.code_failed",
-          "totp-invalid": "methods.code_failed",
-          "second-factor-failed": "methods.code_failed",
-          "invalid-code": "methods.code_failed",
-        });
-      });
+    const code = v.safeParse(Code, new FormData(e.currentTarget).get("code"));
+    if (code.success) verify.mutate({ enrollment: pending.enrollment, code: code.output });
   };
   return (
     <Part aria-labelledby="totp-heading" data-testid="authenticator">
@@ -326,12 +350,9 @@ function Authenticator(props: {
           className="flex flex-col gap-3 rounded-xl border p-4"
           data-testid="totp-enrollment"
         >
-          <p id="totp-key-label" className="text-sm">
-            {t("methods.authenticator_key")}
-          </p>
+          <p className="text-sm">{t("methods.authenticator_key")}</p>
           <p
             className={cn(MONO, "rounded-lg bg-muted px-3 py-2 text-base")}
-            aria-labelledby="totp-key-label"
             data-testid="totp-secret"
           >
             {pending.secret}
@@ -399,6 +420,27 @@ function RecoveryCodes(props: {
     if (codes !== null) list.current?.focus();
   }, [codes]);
   const state = props.methods.recovery_codes;
+  const renew = useMutation({
+    mutationFn: () => json(frontend("/v1/account/recovery-codes", { method: "POST" }), Codes),
+    onSuccess: (r) => {
+      setCodes(r.recovery_codes);
+    },
+    onError: (err) => {
+      props.fail(err);
+    },
+  });
+  const acknowledge = useMutation({
+    mutationFn: () =>
+      json(frontend("/v1/account/recovery-codes/acknowledgement", { method: "POST" })),
+    onSuccess: () => {
+      setCodes(null);
+      props.say(t("methods.codes_saved"));
+      props.reload();
+    },
+    onError: (err) => {
+      props.fail(err);
+    },
+  });
   return (
     <Part aria-labelledby="codes-heading" data-testid="recovery-codes">
       <h4 id="codes-heading" className="font-semibold">
@@ -418,15 +460,7 @@ function RecoveryCodes(props: {
             <Button
               variant="outline"
               onClick={() => {
-                void json<{ recovery_codes: string[] }>(
-                  frontend("/v1/account/recovery-codes", { method: "POST" }),
-                )
-                  .then((r) => {
-                    setCodes(r.recovery_codes);
-                  })
-                  .catch((err: unknown) => {
-                    props.fail(err);
-                  });
+                renew.mutate();
               }}
             >
               {t("action.new_recovery_codes")}
@@ -450,17 +484,7 @@ function RecoveryCodes(props: {
           <Actions>
             <Button
               onClick={() => {
-                void json(
-                  frontend("/v1/account/recovery-codes/acknowledgement", { method: "POST" }),
-                )
-                  .then(() => {
-                    setCodes(null);
-                    props.say(t("methods.codes_saved"));
-                    props.reload();
-                  })
-                  .catch((err: unknown) => {
-                    props.fail(err);
-                  });
+                acknowledge.mutate();
               }}
             >
               {t("action.codes_saved")}
@@ -474,26 +498,29 @@ function RecoveryCodes(props: {
 
 /** The sign-in methods section of S11. */
 export function SignInMethods(): ReactElement {
-  const [methods, setMethods] = useState<Methods | null>(null);
+  const queries = useQueryClient();
   const [codes, setCodes] = useState<readonly string[] | null>(null);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<Methods>(frontend("/v1/account/methods"))
-      .then(setMethods)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const { data: methods, error } = useQuery({
+    queryKey: KEY,
+    queryFn: () => json(frontend("/v1/account/methods"), Methods),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const reload = () => {
+    void queries.invalidateQueries({ queryKey: KEY });
+  };
+  const removal = useMutation({
+    mutationFn: (id: string) =>
+      json(frontend(`/v1/account/methods/${encodeURIComponent(id)}`, { method: "DELETE" })),
+    onSuccess: () => {
+      say(t("methods.removed"));
+      reload();
+    },
+    onError: (e) => {
+      fail(e, REMOVE_CODES);
+    },
+  });
   const remove = (id: string) => {
-    void json(frontend(`/v1/account/methods/${encodeURIComponent(id)}`, { method: "DELETE" }))
-      .then(() => {
-        say(t("methods.removed"));
-        reload();
-      })
-      .catch((e: unknown) => {
-        fail(e, REMOVE_CODES);
-      });
+    removal.mutate(id);
   };
   return (
     <Panel
@@ -503,7 +530,7 @@ export function SignInMethods(): ReactElement {
       titleId="methods-heading"
     >
       {region}
-      {methods === null ? (
+      {methods === undefined ? (
         <Loading rows={4} />
       ) : (
         <>

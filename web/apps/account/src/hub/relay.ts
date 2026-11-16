@@ -1,5 +1,11 @@
 // §8.13 "Relay delayed", OP-156 m.11 (e), INV-24, E30: Access's public relay status. A delay is
 // only a notice; authority never waits on delivery, so no row reads as pending because of it.
+import * as v from "valibot";
+
+const Answer = v.object({
+  notifications_delayed: v.boolean(),
+  relay_lag_ms: v.fallback(v.optional(v.number()), undefined),
+});
 
 /** Relay's delivery as Access reports it. */
 export interface RelayStatus {
@@ -16,12 +22,10 @@ export async function relayStatus(): Promise<RelayStatus | undefined> {
       credentials: "omit",
     });
     if (!r.ok) return undefined;
-    const v = (await r.json()) as { relay_lag_ms?: unknown; notifications_delayed?: unknown };
-    if (typeof v.notifications_delayed !== "boolean") return undefined;
-    return {
-      delayed: v.notifications_delayed,
-      ...(typeof v.relay_lag_ms === "number" ? { lagMs: v.relay_lag_ms } : {}),
-    };
+    const a = v.safeParse(Answer, await r.json());
+    if (!a.success) return undefined;
+    const { notifications_delayed: delayed, relay_lag_ms: lagMs } = a.output;
+    return lagMs === undefined ? { delayed } : { delayed, lagMs };
   } catch {
     return undefined;
   }

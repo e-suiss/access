@@ -97,7 +97,10 @@ export function impactSentence(
   return `${head} ${parts.length === 0 ? t("impactNothing") : parts.join("; ")}.`;
 }
 
-/** The core meta-actions an admin delegation may cover, in the Kernel's order (L0-META-1). */
+/**
+ * The core meta-actions an admin delegation may cover, in the Kernel's order (L0-META-1).
+ * @public
+ */
 export const META: readonly {
   readonly label: Key;
   readonly reserved: boolean;

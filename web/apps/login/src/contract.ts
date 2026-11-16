@@ -6,7 +6,13 @@ export const stepUpPath = "/v1/login/step-up";
 
 export type Step = "identifier" | "authenticate" | "second_factor" | "complete";
 export type FlowKind =
-  "login" | "registration" | "recovery" | "settings" | "consent" | "invitation" | "link";
+  | "login"
+  | "registration"
+  | "recovery"
+  | "settings"
+  | "consent"
+  | "invitation"
+  | "link";
 export type FieldName =
   | "identifier"
   | "password"

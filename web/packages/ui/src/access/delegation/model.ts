@@ -426,7 +426,12 @@ export type Holding =
 
 /** An action on a delegation; never "Remember this", never automatic renewal (XI-19). */
 export type HeldAction =
-  "turn_off_for_me" | "ask_to_exclude" | "give_back" | "narrow" | "renew" | "create_again";
+  | "turn_off_for_me"
+  | "ask_to_exclude"
+  | "give_back"
+  | "narrow"
+  | "renew"
+  | "create_again";
 
 export function heldActions(h: Holding, expired: boolean): HeldAction[] {
   switch (h.kind) {

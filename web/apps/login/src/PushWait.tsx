@@ -37,7 +37,6 @@ export function PushWait({ node }: { readonly node: PushNumberNode }) {
       <p className="text-sm text-muted-foreground">{caption(node)}</p>
       <p
         className="text-5xl font-bold tracking-widest text-(color:--link) tabular-nums"
-        aria-label={String(node.number)}
         data-testid="push-number"
       >
         {String(node.number)}

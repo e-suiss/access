@@ -10,7 +10,8 @@
 #            semgrep:<id>                 a rule of .semgrep/rules.yml
 #            recipe:<name>                a justfile recipe
 #            job:<workflow>/<job>         a job of .github/workflows/<workflow>.yml
-#            eslint:<text>                in every TypeScript package's eslint.config.js
+#            eslint:<text>                in the eslint.config.js of every package ESLint lints (sdks/typescript)
+#            biome:<rule>                 set to "error" in web/biome.json (OP-159 m.46 (a))
 #            tsconfig:<option>            true in every TypeScript package's tsconfig.json
 #            npmrc:<line>                 in sdks/typescript/.npmrc and its web/pnpm-workspace.yaml equivalent
 #            file:<path>                  an existing file
@@ -29,7 +30,7 @@ mechanism = ["lint:clippy::arithmetic_side_effects", "lint:clippy::cast_possible
 [[cell]]
 rule = "R-1"
 language = "typescript"
-mechanism = ["tsconfig:strict", "eslint:strictTypeChecked"]
+mechanism = ["tsconfig:strict", "eslint:strictTypeChecked", "biome:noExplicitAny"]
 
 [[cell]]
 rule = "R-1"
@@ -44,7 +45,7 @@ mechanism = ["lint:rust::unsafe_code", "xtask:unsafe-allowlist", "recipe:miri", 
 [[cell]]
 rule = "R-2"
 language = "typescript"
-mechanism = ["eslint:strictTypeChecked", "npmrc:ignore-scripts=true"]
+mechanism = ["eslint:strictTypeChecked", "biome:noExplicitAny", "biome:noDangerouslySetInnerHtml", "npmrc:ignore-scripts=true"]
 
 [[cell]]
 rule = "R-2"
@@ -59,7 +60,7 @@ mechanism = ["lint:clippy::unwrap_used", "lint:clippy::expect_used", "lint:clipp
 [[cell]]
 rule = "R-3"
 language = "typescript"
-mechanism = ["tsconfig:noUncheckedIndexedAccess", "eslint:strictTypeChecked"]
+mechanism = ["tsconfig:noUncheckedIndexedAccess", "eslint:strictTypeChecked", "biome:noNonNullAssertion"]
 
 [[cell]]
 rule = "R-3"

@@ -3,8 +3,9 @@
 // browser. AIS bytes are encoded by the Kernel (Wasm); WebCrypto signs them. A cookie without
 // this key reads and changes no authority.
 import { loadKernel, type Kernel } from "@esuiss/access";
+import * as v from "valibot";
 
-import { API, b64url, call, fromB64url, json } from "./api.js";
+import { b64url, call, fromB64url, json } from "./api.js";
 
 const DB = "access-account";
 const STORE = "instances";
@@ -142,17 +143,17 @@ export function decodedStatement(k: Kernel, statement: Uint8Array): DecodedState
   return JSON.parse(k.describeStatement(statement)) as DecodedStatement;
 }
 
-interface Challenge {
-  readonly challenge: string;
-  readonly domain: string;
-  readonly basis: string;
-  readonly pep: string;
-  readonly party: string;
-  readonly valid_from: string;
-  readonly valid_until: string;
-  readonly create: string;
-  readonly register?: string;
-}
+const Challenge = v.object({
+  challenge: v.string(),
+  domain: v.string(),
+  basis: v.string(),
+  pep: v.string(),
+  party: v.string(),
+  valid_from: v.string(),
+  valid_until: v.string(),
+  create: v.string(),
+  register: v.optional(v.string()),
+});
 
 /**
  * Registers this browser as the session's device Instance (OP-149 m.6): a fresh
@@ -173,8 +174,9 @@ export async function register(
   const [x, y] = [raw.slice(1, 33), raw.slice(33, 65)];
   const kid = k.thumbprintP256(x, y);
   const coseKey = k.coseKeyP256(x, y);
-  const c = await json<Challenge>(
+  const c = await json(
     call("/instances/challenge", { method: "POST", body: { key: b64url(coseKey) } }),
+    Challenge,
   );
   const domain = fromB64url(c.domain);
   const basis = k.exerciseBasis("public", fromB64url(c.basis));
@@ -254,5 +256,3 @@ export async function readProof(instance: Instance, method: string, path: string
   );
   return sign(instance.key, k, instance.kid, statement);
 }
-
-export { API };

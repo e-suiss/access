@@ -35,9 +35,9 @@ Texts come from a catalogue you pass as `catalogue`; English is the fallback.
 ## Develop
 
 ```sh
-npm ci
-npm run lint && npm run typecheck && npm run format:check
-npm test
+pnpm install --frozen-lockfile
+pnpm run lint && pnpm run typecheck && pnpm -w run format:check
+pnpm test
 ```
 
 ## License

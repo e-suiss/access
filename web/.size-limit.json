@@ -1,0 +1,5 @@
+[
+  { "name": "login", "path": "apps/login/dist/assets/*.js", "limit": "129 kB" },
+  { "name": "account", "path": "apps/account/dist/assets/*.js", "limit": "191 kB" },
+  { "name": "console", "path": "apps/console/dist/assets/*.js", "limit": "346 kB" }
+]

@@ -9,9 +9,9 @@ import { Button } from "@access/ui/components/button";
 import { Input } from "@access/ui/components/input";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, H4, HINT, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Domain {
   readonly host: string;
@@ -58,8 +58,8 @@ function State({ d }: { readonly d: Domain }): ReactElement {
 /** The custom domains panel of the environment's sign-in settings. */
 export function Domains({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const list = useLoad(() =>
-    adminGet<{ readonly items: readonly Domain[] }>(ctx.instance, `envs/${environment}/domains`),
+  const list = useLoad(readKey(ctx, `envs/${environment}/domains`), () =>
+    adminGetAs<{ readonly items: readonly Domain[] }>(ctx.instance, `envs/${environment}/domains`),
   );
   const [host, setHost] = useState("");
   const [w, write] = useRun<WriteResult>();

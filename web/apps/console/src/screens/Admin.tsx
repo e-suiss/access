@@ -1,26 +1,32 @@
 // §8.17.9, S7, IA-5: the Admin section's authority screens. Reads go to ADP as the viewer's own
 // check; every action shown is one the viewer can exercise (IA-5); nothing here is a single
 // "stop everything" control (§8.17.7.5), and revoke is never offered as reversible (§8.10).
-import { useEffect, useState, type ReactElement } from "react";
+import { getRouteApi } from "@tanstack/react-router";
+import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { FieldLegend, FieldSet } from "@access/ui/components/field";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@access/ui/components/table";
 
 import { type Key, t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { DataTable, ResultTable } from "../DataTable.js";
+import { adminGet, change, items, type WriteResult } from "../lib/admin.js";
 import { search, type SearchAnswer } from "../lib/adp.js";
 import { type MetaPayload, type MetaResult, metaWrite, metaWrites } from "../lib/meta.js";
 import { META_BY_ACTION } from "../lib/text.js";
-import { at, type Ctx, Field, PageCount, Panel, Show, useLoad, useRun } from "./parts.js";
+import {
+  at,
+  type Ctx,
+  Field,
+  PageCount,
+  Panel,
+  readKey,
+  Show,
+  useLoad,
+  usePages,
+  useRun,
+} from "./parts.js";
 import {
   type ChangeImpact,
   ChangeImpactView,
@@ -441,22 +447,23 @@ export function Roles({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
-interface Account {
-  readonly account_id: string;
-  readonly status: string;
-  readonly status_at?: string;
-}
+const Account = v.looseObject({
+  account_id: v.string(),
+  status: v.string(),
+  status_at: v.nullish(v.string()),
+});
+
+type Account = v.InferOutput<typeof Account>;
+
+const Accounts_ = items(Account);
 
 function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const slug = ctx.session.environment;
-  const [version, setVersion] = useState(0);
-  const [l, load] = useRun<{ items: Account[] }>();
-  useEffect(() => {
-    load(() =>
-      adminGet<{ items: Account[] }>(ctx.instance, `envs/${encodeURIComponent(slug)}/accounts`),
-    );
-  }, [load, ctx.instance, slug, version]);
-  const [w, write] = useRun<WriteResult>();
+  const key = readKey(ctx, "accounts");
+  const l = useLoad(key, () =>
+    adminGet(ctx.instance, `envs/${encodeURIComponent(slug)}/accounts`, Accounts_),
+  );
+  const [w, write] = useRun<WriteResult>([key]);
   const act = (a: Account, op: "suspend" | "reactivate") => {
     write(() =>
       change(ctx.instance, ctx.confirm, slug, {
@@ -465,32 +472,34 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
         method: "POST",
         path: `accounts/${encodeURIComponent(a.account_id)}/${op}`,
         body: {},
-      }).then((r) => {
-        setVersion((v) => v + 1);
-        return r;
       }),
     );
   };
   return (
     <Panel id="accounts" title={t("peopleAccounts")}>
       <Show l={l}>
-        {(v) => (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col">{t("peopleAccount")}</TableHead>
-                <TableHead scope="col">{t("peopleStatus")}</TableHead>
-                <TableHead scope="col">{t("peopleActions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {v.items.map((a) => (
-                <TableRow key={a.account_id}>
-                  <TableCell className={MONO}>{a.account_id}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{a.status}</Badge>
-                  </TableCell>
-                  <TableCell>
+        {(list) => (
+          <DataTable
+            rows={list.items}
+            rowKey={(a) => a.account_id}
+            label={t("peopleAccounts")}
+            columns={[
+              {
+                id: "account",
+                header: t("peopleAccount"),
+                className: MONO,
+                cell: (a) => a.account_id,
+              },
+              {
+                id: "status",
+                header: t("peopleStatus"),
+                cell: (a) => <Badge variant="outline">{a.status}</Badge>,
+              },
+              {
+                id: "actions",
+                header: t("peopleActions"),
+                cell: (a) => (
+                  <>
                     {a.status === "active" && (
                       <Button
                         variant="destructive"
@@ -513,11 +522,11 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
                         {t("peopleReactivate")}
                       </Button>
                     )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </>
+                ),
+              },
+            ]}
+          />
         )}
       </Show>
       <Show l={w}>
@@ -531,9 +540,14 @@ function Accounts({ ctx }: { readonly ctx: Ctx }): ReactElement {
  * X31, §8.17.7.1, TN-119: by default the viewer sees only their own holdings, what they gave
  * and its subtree; looking up another party is offered only with explicit audit authority.
  */
+const route = getRouteApi("/$environment/admin/{-$screen}");
+
 function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const others = ctx.screens.has("records");
-  const [party, setParty] = useState(ctx.session.account);
+  // OP-159 m.46 (e): the party looked up stays in the address
+  const kept = route.useSearch();
+  const navigate = route.useNavigate();
+  const [party, setParty] = useState(kept.party ?? ctx.session.account);
   const [l, run] = useRun<SearchAnswer<unknown>>();
   const who = others ? party : ctx.session.account;
   return (
@@ -543,6 +557,12 @@ function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
         className={FORM}
         onSubmit={(e) => {
           e.preventDefault();
+          if (others) {
+            void navigate({
+              search: { party: party === ctx.session.account || party === "" ? undefined : party },
+              replace: true,
+            });
+          }
           run(() =>
             search(ctx.instance, "action", {
               party: who,
@@ -568,13 +588,7 @@ function Holdings({ ctx }: { readonly ctx: Ctx }): ReactElement {
         {(a) => (
           <>
             <PageCount page={a.page} shown={a.results.length} />
-            <ul data-testid="holdings" className={BULLETS}>
-              {a.results.map((r, i) => (
-                <li key={String(i)} className={MONO}>
-                  {JSON.stringify(r)}
-                </li>
-              ))}
-            </ul>
+            <ResultTable data-testid="holdings" results={a.results} />
           </>
         )}
       </Show>
@@ -709,7 +723,7 @@ function SourceView({ s }: { readonly s: AcceptedSource }): ReactElement {
 export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [namespace, setNamespace] = useState("");
   const [l, run] = useRun<SearchAnswer<Publication>>();
-  const accepted = useLoad(() => sourcesReport(ctx));
+  const accepted = useLoad(readKey(ctx, "sources-report"), () => sourcesReport(ctx));
   return (
     <>
       <p>{t("sourcesIntro")}</p>
@@ -794,17 +808,19 @@ export function Protected(): ReactElement {
   );
 }
 
-interface Surface {
-  readonly domain?: string;
-  readonly sandbox?: boolean;
-}
+const Surface = v.looseObject({
+  domain: v.nullish(v.string()),
+  sandbox: v.nullish(v.boolean()),
+});
 
 /** §8.17.9.7, INV-29, §5.13: the domain page; the host holds no authority. */
 export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() =>
-    adminGet<Surface>(ctx.instance, `envs/${encodeURIComponent(ctx.session.environment)}`),
+  const l = useLoad(readKey(ctx, `envs/${encodeURIComponent(ctx.session.environment)}`), () =>
+    adminGet(ctx.instance, `envs/${encodeURIComponent(ctx.session.environment)}`, Surface),
   );
-  const partners = useLoad(() => sourcesReport(ctx).then((r) => r?.partners ?? []));
+  const partners = useLoad(readKey(ctx, "sources-partners"), () =>
+    sourcesReport(ctx).then((r) => r?.partners ?? []),
+  );
   return (
     <>
       <p>{t("domainIntro")}</p>
@@ -843,9 +859,7 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 ))}
               </ul>
             </Panel>
-          ) : (
-            <></>
-          )
+          ) : null
         }
       </Show>
     </>
@@ -875,27 +889,14 @@ const CHANGE_KINDS: Readonly<Record<string, Key>> = {
 
 /** IA-2: Changes is information only; no row claims "action required". */
 export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const [rows, setRows] = useState<readonly ChangeRow[]>([]);
-  const [token, setToken] = useState<string | undefined>(undefined);
-  const [l, run] = useRun<SearchAnswer<ChangeRow>>();
-  const more = (after?: string) => {
-    run(() =>
-      search<ChangeRow>(ctx.instance, "changes", {}, after).then((a) => {
-        setRows((r) => (after === undefined ? a.results : [...r, ...a.results]));
-        setToken(a.page.next_token === "" ? undefined : a.page.next_token);
-        return a;
-      }),
-    );
-  };
-  useEffect(() => {
-    more();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { l, more } = usePages(readKey(ctx, "changes"), (after) =>
+    search<ChangeRow>(ctx.instance, "changes", {}, after),
+  );
   return (
     <>
       <p>{t("changesIntro")}</p>
       <Show l={l}>
-        {() =>
+        {(rows) =>
           rows.length === 0 ? (
             <p className={HINT}>{t("changesNone")}</p>
           ) : (
@@ -916,14 +917,8 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
           )
         }
       </Show>
-      {token !== undefined && (
-        <Button
-          variant="outline"
-          className="self-start"
-          onClick={() => {
-            more(token);
-          }}
-        >
+      {more !== undefined && (
+        <Button variant="outline" className="self-start" onClick={more}>
           {t("changesOlder")}
         </Button>
       )}
@@ -937,22 +932,10 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
  * is information only, like Changes, and no row offers an action.
  */
 export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const [rows, setRows] = useState<readonly ChangeRow[]>([]);
-  const [token, setToken] = useState<string | undefined>(undefined);
-  const [l, run] = useRun<SearchAnswer<ChangeRow>>();
-  const more = (after?: string) => {
-    run(() =>
-      search<ChangeRow>(ctx.instance, "changes", {}, after).then((a) => {
-        setRows((r) => (after === undefined ? a.results : [...r, ...a.results]));
-        setToken(a.page.next_token === "" ? undefined : a.page.next_token);
-        return a;
-      }),
-    );
-  };
-  useEffect(() => {
-    more();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { l, more } = usePages(readKey(ctx, "changes"), (after) =>
+    search<ChangeRow>(ctx.instance, "changes", {}, after),
+  );
+  const rows = l.status === "done" ? l.value : [];
   const byRecord = new Map<string, ChangeRow[]>();
   for (const r of rows) {
     const list = byRecord.get(r.position) ?? [];
@@ -993,14 +976,8 @@ export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
           )
         }
       </Show>
-      {token !== undefined && (
-        <Button
-          variant="outline"
-          className="self-start"
-          onClick={() => {
-            more(token);
-          }}
-        >
+      {more !== undefined && (
+        <Button variant="outline" className="self-start" onClick={more}>
           {t("changesOlder")}
         </Button>
       )}

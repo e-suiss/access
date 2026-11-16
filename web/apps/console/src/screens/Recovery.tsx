@@ -8,9 +8,9 @@ import type { ReactElement } from "react";
 import { Card, CardContent } from "@access/ui/components/card";
 
 import { t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { BULLETS, HINT, Notice } from "../ui.js";
-import { at, type Ctx, Show, useLoad } from "./parts.js";
+import { at, type Ctx, Show, readKey, useLoad } from "./parts.js";
 
 interface Entry {
   readonly kind: "recovered" | "handover";
@@ -28,7 +28,9 @@ interface RecoveryView {
 /** The recovery and handover screen. */
 export function Recovery({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const view = useLoad(() => adminGet<RecoveryView>(ctx.instance, `envs/${environment}/recovery`));
+  const view = useLoad(readKey(ctx, `envs/${environment}/recovery`), () =>
+    adminGetAs<RecoveryView>(ctx.instance, `envs/${environment}/recovery`),
+  );
   return (
     <div data-testid="recovery" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("recoveryIntro")}</p>

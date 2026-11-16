@@ -2,8 +2,9 @@
 // read proof; every change is drafted first (a read), checked, shown on the signature screen as
 // the Kernel decoded it, and only then signed and sent as one Exercise.
 import { loadKernel } from "@esuiss/access";
+import * as v from "valibot";
 
-import { b64url, call, fromB64url, Problem } from "./api.js";
+import { answer, b64url, call, fromB64url, problemOf } from "./api.js";
 import {
   adminRead,
   adminWrite,
@@ -13,24 +14,31 @@ import {
   readProof,
 } from "./instance.js";
 
-export async function problemOf(r: Response): Promise<Problem> {
-  try {
-    const p = (await r.json()) as { code?: unknown; reason?: unknown };
-    return new Problem(
-      r.status,
-      typeof p.code === "string" ? p.code : "unknown",
-      typeof p.reason === "string" ? p.reason : undefined,
-    );
-  } catch {
-    return new Problem(r.status, "unknown", undefined);
-  }
+// OP-159 m.46 (f)
+/**
+ * A management read of `/admin/v1/{path}` as `schema` reads it; anything but 2xx throws its
+ * [`Problem`], and an answer of another shape throws before anything is shown.
+ */
+export async function adminGet<S extends v.GenericSchema>(
+  instance: Instance,
+  path: string,
+  schema: S,
+): Promise<v.InferOutput<S>> {
+  return answer(await adminRead(instance, path), schema);
 }
 
-/** A management read of `/admin/v1/{path}`; anything but 2xx throws its [`Problem`]. */
-export async function adminGet<T>(instance: Instance, path: string): Promise<T> {
-  const r = await adminRead(instance, path);
-  if (!r.ok) throw await problemOf(r);
-  return (await r.json()) as T;
+/**
+ * A management read whose answer is not yet read by a schema: only JSON is checked. Each screen
+ * moves to [`adminGet`] with its own schema (OP-159 m.46 (f)).
+ */
+export async function adminGetAs<T>(instance: Instance, path: string): Promise<T> {
+  const value: unknown = await answer(await adminRead(instance, path), v.unknown());
+  return value as T;
+}
+
+/** A list answer whose items `item` reads. */
+export function items<S extends v.GenericSchema>(item: S) {
+  return v.object({ items: v.array(item) });
 }
 
 /** A management read and its `ETag`, which a `PUT` or `PATCH` of it sends as `If-Match` (OP-65). */
@@ -41,27 +49,32 @@ export async function adminGetTagged(
   const r = await adminRead(instance, path);
   if (!r.ok) throw await problemOf(r);
   const etag = r.headers.get("etag");
-  return { value: (await r.json()) as unknown, ...(etag === null ? {} : { etag }) };
+  const value: unknown = await r.json();
+  return { value, ...(etag === null ? {} : { etag }) };
 }
 
 /** What a draft returns (`IntentDraft`). */
-export interface IntentDraft {
-  readonly operation: string;
-  readonly key?: string | null;
-  readonly body: Readonly<Record<string, unknown>>;
-  readonly domain: string;
-  readonly pep: string;
-  readonly intent: string;
-  readonly intent_digest: string;
-}
+export const IntentDraft = v.looseObject({
+  operation: v.string(),
+  key: v.nullish(v.string()),
+  body: v.record(v.string(), v.unknown()),
+  domain: v.string(),
+  pep: v.string(),
+  intent: v.string(),
+  intent_digest: v.string(),
+});
+
+export type IntentDraft = v.InferOutput<typeof IntentDraft>;
 
 /** What a write returns (`WriteResult`). */
-export interface WriteResult {
-  readonly exercise_id: string;
-  readonly position: unknown;
-  readonly resource?: unknown;
-  readonly irreversible?: boolean;
-}
+export const WriteResult = v.looseObject({
+  exercise_id: v.string(),
+  position: v.unknown(),
+  resource: v.exactOptional(v.unknown()),
+  irreversible: v.exactOptional(v.boolean()),
+});
+
+export type WriteResult = v.InferOutput<typeof WriteResult>;
 
 /** One change a screen asks for. */
 export interface Change {
@@ -132,8 +145,7 @@ export async function draftChange(
     body,
     headers: { "x-access-ais": await readProof(instance, "POST", `/admin/v1/${path}`) },
   });
-  if (!r.ok) throw await problemOf(r);
-  return (await r.json()) as IntentDraft;
+  return answer(r, IntentDraft);
 }
 
 /** Drafts, checks, shows and, once the user signs, sends `c`; resolves with the Exercise. */
@@ -155,6 +167,5 @@ export async function change(
     d.pep,
     c.ifMatch,
   );
-  if (!r.ok) throw await problemOf(r);
-  return (await r.json()) as WriteResult;
+  return answer(r, WriteResult);
 }

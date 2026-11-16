@@ -1,10 +1,6 @@
-// OP-159 m.42, TN-113
+// OP-159 m.42, m.43 (b): what this browser remembers about the console's environments and its
+// sign-ins. The addresses themselves are the router's (`router.tsx`).
 import { API } from "./api.js";
-
-/** The console's own page, which names no environment. */
-export const HOME = "/console";
-
-const BASE = "/console/";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
@@ -27,28 +23,6 @@ const SIGN_IN_GRACE_MS = 60_000;
 /** Whether `s` can name an environment in a console address. */
 export function isEnvironment(s: string): boolean {
   return SLUG.test(s) && !RESERVED.has(s);
-}
-
-/** The address of `route` (`""`, `admin`, `admin/roles`, …) in `environment`'s console. */
-export function consoleHref(environment: string, route = ""): string {
-  const base = `${BASE}${encodeURIComponent(environment)}`;
-  return route === "" ? base : `${base}/${route}`;
-}
-
-/** An environment's console address as people share it, on this origin. */
-export function consoleLink(environment: string): string {
-  return `${location.origin}${consoleHref(environment)}`;
-}
-
-/** The environment `path` names and the rest after it; `undefined` when it names none. */
-export function splitPath(path: string): {
-  readonly environment: string | undefined;
-  readonly rest: string;
-} {
-  if (!path.startsWith(BASE)) return { environment: undefined, rest: "" };
-  const [head = "", ...rest] = path.slice(BASE.length).split("/");
-  if (!isEnvironment(head)) return { environment: undefined, rest: "" };
-  return { environment: head, rest: rest.join("/") };
 }
 
 /** The environment this browser last signed in to, if it remembers one (OP-159 m.42 (b)). */

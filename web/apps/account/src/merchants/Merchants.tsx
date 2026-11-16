@@ -6,17 +6,13 @@ import { pay } from "@esuiss/access";
 import { payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Card, CardContent } from "@access/ui/components/card";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 
-import { revoke, search, type Revoking } from "../lib/adp.js";
+import { revoke, search } from "../lib/adp.js";
 import { catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { Loading } from "../lib/ui.js";
-
-type Loaded =
-  | { readonly kind: "loading" }
-  | { readonly kind: "unknown" }
-  | { readonly kind: "ready"; readonly merchants: readonly pay.MerchantHolding[] };
 
 export function MerchantsPage({
   instance,
@@ -25,32 +21,34 @@ export function MerchantsPage({
   readonly instance: Instance;
   readonly confirm: Confirm;
 }): ReactElement {
-  const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
-  const [stopping, setStopping] = useState<Revoking | null>(null);
-  const load = useCallback(() => {
-    search(instance, "inventory", { party: instance.party })
-      .then((a) => {
-        setLoaded({ kind: "ready", merchants: pay.merchantsOf(a.results) });
-      })
-      .catch(() => {
-        setLoaded({ kind: "unknown" });
-      });
-  }, [instance]);
-  useEffect(load, [load]);
-  if (loaded.kind === "loading") return <Loading status />;
-  if (loaded.kind === "unknown") {
+  const queries = useQueryClient();
+  const key = ["merchants", instance.party] as const;
+  const { data: merchants, error } = useQuery({
+    queryKey: key,
+    queryFn: async () =>
+      pay.merchantsOf((await search(instance, "inventory", { party: instance.party })).results),
+  });
+  const stop = useMutation({
+    mutationFn: (grant: string) => revoke(instance, confirm, grant),
+    onSuccess: (r) => {
+      if (r.shown === "outcome.confirmed") void queries.invalidateQueries({ queryKey: key });
+    },
+  });
+  const stopping = stop.data;
+  if (error !== null) {
     return (
       <Alert variant="destructive" data-testid="merchants-unknown">
         {t("domain.unreachable")}
       </Alert>
     );
   }
+  if (merchants === undefined) return <Loading status />;
   const period = (p: "transaction" | "day" | "month") => t(`period.${p}`);
   return (
     <Card data-testid="merchants">
       <CardContent className="flex flex-col gap-4">
         <payment.Merchants
-          merchants={loaded.merchants.map((m) => ({
+          merchants={merchants.map((m) => ({
             grant: m.grant,
             name: m.merchant,
             agent: m.agent,
@@ -58,17 +56,10 @@ export function MerchantsPage({
           }))}
           catalogue={catalogue}
           onStop={(grant) => {
-            revoke(instance, confirm, grant)
-              .then((r) => {
-                setStopping(r);
-                if (r.shown === "outcome.confirmed") load();
-              })
-              .catch(() => {
-                setStopping(null);
-              });
+            stop.mutate(grant);
           }}
         />
-        {stopping !== null && (
+        {stopping !== undefined && (
           <p role="status" data-testid="outcome" className="font-semibold">
             {t(stopping.shown)}
           </p>

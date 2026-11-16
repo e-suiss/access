@@ -12,9 +12,9 @@ import { Badge } from "@access/ui/components/badge";
 import { Card, CardContent } from "@access/ui/components/card";
 
 import { t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { BULLETS, HINT, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Show, useLoad } from "./parts.js";
+import { at, type Ctx, Show, readKey, useLoad } from "./parts.js";
 
 const H3 = "text-base font-semibold";
 
@@ -79,8 +79,8 @@ function Parties({
 /** The durability screen. */
 export function Durability({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const view = useLoad(() =>
-    adminGet<DurabilityView>(ctx.instance, `envs/${environment}/durability`),
+  const view = useLoad(readKey(ctx, `envs/${environment}/durability`), () =>
+    adminGetAs<DurabilityView>(ctx.instance, `envs/${environment}/durability`),
   );
   return (
     <div data-testid="durability" className="flex flex-col gap-4">

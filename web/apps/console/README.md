@@ -115,17 +115,17 @@ Every page, asset and API answer carries a strict Content Security Policy (`defa
 scripts and styles from the console itself, `'wasm-unsafe-eval'` for the Kernel only, Trusted
 Types enforced, no framing), `Referrer-Policy: no-referrer`, cross-origin isolation and a minimal
 `Permissions-Policy`. Strings a tenant controls (environment and display names, client names) are
-rendered as text only; ESLint and `cargo xtask check` (`ui-text-nodes`) refuse HTML sinks, and
+rendered as text only; Biome and `cargo xtask check` (`ui-text-nodes`) refuse HTML sinks, and
 `forbidden-ui-terms` keeps words the console must never use out of its strings.
 
 ## Development
 
 ```sh
 just wasm                    # the Kernel's WebAssembly build for @esuiss/access
-npm ci
-npm run lint && npm run typecheck
-npm run e2e                  # Playwright: shell, signing, stolen cookie, security, WCAG 2.2 AA
-npm run e2e:live             # @live: against the local deployment's management listener
+pnpm install --frozen-lockfile
+pnpm run lint && pnpm run typecheck
+pnpm run e2e                  # Playwright: shell, signing, stolen cookie, security, WCAG 2.2 AA
+pnpm run e2e:live             # @live: against the local deployment's management listener
 ```
 
 The end-to-end tests run against a mock of the BFF that applies the BFF's rules; the BFF itself

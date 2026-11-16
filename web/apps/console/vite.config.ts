@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
@@ -9,7 +10,8 @@ import { securityHeaders } from "./security-headers.js";
 // TN-128: served by the BFF under /console/ on the management listener
 export default defineConfig({
   base: "/console/",
-  plugins: [react(), tailwindcss()],
+  // OP-159 m.46 (c)
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     dedupe: ["react", "react-dom", "@base-ui/react"],

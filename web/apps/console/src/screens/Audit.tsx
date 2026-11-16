@@ -2,12 +2,14 @@
 // `reason_admin`, the StateBasis and the expanded `basis_ref`; deeper identities stay
 // pseudonymous; totals are given only within the reader's disclosure (m.8 (g)); an export is a
 // signed Exercise of its own.
+import { getRouteApi } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 
 import { Button } from "@access/ui/components/button";
 import { Field as FieldRoot, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 
+import { ResultTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";
 import {
   explain,
@@ -26,17 +28,7 @@ import {
   type RevocationImpact,
   RevocationView,
 } from "./Reports.js";
-import {
-  ACTIONS,
-  BULLETS,
-  CHOICE,
-  CHOICE_LABEL,
-  FORM,
-  Failure,
-  HINT,
-  MONO,
-  Notice,
-} from "../ui.js";
+import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, Failure, HINT, Notice } from "../ui.js";
 
 function split(action: string): { namespace: string; name: string } {
   const i = action.lastIndexOf(".");
@@ -50,11 +42,28 @@ function resourceOf(text: string): { namespace: string; path: string[] } {
   return { namespace, path: path.split("/").filter((p) => p !== "") };
 }
 
+const route = getRouteApi("/$environment/audit/{-$screen}");
+
 export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const [position, setPosition] = useState("");
-  const [action, setAction] = useState("");
-  const [resource, setResource] = useState("");
-  const [subject, setSubject] = useState(ctx.session.account);
+  // OP-159 m.46 (e): the record looked up stays in the address
+  const kept = route.useSearch();
+  const navigate = route.useNavigate();
+  const [position, setPosition] = useState(kept.position ?? "");
+  const [action, setAction] = useState(kept.action ?? "");
+  const [resource, setResource] = useState(kept.resource ?? "");
+  const [subject, setSubject] = useState(kept.subject ?? ctx.session.account);
+  const keep = () => {
+    const or = (x: string) => (x === "" ? undefined : x);
+    void navigate({
+      search: {
+        position: or(position),
+        action: or(action),
+        resource: or(resource),
+        subject: subject === ctx.session.account ? undefined : or(subject),
+      },
+      replace: true,
+    });
+  };
   const [record, runRecord] = useRun<Explained>();
   const [found, runSearch] = useRun<SearchAnswer<unknown>>();
   const [token, setToken] = useState<string | undefined>(undefined);
@@ -80,6 +89,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
           className={FORM}
           onSubmit={(e) => {
             e.preventDefault();
+            keep();
             const a = split(action);
             runRecord(() =>
               explain(
@@ -116,6 +126,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
             <Button
               variant="outline"
               onClick={() => {
+                keep();
                 searchPage();
               }}
             >
@@ -128,13 +139,7 @@ export function Records({ ctx }: { readonly ctx: Ctx }): ReactElement {
           {(a) => (
             <>
               <PageCount page={a.page} shown={a.results.length} />
-              <ul data-testid="search-results" className={BULLETS}>
-                {a.results.map((r, i) => (
-                  <li key={String(i)} className={MONO}>
-                    {JSON.stringify(r)}
-                  </li>
-                ))}
-              </ul>
+              <ResultTable data-testid="search-results" results={a.results} />
               {token !== undefined && token !== "" && (
                 <Button
                   variant="outline"

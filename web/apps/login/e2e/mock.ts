@@ -19,8 +19,8 @@ export function example(name: string): LoginUi {
 function echo(ui: LoginUi, identifier: string): LoginUi {
   return {
     ...ui,
-    nodes: ui.nodes.map((n): UiNode =>
-      n.type === "input" && n.read_only === true ? { ...n, value: identifier } : n,
+    nodes: ui.nodes.map(
+      (n): UiNode => (n.type === "input" && n.read_only === true ? { ...n, value: identifier } : n),
     ),
   };
 }
@@ -360,10 +360,11 @@ export class LoginMock {
           status: 401,
           ui: {
             ...failed,
-            nodes: failed.nodes.map((n): UiNode =>
-              n.type === "passkey_signal" && n.signal.kind === "unknown_credential"
-                ? { ...n, signal: { ...n.signal, credential_id: id } }
-                : n,
+            nodes: failed.nodes.map(
+              (n): UiNode =>
+                n.type === "passkey_signal" && n.signal.kind === "unknown_credential"
+                  ? { ...n, signal: { ...n.signal, credential_id: id } }
+                  : n,
             ),
           },
         };

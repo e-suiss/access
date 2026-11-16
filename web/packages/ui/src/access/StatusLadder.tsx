@@ -5,7 +5,13 @@ import { Item, ItemActions, ItemContent, ItemTitle } from "@access/ui/components
 import { text } from "./texts.js";
 
 export type RungOwner =
-  "access" | "executor" | "verifier" | "relay" | "pay" | "coordinator" | "requester";
+  | "access"
+  | "executor"
+  | "verifier"
+  | "relay"
+  | "pay"
+  | "coordinator"
+  | "requester";
 
 export type RungState = "reached" | "not_reached" | "unknown" | "not_applicable";
 

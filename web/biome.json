@@ -1,0 +1,146 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "root": true,
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/test-results",
+      "!**/playwright-report",
+      "!**/.turbo",
+      "!pnpm-lock.yaml"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "includes": ["**", "!packages/ui/src/styles/globals.css"]
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "error",
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "reportUnnecessaryDependencies": false
+          }
+        },
+        "useHookAtTopLevel": "error",
+        "noNestedComponentDefinitions": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "error",
+        "noTsIgnore": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useExportType": "error",
+        "useConst": "error",
+        "noParameterAssign": "error"
+      },
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "error",
+        "noDangerouslySetInnerHtmlWithChildren": "error",
+        "noGlobalEval": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error",
+        "noImpliedEval": "error",
+        "noJsRestrictedProperties": {
+          "level": "error",
+          "options": {
+            "entries": [
+              {
+                "property": "innerHTML",
+                "message": "Render text nodes only (TN-131)."
+              },
+              {
+                "property": "outerHTML",
+                "message": "Render text nodes only (TN-131)."
+              }
+            ]
+          }
+        }
+      },
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["Input", "Textarea", "InputOTP"]
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/ui/src/components/**",
+        "packages/ui/src/hooks/**",
+        "packages/ui/src/styles/globals.css"
+      ],
+      "linter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["**/e2e/**"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "useDomNodeTextContent": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noScriptUrl": "off"
+          }
+        }
+      }
+    }
+  ]
+}

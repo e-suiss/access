@@ -7,7 +7,7 @@ import { Button } from "@access/ui/components/button";
 import { FieldLegend, FieldSet } from "@access/ui/components/field";
 
 import { t } from "../i18n/index.js";
-import { adminGet, draftChange, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, draftChange, type WriteResult } from "../lib/admin.js";
 import { API, b64url, call, fromB64url, json, Problem } from "../lib/api.js";
 import {
   decodedIntent,
@@ -17,7 +17,7 @@ import {
   readProof,
   sign,
 } from "../lib/instance.js";
-import { basisCbor, basisFor, type Basis, type MetaPayload } from "../lib/meta.js";
+import { basisCbor, basisFor, type Basis, MetaDraft, type MetaPayload } from "../lib/meta.js";
 import { CHOICE, CHOICE_LABEL, H4, HINT, MONO, Notice } from "../ui.js";
 import { at, type Ctx, Field, Panel, Show, useRun } from "./parts.js";
 
@@ -57,15 +57,6 @@ interface Preview {
 }
 
 type Choices = Readonly<Record<string, string>>;
-
-interface MetaDraft {
-  readonly intent: {
-    readonly resources: readonly { readonly namespace: string; readonly path: readonly string[] }[];
-  };
-  readonly envelope: string;
-  readonly payload: string;
-  readonly basis?: { readonly anchor: string };
-}
 
 const LABELS: Readonly<Record<string, Parameters<typeof t>[0]>> = {
   keep: "offboardingKeep",
@@ -129,7 +120,7 @@ async function operation(
 ): Promise<{ readonly body: unknown; readonly shown: ReturnType<typeof decodedIntent> }> {
   const k = await loadKernel();
   const [name = ""] = Object.keys(payload);
-  const draft = await json<MetaDraft>("/intents", {
+  const draft = await json("/intents", MetaDraft, {
     method: "POST",
     body: { action: { namespace: "access", name, major: 1 }, payload, mode: "commit" },
     headers: { "x-access-ais": await readProof(ctx.instance, "POST", `${API}/intents`) },
@@ -400,7 +391,7 @@ export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [l, load] = useRun<Preview>();
   const preview = () => {
     load(() =>
-      adminGet<Preview>(
+      adminGetAs<Preview>(
         ctx.instance,
         `envs/${encodeURIComponent(ctx.session.environment)}/offboarding/${encodeURIComponent(party)}/preview`,
       ),

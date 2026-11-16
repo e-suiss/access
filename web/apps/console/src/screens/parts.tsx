@@ -1,6 +1,14 @@
 // §8.13, E25, TN-131: what every section screen shares. A read that fails shows that it failed
 // and nothing else; nothing is ever guessed or shown as allowed. Strings render as text nodes.
-import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import {
+  type QueryKey,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import type { ReactElement, ReactNode } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Card, CardContent, CardHeader } from "@access/ui/components/card";
@@ -8,6 +16,7 @@ import { Field as FieldRoot, FieldDescription, FieldLabel } from "@access/ui/com
 import { Input } from "@access/ui/components/input";
 
 import { t, type Key } from "../i18n/index.js";
+import type { SearchAnswer } from "../lib/adp.js";
 import { Problem, type SessionInfo } from "../lib/api.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { NotSigned } from "../lib/instance.js";
@@ -35,34 +44,75 @@ export function failureKey(e: unknown): Key {
   return "readFailed";
 }
 
-/** Runs `f` on demand; the last call wins. */
-export function useRun<T>(): readonly [Loaded<T>, (f: () => Promise<T>) => void] {
-  const [state, setState] = useState<Loaded<T>>({ status: "idle" });
-  const seq = useRef(0);
-  const run = useCallback((f: () => Promise<T>) => {
-    seq.current += 1;
-    const mine = seq.current;
-    setState({ status: "busy" });
-    f().then(
-      (value) => {
-        if (seq.current === mine) setState({ status: "done", value });
-      },
-      (e: unknown) => {
-        if (seq.current === mine) setState({ status: "failed", key: failureKey(e) });
-      },
-    );
-  }, []);
-  return [state, run] as const;
+const IDLE = { status: "idle" } as const;
+const BUSY = { status: "busy" } as const;
+
+// OP-159 m.46 (d)
+/** The key of a read of the viewer's environment: what a write that changes it invalidates. */
+export function readKey(ctx: Ctx, ...parts: readonly unknown[]): QueryKey {
+  return ["read", ctx.session.environment, ctx.instance.id, ...parts];
 }
 
-/** Runs `f` once on mount. */
-export function useLoad<T>(f: () => Promise<T>): Loaded<T> {
-  const [state, run] = useRun<T>();
-  const first = useRef(f);
-  useEffect(() => {
-    run(first.current);
-  }, [run]);
-  return state;
+/**
+ * Runs `f` on demand; the last call wins. A change is never retried and nothing is shown before
+ * its answer (no optimistic update); once it succeeds, the reads under `invalidates` are read
+ * again.
+ */
+export function useRun<T>(
+  invalidates: readonly QueryKey[] = [],
+): readonly [Loaded<T>, (f: () => Promise<T>) => void] {
+  const client = useQueryClient();
+  const m = useMutation({
+    mutationFn: (f: () => Promise<T>) => f(),
+    retry: false,
+    onSuccess: () => {
+      for (const queryKey of invalidates) void client.invalidateQueries({ queryKey });
+    },
+  });
+  let state: Loaded<T>;
+  if (m.status === "idle") state = IDLE;
+  else if (m.status === "pending") state = BUSY;
+  else if (m.status === "error") state = { status: "failed", key: failureKey(m.error) };
+  else state = { status: "done", value: m.data };
+  return [state, m.mutate] as const;
+}
+
+/** A query's state as a screen shows it; a read that is not asked for is idle. */
+export function loaded<T>(q: UseQueryResult<T>): Loaded<T> {
+  if (q.status === "error") return { status: "failed", key: failureKey(q.error) };
+  if (q.status === "pending") return q.fetchStatus === "idle" ? IDLE : BUSY;
+  return { status: "done", value: q.data };
+}
+
+/** Reads `f` under `key`: kept while the key stays, read again when it changes or is invalidated. */
+export function useLoad<T>(key: QueryKey, f: () => Promise<T>): Loaded<T> {
+  const q = useQuery({ queryKey: key, queryFn: async () => ({ value: await f() }) });
+  const l = loaded(q);
+  return l.status === "done" ? { status: "done", value: l.value.value } : l;
+}
+
+/** A paged search read: every page read so far, and the next one while there is one. */
+export function usePages<T>(
+  key: QueryKey,
+  page: (token: string | undefined) => Promise<SearchAnswer<T>>,
+): { readonly l: Loaded<readonly T[]>; readonly more: (() => void) | undefined } {
+  const q = useInfiniteQuery({
+    queryKey: key,
+    queryFn: ({ pageParam }) => page(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) =>
+      last.page.next_token === undefined || last.page.next_token === ""
+        ? undefined
+        : last.page.next_token,
+  });
+  const more = q.hasNextPage
+    ? () => {
+        void q.fetchNextPage();
+      }
+    : undefined;
+  if (q.isPending) return { l: BUSY, more: undefined };
+  if (q.isError) return { l: { status: "failed", key: failureKey(q.error) }, more: undefined };
+  return { l: { status: "done", value: q.data.pages.flatMap((a) => a.results) }, more };
 }
 
 /** The busy, failed and done states of `l`; `children` renders the value. */

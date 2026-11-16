@@ -10,9 +10,9 @@ import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FORM, H4, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Source {
   readonly name: string;
@@ -35,8 +35,8 @@ const KIND = {
 /** The signal sources panel of the environment's sign-in settings. */
 export function Signals({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const list = useLoad(() =>
-    adminGet<{ readonly items: readonly Source[] }>(
+  const list = useLoad(readKey(ctx, `envs/${environment}/signal-sources`), () =>
+    adminGetAs<{ readonly items: readonly Source[] }>(
       ctx.instance,
       `envs/${environment}/signal-sources`,
     ),

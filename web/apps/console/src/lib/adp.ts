@@ -2,6 +2,7 @@
 // `check`, signed in this browser. The BFF adds no credential, so without this browser's key a
 // read is the anonymous reader's and sees Public only. Nothing here is recorded.
 import { loadKernel } from "@esuiss/access";
+import * as v from "valibot";
 
 import { b64url, call, Problem } from "./api.js";
 import { draft, type Wanted } from "./intents.js";
@@ -33,11 +34,39 @@ export type SearchKind =
   | "compromise-impact";
 
 /** A search page's `page` member (OP-151 m.8 (g)). */
-export interface Page {
-  readonly next_token?: string;
-  readonly total?: number;
-  readonly has_more?: boolean;
+const Page = v.object({
+  next_token: v.exactOptional(v.string()),
+  total: v.exactOptional(v.number()),
+  has_more: v.exactOptional(v.boolean()),
+});
+
+export type Page = Readonly<v.InferOutput<typeof Page>>;
+
+// OP-159 m.46 (f)
+/** A search answer whose results `item` reads. */
+function searchAnswer<T>(item: v.GenericSchema<unknown, T>) {
+  return v.object({ results: v.array(item), page: v.optional(Page, {}) });
 }
+
+/** One of the viewer's own holdings, as the `holdings` search answers (IA-5). */
+export const Holding = v.looseObject({
+  grant: v.string(),
+  holder: v.string(),
+  since: v.number(),
+  actions: v.array(
+    v.looseObject({ namespace: v.exactOptional(v.string()), name: v.exactOptional(v.string()) }),
+  ),
+});
+
+export type Holding = v.InferOutput<typeof Holding>;
+
+/** The viewer's own holdings (IA-5, OP-152 m.7 (b)). */
+export async function holdings(instance: Instance): Promise<readonly Holding[]> {
+  return (await search(instance, "holdings", {}, undefined, Holding)).results;
+}
+
+/** An eligibility check's answer: only a literal `true` is eligible (fail closed). */
+export const Eligibility = v.looseObject({ eligible: v.optional(v.unknown()) });
 
 export interface SearchAnswer<T> {
   readonly results: readonly T[];
@@ -70,18 +99,20 @@ async function signedContext(instance: Instance, w: Wanted): Promise<Record<stri
   };
 }
 
-async function answer<T>(r: Response): Promise<T> {
-  if (!r.ok) {
-    let code = "unknown";
-    try {
-      const p = (await r.json()) as { code?: unknown };
-      if (typeof p.code === "string") code = p.code;
-    } catch {
-      code = "unknown";
-    }
-    throw new Problem(r.status, code, undefined);
+async function failed(r: Response): Promise<Problem> {
+  let code = "unknown";
+  try {
+    const p = v.parse(v.looseObject({ code: v.optional(v.unknown()) }), await r.json());
+    if (typeof p.code === "string") code = p.code;
+  } catch {
+    code = "unknown";
   }
-  return (await r.json()) as T;
+  return new Problem(r.status, code, undefined);
+}
+
+async function answer<T>(r: Response, schema: v.GenericSchema<unknown, T>): Promise<T> {
+  if (!r.ok) throw await failed(r);
+  return v.parse(schema, await r.json());
 }
 
 /** The search intent of `kind`: `access.read` on `access.search:[kind]`. */
@@ -93,26 +124,32 @@ export function searchIntent(kind: SearchKind): Wanted {
 }
 
 /** One search page of `kind` for `query`, read as the viewer. */
-export async function search<T>(
+export async function search<T = unknown>(
   instance: Instance,
   kind: SearchKind,
   query: Readonly<Record<string, unknown>>,
   token?: string,
+  item: v.GenericSchema<unknown, T> = v.unknown() as v.GenericSchema<unknown, T>,
 ): Promise<SearchAnswer<T>> {
   const context = await signedContext(instance, searchIntent(kind));
   const body: Record<string, unknown> = { context: { ...context, query } };
   if (token !== undefined && token !== "") body["page"] = { token };
-  return answer<SearchAnswer<T>>(await call(`/proxy/adp/search/${kind}`, { method: "POST", body }));
+  return answer(
+    await call(`/proxy/adp/search/${kind}`, { method: "POST", body }),
+    searchAnswer(item),
+  );
 }
 
 /** The scope an explanation is read at (OP-141 m.38 (a)). */
 export type Scope = "requester" | "viewer" | "audit";
 
 /** A decision explained: the ADP decision body. */
-export interface Explained {
-  readonly decision?: boolean;
-  readonly context?: Readonly<Record<string, unknown>>;
-}
+const Explained = v.looseObject({
+  decision: v.exactOptional(v.boolean()),
+  context: v.exactOptional(v.record(v.string(), v.unknown())),
+});
+
+export type Explained = Readonly<v.InferOutput<typeof Explained>>;
 
 /**
  * The explanation of `w` for the viewer: advisory now, or of recorded decision `record` at
@@ -135,7 +172,7 @@ export async function explain(
       ...(record === undefined ? {} : { record: record.position, scope: record.scope }),
     },
   };
-  return answer<Explained>(await call("/proxy/adp/explain", { method: "POST", body }));
+  return answer(await call("/proxy/adp/explain", { method: "POST", body }), Explained);
 }
 
 /**
@@ -189,8 +226,9 @@ export async function exportAudit(
     },
   };
   // TN-110, OP-151 m.19: the commit is the single write; the package is the same request again
-  const decided = await answer<Explained>(
+  const decided = await answer(
     await call("/proxy/adp/evaluation", { method: "POST", body }),
+    Explained,
   );
   if (decided.decision !== true) throw new Problem(403, "exercise-not-allowed", undefined);
   const exercise = decided.context?.["exercise"];
@@ -199,7 +237,7 @@ export async function exportAudit(
     body,
     headers: { accept: "application/cbor-seq" },
   });
-  if (!r.ok) await answer<unknown>(r);
+  if (!r.ok) throw await failed(r);
   const bytes = await r.blob();
   return {
     exercise: typeof exercise === "string" ? exercise : "",
@@ -225,7 +263,9 @@ export async function check(instance: Instance, subject: string, w: Wanted): Pro
     body: { subject, set: { ...d.probe, intent: d.intent } },
   });
   if (!r.ok) throw new Problem(r.status, "unavailable", undefined);
-  const v = (await r.json()) as { eligible?: unknown };
-  if (typeof v.eligible !== "boolean") throw new Problem(502, "malformed", undefined);
-  return v.eligible;
+  const a = v.safeParse(Eligibility, await r.json());
+  if (!a.success || typeof a.output.eligible !== "boolean") {
+    throw new Problem(502, "malformed", undefined);
+  }
+  return a.output.eligible;
 }

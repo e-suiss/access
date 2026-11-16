@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
@@ -8,7 +9,8 @@ import { securityHeaders } from "./security-headers.js";
 
 // OP-153 m.3 (s): the Fluent catalogs come from the repository's locales/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // OP-159 m.46 (c)
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     dedupe: ["react", "react-dom", "@base-ui/react"],

@@ -4,7 +4,7 @@
 import { loadKernel } from "@esuiss/access";
 
 import { draft } from "../lib/adp.js";
-import { b64url, call, fromB64url, frontend, json, type SessionInfo } from "../lib/api.js";
+import { b64url, fromB64url, frontend, json, session } from "../lib/api.js";
 import {
   type Confirm,
   decodedStatement,
@@ -17,7 +17,7 @@ import {
 
 /** This browser's device Instance, when it has one for the signed-in account. */
 export async function ownInstance(): Promise<Instance | undefined> {
-  const s = await json<SessionInfo>(call("/session"));
+  const s = await session();
   return find(s.environment, s.account, s.instance);
 }
 

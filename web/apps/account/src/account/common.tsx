@@ -1,7 +1,7 @@
 // TN-107, X29, §8.13: what every S10/S11 write shares. A write that needs a fresh confirmation
 // sends the browser to the hosted login and back; a lost sign-in says only "Please sign in
 // again to continue."; every outcome is announced in a live region.
-import { useCallback, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { FRONTEND, PAGE, Problem } from "../lib/api.js";
 import { locale, t } from "../lib/i18n.js";
@@ -31,8 +31,8 @@ export function refusal(e: unknown, codes: Readonly<Record<string, string>> = {}
   return own === undefined ? t("account.failed") : t(own);
 }
 
-/** A live region and the `say` that fills it. */
-export function useAnnouncer(): {
+/** A live region and the `say` that fills it; a failed read (`failed`) is announced as a refusal. */
+export function useAnnouncer(failed?: unknown): {
   readonly say: (text: string, alert?: boolean) => void;
   readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
   readonly region: ReactElement;
@@ -45,6 +45,9 @@ export function useAnnouncer(): {
     const text = refusal(e, codes);
     if (text !== null) setSaid({ text, alert: true });
   }, []);
+  useEffect(() => {
+    if (failed !== null && failed !== undefined) fail(failed);
+  }, [failed, fail]);
   const region = (
     <div className="flex flex-col gap-1 not-has-[p:not(:empty)]:absolute">
       <p

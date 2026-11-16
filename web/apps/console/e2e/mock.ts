@@ -653,7 +653,8 @@ export class ConsoleMock {
     }
     if (path === "/proxy/adp/eligibility:check") {
       const set = body()["set"] as
-        { intent?: Wanted; domain?: unknown; basis?: unknown; capacity?: unknown } | undefined;
+        | { intent?: Wanted; domain?: unknown; basis?: unknown; capacity?: unknown }
+        | undefined;
       // OP-149 m.10: like ADP, a set without its domain, basis and capacity is not decoded
       if (set?.domain !== DOMAIN || set.basis === undefined || set.capacity !== "own") {
         return problem(400, "set");

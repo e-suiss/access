@@ -2,6 +2,7 @@
 // TypeScript). It asks for a draft, the Kernel decodes the drafted bytes, and the draft is used
 // only when what was decoded is exactly what was asked for.
 import { loadKernel } from "@esuiss/access";
+import * as v from "valibot";
 
 import { API, fromB64url, json } from "./api.js";
 import {
@@ -28,11 +29,11 @@ export interface Drafted {
   readonly probe?: Readonly<Record<string, unknown>>;
 }
 
-interface Draft {
-  readonly intent: unknown;
-  readonly envelope: string;
-  readonly probe?: Readonly<Record<string, unknown>>;
-}
+const Draft = v.looseObject({
+  intent: v.unknown(),
+  envelope: v.string(),
+  probe: v.exactOptional(v.record(v.string(), v.unknown())),
+});
 
 /** Whether the Kernel's decoding names exactly the action and resources of `w`. */
 export function matches(w: Wanted, d: DecodedIntent): boolean {
@@ -64,7 +65,7 @@ export async function draft(
   w: Wanted,
   mode: "check" | "commit",
 ): Promise<Drafted> {
-  const d = await json<Draft>("/intents", {
+  const d = await json("/intents", Draft, {
     method: "POST",
     body: { ...w, mode },
     headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },

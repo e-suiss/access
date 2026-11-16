@@ -2,16 +2,16 @@
 // and replacing its key, and registering and retiring server groups are each one signed change;
 // servers trust the CA key the environment publishes and refuse what its KRL lists. Certificates are
 // projections of ssh.login Grants and show in the audit log.
+import { Link } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
-import { consoleHref } from "../lib/paths.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface HostGroup {
   readonly name: string;
@@ -27,8 +27,8 @@ interface Page<T> {
 /** The SSH certificate authority screen. */
 export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const groups = useLoad(() =>
-    adminGet<Page<HostGroup>>(ctx.instance, `envs/${environment}/ssh-host-groups`),
+  const groups = useLoad(readKey(ctx, `envs/${environment}/ssh-host-groups`), () =>
+    adminGetAs<Page<HostGroup>>(ctx.instance, `envs/${environment}/ssh-host-groups`),
   );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -181,12 +181,13 @@ export function Ssh({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Panel id="ssh-certificates" title={t("sshCertificatesTitle")}>
         <p data-testid="ssh-certificates-note">
           {t("sshCertificatesNote")}{" "}
-          <a
-            href={consoleHref(ctx.session.environment, "audit/records")}
+          <Link
+            to="/$environment/audit/{-$screen}"
+            params={{ environment: ctx.session.environment, screen: "records" }}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("sshAuditLink")}
-          </a>
+          </Link>
         </p>
       </Panel>
       <Show l={w}>

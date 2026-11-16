@@ -109,7 +109,8 @@ export interface ChangeRow {
 
 /** What one read came back as: its results, or nothing usable. */
 export type Read =
-  { readonly kind: "answered"; readonly results: readonly Json[] } | { readonly kind: "unknown" };
+  | { readonly kind: "answered"; readonly results: readonly Json[] }
+  | { readonly kind: "unknown" };
 
 /** One counted hygiene suggestion (§8.17.12, OP-157 m.3 (w)). */
 export interface HygieneRow {

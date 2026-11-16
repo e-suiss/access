@@ -10,9 +10,9 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/
 import { Input } from "@access/ui/components/input";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
-import { type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Preview {
   readonly enforced: boolean;
@@ -38,8 +38,8 @@ export function SsoEnforcement({
 }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
   const base = `organizations/${encodeURIComponent(org)}`;
-  const preview = useLoad(() =>
-    adminGet<Preview>(ctx.instance, `envs/${environment}/${base}/sso-enforcement/preview`),
+  const preview = useLoad(readKey(ctx, `envs/${environment}/${base}/sso-enforcement/preview`), () =>
+    adminGetAs<Preview>(ctx.instance, `envs/${environment}/${base}/sso-enforcement/preview`),
   );
   const [fate, setFate] = useState<Fate | undefined>(undefined);
   const [email, setEmail] = useState("");

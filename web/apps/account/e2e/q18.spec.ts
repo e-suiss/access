@@ -126,7 +126,9 @@ test("a one-time payment pays exactly once and leaves no Grant", async ({ page, 
   const sent = bff.seen.filter((s) => s.path.endsWith("/proxy/adp/evaluation"));
   expect(sent).toHaveLength(1);
   const context = sent[0]?.body["context"] as Record<string, unknown>;
-  expect((sent[0]?.body["action"] as Record<string, unknown>)["name"]).toBe("initiate");
+  expect((sent[0]?.body["action"] as Record<string, unknown> | undefined)?.["name"]).toBe(
+    "initiate",
+  );
   expect(context["payload"]).toBeUndefined();
   expect(context["mode"]).toBe("commit");
   expect(bff.seen.some((s) => JSON.stringify(s.body).includes("grant_issue"))).toBe(false);
@@ -231,14 +233,16 @@ test("saving a card is the customer's own grant.issue to the merchant from their
   const drafted = bff.seen.find(
     (s) => s.path.endsWith("/intents") && s.body["payload"] !== undefined,
   );
-  const issue = (drafted?.body["payload"] as Record<string, Record<string, unknown>>)[
+  const issue = (drafted?.body["payload"] as Record<string, Record<string, unknown>> | undefined)?.[
     "grant_issue"
   ];
   expect(issue?.["basis"]).toEqual({ anchor: "c2VsZg" });
   expect(issue?.["holder"]).toEqual({ party: MERCHANT });
   expect(issue?.["agency"]).toEqual(["own"]);
   const sent = bff.seen.filter((s) => s.path.endsWith("/proxy/adp/evaluation"));
-  expect((sent[0]?.body["action"] as Record<string, unknown>)["name"]).toBe("grant_issue");
+  expect((sent[0]?.body["action"] as Record<string, unknown> | undefined)?.["name"]).toBe(
+    "grant_issue",
+  );
 });
 
 test("a card request that lets the merchant pass it on can't be saved", async ({ page, bff }) => {

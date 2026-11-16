@@ -11,25 +11,31 @@
     "typecheck": "tsc -p tsconfig.json",
     "e2e": "playwright test --project=chromium",
     "e2e:live": "playwright test --project=live --workers=1",
-    "lint": "eslint --max-warnings=0 ."
+    "lint": "biome lint --error-on-warnings ."
   },
   "dependencies": {
-    "@esuiss/access": "link:../../../sdks/typescript",
     "@access/ui": "workspace:*",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "@esuiss/access": "link:../../../sdks/typescript",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-table": "catalog:",
+    "@tanstack/react-virtual": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "valibot": "catalog:"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.63.0",
-    "@access/eslint-config": "workspace:*",
     "@access/typescript-config": "workspace:*",
-    "@tailwindcss/vite": "4.3.5",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "tailwindcss": "4.3.5",
-    "vite": "8.3.5"
+    "@axe-core/playwright": "catalog:",
+    "@babel/core": "catalog:",
+    "@playwright/test": "catalog:",
+    "@rolldown/plugin-babel": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=24",

@@ -609,7 +609,7 @@ jobs:
         run: |
           corepack enable
           just web-install
-      - name: Lint, type check, format (OP-83)
+      - name: Lint, format, type check, dead code (OP-83, OP-159 m.46 (a), (h))
         run: just web-check
       # OP-151 m.3 (g)
       - name: Generated SDK types match the OpenAPI contracts
@@ -617,6 +617,9 @@ jobs:
       # OP-116 m.6
       - name: Unit tests and Kernel vectors through the Wasm binding
         run: just web-test
+      # OP-159 m.46 (h)
+      - name: Build the apps within their size budgets
+        run: just web-size
       - name: Keep the Wasm build for the browser tests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

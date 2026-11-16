@@ -8,14 +8,15 @@ import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 
 import { useAnnouncer, when } from "../account/common.js";
 import { frontend, json } from "../lib/api.js";
 import { catalogue, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 import { Check, Loading, Meta, Nothing, PageTitle, Panel, RowItem, Rows } from "../lib/ui.js";
-import { type Access, type Requests, type SupportRow } from "./model.js";
+import { readAccess, Requests, type SupportRow } from "./model.js";
 import { type Drafted, signDraft } from "./sign.js";
 
 function ended(a: SupportRow): string {
@@ -31,39 +32,55 @@ export function SupportPage({
   readonly instance: Instance;
   readonly confirm: Confirm;
 }): ReactElement {
-  const [requests, setRequests] = useState<Requests | null>(null);
-  const [access, setAccess] = useState<Access | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<Requests>(frontend("/v1/support/requests"))
-      .then(setRequests)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-    json<Access>(frontend("/v1/me/support-access"))
-      .then(setAccess)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
-  const signed = (path: string, draft: Drafted, done: string) => {
-    setBusy(true);
-    signDraft(instance, confirm, draft)
-      .then((body) => json(frontend(path, { method: "POST", body })))
-      .then(() => {
-        say(done);
-        reload();
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+  const queries = useQueryClient();
+  const asked = useQuery({
+    queryKey: ["support", "requests"],
+    queryFn: () => json(frontend("/v1/support/requests"), Requests),
+  });
+  const given = useQuery({ queryKey: ["support", "access"], queryFn: readAccess });
+  const { say, fail, region } = useAnnouncer(asked.error ?? given.error);
+  const reload = () => {
+    void queries.invalidateQueries({ queryKey: ["support"] });
   };
-  if (requests === null || access === null) {
+  const write = {
+    onSuccess: (done: string) => {
+      say(done);
+      reload();
+    },
+    onError: (e: unknown) => {
+      fail(e);
+    },
+  };
+  const signing = useMutation({
+    mutationFn: async (w: { path: string; draft: Drafted; done: string }) => {
+      const body = await signDraft(instance, confirm, w.draft);
+      await json(frontend(w.path, { method: "POST", body }));
+      return w.done;
+    },
+    ...write,
+  });
+  const declining = useMutation({
+    mutationFn: async (path: string) => {
+      await json(frontend(`${path}/decline`, { method: "POST" }));
+      return t("support.declined");
+    },
+    ...write,
+  });
+  const blocking = useMutation({
+    mutationFn: (blocked: boolean) =>
+      json(frontend("/v1/me/support-block", { method: "PUT", body: { blocked } })),
+    onSuccess: reload,
+    onError: (e) => {
+      fail(e);
+    },
+  });
+  const busy = signing.isPending;
+  const signed = (path: string, draft: Drafted, done: string) => {
+    signing.mutate({ path, draft, done });
+  };
+  const requests = asked.data;
+  const access = given.data;
+  if (requests === undefined || access === undefined) {
     return (
       <div data-testid="support">
         {region}
@@ -116,14 +133,7 @@ export function SupportPage({
                   );
                 }}
                 onDecline={() => {
-                  void json(frontend(`${path}/decline`, { method: "POST" }))
-                    .then(() => {
-                      say(t("support.declined"));
-                      reload();
-                    })
-                    .catch((e: unknown) => {
-                      fail(e);
-                    });
+                  declining.mutate(path);
                 }}
               />
               {give.standing !== undefined && (
@@ -203,16 +213,7 @@ export function SupportPage({
               data-testid="support-block"
               checked={requests.blocked}
               onChange={(e) => {
-                void json(
-                  frontend("/v1/me/support-block", {
-                    method: "PUT",
-                    body: { blocked: e.target.checked },
-                  }),
-                )
-                  .then(reload)
-                  .catch((x: unknown) => {
-                    fail(x);
-                  });
+                blocking.mutate(e.target.checked);
               }}
             />
             <FieldLabel htmlFor="support-block" className="font-normal">

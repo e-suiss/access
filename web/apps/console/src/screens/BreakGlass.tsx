@@ -7,9 +7,9 @@ import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, at, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, at, readKey, useLoad, useRun } from "./parts.js";
 
 interface Account {
   readonly account_id: string;
@@ -47,11 +47,11 @@ const classOf = (c: (typeof CLASSES)[number]): string =>
 /** The break-glass screen. */
 export function BreakGlass({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const accounts = useLoad(() =>
-    adminGet<Page<Account>>(ctx.instance, `envs/${environment}/breakglass/accounts`),
+  const accounts = useLoad(readKey(ctx, `envs/${environment}/breakglass/accounts`), () =>
+    adminGetAs<Page<Account>>(ctx.instance, `envs/${environment}/breakglass/accounts`),
   );
-  const reviews = useLoad(() =>
-    adminGet<Page<Use>>(ctx.instance, `envs/${environment}/breakglass/reviews`),
+  const reviews = useLoad(readKey(ctx, `envs/${environment}/breakglass/reviews`), () =>
+    adminGetAs<Page<Use>>(ctx.instance, `envs/${environment}/breakglass/reviews`),
   );
   const [organization, setOrganization] = useState("");
   const [member, setMember] = useState("");

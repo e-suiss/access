@@ -1,18 +1,13 @@
 import { en, type Key } from "./en.js";
-import { tr } from "./tr.js";
 
 export type { Key };
 
-const catalogs: Record<string, Record<Key, string>> = { en, tr };
+// OP-159 m.46 (e): only the viewer's own catalog is loaded; English is the fallback
+const lang = navigator.language.slice(0, 2).toLowerCase();
 
-function pick(): Record<Key, string> {
-  const lang = navigator.language.slice(0, 2).toLowerCase();
-  return catalogs[lang] ?? en;
-}
+const strings: Readonly<Record<Key, string>> = lang === "tr" ? (await import("./tr.js")).tr : en;
 
-const strings = pick();
-
-export const locale: string = strings === tr ? "tr" : "en";
+export const locale: string = lang === "tr" ? "tr" : "en";
 
 /** The string for `key`, with `{name}` placeholders filled as plain text (TN-131). */
 export function t(key: Key, values: Readonly<Record<string, string>> = {}): string {

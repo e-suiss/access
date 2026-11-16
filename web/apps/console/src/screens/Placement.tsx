@@ -6,9 +6,9 @@ import type { ReactElement } from "react";
 import { Card, CardContent } from "@access/ui/components/card";
 
 import { t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { BULLETS, HINT, MONO, ROWS } from "../ui.js";
-import { type Ctx, Show, useLoad } from "./parts.js";
+import { type Ctx, Show, readKey, useLoad } from "./parts.js";
 
 interface Placed {
   readonly cell: string;
@@ -40,8 +40,8 @@ const cellOf = (v: PlacementView, p: Placed | null): string => p?.cell ?? v.cell
 /** The placement screen. */
 export function Placement({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const view = useLoad(() =>
-    adminGet<PlacementView>(ctx.instance, `envs/${environment}/placement`),
+  const view = useLoad(readKey(ctx, `envs/${environment}/placement`), () =>
+    adminGetAs<PlacementView>(ctx.instance, `envs/${environment}/placement`),
   );
   return (
     <div data-testid="placement" className="flex flex-col gap-4">

@@ -43,9 +43,18 @@
         "$TURBO_ROOT$/../sdks/typescript/package.json"
       ]
     },
-    "//#format:check": {},
+    "//#format:check": {
+      "cache": false
+    },
     "lint": {
-      "dependsOn": ["^lint"]
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/biome.json"]
+    },
+    "//#knip": {
+      "cache": false
+    },
+    "//#size:check": {
+      "dependsOn": ["@access/login#build", "@access/account#build", "@access/console#build"],
+      "cache": false
     }
   }
 }

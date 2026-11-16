@@ -4,7 +4,9 @@
 // nothing on the server.
 import { Button } from "@access/ui/components/button";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
@@ -12,30 +14,42 @@ import { Loading, Meta, Nothing, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
 
 /** What `GET /v1/approvers` answers. */
-export interface ApproverList {
-  readonly approvers: readonly {
-    readonly id: string;
-    readonly name: string;
-    readonly device_key: string;
-    readonly registered_at: string;
-    readonly last_used_at: string | null;
-  }[];
-}
+export const ApproverList = v.object({
+  approvers: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      device_key: v.string(),
+      registered_at: v.string(),
+      last_used_at: v.nullable(v.string()),
+    }),
+  ),
+});
+export type ApproverList = v.InferOutput<typeof ApproverList>;
+
+const KEY = ["approvers"] as const;
 
 const CODES = { "no-such-approver": "methods.removed" } as const;
 
 /** "Approvers". */
 export function Approvers(): ReactElement {
-  const [list, setList] = useState<ApproverList | null>(null);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<ApproverList>(frontend("/v1/approvers"))
-      .then(setList)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const queries = useQueryClient();
+  const { data: list, error } = useQuery({
+    queryKey: KEY,
+    queryFn: () => json(frontend("/v1/approvers"), ApproverList),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const retire = useMutation({
+    mutationFn: (id: string) =>
+      json(frontend(`/v1/approvers/${encodeURIComponent(id)}/retire`, { method: "POST" })),
+    onSuccess: () => {
+      say(t("methods.removed"));
+      void queries.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (e) => {
+      fail(e, CODES);
+    },
+  });
   return (
     <Panel
       aria-labelledby="approvers-heading"
@@ -45,7 +59,7 @@ export function Approvers(): ReactElement {
       description={t("approvers.intro")}
     >
       {region}
-      {list === null ? (
+      {list === undefined ? (
         <Loading />
       ) : list.approvers.length === 0 ? (
         <Nothing>{t("approvers.none")}</Nothing>
@@ -63,18 +77,7 @@ export function Approvers(): ReactElement {
                   size="sm"
                   aria-label={`${t("approvers.remove")}: ${a.name}`}
                   onClick={() => {
-                    void json(
-                      frontend(`/v1/approvers/${encodeURIComponent(a.id)}/retire`, {
-                        method: "POST",
-                      }),
-                    )
-                      .then(() => {
-                        say(t("methods.removed"));
-                        reload();
-                      })
-                      .catch((e: unknown) => {
-                        fail(e, CODES);
-                      });
+                    retire.mutate(a.id);
                   }}
                 >
                   {t("approvers.remove")}

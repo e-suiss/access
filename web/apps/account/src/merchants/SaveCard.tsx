@@ -8,6 +8,7 @@ import { payment } from "@access/ui";
 import { Alert } from "@access/ui/components/alert";
 import { Card, CardContent } from "@access/ui/components/card";
 import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { commitMeta, type Revoking } from "../lib/adp.js";
 import { fromB64url } from "../lib/api.js";
@@ -15,26 +16,23 @@ import { at, catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance } from "../lib/instance.js";
 
 /** What the merchant hands the page in `#request=<base64url JSON>`. */
-interface Request {
-  readonly merchant: string;
+const Request = v.object({
+  merchant: v.string(),
   /** The merchant's Party, base64url. */
-  readonly party: string;
+  party: v.string(),
   /** The customer's self-anchor the Grant rests on. */
-  readonly anchor: string;
+  anchor: v.string(),
   /** The canonical authority JSON of the Grant. */
-  readonly authority: unknown;
-}
+  authority: v.unknown(),
+});
+type Request = v.InferOutput<typeof Request>;
 
 function requestOf(hash: string): Request | undefined {
   const raw = new URLSearchParams(hash.replace(/^#/, "")).get("request");
   if (raw === null) return undefined;
   try {
-    const v = JSON.parse(new TextDecoder().decode(fromB64url(raw))) as Record<string, unknown>;
-    const { merchant, party, anchor, authority } = v;
-    if (typeof merchant !== "string" || typeof party !== "string" || typeof anchor !== "string") {
-      return undefined;
-    }
-    return { merchant, party, anchor, authority };
+    const r = v.safeParse(Request, JSON.parse(new TextDecoder().decode(fromB64url(raw))));
+    return r.success ? r.output : undefined;
   } catch {
     return undefined;
   }

@@ -8,12 +8,12 @@ import { loadKernel } from "@esuiss/access";
 import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, draftChange, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, draftChange, type WriteResult } from "../lib/admin.js";
 import { b64url, call, fromB64url, Problem } from "../lib/api.js";
 import { decodedStatement, nonce, NotSigned, sign } from "../lib/instance.js";
 import { type Basis, metaWrite, type MetaResult } from "../lib/meta.js";
 import { ACTIONS, Failure, FORM, HINT, MONO, Notice, ROW, ROWLIST } from "../ui.js";
-import { at, type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Review {
   readonly name: string;
@@ -81,11 +81,13 @@ async function keep(ctx: Ctx, review: string, grant: string): Promise<boolean> {
 
 function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const items = useLoad(() =>
-    adminGet<Page<Item>>(
-      ctx.instance,
-      `envs/${environment}/reviews/${encodeURIComponent(review)}/items`,
-    ),
+  const items = useLoad(
+    readKey(ctx, `envs/${environment}/reviews/${encodeURIComponent(review)}/items`),
+    () =>
+      adminGetAs<Page<Item>>(
+        ctx.instance,
+        `envs/${environment}/reviews/${encodeURIComponent(review)}/items`,
+      ),
   );
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const [k, runKeep] = useRun<boolean>();
@@ -168,8 +170,8 @@ function Items({ ctx, review }: { readonly ctx: Ctx; readonly review: string }):
 /** The access review screen. */
 export function Reviews({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const reviews = useLoad(() =>
-    adminGet<Page<Review>>(ctx.instance, `envs/${environment}/reviews`),
+  const reviews = useLoad(readKey(ctx, `envs/${environment}/reviews`), () =>
+    adminGetAs<Page<Review>>(ctx.instance, `envs/${environment}/reviews`),
   );
   const [name, setName] = useState("");
   const [period, setPeriod] = useState("90");

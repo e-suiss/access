@@ -5,7 +5,9 @@ import { Button } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
@@ -13,38 +15,43 @@ import { Loading, Meta, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer } from "./common.js";
 
 /** What `GET /v1/me/handles` answers. */
-export interface HandleList {
-  readonly handles: readonly {
-    readonly id: string;
-    readonly handle: string;
-    readonly kind: string;
-    readonly state: string;
-    readonly shown: boolean;
-  }[];
-}
+export const HandleList = v.object({
+  handles: v.array(
+    v.object({
+      id: v.string(),
+      handle: v.string(),
+      kind: v.string(),
+      state: v.string(),
+      shown: v.boolean(),
+    }),
+  ),
+});
+export type HandleList = v.InferOutput<typeof HandleList>;
+
+const KEY = ["handles"] as const;
 
 /** "Your names". */
 export function Handles(): ReactElement {
-  const [list, setList] = useState<HandleList | null>(null);
+  const queries = useQueryClient();
   const [draft, setDraft] = useState("");
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<HandleList>(frontend("/v1/me/handles"))
-      .then(setList)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const { data: list, error } = useQuery({
+    queryKey: KEY,
+    queryFn: () => json(frontend("/v1/me/handles"), HandleList),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const write = useMutation({
+    mutationFn: ({ path, body }: { readonly path: string; readonly body?: unknown }) =>
+      json(frontend(path, body === undefined ? { method: "POST" } : { method: "POST", body })),
+    onSuccess: () => {
+      say(t("handle.title"));
+      void queries.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (e) => {
+      fail(e);
+    },
+  });
   const post = (path: string, body?: unknown): void => {
-    void json(frontend(path, body === undefined ? { method: "POST" } : { method: "POST", body }))
-      .then(() => {
-        say(t("handle.title"));
-        reload();
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      });
+    write.mutate(body === undefined ? { path } : { path, body });
   };
   return (
     <Panel
@@ -55,7 +62,7 @@ export function Handles(): ReactElement {
       description={t("handle.intro")}
     >
       {region}
-      {list === null ? (
+      {list === undefined ? (
         <Loading />
       ) : (
         list.handles.length > 0 && (

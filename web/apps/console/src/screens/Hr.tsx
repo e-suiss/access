@@ -10,10 +10,10 @@ import { Input } from "@access/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { search } from "../lib/adp.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface HrSource {
   readonly name: string;
@@ -104,13 +104,13 @@ function accepted(report: SourcesReport | undefined, issuer: string): boolean {
 /** The HR screen. */
 export function Hr({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const sources = useLoad(() =>
-    adminGet<Page<HrSource>>(ctx.instance, `envs/${environment}/hr-sources`),
+  const sources = useLoad(readKey(ctx, `envs/${environment}/hr-sources`), () =>
+    adminGetAs<Page<HrSource>>(ctx.instance, `envs/${environment}/hr-sources`),
   );
-  const connectors = useLoad(() =>
-    adminGet<Page<HrConnector>>(ctx.instance, `envs/${environment}/hr-connectors`),
+  const connectors = useLoad(readKey(ctx, `envs/${environment}/hr-connectors`), () =>
+    adminGetAs<Page<HrConnector>>(ctx.instance, `envs/${environment}/hr-connectors`),
   );
-  const report = useLoad(() =>
+  const report = useLoad(readKey(ctx, "hr-sources-report"), () =>
     search<SourcesReport>(ctx.instance, "sources", {}).then((a) => a.results[0]),
   );
   const [name, setName] = useState("");

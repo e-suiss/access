@@ -4,13 +4,16 @@
 // decoded it, and only then signed on the viewer's own basis for the action and sent as one
 // `idp.platform.*` Exercise.
 import { loadKernel } from "@esuiss/access";
+import * as v from "valibot";
 
-import { search } from "./adp.js";
-import { call, fromB64url, Problem } from "./api.js";
-import { draftHolds, type IntentDraft, problemOf, type WriteResult } from "./admin.js";
+import { Eligibility, holdings } from "./adp.js";
+import { answer, call, fromB64url, Problem } from "./api.js";
+import { draftHolds, IntentDraft, WriteResult } from "./admin.js";
 import { adminWrite, type Confirm, type Instance, NotSigned, readProof } from "./instance.js";
 import { draft } from "./intents.js";
-import { type Basis, basisCbor, type HoldingRef } from "./meta.js";
+import { type Basis, basisCbor } from "./meta.js";
+
+const RootBasis = v.looseObject({ anchor: v.string() });
 
 /** The platform actions (`idp.platform.*`). */
 export type PlatformAction = "tenant_create" | "environment_create" | "sandbox_create";
@@ -25,15 +28,11 @@ export interface PlatformChange {
   readonly body: Readonly<Record<string, unknown>>;
 }
 
-interface HeldGrant extends HoldingRef {
-  readonly actions: readonly { readonly namespace?: string; readonly name?: string }[];
-}
-
 async function eligibleOn(subject: string, set: unknown): Promise<boolean> {
   const r = await call("/proxy/adp/eligibility:check", { method: "POST", body: { subject, set } });
   if (!r.ok) return false;
-  const v = (await r.json()) as { eligible?: unknown };
-  return v.eligible === true;
+  const a = v.safeParse(Eligibility, await r.json());
+  return a.success && a.output.eligible === true;
 }
 
 /**
@@ -60,11 +59,10 @@ export async function platformBasis(
     const probe = d.probe;
     if (probe === undefined) return undefined;
     if (await eligibleOn(subject, { ...probe, intent: d.intent })) {
-      const root = probe["basis"] as { readonly anchor?: unknown } | undefined;
-      return typeof root?.anchor === "string" ? { anchor: root.anchor } : undefined;
+      const root = v.safeParse(RootBasis, probe["basis"]);
+      return root.success ? { anchor: root.output.anchor } : undefined;
     }
-    const held = await search<HeldGrant>(instance, "holdings", {});
-    for (const h of held.results) {
+    for (const h of await holdings(instance)) {
       if (!h.actions.some((a) => a.namespace === "idp.platform" && a.name === action)) continue;
       const holding = { grant: h.grant, holder: h.holder, since: h.since };
       if (await eligibleOn(subject, { ...probe, basis: { holding }, intent: d.intent })) {
@@ -87,8 +85,7 @@ async function draftPlatform(instance: Instance, c: PlatformChange): Promise<Int
     body,
     headers: { "x-access-ais": await readProof(instance, "POST", `/admin/v1/${path}`) },
   });
-  if (!r.ok) throw await problemOf(r);
-  return (await r.json()) as IntentDraft;
+  return answer(r, IntentDraft);
 }
 
 /** Drafts, checks, shows and, once the user signs, sends `c`; resolves with the Exercise. */
@@ -116,6 +113,5 @@ export async function platformChange(
     undefined,
     basisCbor(k, basis),
   );
-  if (!r.ok) throw await problemOf(r);
-  return (await r.json()) as WriteResult;
+  return answer(r, WriteResult);
 }

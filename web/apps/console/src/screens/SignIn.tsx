@@ -4,7 +4,8 @@ import { Button } from "@access/ui/components/button";
 import { Card, CardContent, CardHeader } from "@access/ui/components/card";
 
 import { t, type Key } from "../i18n/index.js";
-import { HOME, startSignIn } from "../lib/paths.js";
+import { BASE } from "../lib/links.js";
+import { startSignIn } from "../lib/remember.js";
 import { MONO, Notice } from "../ui.js";
 
 const REASONS: Readonly<Record<string, Key>> = {
@@ -85,7 +86,7 @@ export function NoEnvironment(): ReactElement {
     <Frame title={t("noEnvironmentTitle")}>
       <p className="text-muted-foreground">{t("noEnvironmentText")}</p>
       <p className={`${MONO} break-all`} data-testid="console-link-shape">
-        {`${location.origin}${HOME}/<environment>`}
+        {`${location.origin}${BASE}/<environment>`}
       </p>
     </Frame>
   );

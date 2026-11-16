@@ -3,7 +3,7 @@
 // produced, and asks the browser for a `payment.get` assertion over H(AAS) with exactly those
 // values; the server refuses any other bytes. Without SPC in the browser or the request, it is a
 // passkey assertion over the same statement.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Button } from "@access/ui/components/button";
 
@@ -99,13 +99,15 @@ export function Spc() {
   const [busy, setBusy] = useState(false);
   const title = useRef<HTMLHeadingElement>(null);
 
-  useEffect(() => {
+  const start = useEffectEvent(() => {
     void call("/v1/approve/flows", call_).then(async (r) => {
       // OP-157 m.3 (l)
       if (r.status === 201) setState({ phase: "ready", started: (await r.json()) as SpcStarted });
       else setState({ phase: "failed" });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    start();
   }, []);
 
   useEffect(() => {

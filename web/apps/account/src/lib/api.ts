@@ -1,5 +1,6 @@
 // OP-153 m.3 (w), TN-131: the account pages speak to their BFF and to the environment's Frontend API,
 // both on the environment's own origin; every state change carries the session's CSRF token.
+import * as v from "valibot";
 
 const SLUG = /^\/env\/([a-z0-9-]+)\/account(?:\/|$)/.exec(location.pathname)?.[1];
 
@@ -65,38 +66,52 @@ export function frontend(path: string, c: Call = {}): Promise<Response> {
   return send(`${FRONTEND}${path}`, c, true);
 }
 
+const ProblemBody = v.object({ code: v.optional(v.string()), type: v.optional(v.string()) });
+
 async function problemOf(r: Response): Promise<Problem> {
-  try {
-    const p = (await r.json()) as { code?: unknown; type?: unknown };
-    if (typeof p.code === "string") return new Problem(r.status, p.code);
-    if (typeof p.type === "string") return new Problem(r.status, p.type.split(":").pop() ?? "");
-  } catch {
-    return new Problem(r.status, "unknown");
-  }
+  const p = v.safeParse(ProblemBody, await r.json().catch(() => null));
+  if (!p.success) return new Problem(r.status, "unknown");
+  if (p.output.code !== undefined) return new Problem(r.status, p.output.code);
+  if (p.output.type !== undefined)
+    return new Problem(r.status, p.output.type.split(":").pop() ?? "");
   return new Problem(r.status, "unknown");
 }
 
-/** The JSON of a 2xx answer; anything else throws its [`Problem`]. */
-export async function json<T>(r: Response | Promise<Response>): Promise<T> {
+/** The code of an answer whose JSON is not what the page reads: shown as any other failure. */
+export const MALFORMED = "malformed-answer";
+
+/** A 2xx answer's JSON checked against `schema`; anything else throws its [`Problem`]. */
+export async function json<S extends v.GenericSchema>(
+  r: Response | Promise<Response>,
+  schema: S,
+): Promise<v.InferOutput<S>>;
+/** A 2xx answer whose body the page does not read; anything else throws its [`Problem`]. */
+export async function json(r: Response | Promise<Response>): Promise<unknown>;
+export async function json(
+  r: Response | Promise<Response>,
+  schema?: v.GenericSchema,
+): Promise<unknown> {
   const answer = await r;
   if (!answer.ok) throw await problemOf(answer);
-  if (answer.status === 204) return undefined as T;
-  return (await answer.json()) as T;
+  if (schema === undefined) return undefined;
+  const body: unknown = answer.status === 204 ? undefined : await answer.json().catch(() => null);
+  const parsed = v.safeParse(schema, body);
+  if (!parsed.success) throw new Problem(answer.status, MALFORMED);
+  return parsed.output;
 }
 
-/** What `GET …/account/api/session` answers. */
-export interface SessionInfo {
-  readonly environment: string;
-  readonly domain: string;
-  readonly account: string;
-  readonly expires_at: string;
-  readonly party: string | null;
-  readonly instance: string | null;
-  readonly instance_id: string | null;
-  readonly step_up_needed: boolean;
-  readonly pep: string;
-  readonly api: string;
-  readonly frontend: string;
+/** What the account pages read of `GET …/account/api/session`. */
+export const SessionInfo = v.object({
+  environment: v.string(),
+  account: v.string(),
+  instance: v.nullable(v.string()),
+  pep: v.string(),
+});
+export type SessionInfo = v.InferOutput<typeof SessionInfo>;
+
+/** Who is signed in. */
+export function session(): Promise<SessionInfo> {
+  return json(call("/session"), SessionInfo);
 }
 
 export function b64url(bytes: Uint8Array): string {

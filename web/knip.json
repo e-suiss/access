@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {},
+    "apps/*": {
+      "entry": ["e2e/**/*.{ts,tsx}"]
+    },
+    "packages/ui": {
+      "entry": ["src/**/*.test.{ts,tsx}"]
+    }
+  },
+  "ignoreIssues": {
+    "packages/ui/src/access/delegation/model.ts": ["duplicates"]
+  }
+}

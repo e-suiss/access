@@ -8,9 +8,9 @@ import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FACTS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Host {
   readonly name: string;
@@ -32,8 +32,8 @@ const hours = (s: number): string => String(Math.round((s / 3600) * 10) / 10);
 /** The Linux client screen. */
 export function Linux({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const hosts = useLoad(() =>
-    adminGet<Page<Host>>(ctx.instance, `envs/${environment}/linux-hosts`),
+  const hosts = useLoad(readKey(ctx, `envs/${environment}/linux-hosts`), () =>
+    adminGetAs<Page<Host>>(ctx.instance, `envs/${environment}/linux-hosts`),
   );
   const [name, setName] = useState("");
   const [group, setGroup] = useState("");

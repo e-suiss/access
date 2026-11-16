@@ -8,22 +8,27 @@
   "packageManager": "pnpm@11.24.0+sha512.bd27e345e976dcb0be0b7a1228217b049a817e21b1f355c90dbe7dc46671895a8bc1e6d06c24554505ea93ea0b45f489a27ec1bfbc8de6a9659fca0f16fa0000",
   "scripts": {
     "lint": "turbo run lint",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build",
-    "check": "turbo run lint typecheck //#format:check"
+    "knip": "knip",
+    "check": "turbo run lint typecheck //#format:check //#knip",
+    "size": "turbo run //#size:check",
+    "size:check": "size-limit"
   },
   "engines": {
     "node": ">=24",
     "pnpm": ">=11.24"
   },
   "devDependencies": {
-    "@types/node": "25.9.9",
-    "eslint": "10.11.0",
-    "prettier": "3.9.9",
+    "@biomejs/biome": "2.6.6",
+    "@size-limit/file": "14.3.0",
+    "@types/node": "catalog:",
+    "knip": "6.44.2",
+    "size-limit": "14.3.0",
     "turbo": "2.11.10",
-    "typescript": "6.0.3"
+    "typescript": "catalog:"
   }
 }

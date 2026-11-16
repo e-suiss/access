@@ -18,7 +18,7 @@ import {
 import { Textarea } from "@access/ui/components/textarea";
 
 import { t, type Key } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { check, explain, type Explained, search, type SearchAnswer } from "../lib/adp.js";
 import type { Wanted } from "../lib/intents.js";
 import {
@@ -29,7 +29,7 @@ import {
   type Published,
 } from "../lib/meta.js";
 import { Explanation } from "./Explanation.js";
-import { Advisory, type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { Advisory, type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 import { type Publication, PublicationView } from "./Reports.js";
 import { ACTIONS, BULLETS, FORM, H4, HINT, MONO, Notice } from "../ui.js";
 
@@ -370,11 +370,13 @@ function Deliveries({
   readonly base: string;
   readonly webhook: string;
 }): ReactElement {
-  const l = useLoad(() =>
-    adminGet<Items<Delivery>>(
-      ctx.instance,
-      `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`,
-    ),
+  const l = useLoad(
+    readKey(ctx, `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`),
+    () =>
+      adminGetAs<Items<Delivery>>(
+        ctx.instance,
+        `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`,
+      ),
   );
   return (
     <Show l={l}>
@@ -403,9 +405,15 @@ function Deliveries({
 /** §8.11, Ek B 3109: OAuth terms only as "OAuth grant type"; hooks and webhooks of the environment. */
 export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const base = `envs/${encodeURIComponent(ctx.session.environment)}`;
-  const clients = useLoad(() => adminGet<Items<Client>>(ctx.instance, `${base}/clients`));
-  const hooks = useLoad(() => adminGet<Items<Hook>>(ctx.instance, `${base}/hooks`));
-  const webhooks = useLoad(() => adminGet<Items<Webhook>>(ctx.instance, `${base}/webhooks`));
+  const clients = useLoad(readKey(ctx, `${base}/clients`), () =>
+    adminGetAs<Items<Client>>(ctx.instance, `${base}/clients`),
+  );
+  const hooks = useLoad(readKey(ctx, `${base}/hooks`), () =>
+    adminGetAs<Items<Hook>>(ctx.instance, `${base}/hooks`),
+  );
+  const webhooks = useLoad(readKey(ctx, `${base}/webhooks`), () =>
+    adminGetAs<Items<Webhook>>(ctx.instance, `${base}/webhooks`),
+  );
   return (
     <>
       <p>{t("integrationsIntro")}</p>
@@ -584,15 +592,15 @@ interface EnvironmentMetadata {
 
 /** D7, L25, X21: the domains the lab can ask: this one and its tenant's sandbox domains. */
 function useDomains(ctx: Ctx) {
-  return useLoad(async () => {
+  return useLoad(readKey(ctx, "lab-domains"), async () => {
     const own = [{ slug: ctx.session.environment, domain: ctx.session.domain }];
     try {
-      const m = await adminGet<EnvironmentMetadata>(
+      const m = await adminGetAs<EnvironmentMetadata>(
         ctx.instance,
         `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
       );
       if (m.tenant_id === undefined) return own;
-      const s = await adminGet<Sandbox>(
+      const s = await adminGetAs<Sandbox>(
         ctx.instance,
         `platform/tenants/${encodeURIComponent(m.tenant_id)}/sandbox-domains`,
       );

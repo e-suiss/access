@@ -5,6 +5,7 @@
 // browser after the signature screen. It is shown paid only once Access answers with the record.
 import { loadKernel, pay } from "@esuiss/access";
 import { honesty } from "@access/ui";
+import * as v from "valibot";
 
 import { API, b64url, fromB64url } from "../lib/api.js";
 import {
@@ -29,23 +30,22 @@ export interface PaymentRequest {
   readonly merchant: string;
 }
 
+const Request = v.object({
+  envelope: v.string(),
+  intent: v.record(v.string(), v.unknown()),
+  anchor: v.string(),
+  merchant: v.string(),
+});
+
+const Wired = v.object({ action: v.object({ namespace: v.string(), name: v.string() }) });
+
 /** The request in the page's fragment `#request=<base64url JSON>`, never sent to a server. */
 export function requestOf(hash: string): PaymentRequest | undefined {
   const raw = new URLSearchParams(hash.replace(/^#/, "")).get("request");
   if (raw === null) return undefined;
   try {
-    const v = JSON.parse(new TextDecoder().decode(fromB64url(raw))) as Record<string, unknown>;
-    const { envelope, intent, anchor, merchant } = v;
-    if (
-      typeof envelope !== "string" ||
-      typeof anchor !== "string" ||
-      typeof merchant !== "string" ||
-      typeof intent !== "object" ||
-      intent === null
-    ) {
-      return undefined;
-    }
-    return { envelope, intent: intent as Record<string, unknown>, anchor, merchant };
+    const r = v.safeParse(Request, JSON.parse(new TextDecoder().decode(fromB64url(raw))));
+    return r.success ? r.output : undefined;
   } catch {
     return undefined;
   }
@@ -56,10 +56,11 @@ export async function decode(r: PaymentRequest): Promise<pay.OneTime | pay.NotOn
   const k = await loadKernel();
   try {
     const described = JSON.parse(k.describeIntent(fromB64url(r.envelope))) as pay.DescribedIntent;
-    const wired = r.intent["action"] as Record<string, unknown> | undefined;
+    const wired = v.safeParse(Wired, r.intent);
     if (
-      wired?.["namespace"] !== described.action.namespace ||
-      wired["name"] !== described.action.name
+      !wired.success ||
+      wired.output.action.namespace !== described.action.namespace ||
+      wired.output.action.name !== described.action.name
     ) {
       return "authority_change";
     }

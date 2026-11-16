@@ -270,6 +270,10 @@ web-test: wasm
     cd sdks/typescript && npm test
     cd web && pnpm run test
 
+# OP-159 m.46 (h): each app's built JavaScript stays within its size-limit budget (web/.size-limit.json)
+web-size: wasm
+    cd web && pnpm run size
+
 # OP-151 m.3 (g), TN-112 item 8: the SDK types are generated from the contracts and committed
 sdk-types-check:
     cd sdks/typescript && npm run gen

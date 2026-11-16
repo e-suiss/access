@@ -4,62 +4,73 @@
 // records or settings: managing an environment means signing in to it. Each creation is one signed
 // `idp.platform.*` Exercise on the viewer's own Grant. OP-159 m.42 (d): each environment shows its
 // console link.
-import { useEffect, useState, type ReactElement } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@access/ui/components/table";
 
+import { DataTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";
-import { adminGet, type WriteResult } from "../lib/admin.js";
-import { consoleHref, consoleLink } from "../lib/paths.js";
+import { adminGet, items, type WriteResult } from "../lib/admin.js";
+import { consoleLink } from "../lib/links.js";
 import { platformChange, type PlatformChange } from "../lib/platform.js";
 import { ACTIONS, CHOICE, CHOICE_LABEL, FORM, HINT, MONO, Notice, ROWS } from "../ui.js";
-import { at, type Ctx, Field, type Loaded, Panel, Show, useRun } from "./parts.js";
+import {
+  at,
+  type Ctx,
+  Field,
+  type Loaded,
+  loaded,
+  Panel,
+  readKey,
+  Show,
+  useLoad,
+  useRun,
+} from "./parts.js";
 
-interface Tenant {
-  readonly tenant_id: string;
-  readonly status: string;
-  readonly placement: string;
-  readonly created_at?: string;
-}
+const Tenant = v.looseObject({
+  tenant_id: v.string(),
+  status: v.string(),
+  placement: v.string(),
+  created_at: v.exactOptional(v.string()),
+});
 
-interface EnvironmentMeta {
-  readonly slug: string;
-  readonly tenant_id?: string;
-  readonly issuer?: string | null;
-  readonly status?: string;
-  readonly placement?: string;
-  readonly domain?: string;
-  readonly sandbox?: boolean;
-  readonly budget?: {
-    readonly exercises_per_day: string;
-    readonly projections_per_day: string;
-  } | null;
-  readonly created_at?: string;
-  readonly key_state?: "pending" | "published" | "signing" | "unavailable";
-  readonly signing_available_at?: string | null;
-  readonly kex_share?: string;
-}
+type Tenant = v.InferOutput<typeof Tenant>;
 
-interface Health {
-  readonly status: "ready" | "degraded";
-  readonly checks: readonly { readonly name: string; readonly ok: boolean }[];
-}
+const KeyState = v.picklist(["pending", "published", "signing", "unavailable"]);
 
-interface Items<T> {
-  readonly items: readonly T[];
-}
+const EnvironmentMeta = v.looseObject({
+  slug: v.string(),
+  tenant_id: v.exactOptional(v.string()),
+  issuer: v.exactOptional(v.nullable(v.string())),
+  status: v.exactOptional(v.string()),
+  placement: v.exactOptional(v.string()),
+  domain: v.exactOptional(v.string()),
+  sandbox: v.exactOptional(v.boolean()),
+  budget: v.exactOptional(
+    v.nullable(v.looseObject({ exercises_per_day: v.string(), projections_per_day: v.string() })),
+  ),
+  created_at: v.exactOptional(v.string()),
+  key_state: v.exactOptional(KeyState),
+  signing_available_at: v.exactOptional(v.nullable(v.string())),
+  kex_share: v.exactOptional(v.string()),
+});
+
+type EnvironmentMeta = v.InferOutput<typeof EnvironmentMeta>;
+
+const Health = v.looseObject({
+  status: v.picklist(["ready", "degraded"]),
+  checks: v.array(v.looseObject({ name: v.string(), ok: v.boolean() })),
+});
+
+const Tenants_ = items(Tenant);
+
+const Environments_ = items(EnvironmentMeta);
 
 function keyState(s: EnvironmentMeta["key_state"]): string {
   if (s === "pending") return t("platformKeyPending");
@@ -80,22 +91,25 @@ function Recorded({ w }: { readonly w: Loaded<WriteResult> }): ReactElement {
 /** OP-159 m.42 (d): the console link of environment `slug`. */
 function ConsoleLink({ slug }: { readonly slug: string }): ReactElement {
   return (
-    <a
-      href={consoleHref(slug)}
+    <Link
+      to="/$environment"
+      params={{ environment: slug }}
       data-testid="environment-console-link"
       className={`${MONO} break-all text-primary underline underline-offset-2 hover:text-foreground`}
     >
       {consoleLink(slug)}
-    </a>
+    </Link>
   );
 }
 
-/** The tenants, read again whenever `version` changes. */
-function useTenants(ctx: Ctx, version: number): Loaded<Items<Tenant>> {
-  const [list, load] = useRun<Items<Tenant>>();
-  useEffect(() => {
-    load(() => adminGet<Items<Tenant>>(ctx.instance, "platform/tenants"));
-  }, [load, ctx.instance, version]);
+/** The key of the tenants read, which a new tenant invalidates. */
+function tenantsKey(ctx: Ctx) {
+  return readKey(ctx, "platform/tenants");
+}
+
+/** The tenants. */
+function useTenants(ctx: Ctx): Loaded<v.InferOutput<typeof Tenants_>> {
+  const list = useLoad(tenantsKey(ctx), () => adminGet(ctx.instance, "platform/tenants", Tenants_));
   return list;
 }
 
@@ -137,10 +151,9 @@ function TenantPicker({
 
 /** Platform ▸ Tenants: every tenant and a new one. */
 export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const [version, setVersion] = useState(0);
-  const list = useTenants(ctx, version);
+  const list = useTenants(ctx);
   const [placement, setPlacement] = useState("");
-  const [w, write] = useRun<WriteResult>();
+  const [w, write] = useRun<WriteResult>([tenantsKey(ctx)]);
   return (
     <div data-testid="platform-tenants" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("platformTenantsIntro")}</p>
@@ -149,27 +162,29 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
           p.items.length === 0 ? (
             <p className={HINT}>{t("none")}</p>
           ) : (
-            <Table data-testid="tenant-list" className="caption-top">
-              <TableCaption className="sr-only">{t("screenTenants")}</TableCaption>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead scope="col">{t("platformTenant")}</TableHead>
-                  <TableHead scope="col">{t("platformStatus")}</TableHead>
-                  <TableHead scope="col">{t("platformPlacement")}</TableHead>
-                  <TableHead scope="col">{t("platformCreated")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {p.items.map((x) => (
-                  <TableRow key={x.tenant_id}>
-                    <TableCell className={MONO}>{x.tenant_id}</TableCell>
-                    <TableCell>{x.status}</TableCell>
-                    <TableCell className={MONO}>{x.placement}</TableCell>
-                    <TableCell>{at(x.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              data-testid="tenant-list"
+              caption={t("screenTenants")}
+              label={t("screenTenants")}
+              rows={p.items}
+              rowKey={(x) => x.tenant_id}
+              columns={[
+                {
+                  id: "tenant",
+                  header: t("platformTenant"),
+                  className: MONO,
+                  cell: (x) => x.tenant_id,
+                },
+                { id: "status", header: t("platformStatus"), cell: (x) => x.status },
+                {
+                  id: "placement",
+                  header: t("platformPlacement"),
+                  className: MONO,
+                  cell: (x) => x.placement,
+                },
+                { id: "created", header: t("platformCreated"), cell: (x) => at(x.created_at) },
+              ]}
+            />
           )
         }
       </Show>
@@ -180,16 +195,14 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
           onSubmit={(e) => {
             e.preventDefault();
             const body: Record<string, unknown> = placement === "" ? {} : { placement };
-            write(async () => {
-              const r = await platformChange(ctx.instance, ctx.confirm, ctx.session.environment, {
+            write(() =>
+              platformChange(ctx.instance, ctx.confirm, ctx.session.environment, {
                 operation: "createTenant",
                 action: "tenant_create",
                 path: "platform/tenants",
                 body,
-              });
-              setVersion((v) => v + 1);
-              return r;
-            });
+              }),
+            );
           }}
         >
           <Field
@@ -400,12 +413,9 @@ function EnvironmentDetails({
   readonly ctx: Ctx;
   readonly slug: string;
 }): ReactElement {
-  const [m, load] = useRun<EnvironmentMeta>();
-  useEffect(() => {
-    load(() =>
-      adminGet<EnvironmentMeta>(ctx.instance, `platform/envs/${encodeURIComponent(slug)}`),
-    );
-  }, [load, ctx.instance, slug]);
+  const m = useLoad(readKey(ctx, "platform/envs", slug), () =>
+    adminGet(ctx.instance, `platform/envs/${encodeURIComponent(slug)}`, EnvironmentMeta),
+  );
   return (
     <Show l={m}>
       {(r) => (
@@ -479,23 +489,24 @@ function TenantEnvironments({
   readonly ctx: Ctx;
   readonly sandbox: boolean;
 }): ReactElement {
-  const [version, setVersion] = useState(0);
-  const tenants = useTenants(ctx, 0);
+  const client = useQueryClient();
+  const tenants = useTenants(ctx);
   const [tenant, setTenant] = useState("");
   const [open, setOpen] = useState<string | undefined>(undefined);
-  const [list, load] = useRun<Items<EnvironmentMeta>>();
   const kind = sandbox ? "sandbox-domains" : "envs";
-  useEffect(() => {
-    if (tenant === "") return;
-    load(() =>
-      adminGet<Items<EnvironmentMeta>>(
+  const listKey = readKey(ctx, "platform/tenants", tenant, kind);
+  const list = useQuery({
+    queryKey: listKey,
+    queryFn: () =>
+      adminGet(
         ctx.instance,
         `platform/tenants/${encodeURIComponent(tenant)}/${kind}`,
+        Environments_,
       ),
-    );
-  }, [load, ctx.instance, tenant, kind, version]);
+    enabled: tenant !== "",
+  });
   const created = () => {
-    setVersion((v) => v + 1);
+    void client.invalidateQueries({ queryKey: listKey });
   };
   return (
     <div
@@ -520,54 +531,53 @@ function TenantEnvironments({
         )}
       </Show>
       {tenant !== "" && (
-        <Show l={list}>
+        <Show l={loaded(list)}>
           {(p) =>
             p.items.length === 0 ? (
               <p className={HINT}>{t("none")}</p>
             ) : (
-              <Table data-testid={`${kind}-list`} className="caption-top">
-                <TableCaption className="sr-only">
-                  {sandbox ? t("screenSandboxes") : t("screenEnvironments")}
-                </TableCaption>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead scope="col">{t("platformSlug")}</TableHead>
-                    <TableHead scope="col">{t("platformStatus")}</TableHead>
-                    <TableHead scope="col">{t("platformCreated")}</TableHead>
-                    {!sandbox && <TableHead scope="col">{t("platformConsoleLink")}</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {p.items.map((r) => (
-                    <TableRow key={r.slug}>
-                      <TableCell>
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant={open === r.slug ? "tinted" : "outline"}
-                            size="sm"
-                            aria-expanded={open === r.slug}
-                            onClick={() => {
-                              setOpen(open === r.slug ? undefined : r.slug);
-                            }}
-                          >
-                            <span className={MONO}>{r.slug}</span>
-                          </Button>
-                          {r.sandbox === true && (
-                            <Badge variant="outline">{t("platformSandbox")}</Badge>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>{r.status ?? ""}</TableCell>
-                      <TableCell>{at(r.created_at)}</TableCell>
-                      {!sandbox && (
-                        <TableCell className="whitespace-normal">
-                          <ConsoleLink slug={r.slug} />
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable
+                data-testid={`${kind}-list`}
+                caption={sandbox ? t("screenSandboxes") : t("screenEnvironments")}
+                label={sandbox ? t("screenSandboxes") : t("screenEnvironments")}
+                rows={p.items}
+                rowKey={(r) => r.slug}
+                columns={[
+                  {
+                    id: "slug",
+                    header: t("platformSlug"),
+                    cell: (r) => (
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant={open === r.slug ? "tinted" : "outline"}
+                          size="sm"
+                          aria-expanded={open === r.slug}
+                          onClick={() => {
+                            setOpen(open === r.slug ? undefined : r.slug);
+                          }}
+                        >
+                          <span className={MONO}>{r.slug}</span>
+                        </Button>
+                        {r.sandbox === true && (
+                          <Badge variant="outline">{t("platformSandbox")}</Badge>
+                        )}
+                      </span>
+                    ),
+                  },
+                  { id: "status", header: t("platformStatus"), cell: (r) => r.status ?? "" },
+                  { id: "created", header: t("platformCreated"), cell: (r) => at(r.created_at) },
+                  ...(sandbox
+                    ? []
+                    : [
+                        {
+                          id: "link",
+                          header: t("platformConsoleLink"),
+                          className: "whitespace-normal",
+                          cell: (r: EnvironmentMeta) => <ConsoleLink slug={r.slug} />,
+                        },
+                      ]),
+                ]}
+              />
             )
           }
         </Show>
@@ -594,10 +604,9 @@ export function Sandboxes({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 /** Platform ▸ Operator health: the deployment's readiness checks, by name. */
 export function Operator({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const [h, load] = useRun<Health>();
-  useEffect(() => {
-    load(() => adminGet<Health>(ctx.instance, "platform/operator/health"));
-  }, [load, ctx.instance]);
+  const h = useLoad(readKey(ctx, "platform/operator/health"), () =>
+    adminGet(ctx.instance, "platform/operator/health", Health),
+  );
   return (
     <div data-testid="platform-operator" className="flex flex-col gap-4">
       <p className="text-muted-foreground">{t("platformOperatorIntro")}</p>

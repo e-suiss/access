@@ -8,9 +8,9 @@ import { Field as FieldRoot, FieldLabel } from "@access/ui/components/field";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { ACTIONS, FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface ProxyRow {
   readonly name: string;
@@ -30,10 +30,10 @@ interface Page<T> {
 const ENGINES = ["envoy", "caddy", "traefik", "nginx"] as const;
 
 /** The forward-auth proxies screen. */
-export function Proxy({ ctx }: { readonly ctx: Ctx }): ReactElement {
+export function Proxies({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const proxies = useLoad(() =>
-    adminGet<Page<ProxyRow>>(ctx.instance, `envs/${environment}/proxies`),
+  const proxies = useLoad(readKey(ctx, `envs/${environment}/proxies`), () =>
+    adminGetAs<Page<ProxyRow>>(ctx.instance, `envs/${environment}/proxies`),
   );
   const [name, setName] = useState("");
   const [engine, setEngine] = useState<string>("envoy");

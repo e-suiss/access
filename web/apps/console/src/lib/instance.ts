@@ -3,8 +3,9 @@
 // browser. AIS bytes are encoded by the Kernel (Wasm); WebCrypto signs them. A stolen cookie,
 // in a browser without this key, can neither write nor read authority state.
 import { loadKernel, type Kernel } from "@esuiss/access";
+import * as v from "valibot";
 
-import { b64url, call, fromB64url, json, Problem } from "./api.js";
+import { b64url, call, fromB64url, json, send } from "./api.js";
 
 const DB = "access-console";
 const STORE = "instances";
@@ -144,17 +145,17 @@ export function decodedStatement(k: Kernel, statement: Uint8Array): DecodedState
 /** A signature screen refusal: the user cancelled, or the bytes did not match the view. */
 export class NotSigned extends Error {}
 
-interface Challenge {
-  readonly challenge: string;
-  readonly domain: string;
-  readonly basis: string;
-  readonly pep?: string;
-  readonly party: string;
-  readonly valid_from: string;
-  readonly valid_until: string;
-  readonly create: string;
-  readonly register?: string;
-}
+const Challenge = v.looseObject({
+  challenge: v.string(),
+  domain: v.string(),
+  basis: v.string(),
+  pep: v.nullish(v.string()),
+  party: v.string(),
+  valid_from: v.string(),
+  valid_until: v.string(),
+  create: v.string(),
+  register: v.exactOptional(v.string()),
+});
 
 /**
  * Registers this browser as the console session's device Instance (OP-149 m.6): a fresh
@@ -174,7 +175,7 @@ export async function register(
   const [x, y] = [raw.slice(1, 33), raw.slice(33, 65)];
   const kid = k.thumbprintP256(x, y);
   const coseKey = k.coseKeyP256(x, y);
-  const c = await json<Challenge>("/instances/challenge", {
+  const c = await json("/instances/challenge", Challenge, {
     method: "POST",
     body: { key: b64url(coseKey) },
   });
@@ -213,7 +214,7 @@ export async function register(
     ais: signed[0] ?? "",
   };
   if (signed[1] !== undefined) body["register_ais"] = signed[1];
-  await json("/instances", { method: "POST", body });
+  await send("/instances", { method: "POST", body });
   const instance: Instance = {
     id: recordId(environment, account, b64url(kid)),
     key: pair.privateKey,
@@ -318,5 +319,3 @@ export async function adminWrite(
     },
   });
 }
-
-export { Problem };

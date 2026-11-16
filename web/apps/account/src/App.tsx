@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@access/ui/components/sidebar";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type ReactElement } from "react";
 
 import { AccountSettings } from "./account/index.js";
@@ -24,7 +25,7 @@ import { MerchantsPage } from "./merchants/Merchants.js";
 import { SaveCardPage } from "./merchants/SaveCard.js";
 import { OneTimePaymentPage } from "./payment/Payment.js";
 import { useSignature } from "./hub/Sign.js";
-import { call, FRONTEND, json, PAGE, Problem, type SessionInfo } from "./lib/api.js";
+import { FRONTEND, PAGE, Problem, session as readSession } from "./lib/api.js";
 import { t } from "./lib/i18n.js";
 import { find, type Instance } from "./lib/instance.js";
 import { Loading } from "./lib/ui.js";
@@ -62,27 +63,20 @@ function pathOf(s: Screen): string {
   return s === "account" ? PAGE : `${PAGE}/${s}`;
 }
 
-type Loaded =
-  | { readonly kind: "loading" }
-  | { readonly kind: "signed_out" }
-  | { readonly kind: "failed" }
-  | { readonly kind: "ready"; readonly session: SessionInfo };
-
 export function App(): ReactElement {
-  const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
-  const [instance, setInstance] = useState<Instance | undefined>(undefined);
+  const loaded = useQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const session = await readSession();
+      const found = await find(session.environment, session.account, session.instance);
+      return { session, found: found ?? null };
+    },
+  });
+  const [registered, setInstance] = useState<Instance | undefined>(undefined);
   const [screen, setScreen] = useState<Screen>(screenOf(location.pathname));
   const { confirm, dialog } = useSignature();
 
   useEffect(() => {
-    json<SessionInfo>(call("/session"))
-      .then(async (session) => {
-        setInstance(await find(session.environment, session.account, session.instance));
-        setLoaded({ kind: "ready", session });
-      })
-      .catch((e: unknown) => {
-        setLoaded({ kind: e instanceof Problem && e.status === 401 ? "signed_out" : "failed" });
-      });
     const back = () => {
       setScreen(screenOf(location.pathname));
     };
@@ -97,21 +91,22 @@ export function App(): ReactElement {
     setScreen(s);
   };
 
-  if (loaded.kind === "loading") {
+  if (loaded.isPending) {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <Loading status />
       </main>
     );
   }
-  if (loaded.kind === "failed") {
+  const signedOut = loaded.error instanceof Problem && loaded.error.status === 401;
+  if (loaded.isError && !signedOut) {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <Alert variant="destructive">{t("shell.unavailable")}</Alert>
       </main>
     );
   }
-  if (loaded.kind === "signed_out") {
+  if (loaded.isError) {
     return (
       <main className="flex min-h-svh items-center justify-center bg-muted p-4">
         <Card className="w-full max-w-sm">
@@ -128,7 +123,8 @@ export function App(): ReactElement {
       </main>
     );
   }
-  const session = loaded.session;
+  const session = loaded.data.session;
+  const instance = registered ?? loaded.data.found ?? undefined;
   return (
     <SidebarProvider className="flex-col md:flex-row">
       <Sidebar

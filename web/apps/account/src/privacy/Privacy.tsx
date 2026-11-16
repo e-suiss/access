@@ -11,7 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@access/ui/components/table";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
@@ -23,28 +25,26 @@ const TOPICS = ["campaign", "newsletter", "product_news"] as const;
 
 const LIST = "divide-y text-sm";
 
-interface Preferences {
-  readonly current: Readonly<Record<string, boolean>>;
-  readonly history: readonly {
-    readonly channel: string;
-    readonly topic: string;
-    readonly granted: boolean;
-    readonly at: string;
-  }[];
+const Preferences = v.object({
+  current: v.record(v.string(), v.boolean()),
+  history: v.array(
+    v.object({ channel: v.string(), topic: v.string(), granted: v.boolean(), at: v.string() }),
+  ),
   /** OP-156 m.3 (c): present when the environment records consent with İYS through Relay. */
-  readonly iys?: {
-    readonly channels: Readonly<
-      Record<
-        string,
-        {
-          readonly consent: "approved" | "rejected";
-          readonly status: "recorded" | "failed" | "pending";
-          readonly at: string | null;
-        }
-      >
-    >;
-  };
-}
+  iys: v.optional(
+    v.object({
+      channels: v.record(
+        v.string(),
+        v.object({
+          consent: v.picklist(["approved", "rejected"]),
+          status: v.picklist(["recorded", "failed", "pending"]),
+          at: v.nullable(v.string()),
+        }),
+      ),
+    }),
+  ),
+});
+type Preferences = v.InferOutput<typeof Preferences>;
 
 function IysView({ iys }: { readonly iys: NonNullable<Preferences["iys"]> }): ReactElement {
   return (
@@ -67,54 +67,66 @@ function IysView({ iys }: { readonly iys: NonNullable<Preferences["iys"]> }): Re
   );
 }
 
-interface Documents {
-  readonly acceptances: readonly {
-    readonly document_type: string;
-    readonly version: string;
-    readonly locale: string;
-    readonly at: string;
-  }[];
-}
+const Documents = v.object({
+  acceptances: v.array(
+    v.object({
+      document_type: v.string(),
+      version: v.string(),
+      locale: v.string(),
+      at: v.string(),
+    }),
+  ),
+});
 
-interface History {
-  readonly days: number;
-  readonly entries: readonly {
-    readonly at: string;
-    readonly category: string;
-    readonly event: string;
-  }[];
-}
+const History = v.object({
+  days: v.number(),
+  entries: v.array(v.object({ at: v.string(), category: v.string(), event: v.string() })),
+});
 
-type Deletion =
-  | { readonly scheduled: false }
-  | {
-      readonly scheduled: true;
-      readonly deleted_on: string;
-      readonly cancellable: boolean;
-      readonly statement: string;
-    };
+const Deletion = v.variant("scheduled", [
+  v.object({ scheduled: v.literal(false) }),
+  v.object({
+    scheduled: v.literal(true),
+    deleted_on: v.string(),
+    cancellable: v.boolean(),
+    statement: v.string(),
+  }),
+]);
 
-interface Requests {
-  readonly requests: readonly {
-    readonly kind: string;
-    readonly received_at: string;
-    readonly due_at: string;
-    readonly outcome?: string | null;
-  }[];
+const Requests = v.object({
+  requests: v.array(
+    v.object({
+      kind: v.string(),
+      received_at: v.string(),
+      due_at: v.string(),
+      outcome: v.optional(v.nullable(v.string())),
+    }),
+  ),
+});
+
+const PREFERENCES = "/v1/account/preferences";
+const DELETION = "/v1/account/deletion";
+
+function useRead<S extends v.GenericSchema>(path: string, schema: S): v.InferOutput<S> | undefined {
+  return useQuery({ queryKey: [path], queryFn: () => json(frontend(path), schema) }).data;
 }
 
 function PreferencesView(): ReactElement {
-  const [prefs, setPrefs] = useState<Preferences | null>(null);
-  const [draft, setDraft] = useState<Record<string, boolean>>({});
+  const queries = useQueryClient();
+  const prefs = useRead(PREFERENCES, Preferences);
+  const [edited, setDraft] = useState<Record<string, boolean> | null>(null);
   const [saved, setSaved] = useState(false);
-  const load = useCallback(() => {
-    void json<Preferences>(frontend("/v1/account/preferences")).then((p) => {
-      setPrefs(p);
-      setDraft({ ...p.current });
-    });
-  }, []);
-  useEffect(load, [load]);
-  if (prefs === null) return <Loading rows={3} />;
+  const save = useMutation({
+    mutationFn: (changes: readonly { channel: string; topic: string; granted: boolean }[]) =>
+      json(frontend(PREFERENCES, { method: "PUT", body: { changes } }), Preferences),
+    onSuccess: (p) => {
+      queries.setQueryData([PREFERENCES], p);
+      setDraft(null);
+      setSaved(true);
+    },
+  });
+  if (prefs === undefined) return <Loading rows={3} />;
+  const draft = edited ?? prefs.current;
   return (
     <Panel
       aria-label={t("privacy.preferences")}
@@ -163,18 +175,12 @@ function PreferencesView(): ReactElement {
         <Button
           onClick={() => {
             const changes = Object.entries(draft)
-              .filter(([k, v]) => prefs.current[k] !== v)
+              .filter(([k, granted]) => prefs.current[k] !== granted)
               .map(([k, granted]) => {
                 const [channel = "", topic = ""] = k.split(":");
                 return { channel, topic, granted };
               });
-            void json<Preferences>(
-              frontend("/v1/account/preferences", { method: "PUT", body: { changes } }),
-            ).then((p) => {
-              setPrefs(p);
-              setDraft({ ...p.current });
-              setSaved(true);
-            });
+            save.mutate(changes);
           }}
         >
           {t("action.save")}
@@ -201,23 +207,15 @@ function PreferencesView(): ReactElement {
   );
 }
 
-function useRead(path: string): unknown {
-  const [v, setV] = useState<unknown>(null);
-  useEffect(() => {
-    void json<unknown>(frontend(path)).then(setV);
-  }, [path]);
-  return v;
-}
-
 function DocumentsView(): ReactElement {
-  const d = useRead("/v1/account/documents") as Documents | null;
+  const d = useRead("/v1/account/documents", Documents);
   return (
     <Panel
       aria-label={t("privacy.documents")}
       data-testid="documents"
       title={t("privacy.documents")}
     >
-      {d === null ? (
+      {d === undefined ? (
         <Loading />
       ) : d.acceptances.length === 0 ? (
         <Nothing>{t("privacy.no_documents")}</Nothing>
@@ -235,14 +233,14 @@ function DocumentsView(): ReactElement {
 }
 
 function HistoryView(): ReactElement {
-  const h = useRead("/v1/account/security-history") as History | null;
+  const h = useRead("/v1/account/security-history", History);
   return (
     <Panel
       aria-label={t("privacy.security_history", { days: "90" })}
       data-testid="security-history"
       title={t("privacy.security_history", { days: String(h?.days ?? 90) })}
     >
-      {h === null ? (
+      {h === undefined ? (
         <Loading />
       ) : h.entries.length === 0 ? (
         <Nothing>{t("privacy.no_history")}</Nothing>
@@ -260,14 +258,17 @@ function HistoryView(): ReactElement {
 }
 
 function DeletionView(): ReactElement {
-  const [d, setD] = useState<Deletion | null>(null);
-  const load = useCallback(() => {
-    void json<Deletion>(frontend("/v1/account/deletion")).then(setD);
-  }, []);
-  useEffect(load, [load]);
+  const queries = useQueryClient();
+  const d = useRead(DELETION, Deletion);
+  const cancel = useMutation({
+    mutationFn: () => frontend(DELETION, { method: "DELETE" }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: [DELETION] });
+    },
+  });
   return (
     <Panel aria-label={t("privacy.deletion")} data-testid="deletion" title={t("privacy.deletion")}>
-      {d === null ? (
+      {d === undefined ? (
         <Loading rows={1} />
       ) : !d.scheduled ? (
         <Meta>{t("privacy.deletion_none")}</Meta>
@@ -283,7 +284,7 @@ function DeletionView(): ReactElement {
               <Button
                 variant="outline"
                 onClick={() => {
-                  void frontend("/v1/account/deletion", { method: "DELETE" }).then(load);
+                  cancel.mutate();
                 }}
               >
                 {t("action.cancel_deletion")}
@@ -297,14 +298,14 @@ function DeletionView(): ReactElement {
 }
 
 function RequestsView(): ReactElement {
-  const r = useRead("/v1/account/data-requests") as Requests | null;
+  const r = useRead("/v1/account/data-requests", Requests);
   return (
     <Panel
       aria-label={t("privacy.data_requests")}
       data-testid="data-requests"
       title={t("privacy.data_requests")}
     >
-      {r === null ? (
+      {r === undefined ? (
         <Loading />
       ) : r.requests.length === 0 ? (
         <Nothing>{t("privacy.no_requests")}</Nothing>

@@ -14,9 +14,9 @@ import {
 } from "@access/ui/components/table";
 
 import { t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { HINT, MONO, Notice, NUMBERED, ROWS } from "../ui.js";
-import { type Ctx, Show, useLoad } from "./parts.js";
+import { type Ctx, Show, readKey, useLoad } from "./parts.js";
 
 interface Bucket {
   readonly name: string;
@@ -52,8 +52,8 @@ const percent = (n: number) => `${String(n)}%`;
 /** The rate limits screen. */
 export function RateLimits({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const view = useLoad(() =>
-    adminGet<RateLimitsView>(ctx.instance, `envs/${environment}/rate-limits`),
+  const view = useLoad(readKey(ctx, `envs/${environment}/rate-limits`), () =>
+    adminGetAs<RateLimitsView>(ctx.instance, `envs/${environment}/rate-limits`),
   );
   return (
     <div data-testid="rate-limits" className="flex flex-col gap-4">

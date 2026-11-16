@@ -4,10 +4,10 @@ import { useState, type ReactElement } from "react";
 import { Button } from "@access/ui/components/button";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { CHOICE, CHOICE_LABEL, FORM, MONO, Notice } from "../ui.js";
-import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 type Profile = "ml-dsa-65" | "ml-dsa-44" | "ml-dsa-87";
 type KexShare = "optimistic" | "advertise-only";
@@ -179,7 +179,9 @@ function KexPanel({ ctx, v }: { readonly ctx: Ctx; readonly v: SigningView }): R
 /** The signing screen. */
 export function Signing({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const view = useLoad(() => adminGet<SigningView>(ctx.instance, `envs/${environment}/signing`));
+  const view = useLoad(readKey(ctx, `envs/${environment}/signing`), () =>
+    adminGetAs<SigningView>(ctx.instance, `envs/${environment}/signing`),
+  );
   return (
     <div data-testid="signing" className="flex flex-col gap-6">
       <p>{t("signingIntro")}</p>

@@ -18,14 +18,17 @@ pub(crate) const LANGUAGES: [&str; 3] = ["rust", "typescript", "c-ffi"];
 
 pub(crate) const RULES: u32 = 7;
 
-/// The TypeScript projects an `eslint:`, `tsconfig:` or `npmrc:` mechanism must hold in: the
-/// `web/` pnpm workspace, whose packages share its settings (OP-159 m.32), and the SDK, an
-/// independent npm package (OP-97).
+/// The TypeScript projects a `tsconfig:` or `npmrc:` mechanism must hold in: the `web/` pnpm
+/// workspace, whose packages share its settings (OP-159 m.32), and the SDK, an independent npm
+/// package (OP-97).
 pub(crate) const TS_PACKAGES: [&str; 2] = ["web", "sdks/typescript"];
 
-/// The `web/` workspace keeps the shared TypeScript and lint settings in its
-/// `packages/typescript-config` and `packages/eslint-config`, and the install settings in
-/// `pnpm-workspace.yaml` (OP-159 m.36).
+/// The TypeScript projects linted by `eslint`; `web/` is linted by Biome (OP-159 m.46 (a)).
+const ESLINT_PACKAGES: [&str; 1] = ["sdks/typescript"];
+
+/// The `web/` workspace keeps the shared TypeScript settings in its
+/// `packages/typescript-config`, the lint settings in `biome.json` and the install settings in
+/// `pnpm-workspace.yaml` (OP-159 m.36, m.46 (a)).
 const WORKSPACE: &str = "web";
 
 /// The `pnpm-workspace.yaml` lines that do what an `.npmrc` line does.
@@ -166,14 +169,18 @@ impl Repo {
         std::fs::read_to_string(self.root.join(rel)).ok()
     }
 
-    fn in_every_package(&self, file: &str, holds: &dyn Fn(&str) -> bool) -> Option<String> {
-        let lacking: Vec<&str> = TS_PACKAGES
+    fn in_every_package(
+        &self,
+        packages: &[&'static str],
+        file: &str,
+        holds: &dyn Fn(&str) -> bool,
+    ) -> Option<String> {
+        let lacking: Vec<&str> = packages
             .iter()
             .copied()
             .filter(|p| {
                 let file = match (*p == WORKSPACE, file) {
                     (true, "tsconfig.json") => "packages/typescript-config/base.json",
-                    (true, "eslint.config.js") => "packages/eslint-config/index.js",
                     _ => file,
                 };
                 self.read(&format!("{p}/{file}"))
@@ -181,6 +188,28 @@ impl Repo {
             })
             .collect();
         (!lacking.is_empty()).then(|| format!("is not in {file} of {lacking:?}"))
+    }
+
+    /// Whether `web/biome.json` sets the lint rule `rule` to `error` in one of its groups.
+    fn biome_denies(&self, rule: &str) -> bool {
+        let Some(config) = self
+            .read(&format!("{WORKSPACE}/biome.json"))
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        else {
+            return false;
+        };
+        config
+            .pointer("/linter/rules")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|groups| {
+                groups.values().any(|g| {
+                    g.get(rule).is_some_and(|v| {
+                        v.as_str()
+                            .or_else(|| v.get("level").and_then(serde_json::Value::as_str))
+                            == Some("error")
+                    })
+                })
+            })
     }
 
     fn npmrc(&self, line: &str) -> Option<String> {
@@ -234,10 +263,15 @@ impl Mechanisms for Repo {
                     .get(w)
                     .is_some_and(|jobs| jobs.iter().any(|n| n == j))
             }),
-            "eslint" => return self.in_every_package("eslint.config.js", &|t| t.contains(what)),
+            "eslint" => {
+                return self
+                    .in_every_package(&ESLINT_PACKAGES, "eslint.config.js", &|t| t.contains(what));
+            }
+            "biome" => self.biome_denies(what),
             "tsconfig" => {
                 let wanted = format!("\"{what}\": true");
-                return self.in_every_package("tsconfig.json", &|t| t.contains(&wanted));
+                return self
+                    .in_every_package(&TS_PACKAGES, "tsconfig.json", &|t| t.contains(&wanted));
             }
             "npmrc" => return self.npmrc(what),
             "file" => self.root.join(what).is_file(),
@@ -374,6 +408,8 @@ mod tests {
         assert_eq!(r.missing("semgrep:unwrap-in-non-test-code"), None);
         assert_eq!(r.missing("job:weekly/sanitizers"), None);
         assert_eq!(r.missing("tsconfig:strict"), None);
+        assert_eq!(r.missing("biome:noExplicitAny"), None);
+        assert!(r.missing("biome:noSuchRule").is_some());
         assert!(r.missing("other:x").is_some());
         let v = check(root).unwrap();
         assert_eq!(messages(&v), Vec::<&str>::new());

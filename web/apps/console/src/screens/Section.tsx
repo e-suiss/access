@@ -1,36 +1,15 @@
 // IA-5, §8.17.4.1, Ek B 2995: one section and its screens. Only the screens the viewer can
 // exercise are listed; "Sign-in settings" (environment configuration) is its own screen apart from
 // authority administration, and billing is not part of the console.
-import type { MouseEvent, ReactElement } from "react";
+import { Link } from "@tanstack/react-router";
+import type { ReactElement } from "react";
 
 import { cn } from "@access/ui/lib/utils";
 
-import { t, type Key } from "../i18n/index.js";
-import { consoleHref } from "../lib/paths.js";
-import { Page } from "../ui.js";
+import { type Key, t } from "../i18n/index.js";
 import { type Screen, SCREENS, type Section } from "../lib/sections.js";
-import * as A from "./Admin.js";
-import { Agents } from "./Agents.js";
-import * as Au from "./Audit.js";
-import * as D from "./Developer.js";
-import { Offboarding } from "./Offboarding.js";
-import * as O from "./Organizations.js";
+import { Page } from "../ui.js";
 import type { Ctx } from "./parts.js";
-import { Planned } from "./Planned.js";
-import { Durability } from "./Durability.js";
-import { Proxy } from "./Proxy.js";
-import { Placement } from "./Placement.js";
-import { RateLimits } from "./RateLimits.js";
-import { Signing } from "./Signing.js";
-import { Recovery } from "./Recovery.js";
-import { Reviews } from "./Reviews.js";
-import { SignInSettings } from "./SignInSettings.js";
-import { Export as SiemExport } from "./Export.js";
-import { Linux } from "./Linux.js";
-import { BreakGlass } from "./BreakGlass.js";
-import { Hr } from "./Hr.js";
-import * as P from "./Platform.js";
-import { Ssh } from "./Ssh.js";
 
 export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   roles: "screenRoles",
@@ -74,7 +53,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   operator: "screenOperator",
 };
 
-const SECTION_TITLE: Readonly<Record<Section, Key>> = {
+export const SECTION_TITLE: Readonly<Record<Section, Key>> = {
   admin: "navAdmin",
   developer: "navDeveloper",
   audit: "navAudit",
@@ -88,90 +67,19 @@ const SECTION_INTRO: Readonly<Record<Section, Key>> = {
   platform: "sectionPlatformIntro",
 };
 
-function body(screen: Screen, ctx: Ctx): ReactElement {
-  switch (screen) {
-    case "roles":
-      return <A.Roles ctx={ctx} />;
-    case "people":
-      return <A.People ctx={ctx} />;
-    case "sources":
-      return <A.Sources ctx={ctx} />;
-    case "restrictions":
-      return <A.Restrictions />;
-    case "protected":
-      return <A.Protected />;
-    case "offboarding":
-      return <Offboarding ctx={ctx} />;
-    case "domain":
-      return <A.Domain ctx={ctx} />;
-    case "changes":
-      return <A.Changes ctx={ctx} />;
-    case "history":
-      return <A.History ctx={ctx} />;
-    case "organizations":
-      return <O.Organizations ctx={ctx} />;
-    case "agents":
-      return <Agents ctx={ctx} />;
-    case "ssh":
-      return <Ssh ctx={ctx} />;
-    case "siem":
-      return <SiemExport ctx={ctx} />;
-    case "linux":
-      return <Linux ctx={ctx} />;
-    case "proxy":
-      return <Proxy ctx={ctx} />;
-    case "hr":
-      return <Hr ctx={ctx} />;
-    case "breakglass":
-      return <BreakGlass ctx={ctx} />;
-    case "reviews":
-      return <Reviews ctx={ctx} />;
-    case "support":
-      return <Planned />;
-    case "placement":
-      return <Placement ctx={ctx} />;
-    case "durability":
-      return <Durability ctx={ctx} />;
-    case "ratelimits":
-      return <RateLimits ctx={ctx} />;
-    case "signing":
-      return <Signing ctx={ctx} />;
-    case "sign-in":
-      return <SignInSettings ctx={ctx} />;
-    case "schemas":
-      return <D.Schemas ctx={ctx} />;
-    case "integrations":
-      return <D.Integrations ctx={ctx} />;
-    case "lab":
-      return <D.Lab ctx={ctx} />;
-    case "logs":
-      return <D.Logs ctx={ctx} />;
-    case "records":
-      return <Au.Records ctx={ctx} />;
-    case "replay":
-      return <D.Replay ctx={ctx} />;
-    case "revocation":
-      return <Au.Revocation ctx={ctx} />;
-    case "unknown":
-      return <Au.Unknown ctx={ctx} />;
-    case "containment":
-      return <Au.Containment ctx={ctx} />;
+/** Each section's address, its screen the optional last part. */
+export const SECTION_TO = {
+  admin: "/$environment/admin/{-$screen}",
+  developer: "/$environment/developer/{-$screen}",
+  audit: "/$environment/audit/{-$screen}",
+  platform: "/$environment/platform/{-$screen}",
+} as const satisfies Readonly<Record<Section, string>>;
 
-    case "export":
-      return <Au.Export ctx={ctx} />;
-
-    case "recovery":
-      return <Recovery ctx={ctx} />;
-    // OP-159 m.41 (b)
-    case "tenants":
-      return <P.Tenants ctx={ctx} />;
-    case "envs":
-      return <P.Environments ctx={ctx} />;
-    case "sandboxes":
-      return <P.Sandboxes ctx={ctx} />;
-    case "operator":
-      return <P.Operator ctx={ctx} />;
-  }
+/** Whether `s` names a screen of `section`. */
+export function screenOf(section: Section, s: string | undefined): Screen | undefined {
+  return s !== undefined && (SCREENS[section] as readonly string[]).includes(s)
+    ? (s as Screen)
+    : undefined;
 }
 
 /** The screens of `section` the viewer may see, in the section's order. */
@@ -183,12 +91,12 @@ export function SectionPage({
   section,
   screen,
   ctx,
-  go,
+  body,
 }: {
   readonly section: Section;
   readonly screen: Screen | undefined;
   readonly ctx: Ctx;
-  readonly go: (path: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
+  readonly body: (screen: Screen, ctx: Ctx) => ReactElement;
 }): ReactElement {
   const shown = screensOf(section, ctx.screens);
   const current = screen !== undefined && shown.includes(screen) ? screen : shown[0];
@@ -198,10 +106,10 @@ export function SectionPage({
         <ul className="flex flex-wrap gap-1 px-1 py-1">
           {shown.map((s) => (
             <li key={s}>
-              <a
-                href={consoleHref(ctx.session.environment, `${section}/${s}`)}
+              <Link
+                to={SECTION_TO[section]}
+                params={{ environment: ctx.session.environment, screen: s }}
                 aria-current={s === current ? "page" : undefined}
-                onClick={go(`${section}/${s}`)}
                 className={cn(
                   "inline-flex h-8 items-center rounded-full px-3 text-sm whitespace-nowrap transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50",
                   s === current
@@ -210,7 +118,7 @@ export function SectionPage({
                 )}
               >
                 {t(SCREEN_TITLE[s])}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

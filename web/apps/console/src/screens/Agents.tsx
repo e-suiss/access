@@ -17,10 +17,10 @@ import {
 } from "@access/ui/components/table";
 
 import { t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { metaWrite, type MetaResult } from "../lib/meta.js";
 import { BULLETS, FACTS, H4, HINT, MONO, Notice, REPORT } from "../ui.js";
-import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface AgentSummary {
   readonly agent: string;
@@ -177,8 +177,8 @@ function AgentView({ a, ctx }: { readonly a: Agent; readonly ctx: Ctx }): ReactE
 /** §8.5 S7, OP-154 m.3 (e): the environment's agents, one opened at a time. */
 export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const list = useLoad(() =>
-    adminGet<{ readonly items: readonly AgentSummary[] }>(
+  const list = useLoad(readKey(ctx, `envs/${environment}/agents`), () =>
+    adminGetAs<{ readonly items: readonly AgentSummary[] }>(
       ctx.instance,
       `envs/${environment}/agents`,
     ),
@@ -214,7 +214,7 @@ export function Agents({ ctx }: { readonly ctx: Ctx }): ReactElement {
                           onClick={() => {
                             setOpen(a.agent);
                             run(() =>
-                              adminGet<Agent>(
+                              adminGetAs<Agent>(
                                 ctx.instance,
                                 `envs/${environment}/agents/${encodeURIComponent(a.agent)}`,
                               ),

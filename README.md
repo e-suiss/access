@@ -87,6 +87,8 @@ just test    # the same tests CI runs on every change
 
 You need Rust (the pinned toolchain installs itself from `rust-toolchain.toml`), [`just`](https://github.com/casey/just) and Docker.
 
+Optional pre-commit hooks (rustfmt, Biome on staged web files, gitleaks on the staged diff) run through [Lefthook](https://lefthook.dev); install `lefthook` and `gitleaks`, then run `lefthook install` once. They work offline and do not replace CI.
+
 SDKs are planned for TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP and Ruby, plus iOS, Android, React Native and Flutter.
 
 ## Run Access locally

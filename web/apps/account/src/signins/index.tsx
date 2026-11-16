@@ -8,7 +8,9 @@ import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactElement } from "react";
+import * as v from "valibot";
 
 import { useSignature } from "../hub/Sign.js";
 import { frontend, json } from "../lib/api.js";
@@ -19,16 +21,23 @@ import { useAnnouncer, when } from "../account/common.js";
 import { ownInstance, terminate } from "./authority.js";
 
 /** One sign-in as `GET /v1/sessions` lists it. */
-export interface SignIn {
-  readonly id: string;
-  readonly authenticated_at: string | null;
-  readonly expires_at: string | null;
-  readonly keep_signed_in: boolean;
-  readonly current?: boolean;
-  readonly device?: string | null;
-  readonly instance?: string | null;
-  readonly bound?: boolean;
-}
+export const SignIn = v.object({
+  id: v.string(),
+  authenticated_at: v.nullable(v.string()),
+  expires_at: v.nullable(v.string()),
+  keep_signed_in: v.boolean(),
+  current: v.optional(v.boolean()),
+  device: v.optional(v.nullable(v.string())),
+  instance: v.optional(v.nullable(v.string())),
+  bound: v.optional(v.boolean()),
+});
+export type SignIn = v.InferOutput<typeof SignIn>;
+
+const Sessions = v.object({ sessions: v.array(SignIn) });
+const Ended = v.object({ instance: v.optional(v.nullable(v.string())) });
+const SignedOut = v.object({ reason: v.optional(v.unknown()) });
+
+const KEY = ["sessions"] as const;
 
 /** The closed list of "Signed out because …" reasons (OP-153 m.3 (y)). */
 export const SIGNED_OUT_REASONS = [
@@ -44,7 +53,7 @@ export async function signedOutReason(): Promise<string | null> {
   try {
     const r = await frontend("/v1/sessions/current");
     if (r.status !== 401) return null;
-    const p = (await r.json()) as { reason?: unknown };
+    const p = v.parse(SignedOut, await r.json());
     const reason = SIGNED_OUT_REASONS.find((x) => x === p.reason);
     return reason === undefined ? null : t(`signed_out.${reason}`);
   } catch {
@@ -54,11 +63,8 @@ export async function signedOutReason(): Promise<string | null> {
 
 /** "Signed out because …", for the signed-out screen. */
 export function SignedOutReason(): ReactElement | null {
-  const [text, setText] = useState<string | null>(null);
-  useEffect(() => {
-    void signedOutReason().then(setText);
-  }, []);
-  return text === null ? null : (
+  const { data: text } = useQuery({ queryKey: ["signed-out-reason"], queryFn: signedOutReason });
+  return text === null || text === undefined ? null : (
     <p role="status" data-testid="signed-out-reason">
       {text}
     </p>
@@ -134,83 +140,69 @@ function Row(props: {
 
 /** S10: where this person is signed in. */
 export function SignIns(): ReactElement {
-  const [list, setList] = useState<readonly SignIn[] | null>(null);
+  const queries = useQueryClient();
   const [expert, setExpert] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [everywhere, setEverywhere] = useState(false);
-  const { say, fail, region } = useAnnouncer();
+  const { data: list, error } = useQuery({
+    queryKey: KEY,
+    queryFn: async () => (await json(frontend("/v1/sessions"), Sessions)).sessions,
+  });
+  const { say, fail, region } = useAnnouncer(error);
   const { confirm, dialog } = useSignature();
-  const reload = useCallback(() => {
-    json<{ sessions: SignIn[] }>(frontend("/v1/sessions"))
-      .then((r) => {
-        setList(r.sessions);
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
 
+  const ending = useMutation({
+    mutationFn: async (s: SignIn): Promise<string> => {
+      const r = await json(
+        frontend(`/v1/sessions/${encodeURIComponent(s.id)}/end`, { method: "POST" }),
+        Ended,
+      );
+      void queries.invalidateQueries({ queryKey: KEY });
+      const target = r.instance ?? null;
+      if (target === null) return t("signins.ended");
+      const own = await ownInstance();
+      if (own === undefined) return t("signins.ended_key_stays");
+      try {
+        await terminate(own, confirm, target);
+        return t("signins.ended_with_key");
+      } catch (e) {
+        if (e instanceof NotSigned) return t("signins.ended_key_stays");
+        throw e;
+      }
+    },
+    onSuccess: (text) => {
+      say(text);
+    },
+    onError: (e) => {
+      fail(e);
+    },
+  });
+
+  const leaving = useMutation({
+    mutationFn: () => json(frontend("/v1/sessions/current/sign-out", { method: "POST" })),
+    onSuccess: () => {
+      location.reload();
+    },
+    onError: (e) => {
+      fail(e);
+    },
+  });
+
+  const leavingEverywhere = useMutation({
+    mutationFn: () => json(frontend("/v1/sessions/sign-out-everywhere", { method: "POST" })),
+    onError: (e) => {
+      fail(e);
+    },
+  });
+
+  const busy = ending.isPending || leaving.isPending || leavingEverywhere.isPending;
+  const everywhere = leavingEverywhere.isSuccess;
   const end = (s: SignIn) => {
-    setBusy(true);
-    void json<{ instance?: string | null }>(
-      frontend(`/v1/sessions/${encodeURIComponent(s.id)}/end`, { method: "POST" }),
-    )
-      .then(async (r) => {
-        reload();
-        const target = r.instance ?? null;
-        if (target === null) {
-          say(t("signins.ended"));
-          return;
-        }
-        const own = await ownInstance();
-        if (own === undefined) {
-          say(t("signins.ended_key_stays"));
-          return;
-        }
-        try {
-          await terminate(own, confirm, target);
-          say(t("signins.ended_with_key"));
-        } catch (e) {
-          if (e instanceof NotSigned) say(t("signins.ended_key_stays"));
-          else fail(e);
-        }
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+    ending.mutate(s);
   };
-
   const signOut = () => {
-    setBusy(true);
-    void json(frontend("/v1/sessions/current/sign-out", { method: "POST" }))
-      .then(() => {
-        location.reload();
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+    leaving.mutate();
   };
-
   const signOutEverywhere = () => {
-    setBusy(true);
-    void json(frontend("/v1/sessions/sign-out-everywhere", { method: "POST" }))
-      .then(() => {
-        setEverywhere(true);
-        setList([]);
-      })
-      .catch((e: unknown) => {
-        fail(e);
-      })
-      .finally(() => {
-        setBusy(false);
-      });
+    leavingEverywhere.mutate();
   };
 
   return (
@@ -232,7 +224,7 @@ export function SignIns(): ReactElement {
               <p className="font-semibold">{t("signins.signed_out_everywhere")}</p>
               <p className="text-sm">{t("signed_out.delegations_remain")}</p>
             </div>
-          ) : list === null ? (
+          ) : list === undefined ? (
             <Loading />
           ) : (
             <>

@@ -1,6 +1,7 @@
 // OP-156 m.3 (s), X22: the environment's export sinks of the read-only SIEM projection. Registering and
 // retiring a sink are each one signed change; the secret is write-only and never shown again.
 // What a sink holds is a copy, never the record: the audit records answer every question.
+import { Link } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 
 import { Badge } from "@access/ui/components/badge";
@@ -11,10 +12,9 @@ import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-s
 import { Textarea } from "@access/ui/components/textarea";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
-import { consoleHref } from "../lib/paths.js";
+import { adminGetAs, change, type WriteResult } from "../lib/admin.js";
 import { FORM, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 
 interface Delivery {
   readonly sent: string;
@@ -70,8 +70,8 @@ function status(s: Sink): string {
 /** The SIEM export screen. */
 export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const sinks = useLoad(() =>
-    adminGet<Page<Sink>>(ctx.instance, `envs/${environment}/export-sinks`),
+  const sinks = useLoad(readKey(ctx, `envs/${environment}/export-sinks`), () =>
+    adminGetAs<Page<Sink>>(ctx.instance, `envs/${environment}/export-sinks`),
   );
   const [name, setName] = useState("");
   const [kind, setKind] = useState<KindValue>("collector:splunk");
@@ -115,12 +115,13 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <p>{t("exportSinksIntro")}</p>
         <Notice role="note" data-testid="export-copy-note">
           {t("exportCopyNote")}{" "}
-          <a
-            href={consoleHref(ctx.session.environment, "audit/records")}
+          <Link
+            to="/$environment/audit/{-$screen}"
+            params={{ environment: ctx.session.environment, screen: "records" }}
             className="text-primary underline underline-offset-2 hover:text-foreground"
           >
             {t("exportRecordsLink")}
-          </a>
+          </Link>
         </Notice>
         <Show l={sinks}>
           {(p) =>

@@ -9,6 +9,7 @@ import { Alert } from "@access/ui/components/alert";
 import { Badge as UiBadge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { cn } from "@access/ui/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { revoke, search, type Revoking } from "../lib/adp.js";
@@ -26,7 +27,7 @@ import {
 } from "../lib/ui.js";
 import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
 import { relayStatus } from "./relay.js";
-import { supportAccess, supportLine, type SupportRow } from "../support/model.js";
+import { supportAccess, supportLine } from "../support/model.js";
 
 export type Section = "authority" | "activity" | "changes";
 
@@ -88,17 +89,18 @@ function NextCheck({
   readonly instance: Instance;
   readonly grant: string;
 }): ReactElement | null {
-  const [next, setNext] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    search(instance, "revocation-impact", { grant })
-      .then((a) => {
-        setNext(agents.nextCheck(agents.exposedOf(a.results[0]), Date.now()));
-      })
-      .catch(() => {
-        setNext(undefined);
-      });
-  }, [instance, grant]);
-  if (next === undefined) return null;
+  const { data: next } = useQuery({
+    queryKey: ["hub", instance.party, "next-check", grant],
+    queryFn: async () => {
+      try {
+        const a = await search(instance, "revocation-impact", { grant });
+        return agents.nextCheck(agents.exposedOf(a.results[0]), Date.now()) ?? null;
+      } catch {
+        return null;
+      }
+    },
+  });
+  if (next === undefined || next === null) return null;
   return (
     <p className="text-sm text-muted-foreground" data-testid="agent-next-check">
       {t("agent.next_check", { time: at(next) })}
@@ -194,8 +196,25 @@ function RevokePanel({
   readonly onDone: () => void;
   readonly onClose: () => void;
 }): ReactElement {
-  const [impact, setImpact] = useState<number | null>(null);
-  const [exposed, setExposed] = useState<readonly agents.Exposed[]>([]);
+  const { data: impacted } = useQuery({
+    queryKey: ["hub", instance.party, "impact", row.grant],
+    queryFn: async (): Promise<{ impact: number; exposed: readonly agents.Exposed[] }> => {
+      try {
+        const a = await search(instance, "revocation-impact", { grant: row.grant });
+        const first = a.results[0] ?? {};
+        const subtree = Array.isArray(first["subtree"]) ? first["subtree"].length : 0;
+        return {
+          impact: Math.max(0, subtree - 1),
+          exposed: agents.exposedOf(first).filter((e) => e.holder === row.who.party),
+        };
+      } catch {
+        return { impact: -1, exposed: [] };
+      }
+    },
+    gcTime: 0,
+  });
+  const impact = impacted?.impact ?? null;
+  const exposed = impacted?.exposed ?? [];
   const [view, setView] = useState<{ v: SignatureView; resolve: (b: boolean) => void } | null>(
     null,
   );
@@ -204,16 +223,6 @@ function RevokePanel({
   );
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    search(instance, "revocation-impact", { grant: row.grant })
-      .then((a) => {
-        const first = a.results[0] ?? {};
-        const subtree = Array.isArray(first["subtree"]) ? first["subtree"].length : 0;
-        setImpact(Math.max(0, subtree - 1));
-        setExposed(agents.exposedOf(first).filter((e) => e.holder === row.who.party));
-      })
-      .catch(() => {
-        setImpact(-1);
-      });
     const confirm: Confirm = (v) =>
       new Promise<boolean>((resolve) => {
         setView({ v, resolve });
@@ -488,27 +497,31 @@ export function Hub({
   readonly instance: Instance;
   readonly section: Section;
 }): ReactElement {
-  const [hub, setHub] = useState<HubData | null>(null);
-  const [delayed, setDelayed] = useState(false);
-  const [given, setGiven] = useState<readonly SupportRow[]>([]);
+  const queries = useQueryClient();
+  const reads = ["hub", instance.party, "read"] as const;
+  // §8.16, XI-17
+  const given = useQuery({ queryKey: [...reads, "support"], queryFn: supportAccess }).data ?? [];
+  // §8.13, INV-24: a delay is a notice; no row changes with it
+  const delayed =
+    useQuery({ queryKey: [...reads, "relay"], queryFn: async () => (await relayStatus()) ?? null })
+      .data?.delayed === true;
+  const { data: hub } = useQuery({
+    queryKey: [...reads, "records"],
+    queryFn: async (): Promise<HubData> => {
+      const query = { party: instance.party };
+      const [inventory, uses, changes] = await Promise.all([
+        read(search(instance, "inventory", query)),
+        read(search(instance, "activity", query)),
+        read(search(instance, "changes", {})),
+      ]);
+      return assemble(instance.party, Date.now(), inventory, uses, changes, known);
+    },
+  });
+  const party = instance.party;
   const load = useCallback(() => {
-    // §8.16, XI-17
-    void supportAccess().then(setGiven);
-    // §8.13, INV-24: a delay is a notice; no row changes with it
-    void relayStatus().then((s) => {
-      setDelayed(s?.delayed === true);
-    });
-    const query = { party: instance.party };
-    void Promise.all([
-      read(search(instance, "inventory", query)),
-      read(search(instance, "activity", query)),
-      read(search(instance, "changes", {})),
-    ]).then(([inventory, uses, changes]) => {
-      setHub(assemble(instance.party, Date.now(), inventory, uses, changes, known));
-    });
-  }, [instance]);
-  useEffect(load, [load]);
-  if (hub === null) return <Loading status rows={3} />;
+    void queries.invalidateQueries({ queryKey: ["hub", party, "read"] });
+  }, [queries, party]);
+  if (hub === undefined) return <Loading status rows={3} />;
   const all = [...hub.yourAuthority, ...hub.actingForYou, ...hub.sharedFromYou];
   return (
     <div className="flex flex-col gap-6" data-testid="hub">

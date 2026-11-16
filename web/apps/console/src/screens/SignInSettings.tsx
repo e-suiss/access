@@ -19,10 +19,10 @@ import {
 import { Textarea } from "@access/ui/components/textarea";
 
 import { t } from "../i18n/index.js";
-import { adminGet, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
+import { adminGetAs, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { BULLETS, CHOICE, CHOICE_LABEL, FACTS, FORM, Failure, HINT, MONO, Notice } from "../ui.js";
-import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type Ctx, at, Field, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 import { Domains } from "./Domains.js";
 import { Signals as SignalSources } from "./Signals.js";
 import { UpstreamLink } from "./UpstreamLink.js";
@@ -80,9 +80,11 @@ function environmentPath(ctx: Ctx, rest = ""): string {
 }
 
 /** §8.13, Ek B 2963, 3034: delayed signals, missing GeoIP and verifier reports. */
-function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Signals>(ctx.instance, environmentPath(ctx, "/signals")));
-  if (l.status !== "done") return <></>;
+function Status({ ctx }: { readonly ctx: Ctx }): ReactElement | null {
+  const l = useLoad(readKey(ctx, "/signals"), () =>
+    adminGetAs<Signals>(ctx.instance, environmentPath(ctx, "/signals")),
+  );
+  if (l.status !== "done") return null;
   const s = l.value;
   return (
     <div data-testid="signal-status" className="flex flex-col gap-3 empty:hidden">
@@ -109,11 +111,13 @@ function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
 }
 
 function Keys({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() =>
-    adminGet<EnvironmentMetadata>(
-      ctx.instance,
-      `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
-    ),
+  const l = useLoad(
+    readKey(ctx, `platform/envs/${encodeURIComponent(ctx.session.environment)}`),
+    () =>
+      adminGetAs<EnvironmentMetadata>(
+        ctx.instance,
+        `platform/envs/${encodeURIComponent(ctx.session.environment)}`,
+      ),
   );
   return (
     <Panel id="keys" title={t("settingsKeys")}>
@@ -427,7 +431,9 @@ function Listing({
   readonly title: string;
   readonly id: string;
 }): ReactElement {
-  const l = useLoad(() => adminGet<Named>(ctx.instance, environmentPath(ctx, path)));
+  const l = useLoad(readKey(ctx, path), () =>
+    adminGetAs<Named>(ctx.instance, environmentPath(ctx, path)),
+  );
   return (
     <Panel id={id} title={title}>
       <Show l={l}>
@@ -476,8 +482,8 @@ function socialWarning(w: SocialWarning): string {
 
 /** IDP-31, TN-87, Ek B 3572, 3655: the social presets and their warnings. */
 function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() =>
-    adminGet<Socials>(ctx.instance, environmentPath(ctx, "/social-providers")),
+  const l = useLoad(readKey(ctx, "/social-providers"), () =>
+    adminGetAs<Socials>(ctx.instance, environmentPath(ctx, "/social-providers")),
   );
   return (
     <Panel id="social" title={t("settingsSocial")}>
@@ -507,7 +513,9 @@ function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
 
 /** IDP-36, K14: counts only, never a decision input. */
 export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Analytics>(ctx.instance, environmentPath(ctx, "/analytics")));
+  const l = useLoad(readKey(ctx, "/analytics"), () =>
+    adminGetAs<Analytics>(ctx.instance, environmentPath(ctx, "/analytics")),
+  );
   return (
     <Panel id="analytics" title={t("analyticsTitle")}>
       <Badge variant="outline" className="self-start" data-testid="analytics-note">
@@ -566,7 +574,7 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
 }
 
 export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(async () => {
+  const l = useLoad(readKey(ctx, "/settings"), async () => {
     const r = await adminGetTagged(ctx.instance, environmentPath(ctx, "/settings"));
     return { s: r.value as Settings, ...(r.etag === undefined ? {} : { etag: r.etag }) };
   });

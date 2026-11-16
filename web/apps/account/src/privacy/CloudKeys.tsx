@@ -3,7 +3,9 @@
 // one and stops it with one tap; stopping tells the environment to destroy its copies.
 import { Button } from "@access/ui/components/button";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { useAnnouncer, when } from "../account/common.js";
 import { frontend, json } from "../lib/api.js";
@@ -11,31 +13,47 @@ import { t } from "../lib/i18n.js";
 import { Loading, Meta, Panel, RowItem, Rows } from "../lib/ui.js";
 
 /** What `GET /v1/me/cloud-key-permissions` answers. */
-export interface CloudKeyList {
-  readonly permissions: readonly {
-    readonly id: string;
-    readonly purpose: string;
-    readonly classes: readonly string[];
-    readonly valid_until: string;
-    readonly state: string;
-    readonly destroy: boolean;
-  }[];
-}
+export const CloudKeyList = v.object({
+  permissions: v.array(
+    v.object({
+      id: v.string(),
+      purpose: v.string(),
+      classes: v.array(v.string()),
+      valid_until: v.string(),
+      state: v.string(),
+      destroy: v.boolean(),
+    }),
+  ),
+});
+export type CloudKeyList = v.InferOutput<typeof CloudKeyList>;
+
+const KEY = ["cloud-key-permissions"] as const;
 
 /** "Cloud use of your data by One". */
 export function CloudKeys(): ReactElement | null {
-  const [list, setList] = useState<CloudKeyList | null>(null);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<CloudKeyList>(frontend("/v1/me/cloud-key-permissions"))
-      .then(setList)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const queries = useQueryClient();
+  const { data: list, error } = useQuery({
+    queryKey: KEY,
+    queryFn: () => json(frontend("/v1/me/cloud-key-permissions"), CloudKeyList),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const revoke = useMutation({
+    mutationFn: (id: string) =>
+      json(
+        frontend(`/v1/me/cloud-key-permissions/${encodeURIComponent(id)}/revoke`, {
+          method: "POST",
+        }),
+      ),
+    onSuccess: () => {
+      say(t("cloud_key.revoke"));
+      void queries.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (e) => {
+      fail(e);
+    },
+  });
   const live = list?.permissions.filter((p) => p.state === "live") ?? [];
-  if (list !== null && live.length === 0) return null;
+  if (list !== undefined && live.length === 0) return null;
   return (
     <Panel
       aria-labelledby="cloud-key-heading"
@@ -44,7 +62,7 @@ export function CloudKeys(): ReactElement | null {
       titleId="cloud-key-heading"
     >
       {region}
-      {list === null ? (
+      {list === undefined ? (
         <Loading rows={1} />
       ) : (
         <Rows>
@@ -64,18 +82,7 @@ export function CloudKeys(): ReactElement | null {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    void json(
-                      frontend(`/v1/me/cloud-key-permissions/${encodeURIComponent(p.id)}/revoke`, {
-                        method: "POST",
-                      }),
-                    )
-                      .then(() => {
-                        say(t("cloud_key.revoke"));
-                        reload();
-                      })
-                      .catch((e: unknown) => {
-                        fail(e);
-                      });
+                    revoke.mutate(p.id);
                   }}
                 >
                   {t("cloud_key.revoke")}

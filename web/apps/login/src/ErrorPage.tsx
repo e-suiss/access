@@ -5,8 +5,6 @@ import { useEffect, useRef } from "react";
 import { t } from "./i18n.js";
 import { note, Panel, problem, stack, Title } from "./Layout.js";
 
-export type Owner = "app" | "upstream" | "access";
-
 /** The reference: the first 30 bits of the request id in Crockford base32, `XXXX-XX`. */
 export function reference(value: string | null): string | null {
   if (value === null) return null;

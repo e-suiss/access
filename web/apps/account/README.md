@@ -26,13 +26,13 @@ Texts come from Access's Fluent catalogs in `locales/`, with the environment's o
 ## Develop
 
 ```sh
-npm ci
-npm run lint && npm run typecheck && npm run format:check
-npm run e2e        # against a mocked BFF
-npm run e2e:live   # @live: against a running local deployment
+pnpm install --frozen-lockfile
+pnpm run lint && pnpm run typecheck && pnpm -w run format:check
+pnpm run e2e        # against a mocked BFF
+pnpm run e2e:live   # @live: against a running local deployment
 ```
 
-`npm run e2e:live` expects the local deployment on `https://access-server:8443` (`ACCESS_LIVE_ORIGIN`) and the bootstrap test user's password in `ACCESS_LOCAL_TEST_PASSWORD`.
+`pnpm run e2e:live` expects the local deployment on `https://access-server:8443` (`ACCESS_LIVE_ORIGIN`) and the bootstrap test user's password in `ACCESS_LOCAL_TEST_PASSWORD`.
 
 ## License
 

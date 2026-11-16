@@ -267,20 +267,18 @@ export function Approval() {
           </>
         )}
         {state.phase === "ready" && (
-          <>
-            <div className="flex flex-col gap-2">
-              <Button
-                {...primary}
-                disabled={busy || state.preview.draft === null}
-                onClick={() => void approve(state.preview)}
-              >
-                {t("action.approve_access")}
-              </Button>
-              <Button {...quiet} disabled={busy} onClick={() => void decline(state.preview)}>
-                {t("action.decline_access")}
-              </Button>
-            </div>
-          </>
+          <div className="flex flex-col gap-2">
+            <Button
+              {...primary}
+              disabled={busy || state.preview.draft === null}
+              onClick={() => void approve(state.preview)}
+            >
+              {t("action.approve_access")}
+            </Button>
+            <Button {...quiet} disabled={busy} onClick={() => void decline(state.preview)}>
+              {t("action.decline_access")}
+            </Button>
+          </div>
         )}
         {state.phase === "confirm" && (
           <div

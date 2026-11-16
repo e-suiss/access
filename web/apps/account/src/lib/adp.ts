@@ -4,8 +4,9 @@
 // once Access answers with the recorded Exercise.
 import { loadKernel } from "@esuiss/access";
 import { honesty } from "@access/ui";
+import * as v from "valibot";
 
-import { API, b64url, call, fromB64url, json, Problem } from "./api.js";
+import { API, b64url, call, fromB64url, json } from "./api.js";
 import {
   type Confirm,
   type DecodedIntent,
@@ -25,14 +26,15 @@ export interface Wanted {
   readonly payload?: Readonly<Record<string, unknown>>;
 }
 
-interface Draft {
-  readonly intent: {
-    readonly resources: readonly { readonly namespace: string; readonly path: readonly string[] }[];
-  };
-  readonly envelope: string;
-  readonly payload?: string;
-  readonly basis?: { readonly anchor: string };
-}
+const Draft = v.object({
+  intent: v.looseObject({
+    resources: v.array(v.looseObject({ namespace: v.string(), path: v.array(v.string()) })),
+  }),
+  envelope: v.string(),
+  payload: v.optional(v.string()),
+  basis: v.optional(v.object({ anchor: v.string() })),
+});
+type Draft = v.InferOutput<typeof Draft>;
 
 interface Drafted {
   readonly draft: Draft;
@@ -46,12 +48,13 @@ export async function draft(
   w: Wanted,
   mode: "check" | "commit",
 ): Promise<Drafted> {
-  const d = await json<Draft>(
+  const d = await json(
     call("/intents", {
       method: "POST",
       body: { ...w, mode },
       headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },
     }),
+    Draft,
   );
   const k = await loadKernel();
   const envelope = fromB64url(d.envelope);
@@ -99,9 +102,8 @@ async function checkContext(instance: Instance, w: Wanted): Promise<Record<strin
 /** The hub's search kinds (OP-153 m.8 (a), (b)). */
 export type HubKind = "inventory" | "activity" | "changes" | "revocation-impact";
 
-export interface SearchAnswer {
-  readonly results: readonly Readonly<Record<string, unknown>>[];
-}
+const SearchAnswer = v.object({ results: v.array(v.record(v.string(), v.unknown())) });
+export type SearchAnswer = v.InferOutput<typeof SearchAnswer>;
 
 /** One search page of `kind`, read as the viewer. */
 export async function search(
@@ -113,25 +115,30 @@ export async function search(
     action: { namespace: "access", name: "read", major: 1 },
     resources: [{ namespace: "access.search", path: [kind] }],
   });
-  return json<SearchAnswer>(
+  return json(
     call(`/proxy/adp/search/${kind}`, { method: "POST", body: { context: { ...context, query } } }),
+    SearchAnswer,
   );
 }
 
 /** An explanation as ADP answers it. */
-export interface Explained {
-  readonly decision?: boolean;
-  readonly context?: Readonly<Record<string, unknown>>;
-}
+const Explained = v.object({
+  decision: v.optional(v.boolean()),
+  context: v.optional(v.record(v.string(), v.unknown())),
+});
+export type Explained = v.InferOutput<typeof Explained>;
 
-/** Why the viewer may do `w` now: advisory, never recorded (E-1, S5). */
+/**
+ * Why the viewer may do `w` now: advisory, never recorded (E-1, S5).
+ * @public
+ */
 export async function explain(
   instance: Instance,
   w: Required<Pick<Wanted, "action" | "resources">>,
 ): Promise<Explained> {
   const context = await checkContext(instance, w);
   const first = w.resources[0];
-  return json<Explained>(
+  return json(
     call("/proxy/adp/explain", {
       method: "POST",
       body: {
@@ -141,6 +148,7 @@ export async function explain(
         context,
       },
     }),
+    Explained,
   );
 }
 
@@ -153,6 +161,13 @@ export interface Revoking {
   /** Sends the same signed request again (HL-5, TI-8). */
   readonly retry: () => Promise<Revoking>;
 }
+
+const Recorded = v.object({
+  context: v.object({
+    exercise: v.fallback(v.optional(v.string()), undefined),
+    position: v.fallback(v.optional(v.number()), undefined),
+  }),
+});
 
 /** How long the page waits for Access before it says "Not confirmed — checking". */
 export const ANSWER_TIMEOUT_MS = 15_000;
@@ -254,9 +269,11 @@ export async function commitMeta(
         timedOut: false,
         validUntil,
       };
-      const c = (answer as { context?: { exercise?: unknown; position?: unknown } }).context;
-      if (typeof c?.exercise === "string") exercise = c.exercise;
-      if (typeof c?.position === "number") position = c.position;
+      const recorded = v.safeParse(Recorded, answer);
+      if (recorded.success) {
+        exercise = recorded.output.context.exercise;
+        position = recorded.output.context.position;
+      }
     } catch {
       attempt = {
         sent: "sent",
@@ -286,5 +303,3 @@ function csrf(): string {
   }
   return "";
 }
-
-export { Problem };

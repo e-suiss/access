@@ -4,30 +4,39 @@
 // authority: stopping it keeps the record and the app receives no details until asked again.
 import { Button } from "@access/ui/components/button";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
 import { Loading, Meta, Nothing, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
 
-interface LinkedList {
-  readonly linked: readonly {
-    readonly link: string;
-    readonly provider: string;
-    readonly linked_at_ms: number;
-    readonly verified_at_ms: number | null;
-  }[];
-}
+const LinkedList = v.object({
+  linked: v.array(
+    v.object({
+      link: v.string(),
+      provider: v.string(),
+      linked_at_ms: v.number(),
+      verified_at_ms: v.nullable(v.number()),
+    }),
+  ),
+});
 
-interface Apps {
-  readonly apps: readonly {
-    readonly client_id: string;
-    readonly app: string;
-    readonly claims: readonly string[];
-    readonly since_ms: number;
-  }[];
-}
+const Apps = v.object({
+  apps: v.array(
+    v.object({
+      client_id: v.string(),
+      app: v.string(),
+      claims: v.array(v.string()),
+      since_ms: v.number(),
+    }),
+  ),
+});
+
+const LINKED = ["account", "linked"] as const;
+const APPS = ["account", "connected-apps"] as const;
 
 const LINK_CODES = {
   "last-sign-in-method": "methods.last_method",
@@ -36,16 +45,23 @@ const LINK_CODES = {
 
 /** "Linked sign-ins". */
 export function LinkedSignIns(): ReactElement {
-  const [list, setList] = useState<LinkedList | null>(null);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<LinkedList>(frontend("/v1/account/linked"))
-      .then(setList)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const queries = useQueryClient();
+  const { data: list, error } = useQuery({
+    queryKey: LINKED,
+    queryFn: () => json(frontend("/v1/account/linked"), LinkedList),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const unlink = useMutation({
+    mutationFn: (link: string) =>
+      json(frontend(`/v1/account/linked/${encodeURIComponent(link)}`, { method: "DELETE" })),
+    onSuccess: () => {
+      say(t("methods.removed"));
+      void queries.invalidateQueries({ queryKey: LINKED });
+    },
+    onError: (e) => {
+      fail(e, LINK_CODES);
+    },
+  });
   return (
     <Panel
       aria-labelledby="linked-heading"
@@ -54,7 +70,7 @@ export function LinkedSignIns(): ReactElement {
       titleId="linked-heading"
     >
       {region}
-      {list === null ? (
+      {list === undefined ? (
         <Loading />
       ) : list.linked.length === 0 ? (
         <Nothing>{t("linked.none")}</Nothing>
@@ -72,18 +88,7 @@ export function LinkedSignIns(): ReactElement {
                   size="sm"
                   aria-label={`${t("action.remove")}: ${l.provider}`}
                   onClick={() => {
-                    void json(
-                      frontend(`/v1/account/linked/${encodeURIComponent(l.link)}`, {
-                        method: "DELETE",
-                      }),
-                    )
-                      .then(() => {
-                        say(t("methods.removed"));
-                        reload();
-                      })
-                      .catch((e: unknown) => {
-                        fail(e, LINK_CODES);
-                      });
+                    unlink.mutate(l.link);
                   }}
                 >
                   {t("action.remove")}
@@ -99,16 +104,25 @@ export function LinkedSignIns(): ReactElement {
 
 /** "Connected apps" (OP-153 m.3 (z)). */
 export function ConnectedApps(): ReactElement {
-  const [apps, setApps] = useState<Apps | null>(null);
-  const { say, fail, region } = useAnnouncer();
-  const reload = useCallback(() => {
-    json<Apps>(frontend("/v1/account/connected-apps"))
-      .then(setApps)
-      .catch((e: unknown) => {
-        fail(e);
-      });
-  }, [fail]);
-  useEffect(reload, [reload]);
+  const queries = useQueryClient();
+  const { data: apps, error } = useQuery({
+    queryKey: APPS,
+    queryFn: () => json(frontend("/v1/account/connected-apps"), Apps),
+  });
+  const { say, fail, region } = useAnnouncer(error);
+  const stop = useMutation({
+    mutationFn: (client: string) =>
+      json(
+        frontend(`/v1/account/connected-apps/${encodeURIComponent(client)}`, { method: "DELETE" }),
+      ),
+    onSuccess: () => {
+      say(t("apps.stopped"));
+      void queries.invalidateQueries({ queryKey: APPS });
+    },
+    onError: (e) => {
+      fail(e);
+    },
+  });
   return (
     <Panel
       aria-labelledby="apps-heading"
@@ -117,7 +131,7 @@ export function ConnectedApps(): ReactElement {
       titleId="apps-heading"
     >
       {region}
-      {apps === null ? (
+      {apps === undefined ? (
         <Loading />
       ) : apps.apps.length === 0 ? (
         <Nothing>{t("apps.none")}</Nothing>
@@ -136,18 +150,7 @@ export function ConnectedApps(): ReactElement {
                   size="sm"
                   aria-label={`${t("action.stop_sharing")}: ${a.app}`}
                   onClick={() => {
-                    void json(
-                      frontend(`/v1/account/connected-apps/${encodeURIComponent(a.client_id)}`, {
-                        method: "DELETE",
-                      }),
-                    )
-                      .then(() => {
-                        say(t("apps.stopped"));
-                        reload();
-                      })
-                      .catch((e: unknown) => {
-                        fail(e);
-                      });
+                    stop.mutate(a.client_id);
                   }}
                 >
                   {t("action.stop_sharing")}

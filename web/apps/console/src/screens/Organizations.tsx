@@ -17,9 +17,9 @@ import {
 } from "@access/ui/components/table";
 
 import { type Key, t } from "../i18n/index.js";
-import { adminGet } from "../lib/admin.js";
+import { adminGetAs } from "../lib/admin.js";
 import { BULLETS, FACTS, H4, HINT, MONO, REPORT } from "../ui.js";
-import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { at, type Ctx, Panel, Show, readKey, useLoad, useRun } from "./parts.js";
 import { SsoEnforcement } from "./SsoEnforcement.js";
 
 interface OrgSummary {
@@ -207,8 +207,8 @@ function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
 /** §8.5 S7, Ek B 3735, 3808, 3819, 3821: the environment's organizations, one opened at a time. */
 export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const environment = encodeURIComponent(ctx.session.environment);
-  const list = useLoad(() =>
-    adminGet<{ readonly items: readonly OrgSummary[] }>(
+  const list = useLoad(readKey(ctx, `envs/${environment}/organizations`), () =>
+    adminGetAs<{ readonly items: readonly OrgSummary[] }>(
       ctx.instance,
       `envs/${environment}/organizations`,
     ),
@@ -232,7 +232,7 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                     onClick={() => {
                       setOpen(o.organization);
                       run(() =>
-                        adminGet<Organization>(
+                        adminGetAs<Organization>(
                           ctx.instance,
                           `envs/${environment}/organizations/${encodeURIComponent(o.organization)}`,
                         ),

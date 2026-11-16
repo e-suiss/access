@@ -23,10 +23,10 @@ WCAG 2.2 AA: paste and autofill always work, codes go into one field, status and
 ## Develop
 
 ```sh
-npm ci
-npm run lint && npm run typecheck && npm run format:check
-npm run e2e        # against a mocked server
-npm run e2e:live   # @live: against a running local deployment (ACCESS_LIVE_ORIGIN)
+pnpm install --frozen-lockfile
+pnpm run lint && pnpm run typecheck && pnpm -w run format:check
+pnpm run e2e        # against a mocked server
+pnpm run e2e:live   # @live: against a running local deployment (ACCESS_LIVE_ORIGIN)
 ```
 
 ## License

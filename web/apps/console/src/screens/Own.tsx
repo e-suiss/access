@@ -1,21 +1,16 @@
 // Ek B 3089, TN-128: the identity plane's own, authority-free screens; the cookie is enough
 import { loadKernel } from "@esuiss/access";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import * as v from "valibot";
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
 import { Card, CardContent } from "@access/ui/components/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@access/ui/components/table";
 
+import { DataTable } from "../DataTable.js";
 import { t } from "../i18n/index.js";
-import { json, type SessionInfo, type SessionRow } from "../lib/api.js";
+import { json, type SessionInfo, SessionRow, send } from "../lib/api.js";
 import { Busy, FACTS, Failure, HINT, MONO, Page } from "../ui.js";
 
 function when(iso: string): string {
@@ -43,78 +38,68 @@ export function Profile({ session }: { readonly session: SessionInfo }): ReactEl
   );
 }
 
+const SESSIONS = ["sessions"] as const;
+
+const Sessions_ = v.object({ sessions: v.array(SessionRow) });
+
+const About_ = v.looseObject({ server_version: v.exactOptional(v.string()) });
+
 export function Sessions({ onEnded }: { readonly onEnded: () => void }): ReactElement {
-  const [rows, setRows] = useState<readonly SessionRow[] | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  const load = useCallback(() => {
-    json<{ sessions: SessionRow[] }>("/sessions").then(
-      (v) => {
-        setRows(v.sessions);
-      },
-      () => {
-        setFailed(true);
-      },
-    );
-  }, []);
-
-  useEffect(load, [load]);
-
-  const end = (row: SessionRow) => {
-    json(`/sessions/${encodeURIComponent(row.id)}/revoke`, { method: "POST" }).then(
-      () => {
-        if (row.current) onEnded();
-        else load();
-      },
-      () => {
-        setFailed(true);
-      },
-    );
-  };
+  const client = useQueryClient();
+  const list = useQuery({ queryKey: SESSIONS, queryFn: () => json("/sessions", Sessions_) });
+  const end = useMutation({
+    mutationFn: (row: SessionRow) =>
+      send(`/sessions/${encodeURIComponent(row.id)}/revoke`, { method: "POST" }),
+    retry: false,
+    onSuccess: (_, row) => {
+      if (row.current) onEnded();
+      else void client.invalidateQueries({ queryKey: SESSIONS });
+    },
+  });
+  const failed = list.isError || end.isError;
 
   return (
     <Page title={t("sessionsTitle")} intro={t("sessionsIntro")}>
       {failed && <Failure>{t("unavailable")}</Failure>}
-      {rows === null && !failed && <Busy />}
-      {rows !== null && (
+      {list.isPending && <Busy />}
+      {list.data !== undefined && (
         <Card className="py-2">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead scope="col">{t("sessionsKind")}</TableHead>
-                <TableHead scope="col">{t("sessionsCreated")}</TableHead>
-                <TableHead scope="col">{t("sessionsLastSeen")}</TableHead>
-                <TableHead scope="col">
-                  <span className="sr-only">{t("sessionsActions")}</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableHead scope="row" className="text-sm font-medium text-foreground">
-                    <span className="flex items-center gap-2">
-                      {r.kind === "console" ? t("sessionsConsole") : t("sessionsLogin")}
-                      {r.current && <Badge variant="outline">{t("sessionsCurrent")}</Badge>}
-                    </span>
-                  </TableHead>
-                  <TableCell>{when(r.created_at)}</TableCell>
-                  <TableCell>{when(r.last_seen_at)}</TableCell>
-                  <TableCell className="text-end">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        end(r);
-                      }}
-                    >
-                      {t("sessionsEnd")}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable
+            rows={list.data.sessions}
+            rowKey={(r) => r.id}
+            label={t("sessionsTitle")}
+            columns={[
+              {
+                id: "kind",
+                header: t("sessionsKind"),
+                rowHeader: true,
+                cell: (r) => (
+                  <span className="flex items-center gap-2">
+                    {r.kind === "console" ? t("sessionsConsole") : t("sessionsLogin")}
+                    {r.current && <Badge variant="outline">{t("sessionsCurrent")}</Badge>}
+                  </span>
+                ),
+              },
+              { id: "created", header: t("sessionsCreated"), cell: (r) => when(r.created_at) },
+              { id: "seen", header: t("sessionsLastSeen"), cell: (r) => when(r.last_seen_at) },
+              {
+                id: "actions",
+                header: <span className="sr-only">{t("sessionsActions")}</span>,
+                className: "text-end",
+                cell: (r) => (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      end.mutate(r);
+                    }}
+                  >
+                    {t("sessionsEnd")}
+                  </Button>
+                ),
+              },
+            ]}
+          />
         </Card>
       )}
     </Page>
@@ -122,26 +107,14 @@ export function Sessions({ onEnded }: { readonly onEnded: () => void }): ReactEl
 }
 
 export function About(): ReactElement {
-  const [kernel, setKernel] = useState<string | null>(null);
-  const [server, setServer] = useState<string | null>(null);
-  useEffect(() => {
-    loadKernel().then(
-      (k) => {
-        setKernel(k.apiVersion());
-      },
-      () => {
-        setKernel(t("aboutUnknown"));
-      },
-    );
-    json<{ server_version?: string }>("/about").then(
-      (v) => {
-        setServer(v.server_version ?? t("aboutUnknown"));
-      },
-      () => {
-        setServer(t("aboutUnknown"));
-      },
-    );
-  }, []);
+  const k = useQuery({
+    queryKey: ["kernel-version"],
+    queryFn: async () => (await loadKernel()).apiVersion(),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const about = useQuery({ queryKey: ["about"], queryFn: () => json("/about", About_) });
+  const kernel = k.isPending ? null : (k.data ?? t("aboutUnknown"));
+  const server = about.isPending ? null : (about.data?.server_version ?? t("aboutUnknown"));
   return (
     <Page title={t("aboutTitle")}>
       <Card>

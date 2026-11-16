@@ -1,7 +1,14 @@
 // OP-158 m.3 (e), (t), XI-20, X14, §6.4, §7.9.14, §8.7, §8.13
 /** Who answers for a failure, as `conformance/catalog/failure-ownership.toml` names them. */
 export type Owner =
-  "access" | "operator" | "domain" | "idp" | "relay" | "executor" | "provider" | "verifier";
+  | "access"
+  | "operator"
+  | "domain"
+  | "idp"
+  | "relay"
+  | "executor"
+  | "provider"
+  | "verifier";
 
 /** A failure the surface is in, with what is not known and what holds until it is. */
 export interface Degraded {
