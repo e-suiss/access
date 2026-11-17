@@ -420,7 +420,7 @@ start:
     echo "Hosts (once):    echo '127.0.0.1 access-server access-server.local' | sudo tee -a /etc/hosts"
     echo "Platform:        https://access-server.local:9443/console/platform"
     echo "Acme:            https://access-server.local:9443/console/acme"
-    echo "Test user:       test@acme.example in acme, password: $ACCESS_LOCAL_TEST_PASSWORD (its own account page: https://127.0.0.1:8443/env/acme/account)"
+    echo "Test user:       test@acme.example in acme, password: $ACCESS_LOCAL_TEST_PASSWORD (its own account page: https://access-server:8443/env/acme/account)"
     echo "Second factor:   just totp (the code of the test user's authenticator app; its key is in target/local-test-totp)"
     echo "Platform admin:  admin@platform.local in platform, the same password; second factor: just totp platform"
     echo "Acme admin:      admin@acme.example in acme, the same password; second factor: just totp acme-admin; it administers the Acme tenant from /console/acme"
