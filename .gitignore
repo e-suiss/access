@@ -16,3 +16,6 @@ dist/
 proptest-regressions/
 __pycache__/
 .turbo/
+
+# a test leaves a measurement directory here
+/bins/access-server/target/
