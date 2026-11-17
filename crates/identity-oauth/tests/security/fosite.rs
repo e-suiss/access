@@ -59,6 +59,8 @@ async fn redirect_uri_tricks_are_never_followed() {
         ("http://127.0.0.1:0x10/native", "loopback port spelling"),
         ("http://127.0.0.1:123456/native", "loopback port length"),
         ("http://localhost:61234/native", "loopback host swap"),
+        ("urn:ietf:wg:oauth:2.0:oob", "out-of-band code display"),
+        ("urn:ietf:wg:oauth:2.0:oob:auto", "out-of-band code display"),
     ] {
         let r = a.authorize(&[("redirect_uri", presented)], cookie).await;
         assert!(is_problem(&r), "{class}: {presented}: {r:?}");

@@ -40,6 +40,8 @@ fn redirect_uris_match_exactly_with_the_loopback_port_free() {
         "https://shop.example/c%62",
         "https://shop.example/cb#f",
         "http://shop.example/cb",
+        "urn:ietf:wg:oauth:2.0:oob",
+        "urn:ietf:wg:oauth:2.0:oob:auto",
     ] {
         assert!(!c.redirect_allowed(bad), "{bad}");
     }

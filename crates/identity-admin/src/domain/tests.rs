@@ -46,6 +46,8 @@ fn redirect_uris_are_exact_and_constrained() {
         "http://shop.example/cb",
         "http://localhost/cb",
         "javascript:alert(1)",
+        "urn:ietf:wg:oauth:2.0:oob",
+        "urn:ietf:wg:oauth:2.0:oob:auto",
         "https:///cb",
         "https://shop.example/c b",
         "shop.example/cb",

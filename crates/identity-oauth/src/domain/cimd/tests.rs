@@ -144,6 +144,8 @@ fn application_type_is_read_from_the_document() {
         "https://*.app.example/cb",
         "javascript:alert(1)",
         "app://cb",
+        "urn:ietf:wg:oauth:2.0:oob",
+        "urn:ietf:wg:oauth:2.0:oob:auto",
     ] {
         let d = doc("").replace("https://app.example/cb", bad);
         assert_eq!(parse(d.as_bytes(), URL), Err(CimdError::Redirect), "{bad}");

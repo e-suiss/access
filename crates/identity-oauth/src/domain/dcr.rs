@@ -214,5 +214,21 @@ mod tests {
         assert_eq!(register(silent, id).err(), Some(Refused::RedirectUri));
         let jwks = br#"{"client_name":"A","redirect_uris":["https://a.example/cb"],"jwks_uri":"https://a.example/j"}"#;
         assert_eq!(register(jwks, id).err(), Some(Refused::Metadata));
+        // RFC 9700 §2.1, RFC 8252 §7
+        for uri in [
+            "urn:ietf:wg:oauth:2.0:oob",
+            "urn:ietf:wg:oauth:2.0:oob:auto",
+        ] {
+            for kind in ["web", "native"] {
+                let body = format!(
+                    r#"{{"client_name":"A","redirect_uris":["{uri}"],"application_type":"{kind}"}}"#
+                );
+                assert_eq!(
+                    register(body.as_bytes(), id).err(),
+                    Some(Refused::RedirectUri),
+                    "{uri} {kind}"
+                );
+            }
+        }
     }
 }
