@@ -2,6 +2,7 @@
 
 use access_crypto::dpop::Role;
 use access_crypto::oauth::opaque_digest;
+use access_identity_session::domain::assurance::Aal;
 use access_identity_session::domain::dbsc::split_cookie;
 use access_identity_session::domain::session::cookie_digest;
 use access_kernel::json::b64url_encode;
@@ -429,11 +430,24 @@ impl<E: Env> OAuth<E> {
             .await?;
         tx.commit().await?;
         let back_to = return_to(&environment.issuer, &l.client.id, &uri);
-        Ok(Reply::Redirect(self.env.pages().login(
-            &environment.issuer,
-            &back_to,
-            reason,
-        )))
+        let mut to = self
+            .env
+            .pages()
+            .login(&environment.issuer, &back_to, reason);
+        // OP-159 m.49 (c)
+        let wanted = l
+            .request
+            .acr_values
+            .iter()
+            .filter_map(|a| crate::domain::tokens::aal_of(a))
+            .max();
+        if let Some(aal) = wanted.filter(|a| *a >= Aal::Aal2)
+            && !matches!(reason, crate::domain::tokens::LoginReason::StepUp(_))
+        {
+            to.push_str("&acr=");
+            crate::domain::issuer::form_encode(crate::domain::tokens::acr(aal), &mut to);
+        }
+        Ok(Reply::Redirect(to))
     }
 
     /// §11.6 rule 1, P58: whether the person's consent record for this client and resource

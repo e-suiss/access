@@ -1133,7 +1133,7 @@ export const tr: Record<Key, string> = {
   platformSandboxesIntro:
     "Bir kiracının sandbox domain'leri. Yetki bir sandbox ile üretim ortamı arasında hiçbir yönde akmaz ve her sandbox'ın sabit bir günlük bütçesi vardır.",
   platformBoundary:
-    "Bir ortamın içindekileri, kiracısının yöneticileri kiracının yönetim ortamında yönetir.",
+    "Bir ortamın içindekileri, kiracısının yöneticileri kiracının ana ortamından yönetir.",
   platformEnvironmentDetails: "Ortam {slug}",
   platformSandbox: "Sandbox",
   platformSlug: "Kısa ad",
@@ -1163,7 +1163,7 @@ export const tr: Record<Key, string> = {
   // OP-159 m.47
   enterTitle: "{environment} ortamını yönet",
   enterIntro:
-    "Kiracınızın yönetim ortamı {home} ortamında giriş yaptınız. Bu ortamı da aynı girişle yönetirsiniz.",
+    "Kiracınızın ana ortamı {home} ortamında giriş yaptınız. Bu ortamı da aynı girişle yönetirsiniz.",
   enterDeviceTitle: "Bu tarayıcının bu ortamdaki anahtarı",
   enterDeviceText:
     "Bu ortamı ilk açışınızda tarayıcı burada kendi anahtarını kaydeder. Bir kez imzalarsınız; yeniden giriş yapmanız gerekmez.",
@@ -1172,17 +1172,13 @@ export const tr: Record<Key, string> = {
   enterAction: "Kaydet ve {environment} ortamını aç",
   enterFailed:
     "Bu tarayıcı burada kaydedilemedi. Hiçbir şey değişmedi. Biraz sonra yeniden deneyin.",
-  tenantDefaultsTitle: "Bu ortamın giriş kurallarını kaydedin",
-  tenantDefaultsText:
-    "Siz kaydedene kadar bu yönetim ortamı yerleşik kurallarını izler: hesaplar yalnız davetle, sosyal giriş kapalı ve her girişte ikinci adım. Kaydetmek tek bir imza ister; kuralları sonra ayarlardan değiştirebilirsiniz.",
-  tenantDefaultsAction: "Giriş kurallarını kaydet",
   tenantHomeTitle: "Kiracınız",
   tenantHomeIntro:
-    "{environment}, kiracınızın yönetim ortamı. Kiracının bütün ortamlarını ve yöneticilerini buradan yönetirsiniz.",
+    "{environment}, kiracınızın ana ortamı: kullanıcılarınız da siz de burada giriş yaparsınız. Kiracının bütün ortamlarını ve yöneticilerini buradan yönetirsiniz.",
   tenantEnvironments: "Ortamlar",
   tenantEnvironmentsIntro:
     "Kişilerini, uygulamalarını ve ayarlarını yönetmek için bir ortamı açın. Girişiniz sürer.",
-  tenantManagement: "Yönetim",
+  tenantPrimary: "Ana ortam",
   tenantEnvironmentCreate: "Yeni ortam oluştur",
   tenantEnvironmentCreateHint:
     "Ortam bu kiracınındır. Sahipleri kiracının sahipleri, yöneticileri kiracının yöneticileridir.",
@@ -1190,7 +1186,7 @@ export const tr: Record<Key, string> = {
   tenantEnvironmentCreateSend: "Ortam oluştur",
   tenantAdmins: "Yöneticiler",
   tenantAdminsIntro:
-    "Yöneticiler burada bir kez giriş yapar ve kiracının bütün ortamlarını yönetir. Sahipler ayrıca rolleri, yetkileri ve güven ayarlarını değiştirebilir.",
+    "Yöneticiler burada ikinci adımla bir kez giriş yapar ve davet edildikleri ortamları yönetir. Sahipler ayrıca rolleri, yetkileri ve güven ayarlarını değiştirebilir.",
   tenantAdminIdentifier: "Adres",
   tenantAdminRole: "Rol",
   tenantAdminSince: "Başlangıç",
@@ -1207,12 +1203,17 @@ export const tr: Record<Key, string> = {
   tenantInvite: "Yönetici davet et",
   tenantInviteHint: "Davet bu adrese gider. Kabul eden yönetici olur, hiçbir zaman sahip olmaz.",
   tenantInviteEmail: "E-posta adresi",
+  tenantInviteScope: "Ortamlar",
+  tenantInviteScopeHint:
+    "Bu yöneticinin yöneteceği ortamları seçin. Hiçbirini seçmezseniz kiracının tamamını yönetir.",
+  tenantAdminEnvironments: "Ortamlar",
+  tenantAdminWholeTenant: "Tüm kiracı",
   tenantInviteSend: "Davet gönder",
   tenantLastOwner: "Kiracının son sahibi kaldırılamaz. Önce başka birini sahip yapın.",
   platformTenantName: "Ad",
-  platformManagementSlug: "Yönetim ortamı",
-  platformManagementSlugHint:
-    "Kiracının yöneticilerinin giriş yaptığı yönetim ortamının kısa adı. Küçük harf, rakam ve tire; 3 ile 63 karakter arası. Sonradan değiştirilemez.",
+  platformPrimarySlug: "Ana ortam",
+  platformPrimarySlugHint:
+    "Kiracının ana ortamının kısa adı: ilk ortamı; kullanıcıları da yöneticileri de burada giriş yapar. Küçük harf, rakam ve tire; 3 ile 63 karakter arası. Sonradan değiştirilemez.",
   platformFounderEmail: "Kurucunun e-posta adresi",
   platformFounderEmailHint:
     "Kurucuya bir davet bağlantısı ve bir kod gider. Kiracıyı kurucu kurar; bu kurulumun operatörü onda hiçbir şeye sahip olmaz.",

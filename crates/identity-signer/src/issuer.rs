@@ -31,7 +31,7 @@ pub const LABEL: &str = "claim-issuer";
 /// m.3 (c)), the agent record's export: operator, sponsor and kind (OP-154 m.3 (c), AG-20),
 /// what a verified workload credential or hardware attestation shows (OP-154 m.3 (d), (s),
 /// U20), the environment issuer's registry classes (OP-153 m.2 N0, m.3 (o), (p), (q)) and the
-/// `org_member` scalar beside `membership` (OP-153 m.25 (i)) and, for a management environment,
+/// `org_member` scalar beside `membership` (OP-153 m.25 (i)) and, for a primary environment,
 /// `tenant_administration` (OP-159 m.47 (d), (f)). Regime classes are never its own.
 pub const CLASSES: [&str; 17] = [
     "authentication",

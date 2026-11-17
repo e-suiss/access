@@ -478,7 +478,7 @@ impl World {
                 issuer_predicate_input: Vec::new(),
                 provisioned_by: None,
                 administered: None,
-                management: None,
+                primary: None,
             })
             .await
             .unwrap();
@@ -765,7 +765,7 @@ async fn environment_creation_opens_genesis_and_fixes_the_issuer() {
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
             administered: None,
-            management: None,
+            primary: None,
         })
         .await;
     assert!(taken.is_err());

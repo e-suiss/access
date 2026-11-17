@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_internal_api::idp::{
-    AdminRule, GenesisOrder, MANAGEMENT_BINDING_CLASSES, NAMESPACES, RESOURCE_NAMESPACE,
+    AdminRule, GenesisOrder, NAMESPACES, PRIMARY_BINDING_CLASSES, RESOURCE_NAMESPACE,
     TENANT_ADMINISTRATION, spp,
 };
 use access_kernel::codec::Canonical;
@@ -341,7 +341,7 @@ fn issuer_use(issuer: Id, use_: &str, classes: &[&str]) -> Value {
 }
 
 /// The Acceptances of a tenant administrator rule (OP-159 m.47 (d)): `subject-selection` of
-/// `tenant_administration` from the management environment's issuer and, when that issuer is
+/// `tenant_administration` from the primary environment's issuer and, when that issuer is
 /// another environment's, its `actor-binding` of who the administrator is and its
 /// `authentication` Claims as predicate input.
 #[must_use]
@@ -355,7 +355,7 @@ pub fn admin_rule_acceptances(rule: &AdminRule) -> Vec<Value> {
         out.push(issuer_use(
             rule.issuer,
             access_kernel::claim::ACTOR_BINDING,
-            &MANAGEMENT_BINDING_CLASSES,
+            &PRIMARY_BINDING_CLASSES,
         ));
         out.push(issuer_use(
             rule.issuer,

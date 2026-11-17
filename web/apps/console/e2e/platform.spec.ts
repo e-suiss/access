@@ -40,7 +40,7 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       {
         tenant_id: "tnt_acme",
         display_name: "Acme",
-        management_slug: "acme-admin",
+        primary_slug: "acme",
         founding: "completed",
         status: "active",
         placement: "pool-default",
@@ -49,7 +49,7 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       {
         tenant_id: "tnt_globex",
         display_name: "<i>Globex</i>",
-        management_slug: "globex-admin",
+        primary_slug: "globex-admin",
         founding: "expired",
         status: "provisioning",
         placement: "pool-default",
@@ -57,7 +57,7 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
       {
         tenant_id: "tnt_initech",
         display_name: "Initech",
-        management_slug: "initech-admin",
+        primary_slug: "initech-admin",
         founding: "completed",
         status: "suspended",
         placement: "pool-eu",
@@ -66,8 +66,14 @@ function seedPlatform(bff: ConsoleMock, held: readonly string[] = ACTIONS): void
   });
   bff.admin.set("platform/tenants/tnt_acme/envs", {
     items: [
-      { slug: "acme-admin", kind: "management", tenant_id: "tnt_acme", status: "active" },
-      { slug: "acme", kind: "standard", tenant_id: "tnt_acme", status: "active", sandbox: false },
+      { slug: "acme", kind: "primary", tenant_id: "tnt_acme", status: "active" },
+      {
+        slug: "acme-staging",
+        kind: "standard",
+        tenant_id: "tnt_acme",
+        status: "active",
+        sandbox: false,
+      },
     ],
   });
   bff.admin.set("platform/tenants/tnt_acme/sandbox-domains", {
@@ -165,7 +171,7 @@ test("the switcher lists no tenant's environments in a platform session", async 
 });
 
 // OP-159 m.47 (c), m.42 (d), TN-131
-test("tenants show their name, management environment, console link, state and founding", async ({
+test("tenants show their name, primary environment, console link, state and founding", async ({
   page,
   bff,
 }) => {
@@ -174,15 +180,13 @@ test("tenants show their name, management environment, console link, state and f
   const list = page.getByTestId("tenant-list");
   const acme = list.locator('[data-tenant="tnt_acme"]');
   await expect(acme).toContainText("Acme");
-  await expect(acme).toContainText("acme-admin");
+  await expect(acme).toContainText("acme");
   await expect(acme).toContainText("Active");
   await expect(acme).toContainText("Done");
-  await expect(acme.getByTestId("environment-console-link")).toHaveText(
-    `${BASE}/console/acme-admin`,
-  );
+  await expect(acme.getByTestId("environment-console-link")).toHaveText(`${BASE}/console/acme`);
   await expect(acme.getByTestId("environment-console-link")).toHaveAttribute(
     "href",
-    "/console/acme-admin",
+    "/console/acme",
   );
   const globex = list.locator('[data-tenant="tnt_globex"]');
   await expect(globex).toContainText("<i>Globex</i>");
@@ -207,7 +211,7 @@ test("a new tenant with its founder is drafted, shown, signed on the platform Gr
   const send = panel.getByRole("button", { name: "Create tenant" });
   await expect(send).toBeDisabled();
   await panel.getByLabel("Name").fill("Hooli");
-  await panel.getByLabel("Management environment").fill("hooli-admin");
+  await panel.getByLabel("Primary environment").fill("hooli-admin");
   await panel.getByLabel("Founder's email address").fill("founder@hooli.example");
   await panel.getByLabel("Placement (optional)").fill("pool-eu");
   await send.click();
@@ -225,7 +229,7 @@ test("a new tenant with its founder is drafted, shown, signed on the platform Gr
   expect(w?.body).toMatchObject({
     tenant_id: "tnt_new",
     display_name: "Hooli",
-    management_slug: "hooli-admin",
+    primary_slug: "hooli-admin",
     founder_email: "founder@hooli.example",
     placement: "pool-eu",
   });
@@ -291,7 +295,7 @@ test("an environment's metadata and key state show, with no way to create one", 
   seedPlatform(bff);
   await openPlatform(page, "/console/platform/platform/envs");
   await page.getByLabel("Tenant").selectOption("tnt_acme");
-  await expect(page.getByTestId("envs-list")).toContainText("Management");
+  await expect(page.getByTestId("envs-list")).toContainText("Primary");
   await page.getByRole("button", { name: "acme", exact: true }).click();
   await expect(page.getByTestId("environment-key-state")).toHaveAttribute("data-state", "signing");
   await expect(page.getByTestId("environment-meta")).toContainText(
@@ -334,7 +338,7 @@ test("a tampered platform draft is refused before the signature screen", async (
   bff.tamper = true;
   const panel = page.getByRole("region", { name: "New tenant" });
   await panel.getByLabel("Name").fill("Hooli");
-  await panel.getByLabel("Management environment").fill("hooli-admin");
+  await panel.getByLabel("Primary environment").fill("hooli-admin");
   await panel.getByLabel("Founder's email address").fill("founder@hooli.example");
   await panel.getByRole("button", { name: "Create tenant" }).click();
   await expect(panel.getByRole("alert")).toContainText(en.signatureMismatch);

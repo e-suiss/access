@@ -1,4 +1,4 @@
-//! The management environment's issuer as the tenant's administration source (OP-159 m.47 (d), (f),
+//! The primary environment's issuer as the tenant's administration source (OP-159 m.47 (d), (f),
 //! TN-139): for each administrator and each domain it administers, a line of short-lived
 //! `tenant_administration` Claims about its Party there. A live administrator's line is renewed
 //! before it lapses; a removed or suspended one's is ended at once, and an end that never
@@ -39,7 +39,7 @@ pub struct Restated {
     pub failed: u32,
 }
 
-/// The management environment's administration courier.
+/// The primary environment's administration courier.
 pub struct Administration<S, I, C> {
     /// `access_app`.
     pub app: Pool,
@@ -201,6 +201,16 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
         let mut t = TenantTx::begin(&self.app, tenant, management)
             .await
             .map_err(down)?;
+        // OP-159 m.49 (d), TN-144
+        if let Some(scope) = admin.as_ref().and_then(|a| a.scope.as_ref()) {
+            let environment = store::environment_of_domain(&mut t, domain)
+                .await
+                .map_err(down)?;
+            if !environment.is_some_and(|e| scope.contains(&e)) {
+                t.commit().await.map_err(down)?;
+                return Ok(None);
+            }
+        }
         store::open_line(&mut t, subject, domain, party)
             .await
             .map_err(down)?;
@@ -320,7 +330,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
             let mut t = TenantTx::begin_tenant(&self.app, tenant)
                 .await
                 .map_err(down)?;
-            let management = store::management_environment(&mut t).await.map_err(down)?;
+            let management = store::primary_environment(&mut t).await.map_err(down)?;
             t.commit().await.map_err(down)?;
             let Some((management, _)) = management else {
                 continue;

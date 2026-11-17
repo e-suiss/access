@@ -1121,7 +1121,7 @@ export const en = {
   platformSandboxesIntro:
     "A tenant's sandbox domains. Authority never flows between a sandbox and a production environment, and each sandbox has a fixed daily budget.",
   platformBoundary:
-    "What is inside an environment is managed by its tenant's administrators, in the tenant's management environment.",
+    "What is inside an environment is managed by its tenant's administrators, in the tenant's primary environment.",
   platformEnvironmentDetails: "Environment {slug}",
   platformSandbox: "Sandbox",
   platformSlug: "Short name",
@@ -1151,7 +1151,7 @@ export const en = {
   // OP-159 m.47
   enterTitle: "Manage {environment}",
   enterIntro:
-    "You're signed in at {home}, your tenant's management environment. You manage this environment with that same sign-in.",
+    "You're signed in at {home}, your tenant's primary environment. You manage this environment with that same sign-in.",
   enterDeviceTitle: "This browser's key in this environment",
   enterDeviceText:
     "The first time you open this environment, this browser registers its own key here. You sign once; no new sign-in is needed.",
@@ -1159,17 +1159,13 @@ export const en = {
   enterGoHome: "Go to {home}",
   enterAction: "Register and open {environment}",
   enterFailed: "This browser could not be registered here. Nothing was changed. Try again shortly.",
-  tenantDefaultsTitle: "Record this environment's sign-in rules",
-  tenantDefaultsText:
-    "Until you record them, this management environment follows its built-in rules: accounts only by invitation, no social sign-in, and a second step at every sign-in. Recording them takes one signature; you can change them later in the settings.",
-  tenantDefaultsAction: "Record the sign-in rules",
   tenantHomeTitle: "Your tenant",
   tenantHomeIntro:
-    "{environment} is your tenant's management environment. From here you manage every environment of the tenant and its administrators.",
+    "{environment} is your tenant's primary environment: its people sign in here, and so do you. From here you manage every environment of the tenant and its administrators.",
   tenantEnvironments: "Environments",
   tenantEnvironmentsIntro:
     "Open an environment to manage its people, apps and settings. You stay signed in.",
-  tenantManagement: "Management",
+  tenantPrimary: "Primary",
   tenantEnvironmentCreate: "New environment",
   tenantEnvironmentCreateHint:
     "The environment belongs to this tenant. Its owners are the tenant's owners, and its administrators are the tenant's administrators.",
@@ -1177,7 +1173,7 @@ export const en = {
   tenantEnvironmentCreateSend: "Create environment",
   tenantAdmins: "Administrators",
   tenantAdminsIntro:
-    "Administrators sign in here once and manage every environment of the tenant. Owners can also change roles, permissions and trust.",
+    "Administrators sign in here once, with a second step, and manage the environments they were invited to. Owners can also change roles, permissions and trust.",
   tenantAdminIdentifier: "Address",
   tenantAdminRole: "Role",
   tenantAdminSince: "Since",
@@ -1195,12 +1191,17 @@ export const en = {
   tenantInviteHint:
     "The invitation goes to this address. Whoever accepts it becomes an administrator, never an owner.",
   tenantInviteEmail: "Email address",
+  tenantInviteScope: "Environments",
+  tenantInviteScopeHint:
+    "Pick the environments this administrator manages. With none picked, the administrator manages the whole tenant.",
+  tenantAdminEnvironments: "Environments",
+  tenantAdminWholeTenant: "Whole tenant",
   tenantInviteSend: "Send invitation",
   tenantLastOwner: "The tenant's last owner can't be removed. Make someone else an owner first.",
   platformTenantName: "Name",
-  platformManagementSlug: "Management environment",
-  platformManagementSlugHint:
-    "The short name of the tenant's management environment, where its administrators sign in. Lowercase letters, digits and hyphens, 3 to 63 characters. It can't be changed later.",
+  platformPrimarySlug: "Primary environment",
+  platformPrimarySlugHint:
+    "The short name of the tenant's primary environment: its first environment, where its people and its administrators sign in. Lowercase letters, digits and hyphens, 3 to 63 characters. It can't be changed later.",
   platformFounderEmail: "Founder's email address",
   platformFounderEmailHint:
     "The founder gets an invitation link and a code. They set up the tenant; this deployment's operator holds nothing in it.",

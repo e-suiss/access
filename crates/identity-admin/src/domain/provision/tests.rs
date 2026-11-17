@@ -200,7 +200,7 @@ fn tenant_order(name: &str, slug: &str) -> TenantOrder {
     TenantOrder {
         tenant: [2; 16],
         display_name: String::from(name),
-        management_slug: String::from(slug),
+        primary_slug: String::from(slug),
         placement: String::from(DEFAULT_PLACEMENT),
         founder: FounderCommitment {
             index: [4; 32],
@@ -212,7 +212,7 @@ fn tenant_order(name: &str, slug: &str) -> TenantOrder {
 
 // OP-159 m.47 (a), (c), TN-131, TN-141
 #[test]
-fn a_tenant_order_checks_its_name_and_management_slug() {
+fn a_tenant_order_checks_its_name_and_primary_slug() {
     assert_eq!(
         PlatformChange::Tenant(tenant_order("Acme", "acme-admin")).check(),
         Ok(())

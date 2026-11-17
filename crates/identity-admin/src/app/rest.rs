@@ -363,8 +363,8 @@ pub enum Op {
     PutSigningProfile,
     /// `putKexShare`: `idp.environment.kex_share` (OP-159 m.3 (a), (t)).
     PutKexShare,
-    /// `bindManagementEnvironment`: `idp.environment.consumer_bind` (OP-159 m.48 (b)).
-    BindManagementEnvironment,
+    /// `bindPrimaryEnvironment`: `idp.environment.consumer_bind` (OP-159 m.48 (b)).
+    BindPrimaryEnvironment,
 }
 
 impl Op {
@@ -533,7 +533,7 @@ impl Op {
             "putAuditTier" => Self::PutAuditTier,
             "putSigningProfile" => Self::PutSigningProfile,
             "putKexShare" => Self::PutKexShare,
-            "bindManagementEnvironment" => Self::BindManagementEnvironment,
+            "bindPrimaryEnvironment" => Self::BindPrimaryEnvironment,
             _ => return None,
         })
     }
@@ -2331,10 +2331,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::KexShare(crate::domain::assurance::KexShare::parse(&own_body(m))?)
         }
         // OP-159 m.48 (b)
-        Op::BindManagementEnvironment => {
-            only(m, &["management"])?;
+        Op::BindPrimaryEnvironment => {
+            only(m, &["primary"])?;
             Change::ConsumerBind {
-                management: String::from(text(m, "management")?),
+                primary: String::from(text(m, "primary")?),
             }
         }
         Op::ResendRelay => {
@@ -2713,18 +2713,6 @@ pub fn default_signin() -> SigninPolicy {
     }
 }
 
-/// The sign-in requirements a management environment reads from its kind while it has no recorded
-/// policy (TN-138, OP-159 m.47 (b), m.48 (c)): a second factor required, registration by invitation
-/// only and no social sign-in; what its founder records at the first console sign-in.
-#[must_use]
-pub fn management_signin() -> SigninPolicy {
-    SigninPolicy {
-        mfa_required: true,
-        registration: Registration::InviteOnly,
-        ..default_signin()
-    }
-}
-
 /// What one read returned: views with their `ETag` positions, and the natural key the next page
 /// starts after.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -2824,9 +2812,9 @@ pub enum Kind {
     /// The environment's signing profile, signing keys and algorithms, key exchange share policy and
     /// crypto module (OP-159 m.3 (o), (r), (t)).
     Signing,
-    /// The tenant's environments, read in its management environment (OP-159 m.47 (a)).
+    /// The tenant's environments, read in its primary environment (OP-159 m.47 (a)).
     TenantEnvironments,
-    /// The tenant's administrators and pending invitations, read in its management environment
+    /// The tenant's administrators and pending invitations, read in its primary environment
     /// (OP-159 m.47 (e), (f)).
     TenantAdmins,
 }
@@ -3672,16 +3660,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 // OP-156 m.3 (d), (f), OP-159 m.3 (ii)
                 let push = t.push_enabled().await?;
                 let sms_otp = t.sms_otp_enabled().await?;
-                // TN-138, OP-159 m.48 (c)
-                let signin_default = if access_store::tenant_admin::environment_kind(t)
-                    .await?
-                    .as_deref()
-                    == Some(crate::domain::tenant::MANAGEMENT)
-                {
-                    management_signin()
-                } else {
-                    default_signin()
-                };
+                let signin_default = default_signin();
                 let view = json!({
                     "jose_alg": s.jose_alg,
                     "argon2": {
@@ -3690,8 +3669,6 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                     "rp_id": s.rp_id,
                     "cimd": { "enabled": s.cimd_enabled, "domains": s.cimd_domains },
                     "signin_policy": stored(p.signin.as_deref(), &signin_default.to_value()),
-                    // OP-159 m.48 (c)
-                    "signin_policy_recorded": p.signin.is_some(),
                     "session_policy":
                         stored(p.session.as_deref(), &SessionPolicy::DEFAULT.to_value()),
                     "branding": stored(branding.as_deref(), &Branding::default().to_value()),

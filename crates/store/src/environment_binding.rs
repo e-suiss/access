@@ -157,7 +157,7 @@ pub async fn domains(
 }
 
 /// The environments of the transaction's tenant whose Claims `domain` consumes (TN-4, OP-159 m.47
-/// (d)): for a tenant environment, its management environment.
+/// (d)): for a tenant environment, its primary environment.
 ///
 /// # Errors
 /// [`StoreError`].

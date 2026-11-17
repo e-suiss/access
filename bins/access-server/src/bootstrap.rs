@@ -837,7 +837,10 @@ impl Plan {
             .tenants
             .iter()
             .cloned()
-            .chain(managed.iter().flat_map(|t| t.environments.iter().cloned()))
+            .chain(managed.iter().flat_map(|t| {
+                // OP-159 m.49 (h)
+                std::iter::once(t.primary.clone()).chain(t.environments.iter().cloned())
+            }))
             .collect();
         let mut products = Vec::new();
         for p in file.products {
@@ -1451,7 +1454,7 @@ where
                     &plan.platform,
                     style,
                     Some(Administered::Own(
-                        access_identity_admin::app::founding::management_actions()
+                        access_identity_admin::app::founding::primary_actions()
                             .into_iter()
                             .chain(
                                 access_identity_admin::domain::provision::PlatformAction::ALL
@@ -1552,7 +1555,7 @@ where
                     slug: o.slug,
                     is_platform: false,
                     opened: Some((o.tenant, o.environment, o.domain, o.created)),
-                    founder: Some(tenants::founder_label(&t.management)),
+                    founder: Some(tenants::founder_label(&t.primary)),
                 });
             }
             managed.push(out);
@@ -2116,7 +2119,7 @@ where
                 issuer_predicate_input,
                 provisioned_by: None,
                 // TN-138, OP-159 m.47 (i)
-                management: administered
+                primary: administered
                     .as_ref()
                     .map(|_| EnvironmentId::from_bytes(*tenant.as_bytes())),
                 administered,

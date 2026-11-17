@@ -3,11 +3,11 @@
 // The environment's bootstrap test user signs in at the environment's own hosted login, with its
 // password and a code of its authenticator app (OP-149 m.26 (b)); the cookie alone then shows no
 // section and reads no organization: every authority read needs this browser's device key, which
-// this sign-in has not registered. The Acme tenant's administrator signs in once at `acme-admin`
-// and administers `acme`; the platform administrator lists tenants and opens no environment.
+// this sign-in has not registered. The Acme tenant's administrator signs in at `acme`, its primary
+// environment, with a second step; the platform administrator lists tenants and opens no environment.
 import { expect, type Page, test } from "@playwright/test";
 
-import { MANAGEMENT, NOT_READY, READY, registerAndOpen, signIn as signInAdmin } from "./signin.js";
+import { NOT_READY, PRIMARY, READY, registerAndOpen, signIn as signInAdmin } from "./signin.js";
 import { nextStep, totp } from "./totp.js";
 
 const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
@@ -67,15 +67,15 @@ test.describe("@live console", () => {
   });
 });
 
-// OP-159 m.47 (a), (i): the local plan's tenant: its management environment and its environment
+// OP-159 m.47 (a), (i): the local plan's tenant: its primary environment and its environment
 test.describe("@live console tenant", () => {
   test("@live the tenant's home and environment addresses are served", async ({ page }) => {
-    for (const path of [`/console/${MANAGEMENT}`, "/console/acme", "/console/platform"]) {
+    for (const path of [`/console/${PRIMARY}`, "/console/platform"]) {
       const r = await page.goto(path);
       expect(r?.status()).toBe(200);
     }
     const tenant = await page.request.get(
-      `/console/api/proxy/admin/envs/${MANAGEMENT}/tenant/environments`,
+      `/console/api/proxy/admin/envs/${PRIMARY}/tenant/environments`,
     );
     expect([401, 403]).toContain(tenant.status());
   });
@@ -89,7 +89,7 @@ test.describe("@live console tenant", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
     await page.getByRole("button", { name: "Environment acme: switch environment" }).click();
     await expect(
-      page.getByRole("menu").getByRole("menuitemradio", { name: `${MANAGEMENT} (tenant home)` }),
+      page.getByRole("menu").getByRole("menuitemradio", { name: `${PRIMARY} (tenant home)` }),
     ).toBeVisible();
   });
 
@@ -121,10 +121,10 @@ test.describe("@live console tenant", () => {
       .click();
     await page.getByRole("link", { name: "Tenants" }).click();
     const acme = page.getByTestId("tenant-list").getByRole("row", { name: /Acme/ });
-    await expect(acme).toContainText(MANAGEMENT);
+    await expect(acme).toContainText(PRIMARY);
     await expect(acme.getByTestId("environment-console-link")).toHaveAttribute(
       "href",
-      `/console/${MANAGEMENT}`,
+      `/console/${PRIMARY}`,
     );
     await expect(page.getByRole("region", { name: "New environment" })).toHaveCount(0);
   });

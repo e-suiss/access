@@ -78,7 +78,9 @@ where
         tx: &mut D::Tx,
         l: &Loaded,
     ) -> Result<Option<[u8; 16]>, SessionError> {
-        if !matches!(l.state.purpose, Purpose::Login) || self.policy.mfa != MfaPolicy::Required {
+        if !matches!(l.state.purpose, Purpose::Login)
+            || self.policy_for(&l.state).mfa != MfaPolicy::Required
+        {
             return Ok(None);
         }
         let Some(subject) = l.state.subject.filter(|_| l.state.first_done()) else {

@@ -71,7 +71,7 @@ function sign1Parts(bytes: Uint8Array): {
   return { protected: p, payload, sig };
 }
 
-/** A device key the session registered in an environment its management environment administers. */
+/** A device key the session registered in an environment its primary environment administers. */
 interface Foreign {
   readonly key: CryptoKey;
   readonly kid: string;
@@ -327,7 +327,7 @@ export class ConsoleMock {
     return (await this.statement(s, ais, mode)) !== undefined;
   }
 
-  /** Whether `slug` is a standard environment the session's management environment administers. */
+  /** Whether `slug` is a standard environment the session's primary environment administers. */
   administers(slug: string): boolean {
     const listed = this.admin.get(`envs/${this.environment}/tenant/environments`) as
       | { items?: { slug: string; kind: string }[] }
@@ -637,8 +637,8 @@ export class ConsoleMock {
         const key =
           typeof b["key"] === "string"
             ? b["key"]
-            : typeof filled["management_slug"] === "string"
-              ? filled["management_slug"]
+            : typeof filled["primary_slug"] === "string"
+              ? filled["primary_slug"]
               : "tnt_new";
         const d = envelopeOf({
           action: { namespace: "idp.platform", name: action[0], major: 1 },

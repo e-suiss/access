@@ -1,6 +1,6 @@
 //! The plan's tenants with administrators (OP-159 m.47 (c), (d), (i), TN-141): the platform creates
 //! each with a founder invitation, the bootstrap plays the founder headless (the address proven
-//! with the code, the management environment opened with the founder's device key as its root, the
+//! with the code, the primary environment opened with the founder's device key as its root, the
 //! founder's account with the plan's password and authenticator app, the founding closed), then
 //! the founder's key opens each of the tenant's environments by `idp.tenant.environment_create`.
 //! Each environment's root is the founder, never the operator. A second run finds every step done.
@@ -32,10 +32,10 @@ use super::{
     named_password, root_party, server_time, sign, token_key,
 };
 
-/// The token label prefix of a tenant founder's device key: `<prefix>/<management slug>`.
+/// The token label prefix of a tenant founder's device key: `<prefix>/<primary slug>`.
 pub(crate) const FOUNDER_LABEL: &str = "access/bootstrap/founder";
 
-/// The token label of the founder of the management environment `slug`.
+/// The token label of the founder of the primary environment `slug`.
 pub(crate) fn founder_label(slug: &str) -> String {
     format!("{FOUNDER_LABEL}/{slug}")
 }
@@ -45,7 +45,7 @@ pub(crate) fn founder_label(slug: &str) -> String {
 #[serde(deny_unknown_fields)]
 pub(super) struct TenantFile {
     name: String,
-    management: String,
+    primary: String,
     #[serde(default)]
     environments: Vec<String>,
     founder: FounderFile,
@@ -65,7 +65,7 @@ impl core::fmt::Debug for TenantFile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TenantFile")
             .field("name", &self.name)
-            .field("management", &self.management)
+            .field("primary", &self.primary)
             .field("environments", &self.environments)
             .finish_non_exhaustive()
     }
@@ -76,8 +76,8 @@ impl core::fmt::Debug for TenantFile {
 pub(crate) struct TenantPlan {
     /// Its display name.
     pub(crate) name: String,
-    /// Its management environment's slug.
-    pub(crate) management: String,
+    /// Its primary environment's slug.
+    pub(crate) primary: String,
     /// Its other environments' slugs.
     pub(crate) environments: Vec<String>,
     /// The founder's identifier.
@@ -92,7 +92,7 @@ impl core::fmt::Debug for TenantPlan {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TenantPlan")
             .field("name", &self.name)
-            .field("management", &self.management)
+            .field("primary", &self.primary)
             .field("environments", &self.environments)
             .field("identifier", &self.identifier)
             .finish_non_exhaustive()
@@ -107,7 +107,7 @@ pub(super) fn check(
     let mut seen: std::collections::BTreeSet<String> = taken.iter().cloned().collect();
     let mut out = Vec::with_capacity(files.len());
     for f in files {
-        for slug in std::iter::once(&f.management).chain(&f.environments) {
+        for slug in std::iter::once(&f.primary).chain(&f.environments) {
             if !seen.insert(slug.clone()) {
                 return Err(BootstrapError::Plan(format!(
                     "tenant {}: environment {slug} is named twice",
@@ -122,7 +122,7 @@ pub(super) fn check(
         )?;
         out.push(TenantPlan {
             name: f.name,
-            management: f.management,
+            primary: f.primary,
             environments: f.environments,
             identifier: f.founder.identifier,
             password,
@@ -142,8 +142,8 @@ pub(super) fn check(
 pub(crate) struct TenantOut {
     /// Its display name.
     pub(crate) name: String,
-    /// Its management environment: the console address is `/console/<management>`.
-    pub(crate) management: String,
+    /// Its primary environment: the console address is `/console/<primary>`.
+    pub(crate) primary: String,
     /// Its other environments.
     pub(crate) environments: Vec<String>,
     /// The founder, the tenant's first owner.
@@ -155,7 +155,7 @@ pub(crate) struct TenantOut {
 pub(crate) struct FounderOut {
     /// The login identifier.
     pub(crate) identifier: String,
-    /// The account (`usr_…`) in the management environment.
+    /// The account (`usr_…`) in the primary environment.
     pub(crate) subject: String,
     /// Its device Party, the root of the tenant's environments, base64url.
     pub(crate) party: String,
@@ -200,7 +200,7 @@ where
 {
     /// The founded tenant of `t` and its environments, founding it headless when the platform
     /// has not created it yet (OP-159 m.47 (c), (i)); returns the opened environments with the
-    /// management environment first, the founder's key and the summary.
+    /// primary environment first, the founder's key and the summary.
     pub(super) async fn managed_tenant(
         &self,
         admin: &Admin<'_, P, P, K>,
@@ -208,15 +208,15 @@ where
         platform: &PlatformRoot<'_>,
         (t, genesis): (&TenantPlan, GenesisOf<'_>),
     ) -> Result<(Vec<Opened>, HsmSigner, TenantOut), BootstrapError> {
-        let founder_key = token_key(self.hsm, &founder_label(&t.management))?;
+        let founder_key = token_key(self.hsm, &founder_label(&t.primary))?;
         let founder = root_party(&founder_key.public_key());
-        let created = route_by_slug(self.router, &t.management).await?.is_none();
-        let (tenant, management, domain) = if created {
-            self.found(admin, platform, t, founder).await?
+        let created = route_by_slug(self.router, &t.primary).await?.is_none();
+        let (tenant, primary, domain) = if created {
+            self.found(admin, platform, (t, genesis), founder).await?
         } else {
-            let route = route_by_slug(self.router, &t.management)
+            let route = route_by_slug(self.router, &t.primary)
                 .await?
-                .ok_or(BootstrapError::Plan(format!("{}: no route", t.management)))?;
+                .ok_or(BootstrapError::Plan(format!("{}: no route", t.primary)))?;
             let mut tx = TenantTx::begin(self.app, route.tenant, route.environment).await?;
             let g = access_store::idp::governance(&mut tx)
                 .await?
@@ -228,31 +228,26 @@ where
                 Digest(*g.domain.as_bytes()),
             )
         };
-        admin.open_keys(tenant, management).await?;
-        self.onboard(tenant, management, domain, &founder_key, founder)
+        admin.open_keys(tenant, primary).await?;
+        self.onboard(tenant, primary, domain, &founder_key, founder)
             .await?;
         let (subject, external, _) = self
-            .account(ids, (tenant, management), &t.identifier, Some(&t.password))
+            .account(ids, (tenant, primary), &t.identifier, Some(&t.password))
             .await?;
         let (_, totp) = self
-            .authenticators(
-                &t.management,
-                subject,
-                &t.identifier,
-                (false, t.totp.as_ref()),
-            )
+            .authenticators(&t.primary, subject, &t.identifier, (false, t.totp.as_ref()))
             .await?;
         if created {
             let token = Self::founding_token(admin, tenant)?;
             admin
-                .finish_founding(&t.management, &token, (subject, founder))
+                .finish_founding(&t.primary, &token, (subject, founder))
                 .await
                 .map_err(|e| BootstrapError::Refused(e.to_string()))?;
         }
         let mut opened = vec![Opened {
-            slug: t.management.clone(),
+            slug: t.primary.clone(),
             tenant,
-            environment: management,
+            environment: primary,
             domain,
             created,
         }];
@@ -260,7 +255,7 @@ where
             opened.push(
                 self.tenant_environment(
                     admin,
-                    (tenant, management, domain),
+                    (tenant, primary, domain),
                     (&founder_key, subject),
                     (slug, genesis(slug, founder)),
                 )
@@ -269,7 +264,7 @@ where
         }
         let out = TenantOut {
             name: t.name.clone(),
-            management: t.management.clone(),
+            primary: t.primary.clone(),
             environments: t.environments.clone(),
             founder: FounderOut {
                 identifier: t.identifier.clone(),
@@ -293,19 +288,19 @@ where
     }
 
     /// Creates the tenant by the platform root's `idp.platform.tenant_create` and plays its
-    /// founder: the address proven with the code and the management environment opened with
+    /// founder: the address proven with the code and the primary environment opened with
     /// `founder` as its root.
     async fn found(
         &self,
         admin: &Admin<'_, P, P, K>,
         platform: &PlatformRoot<'_>,
-        t: &TenantPlan,
+        (t, genesis): (&TenantPlan, GenesisOf<'_>),
         founder: access_kernel::model::Id,
     ) -> Result<(TenantId, EnvironmentId, Digest), BootstrapError> {
         let email = access_identity_admin::domain::tenant::folded_email(&t.identifier)
             .ok_or_else(|| BootstrapError::Plan(format!("{}: founder identifier", t.name)))?;
         let tenant = if let Some(tenant) =
-            tenants::founding_by_slug(self.router, &t.management).await?
+            tenants::founding_by_slug(self.router, &t.primary).await?
         {
             tenant
         } else {
@@ -315,7 +310,7 @@ where
                 let change = PlatformChange::Tenant(TenantOrder {
                     tenant: *tenant.as_bytes(),
                     display_name: t.name.clone(),
-                    management_slug: t.management.clone(),
+                    primary_slug: t.primary.clone(),
                     placement: String::from(PLACEMENT),
                     founder: commitment,
                 });
@@ -364,11 +359,11 @@ where
         let (_, secrets) = admin.founder_commitment(*tenant.as_bytes(), &email, 0)?;
         let token = secrets.token.expose().clone();
         admin
-            .verify_founding(&t.management, &token, (&email, secrets.code.expose()))
+            .verify_founding(&t.primary, &token, (&email, secrets.code.expose()))
             .await
             .map_err(|e| BootstrapError::Refused(e.to_string()))?;
         let created = admin
-            .open_management(&t.management, &token, founder)
+            .open_primary(&t.primary, &token, founder, genesis(&t.primary, founder))
             .await
             .map_err(|e| BootstrapError::Refused(e.to_string()))?;
         Ok((tenant, created.environment, created.domain))
@@ -379,7 +374,7 @@ where
     async fn tenant_environment(
         &self,
         admin: &Admin<'_, P, P, K>,
-        (tenant, management, domain): (TenantId, EnvironmentId, Digest),
+        (tenant, primary, domain): (TenantId, EnvironmentId, Digest),
         (founder_key, subject): (&HsmSigner, [u8; 16]),
         (slug, genesis): (&str, Genesis),
     ) -> Result<Opened, BootstrapError> {
@@ -404,7 +399,7 @@ where
             });
             let m = Moment::at(server_time(self.app).await?);
             let prepared = admin
-                .prepare_tenant((tenant, management), &change, m.validity)
+                .prepare_tenant((tenant, primary), &change, m.validity)
                 .await
                 .map_err(|e| BootstrapError::Refused(e.to_string()))?;
             self.lead(prepared.domain).await?;
@@ -418,7 +413,7 @@ where
             let (applied, opened) = Box::pin(admin.apply_tenant(
                 TenantWrite {
                     tenant,
-                    environment: management,
+                    environment: primary,
                     change: &change,
                     subject: Some(subject),
                     nonce: nonce.to_vec(),
@@ -446,7 +441,7 @@ where
         self.onboard(tenant, environment, env_domain, founder_key, founder)
             .await?;
         // OP-159 m.47 (d), (f)
-        let mut tx = TenantTx::begin(self.app, tenant, management).await?;
+        let mut tx = TenantTx::begin(self.app, tenant, primary).await?;
         tenants::open_line(
             &mut tx,
             &subject,

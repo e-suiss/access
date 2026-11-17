@@ -9,7 +9,7 @@
     "/v1/login/flows": {
       "post": {
         "operationId": "createFlow",
-        "summary": "Starts a flow; its kind is login unless the body names another.",
+        "summary": "Starts a flow; its kind is login unless the body names another. An `acr` at AAL2 or above, passed on from the authorization request, has the sign-in ask for a second factor (OP-159 m.49 (c)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2027,7 +2027,7 @@
     "/v1/login/branding": {
       "get": {
         "operationId": "getBranding",
-        "summary": "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `management`) and, for a management environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)).",
+        "summary": "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `primary`) and, for a primary environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2048,7 +2048,7 @@
     "/v1/foundings/{token}": {
       "get": {
         "operationId": "getFounding",
-        "summary": "A tenant founding's name, its management environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)).",
+        "summary": "A tenant founding's name, its primary environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2119,7 +2119,7 @@
     "/v1/foundings/{token}/complete": {
       "post": {
         "operationId": "completeFounding",
-        "summary": "Opens the management environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141).",
+        "summary": "Opens the primary environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2159,7 +2159,7 @@
     "/v1/admin-invites/{token}": {
       "get": {
         "operationId": "getAdminInvite",
-        "summary": "A tenant administrator invitation on the management environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)).",
+        "summary": "A tenant administrator invitation on the primary environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -5418,7 +5418,7 @@
               "kind": {
                 "enum": [
                   "standard",
-                  "management"
+                  "primary"
                 ]
               },
               "tenant_name": {
@@ -5426,7 +5426,7 @@
                   "string",
                   "null"
                 ],
-                "description": "The tenant's display name, for a management environment only (TN-138, OP-159 m.47 (b))."
+                "description": "The tenant's display name, for a primary environment only (TN-138, OP-159 m.47 (b))."
               }
             }
           }

@@ -75,6 +75,7 @@ fn a_tenant_change_binds_its_body_and_checks_its_fields() {
             email: String::from(email),
             days,
             inviter_name: None,
+            environments: Vec::new(),
         })
     };
     assert!(invite("bob@example.com", 7).check().is_ok());
@@ -86,10 +87,39 @@ fn a_tenant_change_binds_its_body_and_checks_its_fields() {
         invite("bob@example.com", 31).check(),
         Err(TenantInvalid::Lifetime)
     );
-    assert_eq!(
-        TenantInvalid::NotManagement.code(),
-        "management-environment"
+    assert_eq!(TenantInvalid::NotPrimary.code(), "primary-environment");
+}
+
+// OP-159 m.49 (d), TN-144
+#[test]
+fn an_invitation_scope_is_bound_sorted_and_distinct() {
+    let invite = |environments: &[&str]| {
+        TenantChange::AdminInvite(AdminInvite {
+            email: String::from("bob@example.com"),
+            days: 7,
+            inviter_name: None,
+            environments: environments.iter().map(|s| String::from(*s)).collect(),
+        })
+    };
+    let whole = invite(&[]);
+    let scoped = invite(&["acme", "acme-staging"]);
+    assert!(scoped.check().is_ok());
+    assert_ne!(whole.digest().unwrap(), scoped.digest().unwrap());
+    assert_ne!(
+        scoped.digest().unwrap(),
+        invite(&["acme-staging"]).digest().unwrap()
     );
+    for bad in [
+        &["acme-staging", "acme"][..],
+        &["acme", "acme"][..],
+        &["Acme"][..],
+    ] {
+        assert_eq!(invite(bad).check(), Err(TenantInvalid::Scope), "{bad:?}");
+    }
+    let many: Vec<String> = (0..=MAX_SCOPE).map(|i| format!("env-{i:03}")).collect();
+    let refs: Vec<&str> = many.iter().map(String::as_str).collect();
+    assert_eq!(invite(&refs).check(), Err(TenantInvalid::Scope));
+    assert_eq!(TenantInvalid::Scope.code(), "invalid-admin-scope");
 }
 
 // OP-159 m.47 (e)

@@ -1,5 +1,5 @@
-// OP-159 m.47 (a), (f), (h), TN-138, TN-140: the tenant as its management environment answers it. The
-// tenant's environments and administrators are read from `/admin/v1/envs/{management}/tenant/…`;
+// OP-159 m.47 (a), (f), (h), m.49, TN-140, TN-143: the tenant as its primary environment answers
+// it. The tenant's environments and administrators are read from `/admin/v1/envs/{primary}/tenant/…`;
 // every change there is drafted, shown on the signature screen as the Kernel decoded it, signed and
 // sent as one `idp.tenant.*` Exercise, as every console change is.
 import { queryOptions, skipToken } from "@tanstack/react-query";
@@ -11,7 +11,7 @@ import type { Confirm, Instance } from "./instance.js";
 
 export const TenantEnvironment = v.looseObject({
   slug: v.string(),
-  kind: v.picklist(["standard", "management"]),
+  kind: v.picklist(["standard", "primary"]),
   issuer: v.string(),
   created_at: v.string(),
   sandbox: v.boolean(),
@@ -25,44 +25,30 @@ export const TenantAdmin = v.looseObject({
   role: v.picklist(["owner", "admin"]),
   status: v.picklist(["invited", "active", "removed"]),
   since: v.string(),
+  // OP-159 m.49 (d): the environments it administers; null is the whole tenant
+  environments: v.exactOptional(v.nullable(v.array(v.string()))),
 });
 
 export type TenantAdmin = v.InferOutput<typeof TenantAdmin>;
 
 const Environments = items(TenantEnvironment);
 
-const SettingsRecorded = v.looseObject({ signin_policy_recorded: v.exactOptional(v.boolean()) });
-
-/**
- * OP-159 m.48 (c): the sign-in requirements a management environment reads from its kind until its
- * founder records them: e-mail and passkey, a second factor required, accounts by invitation only,
- * no social sign-in method.
- */
-export const MANAGEMENT_DEFAULTS = {
-  methods: ["email", "passkey"],
-  required_fields: ["email"],
-  mfa_required: true,
-  domain_allow: [],
-  domain_deny: [],
-  registration: "invite_only",
-} as const;
-
 const Admins = items(TenantAdmin);
 
-function base(management: string): string {
-  return `envs/${encodeURIComponent(management)}/tenant`;
+function base(primary: string): string {
+  return `envs/${encodeURIComponent(primary)}/tenant`;
 }
 
 /**
- * The tenant's environments when `management` is its management environment; `null` when it is
+ * The tenant's environments when `primary` is its primary environment; `null` when it is
  * not one, or the viewer may not read them (OP-159 m.47 (a)).
  */
 async function tenantEnvironments(
   instance: Instance,
-  management: string,
+  primary: string,
 ): Promise<readonly TenantEnvironment[] | null> {
   try {
-    return (await adminGet(instance, `${base(management)}/environments`, Environments)).items;
+    return (await adminGet(instance, `${base(primary)}/environments`, Environments)).items;
   } catch (e: unknown) {
     if (e instanceof Problem && e.status >= 400 && e.status < 500) return null;
     throw e;
@@ -71,52 +57,22 @@ async function tenantEnvironments(
 
 // OP-159 m.46 (d)
 /** The tenant's environments, read once for the session's own Instance. */
-export function tenantEnvironmentsQuery(instance: Instance | undefined, management: string) {
+export function tenantEnvironmentsQuery(instance: Instance | undefined, primary: string) {
   return queryOptions({
-    queryKey: ["tenant", management, instance?.id, "environments"] as const,
+    queryKey: ["tenant", primary, instance?.id, "environments"] as const,
     queryFn:
       instance === undefined || instance.environment !== undefined
         ? skipToken
-        : () => tenantEnvironments(instance, management),
+        : () => tenantEnvironments(instance, primary),
     staleTime: 300_000,
   });
 }
 
 /** The tenant's administrators, with their role and status. */
-export function tenantAdminsQuery(instance: Instance, management: string) {
+export function tenantAdminsQuery(instance: Instance, primary: string) {
   return queryOptions({
-    queryKey: ["tenant", management, instance.id, "admins"] as const,
-    queryFn: async () => (await adminGet(instance, `${base(management)}/admins`, Admins)).items,
-  });
-}
-
-// OP-159 m.48 (c)
-/** Whether the management environment still reads its sign-in requirements from its kind. */
-export function defaultsPendingQuery(instance: Instance, management: string) {
-  return queryOptions({
-    queryKey: ["tenant", management, instance.id, "defaults"] as const,
-    queryFn: async () =>
-      (
-        await adminGet(
-          instance,
-          `envs/${encodeURIComponent(management)}/settings`,
-          SettingsRecorded,
-        )
-      ).signin_policy_recorded === false,
-  });
-}
-
-/** Records the management defaults as the environment's sign-in requirements: one signature. */
-export function recordDefaults(
-  instance: Instance,
-  confirm: Confirm,
-  management: string,
-): Promise<WriteResult> {
-  return change(instance, confirm, management, {
-    operation: "putSigninPolicy",
-    method: "PUT",
-    path: "settings/signin-policy",
-    body: MANAGEMENT_DEFAULTS,
+    queryKey: ["tenant", primary, instance.id, "admins"] as const,
+    queryFn: async () => (await adminGet(instance, `${base(primary)}/admins`, Admins)).items,
   });
 }
 
@@ -128,10 +84,10 @@ export type IssuerStyle = "path" | "subdomain";
 export function createEnvironment(
   instance: Instance,
   confirm: Confirm,
-  management: string,
+  primary: string,
   body: { readonly slug: string; readonly sandbox: boolean; readonly issuer_style: IssuerStyle },
 ): Promise<WriteResult> {
-  return change(instance, confirm, management, {
+  return change(instance, confirm, primary, {
     operation: "createTenantEnvironment",
     method: "POST",
     path: "tenant/environments",
@@ -140,18 +96,22 @@ export function createEnvironment(
 }
 
 // OP-159 m.47 (f)
-/** An invitation to administer the tenant (`inviteTenantAdmin`). */
+/**
+ * An invitation to administer the tenant (`inviteTenantAdmin`); `environments` names the slugs it
+ * administers, none the whole tenant (OP-159 m.49 (d)).
+ */
 export function inviteAdmin(
   instance: Instance,
   confirm: Confirm,
-  management: string,
+  primary: string,
   email: string,
+  environments: readonly string[] = [],
 ): Promise<WriteResult> {
-  return change(instance, confirm, management, {
+  return change(instance, confirm, primary, {
     operation: "inviteTenantAdmin",
     method: "POST",
     path: "tenant/admins",
-    body: { email },
+    body: environments.length === 0 ? { email } : { email, environments: [...environments].sort() },
   });
 }
 
@@ -160,10 +120,10 @@ export function inviteAdmin(
 export function addOwner(
   instance: Instance,
   confirm: Confirm,
-  management: string,
+  primary: string,
   id: string,
 ): Promise<WriteResult> {
-  return change(instance, confirm, management, {
+  return change(instance, confirm, primary, {
     operation: "addTenantOwner",
     key: id,
     method: "POST",
@@ -177,10 +137,10 @@ export function addOwner(
 export function removeAdmin(
   instance: Instance,
   confirm: Confirm,
-  management: string,
+  primary: string,
   id: string,
 ): Promise<WriteResult> {
-  return change(instance, confirm, management, {
+  return change(instance, confirm, primary, {
     operation: "removeTenantAdmin",
     key: id,
     method: "POST",

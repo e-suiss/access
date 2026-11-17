@@ -1294,7 +1294,7 @@ const BASE: &[Route] = &[
     read(
         "/admin/v1/envs/{slug}/settings",
         "getSettings",
-        "The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)).",
+        "The environment's settings: sign-in, session, branding, RP ID, mappers.",
     ),
     write(
         Verb::Put,
@@ -1591,24 +1591,24 @@ const BASE: &[Route] = &[
     list(
         TE,
         "listManagedEnvironments",
-        "The tenant's environments, read in its management environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a management environment.",
+        "The tenant's environments, read in its primary environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a primary environment.",
     ),
     write(
         Verb::Post,
         TE,
         "createTenantEnvironment",
-        "Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the management environment's Claims: idp.tenant.environment_create (CT2). Refused with `management-environment` outside the tenant's management environment (OP-159 m.47 (d), (h), TN-140).",
+        "Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the primary environment's Claims: idp.tenant.environment_create (CT2). Refused with `primary-environment` outside the tenant's primary environment (OP-159 m.47 (d), (h), TN-140).",
     ),
     list(
         TA,
         "listTenantAdmins",
-        "The tenant's administrators and pending invitations, read in its management environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed) and since when; a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), TN-89 (1)).",
+        "The tenant's administrators and pending invitations, read in its primary environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed), since when and the slugs of the environments it administers (`environments`, null for the whole tenant); a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), m.49 (d), TN-89 (1)).",
     ),
     write(
         Verb::Post,
         TA,
         "inviteTenantAdmin",
-        "Invites a tenant administrator {email}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours: idp.tenant.admin_invite (CT2, OP-159 m.47 (f), TN-89, TN-109).",
+        "Invites a tenant administrator {email, environments?}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours. `environments` names the slugs of the environments it administers; without it, the whole tenant (`invalid-admin-scope`): idp.tenant.admin_invite (CT2, OP-159 m.47 (f), m.49 (d), TN-89, TN-109, TN-144).",
     ),
     write(
         Verb::Post,
@@ -1619,9 +1619,9 @@ const BASE: &[Route] = &[
     // OP-159 m.48 (b)
     write(
         Verb::Post,
-        "/admin/v1/envs/{slug}/settings/management-binding",
-        "bindManagementEnvironment",
-        "Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
+        "/admin/v1/envs/{slug}/settings/primary-binding",
+        "bindPrimaryEnvironment",
+        "Binds this standard environment to its tenant's primary environment {primary: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the primary environment's tenant_administration Claims for subject selection (`primary-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
     ),
     write(
         Verb::Post,
@@ -1854,7 +1854,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putSigningProfile"
         | "putKexShare"
         // OP-159 m.48 (b)
-        | "bindManagementEnvironment" => (Settings, w(false)),
+        | "bindPrimaryEnvironment" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -2172,12 +2172,9 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
-            Invalid::ManagementEnvironment => &codes::platform::MANAGEMENT_ENVIRONMENT,
             // OP-159 m.48 (b)
-            Invalid::ManagementBinding => &codes::platform::MANAGEMENT_BINDING,
-            Invalid::ManagementAcceptanceRequired => {
-                &codes::platform::MANAGEMENT_ACCEPTANCE_REQUIRED
-            }
+            Invalid::PrimaryBinding => &codes::platform::PRIMARY_BINDING,
+            Invalid::PrimaryAcceptanceRequired => &codes::platform::PRIMARY_ACCEPTANCE_REQUIRED,
             Invalid::RootRequired => &codes::platform::ROOT_REQUIRED,
             Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,

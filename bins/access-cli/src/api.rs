@@ -248,7 +248,7 @@ pub(crate) const DECLARED_RESERVED: [&str; 0] = [];
 /// makes one at a time (TN-125, X20); `apply` sends one write per change. An offboarding commit
 /// is such a set too, and a review keep records an identity audit row, no `idp.*` action
 /// (OP-157 m.3 (v), (w)). The tenant administration writes are `idp.tenant.*` actions of a
-/// management environment, signed in the console by its administrators (OP-159 m.47 (d)–(f)).
+/// primary environment, signed in the console by its administrators (OP-159 m.47 (d)–(f)).
 pub(crate) const UNSUPPORTED: [&str; 8] = [
     "createJob",
     "revokeAllAgentInstances",
@@ -436,7 +436,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putSigningProfile" => IdpAction::EnvironmentSigningProfile,
         "putKexShare" => IdpAction::EnvironmentKexShare,
         // OP-159 m.48 (b)
-        "bindManagementEnvironment" => IdpAction::EnvironmentConsumerBind,
+        "bindPrimaryEnvironment" => IdpAction::EnvironmentConsumerBind,
         _ => return None,
     })
 }

@@ -33,11 +33,11 @@ fn tenant_uuid(t: &TenantTx) -> Uuid {
 /// A founding to record (TN-141).
 #[derive(Clone, PartialEq, Eq)]
 pub struct NewFounding<'a> {
-    /// The slug the management environment will take.
+    /// The slug the primary environment will take.
     pub slug: &'a str,
-    /// The management environment's id, drawn now so the founder's blind index is its own.
+    /// The primary environment's id, drawn now so the founder's blind index is its own.
     pub environment: EnvironmentId,
-    /// The management environment's blind index of the founder's identifier.
+    /// The primary environment's blind index of the founder's identifier.
     pub founder_index: &'a [u8; 32],
     /// SHA-256 of the link token.
     pub token_hash: &'a [u8; 32],
@@ -52,9 +52,9 @@ pub struct NewFounding<'a> {
 /// A founding as the tenant reads it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Founding {
-    /// The slug of the management environment.
+    /// The slug of the primary environment.
     pub slug: String,
-    /// The management environment's id.
+    /// The primary environment's id.
     pub environment: EnvironmentId,
     /// The founder's blind index.
     pub founder_index: [u8; 32],
@@ -77,9 +77,9 @@ pub struct Founding {
 pub struct FoundingRoute {
     /// The tenant.
     pub tenant: TenantId,
-    /// The slug of the management environment.
+    /// The slug of the primary environment.
     pub slug: String,
-    /// The management environment's id.
+    /// The primary environment's id.
     pub environment: EnvironmentId,
     /// When the link stops holding, Unix ms.
     pub expires_ms: u64,
@@ -96,7 +96,7 @@ pub struct FoundingRoute {
 /// [`StoreError`]; a taken slug fails as a unique violation.
 pub async fn insert_founding(t: &mut TenantTx, f: &NewFounding<'_>) -> Result<bool, StoreError> {
     let done = sqlx::query!(
-        "INSERT INTO access.tenant_foundings (tenant_id, slug, management_environment_id, founder_index,
+        "INSERT INTO access.tenant_foundings (tenant_id, slug, primary_environment_id, founder_index,
            token_hash, code_hash, created_exercise, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp() + $8::bigint * interval '1 second')
          ON CONFLICT (tenant_id) DO NOTHING",
@@ -120,7 +120,7 @@ pub async fn insert_founding(t: &mut TenantTx, f: &NewFounding<'_>) -> Result<bo
 /// [`StoreError`].
 pub async fn founding(t: &mut TenantTx) -> Result<Option<Founding>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT slug, management_environment_id, founder_index, code_hash, created_exercise,
+        r#"SELECT slug, primary_environment_id, founder_index, code_hash, created_exercise,
                   (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!",
                   reinvites, verified_at IS NOT NULL AS "verified!", founder_subject
              FROM access.tenant_foundings WHERE tenant_id = $1"#,
@@ -131,7 +131,7 @@ pub async fn founding(t: &mut TenantTx) -> Result<Option<Founding>, StoreError> 
     row.map(|r| {
         Ok(Founding {
             slug: r.slug,
-            environment: EnvironmentId::from_bytes(*r.management_environment_id.as_bytes()),
+            environment: EnvironmentId::from_bytes(*r.primary_environment_id.as_bytes()),
             founder_index: id32(&r.founder_index)?,
             code_hash: id32(&r.code_hash)?,
             exercise: id32(&r.created_exercise)?,
@@ -154,8 +154,8 @@ pub async fn founding_by_token(
     token_hash: &[u8; 32],
 ) -> Result<Option<FoundingRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT tenant_id AS "tenant_id!", management_slug AS "slug!",
-                  management_environment_id AS "environment_id!",
+        r#"SELECT tenant_id AS "tenant_id!", primary_slug AS "slug!",
+                  primary_environment_id AS "environment_id!",
                   (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!",
                   verified AS "verified!", completed AS "completed!"
              FROM access.founding_by_token($1)"#,
@@ -260,12 +260,12 @@ pub async fn reinvite_founding(
     Ok(done.rows_affected() == 1)
 }
 
-/// Creates the transaction tenant's management environment with the id its founding drew
+/// Creates the transaction tenant's primary environment with the id its founding drew
 /// (TN-138, TN-141).
 ///
 /// # Errors
-/// [`StoreError`]; a second management environment fails.
-pub async fn create_management_environment(
+/// [`StoreError`]; a second primary environment fails.
+pub async fn create_primary_environment(
     t: &mut TenantTx,
     environment: EnvironmentId,
     domain: &DomainId,
@@ -273,7 +273,7 @@ pub async fn create_management_environment(
 ) -> Result<EnvironmentId, StoreError> {
     let id = sqlx::query_scalar!(
         r#"INSERT INTO access.environments (tenant_id, environment_id, governing_domain_id, slug, placement_id, kind)
-           VALUES ($1, $2, $3, $4, $5, 'management') RETURNING environment_id AS "id!""#,
+           VALUES ($1, $2, $3, $4, $5, 'primary') RETURNING environment_id AS "id!""#,
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
         domain.as_bytes().as_slice(),
@@ -348,7 +348,7 @@ pub async fn set_tenant_placement(t: &mut TenantTx, placement: &str) -> Result<b
     Ok(done.rows_affected() == 1)
 }
 
-/// The kind of the transaction's environment (TN-138): `management` or `standard`.
+/// The kind of the transaction's environment (TN-138): `primary` or `standard`.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -363,16 +363,16 @@ pub async fn environment_kind(t: &mut TenantTx) -> Result<Option<String>, StoreE
     .await?)
 }
 
-/// The tenant's management environment, read in tenant scope (TN-138).
+/// The tenant's primary environment, read in tenant scope (TN-138).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn management_environment(
+pub async fn primary_environment(
     t: &mut TenantTx,
 ) -> Result<Option<(EnvironmentId, String)>, StoreError> {
     let row = sqlx::query!(
         "SELECT environment_id, slug FROM access.environments
-          WHERE tenant_id = $1 AND kind = 'management' AND status = 'active'",
+          WHERE tenant_id = $1 AND kind = 'primary' AND status = 'active'",
         tenant_uuid(t),
     )
     .fetch_optional(&mut *t.tx)
@@ -392,7 +392,7 @@ pub struct TenantEnvironment {
     pub environment: EnvironmentId,
     /// Its slug.
     pub slug: String,
-    /// `standard` or `management`.
+    /// `standard` or `primary`.
     pub kind: String,
     /// Its governing domain.
     pub domain: DomainId,
@@ -439,7 +439,7 @@ pub async fn tenant_environments(t: &mut TenantTx) -> Result<Vec<TenantEnvironme
 /// One tenant administrator.
 #[derive(Clone, PartialEq, Eq)]
 pub struct TenantAdmin {
-    /// The subject in the management environment.
+    /// The subject in the primary environment.
     pub subject: [u8; 16],
     /// Its device Party, once known.
     pub party: Option<[u8; 16]>,
@@ -451,6 +451,8 @@ pub struct TenantAdmin {
     pub cooling_until_ms: Option<u64>,
     /// When it was removed, Unix ms.
     pub ended_ms: Option<u64>,
+    /// The environments it administers; `None` is the whole tenant (OP-159 m.49 (d)).
+    pub scope: Option<Vec<EnvironmentId>>,
 }
 
 /// A tenant administrator to add.
@@ -464,9 +466,23 @@ pub struct NewAdmin<'a> {
     pub exercise: Option<&'a [u8; 32]>,
     /// How long a cross-domain first acceptance waits, seconds (TN-109).
     pub cooling_s: Option<i64>,
+    /// The environments it administers; `None` is the whole tenant (OP-159 m.49 (d)).
+    pub scope: Option<&'a [EnvironmentId]>,
 }
 
-/// Adds `subject` as an administrator of the transaction's management environment; `false` when
+fn scope_uuids(s: Option<&[EnvironmentId]>) -> Option<Vec<Uuid>> {
+    s.map(|e| e.iter().map(|e| Uuid::from_bytes(*e.as_bytes())).collect())
+}
+
+fn scope_ids(s: Option<Vec<Uuid>>) -> Option<Vec<EnvironmentId>> {
+    s.map(|e| {
+        e.iter()
+            .map(|u| EnvironmentId::from_bytes(*u.as_bytes()))
+            .collect()
+    })
+}
+
+/// Adds `subject` as an administrator of the transaction's primary environment; `false` when
 /// it is one already.
 ///
 /// # Errors
@@ -477,11 +493,13 @@ pub async fn add_admin(
     a: &NewAdmin<'_>,
 ) -> Result<bool, StoreError> {
     let environment = t.environment().ok_or(StoreError::Range)?;
+    let scope = scope_uuids(a.scope);
     let done = sqlx::query!(
         "INSERT INTO access.tenant_admins (tenant_id, environment_id, subject_id, party_id, owner,
-           owner_since, added_exercise, cooling_until)
+           owner_since, added_exercise, cooling_until, scope)
          VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN clock_timestamp() END, $6,
-                 CASE WHEN $7::bigint IS NULL THEN NULL ELSE clock_timestamp() + $7::bigint * interval '1 second' END)
+                 CASE WHEN $7::bigint IS NULL THEN NULL ELSE clock_timestamp() + $7::bigint * interval '1 second' END,
+                 $8)
          ON CONFLICT DO NOTHING",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
@@ -490,6 +508,7 @@ pub async fn add_admin(
         a.owner,
         a.exercise.map(<[u8; 32]>::as_slice),
         a.cooling_s,
+        scope.as_deref(),
     )
     .execute(&mut *t.tx)
     .await?;
@@ -576,7 +595,7 @@ pub async fn end_admin(
     Ok(done.rows_affected() == 1)
 }
 
-/// The administrators of the transaction's management environment, live and removed, by when
+/// The administrators of the transaction's primary environment, live and removed, by when
 /// they were added.
 ///
 /// # Errors
@@ -587,7 +606,7 @@ pub async fn admins(t: &mut TenantTx) -> Result<Vec<TenantAdmin>, StoreError> {
         r#"SELECT subject_id, party_id, owner,
                   (extract(epoch FROM added_at) * 1000)::bigint AS "added_ms!",
                   (extract(epoch FROM cooling_until) * 1000)::bigint AS cooling_ms,
-                  (extract(epoch FROM ended_at) * 1000)::bigint AS ended_ms
+                  (extract(epoch FROM ended_at) * 1000)::bigint AS ended_ms, scope
              FROM access.tenant_admins WHERE tenant_id = $1 AND environment_id = $2
             ORDER BY added_at, subject_id"#,
         tenant_uuid(t),
@@ -604,12 +623,13 @@ pub async fn admins(t: &mut TenantTx) -> Result<Vec<TenantAdmin>, StoreError> {
                 added_ms: unsigned(r.added_ms)?,
                 cooling_until_ms: r.cooling_ms.map(unsigned).transpose()?,
                 ended_ms: r.ended_ms.map(unsigned).transpose()?,
+                scope: scope_ids(r.scope),
             })
         })
         .collect()
 }
 
-/// The administrator `subject` of the transaction's management environment.
+/// The administrator `subject` of the transaction's primary environment.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -623,7 +643,7 @@ pub async fn admin(
 /// One `tenant_administration` line: an administrator's Party in a consuming domain (m.47 (f)).
 #[derive(Clone, PartialEq, Eq)]
 pub struct AdminLine {
-    /// The management environment.
+    /// The primary environment.
     pub environment: EnvironmentId,
     /// The administrator's subject there.
     pub subject: [u8; 16],
@@ -735,7 +755,7 @@ pub async fn end_line(
     Ok(done.rows_affected() == 1)
 }
 
-/// The lines of the transaction's management environment, of `subject` when named.
+/// The lines of the transaction's primary environment, of `subject` when named.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -860,7 +880,7 @@ pub struct NewInvitation<'a> {
     pub token_hash: &'a [u8; 32],
     /// SHA-256 of the magic code.
     pub code_hash: &'a [u8; 32],
-    /// The management environment's blind index of the invitee's folded address.
+    /// The primary environment's blind index of the invitee's folded address.
     pub invitee_index: &'a [u8; 32],
     /// The invitee's address domain.
     pub invitee_domain: &'a str,
@@ -872,9 +892,11 @@ pub struct NewInvitation<'a> {
     pub exercise: &'a [u8; 32],
     /// How long the link holds, seconds; at most 30 days.
     pub ttl_s: i64,
+    /// The environments it invites to administer; `None` is the whole tenant (OP-159 m.49 (d)).
+    pub scope: Option<&'a [EnvironmentId]>,
 }
 
-/// A tenant administrator invitation as the management environment keeps it: never its address.
+/// A tenant administrator invitation as the primary environment keeps it: never its address.
 #[derive(Clone, PartialEq, Eq)]
 pub struct AdminInvitation {
     /// Its id.
@@ -899,9 +921,11 @@ pub struct AdminInvitation {
     pub accepted_subject: Option<[u8; 16]>,
     /// Whether a newer invitation to the same address replaced it.
     pub superseded: bool,
+    /// The environments it invites to administer; `None` is the whole tenant (OP-159 m.49 (d)).
+    pub scope: Option<Vec<EnvironmentId>>,
 }
 
-/// Records an invitation in the transaction's management environment and supersedes the pending
+/// Records an invitation in the transaction's primary environment and supersedes the pending
 /// ones to the same address (OP-159 m.47 (f)); returns its id.
 ///
 /// # Errors
@@ -921,11 +945,13 @@ pub async fn insert_invitation(
     )
     .execute(&mut *t.tx)
     .await?;
+    let scope = scope_uuids(i.scope);
     let id = sqlx::query_scalar!(
         "INSERT INTO access.tenant_admin_invitations
            (tenant_id, environment_id, token_hash, code_hash, invitee_index, invitee_domain,
-            inviter_subject, cross_domain, created_exercise, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp() + make_interval(secs => $10))
+            inviter_subject, cross_domain, created_exercise, expires_at, scope)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp() + make_interval(secs => $10),
+                 $11)
          RETURNING invitation_id",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
@@ -937,13 +963,14 @@ pub async fn insert_invitation(
         i.cross_domain,
         i.exercise.as_slice(),
         f64::from(i32::try_from(i.ttl_s).map_err(|_| StoreError::Range)?),
+        scope.as_deref(),
     )
     .fetch_one(&mut *t.tx)
     .await?;
     Ok(*id.as_bytes())
 }
 
-/// The invitations of the transaction's management environment, newest first, or the one whose
+/// The invitations of the transaction's primary environment, newest first, or the one whose
 /// link token hashes to `token_hash`.
 ///
 /// # Errors
@@ -958,7 +985,7 @@ pub async fn invitations(
                   cross_domain, verified_at IS NOT NULL AS "verified!", accepted_subject,
                   superseded_at IS NOT NULL AS "superseded!",
                   (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!",
-                  (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
+                  (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!", scope
              FROM access.tenant_admin_invitations
             WHERE tenant_id = $1 AND environment_id = $2
               AND ($3::bytea IS NULL OR token_hash = $3)
@@ -983,6 +1010,7 @@ pub async fn invitations(
                 verified: r.verified,
                 accepted_subject: r.accepted_subject.map(|u| *u.as_bytes()),
                 superseded: r.superseded,
+                scope: scope_ids(r.scope),
             })
         })
         .collect()
@@ -1033,7 +1061,7 @@ pub async fn accept_invitation(
     Ok(done.rows_affected() == 1)
 }
 
-/// Invitations the transaction's management environment made in the last `since_s` seconds, and
+/// Invitations the transaction's primary environment made in the last `since_s` seconds, and
 /// how many of them were accepted (TN-89 (11)).
 ///
 /// # Errors
@@ -1202,4 +1230,23 @@ pub async fn take_domain_challenge(
         })
     })
     .transpose()
+}
+
+/// The environment of the tenant whose governing domain is `domain` (OP-159 m.49 (d)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn environment_of_domain(
+    t: &mut TenantTx,
+    domain: &DomainId,
+) -> Result<Option<EnvironmentId>, StoreError> {
+    Ok(sqlx::query_scalar!(
+        "SELECT environment_id FROM access.environments
+          WHERE tenant_id = $1 AND governing_domain_id = $2",
+        tenant_uuid(t),
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?
+    .map(|u| EnvironmentId::from_bytes(*u.as_bytes())))
 }

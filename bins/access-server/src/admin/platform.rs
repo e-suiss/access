@@ -37,7 +37,7 @@ use crate::idp::EnvironmentKeyring;
 const TENANT_BODY: &[&str] = &[
     "tenant_id",
     "display_name",
-    "management_slug",
+    "primary_slug",
     "founder_email",
     "placement",
     rest::VALIDITY,
@@ -174,9 +174,7 @@ fn parse(
             display_name: String::from(
                 text(body, "display_name")?.ok_or(&codes::platform::INVALID_TENANT_NAME)?,
             ),
-            slug: String::from(
-                text(body, "management_slug")?.ok_or(&codes::platform::INVALID_SLUG)?,
-            ),
+            slug: String::from(text(body, "primary_slug")?.ok_or(&codes::platform::INVALID_SLUG)?),
             email: email(body)?,
             placement: String::from(text(body, "placement")?.unwrap_or(DEFAULT_PLACEMENT)),
         });
@@ -457,7 +455,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
                     PlatformChange::Tenant(TenantOrder {
                         tenant,
                         display_name,
-                        management_slug: slug,
+                        primary_slug: slug,
                         placement,
                         founder,
                     }),
@@ -585,7 +583,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
     }
 
     /// A tenant's metadata (INV-29): its state, placement, display name, the slug of its
-    /// management environment and its founding's state; never its content.
+    /// primary environment and its founding's state; never its content.
     async fn tenant_view(&self, ids: &IdKey, t: &TenantMeta) -> Result<Value, Unavailable> {
         let mut tx = access_store::identity::TenantTx::begin_tenant(&self.app, t.tenant)
             .await
@@ -610,7 +608,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         Ok(json!({
             "tenant_id": ids.encode(TENANT_PREFIX, *t.tenant.as_bytes()).map_err(|e| unavailable(&e))?,
             "display_name": profile.and_then(|(n, _)| n),
-            "management_slug": founding.map(|f| f.slug),
+            "primary_slug": founding.map(|f| f.slug),
             "founding": state,
             "status": t.status,
             "placement": t.placement,

@@ -1,4 +1,4 @@
-// OP-159 m.47 (a), (d)–(h), TN-138–TN-142, IA-5: the tenant's home at its management environment and
+// OP-159 m.47 (a), (d)–(h), TN-138–TN-142, IA-5: the tenant's home at its primary environment and
 // the tenant's environments administered from one sign-in. The first visit to an environment of the
 // tenant registers this browser's key there with one signature (`party_register` and
 // `instance_create`), and every read and change there is made with that key; another tenant's
@@ -11,7 +11,7 @@ import { BASE } from "./data.js";
 import { expect, test } from "./fixtures.js";
 import { type ConsoleMock, foreignDomain } from "./mock.js";
 
-const M = "acme-admin";
+const M = "acme";
 
 function seedTenant(bff: ConsoleMock): void {
   bff.environment = M;
@@ -19,15 +19,15 @@ function seedTenant(bff: ConsoleMock): void {
   bff.admin.set(`envs/${M}/tenant/environments`, {
     items: [
       {
-        slug: "acme",
+        slug: "acme-staging",
         kind: "standard",
-        issuer: `${BASE}/env/acme`,
+        issuer: `${BASE}/env/acme-staging`,
         created_at: "2026-11-16T10:00:00Z",
         sandbox: false,
       },
       {
         slug: M,
-        kind: "management",
+        kind: "primary",
         issuer: `${BASE}/env/${M}`,
         created_at: "2026-11-16T09:00:00Z",
         sandbox: false,
@@ -56,6 +56,7 @@ function seedTenant(bff: ConsoleMock): void {
         role: "admin",
         status: "active",
         since: "2026-11-16T12:00:00Z",
+        environments: ["acme-staging"],
       },
       {
         id: "adm_eve",
@@ -66,10 +67,12 @@ function seedTenant(bff: ConsoleMock): void {
       },
     ],
   });
-  bff.admin.set("envs/acme/accounts", { items: [{ account_id: "usr_one", status: "active" }] });
+  bff.admin.set("envs/acme-staging/accounts", {
+    items: [{ account_id: "usr_one", status: "active" }],
+  });
 }
 
-/** Signs in to the management environment and registers this browser's key there. */
+/** Signs in to the primary environment and registers this browser's key there. */
 async function openHome(page: Page): Promise<void> {
   await page.goto(`/console/${M}`);
   await page.getByRole("button", { name: "Register this browser" }).click();
@@ -83,22 +86,21 @@ test.beforeEach(async ({ context, bff }) => {
 });
 
 // OP-159 m.47 (a)
-test("the management environment's home lists the tenant's environments and administrators", async ({
+test("the primary environment's home lists the tenant's environments and administrators", async ({
   page,
 }) => {
   await openHome(page);
   const environments = page.getByTestId("tenant-environments");
   await expect(environments.getByTestId("tenant-environment-link")).toHaveText([
     M,
-    "acme",
     "acme-lab",
+    "acme-staging",
   ]);
-  await expect(environments.locator('[data-slug="acme-admin"]')).toContainText("Management");
+  await expect(environments.locator(`[data-slug="${M}"]`)).toContainText("Primary");
   await expect(environments.locator('[data-slug="acme-lab"]')).toContainText("Sandbox");
-  await expect(environments.getByRole("link", { name: "acme", exact: true })).toHaveAttribute(
-    "href",
-    "/console/acme",
-  );
+  await expect(
+    environments.getByRole("link", { name: "acme-staging", exact: true }),
+  ).toHaveAttribute("href", "/console/acme-staging");
   const admins = page.getByTestId("tenant-admins");
   await expect(admins.locator('[data-admin="adm_owner"]')).toContainText("Owner");
   await expect(admins.locator('[data-admin="adm_bob"]')).toContainText("Administrator");
@@ -111,13 +113,15 @@ test("the management environment's home lists the tenant's environments and admi
   const group = page.getByRole("menu").getByRole("group", { name: "Your tenant" });
   await expect(group.getByRole("menuitemradio")).toHaveText([
     `${M} (tenant home)`,
-    "acme",
     "acme-lab",
+    "acme-staging",
   ]);
+  await expect(admins.locator('[data-admin="adm_owner"]')).toContainText("Whole tenant");
+  await expect(admins.locator('[data-admin="adm_bob"]')).toContainText("acme-staging");
 });
 
 // OP-159 m.47 (h), TN-110
-test("a new environment is drafted in the management environment, signed and sent", async ({
+test("a new environment is drafted in the primary environment, signed and sent", async ({
   page,
   bff,
 }) => {
@@ -147,36 +151,29 @@ test("a new environment is drafted in the management environment, signed and sen
   ]);
 });
 
-// OP-159 m.48 (c): the founder records the management defaults with one signature
-test("the management environment's sign-in rules are recorded with one signature", async ({
-  page,
-  bff,
-}) => {
-  bff.admin.set(`envs/${M}/settings`, { signin_policy_recorded: false });
+// OP-159 m.49 (d), TN-144: an invitation names the environments its administrator manages
+test("an administrator is invited to some environments only", async ({ page, bff }) => {
   await openHome(page);
-  const panel = page.getByRole("region", { name: en.tenantDefaultsTitle });
-  await panel.getByRole("button", { name: en.tenantDefaultsAction }).click();
+  const invite = page.getByRole("region", { name: "Invite an administrator" });
+  await invite.getByLabel("Email address").fill("dan@acme.example");
+  const scope = invite.getByTestId("tenant-admin-scope");
+  await scope.getByRole("checkbox", { name: "acme-staging" }).check();
+  await scope.getByRole("checkbox", { name: "acme-lab" }).check();
+  await invite.getByRole("button", { name: "Send invitation" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("idp.environment.signin_policy");
+  await expect(dialog).toContainText("idp.tenant.admin_invite");
   await dialog.getByRole("button", { name: "Sign" }).click();
-  await expect(panel.getByRole("status")).toContainText("Recorded as change");
+  await expect(invite.getByRole("status")).toContainText("Recorded as change");
   expect(bff.writes).toEqual([
-    expect.objectContaining({
-      method: "PUT",
-      path: `envs/${M}/settings/signin-policy`,
+    {
+      method: "POST",
+      path: `envs/${M}/tenant/admins`,
       body: expect.objectContaining({
-        methods: ["email", "passkey"],
-        mfa_required: true,
-        registration: "invite_only",
+        email: "dan@acme.example",
+        environments: ["acme-lab", "acme-staging"],
       }),
-    }),
+    },
   ]);
-});
-
-test("recorded sign-in rules ask for nothing", async ({ page, bff }) => {
-  bff.admin.set(`envs/${M}/settings`, { signin_policy_recorded: true });
-  await openHome(page);
-  await expect(page.getByRole("region", { name: en.tenantDefaultsTitle })).toHaveCount(0);
 });
 
 // OP-159 m.47 (e), (f)
@@ -235,19 +232,19 @@ test("entering an environment of the tenant takes one signature and no new sign-
   await openHome(page);
   await page
     .getByTestId("tenant-environments")
-    .getByRole("link", { name: "acme", exact: true })
+    .getByRole("link", { name: "acme-staging", exact: true })
     .click();
-  await expect(page).toHaveURL(`${BASE}/console/acme`);
+  await expect(page).toHaveURL(`${BASE}/console/acme-staging`);
   const enter = page.getByTestId("enter-environment");
-  await expect(page.getByRole("heading", { level: 1, name: "Manage acme" })).toBeVisible();
-  await enter.getByRole("button", { name: "Register and open acme" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Manage acme-staging" })).toBeVisible();
+  await enter.getByRole("button", { name: "Register and open acme-staging" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByLabel("access.party_register")).toBeVisible();
   await expect(dialog.getByLabel("access.instance_create")).toBeVisible();
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
   await expect(page.getByTestId("device-state")).toContainText("Device key registered");
-  expect(bff.registeredIn).toEqual(["acme"]);
+  expect(bff.registeredIn).toEqual(["acme-staging"]);
   // the environment's screens, probed with the key there, in its domain
   const nav = page.getByRole("navigation", { name: "Console sections" });
   await expect(nav.getByRole("link", { name: "Admin" })).toBeVisible();
@@ -256,20 +253,20 @@ test("entering an environment of the tenant takes one signature and no new sign-
   await nav.getByRole("link", { name: "Admin" }).click();
   await page.getByRole("link", { name: "People & agents" }).click();
   await expect(page.getByText("usr_one")).toBeVisible();
-  const reads = bff.adminSeen.filter((x) => x.path.startsWith("envs/acme/"));
+  const reads = bff.adminSeen.filter((x) => x.path.startsWith("envs/acme-staging/"));
   expect(reads.length).toBeGreaterThan(0);
-  expect(reads.every((x) => x.environment === "acme")).toBe(true);
+  expect(reads.every((x) => x.environment === "acme-staging")).toBe(true);
   // the switcher stays on the tenant; the home is one step away
-  await page.getByRole("button", { name: "Environment acme: switch environment" }).click();
+  await page.getByRole("button", { name: "Environment acme-staging: switch environment" }).click();
   await page.getByRole("menuitemradio", { name: `${M} (tenant home)` }).click();
   await expect(page.getByRole("heading", { level: 1, name: en.tenantHomeTitle })).toBeVisible();
   await page
     .getByTestId("tenant-environments")
-    .getByRole("link", { name: "acme", exact: true })
+    .getByRole("link", { name: "acme-staging", exact: true })
     .click();
   await expect(page.getByRole("heading", { level: 1, name: "Authority" })).toBeVisible();
-  expect(bff.registeredIn).toEqual(["acme"]);
-  expect(foreignDomain("acme")).not.toBe(foreignDomain("acme-lab"));
+  expect(bff.registeredIn).toEqual(["acme-staging"]);
+  expect(foreignDomain("acme-staging")).not.toBe(foreignDomain("acme-lab"));
 });
 
 // OP-159 m.47 (g): a change in an environment of the tenant is drafted and signed there
@@ -278,21 +275,21 @@ test("a change in an environment of the tenant is drafted for it and signed with
   bff,
 }) => {
   await openHome(page);
-  await page.goto("/console/acme");
-  await page.getByRole("button", { name: "Register and open acme" }).click();
+  await page.goto("/console/acme-staging");
+  await page.getByRole("button", { name: "Register and open acme-staging" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.getByTestId("device-state")).toContainText("Device key registered");
-  await page.goto("/console/acme/admin/people");
+  await page.goto("/console/acme-staging/admin/people");
   await expect(page.getByText("usr_one")).toBeVisible();
   await page.getByRole("button", { name: "Suspend" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("idp.account.suspend");
   await dialog.getByRole("button", { name: "Sign" }).click();
   await expect.poll(() => bff.writes.length).toBe(1);
-  expect(bff.writes[0]?.path).toBe("envs/acme/accounts/usr_one/suspend");
-  const there = bff.adminSeen.filter((x) => x.path.startsWith("envs/acme/"));
+  expect(bff.writes[0]?.path).toBe("envs/acme-staging/accounts/usr_one/suspend");
+  const there = bff.adminSeen.filter((x) => x.path.startsWith("envs/acme-staging/"));
   expect(there.map((x) => x.method)).toEqual(expect.arrayContaining(["GET", "POST"]));
-  expect(there.every((x) => x.environment === "acme")).toBe(true);
+  expect(there.every((x) => x.environment === "acme-staging")).toBe(true);
   expect(bff.drafts.some((d) => d["mode"] === "check")).toBe(true);
 });
 
@@ -306,7 +303,7 @@ test("another tenant's environment shows the other-environment notice", async ({
   await expect(page.getByRole("button", { name: "Sign out and sign in to globex" })).toBeVisible();
 });
 
-// OP-159 m.47 (g): without this browser's key in the management environment, nothing is entered
+// OP-159 m.47 (g): without this browser's key in the primary environment, nothing is entered
 test("an environment of the tenant asks for the management key first", async ({ page, bff }) => {
   await page.goto(`/console/${M}`);
   await page.getByRole("button", { name: "Register this browser" }).click();
@@ -314,9 +311,9 @@ test("an environment of the tenant asks for the management key first", async ({ 
   await expect(page.getByRole("heading", { level: 1, name: en.tenantHomeTitle })).toBeVisible();
   await page
     .getByTestId("tenant-environments")
-    .getByRole("link", { name: "acme", exact: true })
+    .getByRole("link", { name: "acme-staging", exact: true })
     .click();
-  await page.getByRole("button", { name: "Register and open acme" }).click();
+  await page.getByRole("button", { name: "Register and open acme-staging" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByTestId("enter-environment")).toBeVisible();
   expect(bff.registeredIn).toEqual([]);
@@ -327,7 +324,7 @@ test("the tenant home and the first visit to an environment have no WCAG 2.2 AA 
   page,
 }) => {
   await openHome(page);
-  for (const path of [`/console/${M}`, "/console/acme"]) {
+  for (const path of [`/console/${M}`, "/console/acme-staging"]) {
     await page.evaluate((p) => {
       history.pushState(null, "", p);
       dispatchEvent(new PopStateEvent("popstate"));

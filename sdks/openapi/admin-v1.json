@@ -4162,7 +4162,7 @@
     "/admin/v1/envs/{slug}/settings": {
       "get": {
         "operationId": "getSettings",
-        "summary": "The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)).",
+        "summary": "The environment's settings: sign-in, session, branding, RP ID, mappers.",
         "tags": [
           "environment"
         ],
@@ -8794,7 +8794,7 @@
     "/admin/v1/envs/{slug}/tenant/environments": {
       "get": {
         "operationId": "listManagedEnvironments",
-        "summary": "The tenant's environments, read in its management environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a management environment.",
+        "summary": "The tenant's environments, read in its primary environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a primary environment.",
         "tags": [
           "environment"
         ],
@@ -8870,7 +8870,7 @@
       },
       "post": {
         "operationId": "createTenantEnvironment",
-        "summary": "Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the management environment's Claims: idp.tenant.environment_create (CT2). Refused with `management-environment` outside the tenant's management environment (OP-159 m.47 (d), (h), TN-140).",
+        "summary": "Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the primary environment's Claims: idp.tenant.environment_create (CT2). Refused with `primary-environment` outside the tenant's primary environment (OP-159 m.47 (d), (h), TN-140).",
         "tags": [
           "environment"
         ],
@@ -8959,7 +8959,7 @@
     "/admin/v1/envs/{slug}/tenant/admins": {
       "get": {
         "operationId": "listTenantAdmins",
-        "summary": "The tenant's administrators and pending invitations, read in its management environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed) and since when; a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), TN-89 (1)).",
+        "summary": "The tenant's administrators and pending invitations, read in its primary environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed), since when and the slugs of the environments it administers (`environments`, null for the whole tenant); a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), m.49 (d), TN-89 (1)).",
         "tags": [
           "environment"
         ],
@@ -9035,7 +9035,7 @@
       },
       "post": {
         "operationId": "inviteTenantAdmin",
-        "summary": "Invites a tenant administrator {email}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours: idp.tenant.admin_invite (CT2, OP-159 m.47 (f), TN-89, TN-109).",
+        "summary": "Invites a tenant administrator {email, environments?}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours. `environments` names the slugs of the environments it administers; without it, the whole tenant (`invalid-admin-scope`): idp.tenant.admin_invite (CT2, OP-159 m.47 (f), m.49 (d), TN-89, TN-109, TN-144).",
         "tags": [
           "environment"
         ],
@@ -9220,10 +9220,10 @@
         }
       }
     },
-    "/admin/v1/envs/{slug}/settings/management-binding": {
+    "/admin/v1/envs/{slug}/settings/primary-binding": {
       "post": {
-        "operationId": "bindManagementEnvironment",
-        "summary": "Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
+        "operationId": "bindPrimaryEnvironment",
+        "summary": "Binds this standard environment to its tenant's primary environment {primary: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the primary environment's tenant_administration Claims for subject selection (`primary-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
         "tags": [
           "environment"
         ],
@@ -21890,7 +21890,7 @@
       },
       "post": {
         "operationId": "createTenant",
-        "summary": "Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
+        "summary": "Creates a tenant awaiting its founder: its display name, the slug its primary environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
         "tags": [
           "platform"
         ],
@@ -23761,7 +23761,7 @@
               "zendesk",
               "freshdesk",
               "servicenow",
-              "jira-service-management"
+              "jira-service-primary"
             ]
           },
           "format": {
@@ -24667,12 +24667,12 @@
             ],
             "description": "The tenant's own name: untrusted text, never authority (TN-1, TN-131)."
           },
-          "management_slug": {
+          "primary_slug": {
             "type": [
               "string",
               "null"
             ],
-            "description": "The slug of its management environment, the tenant's handle (OP-159 m.47 (a))."
+            "description": "The slug of its primary environment, the tenant's handle (OP-159 m.47 (a))."
           },
           "founding": {
             "type": [
@@ -24731,9 +24731,9 @@
             "type": "string",
             "enum": [
               "standard",
-              "management"
+              "primary"
             ],
-            "description": "A tenant's management environment or one of its other environments (TN-138)."
+            "description": "A tenant's primary environment or one of its other environments (TN-138)."
           },
           "tenant_id": {
             "type": "string",
@@ -24884,14 +24884,14 @@
         "additionalProperties": false,
         "required": [
           "display_name",
-          "management_slug",
+          "primary_slug",
           "founder_email"
         ],
         "description": "A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.",
         "examples": [
           {
             "display_name": "Acme",
-            "management_slug": "acme-admin",
+            "primary_slug": "acme",
             "founder_email": "admin@acme.example",
             "placement": "pool-default"
           }
@@ -24905,10 +24905,10 @@
             "type": "string",
             "description": "The tenant's name, 1 to 120 characters (TN-131)."
           },
-          "management_slug": {
+          "primary_slug": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$",
-            "description": "The slug its management environment will take, reserved now (TN-16)."
+            "description": "The slug its primary environment will take, reserved now (TN-16)."
           },
           "founder_email": {
             "type": "string",

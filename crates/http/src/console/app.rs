@@ -67,7 +67,7 @@ struct Held {
 }
 
 /// What a held token is for: the session, the surface and, for an environment the session's
-/// management environment administers, that environment (TN-142).
+/// primary environment administers, that environment (TN-142).
 type HeldKey = ([u8; 16], Surface, Option<String>);
 
 /// Renew a held token this long before its end.
@@ -816,7 +816,7 @@ fn path_and_query(path: &str, uri: &Uri) -> String {
 
 /// The session's read token for `surface`, held or newly issued to its device Instance and
 /// bound to the BFF's DPoP key of the session (TN-130, OP-151 m.3 (c)); for an environment the
-/// session's management environment administers, issued by that environment to the session's
+/// session's primary environment administers, issued by that environment to the session's
 /// Instance in its domain (OP-159 m.47 (g), TN-142).
 async fn read_token<E: ConsoleEnv>(
     c: &Console<E>,

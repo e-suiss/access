@@ -105,7 +105,7 @@ async fn environment_with<G: Governance + access_identity_admin::ports::Instance
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
             administered: None,
-            management: None,
+            primary: None,
         })
         .await
         .unwrap();

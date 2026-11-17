@@ -1,6 +1,6 @@
 // TN-106, OP-153 m.3 (t), §14.3: branding is data; the logo is an image from an origin the
 // environment's CSP allows, drawn with <img> only, so an SVG cannot run anything; no upload exists.
-// OP-159 m.47 (b), TN-138: the branding also says the environment's kind; a management environment
+// OP-159 m.47 (b), TN-138: the branding also says the environment's kind; a primary environment
 // names its tenant, whose administrators sign in there.
 import { useEffect, useState } from "react";
 import * as v from "valibot";
@@ -15,7 +15,7 @@ const BrandingData = v.looseObject({
   logo_uri: v.nullish(v.string(), null),
   environment: v.exactOptional(
     v.looseObject({
-      kind: v.picklist(["standard", "management"]),
+      kind: v.picklist(["standard", "primary"]),
       tenant_name: v.nullish(v.string()),
       display_name: v.nullish(v.string()),
     }),
@@ -47,14 +47,6 @@ export function useBranding(): BrandingData | null {
     };
   }, []);
   return brand;
-}
-
-// OP-159 m.47 (b)
-/** The tenant whose management environment this is; `undefined` for any other environment. */
-export function managementOf(brand: BrandingData | null): string | undefined {
-  const e = brand?.environment;
-  if (e?.kind !== "management") return undefined;
-  return e.tenant_name ?? e.display_name ?? brand?.display_name ?? "";
 }
 
 /** The environment's theme sheet: CSS custom properties the server writes from validated colours. */

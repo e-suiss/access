@@ -197,7 +197,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/login/flows",
         "createFlow",
-        "Starts a flow; its kind is login unless the body names another.",
+        "Starts a flow; its kind is login unless the body names another. An `acr` at AAL2 or above, passed on from the authorization request, has the sign-in ask for a second factor (OP-159 m.49 (c)).",
     ),
     served(
         Verb::Get,
@@ -644,14 +644,14 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/login/branding",
         "getBranding",
-        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `management`) and, for a management environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)).",
+        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `primary`) and, for a primary environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)).",
     ),
     // OP-159 m.47 (c), TN-141
     served(
         Verb::Get,
         "/v1/foundings/{token}",
         "getFounding",
-        "A tenant founding's name, its management environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)).",
+        "A tenant founding's name, its primary environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)).",
     ),
     served(
         Verb::Post,
@@ -663,14 +663,14 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/foundings/{token}/complete",
         "completeFounding",
-        "Opens the management environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141).",
+        "Opens the primary environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141).",
     ),
     // OP-159 m.47 (f), TN-89
     served(
         Verb::Get,
         "/v1/admin-invites/{token}",
         "getAdminInvite",
-        "A tenant administrator invitation on the management environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)).",
+        "A tenant administrator invitation on the primary environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)).",
     ),
     served(
         Verb::Post,
@@ -1555,10 +1555,10 @@ pub fn openapi() -> Value {
                             "type": "object",
                             "required": ["kind"],
                             "properties": {
-                                "kind": { "enum": ["standard", "management"] },
+                                "kind": { "enum": ["standard", "primary"] },
                                 "tenant_name": {
                                     "type": ["string", "null"],
-                                    "description": "The tenant's display name, for a management environment only (TN-138, OP-159 m.47 (b)).",
+                                    "description": "The tenant's display name, for a primary environment only (TN-138, OP-159 m.47 (b)).",
                                 },
                             },
                         },

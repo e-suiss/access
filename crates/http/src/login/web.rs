@@ -426,13 +426,23 @@ handler! {
     /// `kind: registration` (OP-153 m.3 (g)).
     create(s, entry, b, p, bytes, headers) true {
         let _ = &p;
-        let kind = serde_json::from_slice::<serde_json::Value>(&bytes)
-            .ok()
+        let asked = serde_json::from_slice::<serde_json::Value>(&bytes).ok();
+        let kind = asked
+            .as_ref()
             .and_then(|v| v.get("kind").cloned())
             .map_or(Ok(access_identity_ui::domain::flow::FlowKind::Login), serde_json::from_value)
             .map_err(|_| problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request"))?;
+        // OP-159 m.49 (c)
+        let second_factor = asked
+            .as_ref()
+            .and_then(|v| v.get("acr"))
+            .and_then(serde_json::Value::as_str)
+            .and_then(access_identity_oauth::domain::tokens::aal_of)
+            .is_some_and(|a| a >= access_identity_session::domain::assurance::Aal::Aal2);
         Ok(match kind {
-            access_identity_ui::domain::flow::FlowKind::Login => s.hosted.create(&entry, &b).await,
+            access_identity_ui::domain::flow::FlowKind::Login => {
+                s.hosted.create(&entry, &b, second_factor).await
+            }
             access_identity_ui::domain::flow::FlowKind::Registration => {
                 s.hosted.create_signup(&entry, &b).await
             }

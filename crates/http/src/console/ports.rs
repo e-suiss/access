@@ -219,7 +219,7 @@ pub trait Devices: Send + Sync {
     ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
 
     /// A challenge for the device key the browser generated for the domain of `environment`,
-    /// an environment the session's management environment administers (OP-159 m.47 (g),
+    /// an environment the session's primary environment administers (OP-159 m.47 (g),
     /// TN-142); answered as [`Self::challenge`] does, with that domain.
     fn challenge_in(
         &self,
@@ -305,7 +305,7 @@ pub trait ReadGrants: Send + Sync {
     ) -> impl Future<Output = Result<Option<IssuedRead>, Unavailable>> + Send;
 
     /// A token on the environment surface of `environment`, an environment the session's
-    /// management environment administers, issued by that environment's own authorization
+    /// primary environment administers, issued by that environment's own authorization
     /// server to the session's Instance in its domain (OP-159 m.47 (g), TN-142); `None` when
     /// the session may not have one.
     fn issue_in(

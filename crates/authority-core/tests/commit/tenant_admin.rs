@@ -5,7 +5,7 @@
 
 use super::*;
 
-/// The management environment's issuer in the consuming domain.
+/// The primary environment's issuer in the consuming domain.
 const ISSUER: Id = ALICE;
 const ISSUER_KEY: u8 = ALICE_KEY;
 /// A tenant administrator's Party in the consuming domain.

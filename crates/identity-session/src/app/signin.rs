@@ -46,7 +46,9 @@ use crate::domain::flow::{
     Ceremony, EMAIL_CODE_ATTEMPTS, FlowRejection, FlowState, Pending, Purpose, RiskNote,
     SUSPENSION_TTL_MS, code_digest, device_digest, handle_digest, identifier_digest, resume_digest,
 };
-use crate::domain::requirement::{AuthPolicy, Enrolled, Requirement, missing, with_step_up};
+use crate::domain::requirement::{
+    AuthPolicy, Enrolled, MfaPolicy, Requirement, missing, with_step_up,
+};
 use crate::domain::session::{
     MARKER_COOKIE, SESSION_COOKIE, cookie_digest, marker_digest, set_cookie,
 };
@@ -74,6 +76,8 @@ pub struct Identify<'a> {
     pub keep_signed_in: bool,
     /// "Don't ask for a second step on this device for 30 days" (X33).
     pub remember_device: bool,
+    /// The client asked for a second factor (OP-159 m.49 (c)).
+    pub second_factor: bool,
 }
 
 /// What the second screen offers: the same for every identifier (TN-96, CR-40).
@@ -298,6 +302,7 @@ where
         let now = self.now();
         let mut state = FlowState::new(Purpose::Login, now);
         state.keep_signed_in = req.keep_signed_in;
+        state.second_factor = req.second_factor;
         state.remember_device = req.remember_device;
         state.marker = req.marker.and_then(decode32).map(|m| marker_digest(&m));
         let folded = req.identifier.map(Self::folded).transpose()?;
@@ -1159,14 +1164,35 @@ where
         }))
     }
 
-    fn policy_for(&self, purpose: &Purpose) -> AuthPolicy {
-        match purpose {
+    pub(crate) fn policy_for(&self, state: &FlowState) -> AuthPolicy {
+        match &state.purpose {
             Purpose::StepUp { min_aal, .. } => AuthPolicy {
                 min_aal: (*min_aal).max(self.policy.min_aal),
                 ..self.policy
             },
+            // OP-159 m.49 (c)
+            Purpose::Login if state.second_factor => AuthPolicy {
+                mfa: MfaPolicy::Required,
+                min_aal: self.policy.min_aal.max(Aal::Aal2),
+                ..self.policy
+            },
             _ => self.policy,
         }
+    }
+
+    /// Whether the flow's client asked for a second factor (OP-159 m.49 (c)); a flow that is gone
+    /// asked for nothing.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn wants_second_factor(&self, flow: &FlowRef<'_>) -> Result<bool, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let asked = load(&mut tx, flow, now)
+            .await?
+            .is_ok_and(|l| l.state.second_factor);
+        tx.commit().await?;
+        Ok(asked)
     }
 
     #[expect(clippy::too_many_arguments, reason = "one completed flow's facts")]
@@ -1528,7 +1554,7 @@ where
         enrolled: Enrolled,
         marker: bool,
     ) -> Vec<Requirement> {
-        let policy = self.policy_for(&state.purpose);
+        let policy = self.policy_for(state);
         let needs = missing(&policy, &enrolled, &state.factors, marker);
         if state.risk.as_ref().is_some_and(|n| n.step_up) {
             with_step_up(needs, &state.factors)

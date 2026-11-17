@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT slug, management_environment_id, founder_index, code_hash, created_exercise,\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                  reinvites, verified_at IS NOT NULL AS \"verified!\", founder_subject\n             FROM access.tenant_foundings WHERE tenant_id = $1",
+  "query": "SELECT slug, primary_environment_id, founder_index, code_hash, created_exercise,\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                  reinvites, verified_at IS NOT NULL AS \"verified!\", founder_subject\n             FROM access.tenant_foundings WHERE tenant_id = $1",
   "describe": {
     "columns": [
       {
@@ -16,12 +16,12 @@
       },
       {
         "ordinal": 1,
-        "name": "management_environment_id",
+        "name": "primary_environment_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "access.tenant_foundings",
-            "name": "management_environment_id"
+            "name": "primary_environment_id"
           }
         }
       },
@@ -110,5 +110,5 @@
       true
     ]
   },
-  "hash": "5117bff8d9cafa2d4a111b78056500a8d5e5281db76aba665fcb9681bf003f2d"
+  "hash": "6f5cd2ddc9453400cbdb9c506427b0ae70de3e92448f1fd394bda11476c7f860"
 }

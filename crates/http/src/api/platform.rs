@@ -82,7 +82,7 @@ pub const ROWS: &[Route] = &[
     create(
         T,
         "createTenant",
-        "Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
+        "Creates a tenant awaiting its founder: its display name, the slug its primary environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)).",
     ),
     read(
         "/admin/v1/platform/tenants/{tenant_id}",
@@ -146,7 +146,7 @@ pub enum Shape {
 pub const TENANT_FIELDS: &[&str] = &[
     "tenant_id",
     "display_name",
-    "management_slug",
+    "primary_slug",
     "founding",
     "status",
     "placement",

@@ -19,13 +19,13 @@ fn body(v: &Value) -> Map<String, Value> {
 
 // OP-159 m.47 (c), TN-89 (4)
 #[test]
-fn a_tenant_creation_names_its_founder_and_management_slug() {
+fn a_tenant_creation_names_its_founder_and_primary_slug() {
     let k = ids();
     let tenant = k.encode(TENANT_PREFIX, [3; 16]).unwrap();
     let ok = json!({
         "tenant_id": tenant,
         "display_name": "Acme",
-        "management_slug": "acme-admin",
+        "primary_slug": "acme",
         "founder_email": " Admin@Acme.Example ",
     });
     assert_eq!(
@@ -33,7 +33,7 @@ fn a_tenant_creation_names_its_founder_and_management_slug() {
         Parsed::Tenant {
             tenant: [3; 16],
             display_name: String::from("Acme"),
-            slug: String::from("acme-admin"),
+            slug: String::from("acme"),
             email: String::from("admin@acme.example"),
             placement: String::from(DEFAULT_PLACEMENT),
         }

@@ -379,18 +379,14 @@ pub enum Invalid {
     /// (OP-153 m.3 (a)).
     #[error("catalog upgrade required")]
     CatalogUpgradeRequired,
-    /// A third-party client in a management environment, which keeps only the first-party
-    /// console and account clients (TN-138, OP-159 m.47 (b)).
-    #[error("management environment")]
-    ManagementEnvironment,
     /// A consumer binding that does not fit: not a standard environment, another tenant's or no
-    /// management environment, or one bound already (TN-4, OP-159 m.48 (b)).
-    #[error("management binding")]
-    ManagementBinding,
-    /// A consumer binding whose environment does not yet accept the management environment's
+    /// primary environment, or one bound already (TN-4, OP-159 m.48 (b)).
+    #[error("primary binding")]
+    PrimaryBinding,
+    /// A consumer binding whose environment does not yet accept the primary environment's
     /// `tenant_administration` Claims for subject selection (TN-4, TN-139, OP-159 m.48 (b)).
-    #[error("management acceptance required")]
-    ManagementAcceptanceRequired,
+    #[error("primary acceptance required")]
+    PrimaryAcceptanceRequired,
     /// A write only the environment's root signs, sent on another basis or without a session
     /// (INV-29, OP-159 m.48 (b)).
     #[error("root required")]
@@ -814,9 +810,8 @@ impl Invalid {
             Self::UpstreamSubject => "invalid-upstream-subject",
             Self::UpstreamSubjectLinked => "upstream-subject-linked",
             Self::CatalogUpgradeRequired => access_internal_api::idp::CATALOG_UPGRADE_REQUIRED,
-            Self::ManagementEnvironment => "management-environment",
-            Self::ManagementBinding => "management-binding",
-            Self::ManagementAcceptanceRequired => "management-acceptance-required",
+            Self::PrimaryBinding => "primary-binding",
+            Self::PrimaryAcceptanceRequired => "primary-acceptance-required",
             Self::RootRequired => "root-required",
             Self::RecoveryPolicy => "invalid-recovery-policy",
             Self::RecoveryOption => "recovery-option-off",
@@ -2226,10 +2221,10 @@ pub enum Change {
     /// `idp.environment.kex_share` (CT2, OP-159 m.3 (a), (t)).
     KexShare(assurance::KexShare),
     /// `idp.environment.consumer_bind` (CT2, OP-159 m.48 (b)): binds the environment's domain as
-    /// consuming the Claims of its tenant's management environment, named by its slug.
+    /// consuming the Claims of its tenant's primary environment, named by its slug.
     ConsumerBind {
-        /// The management environment's slug.
-        management: String,
+        /// The primary environment's slug.
+        primary: String,
     },
 }
 
@@ -2743,9 +2738,9 @@ impl Change {
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
             // OP-159 m.48 (b)
-            Self::ConsumerBind { management } => {
-                access_identity_oauth::domain::issuer::check_slug(management)
-                    .map_err(|_| Invalid::ManagementBinding)
+            Self::ConsumerBind { primary } => {
+                access_identity_oauth::domain::issuer::check_slug(primary)
+                    .map_err(|_| Invalid::PrimaryBinding)
             }
             // OP-157 m.3 (m), OP-158 m.3 (o), (r), OP-159 m.3 (a), (o), (t)
             Self::SigningProfile(_)
@@ -3030,8 +3025,8 @@ impl Change {
             Self::SigningProfile(p) => assurance::SigningProfile::body(p.as_ref()),
             Self::KexShare(k) => k.body(),
             // OP-159 m.48 (b)
-            Self::ConsumerBind { management } => {
-                Value::Map(vec![(Value::text("management"), Value::text(management))])
+            Self::ConsumerBind { primary } => {
+                Value::Map(vec![(Value::text("primary"), Value::text(primary))])
             }
         }
     }

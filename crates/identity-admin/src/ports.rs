@@ -156,7 +156,7 @@ pub trait EnvironmentKeys: Send + Sync {
     }
 
     /// The environment's blind index key alone (OP-153 m.3 (aa)): what a founding indexes its
-    /// founder by before the management environment and its KEK exist (TN-141); `None` when the
+    /// founder by before the primary environment and its KEK exist (TN-141); `None` when the
     /// token refuses it.
     fn blind_index(
         &self,

@@ -104,7 +104,7 @@ interface Shell {
   readonly screens: ReadonlySet<Screen>;
   readonly registered: (i: Instance) => void;
   // OP-159 m.47 (a)
-  /** The tenant's environments when the viewed environment is its management environment. */
+  /** The tenant's environments when the viewed environment is its primary environment. */
   readonly tenant: readonly TenantEnvironment[] | undefined;
 }
 
@@ -273,7 +273,7 @@ function useRoute(): Route {
 }
 
 /**
- * Whether `environment` is one the session's management environment administers (OP-159 m.47 (a),
+ * Whether `environment` is one the session's primary environment administers (OP-159 m.47 (a),
  * (g)): `undefined` while that is not known yet.
  */
 function administered(
@@ -469,7 +469,7 @@ function SignedIn({
 }
 
 /**
- * The environment's home: its authority and this browser's device Instance; in a management
+ * The environment's home: its authority and this browser's device Instance; in a primary
  * environment, the tenant's home (OP-159 m.47 (a)).
  */
 export function AuthorityPage(): ReactElement {

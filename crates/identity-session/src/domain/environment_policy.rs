@@ -74,7 +74,7 @@ pub struct EnvironmentSignin {
     /// Who may create an account without an invitation (OP-159 m.48 (c)).
     pub registration: Registration,
     /// Whether the environment's enabled social and enterprise providers sign anyone in; only a
-    /// management environment without a recorded policy turns them off (OP-159 m.48 (c)).
+    /// primary environment without a recorded policy turns them off (OP-159 m.48 (c)).
     pub social: bool,
 }
 
@@ -100,19 +100,6 @@ impl Default for EnvironmentSignin {
 }
 
 impl EnvironmentSignin {
-    /// No stored policy in a management environment (TN-138, OP-159 m.47 (b), m.48 (c)): the
-    /// default with a second factor required, registration by invitation only and social sign-in
-    /// off; a decided `idp.environment.signin_policy` replaces it.
-    #[must_use]
-    pub fn management() -> Self {
-        Self {
-            mfa_required: true,
-            registration: Registration::InviteOnly,
-            social: false,
-            ..Self::default()
-        }
-    }
-
     /// Whether an account may be created without an invitation or a founding (OP-159 m.48 (c)).
     #[must_use]
     pub fn open_registration(&self) -> bool {
@@ -426,15 +413,6 @@ mod tests {
         assert!(with(Value::text("open")).unwrap().open_registration());
         assert_eq!(with(Value::text("closed")), None);
         assert_eq!(with(Value::Bool(true)), None);
-    }
-
-    // TN-138, OP-159 m.47 (b), m.48 (c)
-    #[test]
-    fn a_management_environment_without_a_policy_is_closed_and_needs_a_second_factor() {
-        let m = EnvironmentSignin::management();
-        assert!(m.mfa_required && !m.open_registration() && !m.social);
-        assert_eq!(m.apply(AuthPolicy::DEFAULT).mfa, MfaPolicy::Required);
-        assert!(EnvironmentSignin::default().open_registration());
     }
 
     // MD-8

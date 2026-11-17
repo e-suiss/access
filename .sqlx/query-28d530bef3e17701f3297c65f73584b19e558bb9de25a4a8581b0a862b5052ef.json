@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT tenant_id AS \"tenant_id!\", management_slug AS \"slug!\",\n                  management_environment_id AS \"environment_id!\",\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                  verified AS \"verified!\", completed AS \"completed!\"\n             FROM access.founding_by_token($1)",
+  "query": "SELECT tenant_id AS \"tenant_id!\", primary_slug AS \"slug!\",\n                  primary_environment_id AS \"environment_id!\",\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                  verified AS \"verified!\", completed AS \"completed!\"\n             FROM access.founding_by_token($1)",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       null
     ]
   },
-  "hash": "e6b5b4f1d43cd0c48d812dd975c67ded32c0a163cec6f50fec643a6334b214d1"
+  "hash": "28d530bef3e17701f3297c65f73584b19e558bb9de25a4a8581b0a862b5052ef"
 }

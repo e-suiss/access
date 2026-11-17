@@ -52,8 +52,8 @@ use crate::domain::tokens::{
 };
 use crate::ports::dpop::{Clock, ReplayCache};
 use crate::ports::oauth::{
-    ClaimSource, ClientKeys, LoginPages, ManagementHolders, NoClaims, NoManagement, OAuthDb,
-    OAuthTx, Random, TenantIds, TokenSigner,
+    ClaimSource, ClientKeys, LoginPages, ManagementHolders, NoClaims, NoPrimary, OAuthDb, OAuthTx,
+    Random, TenantIds, TokenSigner,
 };
 use crate::ports::{Directory, EnvironmentEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
@@ -131,7 +131,7 @@ pub trait Env: Send + Sync + 'static {
     /// The Instances management read token exchanges read (TN-130); none unless the server
     /// wires them.
     fn management(&self) -> &(dyn ManagementHolders + Sync) {
-        &NoManagement
+        &NoPrimary
     }
     /// What accounts hold to release as identity claims (§10.4.6); nothing unless the server
     /// wires the environments' PII vaults.

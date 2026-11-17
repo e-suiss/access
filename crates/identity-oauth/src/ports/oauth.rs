@@ -787,9 +787,9 @@ impl ClaimSource for NoClaims {
 /// No management holder: no key is live and no environment is the platform's; every exchange is
 /// refused (MD-8).
 #[derive(Clone, Copy, Debug, Default)]
-pub struct NoManagement;
+pub struct NoPrimary;
 
-impl ManagementHolders for NoManagement {
+impl ManagementHolders for NoPrimary {
     fn instance_key(
         &self,
         _: [u8; 32],

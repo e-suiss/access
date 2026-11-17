@@ -1,5 +1,5 @@
 //! OP-159 m.47 against a real PostgreSQL: one slug space over environments and foundings, one
-//! management environment per tenant, a founding's secrets as hashes that change only by a
+//! primary environment per tenant, a founding's secrets as hashes that change only by a
 //! reinvitation, administrators that become owners once and are removed once, and nothing deleted
 //! (TN-16, TN-138, TN-141, OP-73).
 
@@ -15,7 +15,7 @@ use access_store::scope::DomainId;
 use access_store::tenancy::{create_environment, create_tenant};
 use access_store::tenant_admin::{
     NewAdmin, NewFounding, SessionInstance, add_admin, admin, admins, attach_instance,
-    complete_founding, create_management_environment, due_tenants, end_admin, end_line, founding,
+    complete_founding, create_primary_environment, due_tenants, end_admin, end_line, founding,
     founding_by_token, insert_founding, line_of_party, lines, make_owner, open_line,
     reinvite_founding, session_instances, set_admin_party, set_display_name, set_tenant_status,
     slug_free, stated, tenant_environments, tenant_profile, verify_founding,
@@ -73,6 +73,7 @@ fn owner_of(party: &[u8; 16]) -> NewAdmin<'_> {
         owner: true,
         exercise: None,
         cooling_s: None,
+        scope: None,
     }
 }
 
@@ -82,6 +83,7 @@ fn plain(exercise: Option<&[u8; 32]>, cooling_s: Option<i64>) -> NewAdmin<'_> {
         owner: false,
         exercise,
         cooling_s,
+        scope: None,
     }
 }
 
@@ -151,7 +153,7 @@ async fn a_founding_reserves_its_slug_against_every_environment() {
     );
     t.rollback().await.unwrap();
     let mut t = TenantTx::begin_tenant(&db.app, acme).await.unwrap();
-    create_management_environment(&mut t, m, &d, ("acme-admin", "pool-default"))
+    create_primary_environment(&mut t, m, &d, ("acme-admin", "pool-default"))
         .await
         .unwrap();
     t.commit().await.unwrap();
@@ -160,7 +162,7 @@ async fn a_founding_reserves_its_slug_against_every_environment() {
     let d2 = domain(&db, acme, 4).await;
     let mut t = TenantTx::begin_tenant(&db.app, acme).await.unwrap();
     assert!(
-        create_management_environment(&mut t, new_id(8), &d2, ("acme-ops", "pool-default"))
+        create_primary_environment(&mut t, new_id(8), &d2, ("acme-ops", "pool-default"))
             .await
             .is_err()
     );
@@ -169,7 +171,7 @@ async fn a_founding_reserves_its_slug_against_every_environment() {
     let envs = tenant_environments(&mut t).await.unwrap();
     t.commit().await.unwrap();
     assert_eq!(envs.len(), 1);
-    assert_eq!(envs[0].kind, "management");
+    assert_eq!(envs[0].kind, "primary");
     assert!(
         raw(
             &db,
@@ -229,7 +231,7 @@ async fn a_founding_changes_only_by_verification_completion_or_reinvitation() {
 
     for bad in [
         "UPDATE access.tenant_foundings SET token_hash = '\\x2222222222222222222222222222222222222222222222222222222222222222'",
-        "UPDATE access.tenant_foundings SET management_slug = 'other-slug'",
+        "UPDATE access.tenant_foundings SET primary_slug = 'other-slug'",
         "UPDATE access.tenant_foundings SET expires_at = issued_at + interval '31 days', reinvites = reinvites + 1",
         "DELETE FROM access.tenant_foundings",
         "TRUNCATE access.tenant_foundings",
@@ -288,7 +290,7 @@ async fn administrators_own_once_end_once_and_their_lines_stay() {
     let (tenant, m) = founded(&db, "acme-admin", 1).await;
     let d = domain(&db, tenant, 3).await;
     let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
-    create_management_environment(&mut t, m, &d, ("acme-admin", "pool-default"))
+    create_primary_environment(&mut t, m, &d, ("acme-admin", "pool-default"))
         .await
         .unwrap();
     t.commit().await.unwrap();
@@ -322,6 +324,7 @@ async fn administrators_own_once_end_once_and_their_lines_stay() {
                 owner: true,
                 exercise: None,
                 cooling_s: Some(86_400),
+                scope: None,
             },
         )
         .await

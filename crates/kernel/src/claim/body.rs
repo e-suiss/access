@@ -96,7 +96,7 @@ pub enum Class {
     /// Exercise's job is paused or stopped (U5, OP-154 m.3 (u)).
     ExecutorControl,
     /// `tenant_administration`: bool value, `true` while the subject administers the tenant of
-    /// the management environment whose issuer states it, `false` once it no longer does, so a
+    /// the primary environment whose issuer states it, `false` once it no longer does, so a
     /// `Pred` holder selects the tenant's administrators (OP-159 m.47 (d), (f)).
     TenantAdministration,
 }

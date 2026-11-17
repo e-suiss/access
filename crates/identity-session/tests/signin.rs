@@ -306,6 +306,7 @@ async fn start(e: &Env, who: Option<&str>, marker: Option<&str>) -> (String, Str
                 identifier: who,
                 marker,
                 remember_device: true,
+                second_factor: false,
                 ..Identify::default()
             })
             .await

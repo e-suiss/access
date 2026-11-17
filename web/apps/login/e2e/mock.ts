@@ -162,6 +162,8 @@ export interface Canned {
 export class LoginMock {
   readonly submissions: Recorded[] = [];
   readonly requests: string[] = [];
+  /** The bodies of `POST /v1/login/flows`, `null` when there was none. */
+  readonly created: (string | null)[] = [];
   readonly registered = new Set<string>();
   readonly flows = new Map<string, LoginUi>();
   /** Nodes added to the identifier step (the option and provider nodes of N5). */
@@ -279,6 +281,7 @@ export class LoginMock {
       });
     if (request.method() === "POST" && url.pathname.endsWith("/v1/login/flows")) {
       const created = request.postData();
+      this.created.push(created);
       const kind = created === null ? undefined : (JSON.parse(created) as { kind?: string }).kind;
       return this.reply(route, {
         status: 201,

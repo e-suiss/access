@@ -2,9 +2,9 @@
 // Tenants with their founding, suspension and placement; the environments and sandbox domains in
 // them, an environment's metadata with the state of its signing keys; and the deployment's
 // readiness. Nothing here opens an environment or shows or changes an environment's accounts, apps,
-// authority, records or settings: a tenant's founder and administrators do that in its management
+// authority, records or settings: a tenant's founder and administrators do that in its primary
 // environment. Each change is one signed `idp.platform.*` Exercise on the viewer's own Grant.
-// OP-159 m.42 (d): each management environment and environment shows its console link.
+// OP-159 m.42 (d): each primary environment and environment shows its console link.
 
 import { Badge } from "@access/ui/components/badge";
 import { Button } from "@access/ui/components/button";
@@ -37,7 +37,7 @@ import {
 const Tenant = v.looseObject({
   tenant_id: v.string(),
   display_name: v.exactOptional(v.nullable(v.string())),
-  management_slug: v.exactOptional(v.nullable(v.string())),
+  primary_slug: v.exactOptional(v.nullable(v.string())),
   founding: v.exactOptional(v.nullable(v.picklist(["pending", "completed", "expired"]))),
   status: v.picklist(["provisioning", "active", "suspended", "deleted"]),
   placement: v.string(),
@@ -50,7 +50,7 @@ const KeyState = v.picklist(["pending", "published", "signing", "unavailable"]);
 
 const EnvironmentMeta = v.looseObject({
   slug: v.string(),
-  kind: v.exactOptional(v.picklist(["standard", "management"])),
+  kind: v.exactOptional(v.picklist(["standard", "primary"])),
   tenant_id: v.exactOptional(v.string()),
   issuer: v.exactOptional(v.nullable(v.string())),
   status: v.exactOptional(v.string()),
@@ -201,7 +201,7 @@ function CreateTenant({ ctx }: { readonly ctx: Ctx }): ReactElement {
           if (!ready) return;
           const body: Record<string, unknown> = {
             display_name: name.trim(),
-            management_slug: slug,
+            primary_slug: slug,
             founder_email: email.trim(),
             ...(placement === "" ? {} : { placement }),
           };
@@ -221,8 +221,8 @@ function CreateTenant({ ctx }: { readonly ctx: Ctx }): ReactElement {
         <Field id="tenant-name" label={t("platformTenantName")} value={name} onChange={setName} />
         <Field
           id="tenant-slug"
-          label={t("platformManagementSlug")}
-          hint={t("platformManagementSlugHint")}
+          label={t("platformPrimarySlug")}
+          hint={t("platformPrimarySlugHint")}
           value={slug}
           onChange={(v) => {
             setSlug(v.trim().toLowerCase());
@@ -412,14 +412,14 @@ export function Tenants({ ctx }: { readonly ctx: Ctx }): ReactElement {
                   cell: tenantName,
                 },
                 {
-                  id: "management",
-                  header: t("platformManagementSlug"),
+                  id: "primary",
+                  header: t("platformPrimarySlug"),
                   className: "whitespace-normal",
                   cell: (x) =>
-                    typeof x.management_slug === "string" ? (
+                    typeof x.primary_slug === "string" ? (
                       <span className="flex flex-col gap-1">
-                        <span className={MONO}>{x.management_slug}</span>
-                        <ConsoleLink slug={x.management_slug} />
+                        <span className={MONO}>{x.primary_slug}</span>
+                        <ConsoleLink slug={x.primary_slug} />
                       </span>
                     ) : (
                       ""
@@ -612,8 +612,8 @@ function TenantEnvironments({
                         >
                           <span className={MONO}>{r.slug}</span>
                         </Button>
-                        {r.kind === "management" && (
-                          <Badge variant="outline">{t("tenantManagement")}</Badge>
+                        {r.kind === "primary" && (
+                          <Badge variant="outline">{t("tenantPrimary")}</Badge>
                         )}
                         {r.sandbox === true && (
                           <Badge variant="outline">{t("platformSandbox")}</Badge>

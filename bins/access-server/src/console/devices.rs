@@ -716,8 +716,8 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
-        Ok(if kind.as_deref() == Some("management") {
-            "management"
+        Ok(if kind.as_deref() == Some("primary") {
+            "primary"
         } else {
             "standard"
         })
@@ -735,20 +735,20 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
     }
 }
 
-/// An environment a console session's management environment administers, as a registration
+/// An environment a console session's primary environment administers, as a registration
 /// there needs it (OP-159 m.47 (d), (g), TN-142).
 struct Administered {
     row: ConsoleSessionRow,
     environment: access_store::identity::EnvironmentId,
     domain: Digest,
-    /// The administrator's Party: its Party in the management environment.
+    /// The administrator's Party: its Party in the primary environment.
     party: [u8; 16],
     /// Whether that Party is registered in the domain already.
     registered: bool,
 }
 
 impl<I: DeviceInstances> ConsoleDevices<I> {
-    /// `environment` when the session's environment is its tenant's management environment, the
+    /// `environment` when the session's environment is its tenant's primary environment, the
     /// environment's domain consumes it, and the session's subject is one of its live
     /// administrators with a Party; otherwise the refusal to answer.
     async fn administered(

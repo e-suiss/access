@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT invitation_id, code_hash, invitee_index, invitee_domain, inviter_subject,\n                  cross_domain, verified_at IS NOT NULL AS \"verified!\", accepted_subject,\n                  superseded_at IS NOT NULL AS \"superseded!\",\n                  (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\",\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\"\n             FROM access.tenant_admin_invitations\n            WHERE tenant_id = $1 AND environment_id = $2\n              AND ($3::bytea IS NULL OR token_hash = $3)\n            ORDER BY created_at DESC, invitation_id",
+  "query": "SELECT invitation_id, code_hash, invitee_index, invitee_domain, inviter_subject,\n                  cross_domain, verified_at IS NOT NULL AS \"verified!\", accepted_subject,\n                  superseded_at IS NOT NULL AS \"superseded!\",\n                  (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\",\n                  (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\", scope\n             FROM access.tenant_admin_invitations\n            WHERE tenant_id = $1 AND environment_id = $2\n              AND ($3::bytea IS NULL OR token_hash = $3)\n            ORDER BY created_at DESC, invitation_id",
   "describe": {
     "columns": [
       {
@@ -103,6 +103,17 @@
         "name": "expires_ms!",
         "type_info": "Int8",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "scope",
+        "type_info": "UuidArray",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_invitations",
+            "name": "scope"
+          }
+        }
       }
     ],
     "parameters": {
@@ -123,8 +134,9 @@
       true,
       null,
       null,
-      null
+      null,
+      true
     ]
   },
-  "hash": "84aa2d8ff465ca6b023426e0d8fd595ab456addf39b3a52694b73326c975a702"
+  "hash": "202e5f50a7f83dabac1f0dc2246acb82fa7ec510f0d82ad9d6bb81b043c2cbfe"
 }

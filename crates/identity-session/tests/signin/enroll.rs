@@ -206,3 +206,49 @@ async fn a_passkey_enrolled_at_sign_in_completes_it_with_its_assertion() {
     let (_, s) = signed_in(step);
     assert!(s.result.methods.contains(&MethodClass::Passkey));
 }
+
+// OP-159 m.49 (c), TN-144
+#[tokio::test]
+async fn a_sign_in_whose_client_asks_for_a_second_factor_enrolls_one_whatever_the_policy() {
+    let e = env(65, "is-en4").await;
+    e.account("alice@example.com").await;
+    let s = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                second_factor: true,
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    let flow = (s.handle, s.device);
+    assert!(
+        e.with(async |a| {
+            let f = flow.clone();
+            a.wants_second_factor(&ref_of(&f)).await
+        })
+        .await
+        .unwrap()
+    );
+    let step = password(&e, &flow, "alice@example.com", PW).await;
+    assert!(
+        matches!(step, Step::Continue { ref needs, .. } if needs.first() == Some(&Requirement::EnrollSecondFactor))
+    );
+    assert!(enrollment(&e, &flow).await.is_ok());
+
+    let plain = start(&e, Some("alice@example.com"), None).await;
+    assert!(
+        !e.with(async |a| {
+            let f = plain.clone();
+            a.wants_second_factor(&ref_of(&f)).await
+        })
+        .await
+        .unwrap()
+    );
+    assert!(matches!(
+        password(&e, &plain, "alice@example.com", PW).await,
+        Step::SignedIn(_)
+    ));
+}

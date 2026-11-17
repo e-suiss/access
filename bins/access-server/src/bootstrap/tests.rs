@@ -360,7 +360,7 @@ impl World {
                     issuer_predicate_input: Vec::new(),
                     provisioned_by: None,
                     administered: None,
-                    management: None,
+                    primary: None,
                 },
                 recovery,
             )
@@ -427,7 +427,7 @@ fn plan() -> Plan {
     }
 }
 
-/// The management environments' administration courier of the test world (OP-159 m.47 (f)).
+/// The primary environments' administration courier of the test world (OP-159 m.47 (f)).
 type Courier = access_identity_account::app::administration::Administration<
     SignerKeys,
     access_authority_ingest::app::Ingest<
@@ -1400,7 +1400,7 @@ async fn admin_environment_creation_opens_the_domain_keys() {
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
             administered: None,
-            management: None,
+            primary: None,
         })
         .await
         .unwrap();

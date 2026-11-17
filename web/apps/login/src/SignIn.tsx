@@ -97,13 +97,15 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
     const params = new URL(window.location.href).searchParams;
     const flow = params.get("flow");
     const reason = params.get("reason");
-    // TN-44, X-L3: only the authorization request's own reason asks for a step-up
+    const acr = params.get("acr");
+    // TN-44, X-L3: only the authorization request's own reason asks for a step-up; OP-159 m.49 (c):
+    // a sign-in whose request asks for a second factor is a fresh one that asks for it
     const start =
       flow !== null
         ? getFlow(flow)
-        : reason === "step_up" || reason === "reauthenticate"
-          ? stepUp(params.get("acr")).then((a) => (a.kind === "ui" ? a : createFlow()))
-          : createFlow(kind);
+        : reason === "step_up" || (reason === "reauthenticate" && acr === null)
+          ? stepUp(acr).then((a) => (a.kind === "ui" ? a : createFlow(kind, acr)))
+          : createFlow(kind, acr);
     void start.then(settle);
   }, [settle, kind]);
 

@@ -1,7 +1,7 @@
 //! A tenant's founding and administration end to end (OP-159 m.47, TN-138 … TN-141): the platform
 //! root creates a tenant with a founder commitment; the founder proves the address, opens the
-//! management environment rooted in its device Party and closes the founding; the founder's key
-//! opens environments whose Genesis carries the administrator rule over the management issuer and
+//! primary environment rooted in its device Party and closes the founding; the founder's key
+//! opens environments whose Genesis carries the administrator rule over the primary issuer and
 //! which are bound as consuming its Claims; a non-owner administrator holds the rule while its
 //! `tenant_administration` line is live and stands nowhere once it is removed.
 
@@ -116,11 +116,11 @@ async fn provision(
     done
 }
 
-/// Signs `change` with `key` on the management domain's `idp` Anchor and has it applied.
+/// Signs `change` with `key` on the primary domain's `idp` Anchor and has it applied.
 async fn tenant_write(
     s: &Scene<'_>,
     admin: &Admin<'_, TestPlane, TestPlane, EnvironmentKeyring>,
-    (tenant, management, domain): (TenantId, EnvironmentId, Digest),
+    (tenant, primary, domain): (TenantId, EnvironmentId, Digest),
     (key, subject): (&HsmSigner, [u8; 16]),
     change: &TenantChange,
 ) -> Result<
@@ -132,7 +132,7 @@ async fn tenant_write(
 > {
     let m = Moment::at(server_time(&s.w.db.app).await.unwrap());
     let prepared = admin
-        .prepare_tenant((tenant, management), change, m.validity)
+        .prepare_tenant((tenant, primary), change, m.validity)
         .await?;
     MetaExercises::lead(&s.w.plane, prepared.domain)
         .await
@@ -147,7 +147,7 @@ async fn tenant_write(
     let done = Box::pin(admin.apply_tenant(
         TenantWrite {
             tenant,
-            environment: management,
+            environment: primary,
             change,
             subject: Some(subject),
             nonce: nonce.to_vec(),
@@ -208,7 +208,7 @@ async fn a_tenant_is_founded_by_its_invited_founder_and_opens_its_environments()
     let change = PlatformChange::Tenant(TenantOrder {
         tenant: *tenant.as_bytes(),
         display_name: String::from("Acme"),
-        management_slug: String::from(SLUG),
+        primary_slug: String::from(SLUG),
         placement: String::from(PLACEMENT),
         founder: commitment,
     });
@@ -251,7 +251,9 @@ async fn a_tenant_is_founded_by_its_invited_founder_and_opens_its_environments()
     let founder_key = token_key(&w.keys, &crate::bootstrap::tenants::founder_label(SLUG)).unwrap();
     let founder = root_party(&founder_key.public_key());
     assert!(matches!(
-        admin.open_management(SLUG, &token, founder).await,
+        admin
+            .open_primary(SLUG, &token, founder, Default::default())
+            .await,
         Err(FoundingError::State)
     ));
     assert!(matches!(
@@ -272,7 +274,10 @@ async fn a_tenant_is_founded_by_its_invited_founder_and_opens_its_environments()
         .unwrap();
 
     // TN-138, TN-111, TNI-15
-    let opened = admin.open_management(SLUG, &token, founder).await.unwrap();
+    let opened = admin
+        .open_primary(SLUG, &token, founder, Default::default())
+        .await
+        .unwrap();
     w.domains.release().await;
     assert!(opened.environment == EnvironmentId::from_bytes(*tenant.as_bytes()));
     let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
@@ -280,7 +285,7 @@ async fn a_tenant_is_founded_by_its_invited_founder_and_opens_its_environments()
         .unwrap();
     assert_eq!(
         tenants::environment_kind(&mut t).await.unwrap().as_deref(),
-        Some("management")
+        Some("primary")
     );
     let m_issuer = Id(access_store::issuer::environment_issuer(&mut t)
         .await
@@ -457,7 +462,7 @@ async fn a_tenant_is_founded_by_its_invited_founder_and_opens_its_environments()
                 Moment::at(1).validity
             )
             .await,
-        Err(TenantError::Invalid(TenantInvalid::NotManagement))
+        Err(TenantError::Invalid(TenantInvalid::NotPrimary))
     ));
 }
 
@@ -493,7 +498,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
     let change = PlatformChange::Tenant(TenantOrder {
         tenant: *tenant.as_bytes(),
         display_name: String::from("Acme"),
-        management_slug: String::from(SLUG),
+        primary_slug: String::from(SLUG),
         placement: String::from(PLACEMENT),
         founder: commitment,
     });
@@ -505,7 +510,10 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
         .unwrap();
     let founder_key = token_key(&w.keys, &crate::bootstrap::tenants::founder_label(SLUG)).unwrap();
     let founder = root_party(&founder_key.public_key());
-    let opened = admin.open_management(SLUG, &token, founder).await.unwrap();
+    let opened = admin
+        .open_primary(SLUG, &token, founder, Default::default())
+        .await
+        .unwrap();
     w.domains.release().await;
     s.bootstrap
         .onboard(
@@ -574,6 +582,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
             owner: false,
             exercise: None,
             cooling_s: None,
+            scope: None,
         },
     )
     .await
@@ -592,6 +601,63 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
             .unwrap()
             .is_some()
     );
+
+    // OP-159 m.49 (d), TN-144
+    let (scoped, _, _) = s
+        .bootstrap
+        .account(
+            &ids,
+            (tenant, opened.environment),
+            "scoped@acme.example",
+            Some(&password),
+        )
+        .await
+        .unwrap();
+    let only_primary = [opened.environment];
+    let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
+        .await
+        .unwrap();
+    tenants::add_admin(
+        &mut t,
+        &scoped,
+        &tenants::NewAdmin {
+            party: None,
+            owner: false,
+            exercise: None,
+            cooling_s: None,
+            scope: Some(&only_primary),
+        },
+    )
+    .await
+    .unwrap();
+    let kept = tenants::admin(&mut t, &scoped).await.unwrap().unwrap();
+    assert!(
+        kept.scope
+            .as_deref()
+            .is_some_and(|s| s.len() == 1 && s[0].as_bytes() == opened.environment.as_bytes())
+    );
+    t.commit().await.unwrap();
+    assert!(
+        courier
+            .admit(
+                (tenant, opened.environment),
+                &scoped,
+                (&DomainId::from_bytes(shop.domain.0), &helper_party.0),
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
+        .await
+        .unwrap();
+    assert!(
+        tenants::lines(&mut t, Some(&scoped))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    t.commit().await.unwrap();
     w.domains.release().await;
 
     // OP-159 m.47 (d)
@@ -782,6 +848,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
             owner: false,
             exercise: None,
             cooling_s: Some(access_identity_admin::domain::tenant::ADMIN_COOLING_S),
+            scope: None,
         },
     )
     .await
@@ -883,7 +950,7 @@ async fn the_founding_routes_take_a_founder_from_the_link_to_an_active_tenant() 
         &PlatformChange::Tenant(TenantOrder {
             tenant: *tenant.as_bytes(),
             display_name: String::from("Acme"),
-            management_slug: String::from(SLUG),
+            primary_slug: String::from(SLUG),
             placement: String::from(PLACEMENT),
             founder: commitment,
         }),
@@ -933,7 +1000,7 @@ async fn the_founding_routes_take_a_founder_from_the_link_to_an_active_tenant() 
     assert_eq!(referrer.unwrap(), "no-referrer");
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["display_name"], "Acme");
-    assert_eq!(v["environment"]["kind"], "management");
+    assert_eq!(v["environment"]["kind"], "primary");
     assert!(!body.windows(FOUNDER.len()).any(|x| x == FOUNDER.as_bytes()));
     let (status, _, _) = call(
         "GET",

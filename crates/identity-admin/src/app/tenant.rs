@@ -1,8 +1,8 @@
-//! A tenant's administration from its management environment (OP-159 m.47 (d), (e), (f), (h)):
-//! each `idp.tenant.*` change is an Exercise in the management environment's governing domain,
+//! A tenant's administration from its primary environment (OP-159 m.47 (d), (e), (f), (h)):
+//! each `idp.tenant.*` change is an Exercise in the primary environment's governing domain,
 //! committed before anything is written (TN-110, PI-4). An environment opens in the tenant whose
-//! management domain recorded the order (PI-7), rooted in the tenant's owners, with the
-//! administrator rule over the management environment's issuer in its Genesis, and is bound as
+//! primary domain recorded the order (PI-7), rooted in the tenant's owners, with the
+//! administrator rule over the primary environment's issuer in its Genesis, and is bound as
 //! a domain consuming that issuer's Claims (TN-4).
 
 use access_identity_oauth::domain::issuer::Issuer;
@@ -21,7 +21,7 @@ use access_store::tenant_admin as tenants;
 use super::{Admin, Administered, Applied, NewEnvironment, Prepared};
 use crate::AdminError;
 use crate::domain::provision::SANDBOX_BUDGET;
-use crate::domain::tenant::{MANAGEMENT, TenantChange, TenantInvalid, owners_root};
+use crate::domain::tenant::{PRIMARY, TenantChange, TenantInvalid, owners_root};
 use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 
 /// Why a tenant write did not happen.
@@ -45,7 +45,7 @@ impl From<access_store::StoreError> for TenantError {
 pub struct TenantOrder<'a> {
     /// The tenant.
     pub tenant: TenantId,
-    /// Its management environment.
+    /// Its primary environment.
     pub environment: EnvironmentId,
     /// The change.
     pub change: &'a TenantChange,
@@ -87,9 +87,9 @@ pub fn environment_actions() -> Vec<access_kernel::model::ActionRef> {
 }
 
 impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
-    /// The governing domain and slug of `environment` when it is `tenant`'s management environment
+    /// The governing domain and slug of `environment` when it is `tenant`'s primary environment
     /// (TN-138).
-    async fn management(
+    async fn primary(
         &self,
         tenant: TenantId,
         environment: EnvironmentId,
@@ -99,8 +99,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let g = idp::governance(&mut t).await?;
         t.commit().await?;
         let g = g.ok_or(AdminError::NoEnvironment)?;
-        if kind.as_deref() != Some(MANAGEMENT) {
-            return Err(TenantInvalid::NotManagement.into());
+        if kind.as_deref() != Some(PRIMARY) {
+            return Err(TenantInvalid::NotPrimary.into());
         }
         Ok((Digest(*g.domain.as_bytes()), g.slug))
     }
@@ -146,19 +146,21 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                     return Err(TenantInvalid::NoAdmin.into());
                 }
             }
-            // TN-89 (11)
-            TenantChange::AdminInvite(_) => {
+            // TN-89 (11), OP-159 m.49 (d)
+            TenantChange::AdminInvite(i) => {
                 let mut t = TenantTx::begin(self.app, tenant, environment).await?;
                 let fits = super::admin_invite::invite_current(&mut t).await;
+                let scope = scope_of(&mut t, &i.environments).await;
                 t.commit().await?;
                 fits?;
+                scope?;
             }
         }
         Ok(())
     }
 
     /// The inviter of an `idp.tenant.admin_invite`: the subject of the Party that signs `ais` in
-    /// the management environment, and its address (TN-89 (3), (10)); a Party with no account
+    /// the primary environment, and its address (TN-89 (3), (10)); a Party with no account
     /// there invites no one.
     async fn inviter(
         &self,
@@ -190,7 +192,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         Ok(subject.zip(address).ok_or_else(refused)?)
     }
 
-    /// The intent the caller signs for `change` in the management environment (TN-110, EI-25).
+    /// The intent the caller signs for `change` in the primary environment (TN-110, EI-25).
     ///
     /// # Errors
     /// [`TenantError`].
@@ -201,7 +203,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         validity: Window,
     ) -> Result<Prepared, TenantError> {
         change.check()?;
-        let (domain, slug) = self.management(tenant, environment).await?;
+        let (domain, slug) = self.primary(tenant, environment).await?;
         self.tenant_fits(tenant, environment, change).await?;
         let intent = change
             .intent(&slug, validity)
@@ -214,7 +216,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         })
     }
 
-    /// Has the management environment's governing domain commit `order`, binds the ALLOW and
+    /// Has the primary environment's governing domain commit `order`, binds the ALLOW and
     /// writes what it names (TN-110, EI-25, PI-7).
     ///
     /// # Errors
@@ -229,7 +231,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         ais: Vec<u8>,
     ) -> Result<(Applied, Option<OpenedEnvironment>), TenantError> {
         order.change.check()?;
-        let (domain, slug) = self.management(order.tenant, order.environment).await?;
+        let (domain, slug) = self.primary(order.tenant, order.environment).await?;
         let intent = order
             .change
             .intent(&slug, order.validity)
@@ -340,9 +342,11 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 let console = order
                     .console
                     .map(|o| format!("{}/console/{slug}", o.trim_end_matches('/')));
+                let scope = scope_of(&mut t, &i.environments).await?;
                 super::admin_invite::invite(
                     &mut t,
                     &super::admin_invite::InviteWrite {
+                        scope: scope.as_deref(),
                         vault: &vault,
                         ids: self.ids,
                         inviter: (*subject, address),
@@ -385,17 +389,17 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         Ok((applied, opened))
     }
 
-    /// The tenant's live environments as its administrators list them from the management
-    /// environment `(tenant, management)` (OP-159 m.47 (a)): slug, kind, issuer, creation time and
+    /// The tenant's live environments as its administrators list them from the primary
+    /// environment `(tenant, primary)` (OP-159 m.47 (a)): slug, kind, issuer, creation time and
     /// whether it is a sandbox; never their settings or content.
     ///
     /// # Errors
-    /// [`AdminError::NoEnvironment`] outside a management environment; [`AdminError`].
+    /// [`AdminError::NoEnvironment`] outside a primary environment; [`AdminError`].
     pub async fn tenant_environments_view(
         &self,
-        (tenant, management): (TenantId, EnvironmentId),
+        (tenant, primary): (TenantId, EnvironmentId),
     ) -> Result<Vec<serde_json::Value>, AdminError> {
-        self.management(tenant, management)
+        self.primary(tenant, primary)
             .await
             .map_err(|_| AdminError::NoEnvironment)?;
         let mut t = TenantTx::begin_tenant(self.app, tenant).await?;
@@ -415,29 +419,39 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             .collect())
     }
 
-    /// The tenant's administrators as they list them in their management environment (OP-159
+    /// The tenant's administrators as they list them in their primary environment (OP-159
     /// m.47 (e), (f)): each live, removed or invited one with its id (`usr_…` for an account,
     /// `inv_…` for a pending invitation), its address, `owner` or `admin`, its status and since
     /// when. A pending invitation keeps no address (TN-89 (1)): it shows `@` and its domain.
     ///
     /// # Errors
-    /// [`AdminError::NoEnvironment`] outside a management environment; [`AdminError`].
+    /// [`AdminError::NoEnvironment`] outside a primary environment; [`AdminError`].
     pub async fn tenant_admins_view(
         &self,
-        (tenant, management): (TenantId, EnvironmentId),
+        (tenant, primary): (TenantId, EnvironmentId),
     ) -> Result<Vec<serde_json::Value>, AdminError> {
         use access_identity_account::app::SUBJECT_PREFIX;
-        self.management(tenant, management)
+        self.primary(tenant, primary)
             .await
             .map_err(|_| AdminError::NoEnvironment)?;
         let vault = self
             .keys
-            .vault(management)
+            .vault(primary)
             .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
         let now = access_store::authority::server_time(self.app).await?;
-        let mut t = TenantTx::begin(self.app, tenant, management).await?;
+        let mut t = TenantTx::begin(self.app, tenant, primary).await?;
         let admins = tenants::admins(&mut t).await?;
         let invitations = tenants::invitations(&mut t, None).await?;
+        let environments = tenants::tenant_environments(&mut t).await?;
+        // OP-159 m.49 (d)
+        let slugs = |scope: Option<&Vec<EnvironmentId>>| {
+            scope.map(|s| {
+                s.iter()
+                    .filter_map(|e| environments.iter().find(|x| x.environment == *e))
+                    .map(|e| e.slug.clone())
+                    .collect::<Vec<_>>()
+            })
+        };
         let mut out = Vec::with_capacity(admins.len().saturating_add(invitations.len()));
         for a in &admins {
             let address = super::admin_invite::address_of(&mut t, &vault, a.subject).await?;
@@ -451,6 +465,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 "role": if a.owner { "owner" } else { "admin" },
                 "status": status,
                 "since": super::rest::rfc3339(since),
+                "environments": slugs(a.scope.as_ref()),
             }));
         }
         t.commit().await?;
@@ -464,13 +479,14 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 "role": "admin",
                 "status": "invited",
                 "since": super::rest::rfc3339(i.created_ms),
+                "environments": slugs(i.scope.as_ref()),
             }));
         }
         Ok(out)
     }
 
     /// Opens the environment of a bound `idp.tenant.environment_create` (OP-159 m.47 (d), (e), (h)):
-    /// rooted in the tenant's owners, with the administrator rule over the management environment's
+    /// rooted in the tenant's owners, with the administrator rule over the primary environment's
     /// issuer, placed where the tenant is, bound as consuming that issuer's Claims, and the
     /// issuer's key opened there. Repeating it finds what it opened.
     ///
@@ -478,11 +494,11 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
     /// [`TenantError`].
     pub async fn open_tenant_environment(
         &self,
-        (tenant, management): (TenantId, EnvironmentId),
+        (tenant, primary): (TenantId, EnvironmentId),
         e: &crate::domain::tenant::NewTenantEnvironment,
         exercise: &Digest,
     ) -> Result<OpenedEnvironment, TenantError> {
-        let mut t = TenantTx::begin(self.app, tenant, management).await?;
+        let mut t = TenantTx::begin(self.app, tenant, primary).await?;
         let owners: std::collections::BTreeSet<Id> = tenants::admins(&mut t)
             .await?
             .into_iter()
@@ -536,7 +552,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                         issuer,
                         actions: environment_actions(),
                     }),
-                    management: None,
+                    primary: None,
                 })
                 .await?;
             (
@@ -547,10 +563,10 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             )
         };
         let d = DomainId::from_bytes(domain.0);
-        let mut t = TenantTx::begin(self.app, tenant, management).await?;
+        let mut t = TenantTx::begin(self.app, tenant, primary).await?;
         // TN-4, OP-159 m.47 (d)
         if let Some(a) = acceptance {
-            environment_binding::bind(&mut t, management, &d, Role::Consuming { acceptance: a.0 })
+            environment_binding::bind(&mut t, primary, &d, Role::Consuming { acceptance: a.0 })
                 .await?;
         }
         t.commit().await?;
@@ -569,11 +585,33 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             tx.commit().await?;
         }
         // OP-159 m.47 (d), OP-150 L2
-        Box::pin(self.register_issuer_in(tenant, management, domain)).await?;
+        Box::pin(self.register_issuer_in(tenant, primary, domain)).await?;
         Ok(OpenedEnvironment {
             environment,
             domain,
             issuer: issuer_url,
         })
     }
+}
+
+/// The environments an invitation names, by id; `None` for the whole tenant (OP-159 m.49 (d)).
+async fn scope_of(
+    t: &mut TenantTx,
+    slugs: &[String],
+) -> Result<Option<Vec<EnvironmentId>>, TenantError> {
+    if slugs.is_empty() {
+        return Ok(None);
+    }
+    let environments = tenants::tenant_environments(t).await?;
+    slugs
+        .iter()
+        .map(|s| {
+            environments
+                .iter()
+                .find(|e| e.slug == *s)
+                .map(|e| e.environment)
+                .ok_or_else(|| TenantInvalid::Scope.into())
+        })
+        .collect::<Result<Vec<_>, TenantError>>()
+        .map(Some)
 }

@@ -1,5 +1,5 @@
 //! The local platform administrator (OP-159 m.41 (a), m.47 (i)): an account in the platform environment,
-//! the platform tenant's management environment, with a password and an authenticator app, signed in
+//! the platform tenant's primary environment, with a password and an authenticator app, signed in
 //! to the console like any administrator. It administers the platform tenant by the administrator
 //! rule of the platform environment's Genesis, which covers the `idp.platform.*` actions there and
 //! nowhere else: the bootstrap adds it as a tenant administrator and opens its
@@ -150,6 +150,7 @@ where
                 owner: false,
                 exercise: None,
                 cooling_s: None,
+                scope: None,
             },
         )
         .await?;

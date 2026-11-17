@@ -522,25 +522,25 @@
       "description": "The tenant is not in the state this change needs: a new tenant exists already, a reinvitation is only for a tenant awaiting its founder, a suspension only for an active one, a reactivation only for a suspended one (OP-159 m.47 (c), (h))."
     },
     {
-      "code": "management-environment",
-      "type": "urn:suiss:access:problem:management-environment",
+      "code": "primary-environment",
+      "type": "urn:suiss:access:problem:primary-environment",
       "status": 409,
       "title": "Conflict",
-      "description": "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b))."
+      "description": "Tenant administration happens in the tenant's primary environment (TN-143, OP-159 m.49 (a))."
     },
     {
-      "code": "management-binding",
-      "type": "urn:suiss:access:problem:management-binding",
+      "code": "primary-binding",
+      "type": "urn:suiss:access:problem:primary-binding",
       "status": 409,
       "title": "Conflict",
-      "description": "Only a standard environment binds to its own tenant's management environment, named by its slug, and only once (TN-4, OP-159 m.48 (b))."
+      "description": "Only a standard environment binds to its own tenant's primary environment, named by its slug, and only once (TN-4, OP-159 m.48 (b))."
     },
     {
-      "code": "management-acceptance-required",
-      "type": "urn:suiss:access:problem:management-acceptance-required",
+      "code": "primary-acceptance-required",
+      "type": "urn:suiss:access:problem:primary-acceptance-required",
       "status": 409,
       "title": "Conflict",
-      "description": "The environment's root must first establish an Acceptance of the management environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b))."
+      "description": "The environment's root must first establish an Acceptance of the primary environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b))."
     },
     {
       "code": "root-required",
@@ -578,6 +578,13 @@
       "description": "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e))."
     },
     {
+      "code": "invalid-admin-scope",
+      "type": "urn:suiss:access:problem:invalid-admin-scope",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An invitation names at most 64 distinct environments of the tenant by slug; none invites to administer the whole tenant (OP-159 m.49 (d), TN-144)."
+    },
+    {
       "code": "invite-expired",
       "type": "urn:suiss:access:problem:invite-expired",
       "status": 410,
@@ -589,7 +596,7 @@
       "type": "urn:suiss:access:problem:invite-state",
       "status": 409,
       "title": "Conflict",
-      "description": "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the management environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7))."
+      "description": "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the primary environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7))."
     },
     {
       "code": "public-sub-not-opted-in",

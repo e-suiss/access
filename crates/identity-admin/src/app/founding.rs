@@ -1,5 +1,5 @@
 //! A tenant's founding (OP-159 m.47 (c), TN-141): the invited founder proves the address with the
-//! magic code, then the management environment's governing domain is opened with the founder's
+//! magic code, then the primary environment's governing domain is opened with the founder's
 //! device Party as its root (`provisioned_by` the tenant creation). The platform signs nothing in
 //! the new domain (INV-29, TNI-15). The founder's account, credentials and Instance are the hosted
 //! login's; this module opens the environment and closes the founding.
@@ -78,10 +78,19 @@ pub fn device_party(key: &PublicKey) -> Id {
     Id(id)
 }
 
-/// The actions the management environment's administrator rule covers on its own `idp`
+/// The actions the primary environment's administrator rule covers on its own `idp`
+/// The further catalogs, Acceptances and issuer predicate classes a primary environment's Genesis
+/// carries: none from a founder's link; the local plan's fixtures from the bootstrap (OP-159 m.49
+/// (h)).
+pub type GenesisExtras = (
+    Vec<access_kernel::schema::Spp>,
+    Vec<suiss_crypto::dcbor::Value>,
+    Vec<String>,
+);
+
 /// resources: every `idp.*` action and the administered `idp.tenant.*` ones (OP-159 m.47 (d), (e)).
 #[must_use]
-pub fn management_actions() -> Vec<ActionRef> {
+pub fn primary_actions() -> Vec<ActionRef> {
     IdpAction::ALL
         .into_iter()
         .map(IdpAction::action_ref)
@@ -167,18 +176,19 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         Ok(v)
     }
 
-    /// Opens the management environment of a verified founding with `founder` as its sole root
+    /// Opens the primary environment of a verified founding with `founder` as its sole root
     /// (TN-111 with `acknowledge_no_recovery`, TN-138, TN-141): its Genesis publishes the tenant
     /// catalog, carries the administrator rule over its own issuer and records the tenant creation
     /// as `provisioned_by`. Repeating it finds what it opened.
     ///
     /// # Errors
     /// [`FoundingError`].
-    pub async fn open_management(
+    pub async fn open_primary(
         &self,
         slug: &str,
         token: &str,
         founder: Id,
+        (schemas, acceptances, issuer_predicate_input): GenesisExtras,
     ) -> Result<CreatedEnvironment, FoundingError> {
         let v = self.live(slug, token).await?;
         if !v.route.verified {
@@ -189,7 +199,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let f = tenants::founding(&mut t)
             .await?
             .ok_or(FoundingError::NotFound)?;
-        let opened = tenants::management_environment(&mut t).await?;
+        let opened = tenants::primary_environment(&mut t).await?;
         let placement = tenants::tenant_placement(&mut t).await?;
         t.commit().await?;
         if let Some((environment, _)) = opened {
@@ -204,12 +214,14 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 root: Root::Sole(founder),
                 ct3_delay_s: None,
                 causal_binding: false,
-                schemas: vec![tenant::catalog(founder)],
-                acceptances: Vec::new(),
-                issuer_predicate_input: Vec::new(),
+                schemas: std::iter::once(tenant::catalog(founder))
+                    .chain(schemas)
+                    .collect(),
+                acceptances,
+                issuer_predicate_input,
                 provisioned_by: Some(Digest(f.exercise)),
-                administered: Some(Administered::Own(management_actions())),
-                management: Some(f.environment),
+                administered: Some(Administered::Own(primary_actions())),
+                primary: Some(f.environment),
             })
             .await?)
     }
@@ -256,6 +268,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 owner: true,
                 exercise: None,
                 cooling_s: None,
+                scope: None,
             },
         )
         .await?;

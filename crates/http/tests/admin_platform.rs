@@ -183,7 +183,7 @@ async fn a_tenant_creation_answers_with_its_exercise_and_tenant() {
         .header("content-type", "application/json")
         .body(Body::from(
             json!({ "operation": "createTenant",
-                    "body": { "display_name": "Acme", "management_slug": "acme-admin",
+                    "body": { "display_name": "Acme", "primary_slug": "acme-admin",
                               "founder_email": "admin@acme.example" } })
             .to_string(),
         ))

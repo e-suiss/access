@@ -1,11 +1,11 @@
 //! A tenant founder's routes on the environment issuer (OP-159 m.47 (c), TN-141): the founding a link
 //! token names, the proof of the founder's address with the magic code, and the completion that opens
-//! the management environment with the founder's device Party as its root, makes the founder's
+//! the primary environment with the founder's device Party as its root, makes the founder's
 //! account with its password and closes the founding. The routes live before the management
 //! environment does, so they resolve the founding by its token, never by an environment. Every answer
 //! is `no-store` and sent on as no referrer (TN-89 (8)). The login app's founding screen calls them.
 //!
-//! The same module serves a tenant administrator's invitation on its management environment
+//! The same module serves a tenant administrator's invitation on its primary environment
 //! (OP-159 m.47 (f), TN-89): the invitation a link token names, the proof of the invitee's address
 //! with the magic code, and the acceptance that makes the invitee's account with its password and
 //! adds it as an administrator, never an owner. Its Party is bound at its first console sign-in,
@@ -115,7 +115,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Foundi
     }
 }
 
-/// `GET /env/{slug}/v1/foundings/{token}`: the founding's tenant name, its management environment and
+/// `GET /env/{slug}/v1/foundings/{token}`: the founding's tenant name, its primary environment and
 /// its state; never the founder's address.
 async fn view<P: Decider + Governance + Instances + Clone + Send + Sync + 'static>(
     State(f): St<P>,
@@ -129,7 +129,7 @@ async fn view<P: Decider + Governance + Instances + Clone + Send + Sync + 'stati
             StatusCode::OK,
             &json!({
                 "display_name": v.display_name,
-                "environment": { "slug": v.route.slug, "kind": "management" },
+                "environment": { "slug": v.route.slug, "kind": "primary" },
                 "expires_at": access_identity_admin::app::rest::rfc3339(v.route.expires_ms),
                 "verified": v.route.verified,
                 "completed": v.route.completed,
@@ -180,7 +180,7 @@ struct Completion {
 }
 
 /// `POST /env/{slug}/v1/foundings/{token}/complete`: `{email, code, password, device_key}` opens
-/// the management environment rooted in the device key's Party, makes the founder's account with
+/// the primary environment rooted in the device key's Party, makes the founder's account with
 /// the password and closes the founding (TN-141). A second factor is required at the first
 /// sign-in (TN-138).
 async fn complete<P: Decider + Governance + Instances + Clone + Send + Sync + 'static>(
@@ -212,7 +212,10 @@ async fn complete<P: Decider + Governance + Instances + Clone + Send + Sync + 's
         return refused(&e);
     }
     let founder = device_party(&key);
-    let created = match admin.open_management(&slug, &token, founder).await {
+    let created = match admin
+        .open_primary(&slug, &token, founder, Default::default())
+        .await
+    {
         Ok(c) => c,
         Err(e) => return refused(&e),
     };
@@ -258,7 +261,7 @@ async fn complete<P: Decider + Governance + Instances + Clone + Send + Sync + 's
     reply(
         StatusCode::CREATED,
         &json!({
-            "environment": { "slug": slug, "kind": "management" },
+            "environment": { "slug": slug, "kind": "primary" },
             "issuer": created.issuer.as_str(),
             "party": b64url_encode(&founder.0),
         }),
@@ -277,7 +280,7 @@ fn invite_refused(e: &InviteError) -> Response {
 }
 
 impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Founding<P> {
-    /// The management environment `slug` names.
+    /// The primary environment `slug` names.
     async fn place(&self, slug: &str) -> Result<Option<(TenantId, EnvironmentId)>, Down> {
         access_store::tenancy::route_by_slug(&self.router, slug)
             .await
@@ -429,7 +432,7 @@ async fn invite_accept<P: Decider + Governance + Instances + Clone + Send + Sync
     reply(
         StatusCode::CREATED,
         &json!({
-            "environment": { "slug": slug, "kind": "management" },
+            "environment": { "slug": slug, "kind": "primary" },
         }),
     )
 }

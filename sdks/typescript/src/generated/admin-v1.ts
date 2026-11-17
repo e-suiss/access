@@ -617,7 +617,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)). */
+        /** The environment's settings: sign-in, session, branding, RP ID, mappers. */
         get: operations["getSettings"];
         put?: never;
         post?: never;
@@ -1326,10 +1326,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The tenant's environments, read in its management environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a management environment. */
+        /** The tenant's environments, read in its primary environment: slug, kind, issuer, creation time and whether it is a sandbox (OP-159 m.47 (a)); `404` outside a primary environment. */
         get: operations["listManagedEnvironments"];
         put?: never;
-        /** Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the management environment's Claims: idp.tenant.environment_create (CT2). Refused with `management-environment` outside the tenant's management environment (OP-159 m.47 (d), (h), TN-140). */
+        /** Opens an environment of the tenant {slug, sandbox, issuer_style: path | subdomain}, rooted in its owners with the administrator rule in its Genesis and bound as consuming the primary environment's Claims: idp.tenant.environment_create (CT2). Refused with `primary-environment` outside the tenant's primary environment (OP-159 m.47 (d), (h), TN-140). */
         post: operations["createTenantEnvironment"];
         delete?: never;
         options?: never;
@@ -1344,10 +1344,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The tenant's administrators and pending invitations, read in its management environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed) and since when; a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), TN-89 (1)). */
+        /** The tenant's administrators and pending invitations, read in its primary environment: id (`usr_…` or `inv_…`), identifier, role (owner | admin), status (invited | active | removed), since when and the slugs of the environments it administers (`environments`, null for the whole tenant); a pending invitation shows only `@` and its domain (OP-159 m.47 (e), (f), m.49 (d), TN-89 (1)). */
         get: operations["listTenantAdmins"];
         put?: never;
-        /** Invites a tenant administrator {email}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours: idp.tenant.admin_invite (CT2, OP-159 m.47 (f), TN-89, TN-109). */
+        /** Invites a tenant administrator {email, environments?}; the invitee becomes an administrator, never an owner, on accepting, and one from another domain than the inviter's holds nothing for 24 hours. `environments` names the slugs of the environments it administers; without it, the whole tenant (`invalid-admin-scope`): idp.tenant.admin_invite (CT2, OP-159 m.47 (f), m.49 (d), TN-89, TN-109, TN-144). */
         post: operations["inviteTenantAdmin"];
         delete?: never;
         options?: never;
@@ -1372,7 +1372,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/v1/envs/{slug}/settings/management-binding": {
+    "/admin/v1/envs/{slug}/settings/primary-binding": {
         parameters: {
             query?: never;
             header?: never;
@@ -1381,8 +1381,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)). */
-        post: operations["bindManagementEnvironment"];
+        /** Binds this standard environment to its tenant's primary environment {primary: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the primary environment's tenant_administration Claims for subject selection (`primary-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)). */
+        post: operations["bindPrimaryEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3459,7 +3459,7 @@ export interface paths {
         /** Tenants and their states; metadata only. */
         get: operations["listTenants"];
         put?: never;
-        /** Creates a tenant awaiting its founder: its display name, the slug its management environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)). */
+        /** Creates a tenant awaiting its founder: its display name, the slug its primary environment will take, the founder's address and its placement; the founder's invitation goes out with it (OP-159 m.47 (c)). */
         post: operations["createTenant"];
         delete?: never;
         options?: never;
@@ -3930,7 +3930,7 @@ export interface components {
             /** @description The issuer Party, base64url. */
             issuer: string;
             /** @enum {string} */
-            provider: "zendesk" | "freshdesk" | "servicenow" | "jira-service-management";
+            provider: "zendesk" | "freshdesk" | "servicenow" | "jira-service-primary";
             /** @enum {string} */
             format: "product-seam/v1";
             /** @enum {string} */
@@ -4182,8 +4182,8 @@ export interface components {
             tenant_id?: string;
             /** @description The tenant's own name: untrusted text, never authority (TN-1, TN-131). */
             display_name?: string | null;
-            /** @description The slug of its management environment, the tenant's handle (OP-159 m.47 (a)). */
-            management_slug?: string | null;
+            /** @description The slug of its primary environment, the tenant's handle (OP-159 m.47 (a)). */
+            primary_slug?: string | null;
             /**
              * @description Its founder's invitation: waiting, used, or expired and waiting for a reinvitation (TN-141).
              * @enum {string|null}
@@ -4205,10 +4205,10 @@ export interface components {
             /** @description The immutable slug (TN-16). */
             slug?: string;
             /**
-             * @description A tenant's management environment or one of its other environments (TN-138).
+             * @description A tenant's primary environment or one of its other environments (TN-138).
              * @enum {string}
              */
-            kind?: "standard" | "management";
+            kind?: "standard" | "primary";
             /** @description Opaque `tnt_` id of its tenant. */
             tenant_id?: string;
             issuer?: string | null;
@@ -4258,7 +4258,7 @@ export interface components {
          * @description A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.
          * @example {
          *       "display_name": "Acme",
-         *       "management_slug": "acme-admin",
+         *       "primary_slug": "acme",
          *       "founder_email": "admin@acme.example",
          *       "placement": "pool-default"
          *     }
@@ -4268,8 +4268,8 @@ export interface components {
             tenant_id?: string;
             /** @description The tenant's name, 1 to 120 characters (TN-131). */
             display_name: string;
-            /** @description The slug its management environment will take, reserved now (TN-16). */
-            management_slug: string;
+            /** @description The slug its primary environment will take, reserved now (TN-16). */
+            primary_slug: string;
             /** @description The founder's address; the invitation is sent to it and matched by its blind index (TN-89 (4), (5)). */
             founder_email: string;
             /** @description Its placement; `pool-default` when omitted (OP-40). */
@@ -8962,7 +8962,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    bindManagementEnvironment: {
+    bindPrimaryEnvironment: {
         parameters: {
             query?: never;
             header: {

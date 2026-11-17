@@ -1,6 +1,6 @@
-//! A tenant's administration on its management environment's admin surface (OP-159 m.47 (e),
+//! A tenant's administration on its primary environment's admin surface (OP-159 m.47 (e),
 //! (f), (h), TN-140): the environment creation, administrator invitation, owner addition and
-//! administrator removal writes, each one `idp.tenant.*` Exercise in the management environment's
+//! administrator removal writes, each one `idp.tenant.*` Exercise in the primary environment's
 //! governing domain, drafted with `POST …/intents` and sent with the caller's AIS (TN-110). A
 //! removal ends the administrator's `tenant_administration` Claims in every domain at once.
 
@@ -30,7 +30,7 @@ use suiss_crypto::dcbor::{self, Limits};
 
 use super::environment::Environments;
 
-/// The tenant writes of the management environment's surface.
+/// The tenant writes of the primary environment's surface.
 pub(crate) const OPERATIONS: [&str; 4] = [
     "createTenantEnvironment",
     "inviteTenantAdmin",
@@ -39,13 +39,13 @@ pub(crate) const OPERATIONS: [&str; 4] = [
 ];
 
 const ENVIRONMENT_BODY: &[&str] = &["slug", "sandbox", "issuer_style", rest::VALIDITY];
-const INVITE_BODY: &[&str] = &["email", rest::VALIDITY];
+const INVITE_BODY: &[&str] = &["email", "environments", rest::VALIDITY];
 const ADMIN_BODY: &[&str] = &[rest::VALIDITY];
 
 /// Ends an administrator's `tenant_administration` Claims in every domain it administered
 /// (OP-159 m.47 (f)): what a removal or its account's suspension does at once.
 pub(crate) trait EndAdministration: Send + Sync {
-    /// Ends the lines of `subject` of the management environment `place`; the number of Claims
+    /// Ends the lines of `subject` of the primary environment `place`; the number of Claims
     /// ended.
     fn end(
         &self,
@@ -95,12 +95,13 @@ fn invalid(i: TenantInvalid) -> &'static Code {
     use codes::platform as p;
     match i {
         TenantInvalid::Provision(p) => super::platform::invalid(p),
-        TenantInvalid::NotManagement => &p::MANAGEMENT_ENVIRONMENT,
+        TenantInvalid::NotPrimary => &p::PRIMARY_ENVIRONMENT,
         TenantInvalid::Email => &p::INVALID_EMAIL,
         TenantInvalid::Lifetime => &codes::environment::INVALID_BODY,
         TenantInvalid::NoAdmin => &codes::NOT_FOUND,
         TenantInvalid::LastOwner => &p::LAST_TENANT_OWNER,
         TenantInvalid::InviteLimit => &codes::RATE_LIMITED,
+        TenantInvalid::Scope => &p::INVALID_ADMIN_SCOPE,
     }
 }
 
@@ -176,10 +177,23 @@ fn parse(
                 .and_then(Value::as_str)
                 .and_then(folded_email)
                 .ok_or(&codes::platform::INVALID_EMAIL)?;
+            // OP-159 m.49 (d)
+            let mut environments = match m.get("environments") {
+                None => Vec::new(),
+                Some(Value::Array(a)) => a
+                    .iter()
+                    .map(|s| s.as_str().map(String::from))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or(&codes::platform::INVALID_ADMIN_SCOPE)?,
+                Some(_) => return Err(&codes::platform::INVALID_ADMIN_SCOPE),
+            };
+            environments.sort();
+            environments.dedup();
             Ok(TenantChange::AdminInvite(AdminInvite {
                 email,
                 days: INVITE_DAYS,
                 inviter_name: None,
+                environments,
             }))
         }
         "addTenantOwner" => {

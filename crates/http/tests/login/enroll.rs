@@ -36,15 +36,21 @@ async fn an_invite_only_environment_refuses_open_registration() {
     assert_eq!(at.status, StatusCode::OK);
 }
 
-// TN-138, OP-159 m.47 (b), m.48 (c)
+// OP-159 m.48 (c), m.49 (c)
 #[tokio::test]
-async fn a_management_environment_without_a_policy_offers_no_registration_and_no_provider() {
+async fn an_invite_only_environment_without_social_sign_in_offers_no_registration_and_no_provider()
+{
     let e = env_full(
         0xd3,
         "m48-mgmt",
         REQUIRED,
         false,
-        EnvironmentSignin::management(),
+        EnvironmentSignin {
+            mfa_required: true,
+            registration: Registration::InviteOnly,
+            social: false,
+            ..EnvironmentSignin::default()
+        },
     )
     .await;
     let mut b = e.browser("m48-mgmt");

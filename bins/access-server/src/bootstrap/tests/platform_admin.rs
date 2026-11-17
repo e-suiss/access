@@ -56,7 +56,7 @@ async fn create_tenant_as_admin(
     let change = PlatformChange::Tenant(TenantOrder {
         tenant: *tenant.as_bytes(),
         display_name: String::from("Globex"),
-        management_slug: format!("globex-{}", nonce[0]),
+        primary_slug: format!("globex-{}", nonce[0]),
         placement: String::from(PLACEMENT),
         founder: FounderCommitment {
             index: [1; 32],

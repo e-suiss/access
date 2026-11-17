@@ -482,7 +482,7 @@ fn base_schemas() -> Value {
             "properties": {
                 "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$" },
                 "issuer": { "type": "string", "description": "The issuer Party, base64url." },
-                "provider": { "type": "string", "enum": ["zendesk", "freshdesk", "servicenow", "jira-service-management"] },
+                "provider": { "type": "string", "enum": ["zendesk", "freshdesk", "servicenow", "jira-service-primary"] },
                 "format": { "type": "string", "enum": ["product-seam/v1"] },
                 "status": { "type": "string", "enum": ["live", "retired"] },
                 "version": { "type": "integer", "minimum": 1 },
@@ -774,7 +774,7 @@ fn base_schemas() -> Value {
             "properties": {
                 "tenant_id": text("Opaque `tnt_` id (OP-137)."),
                 "display_name": { "type": ["string", "null"], "description": "The tenant's own name: untrusted text, never authority (TN-1, TN-131)." },
-                "management_slug": { "type": ["string", "null"], "description": "The slug of its management environment, the tenant's handle (OP-159 m.47 (a))." },
+                "primary_slug": { "type": ["string", "null"], "description": "The slug of its primary environment, the tenant's handle (OP-159 m.47 (a))." },
                 "founding": { "type": ["string", "null"], "enum": ["pending", "completed", "expired", null], "description": "Its founder's invitation: waiting, used, or expired and waiting for a reinvitation (TN-141)." },
                 "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
                 "placement": text("Its placement (OP-40)."),
@@ -796,7 +796,7 @@ fn base_schemas() -> Value {
             "description": "An environment's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
             "properties": {
                 "slug": text("The immutable slug (TN-16)."),
-                "kind": { "type": "string", "enum": ["standard", "management"], "description": "A tenant's management environment or one of its other environments (TN-138)." },
+                "kind": { "type": "string", "enum": ["standard", "primary"], "description": "A tenant's primary environment or one of its other environments (TN-138)." },
                 "tenant_id": text("Opaque `tnt_` id of its tenant."),
                 "issuer": { "type": ["string", "null"] },
                 "status": { "type": "string", "enum": ["active", "suspended", "deleted"] },
@@ -843,13 +843,13 @@ fn base_schemas() -> Value {
         "TenantCreate": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["display_name", "management_slug", "founder_email"],
+            "required": ["display_name", "primary_slug", "founder_email"],
             "description": "A new tenant awaiting its founder (OP-159 m.47 (c)); the draft assigns its `tenant_id`. The founder's invitation, a link and a code kept only as their SHA-256, goes out with the write; the platform opens no environment.",
-            "examples": [{ "display_name": "Acme", "management_slug": "acme-admin", "founder_email": "admin@acme.example", "placement": "pool-default" }],
+            "examples": [{ "display_name": "Acme", "primary_slug": "acme", "founder_email": "admin@acme.example", "placement": "pool-default" }],
             "properties": {
                 "tenant_id": text("Assigned by the draft; send it back unchanged."),
                 "display_name": text("The tenant's name, 1 to 120 characters (TN-131)."),
-                "management_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", "description": "The slug its management environment will take, reserved now (TN-16)." },
+                "primary_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", "description": "The slug its primary environment will take, reserved now (TN-16)." },
                 "founder_email": text("The founder's address; the invitation is sent to it and matched by its blind index (TN-89 (4), (5))."),
                 "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
                 "validity": r("schemas", "Validity"),

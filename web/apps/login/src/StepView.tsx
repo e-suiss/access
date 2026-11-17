@@ -4,7 +4,6 @@ import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui
 import { Input } from "@access/ui/components/input";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
-import { managementOf, useBranding } from "./Branding.js";
 
 import { LOGIN, under } from "./base.js";
 import type {
@@ -248,11 +247,9 @@ function credentialId(json: string): string {
   return parsed.success ? parsed.output.id : "";
 }
 
-function heading(ui: LoginUi, management: string | undefined): string {
+function heading(ui: LoginUi): string {
   if (ui.kind === "registration") return t("registration.title");
   if (ui.step === "complete") return t("page.signing_in");
-  // OP-159 m.47 (b), TN-138
-  if (management !== undefined) return t("page.management_sign_in", { name: management });
   return t("page.sign_in");
 }
 
@@ -399,7 +396,6 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const errors = ui.messages.filter((m) => m.severity === "error");
   const infos = ui.messages.filter((m) => m.severity === "info");
   const login = ui.kind === undefined || ui.kind === "login";
-  const management = managementOf(useBranding());
 
   return (
     <section
@@ -409,7 +405,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       className={stack}
     >
       <Title id="step-heading" ref={title}>
-        {heading(ui, management)}
+        {heading(ui)}
       </Title>
       <div role="alert" className="flex flex-col gap-2 empty:-mb-4" data-testid="errors">
         {errors.map((m) => (
@@ -497,11 +493,9 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           <a className={link} href={`${LOGIN}/recovery`}>
             {t("page.recover")}
           </a>{" "}
-          {management === undefined && (
-            <a className={link} href={`${LOGIN}?reason=create`}>
-              {t("page.create_account")}
-            </a>
-          )}
+          <a className={link} href={`${LOGIN}?reason=create`}>
+            {t("page.create_account")}
+          </a>
         </p>
       )}
       {ui.kind === "registration" && ui.step !== "complete" && (

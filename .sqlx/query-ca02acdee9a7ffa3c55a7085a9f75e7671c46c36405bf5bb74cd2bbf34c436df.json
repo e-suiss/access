@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT environment_id, slug FROM access.environments\n          WHERE tenant_id = $1 AND kind = 'management' AND status = 'active'",
+  "query": "SELECT environment_id, slug FROM access.environments\n          WHERE tenant_id = $1 AND kind = 'primary' AND status = 'active'",
   "describe": {
     "columns": [
       {
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "fb020e6003f0fa915eb34ab998bbcadda1586c0d4e3f1e91bd77d50eb0972db4"
+  "hash": "ca02acdee9a7ffa3c55a7085a9f75e7671c46c36405bf5bb74cd2bbf34c436df"
 }

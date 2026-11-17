@@ -141,19 +141,19 @@ pub struct NewEnvironment<'a> {
     pub provisioned_by: Option<Digest>,
     /// The tenant administrator rule its Genesis carries (OP-159 m.47 (d), (k) (4)).
     pub administered: Option<Administered>,
-    /// For the tenant's management environment, the id its founding drew (TN-138, TN-141).
-    pub management: Option<EnvironmentId>,
+    /// For the tenant's primary environment, the id its founding drew (TN-138, TN-141).
+    pub primary: Option<EnvironmentId>,
 }
 
 /// Whose `tenant_administration` Claims an environment's administrator rule selects by (OP-159
 /// m.47 (d)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Administered {
-    /// The environment's own issuer: the management environment itself, covering `actions`.
+    /// The environment's own issuer: the primary environment itself, covering `actions`.
     Own(Vec<access_kernel::model::ActionRef>),
-    /// The management environment's issuer `issuer`, covering `actions` (TN-4 consuming binding).
+    /// The primary environment's issuer `issuer`, covering `actions` (TN-4 consuming binding).
     By {
-        /// The management environment's Claim issuer Party.
+        /// The primary environment's Claim issuer Party.
         issuer: [u8; 16],
         /// The `idp` actions the rule covers.
         actions: Vec<access_kernel::model::ActionRef>,
@@ -382,10 +382,10 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             .map_err(|e| AdminError::Unavailable(e.0))?;
         let domain = DomainId::from_bytes(opened.domain.0);
         let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
-        let environment = match r.management {
+        let environment = match r.primary {
             // TN-138, TN-141
             Some(id) => {
-                access_store::tenant_admin::create_management_environment(
+                access_store::tenant_admin::create_primary_environment(
                     &mut t,
                     id,
                     &domain,
@@ -1078,20 +1078,9 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         }
         let g = self.governing(p, state).await?;
         // OP-159 m.48 (b)
-        if let Change::ConsumerBind { management } = &p.change {
-            self.consumer_binding((p.tenant, p.environment), management)
+        if let Change::ConsumerBind { primary } = &p.change {
+            self.consumer_binding((p.tenant, p.environment), primary)
                 .await?;
-        }
-        // TN-138, OP-159 m.47 (b)
-        if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &p.change
-            && c.third_party
-        {
-            let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
-            let kind = access_store::tenant_admin::environment_kind(&mut t).await?;
-            t.commit().await?;
-            if kind.as_deref() == Some(crate::domain::tenant::MANAGEMENT) {
-                return Err(Invalid::ManagementEnvironment.into());
-            }
         }
         if let Change::OrgCreate(o) = &p.change {
             self.org_creatable(p, Digest(*g.domain.as_bytes()), o.party)
@@ -1682,7 +1671,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
 
     /// The extended standing of a Party bound to no account of the environment (OP-159 m.47 (e),
     /// (f)): a Party with a `tenant_administration` line in the environment's domain, kept by a
-    /// management environment whose Claims the domain consumes, stands only while that line is
+    /// primary environment whose Claims the domain consumes, stands only while that line is
     /// live there: not ended, past any cooling, with an administrator that is one and whose
     /// account can sign in, and, once its first Claim is stated, within that Claim's validity. A
     /// removed owner stops at once although it still roots the domain; a line whose Claim lapsed
@@ -1697,8 +1686,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let mut t = TenantTx::begin_tenant(self.app, tenant).await?;
         let managers = access_store::environment_binding::consumed_by(&mut t, &d).await?;
         t.commit().await?;
-        for management in managers {
-            let mut t = TenantTx::begin(self.app, tenant, management).await?;
+        for primary in managers {
+            let mut t = TenantTx::begin(self.app, tenant, primary).await?;
             let line = access_store::tenant_admin::line_of_party(&mut t, &d, &party.0).await?;
             let status = match &line {
                 Some((l, _)) => resources::account(&mut t, l.subject)
@@ -1938,14 +1927,14 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 true
             }
             // TN-4, OP-159 m.48 (b)
-            Change::ConsumerBind { management } => {
+            Change::ConsumerBind { primary } => {
                 let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
                 let b = self
-                    .consumer_binding((t.tenant(), environment), management)
+                    .consumer_binding((t.tenant(), environment), primary)
                     .await?;
                 access_store::environment_binding::bind_cooling(
                     t,
-                    b.management,
+                    b.primary,
                     &b.domain,
                     &b.acceptance,
                     consumer::CONSUMER_COOLING_S,

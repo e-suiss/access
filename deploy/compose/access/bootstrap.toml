@@ -1,20 +1,20 @@
 # OP-69, OP-149 m.21: what `access-server bootstrap` makes sure of. Every environment gets a path
 # issuer under https://access-server:8443/env/<slug>.
-# OP-159 m.47 (i): `platform` is the platform tenant's management environment; its root is the
-# operator's key in the server's token. Each `[[tenant]]` is created by the platform with a founder
-# invitation that the bootstrap plays headless: the founder's device key
-# (`access/bootstrap/founder/<management>`) roots the tenant's management environment and every
-# environment it opens, the founder's account signs in to `management` with the plan's password and
-# authenticator app, and `environments` are opened by `idp.tenant.environment_create` with the
-# administrator rule over the management environment's issuer in their Genesis. A local run assumes
-# a fresh volume: an environment opened before this layout keeps its old root.
+# OP-159 m.47 (i), m.49 (h): `platform` is the platform tenant's primary environment; its root is
+# the operator's key in the server's token. Each `[[tenant]]` is created by the platform with a
+# founder invitation that the bootstrap plays headless: the founder's device key
+# (`access/bootstrap/founder/<primary>`) roots the tenant's primary environment and every
+# environment it opens, the founder's account signs in to `primary` with the plan's password and
+# authenticator app, and the further `environments` are opened by `idp.tenant.environment_create`
+# with the administrator rule over the primary environment's issuer in their Genesis. The primary
+# environment is an end-user environment too: the test user and the sample live in `acme`. A local
+# run assumes a fresh volume: an environment opened before this layout keeps its old root.
 platform = "platform"
 issuer_style = "path"
 
 [[tenant]]
 name = "Acme"
-management = "acme-admin"
-environments = ["acme"]
+primary = "acme"
 
 [tenant.founder]
 identifier = "admin@acme.example"

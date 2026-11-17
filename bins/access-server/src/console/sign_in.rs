@@ -22,6 +22,7 @@ use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::domain::tokens::ID_TYP;
 use access_identity_oauth::ports::oauth::TokenSigner as _;
 use access_identity_oauth::ports::{Directory as _, EnvironmentEntry};
+use access_identity_session::domain::assurance::{Aal, AssuranceVector};
 use access_kernel::json::{self, Json, b64url_decode, b64url_encode};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
@@ -282,6 +283,19 @@ impl EnvironmentSignIn {
         let Some(session) = t.session_by_id(grant.session).await.map_err(down)? else {
             return Ok(None);
         };
+        // OP-159 m.49 (c), TN-144
+        let aal = serde_json::from_slice::<AssuranceVector>(&session.assurance)
+            .map_err(down)?
+            .aal;
+        if aal < Aal::Aal2 {
+            tracing::info!(
+                event = "console.session.refused",
+                outcome = "denied",
+                reason = "second-factor",
+                "console sign-in below AAL2"
+            );
+            return Ok(None);
+        }
         let governing = access_store::idp::governance(&mut t).await.map_err(down)?;
         t.commit().await.map_err(down)?;
         let (Some(g), Some(account)) = (governing, self.ids.encode(SUBJECT_PREFIX, grant.subject))
@@ -398,6 +412,11 @@ impl SignIn for EnvironmentSignIn {
             ("code_challenge_method", "S256"),
             // TN-129
             ("prompt", "login"),
+            // OP-159 m.49 (c), TN-144
+            (
+                "acr_values",
+                access_identity_oauth::domain::tokens::acr(Aal::Aal2),
+            ),
         ]);
         Ok(Some(format!(
             "{}?{query}",

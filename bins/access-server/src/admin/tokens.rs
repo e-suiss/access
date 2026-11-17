@@ -182,7 +182,7 @@ impl<P: LiveKeys> ManagementTokens<P> {
     }
 
     /// Whether the console session `s` holds `instance` in the domain of `environment`, an
-    /// environment its management environment administers, with a `tenant_administration` line
+    /// environment its primary environment administers, with a `tenant_administration` line
     /// there that has not ended (OP-159 m.47 (f), (g), TN-142).
     async fn administered(
         &self,
@@ -229,7 +229,7 @@ impl<P: LiveKeys> ManagementTokens<P> {
     }
 
     /// A read token on the environment surface of `slug`, an environment the console session
-    /// `row`'s management environment administers, signed by that environment's own key for the
+    /// `row`'s primary environment administers, signed by that environment's own key for the
     /// session's Instance in its domain and bound to the BFF's DPoP key `jkt` (OP-159 m.47 (g),
     /// TN-142); `sub` is the administrator's alias there, never an account of it (TNI-14).
     pub(crate) async fn issue_administered(

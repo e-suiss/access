@@ -485,6 +485,8 @@ pub(super) async fn console_as(
     let started = cookies(&r);
     assert!(authorize.starts_with(&format!("https://access.test/env/{slug}/authorize?")));
     assert!(authorize.contains("prompt=login") && authorize.contains("code_challenge_method=S256"));
+    // OP-159 m.49 (c)
+    assert!(authorize.contains("acr_values="));
     let (r, _) = send(
         &oauth,
         Request::get(path_of(&authorize))
@@ -514,7 +516,8 @@ pub(super) async fn console_as(
         auth_time_ms: i64::try_from(at).unwrap(),
         idle_ms: 3_600_000,
         expires_ms: i64::try_from(at + 3_600_000).unwrap(),
-        assurance: &serde_json::to_vec(&vector(&[Factor::password(at)])).unwrap(),
+        assurance: &serde_json::to_vec(&vector(&[Factor::password(at), Factor::totp([7; 16], at)]))
+            .unwrap(),
     })
     .await
     .unwrap();

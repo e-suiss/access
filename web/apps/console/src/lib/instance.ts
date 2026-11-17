@@ -62,7 +62,7 @@ export interface Instance {
   readonly party?: string;
   /**
    * The environment this Instance is in when it is not the session's own: one the session's
-   * management environment administers (OP-159 m.47 (g), TN-142).
+   * primary environment administers (OP-159 m.47 (g), TN-142).
    */
   readonly environment?: string;
 }
@@ -278,7 +278,7 @@ export async function findIn(
 }
 
 /**
- * Registers this browser in `environment`, an environment the session's management environment
+ * Registers this browser in `environment`, an environment the session's primary environment
  * administers: one signature over the administrator's `party_register` (when the Party is new
  * there) and `instance_create`, and no new sign-in (OP-159 m.47 (d), (g), TN-142).
  */

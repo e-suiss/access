@@ -1,6 +1,6 @@
 //! Tenant administrator invitations (OP-159 m.47 (f), TN-89 (1)–(9), (11), TN-109): a committed
 //! `idp.tenant.admin_invite` keeps the invitation as hashes of its link token and magic code and the
-//! management environment's blind index of the invitee, and queues its mail in the same
+//! primary environment's blind index of the invitee, and queues its mail in the same
 //! transaction; the secrets exist only in the mail. The invitee proves the address with the code,
 //! and its acceptance makes it an administrator of the tenant, never an owner; one from another
 //! domain than the inviter's holds nothing for [`ADMIN_COOLING_S`] (the TN-89 (10) exception), and
@@ -17,15 +17,13 @@ use access_store::tenant_admin::{self as tenants, AdminInvitation};
 use super::Admin;
 use super::orgs::{INVITES_PER_DAY, INVITES_PER_HOUR, REPUTATION_WINDOW_S, magic_code, reputable};
 use crate::AdminError;
-use crate::domain::tenant::{
-    ADMIN_COOLING_S, AdminInvite, MANAGEMENT, TenantInvalid, email_domain,
-};
+use crate::domain::tenant::{ADMIN_COOLING_S, AdminInvite, PRIMARY, TenantInvalid, email_domain};
 use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 
 const HOUR_S: i64 = 3_600;
 const DAY_S: i64 = 86_400;
 
-/// The hosted login path an invitation's link opens, under the management environment's issuer.
+/// The hosted login path an invitation's link opens, under the primary environment's issuer.
 pub const ACCEPT_PATH: &str = "/login/admin-invite/";
 
 /// Why an invitation step was refused.
@@ -74,7 +72,7 @@ impl InviteError {
 pub struct InvitationView {
     /// The tenant's display name.
     pub tenant: String,
-    /// The management environment's slug.
+    /// The primary environment's slug.
     pub environment: String,
     /// `pending`, `proven`, `accepted`, `superseded` or `expired`.
     pub state: &'static str,
@@ -98,7 +96,7 @@ pub fn state_of(i: &AdminInvitation, now_ms: u64) -> &'static str {
     }
 }
 
-/// TN-89 (11), TN-95: the management environment sent fewer than [`INVITES_PER_HOUR`]
+/// TN-89 (11), TN-95: the primary environment sent fewer than [`INVITES_PER_HOUR`]
 /// invitations this hour and [`INVITES_PER_DAY`] today, and enough of its recent ones were
 /// accepted.
 pub(crate) async fn invite_current(
@@ -118,15 +116,17 @@ pub(crate) async fn invite_current(
 
 /// What a committed `idp.tenant.admin_invite` writes with.
 pub(crate) struct InviteWrite<'a> {
-    /// The management environment's vault keys.
+    /// The environments the invitee administers; `None` is the whole tenant (OP-159 m.49 (d)).
+    pub scope: Option<&'a [EnvironmentId]>,
+    /// The primary environment's vault keys.
     pub vault: &'a Vault,
     /// The cell's id key.
     pub ids: &'a IdKey,
     /// The inviter's subject and address.
     pub inviter: ([u8; 16], &'a str),
-    /// The management environment's issuer, which the link lives under.
+    /// The primary environment's issuer, which the link lives under.
     pub issuer: &'a str,
-    /// The tenant's console, `{origin}/console/{management slug}`.
+    /// The tenant's console, `{origin}/console/{primary slug}`.
     pub console: Option<&'a str>,
     /// The tenant's display name: its text, untrusted (TN-131).
     pub tenant: &'a str,
@@ -172,6 +172,7 @@ pub(crate) async fn invite(
             cross_domain: domain != email_domain(w.inviter.1),
             exercise: w.exercise,
             ttl_s,
+            scope: w.scope,
         },
     )
     .await?;
@@ -223,7 +224,7 @@ pub(crate) async fn address_of(
 }
 
 impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
-    /// The invitation the link token `token` names in the management environment `place`.
+    /// The invitation the link token `token` names in the primary environment `place`.
     ///
     /// # Errors
     /// [`InviteError::NotFound`]; [`InviteError::Admin`].
@@ -247,7 +248,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let (Some(invitation), Some(g)) = (found, g) else {
             return Err(InviteError::NotFound);
         };
-        if kind.as_deref() != Some(MANAGEMENT) {
+        if kind.as_deref() != Some(PRIMARY) {
             return Err(InviteError::NotFound);
         }
         let now = access_store::authority::server_time(self.app).await?;
@@ -378,6 +379,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 owner: false,
                 exercise: None,
                 cooling_s: cooling,
+                scope: v.invitation.scope.as_deref(),
             },
         )
         .await?;

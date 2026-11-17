@@ -1,6 +1,6 @@
-//! What a tenant's administrators change from its management environment (OP-159 m.47, TN-138 …
-//! TN-141): the `idp.tenant.*` actions, published only in a management environment's Genesis.
-//! An environment opens in the tenant whose management environment's governing domain records the
+//! What a tenant's administrators change from its primary environment (OP-159 m.47, TN-138 …
+//! TN-141): the `idp.tenant.*` actions, published only in a primary environment's Genesis.
+//! An environment opens in the tenant whose primary environment's governing domain records the
 //! order (PI-7), with the tenant's placement; administrators are invited, removed and made owners.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,8 +23,8 @@ pub const NAMESPACE: &str = "idp.tenant";
 /// Version of the tenant catalog.
 pub const CATALOG_VERSION: u64 = 1;
 
-/// The environment kind a management environment is (TN-138).
-pub const MANAGEMENT: &str = "management";
+/// The environment kind a primary environment is (TN-138).
+pub const PRIMARY: &str = "primary";
 
 /// The environment kind every other environment is.
 pub const STANDARD: &str = "standard";
@@ -59,7 +59,7 @@ impl TenantAction {
         Self::OwnerAdd,
     ];
 
-    /// The actions the administrator rule of the management environment covers: every one but
+    /// The actions the administrator rule of the primary environment covers: every one but
     /// `owner_add`, which is the owners' own (OP-159 m.47 (e)).
     pub const ADMINISTERED: [Self; 3] = [
         Self::EnvironmentCreate,
@@ -118,7 +118,7 @@ impl TenantAction {
     }
 }
 
-/// The tenant catalog, published by a management environment's founder in its Genesis (TN-140);
+/// The tenant catalog, published by a primary environment's founder in its Genesis (TN-140);
 /// no other environment's domain accepts it.
 #[must_use]
 pub fn catalog(publisher: Id) -> Spp {
@@ -141,10 +141,10 @@ pub enum TenantInvalid {
     /// The environment's own fields.
     #[error(transparent)]
     Provision(#[from] ProvisionInvalid),
-    /// The change was sent to an environment that is not the tenant's management environment
+    /// The change was sent to an environment that is not the tenant's primary environment
     /// (TN-138).
-    #[error("not the management environment")]
-    NotManagement,
+    #[error("not the primary environment")]
+    NotPrimary,
     /// The address is not one.
     #[error("invalid email")]
     Email,
@@ -157,10 +157,14 @@ pub enum TenantInvalid {
     /// The last owner cannot be removed (m.47 (e)).
     #[error("last owner")]
     LastOwner,
-    /// The management environment sent as many invitations this hour or day as it may, or too
+    /// The primary environment sent as many invitations this hour or day as it may, or too
     /// few of its recent ones were accepted (TN-89 (11), TN-95).
     #[error("invitation limit")]
     InviteLimit,
+    /// An invitation's environments are not distinct, sorted environments of the tenant, or too
+    /// many (OP-159 m.49 (d)).
+    #[error("invalid administrator scope")]
+    Scope,
 }
 
 impl TenantInvalid {
@@ -169,12 +173,13 @@ impl TenantInvalid {
     pub const fn code(self) -> &'static str {
         match self {
             Self::Provision(p) => p.code(),
-            Self::NotManagement => "management-environment",
+            Self::NotPrimary => "primary-environment",
             Self::Email => "invalid-email",
             Self::Lifetime => "invalid-lifetime",
             Self::NoAdmin => "not-found",
             Self::LastOwner => "last-tenant-owner",
             Self::InviteLimit => "rate-limited",
+            Self::Scope => "invalid-admin-scope",
         }
     }
 }
@@ -208,13 +213,20 @@ pub struct AdminInvite {
     pub days: u32,
     /// The inviter's name in the mail: attacker input (TN-89 (11)).
     pub inviter_name: Option<String>,
+    /// The slugs of the environments the invitee administers, sorted and distinct; empty is the
+    /// whole tenant (OP-159 m.49 (d), TN-144).
+    pub environments: Vec<String>,
 }
+
+/// Most environments one invitation names (OP-159 m.49 (d)).
+pub const MAX_SCOPE: usize = 64;
 
 impl core::fmt::Debug for AdminInvite {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AdminInvite")
             .field("email", &"[redacted]")
             .field("days", &self.days)
+            .field("environments", &self.environments)
             .finish_non_exhaustive()
     }
 }
@@ -228,12 +240,12 @@ pub enum TenantChange {
     AdminInvite(AdminInvite),
     /// `idp.tenant.admin_remove` of the administrator `subject`.
     AdminRemove {
-        /// The administrator's subject in the management environment.
+        /// The administrator's subject in the primary environment.
         subject: [u8; 16],
     },
     /// `idp.tenant.owner_add` of the administrator `subject`.
     OwnerAdd {
-        /// The administrator's subject in the management environment.
+        /// The administrator's subject in the primary environment.
         subject: [u8; 16],
     },
 }
@@ -288,6 +300,18 @@ impl TenantChange {
                 if !(1..=30).contains(&i.days) {
                     return Err(TenantInvalid::Lifetime);
                 }
+                // OP-159 m.49 (d)
+                if i.environments.len() > MAX_SCOPE
+                    || i.environments
+                        .iter()
+                        .zip(i.environments.iter().skip(1))
+                        .any(|(a, b)| a >= b)
+                    || i.environments
+                        .iter()
+                        .any(|s| access_identity_oauth::domain::issuer::check_slug(s).is_err())
+                {
+                    return Err(TenantInvalid::Scope);
+                }
                 Ok(())
             }
             Self::AdminRemove { .. } | Self::OwnerAdd { .. } => Ok(()),
@@ -329,10 +353,20 @@ impl TenantChange {
                     ),
                 ),
             ]),
-            Self::AdminInvite(i) => Value::Map(vec![
-                (Value::text("email"), Value::text(&i.email)),
-                (Value::text("days"), Value::Unsigned(u64::from(i.days))),
-            ]),
+            Self::AdminInvite(i) => {
+                let mut m = vec![
+                    (Value::text("email"), Value::text(&i.email)),
+                    (Value::text("days"), Value::Unsigned(u64::from(i.days))),
+                ];
+                // OP-159 m.49 (d)
+                if !i.environments.is_empty() {
+                    m.push((
+                        Value::text("environments"),
+                        Value::Array(i.environments.iter().map(|s| Value::text(s)).collect()),
+                    ));
+                }
+                Value::Map(m)
+            }
             Self::AdminRemove { subject } | Self::OwnerAdd { subject } => Value::Map(vec![(
                 Value::text("subject"),
                 Value::Bytes(subject.to_vec()),
@@ -353,10 +387,10 @@ impl TenantChange {
         Ok(Digest(context_digest(CHANGE_CONTEXT, &bytes).0))
     }
 
-    /// The resource it acts on under the management environment `management`'s `idp` Anchor:
-    /// `idp:[management, "tenant", kind, key]`.
+    /// The resource it acts on under the primary environment `primary`'s `idp` Anchor:
+    /// `idp:[primary, "tenant", kind, key]`.
     #[must_use]
-    pub fn resource(&self, management: &str) -> ResourceRef {
+    pub fn resource(&self, primary: &str) -> ResourceRef {
         let (kind, key) = match self {
             Self::EnvironmentCreate(e) => ("environment", e.slug.clone()),
             Self::AdminInvite(i) => ("admin", i.email.clone()),
@@ -365,7 +399,7 @@ impl TenantChange {
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),
             path: vec![
-                String::from(management),
+                String::from(primary),
                 String::from("tenant"),
                 String::from(kind),
                 key,
@@ -374,20 +408,20 @@ impl TenantChange {
         }
     }
 
-    /// The intent that authorizes it in the management environment `management`, valid over
+    /// The intent that authorizes it in the primary environment `primary`, valid over
     /// `validity`.
     ///
     /// # Errors
     /// [`dcbor::EncodeError`].
     pub fn intent(
         &self,
-        management: &str,
+        primary: &str,
         validity: Window,
     ) -> Result<IntentEnvelope, dcbor::EncodeError> {
         Ok(IntentEnvelope {
             provenance: BTreeMap::new(),
             action: self.action().action_ref(),
-            resources: vec![self.resource(management)],
+            resources: vec![self.resource(primary)],
             params: BTreeMap::new(),
             opaque: BTreeMap::from([(String::from(CHANGE_PARAM), self.digest()?)]),
             recipient: None,

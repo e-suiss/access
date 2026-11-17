@@ -2,7 +2,7 @@
 //! invited founder, their suspension and placement. Each is an `idp.platform.*` Exercise in the
 //! platform environment's governing domain, so the platform surface has no write path of its own
 //! (TN-110, PI-4, INV-2). The platform opens no environment: a tenant's founder opens its
-//! management environment and its administrators the rest (TN-141, TN-140); the operator holds
+//! primary environment and its administrators the rest (TN-141, TN-140); the operator holds
 //! nothing in them (INV-29, TNI-15).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -461,7 +461,7 @@ impl EnvironmentOrder {
     }
 }
 
-/// What a tenant's founding commits to (TN-89 (1), (8), TN-141): the management environment's
+/// What a tenant's founding commits to (TN-89 (1), (8), TN-141): the primary environment's
 /// blind index of the founder's identifier and the SHA-256 of the link token and of the magic
 /// code. The secrets themselves exist only in the mail.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -491,7 +491,7 @@ impl FounderCommitment {
 }
 
 /// A tenant to create (OP-159 m.47 (c)): a server-assigned id, its display name, the slug its
-/// management environment will take, its placement and the founder commitment. The management
+/// primary environment will take, its placement and the founder commitment. The management
 /// environment's id is the tenant's own (TN-141): the founder's blind index is that
 /// environment's before it exists.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -500,8 +500,8 @@ pub struct TenantOrder {
     pub tenant: [u8; 16],
     /// Its display name: its own text, never authority (TN-1, TN-131).
     pub display_name: String,
-    /// The management environment's slug (TN-138).
-    pub management_slug: String,
+    /// The primary environment's slug (TN-138).
+    pub primary_slug: String,
     /// Its placement.
     pub placement: String,
     /// What its founding commits to.
@@ -585,7 +585,7 @@ impl PlatformChange {
         match self {
             Self::Tenant(t) => {
                 check_name(&t.display_name)?;
-                check_new_slug(&t.management_slug)?;
+                check_new_slug(&t.primary_slug)?;
                 check_placement(&t.placement)
             }
             Self::Placement { placement, .. } => check_placement(placement),
@@ -598,10 +598,7 @@ impl PlatformChange {
             Self::Tenant(t) => Value::Map(vec![
                 (Value::text("tenant"), Value::Bytes(t.tenant.to_vec())),
                 (Value::text("display_name"), Value::text(&t.display_name)),
-                (
-                    Value::text("management_slug"),
-                    Value::text(&t.management_slug),
-                ),
+                (Value::text("primary_slug"), Value::text(&t.primary_slug)),
                 (Value::text("placement"), Value::text(&t.placement)),
                 (Value::text("founder"), t.founder.value()),
             ]),

@@ -215,7 +215,6 @@ passkey-no_pqc = Passkeys don't use post-quantum cryptography yet.
 passkey-attestation_refused = This security key isn't accepted here. Try a different one.
 passkey-attestation_unknown = This security key can't be checked right now. Try again later.
 # OP-159 m.47 (b), (c), (f)
-page-management_sign_in = { $name } — Administrator sign-in
 page-second_step_missing = This sign-in needs a second step: a passkey or an authenticator app. Your account doesn't have one yet, and it can't be added here. Ask another administrator for help.
 founding-heading = Invitation
 founding-title = Set up { $name }

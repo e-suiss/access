@@ -1713,7 +1713,7 @@ pub struct GenesisOrder {
 /// environment's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdminRule {
-    /// The management environment's Claim issuer Party.
+    /// The primary environment's Claim issuer Party.
     pub issuer: Id,
     /// Whether the issuer is another environment's: the domain is then born accepting it for
     /// `actor-binding` and, as predicate input, `authentication` too (TN-4 consuming binding).
@@ -1725,10 +1725,10 @@ pub struct AdminRule {
 /// The class a tenant administrator rule selects by (OP-159 m.47 (d)).
 pub const TENANT_ADMINISTRATION: &str = "tenant_administration";
 
-/// The classes a consuming domain accepts from the management environment's issuer for
+/// The classes a consuming domain accepts from the primary environment's issuer for
 /// `actor-binding` (OP-159 m.47 (d)): who the administrator's Party is and that its account
 /// stands.
-pub const MANAGEMENT_BINDING_CLASSES: [&str; 3] = [
+pub const PRIMARY_BINDING_CLASSES: [&str; 3] = [
     "account_status",
     "authentication",
     "identity_binding_person",

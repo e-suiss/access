@@ -133,7 +133,7 @@ async fn an_administrator_binds_two_environments_of_one_tenant_with_an_environme
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
             administered: None,
-            management: None,
+            primary: None,
         })
         .await
         .unwrap();

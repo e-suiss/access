@@ -1297,6 +1297,27 @@ async fn redirect_exactness_errors_and_par() {
     // §10.4.6
     let login = location(&w.authorize(&[("prompt", "login")], Some(&w.cookie)).await);
     assert!(login.contains("reason=reauthenticate"), "{login}");
+    assert!(!login.contains("acr="), "{login}");
+    // OP-159 m.49 (c)
+    let aal2 = "http://idmanagement.gov/ns/assurance/aal/2";
+    for cookie in [None, Some(w.cookie.as_str())] {
+        let to = location(
+            &w.authorize(&[("prompt", "login"), ("acr_values", aal2)], cookie)
+                .await,
+        );
+        assert_eq!(query(&to, "acr"), aal2, "{to}");
+    }
+    let aal1 = location(
+        &w.authorize(
+            &[
+                ("prompt", "login"),
+                ("acr_values", "http://idmanagement.gov/ns/assurance/aal/1"),
+            ],
+            Some(&w.cookie),
+        )
+        .await,
+    );
+    assert!(!aal1.contains("acr="), "{aal1}");
     // OP-148, §10.4.6, OP-153 m.3 (g)
     for cookie in [None, Some(w.cookie.as_str())] {
         let create = location(&w.authorize(&[("prompt", "create")], cookie).await);

@@ -457,7 +457,6 @@ fn registration_is_a_sign_in_requirement_open_by_default() {
         panic!("an invite-only policy");
     };
     assert_eq!(c.registration, Registration::InviteOnly);
-    assert_eq!(c, management_signin());
     assert!(format!("{:?}", c.to_value()).contains("invite_only"));
     for bad in [json!("closed"), json!(true)] {
         let mut b = base.clone();
@@ -479,13 +478,13 @@ fn default_signin_with_mfa() -> crate::domain::SigninPolicy {
 
 // OP-159 m.48 (b)
 #[test]
-fn the_consumer_binding_names_the_management_environment() {
+fn the_consumer_binding_names_the_primary_environment() {
     let ids = ids();
     let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
     let change = compile(
-        Op::BindManagementEnvironment,
+        Op::BindPrimaryEnvironment,
         None,
-        &json!({"management": "acme-admin"}),
+        &json!({"primary": "acme-admin"}),
         &ids,
     )
     .unwrap();
@@ -493,23 +492,23 @@ fn the_consumer_binding_names_the_management_environment() {
     assert_eq!(change.check(&declared), Ok(()));
     for bad in [
         json!({}),
-        json!({"management": "acme-admin", "domain": "x"}),
-        json!({"management": 7}),
+        json!({"primary": "acme-admin", "domain": "x"}),
+        json!({"primary": 7}),
     ] {
         assert_eq!(
-            compile(Op::BindManagementEnvironment, None, &bad, &ids).err(),
+            compile(Op::BindPrimaryEnvironment, None, &bad, &ids).err(),
             Some(Invalid::Body),
             "{bad}"
         );
     }
     let wrong = compile(
-        Op::BindManagementEnvironment,
+        Op::BindPrimaryEnvironment,
         None,
-        &json!({"management": "Not A Slug"}),
+        &json!({"primary": "Not A Slug"}),
         &ids,
     )
     .unwrap();
-    assert_eq!(wrong.check(&declared), Err(Invalid::ManagementBinding));
+    assert_eq!(wrong.check(&declared), Err(Invalid::PrimaryBinding));
     assert!(
         !crate::app::tenant::environment_actions()
             .contains(&access_internal_api::idp::IdpAction::EnvironmentConsumerBind.action_ref())

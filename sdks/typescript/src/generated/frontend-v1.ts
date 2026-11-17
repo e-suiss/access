@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts a flow; its kind is login unless the body names another. */
+        /** Starts a flow; its kind is login unless the body names another. An `acr` at AAL2 or above, passed on from the authorization request, has the sign-in ask for a second factor (OP-159 m.49 (c)). */
         post: operations["createFlow"];
         delete?: never;
         options?: never;
@@ -975,7 +975,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `management`) and, for a management environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)). */
+        /** The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `primary`) and, for a primary environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)). */
         get: operations["getBranding"];
         put?: never;
         post?: never;
@@ -992,7 +992,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A tenant founding's name, its management environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)). */
+        /** A tenant founding's name, its primary environment {slug, kind} and its state; never the founder's address. `no-store`, no referrer (TN-89 (8)). */
         get: operations["getFounding"];
         put?: never;
         post?: never;
@@ -1028,7 +1028,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Opens the management environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141). */
+        /** Opens the primary environment rooted in the browser's device key {email, code, password, device_key}; 201 {environment, issuer, party} (TN-141). */
         post: operations["completeFounding"];
         delete?: never;
         options?: never;
@@ -1043,7 +1043,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A tenant administrator invitation on the management environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)). */
+        /** A tenant administrator invitation on the primary environment: {tenant, environment, state: pending | proven | accepted | superseded | expired}; never the invitee's address. `no-store`, no referrer (TN-89 (8)). */
         get: operations["getAdminInvite"];
         put?: never;
         post?: never;
@@ -2600,8 +2600,8 @@ export interface components {
             logo_uri: string | null;
             environment: {
                 /** @enum {unknown} */
-                kind: "standard" | "management";
-                /** @description The tenant's display name, for a management environment only (TN-138, OP-159 m.47 (b)). */
+                kind: "standard" | "primary";
+                /** @description The tenant's display name, for a primary environment only (TN-138, OP-159 m.47 (b)). */
                 tenant_name?: string | null;
             };
         };

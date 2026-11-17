@@ -170,7 +170,7 @@ async fn the_platform_admin_reads_and_provisions_through_the_console() {
             .body(Body::from(
                 serde_json::json!({ "operation": "createTenant", "body": {
                     "display_name": "Globex",
-                    "management_slug": "globex-admin",
+                    "primary_slug": "globex-admin",
                     "founder_email": "admin@globex.example",
                 } })
                 .to_string(),

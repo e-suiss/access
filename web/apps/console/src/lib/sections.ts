@@ -275,7 +275,7 @@ export function visibleSections(screens: ReadonlySet<Screen>): ReadonlySet<Secti
 }
 
 // OP-159 m.47 (e), (f), (h), TN-140
-/** The tenant's own actions, which only its management environment publishes. */
+/** The tenant's own actions, which only its primary environment publishes. */
 export const TENANT_ACTIONS = [
   "environment_create",
   "admin_invite",
@@ -286,7 +286,7 @@ export const TENANT_ACTIONS = [
 export type TenantAction = (typeof TENANT_ACTIONS)[number];
 
 /**
- * The tenant actions the viewer can exercise in management environment `environment`, asked once
+ * The tenant actions the viewer can exercise in primary environment `environment`, asked once
  * per session and Instance like the screens; no answer is no action (fail closed).
  */
 export function tenantActionsQuery(instance: Instance, environment: string, account: string) {

@@ -66,27 +66,26 @@ pub const TENANT_STATE: Code = code(
     "Conflict",
     "The tenant is not in the state this change needs: a new tenant exists already, a reinvitation is only for a tenant awaiting its founder, a suspension only for an active one, a reactivation only for a suspended one (OP-159 m.47 (c), (h)).",
 );
-/// A tenant write sent to an environment that is not the tenant's management environment, or a
-/// third-party client in a management environment.
-pub const MANAGEMENT_ENVIRONMENT: Code = code(
-    "management-environment",
+/// A tenant write sent to an environment that is not the tenant's primary environment.
+pub const PRIMARY_ENVIRONMENT: Code = code(
+    "primary-environment",
     409,
     "Conflict",
-    "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b)).",
+    "Tenant administration happens in the tenant's primary environment (TN-143, OP-159 m.49 (a)).",
 );
 /// A consumer binding that does not fit (TN-4, OP-159 m.48 (b)).
-pub const MANAGEMENT_BINDING: Code = code(
-    "management-binding",
+pub const PRIMARY_BINDING: Code = code(
+    "primary-binding",
     409,
     "Conflict",
-    "Only a standard environment binds to its own tenant's management environment, named by its slug, and only once (TN-4, OP-159 m.48 (b)).",
+    "Only a standard environment binds to its own tenant's primary environment, named by its slug, and only once (TN-4, OP-159 m.48 (b)).",
 );
-/// The environment does not yet accept the management environment's administrators (TN-139).
-pub const MANAGEMENT_ACCEPTANCE_REQUIRED: Code = code(
-    "management-acceptance-required",
+/// The environment does not yet accept the primary environment's administrators (TN-139).
+pub const PRIMARY_ACCEPTANCE_REQUIRED: Code = code(
+    "primary-acceptance-required",
     409,
     "Conflict",
-    "The environment's root must first establish an Acceptance of the management environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b)).",
+    "The environment's root must first establish an Acceptance of the primary environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b)).",
 );
 /// A write only the environment's root signs (INV-29).
 pub const ROOT_REQUIRED: Code = code(
@@ -123,6 +122,13 @@ pub const LAST_TENANT_OWNER: Code = code(
     "Conflict",
     "The tenant keeps at least one owner; make another administrator an owner first (OP-159 m.47 (e)).",
 );
+/// An invitation's environments that are not environments of the tenant (OP-159 m.49 (d)).
+pub const INVALID_ADMIN_SCOPE: Code = code(
+    "invalid-admin-scope",
+    400,
+    "Bad Request",
+    "An invitation names at most 64 distinct environments of the tenant by slug; none invites to administer the whole tenant (OP-159 m.49 (d), TN-144).",
+);
 /// The tenant administrator invitation expired.
 pub const INVITE_EXPIRED: Code = code(
     "invite-expired",
@@ -135,5 +141,5 @@ pub const INVITE_STATE: Code = code(
     "invite-state",
     409,
     "Conflict",
-    "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the management environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7)).",
+    "The invitation is accepted or replaced already, its address is not proven yet, the address has an account in the primary environment, or the inviter is no administrator any more (OP-159 m.47 (f), TN-89 (3), (7)).",
 );

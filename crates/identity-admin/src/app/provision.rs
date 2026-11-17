@@ -2,7 +2,7 @@
 //! change is an `idp.platform.*` Exercise in the platform environment's governing domain,
 //! committed by the authority plane before anything is written (TN-110, PI-4, INV-2). A tenant
 //! opens `provisioning` with its founding and the founder's mail in one transaction; the founder
-//! opens its management environment (TN-141). The operator holds nothing in it (INV-29, TNI-15).
+//! opens its primary environment (TN-141). The operator holds nothing in it (INV-29, TNI-15).
 //! Every effect is idempotent: a retry of a committed Exercise finishes what the first attempt
 //! left.
 
@@ -137,7 +137,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
     }
 
     /// The founder commitment of `tenant` to `email` and its secrets (TN-89, TN-141): the
-    /// management environment's blind index of the address, and a link and a code the token's
+    /// primary environment's blind index of the address, and a link and a code the token's
     /// index key derives from the tenant and its `round` of invitations, so the draft and the
     /// write name the same and only the token knows them.
     ///
@@ -190,7 +190,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         Ok(f.map(|f| f.reinvites))
     }
 
-    /// Whether `change` fits the platform's current state: a new tenant's management slug is
+    /// Whether `change` fits the platform's current state: a new tenant's primary slug is
     /// free (TN-16), a changed tenant exists and is in the state its change needs.
     async fn fits(&self, p: &Platform<'_>, change: &PlatformChange) -> Result<(), ProvisionError> {
         let tenant = TenantId::from_bytes(change.tenant());
@@ -200,7 +200,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 if row.is_some() {
                     return Err(ProvisionInvalid::TenantState.into());
                 }
-                if !tenants::slug_free(p.router, &t.management_slug).await? {
+                if !tenants::slug_free(p.router, &t.primary_slug).await? {
                     return Err(ProvisionInvalid::SlugTaken.into());
                 }
             }
@@ -367,7 +367,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
     }
 
     /// Queues the founder's mail in the platform environment's outbox, in the transaction that
-    /// binds the decision (TN-89, TN-141): the link goes to the management environment's founding
+    /// binds the decision (TN-89, TN-141): the link goes to the primary environment's founding
     /// route.
     async fn founder_mail(
         &self,
@@ -383,7 +383,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         use access_identity_account::notify::ports::Notifier as _;
 
         let (slug, name) = match change {
-            PlatformChange::Tenant(o) => (o.management_slug.clone(), o.display_name.clone()),
+            PlatformChange::Tenant(o) => (o.primary_slug.clone(), o.display_name.clone()),
             PlatformChange::Reinvite { tenant, .. } => {
                 let mut tx =
                     TenantTx::begin_tenant(self.app, TenantId::from_bytes(*tenant)).await?;
@@ -457,7 +457,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 tenants::insert_founding(
                     &mut t,
                     &NewFounding {
-                        slug: &o.management_slug,
+                        slug: &o.primary_slug,
                         environment: EnvironmentId::from_bytes(o.tenant),
                         founder_index: &o.founder.index,
                         token_hash: &o.founder.token,

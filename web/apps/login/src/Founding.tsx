@@ -1,6 +1,6 @@
 // OP-159 m.47 (c), TN-141: the founder's page at `/login/founding/{token}#code=…`. The founder proves
 // the invited address, chooses a password and this browser makes the key whose Party becomes the
-// founding root of the tenant's management environment; a second step is added at the first
+// founding root of the tenant's primary environment; a second step is added at the first
 // sign-in (TN-138).
 import * as v from "valibot";
 

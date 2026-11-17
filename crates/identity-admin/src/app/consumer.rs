@@ -1,7 +1,7 @@
 //! The upgrade path of an existing standard environment into its tenant's administration (TN-4,
 //! TN-139, OP-159 m.48 (b)): `idp.environment.consumer_bind` in the environment's own governing
 //! domain, signed by its root and never by the operator or the platform (INV-29). The domain must
-//! already accept the management environment's `tenant_administration` Claims for subject
+//! already accept the primary environment's `tenant_administration` Claims for subject
 //! selection, which its root establishes first; the binding then holds after the 24-hour TN-4
 //! cool-down.
 
@@ -17,7 +17,7 @@ use suiss_crypto::dcbor::{self, Limits};
 
 use super::{Admin, Proposal};
 use crate::AdminError;
-use crate::domain::tenant::MANAGEMENT;
+use crate::domain::tenant::PRIMARY;
 use crate::domain::{Change, Invalid};
 use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 
@@ -26,8 +26,8 @@ pub const CONSUMER_COOLING_S: i64 = 86_400;
 
 /// What a consumer binding binds.
 pub(crate) struct ConsumerBinding {
-    /// The tenant's management environment.
-    pub(crate) management: EnvironmentId,
+    /// The tenant's primary environment.
+    pub(crate) primary: EnvironmentId,
     /// The bound environment's governing domain.
     pub(crate) domain: DomainId,
     /// The Acceptance through which that domain selects the tenant's administrators.
@@ -35,18 +35,18 @@ pub(crate) struct ConsumerBinding {
 }
 
 impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, K> {
-    /// What `idp.environment.consumer_bind` of `management` binds for the proposal's environment
-    /// (OP-159 m.48 (b)): it is a standard environment, `management` is its tenant's management
-    /// environment, the two are not bound yet, and the environment's domain accepts the management
+    /// What `idp.environment.consumer_bind` of `primary` binds for the proposal's environment
+    /// (OP-159 m.48 (b)): it is a standard environment, `primary` is its tenant's primary
+    /// environment, the two are not bound yet, and the environment's domain accepts the primary
     /// issuer's `tenant_administration` Claims for subject selection.
     ///
     /// # Errors
-    /// [`Invalid::ManagementBinding`], [`Invalid::ManagementAcceptanceRequired`];
+    /// [`Invalid::PrimaryBinding`], [`Invalid::PrimaryAcceptanceRequired`];
     /// [`AdminError`].
     pub(crate) async fn consumer_binding(
         &self,
         (tenant, environment): (TenantId, EnvironmentId),
-        management: &str,
+        primary: &str,
     ) -> Result<ConsumerBinding, AdminError> {
         let mut t = TenantTx::begin(self.app, tenant, environment).await?;
         let kind = tenant_admin::environment_kind(&mut t).await?;
@@ -54,28 +54,28 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             .await?
             .ok_or(AdminError::NoEnvironment)?;
         t.commit().await?;
-        if kind.as_deref() == Some(MANAGEMENT) {
-            return Err(Invalid::ManagementBinding.into());
+        if kind.as_deref() == Some(PRIMARY) {
+            return Err(Invalid::PrimaryBinding.into());
         }
         let mut t = TenantTx::begin_tenant(self.app, tenant).await?;
-        let found = tenant_admin::management_environment(&mut t).await?;
+        let found = tenant_admin::primary_environment(&mut t).await?;
         t.commit().await?;
-        let Some((m, _)) = found.filter(|(m, slug)| slug == management && *m != environment) else {
-            return Err(Invalid::ManagementBinding.into());
+        let Some((m, _)) = found.filter(|(m, slug)| slug == primary && *m != environment) else {
+            return Err(Invalid::PrimaryBinding.into());
         };
         let mut t = TenantTx::begin(self.app, tenant, m).await?;
         let issuer = access_store::issuer::environment_issuer(&mut t).await?;
         let bound = environment_binding::bound(&mut t, m, &g.domain).await?;
         t.commit().await?;
         let Some(issuer) = issuer.filter(|_| !bound) else {
-            return Err(Invalid::ManagementBinding.into());
+            return Err(Invalid::PrimaryBinding.into());
         };
         let acceptance = self
             .administration_acceptance(&g.domain, Id(issuer))
             .await?
-            .ok_or(Invalid::ManagementAcceptanceRequired)?;
+            .ok_or(Invalid::PrimaryAcceptanceRequired)?;
         Ok(ConsumerBinding {
-            management: m,
+            primary: m,
             domain: g.domain,
             acceptance,
         })

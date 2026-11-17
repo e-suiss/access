@@ -1,5 +1,5 @@
 //! The console of a tenant administrator against the real BFF, admin surface, sequencer and store
-//! (OP-159 m.47 (g), TN-142, TNI-14): the founder signs in once to the management environment,
+//! (OP-159 m.47 (g), TN-142, TNI-14): the founder signs in once to the primary environment,
 //! registers the browser's key in the domain of an environment the tenant administers, and reads
 //! that environment's management surface with a token its own authorization server issued to that
 //! Instance; an environment it has no Instance in stays closed.
@@ -15,7 +15,7 @@ fn tenant_plan() -> Plan {
         tenants: Vec::new(),
         managed: vec![TenantPlan {
             name: String::from("Acme"),
-            management: String::from("acme-admin"),
+            primary: String::from("acme-admin"),
             environments: vec![String::from("acme")],
             identifier: String::from(FOUNDER),
             password: Secret::new(String::from("founder horse battery staple")),
@@ -29,7 +29,7 @@ fn tenant_plan() -> Plan {
 #[tokio::test]
 #[expect(
     clippy::too_many_lines,
-    reason = "one sign-in from the management environment to an administered environment's read"
+    reason = "one sign-in from the primary environment to an administered environment's read"
 )]
 async fn the_founder_reads_its_environment_through_its_own_instance_there() {
     let plan = tenant_plan();
@@ -154,7 +154,7 @@ async fn the_founder_reads_its_environment_through_its_own_instance_there() {
     .await;
     let session: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(session["environments"], serde_json::json!(["acme"]));
-    assert_eq!(session["kind"], "management");
+    assert_eq!(session["kind"], "primary");
 
     // OP-159 m.47 (f)
     administer(&c.w).await;
@@ -363,10 +363,9 @@ async fn tenant_read(c: &Console, path: &str) -> (StatusCode, serde_json::Value)
 #[tokio::test]
 #[expect(
     clippy::too_many_lines,
-    reason = "one tenant's administration from its management environment, end to end"
+    reason = "one tenant's administration from its primary environment, end to end"
 )]
-async fn a_tenant_administers_its_environments_and_administrators_from_its_management_environment()
-{
+async fn a_tenant_administers_its_environments_and_administrators_from_its_primary_environment() {
     use access_identity_account::domain::invitation::{code_hash, token_hash};
     let plan = tenant_plan();
     let c = console_as(
@@ -398,7 +397,7 @@ async fn a_tenant_administers_its_environments_and_administrators_from_its_manag
         slugs,
         vec![
             ("acme", "standard", false),
-            ("acme-admin", "management", false)
+            ("acme-admin", "primary", false)
         ]
     );
     assert!(list["items"][0]["issuer"].is_string() && list["items"][0]["created_at"].is_string());
@@ -508,6 +507,7 @@ async fn a_tenant_administers_its_environments_and_administrators_from_its_manag
             cross_domain: true,
             exercise: &[7; 32],
             ttl_s: 86_400,
+            scope: None,
         },
     )
     .await
@@ -605,7 +605,7 @@ async fn a_tenant_administers_its_environments_and_administrators_from_its_manag
     )
     .await;
     assert_eq!(s, StatusCode::CREATED, "{accepted}");
-    assert_eq!(accepted["environment"]["kind"], "management");
+    assert_eq!(accepted["environment"]["kind"], "primary");
     let (s, _, again) = call(
         Method::POST,
         format!("{base}/accept"),

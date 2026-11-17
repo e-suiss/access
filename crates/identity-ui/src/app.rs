@@ -659,14 +659,19 @@ where
 
     /// `POST /v1/login/flows`: a new flow at the identifier step, with discoverable passkey
     /// options (TN-96, TN-99).
-    pub async fn create(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
+    pub async fn create(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        second_factor: bool,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
         };
         signin!(self, kit, auth, Some(b.ip));
         let reply = self
-            .start(&auth, &kit, b, None, 201, false)
+            .start(&auth, &kit, b, None, 201, (false, second_factor))
             .await
             .unwrap_or_else(|r| r);
         self.drawn(&kit, reply).await
@@ -731,7 +736,7 @@ where
         b: &Browser<'_>,
         identifier: Option<&str>,
         status: u16,
-        keep_signed_in: bool,
+        (keep_signed_in, second_factor): (bool, bool),
     ) -> Result<Reply, Reply> {
         let started = auth
             .identify(&Identify {
@@ -740,6 +745,7 @@ where
                 marker: b.marker,
                 keep_signed_in,
                 remember_device: false,
+                second_factor,
             })
             .await
             .map_err(|e| failed(&e))?;
@@ -850,8 +856,15 @@ where
         let field = |name| checked.get(name).unwrap_or_default();
         let corr = b.correlation;
         steps(checked.method);
+        // OP-159 m.49 (c)
+        let second_factor = || async {
+            auth.wants_second_factor(&fref)
+                .await
+                .map_err(|e| failed(&e))
+        };
         let outcome = match (checked.method, &current) {
             (Method::Identifier, _) => {
+                let asked = second_factor().await?;
                 return self
                     .start(
                         auth,
@@ -859,13 +872,17 @@ where
                         b,
                         Some(field(FieldName::Identifier)),
                         200,
-                        keep == Some(true),
+                        (keep == Some(true), asked),
                     )
                     .await;
             }
-            (Method::Restart, _) => return self.start(auth, kit, b, None, 200, false).await,
+            (Method::Restart, _) => {
+                let asked = second_factor().await?;
+                return self.start(auth, kit, b, None, 200, (false, asked)).await;
+            }
             // OP-153 m.3 (j), TN-96
             (Method::Password, Current::Identifier) if kit.signin.strict => {
+                let asked = second_factor().await?;
                 return self
                     .strict_password(
                         auth,
@@ -873,7 +890,7 @@ where
                         b,
                         field(FieldName::Identifier),
                         field(FieldName::Password),
-                        keep == Some(true),
+                        (keep == Some(true), asked),
                     )
                     .await;
             }
@@ -960,7 +977,7 @@ where
         b: &Browser<'_>,
         identifier: &str,
         password: &str,
-        keep_signed_in: bool,
+        (keep_signed_in, second_factor): (bool, bool),
     ) -> Result<Reply, Reply> {
         let started = auth
             .identify(&Identify {
@@ -969,6 +986,7 @@ where
                 marker: b.marker,
                 keep_signed_in,
                 remember_device: false,
+                second_factor,
             })
             .await
             .map_err(|e| failed(&e))?;
@@ -992,7 +1010,9 @@ where
         if let Outcome::Rejected(Refusal { problem, pad_ms }) = outcome
             && problem.status == 401
         {
-            let mut reply = self.start(auth, kit, b, None, 401, false).await?;
+            let mut reply = self
+                .start(auth, kit, b, None, 401, (false, second_factor))
+                .await?;
             if let Body::Ui(ui) = &mut reply.body {
                 ui.messages.push(Message::error(TextId::LoginFailed));
             }
@@ -1000,7 +1020,9 @@ where
             return Ok(reply.cookie(started.set_cookie));
         }
         if let Outcome::Throttled { retry_after_s } = outcome {
-            let mut reply = self.start(auth, kit, b, None, 429, false).await?;
+            let mut reply = self
+                .start(auth, kit, b, None, 429, (false, second_factor))
+                .await?;
             if let Body::Ui(ui) = &mut reply.body {
                 let seconds = u32::try_from(retry_after_s).unwrap_or(u32::MAX);
                 ui.messages

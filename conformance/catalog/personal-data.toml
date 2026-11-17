@@ -343,7 +343,7 @@ retention = "suppression"
 basis = "legitimate_interest"
 portable = "derived"
 export = false
-note = "Keyed blind index of the invited founder's folded address in the management environment (TN-141); the address itself is never stored."
+note = "Keyed blind index of the invited founder's folded address in the primary environment (TN-141); the address itself is never stored."
 
 [[field]]
 column = "access.tenant_admin_invitations.invitee_index"

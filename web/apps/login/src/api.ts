@@ -59,12 +59,19 @@ function headers(): HeadersInit {
   return { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() };
 }
 
-/** A new flow; a sign-up flow names its kind (OP-153 m.3 (g)). */
-export function createFlow(kind: FlowKind = "login"): Promise<Answer> {
+/**
+ * A new flow; a sign-up flow names its kind (OP-153 m.3 (g)); `acr` is the authorization
+ * request's, which asks a sign-in for a second factor (OP-159 m.49 (c)).
+ */
+export function createFlow(kind: FlowKind = "login", acr: string | null = null): Promise<Answer> {
+  const body = {
+    ...(kind === "login" ? {} : { kind }),
+    ...(acr === null ? {} : { acr }),
+  };
   return call(flowsPath, {
     method: "POST",
     headers: headers(),
-    ...(kind === "login" ? {} : { body: JSON.stringify({ kind }) }),
+    ...(Object.keys(body).length === 0 ? {} : { body: JSON.stringify(body) }),
   });
 }
 

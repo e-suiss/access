@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.tenant_foundings (tenant_id, slug, primary_environment_id, founder_index,\n           token_hash, code_hash, created_exercise, expires_at)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp() + $8::bigint * interval '1 second')\n         ON CONFLICT (tenant_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "714d01e60def1f4efe8b2c868230daeaef1725e7697ef5082b988e1a988bc808"
+}

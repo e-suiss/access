@@ -226,6 +226,10 @@ pub struct FlowState {
     /// What SL2 noted and decided for this sign-in (TN-46).
     #[serde(default)]
     pub risk: Option<RiskNote>,
+    /// The client asked for a second factor (`acr_values` at AAL2 or above): the console's
+    /// sign-in, whatever the environment's policy (OP-159 m.49 (c), TN-144).
+    #[serde(default)]
+    pub second_factor: bool,
 }
 
 /// What SL2 notes in a sign-in flow (§12.2.4, TN-46): the password step's breach check and
@@ -295,6 +299,7 @@ impl FlowState {
             started_ms: now_ms,
             expires_ms: now_ms.saturating_add(FLOW_TTL_MS),
             risk: None,
+            second_factor: false,
         }
     }
 

@@ -1,7 +1,8 @@
-// OP-159 m.47 (a), (e), (f), (h), TN-138, TN-140: the tenant's home at `/console/{management}`. The
-// tenant's environments, each a link to its console, which the session administers without a new
-// sign-in; a new environment; the administrators with their role and status, an invitation, a new
-// owner and a removal. Each change is one signed `idp.tenant.*` Exercise; a control shows only when
+// OP-159 m.47 (a), (e), (f), (h), m.49, TN-140, TN-143, TN-144: the tenant's home at
+// `/console/{primary}`. The tenant's environments, each a link to its console, which the session
+// administers without a new sign-in; a new environment; the administrators with their role, status
+// and environments, an invitation to the whole tenant or to some environments, a new owner and a
+// removal. Each change is one signed `idp.tenant.*` Exercise; a control shows only when
 // the eligibility check says the viewer can exercise its action (IA-5). The tenant's texts and
 // addresses render as text (TN-131).
 
@@ -19,10 +20,8 @@ import { tenantActionsQuery } from "../lib/sections.js";
 import {
   addOwner,
   createEnvironment,
-  defaultsPendingQuery,
   type IssuerStyle,
   inviteAdmin,
-  recordDefaults,
   removeAdmin,
   type TenantAdmin,
   type TenantEnvironment,
@@ -63,7 +62,7 @@ function Environments({
   readonly environments: readonly TenantEnvironment[];
 }): ReactElement {
   const rows = [...environments].sort((a, b) =>
-    a.kind === b.kind ? a.slug.localeCompare(b.slug) : a.kind === "management" ? -1 : 1,
+    a.kind === b.kind ? a.slug.localeCompare(b.slug) : a.kind === "primary" ? -1 : 1,
   );
   return (
     <DataTable
@@ -81,7 +80,7 @@ function Environments({
           cell: (e) => (
             <span className="flex flex-wrap items-center gap-2">
               <EnvironmentLink slug={e.slug} />
-              {e.kind === "management" && <Badge variant="outline">{t("tenantManagement")}</Badge>}
+              {e.kind === "primary" && <Badge variant="outline">{t("tenantPrimary")}</Badge>}
               {e.sandbox && <Badge variant="outline">{t("platformSandbox")}</Badge>}
             </span>
           ),
@@ -95,14 +94,12 @@ function Environments({
 
 /** A new environment of the tenant (OP-159 m.47 (h)). */
 function CreateEnvironment({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const management = ctx.session.environment;
+  const primary = ctx.session.environment;
   const [slug, setSlug] = useState("");
   const [sandbox, setSandbox] = useState(false);
   const [style, setStyle] = useState<IssuerStyle>("path");
   const [made, setMade] = useState("");
-  const [w, write] = useRun<WriteResult>([
-    tenantEnvironmentsQuery(ctx.instance, management).queryKey,
-  ]);
+  const [w, write] = useRun<WriteResult>([tenantEnvironmentsQuery(ctx.instance, primary).queryKey]);
   const valid = SLUG.test(slug) && slug !== "api" && slug !== "assets";
   return (
     <Panel id="tenant-environment-create" title={t("tenantEnvironmentCreate")}>
@@ -114,7 +111,7 @@ function CreateEnvironment({ ctx }: { readonly ctx: Ctx }): ReactElement {
           if (!valid) return;
           const wanted = slug;
           write(async () => {
-            const r = await createEnvironment(ctx.instance, ctx.confirm, management, {
+            const r = await createEnvironment(ctx.instance, ctx.confirm, primary, {
               slug: wanted,
               sandbox,
               issuer_style: style,
@@ -199,14 +196,18 @@ function statusText(a: TenantAdmin): string {
 function Administrators({
   ctx,
   can,
+  environments,
 }: {
   readonly ctx: Ctx;
   readonly can: ReadonlySet<string>;
+  readonly environments: readonly TenantEnvironment[];
 }): ReactElement {
-  const management = ctx.session.environment;
-  const query = tenantAdminsQuery(ctx.instance, management);
+  const primary = ctx.session.environment;
+  const query = tenantAdminsQuery(ctx.instance, primary);
   const list = loaded(useQuery(query));
   const [email, setEmail] = useState("");
+  // OP-159 m.49 (d): none picked is the whole tenant
+  const [scope, setScope] = useState<ReadonlySet<string>>(new Set());
   const [invited, invite] = useRun<WriteResult>([query.queryKey]);
   const [changed, act] = useRun<WriteResult>([query.queryKey]);
   return (
@@ -245,6 +246,16 @@ function Administrators({
                   ),
                 },
                 { id: "status", header: t("platformStatus"), cell: statusText },
+                {
+                  id: "environments",
+                  header: t("tenantAdminEnvironments"),
+                  cell: (a) =>
+                    a.environments === undefined || a.environments === null ? (
+                      t("tenantAdminWholeTenant")
+                    ) : (
+                      <span className={MONO}>{a.environments.join(", ")}</span>
+                    ),
+                },
                 { id: "since", header: t("tenantAdminSince"), cell: (a) => at(a.since) },
                 {
                   id: "actions",
@@ -257,7 +268,7 @@ function Administrators({
                           variant="outline"
                           aria-label={t("tenantMakeOwnerOf", { who: a.identifier })}
                           onClick={() => {
-                            act(() => addOwner(ctx.instance, ctx.confirm, management, a.id));
+                            act(() => addOwner(ctx.instance, ctx.confirm, primary, a.id));
                           }}
                         >
                           {t("tenantMakeOwner")}
@@ -269,7 +280,7 @@ function Administrators({
                           variant="outline"
                           aria-label={t("tenantRemoveOf", { who: a.identifier })}
                           onClick={() => {
-                            act(() => removeAdmin(ctx.instance, ctx.confirm, management, a.id));
+                            act(() => removeAdmin(ctx.instance, ctx.confirm, primary, a.id));
                           }}
                         >
                           {t("tenantRemove")}
@@ -295,9 +306,11 @@ function Administrators({
               e.preventDefault();
               const to = email.trim();
               if (!EMAIL.test(to)) return;
+              const picked = [...scope];
               invite(async () => {
-                const r = await inviteAdmin(ctx.instance, ctx.confirm, management, to);
+                const r = await inviteAdmin(ctx.instance, ctx.confirm, primary, to, picked);
                 setEmail("");
+                setScope(new Set());
                 return r;
               });
             }}
@@ -308,6 +321,27 @@ function Administrators({
               value={email}
               onChange={setEmail}
             />
+            <fieldset className="flex flex-col gap-2" data-testid="tenant-admin-scope">
+              <legend className="mb-1 text-sm font-semibold">{t("tenantInviteScope")}</legend>
+              <p className={HINT}>{t("tenantInviteScopeHint")}</p>
+              {environments.map((e) => (
+                <label key={e.slug} className={CHOICE_LABEL}>
+                  <input
+                    className={CHOICE}
+                    type="checkbox"
+                    value={e.slug}
+                    checked={scope.has(e.slug)}
+                    onChange={(ev) => {
+                      const next = new Set(scope);
+                      if (ev.target.checked) next.add(e.slug);
+                      else next.delete(e.slug);
+                      setScope(next);
+                    }}
+                  />
+                  <span className={MONO}>{e.slug}</span>
+                </label>
+              ))}
+            </fieldset>
             <div className={ACTIONS}>
               <Button type="submit" disabled={!EMAIL.test(email.trim())}>
                 {t("tenantInviteSend")}
@@ -318,36 +352,6 @@ function Administrators({
         </Panel>
       )}
     </section>
-  );
-}
-
-/**
- * OP-159 m.48 (c): while the management environment reads its sign-in requirements from its kind, the
- * founder records them with one signature; afterwards they change like any setting.
- */
-function ManagementDefaults({ ctx }: { readonly ctx: Ctx }): ReactElement | null {
-  const management = ctx.session.environment;
-  const pending = useQuery(defaultsPendingQuery(ctx.instance, management));
-  const [w, write] = useRun<WriteResult>([defaultsPendingQuery(ctx.instance, management).queryKey]);
-  if (pending.data !== true && w.status !== "done") return null;
-  return (
-    <Panel id="tenant-defaults" title={t("tenantDefaultsTitle")}>
-      <p className={HINT}>{t("tenantDefaultsText")}</p>
-      {pending.data === true && (
-        <div className={ACTIONS}>
-          <Button
-            type="button"
-            data-testid="tenant-defaults-record"
-            onClick={() => {
-              write(() => recordDefaults(ctx.instance, ctx.confirm, management));
-            }}
-          >
-            {t("tenantDefaultsAction")}
-          </Button>
-        </div>
-      )}
-      <Recorded w={w} />
-    </Panel>
   );
 }
 
@@ -368,7 +372,6 @@ export function TenantHome({
       intro={t("tenantHomeIntro", { environment: ctx.session.environment })}
       data-testid="tenant-home"
     >
-      <ManagementDefaults ctx={ctx} />
       <section aria-labelledby="tenant-environments-title" className="flex flex-col gap-4">
         <h2 id="tenant-environments-title" className="text-lg font-semibold">
           {t("tenantEnvironments")}
@@ -377,7 +380,7 @@ export function TenantHome({
         <Environments environments={environments} />
         {can.has("environment_create") && <CreateEnvironment ctx={ctx} />}
       </section>
-      <Administrators ctx={ctx} can={can} />
+      <Administrators ctx={ctx} can={can} environments={environments} />
     </Page>
   );
 }

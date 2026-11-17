@@ -215,7 +215,6 @@ passkey-no_pqc = Geçiş anahtarları henüz kuantum sonrası kriptografi kullan
 passkey-attestation_refused = Bu güvenlik anahtarı burada kabul edilmiyor. Başka bir anahtar dene.
 passkey-attestation_unknown = Bu güvenlik anahtarı şu anda denetlenemiyor. Daha sonra yeniden dene.
 # OP-159 m.47 (b), (c), (f)
-page-management_sign_in = { $name } — Yönetim girişi
 page-second_step_missing = Bu giriş ikinci bir adım istiyor: geçiş anahtarı ya da doğrulama uygulaması. Hesabınızda henüz yok ve burada eklenemiyor. Başka bir yöneticiden yardım isteyin.
 founding-heading = Davet
 founding-title = { $name } kurulumu

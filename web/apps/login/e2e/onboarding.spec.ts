@@ -1,5 +1,5 @@
 // OP-159 m.47 (b), (c), (f), TN-89, TN-138, TN-141: a tenant's founding and an administrator's
-// invitation on the hosted pages, and the management environment's sign-in. The magic code rides in
+// invitation on the hosted pages, and the primary environment's sign-in. The magic code rides in
 // the fragment and is dropped from the address; the address is proved before the password is
 // chosen; the browser sends only its device key's public `COSE_Key`; the tenant's name is text.
 import AxeBuilder from "@axe-core/playwright";
@@ -26,18 +26,18 @@ test.beforeEach(async ({ page }) => {
 const NAME = '<img src=x onerror="alert(1)">Acme';
 
 function founding(mock: import("./mock.js").LoginMock, view: Record<string, unknown> = {}) {
-  mock.json.set(`GET /env/acme-admin/v1/foundings/${TOKEN}`, {
+  mock.json.set(`GET /env/acme/v1/foundings/${TOKEN}`, {
     status: 200,
     body: {
       display_name: NAME,
-      environment: { slug: "acme-admin", kind: "management" },
+      environment: { slug: "acme", kind: "primary" },
       expires_at: "2026-11-23T10:00:00Z",
       verified: false,
       completed: false,
       ...view,
     },
   });
-  mock.json.set(`POST /env/acme-admin/v1/foundings/${TOKEN}/verify`, (body) =>
+  mock.json.set(`POST /env/acme/v1/foundings/${TOKEN}/verify`, (body) =>
     (body as { code?: string }).code === "MAGIC-42"
       ? { status: 204 }
       : {
@@ -49,11 +49,11 @@ function founding(mock: import("./mock.js").LoginMock, view: Record<string, unkn
           },
         },
   );
-  mock.json.set(`POST /env/acme-admin/v1/foundings/${TOKEN}/complete`, {
+  mock.json.set(`POST /env/acme/v1/foundings/${TOKEN}/complete`, {
     status: 201,
     body: {
-      environment: { slug: "acme-admin", kind: "management" },
-      issuer: "https://acme.example/env/acme-admin",
+      environment: { slug: "acme", kind: "primary" },
+      issuer: "https://acme.example/env/acme",
       party: "AgICAgICAgICAgICAgICAg",
     },
   });
@@ -65,7 +65,7 @@ test("a founder proves the address with the code, chooses a password and sends o
   mock,
 }) => {
   founding(mock);
-  await page.goto(`/env/acme-admin/login/founding/${TOKEN}#code=MAGIC-42`);
+  await page.goto(`/env/acme/login/founding/${TOKEN}#code=MAGIC-42`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Set up ${NAME}`);
   await expect(page.getByTestId("tenant-name")).toHaveText(NAME);
   await expect(page.locator("main img")).toHaveCount(0);
@@ -82,12 +82,12 @@ test("a founder proves the address with the code, chooses a password and sends o
   );
   await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
     "href",
-    "/env/acme-admin/login",
+    "/env/acme/login",
   );
   const sent = mock.posted.filter((p) => p.key.startsWith("POST"));
   expect(sent.map((p) => p.key)).toEqual([
-    `POST /env/acme-admin/v1/foundings/${TOKEN}/verify`,
-    `POST /env/acme-admin/v1/foundings/${TOKEN}/complete`,
+    `POST /env/acme/v1/foundings/${TOKEN}/verify`,
+    `POST /env/acme/v1/foundings/${TOKEN}/complete`,
   ]);
   expect(sent[0]?.body).toEqual({ email: "founder@acme.example", code: "MAGIC-42" });
   const done = sent[1]?.body as Record<string, string>;
@@ -108,7 +108,7 @@ test("a founder without the code in the link types it; a wrong code is refused",
   mock,
 }) => {
   founding(mock);
-  await page.goto(`/env/acme-admin/login/founding/${TOKEN}`);
+  await page.goto(`/env/acme/login/founding/${TOKEN}`);
   await page.getByLabel("Email", { exact: true }).fill("founder@acme.example");
   await page.getByLabel("Code from the invitation email").fill("WRONG");
   await page.getByRole("button", { name: "Continue" }).click();
@@ -123,12 +123,12 @@ test("a founder without the code in the link types it; a wrong code is refused",
 // TN-141: a finished or expired founding says so and asks nothing
 test("a finished founding and an expired one say so", async ({ page, mock }) => {
   founding(mock, { completed: true });
-  await page.goto(`/env/acme-admin/login/founding/${TOKEN}#code=MAGIC-42`);
+  await page.goto(`/env/acme/login/founding/${TOKEN}#code=MAGIC-42`);
   await expect(page.getByRole("alert")).toHaveText(
     "This setup is already finished. Sign in instead.",
   );
   await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
-  mock.json.set(`GET /env/acme-admin/v1/foundings/${TOKEN}`, {
+  mock.json.set(`GET /env/acme/v1/foundings/${TOKEN}`, {
     status: 410,
     body: {
       type: "urn:suiss:access:problem:founding-expired",
@@ -136,19 +136,19 @@ test("a finished founding and an expired one say so", async ({ page, mock }) => 
       code: "founding-expired",
     },
   });
-  await page.goto(`/env/acme-admin/login/founding/${TOKEN}`);
+  await page.goto(`/env/acme/login/founding/${TOKEN}`);
   await expect(page.getByRole("alert")).toHaveText(
     "This invitation has expired. Ask for a new one.",
   );
 });
 
 function invite(mock: import("./mock.js").LoginMock, state = "pending") {
-  mock.json.set("GET /env/acme-admin/v1/admin-invites/inv_TOKEN", {
+  mock.json.set("GET /env/acme/v1/admin-invites/inv_TOKEN", {
     status: 200,
-    body: { tenant: "Acme", environment: "acme-admin", state },
+    body: { tenant: "Acme", environment: "acme", state },
   });
-  mock.json.set("POST /env/acme-admin/v1/admin-invites/inv_TOKEN/verify", { status: 204 });
-  mock.json.set("POST /env/acme-admin/v1/admin-invites/inv_TOKEN/accept", (body) =>
+  mock.json.set("POST /env/acme/v1/admin-invites/inv_TOKEN/verify", { status: 204 });
+  mock.json.set("POST /env/acme/v1/admin-invites/inv_TOKEN/accept", (body) =>
     (body as { password?: string }).password === "short"
       ? {
           status: 400,
@@ -158,7 +158,7 @@ function invite(mock: import("./mock.js").LoginMock, state = "pending") {
             code: "invalid-password",
           },
         }
-      : { status: 201, body: { environment: { slug: "acme-admin", kind: "management" } } },
+      : { status: 201, body: { environment: { slug: "acme", kind: "primary" } } },
   );
 }
 
@@ -168,7 +168,7 @@ test("an invited administrator proves the address, chooses a password and joins"
   mock,
 }) => {
   invite(mock);
-  await page.goto("/env/acme-admin/login/admin-invite/inv_TOKEN#code=MAGIC-7");
+  await page.goto("/env/acme/login/admin-invite/inv_TOKEN#code=MAGIC-7");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Administer Acme");
   await page.getByLabel("Email", { exact: true }).fill("bob@acme.example");
   await page.getByRole("button", { name: "Continue" }).click();
@@ -190,18 +190,18 @@ test("an invited administrator proves the address, chooses a password and joins"
 
 test("a used or replaced administrator invitation says so", async ({ page, mock }) => {
   invite(mock, "superseded");
-  await page.goto("/env/acme-admin/login/admin-invite/inv_TOKEN#code=MAGIC-7");
+  await page.goto("/env/acme/login/admin-invite/inv_TOKEN#code=MAGIC-7");
   await expect(page.getByRole("alert")).toHaveText(
     "This invitation was already used or replaced by a newer one.",
   );
-  await page.goto("/env/acme-admin/login/admin-invite/not a token");
+  await page.goto("/env/acme/login/admin-invite/not a token");
   await expect(page.getByRole("alert")).toHaveText(
     "This invitation link doesn't work. Check that you opened the whole link.",
   );
 });
 
-// OP-159 m.47 (b), TN-138: the management environment's sign-in names its tenant and offers no sign-up
-test("a management environment's sign-in is titled for its tenant's administrators", async ({
+// OP-159 m.49 (a): a primary environment is an end-user environment: its sign-in is the usual one
+test("a primary environment's sign-in is the usual sign-in with its sign-up link", async ({
   page,
   mock,
 }) => {
@@ -210,14 +210,12 @@ test("a management environment's sign-in is titled for its tenant's administrato
     body: {
       display_name: null,
       logo_uri: null,
-      environment: { kind: "management", tenant_name: "Acme" },
+      environment: { kind: "primary", tenant_name: "Acme" },
     },
   };
-  await page.goto("/env/acme-admin/login");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Acme — Administrator sign-in");
-  await expect(page.getByRole("link", { name: "Create an account" })).toHaveCount(0);
-  await page.goto("/env/acme-admin/login?ui_locales=tr");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Acme — Yönetim girişi");
+  await page.goto("/env/acme/login");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in");
+  await expect(page.getByRole("link", { name: "Create an account" })).toHaveCount(1);
 });
 
 test("a standard environment's sign-in keeps its title and sign-up link", async ({
@@ -279,8 +277,8 @@ test("the founding and invitation pages have no WCAG 2.2 AA violations", async (
   founding(mock);
   invite(mock);
   for (const path of [
-    `/env/acme-admin/login/founding/${TOKEN}#code=MAGIC-42`,
-    "/env/acme-admin/login/admin-invite/inv_TOKEN",
+    `/env/acme/login/founding/${TOKEN}#code=MAGIC-42`,
+    "/env/acme/login/admin-invite/inv_TOKEN",
   ]) {
     await page.goto(path);
     await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
@@ -289,4 +287,17 @@ test("the founding and invitation pages have no WCAG 2.2 AA violations", async (
       .analyze();
     expect(a11y.violations).toEqual([]);
   }
+});
+
+// OP-159 m.49 (c), TN-144: the authorization request's `acr` reaches the new flow, so a console
+// sign-in asks for a second factor whatever the environment's policy
+test("a sign-in whose request asks for a second factor passes its acr to the new flow", async ({
+  page,
+  mock,
+}) => {
+  const acr = "http://idmanagement.gov/ns/assurance/aal/2";
+  await page.goto(`/env/acme/login?reason=reauthenticate&acr=${encodeURIComponent(acr)}`);
+  await expect(page.getByLabel("Email or username")).toBeVisible();
+  expect(mock.created.map((b) => (b === null ? null : JSON.parse(b)))).toEqual([{ acr }]);
+  expect(mock.requests).not.toContain("POST /env/acme/v1/login/step-up");
 });

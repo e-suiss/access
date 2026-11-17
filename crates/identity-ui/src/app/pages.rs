@@ -271,7 +271,7 @@ where
     }
 
     /// `GET /v1/login/branding` (TN-106): the branding record and the environment's kind; a
-    /// management environment also names its tenant, which the page titles "{name} — Yönetim
+    /// primary environment also names its tenant, which the page titles "{name} — Yönetim
     /// girişi" (TN-138, OP-159 m.47 (b)).
     pub async fn branding(&self, entry: &EnvironmentEntry) -> Reply {
         let theme = match self.theme(entry).await {
@@ -294,11 +294,11 @@ where
         let Ok((kind, name)) = read.await else {
             return Reply::problem(UNAVAILABLE);
         };
-        let management = kind.as_deref() == Some("management");
+        let primary = kind.as_deref() == Some("primary");
         let mut environment = serde_json::json!({
-            "kind": if management { "management" } else { "standard" },
+            "kind": if primary { "primary" } else { "standard" },
         });
-        if management && let Some(o) = environment.as_object_mut() {
+        if primary && let Some(o) = environment.as_object_mut() {
             o.insert(String::from("tenant_name"), serde_json::Value::from(name));
         }
         let mut body = theme.json();

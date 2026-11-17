@@ -1,5 +1,5 @@
 // OP-159 m.43 (b), m.42 (c), IA-5: the environment switcher in the console header. It lists the environments
-// this browser signed in to (and, in a management environment, the tenant's: tenant.spec.ts);
+// this browser signed in to (and, in a primary environment, the tenant's: tenant.spec.ts);
 // choosing one opens that environment's console, which never switches the session silently.
 
 import { BASE } from "./data.js";

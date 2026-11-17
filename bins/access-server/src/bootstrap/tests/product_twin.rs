@@ -175,7 +175,7 @@ async fn environment(w: &World, slug: &str) -> (TenantId, EnvironmentId, Digest)
             issuer_predicate_input: Vec::new(),
             provisioned_by: None,
             administered: None,
-            management: None,
+            primary: None,
         })
         .await
         .unwrap();

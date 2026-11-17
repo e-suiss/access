@@ -245,9 +245,9 @@ pub enum ResourceKind {
     /// The environment's signing profile, keys, key exchange share policy and crypto module, one
     /// resource (OP-159 m.3 (o), (r), (t)).
     Signing,
-    /// The tenant's environments, by slug, read in its management environment (OP-159 m.47 (a)).
+    /// The tenant's environments, by slug, read in its primary environment (OP-159 m.47 (a)).
     TenantEnvironments,
-    /// The tenant's administrators and pending invitations, by id, read in its management
+    /// The tenant's administrators and pending invitations, by id, read in its primary
     /// environment (OP-159 m.47 (e), (f)).
     TenantAdmins,
 }

@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO access.environments (tenant_id, environment_id, governing_domain_id, slug, placement_id, kind)\n           VALUES ($1, $2, $3, $4, $5, 'management') RETURNING environment_id AS \"id!\"",
+  "query": "SELECT environment_id FROM access.environments\n          WHERE tenant_id = $1 AND governing_domain_id = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id!",
+        "name": "environment_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -18,15 +18,12 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
-        "Bytea",
-        "Text",
-        "Text"
+        "Bytea"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "492c3de8ab9aca421459f471a8d5e4767e8298b696a618716e2aeb774e09d86b"
+  "hash": "59b4b78b79e7e4fbcf7f74cf3dd873177113dc66d77aeba8547871fc906710c0"
 }

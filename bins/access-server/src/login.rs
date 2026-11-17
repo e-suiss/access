@@ -517,12 +517,6 @@ impl HsmKits {
         // TN-132, MD-8
         let signin = match &settings.signin {
             Some(bytes) => EnvironmentSignin::decode(bytes).ok_or("sign-in policy")?,
-            // TN-138, OP-159 m.47 (b)
-            None if settings.kind.as_deref()
-                == Some(access_identity_admin::domain::tenant::MANAGEMENT) =>
-            {
-                EnvironmentSignin::management()
-            }
             None => EnvironmentSignin::default(),
         };
         // IDP-5, IDI-4, OP-156 m.3 (i)
