@@ -341,6 +341,18 @@ pub const ROUTES: &[Route] = &[
     ),
     served(
         Verb::Get,
+        "/v1/account/deletion/draft",
+        "getDeletionDraft",
+        "The person's own idp.account.delete for their device to sign: its intent, the self-anchor basis, the PEP and the date it would take effect; `self-deletion-closed` where the environment turned self-service deletion off (OP-159 m.50).",
+    ),
+    served(
+        Verb::Post,
+        "/v1/account/deletion",
+        "requestDeletion",
+        "Schedules the person's own deletion from their device-signed idp.account.delete {nonce, intent, basis, ais}: the session authenticated with two factors in the last five minutes (`step-up-required` otherwise); the deletion takes effect after its cancellation window and the sessions stay until then (OP-159 m.50, TN-145).",
+    ),
+    served(
+        Verb::Get,
         "/v1/account/data-requests",
         "listDataRequests",
         "The person's export and deletion requests.",

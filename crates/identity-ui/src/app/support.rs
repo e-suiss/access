@@ -185,12 +185,12 @@ impl UploadGate {
     }
 }
 
-struct Parsed {
-    nonce: Vec<u8>,
-    intent: IntentEnvelope,
-    payload: Option<Payload>,
-    basis: ExerciseBasis,
-    ais: Vec<u8>,
+pub(super) struct Parsed {
+    pub(super) nonce: Vec<u8>,
+    pub(super) intent: IntentEnvelope,
+    pub(super) payload: Option<Payload>,
+    pub(super) basis: ExerciseBasis,
+    pub(super) ais: Vec<u8>,
 }
 
 fn b64<const N: usize>(text: &str) -> Option<[u8; N]> {
@@ -199,7 +199,7 @@ fn b64<const N: usize>(text: &str) -> Option<[u8; N]> {
         .and_then(|b| <[u8; N]>::try_from(b).ok())
 }
 
-fn parse(s: &Signed) -> Option<Parsed> {
+pub(super) fn parse(s: &Signed) -> Option<Parsed> {
     let nonce = b64url_decode(&s.nonce)
         .ok()
         .filter(|n| (16..=64).contains(&n.len()))?;
@@ -336,7 +336,11 @@ where
             .map_err(|_| unavailable())
     }
 
-    async fn party(&self, kit: &EnvironmentKit, subject: [u8; 16]) -> Result<[u8; 16], Reply> {
+    pub(super) async fn party(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Result<[u8; 16], Reply> {
         let mut t = self.begin(kit).await?;
         let p = idp::subject_party(&mut t, &subject)
             .await
@@ -345,7 +349,7 @@ where
         p.ok_or_else(|| Reply::problem(NO_PARTY))
     }
 
-    async fn commit_signed<A: SupportAuthority>(
+    pub(super) async fn commit_signed<A: SupportAuthority>(
         authority: &A,
         pep: &str,
         (domain, actor, capacity): (Digest, [u8; 16], Capacity),

@@ -15,9 +15,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useState } from "react";
 import * as v from "valibot";
 
+import { refusal } from "../account/common.js";
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import type { Confirm } from "../lib/instance.js";
 import { Actions, Check, Loading, Meta, Nothing, PageTitle, Panel, Part } from "../lib/ui.js";
+import { ownInstance } from "../signins/authority.js";
+import { signDraft } from "../support/sign.js";
 import { CloudKeys } from "./CloudKeys.js";
 
 const CHANNELS = ["email", "sms", "call", "push"] as const;
@@ -104,8 +108,22 @@ const Requests = v.object({
   ),
 });
 
+const Draft = v.object({
+  intent: v.string(),
+  basis: v.object({ anchor: v.string() }),
+  pep: v.string(),
+  deleted_on: v.string(),
+});
+
 const PREFERENCES = "/v1/account/preferences";
 const DELETION = "/v1/account/deletion";
+const DRAFT = "/v1/account/deletion/draft";
+
+/** OP-159 m.50: refusals the deletion explains in its own words. */
+const DELETION_REFUSALS = {
+  "self-deletion-closed": "privacy.delete_closed",
+  "self-deletion-party": "privacy.delete_needs_device",
+} as const;
 
 function useRead<S extends v.GenericSchema>(path: string, schema: S): v.InferOutput<S> | undefined {
   return useQuery({ queryKey: [path], queryFn: () => json(frontend(path), schema) }).data;
@@ -257,7 +275,100 @@ function HistoryView(): ReactElement {
   );
 }
 
-function DeletionView(): ReactElement {
+/**
+ * OP-159 m.50, TN-145: the person deletes their own account. What happens is said first: the date,
+ * that it can be cancelled until then and that the sign-ins stay until it takes effect; then this
+ * browser's device key signs `idp.account.delete` on the signature screen. A sign-in older than
+ * five minutes, or with one factor, is sent to confirm it's them first.
+ */
+function DeleteOwnAccount({ confirm }: { readonly confirm: Confirm }): ReactElement {
+  const queries = useQueryClient();
+  const [asked, setAsked] = useState<v.InferOutput<typeof Draft> | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const refused = (e: unknown) => {
+    setSaid(refusal(e, DELETION_REFUSALS));
+  };
+  const ask = useMutation({
+    mutationFn: () => json(frontend(DRAFT), Draft),
+    onSuccess: (d) => {
+      setSaid(null);
+      setAsked(d);
+    },
+    onError: refused,
+  });
+  const remove = useMutation({
+    mutationFn: async (d: v.InferOutput<typeof Draft>) => {
+      const instance = await ownInstance();
+      if (instance === undefined) throw new Error("no device key");
+      const body = await signDraft(instance, confirm, d);
+      await json(frontend(DELETION, { method: "POST", body }));
+    },
+    onSuccess: () => {
+      setAsked(null);
+      void queries.invalidateQueries({ queryKey: [DELETION] });
+    },
+    onError: (e) => {
+      if (e instanceof Error && e.message === "no device key") {
+        setSaid(t("privacy.delete_needs_device"));
+        return;
+      }
+      refused(e);
+    },
+  });
+  return (
+    <div className="flex flex-col gap-3" data-testid="delete-own-account">
+      {asked === null ? (
+        <Actions>
+          <Button
+            variant="destructive"
+            disabled={ask.isPending}
+            onClick={() => {
+              ask.mutate();
+            }}
+          >
+            {t("action.delete_account")}
+          </Button>
+        </Actions>
+      ) : (
+        <fieldset className="flex flex-col gap-3 rounded-xl border p-4">
+          <legend className="font-semibold">{t("privacy.delete_confirm_title")}</legend>
+          <ul className="list-disc pl-5 text-sm">
+            <li>{t("privacy.delete_on", { date: asked.deleted_on })}</li>
+            <li>{t("privacy.delete_cancel_until")}</li>
+            <li>{t("privacy.delete_sign_ins")}</li>
+            <li>{t("privacy.delete_kept")}</li>
+          </ul>
+          <Actions>
+            <Button
+              variant="destructive"
+              disabled={remove.isPending}
+              onClick={() => {
+                remove.mutate(asked);
+              }}
+            >
+              {t("action.delete_account_confirm")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAsked(null);
+              }}
+            >
+              {t("action.keep_account")}
+            </Button>
+          </Actions>
+        </fieldset>
+      )}
+      {said !== null && (
+        <p role="alert" className="text-sm text-destructive">
+          {said}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DeletionView({ confirm }: { readonly confirm: Confirm }): ReactElement {
   const queries = useQueryClient();
   const d = useRead(DELETION, Deletion);
   const cancel = useMutation({
@@ -271,7 +382,10 @@ function DeletionView(): ReactElement {
       {d === undefined ? (
         <Loading rows={1} />
       ) : !d.scheduled ? (
-        <Meta>{t("privacy.deletion_none")}</Meta>
+        <>
+          <Meta>{t("privacy.deletion_none")}</Meta>
+          <DeleteOwnAccount confirm={confirm} />
+        </>
       ) : (
         <>
           <div className="flex flex-col gap-1 rounded-xl bg-muted p-4">
@@ -322,7 +436,7 @@ function RequestsView(): ReactElement {
   );
 }
 
-export function Privacy(): ReactElement {
+export function Privacy({ confirm }: { readonly confirm: Confirm }): ReactElement {
   return (
     <div data-testid="privacy" className="flex flex-col gap-6">
       <PageTitle>{t("privacy.title")}</PageTitle>
@@ -330,7 +444,7 @@ export function Privacy(): ReactElement {
       <CloudKeys />
       <DocumentsView />
       <HistoryView />
-      <DeletionView />
+      <DeletionView confirm={confirm} />
       <RequestsView />
     </div>
   );

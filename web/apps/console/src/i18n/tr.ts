@@ -458,6 +458,9 @@ export const tr: Record<Key, string> = {
   settingsDbsc: "Tarayıcı destekliyorsa her girişi cihazın anahtarına bağla (DBSC)",
   settingsDbscOn: "Girişlere cihaz anahtarı önerilir.",
   settingsDbscOff: "Girişlere cihaz anahtarı önerilmez.",
+  settingsSelfDeletion: "Kişiler kendi hesaplarını hesap sayfalarından silebilsin",
+  settingsSelfDeletionOn: "Kişiler kendi hesaplarını silebilir.",
+  settingsSelfDeletionOff: "Kişiler kendi hesaplarını silemez; hesabı bir yönetici siler.",
   settingsRelatedList: "İlişkili kökenler, her satıra bir tane (https://…)",
   settingsRelated: "İlişkili kökenler",
   settingsRelatedText:

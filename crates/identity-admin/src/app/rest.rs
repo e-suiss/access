@@ -1672,6 +1672,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "profile",
                     "attestation",
                     "registration",
+                    "self_deletion",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1704,6 +1705,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 },
                 // OP-153 m.22 (c), m.25 (b)
                 dbsc: match m.get("dbsc") {
+                    None => true,
+                    Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                // OP-159 m.50
+                self_deletion: match m.get("self_deletion") {
                     None => true,
                     Some(Json::Bool(b)) => *b,
                     Some(_) => return Err(Invalid::SigninPolicy),
@@ -2710,6 +2717,7 @@ pub fn default_signin() -> SigninPolicy {
         profile: AssuranceProfile::Standard,
         attestation: Attestation::None,
         registration: Registration::Open,
+        self_deletion: true,
     }
 }
 

@@ -16,7 +16,8 @@ import {
 
 /** An Exercise Access drafted for this person's device. */
 export interface Drafted {
-  readonly payload: string;
+  /** The meta payload; absent for a domain action such as `idp.account.delete`. */
+  readonly payload?: string;
   readonly intent: string;
   readonly basis: { readonly anchor: string };
   /** The PEP the statement names: the route commits as this one. */
@@ -27,7 +28,7 @@ export interface Drafted {
 export interface Signed {
   readonly nonce: string;
   readonly intent: string;
-  readonly payload: string;
+  readonly payload?: string;
   readonly basis: { readonly anchor: string };
   readonly ais: string;
 }
@@ -57,7 +58,7 @@ export async function signDraft(instance: Instance, confirm: Confirm, d: Drafted
   return {
     nonce: b64url(n),
     intent: d.intent,
-    payload: d.payload,
+    ...(d.payload === undefined ? {} : { payload: d.payload }),
     basis: d.basis,
     ais: await sign(instance.key, k, instance.kid, statement),
   };

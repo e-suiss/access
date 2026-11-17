@@ -88,3 +88,56 @@ test("the İYS state of each commercial channel is shown as Relay reported it", 
   await expect(page.getByTestId("iys-email")).toContainText("Access will try again.");
   await expect(page.getByTestId("iys-call")).toContainText("Being recorded with İYS");
 });
+
+// OP-159 m.50, TN-145: what deleting the account does is said before anything is signed
+test("deleting the account says its date, that it can be cancelled and what stays", async ({
+  page,
+  context,
+  baseURL,
+  bff,
+}) => {
+  await bff.signIn(context, baseURL ?? "");
+  await page.goto("/account/");
+  const deletion = page.getByTestId("deletion");
+  await deletion.getByRole("button", { name: "Delete my account" }).click();
+  const asked = deletion.getByRole("group", { name: "Before you delete your account" });
+  await expect(asked).toContainText("2026-11-18T12:00:00Z");
+  await expect(asked).toContainText("You can cancel here until then.");
+  await expect(asked).toContainText("every device is signed out");
+  await expect(asked).not.toContainText(/instantly|immediately/i);
+  await asked.getByRole("button", { name: "Keep my account" }).click();
+  await expect(asked).toHaveCount(0);
+  expect(bff.seen.filter((x) => x.path.endsWith("/deletion") && "ais" in x.body)).toEqual([]);
+});
+
+test("an environment that turned self-deletion off says so in its own words", async ({
+  page,
+  context,
+  baseURL,
+  bff,
+}) => {
+  bff.deletionDraft = "closed";
+  await bff.signIn(context, baseURL ?? "");
+  await page.goto("/account/");
+  const deletion = page.getByTestId("deletion");
+  await deletion.getByRole("button", { name: "Delete my account" }).click();
+  await expect(deletion.getByRole("alert")).toContainText(
+    "This app doesn't let you delete your account here.",
+  );
+});
+
+test("deleting the account after a stale sign-in confirms it's you first", async ({
+  page,
+  context,
+  baseURL,
+  bff,
+}) => {
+  bff.deletionDraft = "step-up";
+  await bff.signIn(context, baseURL ?? "");
+  await page.route("**/login?**", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>login</title>" }),
+  );
+  await page.goto("/account/");
+  await page.getByTestId("deletion").getByRole("button", { name: "Delete my account" }).click();
+  await page.waitForURL(/\/login\?reason=reauthenticate&return_to=%2Faccount/);
+});

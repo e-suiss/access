@@ -635,6 +635,8 @@ pub struct SigninPolicy {
     pub attestation: Attestation,
     /// Who may create an account without an invitation (OP-159 m.48 (c)); open by default.
     pub registration: Registration,
+    /// Whether a person may delete their own account (OP-159 m.50, TN-145); on by default.
+    pub self_deletion: bool,
 }
 
 impl SigninPolicy {
@@ -720,6 +722,10 @@ impl SigninPolicy {
                 Value::text("registration"),
                 Value::text(self.registration.name()),
             ));
+        }
+        // OP-159 m.50
+        if !self.self_deletion {
+            m.push((Value::text("self_deletion"), Value::Bool(false)));
         }
         Value::Map(m)
     }

@@ -76,6 +76,8 @@ pub struct EnvironmentSignin {
     /// Whether the environment's enabled social and enterprise providers sign anyone in; only a
     /// primary environment without a recorded policy turns them off (OP-159 m.48 (c)).
     pub social: bool,
+    /// Whether a person may delete their own account from the account page (OP-159 m.50, TN-145).
+    pub self_deletion: bool,
 }
 
 impl Default for EnvironmentSignin {
@@ -95,6 +97,7 @@ impl Default for EnvironmentSignin {
             attestation: AttestationPolicy::None,
             registration: Registration::Open,
             social: true,
+            self_deletion: true,
         }
     }
 }
@@ -201,9 +204,16 @@ impl EnvironmentSignin {
             Some(Value::Text(t)) => Registration::parse(t)?,
             Some(_) => return None,
         };
+        // OP-159 m.50
+        let self_deletion = match get("self_deletion") {
+            None => true,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
             registration,
+            self_deletion,
             social: true,
             methods,
             mfa_required,
@@ -278,6 +288,25 @@ mod tests {
             Limits::CEILING,
         )
         .unwrap_or_default()
+    }
+
+    // OP-159 m.50
+    #[test]
+    fn people_may_delete_their_own_account_unless_the_policy_says_no() {
+        assert!(EnvironmentSignin::default().self_deletion);
+        let base = stored(&["email"], false, &[], &[]);
+        assert!(EnvironmentSignin::decode(&base).unwrap().self_deletion);
+        let Ok(Value::Map(mut m)) = dcbor::decode(&base, Limits::CEILING) else {
+            panic!("a map");
+        };
+        m.push((Value::text("self_deletion"), Value::Bool(false)));
+        let off = dcbor::encode(&Value::Map(m.clone()), Limits::CEILING).unwrap();
+        assert!(!EnvironmentSignin::decode(&off).unwrap().self_deletion);
+        if let Some(last) = m.last_mut() {
+            last.1 = Value::text("no");
+        }
+        let bad = dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap();
+        assert_eq!(EnvironmentSignin::decode(&bad), None);
     }
 
     // TN-132, OP-151 m.11 (d)

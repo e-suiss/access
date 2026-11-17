@@ -482,13 +482,32 @@ test("the device key offer is turned off by a sign-in policy patch", async ({ pa
   await open(page, bff, "/console/acme/admin/sign-in");
   const panel = page.getByRole("region", { name: "Sign-in policy" });
   await expect(page.getByTestId("dbsc-state")).toHaveText("Sign-ins are offered a device key.");
-  await panel.getByRole("checkbox").uncheck();
+  await panel.getByRole("checkbox", { name: /device's key \(DBSC\)/ }).uncheck();
   await panel.getByRole("button").click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(panel.getByRole("status")).toContainText("Recorded");
   expect(bff.writes.map((w) => [w.method, w.path, w.body["dbsc"], w.ifMatch])).toEqual([
     ["PATCH", "envs/acme/settings/signin-policy", false, '"settings-1"'],
   ]);
+});
+
+// OP-159 m.50, TN-145: self-service deletion is on by default and turned off by the same patch
+test("people deleting their own account is turned off by a sign-in policy patch", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/acme/admin/sign-in");
+  const panel = page.getByRole("region", { name: "Sign-in policy" });
+  await expect(page.getByTestId("self-deletion-state")).toHaveText(
+    "People can delete their own account.",
+  );
+  await panel.getByRole("checkbox", { name: /delete their own account/ }).uncheck();
+  await panel.getByRole("button").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(panel.getByRole("status")).toContainText("Recorded");
+  expect(
+    bff.writes.map((w) => [w.method, w.path, w.body["self_deletion"], w.body["dbsc"]]),
+  ).toEqual([["PATCH", "envs/acme/settings/signin-policy", false, true]]);
 });
 
 // TN-18, OP-153 m.22 (k): the Related Origins are one list, one change

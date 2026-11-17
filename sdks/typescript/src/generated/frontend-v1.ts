@@ -340,9 +340,27 @@ export interface paths {
         /** Whether the account is scheduled for deletion, and when. */
         get: operations["getDeletion"];
         put?: never;
-        post?: never;
+        /** Schedules the person's own deletion from their device-signed idp.account.delete {nonce, intent, basis, ais}: the session authenticated with two factors in the last five minutes (`step-up-required` otherwise); the deletion takes effect after its cancellation window and the sessions stay until then (OP-159 m.50, TN-145). */
+        post: operations["requestDeletion"];
         /** Cancels a scheduled deletion inside its window. */
         delete: operations["cancelDeletion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/deletion/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's own idp.account.delete for their device to sign: its intent, the self-anchor basis, the PEP and the date it would take effect; `self-deletion-closed` where the environment turned self-service deletion off (OP-159 m.50). */
+        get: operations["getDeletionDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3195,7 +3213,53 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    requestDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     cancelDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDeletionDraft: {
         parameters: {
             query?: never;
             header?: never;

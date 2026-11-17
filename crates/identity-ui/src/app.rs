@@ -32,6 +32,7 @@ pub mod privacy;
 pub mod push;
 pub mod recovery;
 mod saml;
+pub mod self_deletion;
 pub mod shell;
 pub mod signup;
 pub mod social;

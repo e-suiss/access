@@ -31,7 +31,12 @@ import { UpstreamLink } from "./UpstreamLink.js";
 // OP-159 m.46 (f)
 const Settings = v.looseObject({
   rp_id: v.exactOptional(v.nullable(v.string())),
-  signin_policy: v.exactOptional(v.looseObject({ dbsc: v.exactOptional(v.boolean()) })),
+  signin_policy: v.exactOptional(
+    v.looseObject({
+      dbsc: v.exactOptional(v.boolean()),
+      self_deletion: v.exactOptional(v.boolean()),
+    }),
+  ),
   session_policy: v.exactOptional(v.unknown()),
   branding: v.exactOptional(
     v.looseObject({ display_name: v.exactOptional(v.nullable(v.string())) }),
@@ -217,15 +222,23 @@ function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement
   );
 }
 
-/** TN-33, OP-153 m.22 (c): whether a hosted sign-in is offered a device key. */
+/**
+ * TN-33, OP-153 m.22 (c): whether a hosted sign-in is offered a device key; OP-159 m.50: whether
+ * people may delete their own account (on by default).
+ */
 function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
   const managed = (s.managed ?? []).includes("signin_policy");
   const current = s.signin_policy?.dbsc !== false;
   const [dbsc, setDbsc] = useState(current);
+  const deletable = s.signin_policy?.self_deletion !== false;
+  const [selfDeletion, setSelfDeletion] = useState(deletable);
   const [w, write] = useRun<WriteResult>();
   return (
     <Panel id="signin-policy" title={t("settingsSignin")}>
       <p data-testid="dbsc-state">{current ? t("settingsDbscOn") : t("settingsDbscOff")}</p>
+      <p data-testid="self-deletion-state">
+        {deletable ? t("settingsSelfDeletionOn") : t("settingsSelfDeletionOff")}
+      </p>
       {managed ? (
         <p className={HINT}>{t("settingsGitops")}</p>
       ) : (
@@ -238,7 +251,7 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
                 operation: "patchSigninPolicy",
                 method: "PATCH",
                 path: "settings/signin-policy",
-                body: { dbsc },
+                body: { dbsc, self_deletion: selfDeletion },
                 ...(etag === undefined ? {} : { ifMatch: etag }),
               }),
             );
@@ -255,7 +268,22 @@ function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactEl
             />
             {t("settingsDbsc")}
           </label>
-          <Button type="submit" className="self-start" disabled={dbsc === current}>
+          <label className={CHOICE_LABEL}>
+            <input
+              className={CHOICE}
+              type="checkbox"
+              checked={selfDeletion}
+              onChange={(e) => {
+                setSelfDeletion(e.target.checked);
+              }}
+            />
+            {t("settingsSelfDeletion")}
+          </label>
+          <Button
+            type="submit"
+            className="self-start"
+            disabled={dbsc === current && selfDeletion === deletable}
+          >
             {t("settingsSave")}
           </Button>
         </form>

@@ -91,6 +91,11 @@ where
             .route(
                 &format!("{prefix}/v1/me/support-block"),
                 put(block::<D, K, KI, C, M, A>),
+            )
+            // OP-159 m.50
+            .route(
+                &format!("{prefix}/v1/account/deletion"),
+                post(delete_account::<D, K, KI, C, M, A>),
             );
         reads = reads
             .route(
@@ -108,6 +113,11 @@ where
             .route(
                 &format!("{prefix}/v1/me/support-access"),
                 get(access::<D, K, KI, C, M, A>),
+            )
+            // OP-159 m.50
+            .route(
+                &format!("{prefix}/v1/account/deletion/draft"),
+                get(deletion_draft::<D, K, KI, C, M, A>),
             );
     }
     let cache = Arc::new(idempotency::Cache::default());
@@ -275,6 +285,63 @@ where
         .login
         .hosted
         .give_support(&s.authority, &s.pep, &entry, &jar.browser(), request, &b)
+        .await;
+    send(reply, &headers).await
+}
+
+/// `GET /v1/account/deletion/draft` (OP-159 m.50).
+async fn deletion_draft<D, K, KI, C, M, A>(
+    State(s): St<D, K, KI, C, M, A>,
+    Path(p): Params,
+    peer: Option<Extension<Peer>>,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+    A: SupportAuthority,
+{
+    let entry = entry!(s, p, uri, headers, false);
+    let jar = Jar::of(&headers, peer);
+    let reply = s
+        .login
+        .hosted
+        .deletion_draft(&s.authority, &s.pep, &entry, &jar.browser())
+        .await;
+    send(reply, &headers).await
+}
+
+/// `POST /v1/account/deletion`: the person's signed `idp.account.delete` (OP-159 m.50).
+async fn delete_account<D, K, KI, C, M, A>(
+    State(s): St<D, K, KI, C, M, A>,
+    Path(p): Params,
+    peer: Option<Extension<Peer>>,
+    uri: Uri,
+    headers: HeaderMap,
+    bytes: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+    A: SupportAuthority,
+{
+    let entry = entry!(s, p, uri, headers, true);
+    let b: Signed = match body(&headers, &bytes, MAX_BODY) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    let jar = Jar::of(&headers, peer);
+    let reply = s
+        .login
+        .hosted
+        .request_self_deletion(&s.authority, &s.pep, &entry, &jar.browser(), &b)
         .await;
     send(reply, &headers).await
 }

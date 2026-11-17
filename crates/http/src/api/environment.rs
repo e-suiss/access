@@ -1717,6 +1717,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "email_keep_days",
     "attestation",
     "registration",
+    "self_deletion",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];

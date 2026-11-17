@@ -67,6 +67,8 @@ export class AccountMock {
   preferences: Record<string, boolean> = { "email:newsletter": false, "sms:campaign": false };
   /** OP-156 m.3 (c): the İYS state the preferences carry, when the environment records it. */
   iys: Record<string, { consent: string; status: string; at: string | null }> | null = null;
+  /** OP-159 m.50: how `GET /v1/account/deletion/draft` answers. */
+  deletionDraft: "ready" | "closed" | "step-up" = "ready";
   /** S11: the sign-in methods `GET /v1/account/methods` lists. */
   methods: S11Methods = {
     password: { set: true },
@@ -473,6 +475,15 @@ export class AccountMock {
         return reply(200, { days: 90, entries: [], last_sign_in: null });
       case "/deletion":
         return reply(200, { scheduled: false });
+      case "/deletion/draft":
+        if (this.deletionDraft === "closed") return reply(403, { code: "self-deletion-closed" });
+        if (this.deletionDraft === "step-up") return reply(401, { code: "step-up-required" });
+        return reply(200, {
+          intent: "AA",
+          basis: { anchor: "AA" },
+          pep: "access/identity",
+          deleted_on: "2026-11-18T12:00:00Z",
+        });
       case "/data-requests":
         return reply(200, { requests: [] });
       default:

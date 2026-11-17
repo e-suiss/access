@@ -87,7 +87,7 @@ where
         }
     }
 
-    fn db(&self, kit: &EnvironmentKit) -> PgAccounts {
+    pub(super) fn db(&self, kit: &EnvironmentKit) -> PgAccounts {
         PgAccounts::sealed(self.db.clone(), kit.vault())
     }
 

@@ -172,7 +172,7 @@ export function App(): ReactElement {
             <>
               <AccountSettings />
               <SignIns />
-              <Privacy />
+              <Privacy confirm={confirm} />
             </>
           ) : instance === undefined ? (
             <DeviceSetup session={session} confirm={confirm} onReady={setInstance} />

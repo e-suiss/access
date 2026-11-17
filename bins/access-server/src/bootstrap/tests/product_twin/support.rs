@@ -1022,7 +1022,7 @@ mod front {
     }
 
     impl Front {
-        async fn tx(&self, d: &Desk) -> TenantTx {
+        pub(super) async fn tx(&self, d: &Desk) -> TenantTx {
             TenantTx::begin(&d.s.w.db.app, self.tenant, self.environment)
                 .await
                 .unwrap()
@@ -1030,6 +1030,22 @@ mod front {
 
         /// An active account of the environment bound to a new Party of its own, with a fresh session.
         pub(super) async fn person(&self, d: &Desk, address: &str, name: Option<&str>) -> Person {
+            self.person_with(d, address, name, false).await
+        }
+
+        /// A person whose session authenticated with a password and an authenticator app just
+        /// now (AAL2).
+        pub(super) async fn strong_person(&self, d: &Desk, address: &str) -> Person {
+            self.person_with(d, address, None, true).await
+        }
+
+        async fn person_with(
+            &self,
+            d: &Desk,
+            address: &str,
+            name: Option<&str>,
+            two_factors: bool,
+        ) -> Person {
             let actor = d.s.actor().await;
             let ids = crate::ids::CellIds::new(d.s.w.keys.clone()).key().unwrap();
             let v = crate::login::EnvironmentKeks::new(d.s.w.keys.clone())
@@ -1070,9 +1086,14 @@ mod front {
                 idle_ms: 3_600_000,
                 expires_ms: i64::try_from(at + 3_600_000).unwrap(),
                 assurance: &serde_json::to_vec(
-                    &access_identity_session::domain::assurance::vector(&[
-                        access_identity_session::domain::assurance::Factor::password(at),
-                    ]),
+                    &access_identity_session::domain::assurance::vector(&if two_factors {
+                        vec![
+                            access_identity_session::domain::assurance::Factor::password(at),
+                            access_identity_session::domain::assurance::Factor::totp([9; 16], at),
+                        ]
+                    } else {
+                        vec![access_identity_session::domain::assurance::Factor::password(at)]
+                    }),
                 )
                 .unwrap(),
             })
@@ -2211,4 +2232,106 @@ async fn a_large_artifact_streams_in_under_the_environment_limit_and_no_session_
         .unwrap();
     let r = app.oneshot(req).await.unwrap();
     assert_eq!(r.status().as_u16(), 413);
+}
+
+// OP-159 m.50, TN-145, OP-153 m.3 (bb)
+#[tokio::test]
+async fn a_person_deletes_their_own_account_with_their_devices_signature() {
+    use access_identity_admin::domain::Change;
+    use access_identity_ui::app::self_deletion::deletion_intent;
+    use axum::http::Method;
+    let d = Desk::open("self-deletion").await;
+    let f = front::front(&d).await;
+    let ayse = f.strong_person(&d, "ayse@access.test").await;
+    let weak = f.person(&d, "mehmet@access.test", None).await;
+
+    let (s, draft) = f
+        .send(Method::GET, "/v1/account/deletion/draft", &ayse, None, &[])
+        .await;
+    assert_eq!(s, 200, "{draft}");
+    assert_eq!(
+        draft["basis"]["anchor"],
+        b64url_encode(&ayse.actor.anchor.0)
+    );
+    assert!(draft["deleted_on"].is_string());
+
+    let now = now_ms();
+    let window = Window {
+        from: now.saturating_sub(60_000),
+        until: now + 600_000,
+    };
+    let own = |who: &front::Person, of: &front::Person| {
+        front::signed(
+            &d,
+            &who.actor,
+            (&deletion_intent(&of.actor.party.0, window), None),
+            ExerciseBasis::Anchor(who.actor.anchor),
+            Capacity::Own,
+        )
+    };
+
+    // OP-159 m.50 (c)
+    let (s, refused) = f
+        .send(
+            Method::POST,
+            "/v1/account/deletion",
+            &weak,
+            Some(own(&weak, &weak)),
+            &[],
+        )
+        .await;
+    assert_eq!(
+        (s, refused["code"].as_str()),
+        (401, Some("step-up-required"))
+    );
+
+    // OP-159 m.50 (b)
+    let (s, other) = f
+        .send(
+            Method::POST,
+            "/v1/account/deletion",
+            &ayse,
+            Some(own(&ayse, &weak)),
+            &[],
+        )
+        .await;
+    assert_eq!((s, other["code"].as_str()), (400, Some("invalid-request")));
+
+    let (s, done) = f
+        .send(
+            Method::POST,
+            "/v1/account/deletion",
+            &ayse,
+            Some(own(&ayse, &ayse)),
+            &[],
+        )
+        .await;
+    assert_eq!(s, 201, "{done}");
+    assert_eq!(done["scheduled"], true);
+    assert_eq!(done["cancellable"], true);
+    let statement = done["statement"].as_str().unwrap().to_lowercase();
+    assert!(!statement.contains("instantly"), "{statement}");
+    let mut t = f.tx(&d).await;
+    let rows = t.deletions(ayse.subject).await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source, "self_service");
+    assert!(rows[0].effective_ms > i64::try_from(now).unwrap() + 3_600_000);
+
+    // OP-159 m.50 (a)
+    f.change(
+        &d,
+        Change::SigninPolicy(access_identity_admin::domain::environment::SigninPolicy {
+            self_deletion: false,
+            ..access_identity_admin::app::rest::default_signin()
+        }),
+    )
+    .await;
+    let (s, closed) = f
+        .send(Method::GET, "/v1/account/deletion/draft", &weak, None, &[])
+        .await;
+    assert_eq!(
+        (s, closed["code"].as_str()),
+        (403, Some("self-deletion-closed"))
+    );
 }

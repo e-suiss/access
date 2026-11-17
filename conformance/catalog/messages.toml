@@ -5257,3 +5257,73 @@ surface = "login"
 class = "label"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "action-delete_account"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-delete_account_confirm"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-keep_account"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_confirm_title"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_on"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_cancel_until"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_sign_ins"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_kept"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_closed"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-delete_needs_device"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
