@@ -412,6 +412,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         let ttl_ms = u64::try_from(FOUNDING_TTL_S)
             .unwrap_or(0)
             .saturating_mul(1000);
+        let (token, code) = (mail.secrets.token.expose(), mail.secrets.code.expose());
         let message = Message {
             subject: inviter,
             to: Address::Email(String::from(mail.email)),
@@ -419,10 +420,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             valid_since_ms: Some(at),
             body: Body::Invitation {
                 link: access_crypto::Secret::new(format!(
-                    "{}/login/founding/{}#code={}",
-                    issuer.as_str().trim_end_matches('/'),
-                    mail.secrets.token.expose(),
-                    mail.secrets.code.expose()
+                    "{}/login/founding/{token}#code={code}",
+                    issuer.as_str().trim_end_matches('/')
                 )),
                 organization: name,
                 inviter: String::from("Platform"),

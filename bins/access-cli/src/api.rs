@@ -247,12 +247,17 @@ pub(crate) const DECLARED_RESERVED: [&str; 0] = [];
 /// Writes `access admin` refuses: a bulk job is a set of Exercises the command line already
 /// makes one at a time (TN-125, X20); `apply` sends one write per change. An offboarding commit
 /// is such a set too, and a review keep records an identity audit row, no `idp.*` action
-/// (OP-157 m.3 (v), (w)).
-pub(crate) const UNSUPPORTED: [&str; 4] = [
+/// (OP-157 m.3 (v), (w)). The tenant administration writes are `idp.tenant.*` actions of a
+/// management environment, signed in the console by its administrators (OP-159 m.47 (d)–(f)).
+pub(crate) const UNSUPPORTED: [&str; 8] = [
     "createJob",
     "revokeAllAgentInstances",
     "commitOffboarding",
     "keepReviewItem",
+    "createTenantEnvironment",
+    "inviteTenantAdmin",
+    "addTenantOwner",
+    "removeTenantAdmin",
 ];
 
 /// The `idp.*` action a write operation compiles to; `None` for an operation the command line
