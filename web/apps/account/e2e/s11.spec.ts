@@ -191,3 +191,44 @@ test("a pending name is checked again and then shown", async ({ page }) => {
   await names.getByRole("button", { name: "Remove: ada.example.org" }).click();
   await expect(names.getByTestId("handle-row")).toHaveCount(0);
 });
+
+// TN-147, OP-159 m.52
+test("a first passkey waits for the code sent to the account's address", async ({ page, bff }) => {
+  bff.proofNeeded = true;
+  await stubPasskeys(page);
+  await page.goto("/account/");
+  const passkeys = page.getByTestId("passkeys");
+  await passkeys.getByRole("button", { name: "Create a passkey" }).click();
+  const proof = passkeys.getByTestId("method-proof");
+  await expect(proof).toContainText("We sent a code to the email address or phone number");
+  const code = proof.getByLabel("Code we sent you");
+  await expect(code).toBeFocused();
+  await code.fill("11111111");
+  await proof.getByRole("button", { name: "Verify" }).click();
+  await expect(alerted(page)).toHaveText(
+    "That code isn't right. Check the newest message and try again.",
+  );
+  expect(bff.seen.some((s) => s.path.endsWith("/passkeys/reg_1"))).toBe(false);
+  await code.fill("2468 1357");
+  await proof.getByRole("button", { name: "Verify" }).click();
+  await expect(said(page)).toHaveText("Added.");
+  await expect(passkeys.getByTestId("passkey-row")).toHaveCount(2);
+  await expect(proof).toHaveCount(0);
+  expect(bff.seen.findLast((s) => s.path.endsWith("/method-proof/reg_1"))?.body["code"]).toBe(
+    "24681357",
+  );
+});
+
+test("an authenticator app shows its key only after the address code", async ({ page, bff }) => {
+  bff.proofNeeded = true;
+  await page.goto("/account/");
+  const app = page.getByTestId("authenticator");
+  await app.getByRole("button", { name: "Set up an authenticator app" }).click();
+  await expect(app.getByTestId("totp-secret")).toHaveCount(0);
+  await app.getByLabel("Code we sent you").fill("24681357");
+  await app.getByRole("button", { name: "Verify" }).click();
+  await expect(app.getByTestId("totp-secret")).toHaveText("JBSWY3DPEHPK3PXP");
+  await app.getByLabel("Code from your authenticator app").fill("123456");
+  await app.getByRole("button", { name: "Verify" }).click();
+  await expect(app.getByTestId("totp-row")).toHaveCount(1);
+});

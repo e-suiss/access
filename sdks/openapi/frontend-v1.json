@@ -300,7 +300,7 @@
     "/v1/account/totp": {
       "post": {
         "operationId": "beginTotp",
-        "summary": "Starts adding an authenticator app.",
+        "summary": "Starts adding an authenticator app after a sign-in in the last five minutes, at two factors when the account already has a passkey or authenticator app (`step-up-required` otherwise); `proof: true` when a code went to the account's address and must be given at `proveMethodChange` first (TN-147).",
         "responses": {
           "200": {
             "description": "OK",
@@ -370,7 +370,7 @@
     "/v1/account/recovery-codes": {
       "post": {
         "operationId": "regenerateRecoveryCodes",
-        "summary": "Makes new recovery codes, shown once.",
+        "summary": "Makes new recovery codes, shown once, after a two-factor sign-in in the last five minutes (`step-up-required` otherwise, TN-147).",
         "responses": {
           "200": {
             "description": "OK",
@@ -460,7 +460,7 @@
     "/v1/account/passkeys": {
       "post": {
         "operationId": "beginPasskey",
-        "summary": "Starts adding a passkey.",
+        "summary": "Starts adding a passkey under the same rule as `beginTotp`; `proof: true` when a code went to the account's address (TN-147).",
         "responses": {
           "200": {
             "description": "OK",
@@ -490,7 +490,7 @@
     "/v1/account/passkeys/{registration}": {
       "post": {
         "operationId": "finishPasskey",
-        "summary": "Finishes adding a passkey.",
+        "summary": "Finishes adding a passkey; `proof-required` while the code from the account's address is not given.",
         "responses": {
           "200": {
             "description": "OK",
@@ -509,6 +509,46 @@
         "parameters": [
           {
             "name": "registration",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/method-proof/{flow}": {
+      "post": {
+        "operationId": "proveMethodChange",
+        "summary": "The code sent to the account's address for a passkey registration or authenticator app enrolment that waits for one (TN-147).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "flow",
             "in": "path",
             "required": true,
             "schema": {

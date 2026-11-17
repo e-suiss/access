@@ -387,8 +387,22 @@ pub(super) async fn account(c: &Console, email: &str, password: bool) -> [u8; 16
 
 /// A live session of `subject`, as a sign-in leaves it; its cookie value.
 pub(super) async fn session(c: &Console, subject: [u8; 16]) -> String {
+    session_of(c, subject, false).await
+}
+
+/// A live session of `subject` signed in with the password and a second factor (TN-147).
+pub(super) async fn strong_session(c: &Console, subject: [u8; 16]) -> String {
+    session_of(c, subject, true).await
+}
+
+async fn session_of(c: &Console, subject: [u8; 16], strong: bool) -> String {
+    use access_identity_session::domain::assurance::Factor;
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
+    let mut factors = vec![Factor::password(at)];
+    if strong {
+        factors.push(Factor::totp([7; 16], at));
+    }
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
         .await
         .unwrap();
@@ -407,9 +421,9 @@ pub(super) async fn session(c: &Console, subject: [u8; 16]) -> String {
         auth_time_ms: i64::try_from(at).unwrap(),
         idle_ms: 3_600_000,
         expires_ms: i64::try_from(at + 3_600_000).unwrap(),
-        assurance: &serde_json::to_vec(&access_identity_session::domain::assurance::vector(&[
-            access_identity_session::domain::assurance::Factor::password(at),
-        ]))
+        assurance: &serde_json::to_vec(&access_identity_session::domain::assurance::vector(
+            &factors,
+        ))
         .unwrap(),
     })
     .await

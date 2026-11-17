@@ -589,6 +589,15 @@ handler! {
 }
 
 handler! {
+    /// `POST /v1/account/method-proof/{flow}` (TN-147).
+    prove_method_change(s, entry, b, p, bytes, headers) true {
+        let req: CodeBody = body(&bytes)?;
+        let code = bounded(&req.code, 16)?;
+        Ok(s.hosted.prove_method_change(&entry, &b, param(&p, "flow"), code).await)
+    }
+}
+
+handler! {
     /// `POST /v1/account/recovery-codes`.
     recovery_codes(s, entry, b, p, bytes, headers) true {
         let _ = (&p, &bytes);

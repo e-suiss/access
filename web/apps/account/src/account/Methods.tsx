@@ -33,13 +33,84 @@ export const Methods = v.object({
 });
 export type Methods = v.InferOutput<typeof Methods>;
 
-const Enrollment = v.object({ enrollment: v.string(), secret: v.string(), uri: v.string() });
+const Enrollment = v.object({
+  enrollment: v.string(),
+  secret: v.string(),
+  uri: v.string(),
+  proof: v.optional(v.boolean(), false),
+});
 type Enrollment = v.InferOutput<typeof Enrollment>;
 
 const Registration = v.object({
   registration: v.string(),
   options: v.record(v.string(), v.unknown()),
+  proof: v.optional(v.boolean(), false),
 });
+type Registration = v.InferOutput<typeof Registration>;
+
+// TN-147
+const PROOF_CODES = {
+  "code-not-accepted": "methods.proof_failed",
+  "proof-unavailable": "methods.proof_unavailable",
+} as const;
+
+async function prove(flow: string, code: string): Promise<void> {
+  await json(
+    frontend(`/v1/account/method-proof/${encodeURIComponent(flow)}`, {
+      method: "POST",
+      body: { code },
+    }),
+  );
+}
+
+/** TN-147: the code sent to the account's address before a first strong method is added. */
+function Proof(props: {
+  readonly id: string;
+  readonly busy: boolean;
+  readonly onCode: (code: string) => void;
+  readonly onCancel: () => void;
+}): ReactElement {
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    field.current?.focus();
+  }, []);
+  const submit = (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const code = v.safeParse(Code, new FormData(e.currentTarget).get("code"));
+    if (code.success && code.output !== "") props.onCode(code.output);
+  };
+  return (
+    <form
+      onSubmit={submit}
+      className="flex flex-col gap-3 rounded-xl border p-4"
+      data-testid="method-proof"
+    >
+      <p className="text-sm">{t("methods.proof_sent")}</p>
+      <Field>
+        <FieldLabel htmlFor={props.id}>{t("label.proof_code")}</FieldLabel>
+        <Input
+          id={props.id}
+          ref={field}
+          size="md"
+          name="code"
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          maxLength={16}
+          spellCheck={false}
+          required
+        />
+      </Field>
+      <Actions>
+        <Button type="submit" disabled={props.busy}>
+          {t("action.verify")}
+        </Button>
+        <Button variant="outline" onClick={props.onCancel}>
+          {t("action.cancel")}
+        </Button>
+      </Actions>
+    </form>
+  );
+}
 
 const Codes = v.object({ recovery_codes: v.array(v.string()) });
 const Enrolled = v.object({ recovery_codes: v.optional(v.array(v.string())) });
@@ -75,42 +146,63 @@ function Passkeys(props: {
   readonly remove: (id: string) => void;
 }): ReactElement {
   const [name, setName] = useState("");
+  const [waiting, setWaiting] = useState<Registration | null>(null);
+  const finish = async (reg: Registration): Promise<boolean> => {
+    let credential: unknown;
+    try {
+      credential = await createPasskey(reg.options);
+    } catch {
+      return false;
+    }
+    await json(
+      frontend(`/v1/account/passkeys/${encodeURIComponent(reg.registration)}`, {
+        method: "POST",
+        body: { credential },
+      }),
+    );
+    return true;
+  };
+  const done = (created: boolean | null) => {
+    if (created === null) return;
+    setWaiting(null);
+    if (!created) {
+      props.say(t("methods.passkey_failed"), true);
+      return;
+    }
+    setName("");
+    props.say(t("methods.added"));
+    props.reload();
+  };
+  const refused = (err: unknown) => {
+    // OP-159 m.3 (ll), TN-147
+    props.fail(err, {
+      "attestation-format": t("passkey.attestation_refused"),
+      "attestation-revocation-unknown": t("passkey.attestation_unknown"),
+      ...PROOF_CODES,
+    });
+  };
   const create = useMutation({
-    mutationFn: async (label: string): Promise<boolean> => {
+    mutationFn: async (label: string): Promise<boolean | null> => {
       const reg = await json(
         frontend("/v1/account/passkeys", { method: "POST", body: { name: label } }),
         Registration,
       );
-      let credential: unknown;
-      try {
-        credential = await createPasskey(reg.options);
-      } catch {
-        return false;
+      if (reg.proof) {
+        setWaiting(reg);
+        return null;
       }
-      await json(
-        frontend(`/v1/account/passkeys/${encodeURIComponent(reg.registration)}`, {
-          method: "POST",
-          body: { credential },
-        }),
-      );
-      return true;
+      return finish(reg);
     },
-    onSuccess: (created) => {
-      if (!created) {
-        props.say(t("methods.passkey_failed"), true);
-        return;
-      }
-      setName("");
-      props.say(t("methods.added"));
-      props.reload();
+    onSuccess: done,
+    onError: refused,
+  });
+  const proved = useMutation({
+    mutationFn: async ({ reg, code }: { readonly reg: Registration; readonly code: string }) => {
+      await prove(reg.registration, code);
+      return finish(reg);
     },
-    onError: (err) => {
-      // OP-159 m.3 (ll)
-      props.fail(err, {
-        "attestation-format": t("passkey.attestation_refused"),
-        "attestation-revocation-unknown": t("passkey.attestation_unknown"),
-      });
-    },
+    onSuccess: done,
+    onError: refused,
   });
   const add = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -150,6 +242,18 @@ function Passkeys(props: {
             </RowItem>
           ))}
         </Rows>
+      )}
+      {waiting !== null && (
+        <Proof
+          id="passkey-proof"
+          busy={proved.isPending}
+          onCode={(code) => {
+            proved.mutate({ reg: waiting, code });
+          }}
+          onCancel={() => {
+            setWaiting(null);
+          }}
+        />
       )}
       <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <Field className="flex-1">
@@ -261,8 +365,20 @@ function Authenticator(props: {
   const [pending, setPending] = useState<Enrollment | null>(null);
   const code = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (pending !== null) code.current?.focus();
+    if (pending !== null && !pending.proof) code.current?.focus();
   }, [pending]);
+  const proved = useMutation({
+    mutationFn: async ({ e, code }: { readonly e: Enrollment; readonly code: string }) => {
+      await prove(e.enrollment, code);
+      return e;
+    },
+    onSuccess: (e) => {
+      setPending({ ...e, proof: false });
+    },
+    onError: (err) => {
+      props.fail(err, PROOF_CODES);
+    },
+  });
   const start = useMutation({
     mutationFn: () =>
       json(
@@ -273,7 +389,7 @@ function Authenticator(props: {
       setPending(e);
     },
     onError: (err) => {
-      props.fail(err);
+      props.fail(err, PROOF_CODES);
     },
   });
   const verify = useMutation({
@@ -297,6 +413,7 @@ function Authenticator(props: {
         "totp-invalid": "methods.code_failed",
         "second-factor-failed": "methods.code_failed",
         "invalid-code": "methods.code_failed",
+        "code-not-accepted": "methods.code_failed",
       });
     },
   });
@@ -344,6 +461,17 @@ function Authenticator(props: {
             {t("action.add_authenticator")}
           </Button>
         </Actions>
+      ) : pending.proof ? (
+        <Proof
+          id="totp-proof"
+          busy={proved.isPending}
+          onCode={(code) => {
+            proved.mutate({ e: pending, code });
+          }}
+          onCancel={() => {
+            setPending(null);
+          }}
+        />
       ) : (
         <form
           onSubmit={confirm}

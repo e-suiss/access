@@ -18,7 +18,6 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use super::signup::STEP_UP_MAX_AGE_MS;
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, failed, issuer_path, signin};
 use crate::domain::branding::Theme;
 use crate::ports::{EnvironmentKit, Kits, Messages};
@@ -531,9 +530,19 @@ where
         b: &Browser<'_>,
         fresh: bool,
     ) -> Result<[u8; 16], Reply> {
-        self.fresh(kit, b, fresh.then_some(STEP_UP_MAX_AGE_MS))
-            .await
-            .map(|(s, _)| s)
+        if !fresh {
+            return self.fresh(kit, b, None).await.map(|(s, _)| s);
+        }
+        // TN-147
+        signin!(self, kit, auth);
+        let Some(cookie) = b.session else {
+            return Err(Reply::problem(SESSION_REQUIRED));
+        };
+        match auth.change_subject(cookie).await {
+            Ok(Ok(s)) => Ok(s),
+            Ok(Err(gate)) => Err(super::account::gated(&gate)),
+            Err(e) => Err(failed(&e)),
+        }
     }
 
     /// `GET /v1/account/methods` (S11, TN-99, OP-148).

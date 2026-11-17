@@ -143,6 +143,7 @@ async fn enrol(b: &mut Web, key: Key, attestation: Attestation, credential: u8) 
         .post("/v1/account/passkeys", Some(json!({ "name": "key" })))
         .await;
     assert_eq!(reg.status, StatusCode::CREATED);
+    b.proved(&reg, "registration").await;
     let r = reg.json();
     let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
     let mut a = Authenticator::new(key);
@@ -223,8 +224,8 @@ async fn direct_attestation_is_verified_with_fetched_crls_at_registration() {
     )
     .await;
     e.account("ann@example.com").await;
-    let mut b = e.browser("b");
-    assert_eq!(b.sign_in("ann@example.com").await.step(), "complete");
+    // TN-147
+    let (mut b, _) = e.strong("ann@example.com", "b").await;
 
     let ok = enrol(&mut b, Key::es256(), packed(&good, MODEL, Flaw::None), 0xa1).await;
     assert_eq!(
@@ -354,8 +355,8 @@ async fn the_none_policy_reads_no_attestation() {
 async fn hl_19_an_ml_dsa_passkey_is_refused() {
     let e = env(73, "lg-pq", AuthPolicy::DEFAULT).await;
     e.account("cem@example.com").await;
-    let mut b = e.browser("b");
-    assert_eq!(b.sign_in("cem@example.com").await.step(), "complete");
+    // TN-147
+    let (mut b, _) = e.strong("cem@example.com", "b").await;
     for alg in access_identity_webauthn::domain::cose::ML_DSA {
         let refused = enrol(&mut b, Key::p256(alg), Attestation::None, 0xc1).await;
         assert_eq!(refused.status, StatusCode::BAD_REQUEST, "{alg}");

@@ -257,7 +257,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/account/totp",
         "beginTotp",
-        "Starts adding an authenticator app.",
+        "Starts adding an authenticator app after a sign-in in the last five minutes, at two factors when the account already has a passkey or authenticator app (`step-up-required` otherwise); `proof: true` when a code went to the account's address and must be given at `proveMethodChange` first (TN-147).",
     ),
     served(
         Verb::Post,
@@ -269,7 +269,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/account/recovery-codes",
         "regenerateRecoveryCodes",
-        "Makes new recovery codes, shown once.",
+        "Makes new recovery codes, shown once, after a two-factor sign-in in the last five minutes (`step-up-required` otherwise, TN-147).",
     ),
     live(
         Owner::N1,
@@ -289,13 +289,19 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/account/passkeys",
         "beginPasskey",
-        "Starts adding a passkey.",
+        "Starts adding a passkey under the same rule as `beginTotp`; `proof: true` when a code went to the account's address (TN-147).",
     ),
     served(
         Verb::Post,
         "/v1/account/passkeys/{registration}",
         "finishPasskey",
-        "Finishes adding a passkey.",
+        "Finishes adding a passkey; `proof-required` while the code from the account's address is not given.",
+    ),
+    served(
+        Verb::Post,
+        "/v1/account/method-proof/{flow}",
+        "proveMethodChange",
+        "The code sent to the account's address for a passkey registration or authenticator app enrolment that waits for one (TN-147).",
     ),
     served(
         Verb::Get,

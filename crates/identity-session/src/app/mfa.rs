@@ -23,6 +23,7 @@ use access_store::accounts::{NewCredential, Revoke, SealedSecret, SubjectRow};
 use access_store::sessions::NewFlow;
 use serde_json::Value;
 
+use super::change_gate::{Gate, PROOF_REQUIRED};
 use super::sessions::SessionStatus;
 use super::{
     Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, RECOVERY_CODE, Resume, STEP_NOT_ALLOWED, Step,
@@ -55,6 +56,8 @@ pub struct TotpEnrollment {
     pub secret: Secret<String>,
     /// The `otpauth://` URI, for the QR code.
     pub uri: Secret<String>,
+    /// A code went to the account's address and must be given first (TN-147).
+    pub proof: bool,
 }
 
 /// A confirmed TOTP enrollment.
@@ -101,6 +104,8 @@ pub struct PasskeyRegistration {
     pub handle: String,
     /// `PublicKeyCredentialCreationOptionsJSON`.
     pub options: Value,
+    /// A code went to the account's address and must be given first (TN-147).
+    pub proof: bool,
 }
 
 impl<D, C, R, N, P, S> Auth<'_, D, C, R, N, P, S>
@@ -119,12 +124,29 @@ where
         cookie: &str,
         now: u64,
     ) -> Result<String, SessionError> {
+        self.proved_flow(tx, state, cookie, (now, None)).await
+    }
+
+    /// [`Self::session_flow`] that waits for `proof`, a code at the account's address, when
+    /// one is given (TN-147).
+    pub(crate) async fn proved_flow(
+        &self,
+        tx: &mut D::Tx,
+        state: &FlowState,
+        cookie: &str,
+        (now, proof): (u64, Option<&str>),
+    ) -> Result<String, SessionError> {
         let handle = self.random32()?;
         let device = super::decode32(cookie).ok_or(SessionError::Invalid)?;
+        let flow_hash = handle_digest(&handle);
+        let mut state = state.clone();
+        if let Some(code) = proof {
+            state.pending = Some(Self::proof_pending(&flow_hash, code, now));
+        }
         let encoded = state.encode().map_err(|_| SessionError::Corrupt)?;
         tx.insert_flow(&NewFlow {
             day: partition(now)?,
-            flow_hash: &handle_digest(&handle),
+            flow_hash: &flow_hash,
             device_hash: &device_digest(&device),
             resume_hash: None,
             expires_ms: i64_of(state.expires_ms)?,
@@ -253,14 +275,14 @@ where
         cookie: &str,
         issuer: &str,
         account_label: &str,
-    ) -> Result<Result<TotpEnrollment, SessionStatus>, SessionError> {
+    ) -> Result<Result<TotpEnrollment, Gate>, SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
-        let session = match self.live_session(&mut tx, cookie, now).await? {
+        let (session, proof) = match self.gated(&mut tx, cookie, now, false).await? {
             Ok(s) => s,
-            Err(status) => {
+            Err(g) => {
                 tx.commit().await?;
-                return Ok(Err(status));
+                return Ok(Err(g));
             }
         };
         let subject = session.subject;
@@ -278,7 +300,18 @@ where
             nonce: sealed.nonce,
             ciphertext: sealed.ciphertext,
         });
-        let handle = self.session_flow(&mut tx, &state, cookie, now).await?;
+        let handle = self
+            .proved_flow(
+                &mut tx,
+                &state,
+                cookie,
+                (now, proof.as_ref().map(|p| p.0.as_str())),
+            )
+            .await?;
+        let proved = proof.is_some();
+        if let Some(p) = proof {
+            self.send_proof(&mut tx, subject, p, now).await?;
+        }
         tx.commit().await?;
         let params = access_crypto::totp::TotpParams::DEFAULT;
         Ok(Ok(TotpEnrollment {
@@ -291,6 +324,7 @@ where
                 params.algorithm.uri_name(),
                 params.digits,
             )),
+            proof: proved,
         }))
     }
 
@@ -327,6 +361,10 @@ where
             })
         {
             return Ok(Err(refuse(STEP_NOT_ALLOWED)));
+        }
+        // TN-147
+        if l.state.pending.is_some() {
+            return Ok(Err(refuse(PROOF_REQUIRED)));
         }
         let subject = session.subject;
         let Some(blob) = l.state.sealed.clone() else {
@@ -540,14 +578,14 @@ where
         &self,
         cookie: &str,
         correlation: &str,
-    ) -> Result<Result<Vec<Secret<String>>, SessionStatus>, SessionError> {
+    ) -> Result<Result<Vec<Secret<String>>, Gate>, SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
-        let session = match self.live_session(&mut tx, cookie, now).await? {
-            Ok(s) => s,
-            Err(status) => {
+        let session = match self.gated(&mut tx, cookie, now, true).await? {
+            Ok((s, _)) => s,
+            Err(g) => {
                 tx.commit().await?;
-                return Ok(Err(status));
+                return Ok(Err(g));
             }
         };
         let subject = session.subject;
@@ -666,14 +704,14 @@ where
         cookie: &str,
         name: &str,
         display_name: &str,
-    ) -> Result<Result<PasskeyRegistration, SessionStatus>, SessionError> {
+    ) -> Result<Result<PasskeyRegistration, Gate>, SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
-        let session = match self.live_session(&mut tx, cookie, now).await? {
+        let (session, proof) = match self.gated(&mut tx, cookie, now, false).await? {
             Ok(s) => s,
-            Err(status) => {
+            Err(g) => {
                 tx.commit().await?;
-                return Ok(Err(status));
+                return Ok(Err(g));
             }
         };
         let subject = session.subject;
@@ -693,11 +731,23 @@ where
             expires_at_s: start.state.expires_at,
             prf_salt: start.state.prf_salt.map(|s| s.0),
         });
-        let flow = self.session_flow(&mut tx, &state, cookie, now).await?;
+        let flow = self
+            .proved_flow(
+                &mut tx,
+                &state,
+                cookie,
+                (now, proof.as_ref().map(|p| p.0.as_str())),
+            )
+            .await?;
+        let proved = proof.is_some();
+        if let Some(p) = proof {
+            self.send_proof(&mut tx, subject, p, now).await?;
+        }
         tx.commit().await?;
         Ok(Ok(PasskeyRegistration {
             handle: flow,
             options: start.options,
+            proof: proved,
         }))
     }
 
@@ -726,6 +776,10 @@ where
             Ok(l) => l,
             Err(e) => return Ok(Err(gone(e))),
         };
+        // TN-147
+        if l.state.pending.is_some() {
+            return Ok(Err(refuse(PROOF_REQUIRED)));
+        }
         let Some(reg) = l.state.registration.take().filter(|_| {
             l.state.purpose
                 == Purpose::RegisterPasskey {

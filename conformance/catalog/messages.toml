@@ -2138,6 +2138,34 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "methods-proof_sent"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-proof_failed"
+surface = "account"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-proof_unavailable"
+surface = "account"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-proof_code"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "action-copy_key"
 surface = "account"
 class = "action"

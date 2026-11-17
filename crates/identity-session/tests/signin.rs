@@ -399,6 +399,7 @@ async fn enable_totp(e: &Env, cookie: &str) -> (Vec<u8>, Vec<String>) {
         .await
         .unwrap()
         .unwrap();
+    prove(e, cookie, &enrollment.handle, enrollment.proof).await;
     let seed = base32_decode(enrollment.secret.expose());
     assert!(
         enrollment
@@ -420,6 +421,18 @@ async fn enable_totp(e: &Env, cookie: &str) -> (Vec<u8>, Vec<String>) {
         .map(|c| c.expose().clone())
         .collect();
     (seed, codes)
+}
+
+/// TN-147: the code sent to the account's address, when the change waits for one.
+async fn prove(e: &Env, cookie: &str, handle: &str, proof: bool) {
+    if !proof {
+        return;
+    }
+    let (_, code) = e.outbox.last().unwrap();
+    e.with(async |a| a.prove_change(cookie, handle, &code, "req").await)
+        .await
+        .unwrap()
+        .unwrap_or_else(|s| panic!("{s:?}"));
 }
 
 fn ref_of(flow: &(String, String)) -> FlowRef<'_> {
@@ -926,6 +939,7 @@ async fn register_passkey(e: &Env, cookie: &str, auth: &mut Authenticator) -> Ve
         .await
         .unwrap()
         .unwrap();
+    prove(e, cookie, &reg.handle, reg.proof).await;
     let challenge = b64url_decode(reg.options["challenge"].as_str().unwrap()).unwrap();
     let (cdj, att) = auth.register(RP_ID, ORIGIN, &challenge);
     let id = auth.credential_id.clone();
@@ -1392,7 +1406,21 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     let mut other = Authenticator::new(Key::es256());
     other.aaguid = [0x22; 16];
     other.credential_id = vec![0xc2; 32];
-    register_passkey(&e, &cookie, &mut other).await;
+    // TN-147
+    let strong = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    let fs = (strong.handle.clone(), strong.device.clone());
+    let (strong, _) =
+        signed_in(assert_passkey(&e, &fs, &strong.options.passkey, &mut key, &handle).await);
+    register_passkey(&e, &strong, &mut other).await;
     let passkey = |o: &&access_identity_account::domain::claims::ClaimOrder| {
         matches!(
             &o.content,

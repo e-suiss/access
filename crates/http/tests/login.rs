@@ -911,7 +911,36 @@ impl Env {
             name: name.to_owned(),
             n: 0,
             host: HOST.to_owned(),
+            outbox: self.outbox.clone(),
         }
+    }
+
+    /// TN-147: a browser of `who` signed in with the password and a new authenticator app, at
+    /// AAL2 and fresh; the app's seed.
+    async fn strong(&self, who: &str, name: &str) -> (Web, Vec<u8>) {
+        let mut a = self.browser(&format!("{name}-setup"));
+        assert_eq!(a.sign_in(who).await.step(), "complete");
+        let started = a
+            .post("/v1/account/totp", Some(json!({ "label": "setup" })))
+            .await;
+        assert_eq!(started.status, StatusCode::CREATED);
+        a.proved(&started, "enrollment").await;
+        let s = started.json();
+        let seed = base32_decode(s["secret"].as_str().unwrap());
+        let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+        let ok = a
+            .post(&path, Some(json!({ "code": self.totp(&seed) })))
+            .await;
+        assert_eq!(ok.status, StatusCode::OK);
+        self.advance(30_000);
+        let mut b = self.browser(name);
+        let second = b.sign_in(who).await;
+        assert_eq!(second.step(), "second_factor");
+        let done = b
+            .submit(&second, "totp", json!({ "totp_code": self.totp(&seed) }))
+            .await;
+        assert_eq!(done.step(), "complete");
+        (b, seed)
     }
 
     fn advance(&self, ms: u64) {
@@ -967,9 +996,28 @@ struct Web {
     name: String,
     n: u64,
     host: String,
+    outbox: Outbox,
 }
 
 impl Web {
+    /// TN-147: gives the code sent to the account's address when `started` waits for one; the
+    /// flow's handle is its `field`.
+    async fn proved(&mut self, started: &Answer, field: &str) {
+        let s = started.json();
+        if s["proof"] != json!(true) {
+            return;
+        }
+        let path = format!("/v1/account/method-proof/{}", s[field].as_str().unwrap());
+        let code = self.outbox.last();
+        let r = self.post(&path, Some(json!({ "code": code }))).await;
+        assert_eq!(
+            r.status,
+            StatusCode::NO_CONTENT,
+            "{}",
+            String::from_utf8_lossy(&r.body)
+        );
+    }
+
     fn key(&mut self) -> String {
         self.n += 1;
         format!("{}-{}", self.name, self.n)
@@ -1434,6 +1482,7 @@ async fn totp_recovery_codes_and_sign_out() {
     let started = b
         .post("/v1/account/totp", Some(json!({ "label": "alice" })))
         .await;
+    b.proved(&started, "enrollment").await;
     assert_eq!(started.status, StatusCode::CREATED);
     let s = started.json();
     assert!(
@@ -1501,7 +1550,11 @@ async fn totp_recovery_codes_and_sign_out() {
         .await;
     assert_eq!(again.status, StatusCode::UNAUTHORIZED);
 
-    let fresh = b.post("/v1/account/recovery-codes", None).await;
+    // TN-147
+    let weak = b.post("/v1/account/recovery-codes", None).await;
+    assert_eq!(weak.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(weak.json()["code"], "step-up-required");
+    let fresh = c.post("/v1/account/recovery-codes", None).await;
     assert_eq!(fresh.json()["recovery_codes"].as_array().unwrap().len(), 10);
 
     let out = c.post("/v1/sessions/current/sign-out", None).await;
@@ -1533,6 +1586,7 @@ async fn a_passkey_registered_from_a_session_signs_in() {
         )
         .await;
     assert_eq!(reg.status, StatusCode::CREATED);
+    b.proved(&reg, "registration").await;
     let r = reg.json();
     let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
     let user = r["options"]["user"]["id"].as_str().unwrap().to_owned();
@@ -2711,6 +2765,7 @@ async fn register_passkey_with(
         .post("/v1/account/passkeys", Some(json!({ "name": who })))
         .await;
     assert_eq!(reg.status, StatusCode::CREATED);
+    b.proved(&reg, "registration").await;
     let r = reg.json();
     let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
     let user = r["options"]["user"]["id"].as_str().unwrap().to_owned();
@@ -3742,6 +3797,7 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
     let started = b
         .post("/v1/account/totp", Some(json!({ "label": "told" })))
         .await;
+    b.proved(&started, "enrollment").await;
     let s = started.json();
     let seed = base32_decode(s["secret"].as_str().unwrap());
     let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
@@ -3751,6 +3807,14 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
     assert_eq!(enabled.0, "relay.message.second_factor_enabled.v1");
     assert_eq!(enabled.2, subject);
     assert!(enabled.1.is_some());
+    // TN-147
+    e.advance(30_000);
+    let mut b = e.browser("su-i-strong");
+    let second = b.sign_in("told@example.com").await;
+    let done = b
+        .submit(&second, "totp", json!({ "totp_code": e.totp(&seed) }))
+        .await;
+    assert_eq!(done.step(), "complete");
     let fresh = b.post("/v1/account/recovery-codes", None).await;
     assert_eq!(fresh.status, StatusCode::OK);
     let regenerated = *e.sent().last().unwrap();
@@ -3790,6 +3854,7 @@ async fn the_owner_exports_the_password_hash_and_app_seeds_after_a_fresh_step_up
     let started = b
         .post("/v1/account/totp", Some(json!({ "label": "exp" })))
         .await;
+    b.proved(&started, "enrollment").await;
     let s = started.json();
     let secret = s["secret"].as_str().unwrap().to_owned();
     let seed = base32_decode(&secret);
@@ -4482,6 +4547,7 @@ async fn n5_keep_signed_in_and_the_second_step_option_reach_the_session() {
     let started = b
         .post("/v1/account/totp", Some(json!({ "label": "ann" })))
         .await;
+    b.proved(&started, "enrollment").await;
     let s = started.json();
     let seed = base32_decode(s["secret"].as_str().unwrap());
     let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
@@ -4808,6 +4874,7 @@ async fn n5_sign_in_methods_are_managed_in_s11() {
     let started = b
         .post("/v1/account/totp", Some(json!({ "label": "di" })))
         .await;
+    b.proved(&started, "enrollment").await;
     let s = started.json();
     let seed = base32_decode(s["secret"].as_str().unwrap());
     let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
@@ -4824,8 +4891,20 @@ async fn n5_sign_in_methods_are_managed_in_s11() {
     assert_eq!(m["recovery_codes"]["acknowledged"], false);
 
     let path = format!("/v1/account/methods/{totp}");
+    // TN-147
     let key = b.key();
-    let removed = b.send("DELETE", &path, None, Some(&key)).await;
+    let weak = b.send("DELETE", &path, None, Some(&key)).await;
+    assert_eq!(weak.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(weak.json()["code"], "step-up-required");
+    e.advance(30_000);
+    let mut s = e.browser("n5-strong");
+    let second = s.sign_in("di@example.com").await;
+    let done = s
+        .submit(&second, "totp", json!({ "totp_code": e.totp(&seed) }))
+        .await;
+    assert_eq!(done.step(), "complete");
+    let key = s.key();
+    let removed = s.send("DELETE", &path, None, Some(&key)).await;
     assert_eq!(
         removed.status,
         StatusCode::NO_CONTENT,
@@ -4863,6 +4942,80 @@ async fn n5_sign_in_methods_are_managed_in_s11() {
         .send("DELETE", "/v1/account/methods/crd_nope", None, Some(&key))
         .await;
     assert_eq!(missing.status, StatusCode::UNAUTHORIZED);
+}
+
+// TN-147, OP-159 m.52
+#[tokio::test]
+async fn a_first_strong_method_waits_for_the_address_code_and_then_needs_two_factors() {
+    let e = env(60, "tn-147", AuthPolicy::DEFAULT).await;
+    e.account("gate@example.com").await;
+    let mut b = e.browser("gate");
+    assert_eq!(b.sign_in("gate@example.com").await.step(), "complete");
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "gate" })))
+        .await;
+    assert_eq!(started.status, StatusCode::CREATED);
+    let s = started.json();
+    assert_eq!(s["proof"], true);
+    let code = e.outbox.last();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    let enrollment = s["enrollment"].as_str().unwrap();
+    let confirm = format!("/v1/account/totp/{enrollment}");
+    let early = b
+        .post(&confirm, Some(json!({ "code": e.totp(&seed) })))
+        .await;
+    assert_eq!(early.status, StatusCode::FORBIDDEN);
+    assert_eq!(early.json()["code"], "proof-required");
+    let proof = format!("/v1/account/method-proof/{enrollment}");
+    let wrong = b.post(&proof, Some(json!({ "code": "00000000" }))).await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.json()["code"], "code-not-accepted");
+    let mut other = e.browser("gate-other");
+    let stolen = other.post(&proof, Some(json!({ "code": code }))).await;
+    assert_ne!(stolen.status, StatusCode::NO_CONTENT);
+    let right = b.post(&proof, Some(json!({ "code": code }))).await;
+    assert_eq!(right.status, StatusCode::NO_CONTENT);
+    let ok = b
+        .post(&confirm, Some(json!({ "code": e.totp(&seed) })))
+        .await;
+    assert_eq!(
+        ok.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&ok.body)
+    );
+
+    for (path, body) in [
+        ("/v1/account/passkeys", Some(json!({ "name": "gate" }))),
+        ("/v1/account/totp", Some(json!({ "label": "again" }))),
+        ("/v1/account/recovery-codes", None),
+    ] {
+        let weak = b.post(path, body).await;
+        assert_eq!(weak.status, StatusCode::UNAUTHORIZED, "{path}");
+        assert_eq!(weak.json()["code"], "step-up-required", "{path}");
+    }
+
+    e.advance(30_000);
+    let mut strong = e.browser("gate-strong");
+    let second = strong.sign_in("gate@example.com").await;
+    let done = strong
+        .submit(&second, "totp", json!({ "totp_code": e.totp(&seed) }))
+        .await;
+    assert_eq!(done.step(), "complete");
+    let sent = e.outbox.0.lock().unwrap().len();
+    let reg = strong
+        .post("/v1/account/passkeys", Some(json!({ "name": "gate" })))
+        .await;
+    assert_eq!(reg.status, StatusCode::CREATED);
+    assert_eq!(reg.json()["proof"], false);
+    assert_eq!(e.outbox.0.lock().unwrap().len(), sent);
+    assert_eq!(
+        strong.post("/v1/account/recovery-codes", None).await.status,
+        StatusCode::OK
+    );
+    e.advance(access_identity_ui::app::signup::STEP_UP_MAX_AGE_MS + 1);
+    let stale = strong.post("/v1/account/recovery-codes", None).await;
+    assert_eq!(stale.json()["code"], "step-up-required");
 }
 
 // TN-68

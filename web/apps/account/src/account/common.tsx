@@ -25,10 +25,11 @@ export function refusal(e: unknown, codes: Readonly<Record<string, string>> = {}
     location.assign(confirmAgainUrl());
     return null;
   }
+  const own = codes[e.code];
+  if (own !== undefined) return t(own);
   // §8.13
   if (e.status === 401) return t("account.sign_in_again");
-  const own = codes[e.code];
-  return own === undefined ? t("account.failed") : t(own);
+  return t("account.failed");
 }
 
 /** A live region and the `say` that fills it; a failed read (`failed`) is announced as a refusal. */

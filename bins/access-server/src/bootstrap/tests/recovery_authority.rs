@@ -731,8 +731,9 @@ async fn two_channel_cooling(
     let mut me = Page::default();
     me.jar.insert(
         String::from("__Host-access-session"),
-        session(c, subject).await,
+        super::recovery::strong_session(c, subject).await,
     );
+    // TN-147
     let codes = me
         .call(app, &Method::POST, "/v1/account/recovery-codes", None)
         .await;
@@ -842,8 +843,9 @@ async fn recovery_starts_only_with_the_nist_classes_and_registered_codes_are_spe
     let mut me = Page::default();
     me.jar.insert(
         String::from("__Host-access-session"),
-        session(&c, cara).await,
+        super::recovery::strong_session(&c, cara).await,
     );
+    // TN-147
     let codes = me
         .call(&app, &Method::POST, "/v1/account/recovery-codes", None)
         .await;
@@ -1015,8 +1017,9 @@ async fn turning_assisted_recovery_off_leaves_only_the_owners_own_codes() {
     let mut me = Page::default();
     me.jar.insert(
         String::from("__Host-access-session"),
-        session(&c, eve).await,
+        super::recovery::strong_session(&c, eve).await,
     );
+    // TN-147
     let codes = me
         .call(&app, &Method::POST, "/v1/account/recovery-codes", None)
         .await;

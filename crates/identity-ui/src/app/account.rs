@@ -5,6 +5,7 @@
 
 use access_identity_account::domain::login::Problem;
 use access_identity_oauth::ports::EnvironmentEntry;
+use access_identity_session::app::change_gate::Gate;
 use access_identity_session::app::sessions::{SessionStatus, SessionView};
 use access_identity_session::app::{Refusal, Step as Outcome};
 use access_identity_session::domain::recovery::Restricted;
@@ -91,6 +92,26 @@ fn ended(status: &SessionStatus) -> Reply {
         r.cookies.push(clear_cookie(SESSION_COOKIE));
     }
     r
+}
+
+/// The answer to a sign-in method change the gate refused (TN-147).
+pub(super) fn gated(gate: &Gate) -> Reply {
+    match gate {
+        Gate::Ended(status) => ended(status),
+        Gate::StepUp => Reply::problem(super::signup::STEP_UP_REQUIRED),
+        Gate::NoAddress => Reply::problem(Problem {
+            status: 409,
+            code: "proof-unavailable",
+            title: "Add an email address or phone number to your account first",
+            retry_after_s: None,
+        }),
+        Gate::Throttled => Reply::problem(Problem {
+            status: 429,
+            code: "too-many-requests",
+            title: "Too many attempts",
+            retry_after_s: None,
+        }),
+    }
 }
 
 fn secrets(codes: &[access_crypto::Secret<String>]) -> Value {
@@ -256,9 +277,10 @@ where
                     "enrollment": e.handle,
                     "secret": e.secret.expose(),
                     "uri": e.uri.expose(),
+                    "proof": e.proof,
                 }),
             ),
-            Ok(Err(status)) => ended(&status),
+            Ok(Err(gate)) => gated(&gate),
             Err(e) => failed(&e),
         }
     }
@@ -319,7 +341,7 @@ where
                 200,
                 json!({ "recovery_codes": secrets(&codes), "acknowledgement_required": true }),
             ),
-            Ok(Err(status)) => ended(&status),
+            Ok(Err(gate)) => gated(&gate),
             Err(e) => failed(&e),
         }
     }
@@ -378,9 +400,33 @@ where
         {
             Ok(Ok(reg)) => Reply::json(
                 201,
-                json!({ "registration": reg.handle, "options": reg.options }),
+                json!({ "registration": reg.handle, "options": reg.options, "proof": reg.proof }),
             ),
-            Ok(Err(status)) => ended(&status),
+            Ok(Err(gate)) => gated(&gate),
+            Err(e) => failed(&e),
+        }
+    }
+
+    /// `POST /v1/account/method-proof/{flow}` (TN-147): the code from the account's address
+    /// for a passkey registration or TOTP enrolment that waits for one.
+    pub async fn prove_method_change(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        flow: &str,
+        code: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth);
+        match auth
+            .prove_change(b.session.unwrap_or_default(), flow, code, b.correlation)
+            .await
+        {
+            Ok(Ok(())) => Reply::new(204, Body::Empty),
+            Ok(Err(step)) => refusal(&step),
             Err(e) => failed(&e),
         }
     }

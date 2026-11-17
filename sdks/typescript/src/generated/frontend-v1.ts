@@ -167,7 +167,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts adding an authenticator app. */
+        /** Starts adding an authenticator app after a sign-in in the last five minutes, at two factors when the account already has a passkey or authenticator app (`step-up-required` otherwise); `proof: true` when a code went to the account's address and must be given at `proveMethodChange` first (TN-147). */
         post: operations["beginTotp"];
         delete?: never;
         options?: never;
@@ -201,7 +201,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Makes new recovery codes, shown once. */
+        /** Makes new recovery codes, shown once, after a two-factor sign-in in the last five minutes (`step-up-required` otherwise, TN-147). */
         post: operations["regenerateRecoveryCodes"];
         delete?: never;
         options?: never;
@@ -252,7 +252,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts adding a passkey. */
+        /** Starts adding a passkey under the same rule as `beginTotp`; `proof: true` when a code went to the account's address (TN-147). */
         post: operations["beginPasskey"];
         delete?: never;
         options?: never;
@@ -269,8 +269,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Finishes adding a passkey. */
+        /** Finishes adding a passkey; `proof-required` while the code from the account's address is not given. */
         post: operations["finishPasskey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/method-proof/{flow}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The code sent to the account's address for a passkey registration or authenticator app enrolment that waits for one (TN-147). */
+        post: operations["proveMethodChange"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3058,6 +3075,33 @@ export interface operations {
             header?: never;
             path: {
                 registration: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    proveMethodChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flow: string;
             };
             cookie?: never;
         };

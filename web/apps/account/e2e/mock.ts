@@ -78,6 +78,9 @@ export class AccountMock {
   };
   /** S11: writes that need a fresh confirmation first. */
   freshNeeded = false;
+  /** TN-147: a first strong method waits for a code at the account's address. */
+  proofNeeded = false;
+  private proved = false;
   /** S11: the server refuses removing the last way to sign in. */
   lastMethod = false;
   /** S11: linked sign-ins. */
@@ -156,7 +159,7 @@ export class AccountMock {
     await context.route("**/account/api/**", (r) => this.bff(r));
     await context.route("**/v1/account/**", (r) => this.frontend(r));
     await context.route(
-      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps)/,
+      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps|method-proof)/,
       (r) => this.s11(r),
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
@@ -523,8 +526,15 @@ export class AccountMock {
       this.methods = { ...this.methods, password: { set: true } };
       return reply(204);
     }
+    // TN-147
+    if (path.startsWith("/method-proof/")) {
+      if (s.body["code"] !== "24681357") return reply(401, { code: "code-not-accepted" });
+      this.proved = true;
+      return reply(204);
+    }
     if (path === "/passkeys") {
       return reply(200, {
+        proof: this.proofNeeded,
         registration: "reg_1",
         options: {
           challenge: "Y2hhbGxlbmdl",
@@ -535,6 +545,7 @@ export class AccountMock {
       });
     }
     if (path === "/passkeys/reg_1") {
+      if (this.proofNeeded && !this.proved) return reply(403, { code: "proof-required" });
       this.methods = {
         ...this.methods,
         passkeys: [
@@ -551,12 +562,14 @@ export class AccountMock {
     }
     if (path === "/totp") {
       return reply(200, {
+        proof: this.proofNeeded,
         enrollment: "enr_1",
         secret: "JBSWY3DPEHPK3PXP",
         uri: "otpauth://totp/acme:ada?secret=JBSWY3DPEHPK3PXP&issuer=acme",
       });
     }
     if (path === "/totp/enr_1") {
+      if (this.proofNeeded && !this.proved) return reply(403, { code: "proof-required" });
       if (s.body["code"] !== "123456") return reply(400, { code: "invalid-code" });
       this.methods = {
         ...this.methods,

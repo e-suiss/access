@@ -125,6 +125,10 @@ where
                 post(web::confirm_totp::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/account/method-proof/{{flow}}"),
+                post(web::prove_method_change::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/account/recovery-codes"),
                 post(web::recovery_codes::<D, K, KI, C, M>),
             )
