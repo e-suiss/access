@@ -25,9 +25,9 @@ use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
     JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgInvite, OrgMember,
-    OrgUpdate, ProtectionMode, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy,
-    Signing, Social, SocialClient, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange,
-    WebhookSpec,
+    OrgUpdate, ProtectionMode, RedirectUri, Registration, RpId, SessionPolicy, SigninMethod,
+    SigninPolicy, Signing, Social, SocialClient, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX,
+    WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, EnvironmentKeys, Governance, Instances};
 use access_identity_events::domain::webhook::event_names;
@@ -363,6 +363,8 @@ pub enum Op {
     PutSigningProfile,
     /// `putKexShare`: `idp.environment.kex_share` (OP-159 m.3 (a), (t)).
     PutKexShare,
+    /// `bindManagementEnvironment`: `idp.environment.consumer_bind` (OP-159 m.48 (b)).
+    BindManagementEnvironment,
 }
 
 impl Op {
@@ -531,6 +533,7 @@ impl Op {
             "putAuditTier" => Self::PutAuditTier,
             "putSigningProfile" => Self::PutSigningProfile,
             "putKexShare" => Self::PutKexShare,
+            "bindManagementEnvironment" => Self::BindManagementEnvironment,
             _ => return None,
         })
     }
@@ -1668,6 +1671,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "dbsc",
                     "profile",
                     "attestation",
+                    "registration",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1716,6 +1720,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 attestation: match m.get("attestation") {
                     None | Some(Json::Null) => Attestation::None,
                     Some(Json::Object(a)) => attestation(a)?,
+                    Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                // OP-159 m.48 (c)
+                registration: match m.get("registration") {
+                    None => Registration::Open,
+                    Some(Json::String(s)) => Registration::parse(s).ok_or(Invalid::SigninPolicy)?,
                     Some(_) => return Err(Invalid::SigninPolicy),
                 },
             })
@@ -2320,6 +2330,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutKexShare => {
             Change::KexShare(crate::domain::assurance::KexShare::parse(&own_body(m))?)
         }
+        // OP-159 m.48 (b)
+        Op::BindManagementEnvironment => {
+            only(m, &["management"])?;
+            Change::ConsumerBind {
+                management: String::from(text(m, "management")?),
+            }
+        }
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
@@ -2692,6 +2709,19 @@ pub fn default_signin() -> SigninPolicy {
         dbsc: true,
         profile: AssuranceProfile::Standard,
         attestation: Attestation::None,
+        registration: Registration::Open,
+    }
+}
+
+/// The sign-in requirements a management environment reads from its kind while it has no recorded
+/// policy (TN-138, OP-159 m.47 (b), m.48 (c)): a second factor required, registration by invitation
+/// only and no social sign-in; what its founder records at the first console sign-in.
+#[must_use]
+pub fn management_signin() -> SigninPolicy {
+    SigninPolicy {
+        mfa_required: true,
+        registration: Registration::InviteOnly,
+        ..default_signin()
     }
 }
 
@@ -3642,6 +3672,16 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 // OP-156 m.3 (d), (f), OP-159 m.3 (ii)
                 let push = t.push_enabled().await?;
                 let sms_otp = t.sms_otp_enabled().await?;
+                // TN-138, OP-159 m.48 (c)
+                let signin_default = if access_store::tenant_admin::environment_kind(t)
+                    .await?
+                    .as_deref()
+                    == Some(crate::domain::tenant::MANAGEMENT)
+                {
+                    management_signin()
+                } else {
+                    default_signin()
+                };
                 let view = json!({
                     "jose_alg": s.jose_alg,
                     "argon2": {
@@ -3649,7 +3689,9 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                     },
                     "rp_id": s.rp_id,
                     "cimd": { "enabled": s.cimd_enabled, "domains": s.cimd_domains },
-                    "signin_policy": stored(p.signin.as_deref(), &default_signin().to_value()),
+                    "signin_policy": stored(p.signin.as_deref(), &signin_default.to_value()),
+                    // OP-159 m.48 (c)
+                    "signin_policy_recorded": p.signin.is_some(),
                     "session_policy":
                         stored(p.session.as_deref(), &SessionPolicy::DEFAULT.to_value()),
                     "branding": stored(branding.as_deref(), &Branding::default().to_value()),

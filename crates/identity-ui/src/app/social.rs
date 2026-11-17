@@ -219,6 +219,10 @@ where
         social: &Social<H, S>,
     ) -> Result<(String, Option<String>), Reply> {
         let kit = self.kit(entry).await?;
+        // OP-159 m.48 (c)
+        if !kit.signin.social {
+            return Err(Reply::problem(NO_PROVIDER));
+        }
         let link_to = if link {
             Some(self.fresh(&kit, b, Some(LINK_FRESHNESS_MS)).await?.0)
         } else {
@@ -414,11 +418,16 @@ where
             .email
             .as_ref()
             .map(|e| (e.address.as_str(), e.vouched));
+        // OP-159 m.48 (c)
+        if !kit.signin.social {
+            return Reply::problem(SOCIAL_FAILED);
+        }
         let asserted = Asserted {
             provider,
             key: &external.key,
             address,
             name: external.name.as_deref(),
+            register: kit.signin.open_registration(),
         };
         if let Some(subject) = attempt.link_to {
             let (current, _) = match self.fresh(&kit, b, None).await {

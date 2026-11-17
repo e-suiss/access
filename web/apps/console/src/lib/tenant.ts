@@ -31,6 +31,22 @@ export type TenantAdmin = v.InferOutput<typeof TenantAdmin>;
 
 const Environments = items(TenantEnvironment);
 
+const SettingsRecorded = v.looseObject({ signin_policy_recorded: v.exactOptional(v.boolean()) });
+
+/**
+ * OP-159 m.48 (c): the sign-in requirements a management environment reads from its kind until its
+ * founder records them: e-mail and passkey, a second factor required, accounts by invitation only,
+ * no social sign-in method.
+ */
+export const MANAGEMENT_DEFAULTS = {
+  methods: ["email", "passkey"],
+  required_fields: ["email"],
+  mfa_required: true,
+  domain_allow: [],
+  domain_deny: [],
+  registration: "invite_only",
+} as const;
+
 const Admins = items(TenantAdmin);
 
 function base(management: string): string {
@@ -71,6 +87,36 @@ export function tenantAdminsQuery(instance: Instance, management: string) {
   return queryOptions({
     queryKey: ["tenant", management, instance.id, "admins"] as const,
     queryFn: async () => (await adminGet(instance, `${base(management)}/admins`, Admins)).items,
+  });
+}
+
+// OP-159 m.48 (c)
+/** Whether the management environment still reads its sign-in requirements from its kind. */
+export function defaultsPendingQuery(instance: Instance, management: string) {
+  return queryOptions({
+    queryKey: ["tenant", management, instance.id, "defaults"] as const,
+    queryFn: async () =>
+      (
+        await adminGet(
+          instance,
+          `envs/${encodeURIComponent(management)}/settings`,
+          SettingsRecorded,
+        )
+      ).signin_policy_recorded === false,
+  });
+}
+
+/** Records the management defaults as the environment's sign-in requirements: one signature. */
+export function recordDefaults(
+  instance: Instance,
+  confirm: Confirm,
+  management: string,
+): Promise<WriteResult> {
+  return change(instance, confirm, management, {
+    operation: "putSigninPolicy",
+    method: "PUT",
+    path: "settings/signin-policy",
+    body: MANAGEMENT_DEFAULTS,
   });
 }
 

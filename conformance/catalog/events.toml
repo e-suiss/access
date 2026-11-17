@@ -1190,6 +1190,14 @@ fields = ["verdict"]
 ocsf = "application_error"
 
 [[event]]
+name = "administration.revive"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["outcome", "error"]
+ocsf = "application_error"
+
+[[event]]
 name = "administration.end"
 plane = "identity"
 severity = "warn"

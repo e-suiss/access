@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod admin_invite;
 pub mod agents;
 mod breakglass;
+pub mod consumer;
 mod custom_domains;
 pub mod domains;
 mod export_sinks;
@@ -934,7 +935,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             | Change::RateLimit(_)
             | Change::DrProfile(_)
             | Change::SigningProfile(None)
-            | Change::KexShare(_) => {}
+            | Change::KexShare(_)
+            | Change::ConsumerBind { .. } => {}
             // CR-41, OP-159 m.3 (o)
             Change::ClientProfile { delta, .. } => {
                 if let crate::domain::ProfileDelta::SigningAlg(Some(a)) = delta
@@ -1075,6 +1077,11 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             return Err(Invalid::PlatformTenant.into());
         }
         let g = self.governing(p, state).await?;
+        // OP-159 m.48 (b)
+        if let Change::ConsumerBind { management } = &p.change {
+            self.consumer_binding((p.tenant, p.environment), management)
+                .await?;
+        }
         // TN-138, OP-159 m.47 (b)
         if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &p.change
             && c.third_party
@@ -1261,6 +1268,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
     /// # Errors
     /// [`AdminError`]; a DENY or a pending decision is [`Applied::NotAllowed`].
     pub async fn apply(&self, p: &Proposal, ais: Vec<u8>) -> Result<Applied, AdminError> {
+        // INV-29, OP-159 m.48 (b)
+        consumer::root_signed(p)?;
         let prepared = self.prepared(p, false).await?;
         let actor = self.actor(p).await?;
         self.standing((p.tenant, p.environment), prepared.domain, &ais, actor)
@@ -1927,6 +1936,21 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             Change::KexShare(k) => {
                 t.put_kex_share(bound, k.mode.name()).await?;
                 true
+            }
+            // TN-4, OP-159 m.48 (b)
+            Change::ConsumerBind { management } => {
+                let environment = t.environment().ok_or(AdminError::NoEnvironment)?;
+                let b = self
+                    .consumer_binding((t.tenant(), environment), management)
+                    .await?;
+                access_store::environment_binding::bind_cooling(
+                    t,
+                    b.management,
+                    &b.domain,
+                    &b.acceptance,
+                    consumer::CONSUMER_COOLING_S,
+                )
+                .await?
             }
             // OP-158 m.3 (w)
             Change::AuditTier(tier) => {

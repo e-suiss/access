@@ -644,7 +644,7 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
         .unwrap();
     tenants::stated(
         &mut t,
-        (&helper, &shop_d),
+        (&helper, &shop_d, stated.episode),
         &stated.claim.unwrap(),
         (now - 7_200_000, now - 1),
     )
@@ -807,6 +807,44 @@ async fn a_tenant_administrator_holds_the_rule_while_its_line_lives() {
             .await,
         Err(access_identity_admin::AdminError::Refused(code)) if code == "actor-binding"
     ));
+
+    // OP-159 m.48 (d)
+    assert_eq!(
+        courier
+            .end((tenant, opened.environment), &cool)
+            .await
+            .unwrap(),
+        1
+    );
+    w.domains.release().await;
+    assert_eq!(
+        courier
+            .revive((tenant, opened.environment), &helper)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        courier
+            .revive((tenant, opened.environment), &cool)
+            .await
+            .unwrap(),
+        1
+    );
+    w.domains.release().await;
+    let mut t = TenantTx::begin(&w.db.app, tenant, opened.environment)
+        .await
+        .unwrap();
+    let episodes: Vec<_> = tenants::lines(&mut t, Some(&cool))
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|l| (l.episode, l.ended_ms.is_some(), l.claim.is_some()))
+        .collect();
+    let helper_lines = tenants::lines(&mut t, Some(&helper)).await.unwrap().len();
+    t.commit().await.unwrap();
+    assert_eq!(episodes, [(1, true, true), (2, false, true)]);
+    assert_eq!(helper_lines, 1);
 }
 
 // OP-159 m.47 (b), (c), TN-141, TN-89 (5), (8)

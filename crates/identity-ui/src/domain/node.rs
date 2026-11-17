@@ -456,6 +456,26 @@ pub enum Node {
         /// RFC 3339.
         expires_at: String,
     },
+    /// The TOTP seed of a first second factor enrolled at sign-in (OP-159 m.48 (a)): the key for
+    /// manual entry and its `otpauth://` URI. Shown only after the first factor; the code that
+    /// proves it is a [`Method::Totp`] input.
+    TotpSetup {
+        /// Caption.
+        label: Text,
+        /// The key in base32.
+        secret: String,
+        /// The `otpauth://` URI.
+        uri: String,
+    },
+    /// Recovery codes, shown once when a sign-in enrolled the account's first second factor
+    /// (§10.2.2, OP-159 m.48 (a)): the page asks the person to save them before it continues, and
+    /// acknowledges them with the new session.
+    RecoveryCodes {
+        /// Caption.
+        label: Text,
+        /// The codes.
+        codes: Vec<String>,
+    },
 }
 
 impl Node {
@@ -469,7 +489,9 @@ impl Node {
             Self::PasskeySignal { .. }
             | Self::Option { .. }
             | Self::Provider { .. }
-            | Self::PushNumber { .. } => None,
+            | Self::PushNumber { .. }
+            | Self::TotpSetup { .. }
+            | Self::RecoveryCodes { .. } => None,
         }
     }
 

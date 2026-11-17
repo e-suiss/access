@@ -528,6 +528,54 @@
                 "format": "date-time"
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "label",
+              "secret",
+              "uri"
+            ],
+            "properties": {
+              "type": {
+                "const": "totp_setup"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "secret": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string",
+                "pattern": "^otpauth://"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "label",
+              "codes"
+            ],
+            "properties": {
+              "type": {
+                "const": "recovery_codes"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "codes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         ]
       },
@@ -595,6 +643,8 @@
           "action.sign_in",
           "action.passkey",
           "action.passkey_create",
+          "second_factor.enroll",
+          "label.totp_setup",
           "action.verify",
           "action.recovery_code",
           "action.skip",

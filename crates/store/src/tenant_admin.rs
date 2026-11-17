@@ -631,6 +631,8 @@ pub struct AdminLine {
     pub domain: DomainId,
     /// The administrator's Party in it.
     pub party: [u8; 16],
+    /// The line's episode: a new one after an ended one (OP-159 m.48 (d)).
+    pub episode: i32,
     /// The line's last Claim, when one was stated.
     pub claim: Option<[u8; 16]>,
     /// When it was stated, Unix ms.
@@ -643,7 +645,8 @@ pub struct AdminLine {
     pub ended_claim: Option<[u8; 16]>,
 }
 
-/// Opens the line of `subject` with `party` in `domain`; `false` when it exists.
+/// Opens the line of `subject` with `party` in `domain`: its first episode, or a new one after an
+/// ended one (OP-159 m.48 (d)); `false` when a live one exists.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -655,8 +658,12 @@ pub async fn open_line(
 ) -> Result<bool, StoreError> {
     let environment = t.environment().ok_or(StoreError::Range)?;
     let done = sqlx::query!(
-        "INSERT INTO access.tenant_admin_claims (tenant_id, environment_id, subject_id, domain_id, party_id)
-         VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+        "INSERT INTO access.tenant_admin_claims (tenant_id, environment_id, subject_id, domain_id, party_id, episode)
+         SELECT $1::uuid, $2::uuid, $3::uuid, $4::bytea, $5::bytea, coalesce(max(c.episode), 0) + 1
+           FROM access.tenant_admin_claims c
+          WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.subject_id = $3 AND c.domain_id = $4
+         HAVING NOT coalesce(bool_or(c.ended_ms IS NULL), false)
+         ON CONFLICT DO NOTHING",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
         Uuid::from_bytes(*subject),
@@ -674,7 +681,7 @@ pub async fn open_line(
 /// [`StoreError`].
 pub async fn stated(
     t: &mut TenantTx,
-    (subject, domain): (&[u8; 16], &DomainId),
+    (subject, domain, episode): (&[u8; 16], &DomainId, i32),
     claim: &[u8; 16],
     (stated_ms, until_ms): (u64, u64),
 ) -> Result<bool, StoreError> {
@@ -682,7 +689,7 @@ pub async fn stated(
     let done = sqlx::query!(
         "UPDATE access.tenant_admin_claims SET claim_id = $5, stated_ms = $6, valid_until_ms = $7
           WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND domain_id = $4
-            AND ended_ms IS NULL",
+            AND episode = $8 AND ended_ms IS NULL",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
         Uuid::from_bytes(*subject),
@@ -690,6 +697,7 @@ pub async fn stated(
         claim.as_slice(),
         signed(stated_ms)?,
         signed(until_ms)?,
+        episode,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -703,7 +711,7 @@ pub async fn stated(
 /// [`StoreError`].
 pub async fn end_line(
     t: &mut TenantTx,
-    (subject, domain): (&[u8; 16], &DomainId),
+    (subject, domain, episode): (&[u8; 16], &DomainId, i32),
     at_ms: u64,
     ended_claim: Option<&[u8; 16]>,
 ) -> Result<bool, StoreError> {
@@ -712,6 +720,7 @@ pub async fn end_line(
         "UPDATE access.tenant_admin_claims
             SET ended_ms = coalesce(ended_ms, $5), ended_claim_id = coalesce(ended_claim_id, $6)
           WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND domain_id = $4
+            AND episode = $7
             AND (ended_ms IS NULL OR (ended_claim_id IS NULL AND $6::bytea IS NOT NULL))",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
@@ -719,6 +728,7 @@ pub async fn end_line(
         domain.as_bytes().as_slice(),
         signed(at_ms)?,
         ended_claim.map(<[u8; 16]>::as_slice),
+        episode,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -735,11 +745,11 @@ pub async fn lines(
 ) -> Result<Vec<AdminLine>, StoreError> {
     let environment = t.environment().ok_or(StoreError::Range)?;
     let rows = sqlx::query!(
-        "SELECT subject_id, domain_id, party_id, claim_id, stated_ms, valid_until_ms, ended_ms,
-                ended_claim_id
+        "SELECT subject_id, domain_id, party_id, episode, claim_id, stated_ms, valid_until_ms,
+                ended_ms, ended_claim_id
            FROM access.tenant_admin_claims
           WHERE tenant_id = $1 AND environment_id = $2 AND ($3::uuid IS NULL OR subject_id = $3)
-          ORDER BY subject_id, domain_id",
+          ORDER BY subject_id, domain_id, episode",
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
         subject.map(|s| Uuid::from_bytes(*s)),
@@ -753,6 +763,7 @@ pub async fn lines(
                 subject: *r.subject_id.as_bytes(),
                 domain: DomainId::from_bytes(id32(&r.domain_id)?),
                 party: id16(&r.party_id)?,
+                episode: r.episode,
                 claim: r.claim_id.as_deref().map(id16).transpose()?,
                 stated_ms: r.stated_ms.map(unsigned).transpose()?,
                 valid_until_ms: r.valid_until_ms.map(unsigned).transpose()?,
@@ -784,14 +795,15 @@ pub async fn line_of_party(
 ) -> Result<Option<(AdminLine, LineAdmin)>, StoreError> {
     let environment = t.environment().ok_or(StoreError::Range)?;
     let row = sqlx::query!(
-        r#"SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,
+        r#"SELECT c.subject_id, c.episode, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms,
+                  c.ended_claim_id,
                   a.ended_at IS NULL AS "admin_live!",
                   (extract(epoch FROM a.cooling_until) * 1000)::bigint AS cooling_ms
              FROM access.tenant_admin_claims c
              JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id
               AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id
             WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4
-            ORDER BY c.created_at DESC LIMIT 1"#,
+            ORDER BY c.episode DESC LIMIT 1"#,
         tenant_uuid(t),
         Uuid::from_bytes(*environment.as_bytes()),
         domain.as_bytes().as_slice(),
@@ -806,6 +818,7 @@ pub async fn line_of_party(
                 subject: *r.subject_id.as_bytes(),
                 domain: *domain,
                 party: *party,
+                episode: r.episode,
                 claim: r.claim_id.as_deref().map(id16).transpose()?,
                 stated_ms: r.stated_ms.map(unsigned).transpose()?,
                 valid_until_ms: r.valid_until_ms.map(unsigned).transpose()?,

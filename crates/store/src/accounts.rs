@@ -857,6 +857,31 @@ impl TenantTx {
             .collect()
     }
 
+    /// Whether the subject ever held a credential of one of `kinds`, a revoked one too (OP-159
+    /// m.48 (a)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn ever_held(
+        &mut self,
+        subject: [u8; 16],
+        kinds: &[&str],
+    ) -> Result<bool, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        let kinds: Vec<String> = kinds.iter().map(|k| String::from(*k)).collect();
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM access.identity_credentials
+                               WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                                 AND kind = ANY($4)) AS "held!""#,
+            tenant,
+            environment,
+            uuid(subject),
+            &kinds,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// Replaces an active credential's sealed secret, as a rehash does (CR-37).
     ///
     /// # Errors

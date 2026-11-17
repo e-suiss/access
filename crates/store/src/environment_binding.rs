@@ -48,6 +48,56 @@ pub async fn bind(
     Ok(done.rows_affected() == 1)
 }
 
+/// Binds `domain` as consuming `environment`'s Claims through `acceptance`, holding only once
+/// `cooling_s` seconds have passed (TN-4, OP-159 m.48 (b)): `true` the first time.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn bind_cooling(
+    t: &mut TenantTx,
+    environment: EnvironmentId,
+    domain: &DomainId,
+    acceptance: &[u8; 16],
+    cooling_s: i64,
+) -> Result<bool, StoreError> {
+    let done = sqlx::query!(
+        "INSERT INTO access.environment_domain_binding (tenant_id, environment_id, domain_id, role, acceptance_id,
+           effective_at)
+         VALUES ($1, $2, $3, 'consuming', $4, clock_timestamp() + $5::bigint * interval '1 second')
+         ON CONFLICT (tenant_id, environment_id, domain_id) DO NOTHING",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
+        domain.as_bytes().as_slice(),
+        acceptance.as_slice(),
+        cooling_s,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// Whether `domain` has a live binding to `environment`, holding or still cooling (TN-4, OP-159
+/// m.48 (b)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn bound(
+    t: &mut TenantTx,
+    environment: EnvironmentId,
+    domain: &DomainId,
+) -> Result<bool, StoreError> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM access.environment_domain_binding
+                           WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3
+                             AND retired_at IS NULL) AS "bound!""#,
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*environment.as_bytes()),
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_one(&mut *t.tx)
+    .await?)
+}
+
 /// Retires the binding: `true` the first time.
 ///
 /// # Errors
@@ -69,7 +119,8 @@ pub async fn retire(
     Ok(done.rows_affected() == 1)
 }
 
-/// The live domains of `environment` with their roles.
+/// The live domains of `environment` with their roles; a consuming binding still cooling is not one
+/// yet (OP-159 m.48 (b)).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -79,7 +130,9 @@ pub async fn domains(
 ) -> Result<Vec<(DomainId, Role)>, StoreError> {
     let rows = sqlx::query!(
         "SELECT domain_id, role, acceptance_id FROM access.environment_domain_binding
-          WHERE tenant_id = $1 AND environment_id = $2 AND retired_at IS NULL ORDER BY domain_id",
+          WHERE tenant_id = $1 AND environment_id = $2 AND retired_at IS NULL
+            AND (effective_at IS NULL OR effective_at <= clock_timestamp())
+          ORDER BY domain_id",
         Uuid::from_bytes(*t.tenant.as_bytes()),
         Uuid::from_bytes(*environment.as_bytes()),
     )
@@ -115,6 +168,7 @@ pub async fn consumed_by(
     let rows = sqlx::query_scalar!(
         "SELECT environment_id FROM access.environment_domain_binding
           WHERE tenant_id = $1 AND domain_id = $2 AND role = 'consuming' AND retired_at IS NULL
+            AND (effective_at IS NULL OR effective_at <= clock_timestamp())
           ORDER BY environment_id",
         Uuid::from_bytes(*t.tenant.as_bytes()),
         domain.as_bytes().as_slice(),

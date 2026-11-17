@@ -16,11 +16,13 @@ import type {
   OptionNode,
   PasskeyCreateNode,
   ProviderNode,
+  RecoveryCodesNode,
   Submission,
   SubmitNode,
+  TotpSetupNode,
   UiNode,
 } from "./contract.js";
-import { follow, returnTo } from "./http.js";
+import { Empty, follow, postJson, returnTo } from "./http.js";
 import { t, text } from "./i18n.js";
 import {
   link,
@@ -171,6 +173,67 @@ function Provider({ node }: { readonly node: ProviderNode }) {
   );
 }
 
+// OP-159 m.48 (a): the key of a TOTP set up at sign-in; the code that proves it is the step's input
+function TotpSetup({ node }: { readonly node: TotpSetupNode }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex flex-col gap-2" data-testid="totp-setup">
+      <p className="text-sm">{text(node.label)}</p>
+      <p
+        className="break-all rounded-lg bg-muted px-3 py-2 font-mono text-base tracking-widest"
+        data-testid="totp-secret"
+      >
+        {node.secret}
+      </p>
+      <p className="flex flex-wrap gap-3">
+        <Button
+          type="button"
+          {...quiet}
+          onClick={() => {
+            void navigator.clipboard.writeText(node.secret).then(
+              () => {
+                setCopied(true);
+              },
+              () => undefined,
+            );
+          }}
+        >
+          {copied ? t("page.totp_copied") : t("page.totp_copy")}
+        </Button>
+        <a className={link} href={node.uri} data-testid="totp-uri">
+          {t("page.totp_open")}
+        </a>
+      </p>
+    </div>
+  );
+}
+
+// OP-159 m.48 (a), §10.2.2: shown once; the sign-in continues only after the person says they saved them
+function RecoveryCodes(props: {
+  readonly node: RecoveryCodesNode;
+  readonly target: string | undefined;
+}) {
+  const [busy, setBusy] = useState(false);
+  const proceed = async () => {
+    setBusy(true);
+    await postJson("/v1/account/recovery-codes/acknowledgement", {}, Empty);
+    if (props.target !== undefined) follow(props.target);
+  };
+  return (
+    <div className="flex flex-col gap-3" data-testid="recovery-codes">
+      <p className="text-sm">{text(props.node.label)}</p>
+      <ul className="grid grid-cols-2 gap-2 rounded-lg bg-muted px-3 py-2 font-mono text-sm">
+        {props.node.codes.map((c) => (
+          <li key={c}>{c}</li>
+        ))}
+      </ul>
+      <Button {...primary} disabled={busy} onClick={() => void proceed()}>
+        {t("page.codes_saved")}
+      </Button>
+    </div>
+  );
+}
+
 /** Conditional create is opportunistic; it never holds the user back for longer than this. */
 const conditionalCreateWaitMs = 2000;
 
@@ -207,6 +270,7 @@ function noSecondStep(ui: LoginUi): boolean {
       n.type === "passkey_get" ||
       n.type === "passkey_create" ||
       n.type === "push_number" ||
+      n.type === "totp_setup" ||
       ((n.type === "input" || n.type === "submit") &&
         n.method !== "restart" &&
         n.method !== "skip"),
@@ -224,6 +288,8 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const autofill = ui.nodes.find((n) => n.type === "passkey_autofill");
   const passkeyButton = ui.nodes.find((n) => n.type === "passkey_get");
   const create = ui.nodes.find((n): n is PasskeyCreateNode => n.type === "passkey_create");
+  const totpSetup = ui.nodes.find((n): n is TotpSetupNode => n.type === "totp_setup");
+  const recoveryCodes = ui.nodes.find((n): n is RecoveryCodesNode => n.type === "recovery_codes");
   const optionNodes = ui.nodes.filter((n): n is OptionNode => n.type === "option");
   const providers = ui.nodes.filter((n): n is ProviderNode => n.type === "provider");
   const push = pushOf(ui);
@@ -257,6 +323,8 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       const target = ui.step === "complete" ? (returnTo() ?? ui.redirect_to) : undefined;
       if (target === undefined) return;
       if (create?.mediation === "explicit") return;
+      // OP-159 m.48 (a): the recovery codes are read first
+      if (recoveryCodes !== undefined) return;
       // §10.2.4
       if (create?.mediation === "conditional" && (await conditionalCreateAvailable())) {
         const credential = await createPasskey(
@@ -271,7 +339,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       }
       follow(target);
     });
-  }, [ui, create, onSubmit]);
+  }, [ui, create, recoveryCodes, onSubmit]);
 
   const optionsRef = useRef(options);
   useEffect(() => {
@@ -358,6 +426,13 @@ export function StepView({ ui, busy, onSubmit }: Props) {
         ))}
       </div>
       {push !== undefined && <PushWait node={push} />}
+      {totpSetup !== undefined && <TotpSetup node={totpSetup} />}
+      {recoveryCodes !== undefined && (
+        <RecoveryCodes
+          node={recoveryCodes}
+          target={ui.step === "complete" ? (returnTo() ?? ui.redirect_to) : undefined}
+        />
+      )}
       {noSecondStep(ui) && (
         <p className={problem} data-testid="second-step-missing">
           {t("page.second_step_missing")}

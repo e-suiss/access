@@ -157,8 +157,25 @@ export interface PushNumberNode {
   readonly expires_at: string;
 }
 
+/** OP-159 m.48 (a): the key of a TOTP set up at sign-in, for manual entry and as an `otpauth://` link. */
+export interface TotpSetupNode {
+  readonly type: "totp_setup";
+  readonly label: Text;
+  readonly secret: string;
+  readonly uri: string;
+}
+
+/** OP-159 m.48 (a), §10.2.2: recovery codes, shown once on the completed step of a sign-in that enrolled. */
+export interface RecoveryCodesNode {
+  readonly type: "recovery_codes";
+  readonly label: Text;
+  readonly codes: readonly string[];
+}
+
 export type UiNode =
   | InputNode
+  | TotpSetupNode
+  | RecoveryCodesNode
   | PushNumberNode
   | OptionNode
   | ProviderNode
@@ -331,6 +348,18 @@ const PushNumberS: v.GenericSchema<unknown, PushNumberNode> = v.object({
   expires_at: v.string(),
 });
 
+const TotpSetupS: v.GenericSchema<unknown, TotpSetupNode> = v.object({
+  type: v.literal("totp_setup"),
+  label: TextS,
+  secret: v.string(),
+  uri: v.pipe(v.string(), v.startsWith("otpauth://")),
+});
+const RecoveryCodesS: v.GenericSchema<unknown, RecoveryCodesNode> = v.object({
+  type: v.literal("recovery_codes"),
+  label: TextS,
+  codes: v.array(v.string()),
+});
+
 const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
   input: InputS,
   submit: SubmitS,
@@ -341,6 +370,8 @@ const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
   option: OptionS,
   provider: ProviderS,
   push_number: PushNumberS,
+  totp_setup: TotpSetupS,
+  recovery_codes: RecoveryCodesS,
 };
 
 const NodeType = v.looseObject({ type: v.string() });

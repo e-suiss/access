@@ -29,6 +29,9 @@ pub struct Asserted<'a> {
     pub address: Option<(&'a str, bool)>,
     /// The display name, attacker-controlled text.
     pub name: Option<&'a str>,
+    /// Whether an identity linked to no account may create one; false where registration is by
+    /// invitation only (OP-159 m.48 (c)).
+    pub register: bool,
 }
 
 /// The outcome of a sign-in with an external identity.
@@ -171,8 +174,9 @@ impl Externals<'_> {
         }))
     }
 
-    /// Signs in with `a` (OP-153 m.3 (l)): its linked account, or a new one; the answer does
-    /// not depend on whether any account holds the provider's address (CR-40).
+    /// Signs in with `a` (OP-153 m.3 (l)): its linked account, or a new one when `a` may register
+    /// (OP-159 m.48 (c)); the answer does not depend on whether any account holds the provider's
+    /// address (CR-40).
     ///
     /// # Errors
     /// [`AccountError`].
@@ -206,6 +210,18 @@ impl Externals<'_> {
             }
             tx.0.federated_verified(row.link, now_ms).await?;
             return Ok(Resolved::Existing(row.subject));
+        }
+        // OP-159 m.48 (c)
+        if !a.register {
+            audit(
+                tx,
+                "account.registration_refused",
+                who.actor,
+                a.provider,
+                who.correlation,
+            )
+            .await?;
+            return Ok(Resolved::Unusable);
         }
         let wrapped = crate::app::sealing::new_subject_key(self.environment)?;
         let subject = tx

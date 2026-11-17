@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.environment_domain_binding\n                           WHERE tenant_id = $1 AND environment_id = $2 AND domain_id = $3\n                             AND retired_at IS NULL) AS \"bound!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bound!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e6f4fe23421eb1952818bb75958099c19279d7f5adcbf77e6dfde5610384d238"
+}

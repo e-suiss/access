@@ -1522,7 +1522,12 @@ where
     }
 
     /// What is still missing (TN-132), with SL2's step-up added when it asked for one (TN-46).
-    fn needs(&self, state: &FlowState, enrolled: Enrolled, marker: bool) -> Vec<Requirement> {
+    pub(crate) fn needs(
+        &self,
+        state: &FlowState,
+        enrolled: Enrolled,
+        marker: bool,
+    ) -> Vec<Requirement> {
         let policy = self.policy_for(&state.purpose);
         let needs = missing(&policy, &enrolled, &state.factors, marker);
         if state.risk.as_ref().is_some_and(|n| n.step_up) {

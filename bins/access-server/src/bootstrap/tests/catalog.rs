@@ -875,6 +875,66 @@ async fn a_catalog_8_environment_refuses_the_version_9_actions_until_its_upgrade
 }
 
 #[tokio::test]
+async fn a_catalog_9_environment_refuses_the_consumer_binding_until_its_upgrade_commits() {
+    // OP-159 m.48 (b), OP-153 m.3 (a)
+    let w = World::new("catalog-v10").await;
+    let governance = FirstCatalog {
+        plane: &w.plane,
+        domains: &w.domains,
+        version: 9,
+    };
+    let (tenant, created) = environment_with(&w, &governance, "ninth").await;
+    let domain = created.domain;
+    assert!(accepts(&w, domain, IdpAction::EnvironmentKexShare).await);
+    let new: Vec<IdpAction> = IdpAction::ALL
+        .into_iter()
+        .filter(|a| a.since() == 10)
+        .collect();
+    assert_eq!(new, vec![IdpAction::EnvironmentConsumerBind]);
+    assert!(!accepts(&w, domain, IdpAction::EnvironmentConsumerBind).await);
+
+    let declared = DeclaredTargets::default();
+    let b = bootstrap(&w, &declared);
+    let root = root_key(&w.keys).unwrap();
+    let party = root_party(&root.public_key());
+    b.onboard(tenant, created.environment, domain, &root, party)
+        .await
+        .unwrap();
+    w.domains.release().await;
+    let Verdict::NotAllowed { decision, .. } = exercise(
+        &w,
+        domain,
+        "ninth",
+        IdpAction::EnvironmentConsumerBind,
+        "environment",
+    )
+    .await
+    else {
+        panic!("consumer_bind before the upgrade");
+    };
+    assert!(catalog_upgrade_required(&decision));
+
+    let summary = w.run(&old_plan("ninth")).await;
+    let namespaces: Vec<_> = upgraded(&summary, "ninth")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    assert_eq!(namespaces, vec![("idp.environment", "accepted")]);
+    assert!(accepts(&w, domain, IdpAction::EnvironmentConsumerBind).await);
+    assert!(matches!(
+        exercise(
+            &w,
+            domain,
+            "ninth",
+            IdpAction::EnvironmentConsumerBind,
+            "environment"
+        )
+        .await,
+        Verdict::Committed(_)
+    ));
+}
+
+#[tokio::test]
 async fn an_idp_write_before_the_upgrade_answers_catalog_upgrade_required() {
     // OP-153 m.3 (a), TN-110
     let w = World::new("catalog-required").await;

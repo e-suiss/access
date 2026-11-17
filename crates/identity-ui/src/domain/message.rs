@@ -48,6 +48,13 @@ pub enum TextId {
     /// Create a passkey.
     #[serde(rename = "action.passkey_create")]
     PasskeyCreate,
+    /// The environment requires a second step and the account has none yet: set one up now. Only
+    /// after the first factor (OP-159 m.48 (a)).
+    #[serde(rename = "second_factor.enroll")]
+    EnrollSecondFactor,
+    /// The key of a TOTP set up at sign-in (OP-159 m.48 (a)).
+    #[serde(rename = "label.totp_setup")]
+    TotpSetup,
     /// Verify a second-factor code.
     #[serde(rename = "action.verify")]
     Verify,
@@ -588,7 +595,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 191] = [
+    pub const ALL: [Self; 193] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -603,6 +610,8 @@ impl TextId {
         Self::SignIn,
         Self::PasskeySignIn,
         Self::PasskeyCreate,
+        Self::EnrollSecondFactor,
+        Self::TotpSetup,
         Self::Verify,
         Self::UseRecoveryCode,
         Self::Skip,
@@ -801,6 +810,8 @@ impl TextId {
             Self::SignIn => "action.sign_in",
             Self::PasskeySignIn => "action.passkey",
             Self::PasskeyCreate => "action.passkey_create",
+            Self::EnrollSecondFactor => "second_factor.enroll",
+            Self::TotpSetup => "label.totp_setup",
             Self::Verify => "action.verify",
             Self::UseRecoveryCode => "action.recovery_code",
             Self::Skip => "action.skip",
@@ -1001,6 +1012,12 @@ impl TextId {
             Self::SignIn => "Sign in",
             Self::PasskeySignIn => "Sign in with a passkey",
             Self::PasskeyCreate => "Create a passkey",
+            Self::EnrollSecondFactor => {
+                "This sign-in needs a second step. Set up an authenticator app or a passkey to continue."
+            }
+            Self::TotpSetup => {
+                "Add this key to your authenticator app, then enter the code it shows"
+            }
             Self::Verify => "Verify",
             Self::UseRecoveryCode => "Use a recovery code",
             Self::Skip => "Not now",
@@ -1285,6 +1302,8 @@ impl TextId {
         !matches!(
             self,
             Self::SecondFactorFailed
+                | Self::EnrollSecondFactor
+                | Self::TotpSetup
                 | Self::PasskeyNotRegistered
                 | Self::PasskeyAttestationRefused
                 | Self::PasskeyAttestationUnknown

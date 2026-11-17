@@ -617,7 +617,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The environment's settings: sign-in, session, branding, RP ID, mappers. */
+        /** The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)). */
         get: operations["getSettings"];
         put?: never;
         post?: never;
@@ -635,7 +635,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets the sign-in requirements. */
+        /** Sets the sign-in requirements; `registration: open | invite_only` (default open) refuses open registration and account creation by a social or enterprise sign-in when invite_only (OP-159 m.48 (c)). */
         put: operations["putSigninPolicy"];
         post?: never;
         delete?: never;
@@ -1366,6 +1366,23 @@ export interface paths {
         put?: never;
         /** Makes an administrator an owner, a root of the tenant's new environments: idp.tenant.owner_add (reserved, CT3; the owners' own, OP-159 m.47 (e)). */
         post: operations["addTenantOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/envs/{slug}/settings/management-binding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)). */
+        post: operations["bindManagementEnvironment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8914,6 +8931,50 @@ export interface operations {
                 slug: components["parameters"]["Slug"];
                 /** @description The resource's natural key. */
                 admin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    bindManagementEnvironment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
             };
             cookie?: never;
         };

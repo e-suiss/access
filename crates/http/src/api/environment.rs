@@ -1294,13 +1294,13 @@ const BASE: &[Route] = &[
     read(
         "/admin/v1/envs/{slug}/settings",
         "getSettings",
-        "The environment's settings: sign-in, session, branding, RP ID, mappers.",
+        "The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)).",
     ),
     write(
         Verb::Put,
         "/admin/v1/envs/{slug}/settings/signin-policy",
         "putSigninPolicy",
-        "Sets the sign-in requirements.",
+        "Sets the sign-in requirements; `registration: open | invite_only` (default open) refuses open registration and account creation by a social or enterprise sign-in when invite_only (OP-159 m.48 (c)).",
     ),
     write(
         Verb::Patch,
@@ -1616,6 +1616,13 @@ const BASE: &[Route] = &[
         "addTenantOwner",
         "Makes an administrator an owner, a root of the tenant's new environments: idp.tenant.owner_add (reserved, CT3; the owners' own, OP-159 m.47 (e)).",
     ),
+    // OP-159 m.48 (b)
+    write(
+        Verb::Post,
+        "/admin/v1/envs/{slug}/settings/management-binding",
+        "bindManagementEnvironment",
+        "Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
+    ),
     write(
         Verb::Post,
         "/admin/v1/envs/{slug}/tenant/admins/{admin}/remove",
@@ -1709,6 +1716,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "enumeration",
     "email_keep_days",
     "attestation",
+    "registration",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];
@@ -1844,7 +1852,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putHashProfile"
         // OP-159 m.3 (a), (o), (t), m.7 (b)
         | "putSigningProfile"
-        | "putKexShare" => (Settings, w(false)),
+        | "putKexShare"
+        // OP-159 m.48 (b)
+        | "bindManagementEnvironment" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -2163,6 +2173,12 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
             Invalid::ManagementEnvironment => &codes::platform::MANAGEMENT_ENVIRONMENT,
+            // OP-159 m.48 (b)
+            Invalid::ManagementBinding => &codes::platform::MANAGEMENT_BINDING,
+            Invalid::ManagementAcceptanceRequired => {
+                &codes::platform::MANAGEMENT_ACCEPTANCE_REQUIRED
+            }
+            Invalid::RootRequired => &codes::platform::ROOT_REQUIRED,
             Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,

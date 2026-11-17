@@ -5,6 +5,7 @@
 pub mod claims;
 pub mod dbsc;
 pub mod devices;
+pub mod enroll;
 pub mod epochs;
 pub mod mfa;
 pub mod portability;

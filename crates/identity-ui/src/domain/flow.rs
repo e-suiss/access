@@ -503,6 +503,64 @@ impl Ui {
         Self::new(flow, Step::SecondFactor, policy, nodes)
     }
 
+    /// The first second factor of an account, enrolled at sign-in (OP-159 m.48 (a)): the TOTP key
+    /// with the input for its first code, and passkey creation when `passkey` carries creation
+    /// options. Only after the first factor, and only for an account that never held a second
+    /// factor; nothing here can be skipped.
+    #[must_use]
+    pub fn enroll_second_factor(
+        flow: FlowId,
+        (secret, uri): (String, String),
+        passkey: Option<PasskeyOptions>,
+        policy: &[Requirement],
+    ) -> Self {
+        let mut nodes = vec![
+            Node::TotpSetup {
+                label: TextId::TotpSetup.into(),
+                secret,
+                uri,
+            },
+            Node::input(
+                FieldName::TotpCode,
+                Method::Totp,
+                InputKind::Code,
+                Autocomplete::OneTimeCode,
+                TextId::TotpLabel.into(),
+            ),
+            Node::Submit {
+                method: Method::Totp,
+                label: TextId::Verify.into(),
+            },
+        ];
+        if let Some(options) = passkey {
+            nodes.push(Node::PasskeyCreate {
+                mediation: CreateMediation::Explicit,
+                label: TextId::PasskeyCreate.into(),
+                options,
+            });
+        }
+        nodes.push(Node::Submit {
+            method: Method::Restart,
+            label: TextId::Restart.into(),
+        });
+        let mut ui = Self::new(flow, Step::SecondFactor, policy, nodes);
+        ui.messages.push(Message::info(TextId::EnrollSecondFactor));
+        ui
+    }
+
+    /// Adds the recovery codes a sign-in's enrollment made, shown once (§10.2.2, OP-159 m.48 (a));
+    /// only on the completed step.
+    #[must_use]
+    pub fn with_recovery_codes(mut self, codes: Vec<String>) -> Self {
+        if self.step == Step::Complete && !codes.is_empty() {
+            self.nodes.push(Node::RecoveryCodes {
+                label: TextId::RecoveryCodesSave.into(),
+                codes,
+            });
+        }
+        self
+    }
+
     /// A push waits for the approver (OP-156 m.3 (d), TN-102): the number to type, a check that
     /// submits [`Method::Push`] again, and the way back. The client polls the flow until
     /// `expires_at`.
@@ -847,6 +905,43 @@ mod tests {
             link.nodes
                 .iter()
                 .all(|n| n.method() == Some(Method::Restart))
+        );
+    }
+
+    // OP-159 m.48 (a)
+    #[test]
+    fn the_enrollment_step_offers_a_totp_key_and_a_passkey_and_no_skip() {
+        let ui = Ui::enroll_second_factor(
+            flow(),
+            (String::from("JBSWY3DP"), String::from("otpauth://totp/a")),
+            Some(options(&[])),
+            &[Requirement::SecondFactor],
+        );
+        assert_eq!(ui.step, Step::SecondFactor);
+        assert!(!ui.pre_auth());
+        let methods: Vec<_> = ui.nodes.iter().filter_map(Node::method).collect();
+        assert!(methods.contains(&Method::Totp) && methods.contains(&Method::PasskeyRegister));
+        assert!(!methods.contains(&Method::Skip));
+        assert!(ui.nodes.iter().any(|n| matches!(n, Node::TotpSetup { .. })));
+        assert_eq!(ui.messages, [Message::info(TextId::EnrollSecondFactor)]);
+        let bare = Ui::enroll_second_factor(flow(), (String::new(), String::new()), None, &[]);
+        assert!(
+            bare.nodes
+                .iter()
+                .all(|n| n.method() != Some(Method::PasskeyRegister))
+        );
+        let codes = vec![String::from("aaaa-bbbb")];
+        assert!(
+            ui.with_recovery_codes(codes.clone())
+                .nodes
+                .iter()
+                .all(|n| !matches!(n, Node::RecoveryCodes { .. }))
+        );
+        let done = Ui::complete(flow(), "/".into(), &[]).with_recovery_codes(codes);
+        assert!(
+            done.nodes
+                .iter()
+                .any(|n| matches!(n, Node::RecoveryCodes { .. }))
         );
     }
 

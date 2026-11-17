@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "complete",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "recovery_codes",
+      "label": {
+        "id": "recovery_codes.save",
+        "text": "Save these codes somewhere safe. Each code works once."
+      },
+      "codes": [
+        "abcd-efgh-0001",
+        "abcd-efgh-0002",
+        "abcd-efgh-0003",
+        "abcd-efgh-0004",
+        "abcd-efgh-0005",
+        "abcd-efgh-0006",
+        "abcd-efgh-0007",
+        "abcd-efgh-0008",
+        "abcd-efgh-0009",
+        "abcd-efgh-0010"
+      ]
+    }
+  ],
+  "messages": [],
+  "redirect_to": "/callback?state=example"
+}

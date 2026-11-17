@@ -19,8 +19,10 @@ import { tenantActionsQuery } from "../lib/sections.js";
 import {
   addOwner,
   createEnvironment,
+  defaultsPendingQuery,
   type IssuerStyle,
   inviteAdmin,
+  recordDefaults,
   removeAdmin,
   type TenantAdmin,
   type TenantEnvironment,
@@ -319,6 +321,36 @@ function Administrators({
   );
 }
 
+/**
+ * OP-159 m.48 (c): while the management environment reads its sign-in requirements from its kind, the
+ * founder records them with one signature; afterwards they change like any setting.
+ */
+function ManagementDefaults({ ctx }: { readonly ctx: Ctx }): ReactElement | null {
+  const management = ctx.session.environment;
+  const pending = useQuery(defaultsPendingQuery(ctx.instance, management));
+  const [w, write] = useRun<WriteResult>([defaultsPendingQuery(ctx.instance, management).queryKey]);
+  if (pending.data !== true && w.status !== "done") return null;
+  return (
+    <Panel id="tenant-defaults" title={t("tenantDefaultsTitle")}>
+      <p className={HINT}>{t("tenantDefaultsText")}</p>
+      {pending.data === true && (
+        <div className={ACTIONS}>
+          <Button
+            type="button"
+            data-testid="tenant-defaults-record"
+            onClick={() => {
+              write(() => recordDefaults(ctx.instance, ctx.confirm, management));
+            }}
+          >
+            {t("tenantDefaultsAction")}
+          </Button>
+        </div>
+      )}
+      <Recorded w={w} />
+    </Panel>
+  );
+}
+
 export function TenantHome({
   ctx,
   environments,
@@ -336,6 +368,7 @@ export function TenantHome({
       intro={t("tenantHomeIntro", { environment: ctx.session.environment })}
       data-testid="tenant-home"
     >
+      <ManagementDefaults ctx={ctx} />
       <section aria-labelledby="tenant-environments-title" className="flex flex-col gap-4">
         <h2 id="tenant-environments-title" className="text-lg font-semibold">
           {t("tenantEnvironments")}

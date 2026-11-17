@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.subject_id, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms, c.ended_claim_id,\n                  a.ended_at IS NULL AS \"admin_live!\",\n                  (extract(epoch FROM a.cooling_until) * 1000)::bigint AS cooling_ms\n             FROM access.tenant_admin_claims c\n             JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id\n              AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id\n            WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4\n            ORDER BY c.created_at DESC LIMIT 1",
+  "query": "SELECT c.subject_id, c.episode, c.claim_id, c.stated_ms, c.valid_until_ms, c.ended_ms,\n                  c.ended_claim_id,\n                  a.ended_at IS NULL AS \"admin_live!\",\n                  (extract(epoch FROM a.cooling_until) * 1000)::bigint AS cooling_ms\n             FROM access.tenant_admin_claims c\n             JOIN access.tenant_admins a ON a.tenant_id = c.tenant_id\n              AND a.environment_id = c.environment_id AND a.subject_id = c.subject_id\n            WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.domain_id = $3 AND c.party_id = $4\n            ORDER BY c.episode DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "episode",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "episode"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "claim_id",
         "type_info": "Bytea",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "stated_ms",
         "type_info": "Int8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "valid_until_ms",
         "type_info": "Int8",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "ended_ms",
         "type_info": "Int8",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "ended_claim_id",
         "type_info": "Bytea",
         "origin": {
@@ -70,13 +81,13 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "admin_live!",
         "type_info": "Bool",
         "origin": "Expression"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "cooling_ms",
         "type_info": "Int8",
         "origin": "Expression"
@@ -92,6 +103,7 @@
     },
     "nullable": [
       false,
+      false,
       true,
       true,
       true,
@@ -101,5 +113,5 @@
       null
     ]
   },
-  "hash": "71f91e2d4c9c1ce7851d54a2f923ab0fb302c1e78b5b0a255d877a5e715702ab"
+  "hash": "fa5cdd1c96cc3c099123745293e469e4d7707c185fe492e6d924b3429d692382"
 }

@@ -24,6 +24,9 @@ mod payment;
 #[path = "login/attestation.rs"]
 mod attestation;
 
+#[path = "login/enroll.rs"]
+mod enroll;
+
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU64, Ordering};

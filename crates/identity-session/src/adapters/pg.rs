@@ -117,6 +117,16 @@ impl SessionTx for PgTx {
         Ok(self.0.code_set_pending(subject).await?)
     }
 
+    async fn second_factor_ever(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .ever_held(
+                subject,
+                &[crate::app::TOTP, crate::adapters::passkeys::WEBAUTHN],
+            )
+            .await?)
+    }
+
     async fn user_handle(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 64]>, SessionError> {
         Ok(self.0.user_handle(subject).await?)
     }

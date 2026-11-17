@@ -172,6 +172,8 @@ export class LoginMock {
   linkPolls = 2;
   /** OP-156 m.3 (d): the second step after the password, when a test replaces it. */
   secondFactor: LoginUi | undefined = undefined;
+  /** OP-159 m.48 (a): the step a right TOTP code answers with, when a test replaces it. */
+  totpDone: LoginUi | undefined = undefined;
   /** The step a sent push answers with. */
   pushSent: LoginUi | undefined = undefined;
   /** How many polls of a push wait still answer "waiting". */
@@ -349,7 +351,7 @@ export class LoginMock {
           : { status: 401, ui: echo(example("authenticate-failed"), this.identifier) };
       case "totp":
         return fields.totp_code === totp
-          ? { status: 200, ui: withoutNodes(example("complete")) }
+          ? { status: 200, ui: this.totpDone ?? withoutNodes(example("complete")) }
           : { status: 200, ui: example("second-factor-failed") };
       case "passkey": {
         const credential = JSON.parse(fields.passkey_credential ?? "{}") as { id?: string };

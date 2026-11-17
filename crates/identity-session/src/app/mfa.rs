@@ -207,7 +207,7 @@ where
 
     /// TN-64: carries `session` to the next epoch, then moves the subject's epoch, which ends
     /// every other session and refresh family in this transaction.
-    async fn end_other_sessions(
+    pub(crate) async fn end_other_sessions(
         &self,
         tx: &mut D::Tx,
         session: &access_store::sessions::SessionRow,
@@ -375,7 +375,7 @@ where
     }
 
     /// A fresh 160-bit seed for `subject`, sealed under its DEK (§10.2.2).
-    async fn new_seed(
+    pub(crate) async fn new_seed(
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],
@@ -400,7 +400,7 @@ where
     /// The credential of the sealed seed once `code` matches it: its first step used, its
     /// binding Claim and signal queued, and recovery codes when the account has none; `None`
     /// when the code does not match.
-    async fn add_totp(
+    pub(crate) async fn add_totp(
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],
@@ -448,7 +448,7 @@ where
 
     /// The audit record and the account holder's notice of a confirmed TOTP; returns the
     /// subject's external id.
-    async fn totp_announced(
+    pub(crate) async fn totp_announced(
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],
@@ -595,7 +595,7 @@ where
 
     /// The subject's WebAuthn `user.id`: its random 64-byte handle, made on first use (§12.3.6
     /// invariant 10).
-    async fn user_handle(
+    pub(crate) async fn user_handle(
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],
@@ -612,7 +612,7 @@ where
     }
 
     /// The creation options of a new passkey for the handle (§10.2.4).
-    async fn creation(
+    pub(crate) async fn creation(
         &self,
         handle: [u8; 64],
         name: &str,

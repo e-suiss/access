@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT subject_id, domain_id, party_id, claim_id, stated_ms, valid_until_ms, ended_ms,\n                ended_claim_id\n           FROM access.tenant_admin_claims\n          WHERE tenant_id = $1 AND environment_id = $2 AND ($3::uuid IS NULL OR subject_id = $3)\n          ORDER BY subject_id, domain_id",
+  "query": "SELECT subject_id, domain_id, party_id, episode, claim_id, stated_ms, valid_until_ms,\n                ended_ms, ended_claim_id\n           FROM access.tenant_admin_claims\n          WHERE tenant_id = $1 AND environment_id = $2 AND ($3::uuid IS NULL OR subject_id = $3)\n          ORDER BY subject_id, domain_id, episode",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "episode",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.tenant_admin_claims",
+            "name": "episode"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "claim_id",
         "type_info": "Bytea",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "stated_ms",
         "type_info": "Int8",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "valid_until_ms",
         "type_info": "Int8",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "ended_ms",
         "type_info": "Int8",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "ended_claim_id",
         "type_info": "Bytea",
         "origin": {
@@ -103,6 +114,7 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
@@ -110,5 +122,5 @@
       true
     ]
   },
-  "hash": "34e5bf85441adb8c45e6f28ff333d0c265eaedbe52c2b5887eec38770a814e5f"
+  "hash": "466e2886f77a811bd06b13bec23c51acc7c79f2febe6fc331a05816586523abc"
 }

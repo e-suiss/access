@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT domain_id, role, acceptance_id FROM access.environment_domain_binding\n          WHERE tenant_id = $1 AND environment_id = $2 AND retired_at IS NULL ORDER BY domain_id",
+  "query": "SELECT domain_id, role, acceptance_id FROM access.environment_domain_binding\n          WHERE tenant_id = $1 AND environment_id = $2 AND retired_at IS NULL\n            AND (effective_at IS NULL OR effective_at <= clock_timestamp())\n          ORDER BY domain_id",
   "describe": {
     "columns": [
       {
@@ -49,5 +49,5 @@
       true
     ]
   },
-  "hash": "31bb48e19f950d79e1c0a34b0378e1029c47fd4227b0d7575516451fb3a9c5fe"
+  "hash": "f0257990731af4582fb98d9d988a5de30e5a427f76f56a7d27afa80b45611411"
 }

@@ -52,6 +52,14 @@ pub(crate) trait EndAdministration: Send + Sync {
         place: (TenantId, EnvironmentId),
         subject: [u8; 16],
     ) -> Pin<Box<dyn Future<Output = Result<u32, access_internal_api::idp::Unavailable>> + Send + '_>>;
+
+    /// Opens a new episode of each ended line of `subject` once its account is reactivated (OP-159
+    /// m.48 (d)); the number of lines stated.
+    fn revive(
+        &self,
+        place: (TenantId, EnvironmentId),
+        subject: [u8; 16],
+    ) -> Pin<Box<dyn Future<Output = Result<u32, access_internal_api::idp::Unavailable>> + Send + '_>>;
 }
 
 impl<S, I, C> EndAdministration
@@ -68,6 +76,15 @@ where
     ) -> Pin<Box<dyn Future<Output = Result<u32, access_internal_api::idp::Unavailable>> + Send + '_>>
     {
         Box::pin(async move { Self::end(self, place, &subject).await })
+    }
+
+    fn revive(
+        &self,
+        place: (TenantId, EnvironmentId),
+        subject: [u8; 16],
+    ) -> Pin<Box<dyn Future<Output = Result<u32, access_internal_api::idp::Unavailable>> + Send + '_>>
+    {
+        Box::pin(async move { Self::revive(self, place, &subject).await })
     }
 }
 
@@ -308,6 +325,22 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
         };
         if let Err(e) = ender.end(place, subject).await {
             tracing::warn!(event = "administration.end", outcome = "error", error = %e.0, "administration end left to the restate job");
+        }
+    }
+
+    /// Revives the `tenant_administration` lines of a reactivated `subject` (OP-159 m.48 (d)); a
+    /// failure leaves them to the console, which opens the new episode when the administrator next
+    /// enters the environment.
+    pub(super) async fn revive_administration(
+        &self,
+        place: (TenantId, EnvironmentId),
+        subject: [u8; 16],
+    ) {
+        let Some(ender) = &self.administration else {
+            return;
+        };
+        if let Err(e) = ender.revive(place, subject).await {
+            tracing::warn!(event = "administration.revive", outcome = "error", error = %e.0, "administration revival left to the console");
         }
     }
 }

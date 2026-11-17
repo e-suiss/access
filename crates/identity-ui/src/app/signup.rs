@@ -44,6 +44,15 @@ const PREFIX: char = 'r';
 /// How fresh the session's last authentication must be to change the address (OP-153 m.3 (i)).
 pub const STEP_UP_MAX_AGE_MS: u64 = 300_000;
 
+/// Registration is by invitation only in this environment (OP-159 m.48 (c)): the same answer for
+/// every address, before anything is sent.
+pub const REGISTRATION_CLOSED: Problem = Problem {
+    status: 403,
+    code: "registration-closed",
+    title: "Accounts here are created by invitation only",
+    retry_after_s: None,
+};
+
 /// The step-up an e-mail change needs first (X29).
 pub const STEP_UP_REQUIRED: Problem = Problem {
     status: 401,
@@ -206,8 +215,13 @@ where
     /// `POST /v1/login/flows` with `kind: registration` (OP-153 m.3 (g)): a new sign-up flow at
     /// its address step, and the flow cookie when the browser has none.
     pub async fn create_signup(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
-        if let Err(r) = self.kit(entry).await {
-            return r;
+        match self.kit(entry).await {
+            Err(r) => return r,
+            // OP-159 m.48 (c)
+            Ok(kit) if !kit.signin.open_registration() => {
+                return Reply::problem(REGISTRATION_CLOSED);
+            }
+            Ok(_) => {}
         }
         let Ok(secret) = access_crypto::random::bytes::<32>() else {
             return Reply::problem(FLOW_GONE);
@@ -262,6 +276,10 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // OP-159 m.48 (c)
+        if !kit.signin.open_registration() {
+            return Reply::problem(REGISTRATION_CLOSED);
+        }
         let (Some(flow), Some(secret), Some(device)) = (
             FlowId::parse(handle),
             signup_secret(handle),

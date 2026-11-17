@@ -39,6 +39,30 @@ fn text_ids() -> Vec<&'static str> {
     TextId::ALL.iter().map(|t| t.as_str()).collect()
 }
 
+// OP-159 m.48 (a)
+fn enrollment_nodes() -> (Value, Value) {
+    let totp_setup = variant(
+        "type",
+        "totp_setup",
+        &json!({
+            "label": r("Text"),
+            "secret": { "type": "string" },
+            "uri": { "type": "string", "pattern": "^otpauth://" },
+        }),
+        &["label", "secret", "uri"],
+    );
+    let recovery_codes = variant(
+        "type",
+        "recovery_codes",
+        &json!({
+            "label": r("Text"),
+            "codes": { "type": "array", "items": { "type": "string" } },
+        }),
+        &["label", "codes"],
+    );
+    (totp_setup, recovery_codes)
+}
+
 fn node() -> Value {
     let input = variant(
         "type",
@@ -126,6 +150,7 @@ fn node() -> Value {
         }),
         &["number", "label", "expires_at"],
     );
+    let (totp_setup, recovery_codes) = enrollment_nodes();
     json!({ "oneOf": [
         input,
         submit,
@@ -136,6 +161,8 @@ fn node() -> Value {
         option,
         provider,
         push_number,
+        totp_setup,
+        recovery_codes,
     ] })
 }
 

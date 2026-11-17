@@ -529,6 +529,27 @@
       "description": "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b))."
     },
     {
+      "code": "management-binding",
+      "type": "urn:suiss:access:problem:management-binding",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Only a standard environment binds to its own tenant's management environment, named by its slug, and only once (TN-4, OP-159 m.48 (b))."
+    },
+    {
+      "code": "management-acceptance-required",
+      "type": "urn:suiss:access:problem:management-acceptance-required",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The environment's root must first establish an Acceptance of the management environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b))."
+    },
+    {
+      "code": "root-required",
+      "type": "urn:suiss:access:problem:root-required",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "Only the environment's root signs this, from a session and on its Anchor; the operator and the platform never do (INV-29, OP-159 m.48 (b))."
+    },
+    {
       "code": "founding-expired",
       "type": "urn:suiss:access:problem:founding-expired",
       "status": 410,

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.environment_domain_binding (tenant_id, environment_id, domain_id, role, acceptance_id,\n           effective_at)\n         VALUES ($1, $2, $3, 'consuming', $4, clock_timestamp() + $5::bigint * interval '1 second')\n         ON CONFLICT (tenant_id, environment_id, domain_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4336b2fc154674ff29657313bd4cf2d56d2e1a39552865bd35bb38e6421605d7"
+}

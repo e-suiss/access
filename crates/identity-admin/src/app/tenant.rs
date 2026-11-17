@@ -75,11 +75,13 @@ pub struct OpenedEnvironment {
     pub issuer: String,
 }
 
-/// The `idp` actions a standard environment's administrator rule covers (OP-159 m.47 (d)).
+/// The `idp` actions a standard environment's administrator rule covers (OP-159 m.47 (d)): every one
+/// but `idp.environment.consumer_bind`, which only the environment's root signs (OP-159 m.48 (b)).
 #[must_use]
 pub fn environment_actions() -> Vec<access_kernel::model::ActionRef> {
     IdpAction::ALL
         .into_iter()
+        .filter(|a| *a != IdpAction::EnvironmentConsumerBind)
         .map(IdpAction::action_ref)
         .collect()
 }

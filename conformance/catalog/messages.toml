@@ -5220,3 +5220,47 @@ surface = "login"
 class = "info"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "second_factor-enroll"
+text_id = "second_factor.enroll"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-totp_setup"
+text_id = "label.totp_setup"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-totp_copy"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-totp_copied"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-totp_open"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_saved"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false

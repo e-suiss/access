@@ -131,6 +131,12 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Whether the subject ever held a TOTP credential or a passkey, a removed one too (OP-159
+    /// m.48 (a)).
+    fn second_factor_ever(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// The subject's WebAuthn `user.id`.
     fn user_handle(
         &mut self,

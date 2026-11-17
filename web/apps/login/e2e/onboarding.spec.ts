@@ -250,6 +250,30 @@ test("a second step the account has none of is explained", async ({ page, mock }
   );
 });
 
+// OP-159 m.48 (a), §10.2.2: the first second step is set up in the sign-in, and its recovery codes
+// are read before it continues
+test("a required second step is set up during the sign-in", async ({ page, mock }) => {
+  mock.secondFactor = example("second-factor-enroll");
+  mock.totpDone = example("complete-recovery-codes");
+  mock.json.set("POST /v1/account/recovery-codes/acknowledgement", { status: 204 });
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByTestId("totp-secret")).toHaveText("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+  await expect(page.getByTestId("totp-uri")).toHaveAttribute("href", /^otpauth:\/\/totp\//);
+  await expect(page.getByTestId("second-step-missing")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create a passkey" })).toBeVisible();
+  await page.getByLabel("Code from your authenticator app").fill("123456");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.getByTestId("recovery-codes").getByRole("listitem")).toHaveCount(10);
+  expect(mock.requests).not.toContain("POST /v1/account/recovery-codes/acknowledgement");
+  await page.getByRole("button", { name: "I saved them — continue" }).click();
+  await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+  expect(mock.requests).toContain("POST /v1/account/recovery-codes/acknowledgement");
+});
+
 // OP-83
 test("the founding and invitation pages have no WCAG 2.2 AA violations", async ({ page, mock }) => {
   founding(mock);

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.tenant_admin_claims (tenant_id, environment_id, subject_id, domain_id, party_id, episode)\n         SELECT $1::uuid, $2::uuid, $3::uuid, $4::bytea, $5::bytea, coalesce(max(c.episode), 0) + 1\n           FROM access.tenant_admin_claims c\n          WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.subject_id = $3 AND c.domain_id = $4\n         HAVING NOT coalesce(bool_or(c.ended_ms IS NULL), false)\n         ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c2966c1500f525ea771a80adadc193d933084919104a92d5687fc1df5c1fd8f"
+}

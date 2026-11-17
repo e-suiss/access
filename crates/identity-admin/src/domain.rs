@@ -52,8 +52,8 @@ pub mod support;
 
 pub use ciba::CibaSetting;
 pub use environment::{
-    Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
-    Social, SocialClient, Upstream, UpstreamLink,
+    Binding, Group, Members, MembershipIssuer, Name, Registration, SessionPolicy, SigninMethod,
+    SigninPolicy, Social, SocialClient, Upstream, UpstreamLink,
 };
 
 /// Context label of a change digest.
@@ -383,6 +383,18 @@ pub enum Invalid {
     /// console and account clients (TN-138, OP-159 m.47 (b)).
     #[error("management environment")]
     ManagementEnvironment,
+    /// A consumer binding that does not fit: not a standard environment, another tenant's or no
+    /// management environment, or one bound already (TN-4, OP-159 m.48 (b)).
+    #[error("management binding")]
+    ManagementBinding,
+    /// A consumer binding whose environment does not yet accept the management environment's
+    /// `tenant_administration` Claims for subject selection (TN-4, TN-139, OP-159 m.48 (b)).
+    #[error("management acceptance required")]
+    ManagementAcceptanceRequired,
+    /// A write only the environment's root signs, sent on another basis or without a session
+    /// (INV-29, OP-159 m.48 (b)).
+    #[error("root required")]
+    RootRequired,
     /// The actor's account is in the grace period after a recovery, which refuses this change
     /// (TN-56, OP-153 m.3 (e)).
     #[error("recovery grace")]
@@ -803,6 +815,9 @@ impl Invalid {
             Self::UpstreamSubjectLinked => "upstream-subject-linked",
             Self::CatalogUpgradeRequired => access_internal_api::idp::CATALOG_UPGRADE_REQUIRED,
             Self::ManagementEnvironment => "management-environment",
+            Self::ManagementBinding => "management-binding",
+            Self::ManagementAcceptanceRequired => "management-acceptance-required",
+            Self::RootRequired => "root-required",
             Self::RecoveryPolicy => "invalid-recovery-policy",
             Self::RecoveryOption => "recovery-option-off",
             Self::SelfIssue => "self-issue-refused",
@@ -2210,6 +2225,12 @@ pub enum Change {
     SigningProfile(Option<assurance::SigningProfile>),
     /// `idp.environment.kex_share` (CT2, OP-159 m.3 (a), (t)).
     KexShare(assurance::KexShare),
+    /// `idp.environment.consumer_bind` (CT2, OP-159 m.48 (b)): binds the environment's domain as
+    /// consuming the Claims of its tenant's management environment, named by its slug.
+    ConsumerBind {
+        /// The management environment's slug.
+        management: String,
+    },
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home environment discovery
@@ -2511,6 +2532,8 @@ impl Change {
             // OP-159 m.3 (a)
             Self::SigningProfile(p) => assurance::SigningProfile::action(p.as_ref()),
             Self::KexShare(_) => IdpAction::EnvironmentKexShare,
+            // OP-159 m.48 (b)
+            Self::ConsumerBind { .. } => IdpAction::EnvironmentConsumerBind,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2719,6 +2742,11 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
+            // OP-159 m.48 (b)
+            Self::ConsumerBind { management } => {
+                access_identity_oauth::domain::issuer::check_slug(management)
+                    .map_err(|_| Invalid::ManagementBinding)
+            }
             // OP-157 m.3 (m), OP-158 m.3 (o), (r), OP-159 m.3 (a), (o), (t)
             Self::SigningProfile(_)
             | Self::KexShare(_)
@@ -3001,6 +3029,10 @@ impl Change {
             // OP-159 m.3 (a)
             Self::SigningProfile(p) => assurance::SigningProfile::body(p.as_ref()),
             Self::KexShare(k) => k.body(),
+            // OP-159 m.48 (b)
+            Self::ConsumerBind { management } => {
+                Value::Map(vec![(Value::text("management"), Value::text(management))])
+            }
         }
     }
 
@@ -3149,7 +3181,8 @@ impl Change {
             | Self::HashProfileSet(_)
             | Self::AuditTier(_)
             | Self::SigningProfile(_)
-            | Self::KexShare(_) => path.push(String::from("environment")),
+            | Self::KexShare(_)
+            | Self::ConsumerBind { .. } => path.push(String::from("environment")),
             // OP-157 m.3 (a)
             Self::CaseSystem(c) => path.extend(c.path()),
             Self::Review(r) => path.extend(r.path()),

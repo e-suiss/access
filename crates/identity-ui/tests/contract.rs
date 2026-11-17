@@ -64,6 +64,7 @@ fn creation_options(conditional: bool) -> PasskeyOptions {
     .unwrap()
 }
 
+#[expect(clippy::too_many_lines, reason = "one committed example per step")]
 fn examples() -> Vec<(&'static str, Ui)> {
     let identifier = Ui::identifier(flow(), request_options(&[]), &POLICY);
     let authenticate = Ui::authenticate(
@@ -125,6 +126,26 @@ fn examples() -> Vec<(&'static str, Ui)> {
             ),
         ),
         ("push-stopped", Ui::push_stopped(flow(), &POLICY)),
+        // OP-159 m.48 (a)
+        (
+            "second-factor-enroll",
+            Ui::enroll_second_factor(
+                flow(),
+                (
+                    String::from("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"),
+                    String::from(
+                        "otpauth://totp/Acme:ada%40example.org?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Acme&algorithm=SHA1&digits=6&period=30",
+                    ),
+                ),
+                Some(creation_options(false)),
+                &POLICY,
+            ),
+        ),
+        (
+            "complete-recovery-codes",
+            Ui::complete(flow(), "/callback?state=example".into(), &POLICY)
+                .with_recovery_codes((1..=10).map(|i| format!("abcd-efgh-{i:04}")).collect()),
+        ),
         (
             "complete",
             Ui::complete(flow(), "/callback?state=example".into(), &POLICY)

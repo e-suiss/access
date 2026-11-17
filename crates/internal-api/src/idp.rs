@@ -15,8 +15,8 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
 /// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a),
-/// OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 9;
+/// OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a), m.48 (b)).
+pub const CATALOG_VERSION: u64 = 10;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
 /// OP-155 m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
@@ -526,11 +526,15 @@ pub enum IdpAction {
     /// Sets the environment's hybrid key exchange share policy, `optimistic` or `advertise-only`; both
     /// offer the post-quantum group (CR-12 m.3, OP-159 m.3 (a)): CT2.
     EnvironmentKexShare,
+    /// Binds an existing standard environment's domain as consuming its tenant's management
+    /// environment's Claims (TN-4, OP-159 m.48 (b)): the environment's root signs it, the binding
+    /// holds after a 24-hour cool-down; CT2.
+    EnvironmentConsumerBind,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 212] = [
+    pub const ALL: [Self; 213] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -743,10 +747,11 @@ impl IdpAction {
         Self::EnvironmentSigningProfile,
         Self::EnvironmentSigningProfileClose,
         Self::EnvironmentKexShare,
+        Self::EnvironmentConsumerBind,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
-    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a)).
+    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a), OP-159 m.3 (a), m.48 (b)).
     #[must_use]
     #[expect(
         clippy::too_many_lines,
@@ -754,6 +759,7 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
+            Self::EnvironmentConsumerBind => 10,
             Self::EnvironmentSigningProfile
             | Self::EnvironmentSigningProfileClose
             | Self::EnvironmentKexShare => 9,
@@ -989,6 +995,7 @@ impl IdpAction {
             | Self::EnvironmentSigningProfile
             | Self::EnvironmentSigningProfileClose
             | Self::EnvironmentKexShare
+            | Self::EnvironmentConsumerBind
             | Self::EnvironmentBranding
             | Self::EnvironmentKeyPolicy
             | Self::EnvironmentKeyRotate
@@ -1355,6 +1362,7 @@ impl IdpAction {
             Self::EnvironmentSigningProfile => "signing_profile",
             Self::EnvironmentSigningProfileClose => "signing_profile_close",
             Self::EnvironmentKexShare => "kex_share",
+            Self::EnvironmentConsumerBind => "consumer_bind",
         }
     }
 

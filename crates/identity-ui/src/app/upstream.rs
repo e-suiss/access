@@ -266,6 +266,10 @@ where
         social: &Social<H, S>,
         q: StartQuery<'_>,
     ) -> Result<(String, Option<String>), Reply> {
+        // OP-159 m.48 (c)
+        if !kit.signin.social {
+            return Err(Reply::problem(NO_CONNECTION));
+        }
         let held = self
             .upstream_connection(kit, social, name)
             .await?
@@ -603,11 +607,16 @@ where
             .email
             .as_ref()
             .map(|e| (e.address.as_str(), false));
+        // OP-159 m.48 (c)
+        if !kit.signin.social {
+            return Reply::problem(UPSTREAM_FAILED);
+        }
         let asserted = Asserted {
             provider: name,
             key: &signed.external.key,
             address,
             name: signed.external.name.as_deref(),
+            register: kit.signin.open_registration(),
         };
         // TN-134 (1), (3)
         if let Err(r) = self

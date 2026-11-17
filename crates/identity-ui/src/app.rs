@@ -61,7 +61,7 @@ use access_identity_session::app::{
     Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Refusal, Step as Outcome,
 };
 use access_identity_session::domain::assurance::{Aal, MethodClass};
-use access_identity_session::domain::requirement::MfaPolicy;
+use access_identity_session::domain::requirement::{MfaPolicy, Requirement as Needed};
 use access_identity_session::domain::session::{clear_cookie, set_cookie};
 use access_identity_session::ports::Clock;
 use access_identity_webauthn::domain::psl::Psl;
@@ -86,6 +86,10 @@ pub const LOGIN_COOKIE: &str = "__Host-access-login";
 
 /// How long the identifier cookie lives: the flow's lifetime (OP-146 m.14 (d)).
 const LOGIN_COOKIE_MAX_AGE_S: u64 = 1_800;
+
+/// What an enrollment at sign-in names its key and passkey by when the page did not keep the
+/// identifier (OP-159 m.48 (a)).
+const ENROLL_LABEL: &str = "account";
 
 /// What the browser presented with a request.
 #[derive(Clone, Copy, Debug)]
@@ -229,6 +233,9 @@ enum Current {
     PushEnded(SecondFactors, TextId),
     /// OP-156 m.3 (d): "This wasn't me" stopped the sign-in.
     Stopped,
+    /// OP-159 m.48 (a): the account's first second factor, enrolled now; the label its key and
+    /// passkey are named by.
+    Enroll(String),
     Done(Reply),
 }
 
@@ -515,6 +522,13 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             &reqs,
         ),
         Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
+        // OP-159 m.48 (a)
+        Current::Enroll(_) => Ui::enroll_second_factor(
+            flow.clone(),
+            (String::new(), String::new()),
+            kit.auth.passkey.then(|| blank.clone()),
+            &reqs,
+        ),
         Current::Done(_) => return None,
     })
 }
@@ -564,7 +578,8 @@ where
             return reply;
         }
         **ui = with_options(kit, (**ui).clone());
-        if ui.step != Step::Identifier {
+        // OP-159 m.48 (c)
+        if ui.step != Step::Identifier || !kit.signin.social {
             return reply;
         }
         let rows = async {
@@ -882,6 +897,24 @@ where
                     .await
                     .map_err(|e| failed(&e))?
             }
+            // OP-159 m.48 (a)
+            (Method::Totp, Current::Enroll(_)) => {
+                return self
+                    .enroll_totp(auth, kit, b, &flow, &fref, field(FieldName::TotpCode))
+                    .await;
+            }
+            (Method::PasskeyRegister, Current::Enroll(_)) => {
+                return self
+                    .enroll_passkey(
+                        auth,
+                        kit,
+                        b,
+                        &flow,
+                        &fref,
+                        field(FieldName::PasskeyCredential),
+                    )
+                    .await;
+            }
             (Method::Totp, _) => auth
                 .totp(&fref, field(FieldName::TotpCode), corr)
                 .await
@@ -1019,6 +1052,13 @@ where
                 Some(id) => Current::Authenticate(id),
                 None => Current::Identifier,
             },
+            // OP-159 m.48 (a)
+            Outcome::Continue {
+                needs,
+                enrolled: Some(_),
+            } if needs.contains(&Needed::EnrollSecondFactor) => {
+                Current::Enroll(typed(b, fref.handle).unwrap_or_else(|| String::from(ENROLL_LABEL)))
+            }
             Outcome::Continue {
                 enrolled: Some(e), ..
             } => {
@@ -1134,6 +1174,27 @@ where
                 &reqs,
             ),
             Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
+            // OP-159 m.48 (a)
+            Current::Enroll(label) => {
+                match auth
+                    .sign_in_enrollment(fref, &kit.name, &label)
+                    .await
+                    .map_err(|e| failed(&e))?
+                {
+                    Ok(e) => {
+                        let passkey = e.passkey.map(options).transpose()?;
+                        Ui::enroll_second_factor(
+                            flow.clone(),
+                            (e.totp.secret.expose().clone(), e.totp.uri.expose().clone()),
+                            passkey,
+                            &reqs,
+                        )
+                    }
+                    Err(_) => {
+                        Ui::second_factor(flow.clone(), SecondFactors::default(), None, &reqs)
+                    }
+                }
+            }
         };
         Ok(Reply::ui(status, ui))
     }
@@ -1163,7 +1224,10 @@ where
             return Err(Reply::problem(p));
         }
         let current = self.current(auth, kit, b, fref).await?;
-        let second = matches!(current, Current::Second(_) | Current::PushEnded(..));
+        let second = matches!(
+            current,
+            Current::Second(_) | Current::PushEnded(..) | Current::Enroll(_)
+        );
         let mut reply = self.render(auth, kit, flow, fref, current, 401).await?;
         if let Body::Ui(ui) = &mut reply.body {
             let id = if !second {
@@ -1190,6 +1254,14 @@ where
     ) -> Result<Reply, Reply> {
         let reqs = policy(kit);
         match outcome {
+            // OP-159 m.48 (a)
+            Outcome::Continue {
+                ref needs,
+                enrolled: Some(_),
+            } if needs.contains(&Needed::EnrollSecondFactor) => {
+                let current = self.current(auth, kit, b, fref).await?;
+                self.render(auth, kit, flow, fref, current, 200).await
+            }
             Outcome::Continue {
                 enrolled: Some(e), ..
             } => {
@@ -1253,6 +1325,71 @@ where
                     .await
             }
         }
+    }
+
+    /// The first code of a TOTP enrolled at sign-in (OP-159 m.48 (a)): a verified code signs the
+    /// browser in and shows the recovery codes once; anything else answers as the step does.
+    async fn enroll_totp<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        flow: &FlowId,
+        fref: &FlowRef<'_>,
+        code: &str,
+    ) -> Result<Reply, Reply> {
+        let done = auth
+            .confirm_sign_in_totp(fref, code, b.correlation)
+            .await
+            .map_err(|e| failed(&e))?;
+        let Outcome::SignedIn(s) = done.step else {
+            return self.outcome(auth, kit, b, flow, fref, done.step).await;
+        };
+        let codes = done
+            .recovery_codes
+            .unwrap_or_default()
+            .iter()
+            .map(|c| c.expose().clone())
+            .collect();
+        let ui =
+            Ui::complete(flow.clone(), self.done_to(kit), &policy(kit)).with_recovery_codes(codes);
+        let reply = Reply::ui(200, ui)
+            .cookie(s.set_cookie)
+            .cookie(s.marker_cookie)
+            .cookie(Some(clear_cookie(LOGIN_COOKIE)));
+        // TN-33, OP-153 m.3 (y)
+        Ok(self.offer_dbsc(auth, kit, s.session, reply).await)
+    }
+
+    /// A passkey enrolled at sign-in (OP-159 m.48 (a)): once registered, the step asks for an
+    /// assertion of it, which completes the sign-in.
+    async fn enroll_passkey<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        flow: &FlowId,
+        fref: &FlowRef<'_>,
+        credential_json: &str,
+    ) -> Result<Reply, Reply> {
+        let Some(owned) = credential::registration(credential_json) else {
+            return Err(Reply::problem(INVALID_SUBMISSION));
+        };
+        let registered = auth
+            .enroll_sign_in_passkey(fref, &owned.response(), b.correlation)
+            .await
+            .map_err(|e| failed(&e))?;
+        let step = match registered {
+            Ok(access_identity_webauthn::app::RegistrationOutcome::Registered(_)) => auth
+                .resume(fref, b.correlation)
+                .await
+                .map_err(|e| failed(&e))?,
+            Ok(access_identity_webauthn::app::RegistrationOutcome::Rejected(r)) => {
+                return Err(account::refused(r));
+            }
+            Err(step) => step,
+        };
+        self.outcome(auth, kit, b, flow, fref, step).await
     }
 
     /// `POST /v1/login/link/preview`: what opening a magic link shows; consumes nothing

@@ -152,20 +152,13 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
         let mut t = TenantTx::begin(&self.app, tenant, management)
             .await
             .map_err(down)?;
+        let at = (&line.subject, &line.domain, line.episode);
         if holds {
-            store::stated(
-                &mut t,
-                (&line.subject, &line.domain),
-                &id.0,
-                (now, validity.until),
-            )
-            .await
-            .map_err(down)?;
+            store::stated(&mut t, at, &id.0, (now, validity.until)).await
         } else {
-            store::end_line(&mut t, (&line.subject, &line.domain), now, Some(&id.0))
-                .await
-                .map_err(down)?;
+            store::end_line(&mut t, at, now, Some(&id.0)).await
         }
+        .map_err(down)?;
         t.commit().await.map_err(down)?;
         Ok(Some(id.0))
     }
@@ -189,7 +182,8 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
 
     /// Opens the line of `subject` with its Party `party` in `domain` and states it, when the
     /// administrator is live (OP-159 m.47 (d)): what the console does when an administrator first
-    /// reads an environment. Returns the Claim stated.
+    /// reads an environment. A line whose episode ended gets a new episode (OP-159 m.48 (d)).
+    /// Returns the Claim stated.
     ///
     /// # Errors
     /// [`Unavailable`].
@@ -214,7 +208,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
             .await
             .map_err(down)?
             .into_iter()
-            .find(|l| l.domain == *domain);
+            .rfind(|l| l.domain == *domain);
         t.commit().await.map_err(down)?;
         let Some(line) = line.filter(|l| l.ended_ms.is_none()) else {
             return Ok(None);
@@ -260,7 +254,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
                     .map_err(down)?;
                 store::end_line(
                     &mut t,
-                    (&line.subject, &line.domain),
+                    (&line.subject, &line.domain, line.episode),
                     self.clock.now_ms(),
                     None,
                 )
@@ -270,6 +264,45 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Administration<S, I, C> {
             }
         }
         Ok(ended)
+    }
+
+    /// Revives the lines of `subject` after its account was reactivated (OP-159 m.48 (d)): in each
+    /// domain whose last episode ended, a new episode opens with the same Party and is stated. A
+    /// removed administrator, or an account that still cannot sign in, gets nothing; an ended
+    /// episode is never reopened. Returns the number of lines stated.
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn revive(
+        &self,
+        (tenant, management): (TenantId, EnvironmentId),
+        subject: &[u8; 16],
+    ) -> Result<u32, Unavailable> {
+        let (admin, status) = self.facts((tenant, management), subject).await?;
+        if !live(admin.as_ref(), status.as_deref()) {
+            return Ok(0);
+        }
+        let mut t = TenantTx::begin(&self.app, tenant, management)
+            .await
+            .map_err(down)?;
+        let lines = store::lines(&mut t, Some(subject)).await.map_err(down)?;
+        t.commit().await.map_err(down)?;
+        let mut last: std::collections::BTreeMap<[u8; 32], &AdminLine> =
+            std::collections::BTreeMap::new();
+        for line in &lines {
+            last.insert(*line.domain.as_bytes(), line);
+        }
+        let mut revived = 0_u32;
+        for line in last.values().filter(|l| l.ended_ms.is_some()) {
+            if self
+                .admit((tenant, management), subject, (&line.domain, &line.party))
+                .await?
+                .is_some()
+            {
+                revived = revived.saturating_add(1);
+            }
+        }
+        Ok(revived)
     }
 
     /// Renews the live lines that lapse within [`RESTATE_LEAD_MS`] and ends the lines whose

@@ -12,7 +12,43 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use crate::domain::assurance::AssuranceProfile;
 use crate::domain::requirement::{AuthPolicy, MfaPolicy};
 
+/// Who may create an account without an invitation (OP-159 m.48 (c)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Registration {
+    /// Anyone may register, within the domain lists (the default).
+    #[default]
+    Open,
+    /// Only an invitation or a founding creates an account; open registration and account
+    /// creation by a social or enterprise sign-in are refused.
+    InviteOnly,
+}
+
+impl Registration {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::InviteOnly => "invite_only",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "open" => Some(Self::Open),
+            "invite_only" => Some(Self::InviteOnly),
+            _ => None,
+        }
+    }
+}
+
 /// An environment's sign-in requirements as written.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each switch of the written policy is one flag (TN-132)"
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnvironmentSignin {
     /// Enabled methods: `email`, `phone`, `username`, `passkey`, `social:<provider>`.
@@ -35,6 +71,11 @@ pub struct EnvironmentSignin {
     pub profile: AssuranceProfile,
     /// The WebAuthn attestation policy (§10.2.4, OP-159 m.3 (ll)).
     pub attestation: AttestationPolicy,
+    /// Who may create an account without an invitation (OP-159 m.48 (c)).
+    pub registration: Registration,
+    /// Whether the environment's enabled social and enterprise providers sign anyone in; only a
+    /// management environment without a recorded policy turns them off (OP-159 m.48 (c)).
+    pub social: bool,
 }
 
 impl Default for EnvironmentSignin {
@@ -52,19 +93,30 @@ impl Default for EnvironmentSignin {
             dbsc: true,
             profile: AssuranceProfile::Standard,
             attestation: AttestationPolicy::None,
+            registration: Registration::Open,
+            social: true,
         }
     }
 }
 
 impl EnvironmentSignin {
-    /// No stored policy in a management environment (TN-138, OP-159 m.47 (b)): the default with
-    /// a second factor required; a decided `idp.environment.signin_policy` replaces it.
+    /// No stored policy in a management environment (TN-138, OP-159 m.47 (b), m.48 (c)): the
+    /// default with a second factor required, registration by invitation only and social sign-in
+    /// off; a decided `idp.environment.signin_policy` replaces it.
     #[must_use]
     pub fn management() -> Self {
         Self {
             mfa_required: true,
+            registration: Registration::InviteOnly,
+            social: false,
             ..Self::default()
         }
+    }
+
+    /// Whether an account may be created without an invitation or a founding (OP-159 m.48 (c)).
+    #[must_use]
+    pub fn open_registration(&self) -> bool {
+        self.registration == Registration::Open
     }
 }
 
@@ -156,8 +208,16 @@ impl EnvironmentSignin {
         };
         // OP-159 m.3 (ll)
         let attestation = attestation(get("attestation"))?;
+        // OP-159 m.48 (c)
+        let registration = match get("registration") {
+            None => Registration::Open,
+            Some(Value::Text(t)) => Registration::parse(t)?,
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
+            registration,
+            social: true,
             methods,
             mfa_required,
             domain_allow: texts(get("domain_allow"))?,
@@ -342,6 +402,39 @@ mod tests {
         ] {
             assert_eq!(with(bad), None);
         }
+    }
+
+    // OP-159 m.48 (c), MD-8
+    #[test]
+    fn a_policy_names_its_registration_or_is_open() {
+        let base = stored(&["email"], false, &[], &[]);
+        let p = EnvironmentSignin::decode(&base).unwrap();
+        assert!(p.open_registration() && p.social);
+        let Ok(Value::Map(m)) = dcbor::decode(&base, Limits::CEILING) else {
+            panic!("a policy map");
+        };
+        let with = |r: Value| {
+            let mut m = m.clone();
+            m.push((Value::text("registration"), r));
+            EnvironmentSignin::decode(
+                &dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default(),
+            )
+        };
+        let closed = with(Value::text("invite_only")).unwrap();
+        assert_eq!(closed.registration, Registration::InviteOnly);
+        assert!(!closed.open_registration() && closed.social);
+        assert!(with(Value::text("open")).unwrap().open_registration());
+        assert_eq!(with(Value::text("closed")), None);
+        assert_eq!(with(Value::Bool(true)), None);
+    }
+
+    // TN-138, OP-159 m.47 (b), m.48 (c)
+    #[test]
+    fn a_management_environment_without_a_policy_is_closed_and_needs_a_second_factor() {
+        let m = EnvironmentSignin::management();
+        assert!(m.mfa_required && !m.open_registration() && !m.social);
+        assert_eq!(m.apply(AuthPolicy::DEFAULT).mfa, MfaPolicy::Required);
+        assert!(EnvironmentSignin::default().open_registration());
     }
 
     // MD-8

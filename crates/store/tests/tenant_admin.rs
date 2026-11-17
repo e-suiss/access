@@ -16,9 +16,9 @@ use access_store::tenancy::{create_environment, create_tenant};
 use access_store::tenant_admin::{
     NewAdmin, NewFounding, SessionInstance, add_admin, admin, admins, attach_instance,
     complete_founding, create_management_environment, due_tenants, end_admin, end_line, founding,
-    founding_by_token, insert_founding, lines, make_owner, open_line, reinvite_founding,
-    session_instances, set_admin_party, set_display_name, set_tenant_status, slug_free, stated,
-    tenant_environments, tenant_profile, verify_founding,
+    founding_by_token, insert_founding, line_of_party, lines, make_owner, open_line,
+    reinvite_founding, session_instances, set_admin_party, set_display_name, set_tenant_status,
+    slug_free, stated, tenant_environments, tenant_profile, verify_founding,
 };
 use access_store::testing::{TestDb, fresh};
 
@@ -361,7 +361,7 @@ async fn administrators_own_once_end_once_and_their_lines_stay() {
     assert!(
         stated(
             &mut t,
-            (&invited, &consuming),
+            (&invited, &consuming, 1),
             &[0x66; 16],
             (1_000, 3_601_000)
         )
@@ -377,7 +377,7 @@ async fn administrators_own_once_end_once_and_their_lines_stay() {
     assert!(!end_admin(&mut t, &invited, None).await.unwrap());
     assert!(!make_owner(&mut t, &invited).await.unwrap());
     assert!(
-        end_line(&mut t, (&invited, &consuming), 2_000, None)
+        end_line(&mut t, (&invited, &consuming, 1), 2_000, None)
             .await
             .unwrap()
     );
@@ -385,22 +385,72 @@ async fn administrators_own_once_end_once_and_their_lines_stay() {
     assert_eq!(due_tenants(&db.app, 0).await.unwrap().len(), 1);
     let mut t = TenantTx::begin(&db.app, tenant, m).await.unwrap();
     assert!(
-        end_line(&mut t, (&invited, &consuming), 2_500, Some(&[0x77; 16]))
+        end_line(&mut t, (&invited, &consuming, 1), 2_500, Some(&[0x77; 16]))
             .await
             .unwrap()
     );
     assert!(
-        !stated(&mut t, (&invited, &consuming), &[0x68; 16], (3_000, 9_000))
-            .await
-            .unwrap()
+        !stated(
+            &mut t,
+            (&invited, &consuming, 1),
+            &[0x68; 16],
+            (3_000, 9_000)
+        )
+        .await
+        .unwrap()
     );
     let line = lines(&mut t, Some(&invited)).await.unwrap();
     let removed = admin(&mut t, &invited).await.unwrap().unwrap();
     t.commit().await.unwrap();
     assert_eq!(line[0].ended_ms, Some(2_000));
     assert_eq!(line[0].ended_claim, Some([0x77; 16]));
+    assert_eq!(line[0].episode, 1);
     assert!(removed.ended_ms.is_some() && removed.owner);
     assert!(due_tenants(&db.app, 0).await.unwrap().is_empty());
+    // OP-159 m.48 (d)
+    let mut t = TenantTx::begin(&db.app, tenant, m).await.unwrap();
+    assert!(
+        open_line(&mut t, &invited, &consuming, &[0x55; 16])
+            .await
+            .unwrap()
+    );
+    assert!(
+        !open_line(&mut t, &invited, &consuming, &[0x55; 16])
+            .await
+            .unwrap()
+    );
+    let both = lines(&mut t, Some(&invited)).await.unwrap();
+    assert_eq!(
+        both.iter()
+            .map(|l| (l.episode, l.ended_ms.is_some()))
+            .collect::<Vec<_>>(),
+        [(1, true), (2, false)]
+    );
+    assert!(
+        stated(
+            &mut t,
+            (&invited, &consuming, 2),
+            &[0x69; 16],
+            (3_000, 9_000)
+        )
+        .await
+        .unwrap()
+    );
+    let (found, _) = line_of_party(&mut t, &consuming, &[0x55; 16])
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((found.episode, found.claim), (2, Some([0x69; 16])));
+    t.commit().await.unwrap();
+    assert!(
+        raw_in(
+            &db,
+            (tenant, m),
+            "UPDATE access.tenant_admin_claims SET episode = 3 WHERE episode = 2"
+        )
+        .await
+        .is_err()
+    );
     for bad in [
         "UPDATE access.tenant_admins SET owner = false",
         "DELETE FROM access.tenant_admins",

@@ -153,6 +153,7 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   patchBranding: ["idp.environment", "branding"],
   putCspMode: ["idp.environment", "csp_mode"],
   patchSigninPolicy: ["idp.environment", "signin_policy"],
+  putSigninPolicy: ["idp.environment", "signin_policy"],
   putRelatedOrigins: ["idp.environment", "related_origins"],
   putRpId: ["idp.environment", "rp_id"],
   suspendAccount: ["idp.account", "suspend"],

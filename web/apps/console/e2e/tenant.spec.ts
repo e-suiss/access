@@ -147,6 +147,38 @@ test("a new environment is drafted in the management environment, signed and sen
   ]);
 });
 
+// OP-159 m.48 (c): the founder records the management defaults with one signature
+test("the management environment's sign-in rules are recorded with one signature", async ({
+  page,
+  bff,
+}) => {
+  bff.admin.set(`envs/${M}/settings`, { signin_policy_recorded: false });
+  await openHome(page);
+  const panel = page.getByRole("region", { name: en.tenantDefaultsTitle });
+  await panel.getByRole("button", { name: en.tenantDefaultsAction }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("idp.environment.signin_policy");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(panel.getByRole("status")).toContainText("Recorded as change");
+  expect(bff.writes).toEqual([
+    expect.objectContaining({
+      method: "PUT",
+      path: `envs/${M}/settings/signin-policy`,
+      body: expect.objectContaining({
+        methods: ["email", "passkey"],
+        mfa_required: true,
+        registration: "invite_only",
+      }),
+    }),
+  ]);
+});
+
+test("recorded sign-in rules ask for nothing", async ({ page, bff }) => {
+  bff.admin.set(`envs/${M}/settings`, { signin_policy_recorded: true });
+  await openHome(page);
+  await expect(page.getByRole("region", { name: en.tenantDefaultsTitle })).toHaveCount(0);
+});
+
 // OP-159 m.47 (e), (f)
 test("an administrator is invited, made an owner and removed; the last owner is refused", async ({
   page,

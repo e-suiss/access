@@ -435,6 +435,8 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         // OP-159 m.3 (a)
         "putSigningProfile" => IdpAction::EnvironmentSigningProfile,
         "putKexShare" => IdpAction::EnvironmentKexShare,
+        // OP-159 m.48 (b)
+        "bindManagementEnvironment" => IdpAction::EnvironmentConsumerBind,
         _ => return None,
     })
 }

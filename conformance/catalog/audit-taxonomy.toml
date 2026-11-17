@@ -181,6 +181,17 @@ caep = ""
 webhook = false
 
 [[event]]
+event = "login.second_factor.enrolled"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 10
+caep = "credential-change"
+webhook = true
+
+[[event]]
 event = "login.totp.failed"
 plane = "identity"
 class = "authentication"
@@ -547,6 +558,17 @@ ocsf_class = 3001
 ocsf_activity = 99
 caep = ""
 webhook = true
+
+[[event]]
+event = "account.registration_refused"
+plane = "identity"
+class = "account"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = ""
+webhook = false
 
 [[event]]
 event = "account.registered"

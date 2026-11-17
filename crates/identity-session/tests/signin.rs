@@ -1469,6 +1469,9 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
 
 #[path = "signin/sl2.rs"]
 mod sl2;
+
+#[path = "signin/enroll.rs"]
+mod enroll;
 fn stored_signin(methods: &[&str], mfa: bool) -> Vec<u8> {
     use suiss_crypto::dcbor::{self, Limits, Value};
     let list = |l: &[&str]| Value::Array(l.iter().map(|s| Value::text(s)).collect());

@@ -4162,7 +4162,7 @@
     "/admin/v1/envs/{slug}/settings": {
       "get": {
         "operationId": "getSettings",
-        "summary": "The environment's settings: sign-in, session, branding, RP ID, mappers.",
+        "summary": "The environment's settings: sign-in, session, branding, RP ID, mappers. `signin_policy_recorded` is false while a management environment reads its sign-in requirements from its kind (OP-159 m.48 (c)).",
         "tags": [
           "environment"
         ],
@@ -4228,7 +4228,7 @@
     "/admin/v1/envs/{slug}/settings/signin-policy": {
       "put": {
         "operationId": "putSigninPolicy",
-        "summary": "Sets the sign-in requirements.",
+        "summary": "Sets the sign-in requirements; `registration: open | invite_only` (default open) refuses open registration and account creation by a social or enterprise sign-in when invite_only (OP-159 m.48 (c)).",
         "tags": [
           "environment"
         ],
@@ -9149,6 +9149,95 @@
               "maxLength": 255
             },
             "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "environment",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/envs/{slug}/settings/management-binding": {
+      "post": {
+        "operationId": "bindManagementEnvironment",
+        "summary": "Binds this standard environment to its tenant's management environment {management: slug}, so the tenant's administrators administer it: idp.environment.consumer_bind (CT2), signed by the environment's root on its Anchor and never by the operator or the platform (`root-required`, INV-29). The environment must already accept the management environment's tenant_administration Claims for subject selection (`management-acceptance-required`); the binding holds after a 24-hour cool-down (TN-4, OP-159 m.48 (b)).",
+        "tags": [
+          "environment"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
           },
           {
             "$ref": "#/components/parameters/IdempotencyKey"

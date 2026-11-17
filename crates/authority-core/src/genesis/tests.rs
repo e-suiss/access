@@ -297,6 +297,8 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::EnvironmentSigningProfile, Tier::Ct3),
         (IdpAction::EnvironmentSigningProfileClose, Tier::Ct1),
         (IdpAction::EnvironmentKexShare, Tier::Ct2),
+        // OP-159 m.48 (b)
+        (IdpAction::EnvironmentConsumerBind, Tier::Ct2),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

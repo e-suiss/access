@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "second_factor",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "totp_setup",
+      "label": {
+        "id": "label.totp_setup",
+        "text": "Add this key to your authenticator app, then enter the code it shows"
+      },
+      "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "uri": "otpauth://totp/Acme:ada%40example.org?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Acme&algorithm=SHA1&digits=6&period=30"
+    },
+    {
+      "type": "input",
+      "name": "totp_code",
+      "method": "totp",
+      "kind": "code",
+      "autocomplete": "one-time-code",
+      "required": true,
+      "max_length": 10,
+      "label": {
+        "id": "label.totp_code",
+        "text": "Code from your authenticator app"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "totp",
+      "label": {
+        "id": "action.verify",
+        "text": "Verify"
+      }
+    },
+    {
+      "type": "passkey_create",
+      "mediation": "explicit",
+      "label": {
+        "id": "action.passkey_create",
+        "text": "Create a passkey"
+      },
+      "options": {
+        "rp": {
+          "id": "acme.localhost",
+          "name": "Acme"
+        },
+        "user": {
+          "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+          "name": "ada@example.org",
+          "displayName": "Ada"
+        },
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "pubKeyCredParams": [
+          {
+            "type": "public-key",
+            "alg": -7
+          },
+          {
+            "type": "public-key",
+            "alg": -8
+          }
+        ],
+        "timeout": 300000,
+        "excludeCredentials": [],
+        "authenticatorSelection": {
+          "residentKey": "required",
+          "userVerification": "preferred"
+        },
+        "attestation": "none",
+        "extensions": {
+          "credProps": true
+        },
+        "hints": [
+          "client-device"
+        ]
+      }
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "second_factor.enroll",
+      "text": "This sign-in needs a second step. Set up an authenticator app or a passkey to continue.",
+      "severity": "info"
+    }
+  ]
+}

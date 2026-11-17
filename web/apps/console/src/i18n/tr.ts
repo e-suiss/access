@@ -1172,6 +1172,10 @@ export const tr: Record<Key, string> = {
   enterAction: "Kaydet ve {environment} ortamını aç",
   enterFailed:
     "Bu tarayıcı burada kaydedilemedi. Hiçbir şey değişmedi. Biraz sonra yeniden deneyin.",
+  tenantDefaultsTitle: "Bu ortamın giriş kurallarını kaydedin",
+  tenantDefaultsText:
+    "Siz kaydedene kadar bu yönetim ortamı yerleşik kurallarını izler: hesaplar yalnız davetle, sosyal giriş kapalı ve her girişte ikinci adım. Kaydetmek tek bir imza ister; kuralları sonra ayarlardan değiştirebilirsiniz.",
+  tenantDefaultsAction: "Giriş kurallarını kaydet",
   tenantHomeTitle: "Kiracınız",
   tenantHomeIntro:
     "{environment}, kiracınızın yönetim ortamı. Kiracının bütün ortamlarını ve yöneticilerini buradan yönetirsiniz.",

@@ -440,6 +440,82 @@ fn the_attestation_policy_is_a_sign_in_requirement() {
     assert_eq!(upper.check(), Err(Invalid::SigninPolicy));
 }
 
+// OP-159 m.48 (c)
+#[test]
+fn registration_is_a_sign_in_requirement_open_by_default() {
+    let ids = ids();
+    let base = json!({"methods": ["email", "passkey"], "mfa_required": true,
+                      "required_fields": ["email"]});
+    let Ok(Change::SigninPolicy(p)) = compile(Op::PutSigninPolicy, None, &base, &ids) else {
+        panic!("a sign-in policy");
+    };
+    assert_eq!(p.registration, Registration::Open);
+    assert_eq!(p.to_value(), default_signin_with_mfa().to_value());
+    let mut closed = base.clone();
+    closed["registration"] = json!("invite_only");
+    let Ok(Change::SigninPolicy(c)) = compile(Op::PutSigninPolicy, None, &closed, &ids) else {
+        panic!("an invite-only policy");
+    };
+    assert_eq!(c.registration, Registration::InviteOnly);
+    assert_eq!(c, management_signin());
+    assert!(format!("{:?}", c.to_value()).contains("invite_only"));
+    for bad in [json!("closed"), json!(true)] {
+        let mut b = base.clone();
+        b["registration"] = bad.clone();
+        assert_eq!(
+            compile(Op::PutSigninPolicy, None, &b, &ids).err(),
+            Some(Invalid::SigninPolicy),
+            "{bad}"
+        );
+    }
+}
+
+fn default_signin_with_mfa() -> crate::domain::SigninPolicy {
+    crate::domain::SigninPolicy {
+        mfa_required: true,
+        ..default_signin()
+    }
+}
+
+// OP-159 m.48 (b)
+#[test]
+fn the_consumer_binding_names_the_management_environment() {
+    let ids = ids();
+    let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
+    let change = compile(
+        Op::BindManagementEnvironment,
+        None,
+        &json!({"management": "acme-admin"}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(change.action().label(), "idp.environment.consumer_bind");
+    assert_eq!(change.check(&declared), Ok(()));
+    for bad in [
+        json!({}),
+        json!({"management": "acme-admin", "domain": "x"}),
+        json!({"management": 7}),
+    ] {
+        assert_eq!(
+            compile(Op::BindManagementEnvironment, None, &bad, &ids).err(),
+            Some(Invalid::Body),
+            "{bad}"
+        );
+    }
+    let wrong = compile(
+        Op::BindManagementEnvironment,
+        None,
+        &json!({"management": "Not A Slug"}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(wrong.check(&declared), Err(Invalid::ManagementBinding));
+    assert!(
+        !crate::app::tenant::environment_actions()
+            .contains(&access_internal_api::idp::IdpAction::EnvironmentConsumerBind.action_ref())
+    );
+}
+
 // TN-110, OP-65
 #[test]
 fn the_validity_is_bounded() {

@@ -74,6 +74,27 @@ pub const MANAGEMENT_ENVIRONMENT: Code = code(
     "Conflict",
     "Tenant administration happens in the tenant's management environment, and a management environment keeps only the first-party console and account clients (TN-138, OP-159 m.47 (b)).",
 );
+/// A consumer binding that does not fit (TN-4, OP-159 m.48 (b)).
+pub const MANAGEMENT_BINDING: Code = code(
+    "management-binding",
+    409,
+    "Conflict",
+    "Only a standard environment binds to its own tenant's management environment, named by its slug, and only once (TN-4, OP-159 m.48 (b)).",
+);
+/// The environment does not yet accept the management environment's administrators (TN-139).
+pub const MANAGEMENT_ACCEPTANCE_REQUIRED: Code = code(
+    "management-acceptance-required",
+    409,
+    "Conflict",
+    "The environment's root must first establish an Acceptance of the management environment's issuer for subject selection by tenant_administration (TN-4, TN-139, OP-159 m.48 (b)).",
+);
+/// A write only the environment's root signs (INV-29).
+pub const ROOT_REQUIRED: Code = code(
+    "root-required",
+    403,
+    "Forbidden",
+    "Only the environment's root signs this, from a session and on its Anchor; the operator and the platform never do (INV-29, OP-159 m.48 (b)).",
+);
 /// The founder invitation expired.
 pub const FOUNDING_EXPIRED: Code = code(
     "founding-expired",

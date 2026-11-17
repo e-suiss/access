@@ -48,7 +48,7 @@ const ATTESTATION_REVOCATION_UNKNOWN: Problem = Problem {
 };
 
 /// The answer to a refused registration: honest after authentication (X34).
-fn refused(rejection: Rejection) -> Reply {
+pub(crate) fn refused(rejection: Rejection) -> Reply {
     match rejection {
         // OP-159 m.3 (ll)
         Rejection::AttestationRevocationUnknown | Rejection::MetadataUnavailable => {

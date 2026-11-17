@@ -572,6 +572,37 @@ fn aaguid_text(text: &str) -> bool {
         })
 }
 
+/// Who may create an account without an invitation (OP-159 m.48 (c)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Registration {
+    /// Anyone may register, within the domain lists (the default).
+    #[default]
+    Open,
+    /// Only an invitation or a founding creates an account.
+    InviteOnly,
+}
+
+impl Registration {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::InviteOnly => "invite_only",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "open" => Some(Self::Open),
+            "invite_only" => Some(Self::InviteOnly),
+            _ => None,
+        }
+    }
+}
+
 /// The shortest "keep N days" an e-mail reuse policy may name (OP-153 m.3 (i), TN-76 m.5).
 pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
 
@@ -602,6 +633,8 @@ pub struct SigninPolicy {
     pub profile: AssuranceProfile,
     /// The WebAuthn attestation policy (OP-159 m.3 (ll)); `none` by default.
     pub attestation: Attestation,
+    /// Who may create an account without an invitation (OP-159 m.48 (c)); open by default.
+    pub registration: Registration,
 }
 
 impl SigninPolicy {
@@ -680,6 +713,13 @@ impl SigninPolicy {
         // OP-159 m.3 (ll)
         if let Some(a) = self.attestation.to_value() {
             m.push((Value::text("attestation"), a));
+        }
+        // OP-159 m.48 (c)
+        if self.registration != Registration::Open {
+            m.push((
+                Value::text("registration"),
+                Value::text(self.registration.name()),
+            ));
         }
         Value::Map(m)
     }

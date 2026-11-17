@@ -1159,6 +1159,10 @@ export const en = {
   enterGoHome: "Go to {home}",
   enterAction: "Register and open {environment}",
   enterFailed: "This browser could not be registered here. Nothing was changed. Try again shortly.",
+  tenantDefaultsTitle: "Record this environment's sign-in rules",
+  tenantDefaultsText:
+    "Until you record them, this management environment follows its built-in rules: accounts only by invitation, no social sign-in, and a second step at every sign-in. Recording them takes one signature; you can change them later in the settings.",
+  tenantDefaultsAction: "Record the sign-in rules",
   tenantHomeTitle: "Your tenant",
   tenantHomeIntro:
     "{environment} is your tenant's management environment. From here you manage every environment of the tenant and its administrators.",

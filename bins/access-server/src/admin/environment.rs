@@ -624,6 +624,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Enviro
             self.end_administration((compiled.tenant, compiled.environment), *s)
                 .await;
         }
+        // OP-159 m.48 (d)
+        if let Change::AccountReactivate(s) = &compiled.change {
+            self.revive_administration((compiled.tenant, compiled.environment), *s)
+                .await;
+        }
         let resource = match report {
             Some(r) => serde_json::to_value(&r)
                 .ok()
