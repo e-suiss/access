@@ -133,9 +133,11 @@ pub fn register(body: &[u8], client_id: &str) -> Result<(Vec<u8>, Document), Ref
     if doc.contains_key("client_id") || FETCHED.iter().any(|f| doc.contains_key(*f)) {
         return Err(Refused::Metadata);
     }
-    // §11.4.5 SEP-837
+    // §11.4.5 SEP-837, AG-44
     let loopback = matches!(doc.get("redirect_uris"), Some(Value::Array(u))
-        if u.iter().filter_map(Value::as_str).any(is_loopback));
+    if u.iter().filter_map(Value::as_str).any(|u| {
+        is_loopback(u) || crate::domain::client::private_use_scheme(u).is_some()
+    }));
     if loopback && doc.get("application_type").and_then(Value::as_str) != Some("native") {
         return Err(Refused::RedirectUri);
     }
@@ -214,6 +216,11 @@ mod tests {
         assert_eq!(register(silent, id).err(), Some(Refused::RedirectUri));
         let jwks = br#"{"client_name":"A","redirect_uris":["https://a.example/cb"],"jwks_uri":"https://a.example/j"}"#;
         assert_eq!(register(jwks, id).err(), Some(Refused::Metadata));
+        // AG-44
+        let app = br#"{"client_name":"A","redirect_uris":["com.example.app:/cb"],"application_type":"native"}"#;
+        assert!(register(app, id).is_ok());
+        let web_app = br#"{"client_name":"A","redirect_uris":["com.example.app:/cb"]}"#;
+        assert_eq!(register(web_app, id).err(), Some(Refused::RedirectUri));
         // RFC 9700 §2.1, RFC 8252 §7
         for uri in [
             "urn:ietf:wg:oauth:2.0:oob",

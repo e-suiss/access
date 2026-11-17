@@ -296,6 +296,20 @@ impl Client {
 
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "[::1]", "localhost"];
 
+/// RFC 8252 §7.1, AG-44: the scheme of a private-use redirect URI, a native app's reverse domain
+/// name (`com.example.app:/cb`): lowercase, with a dot, starting with a letter, followed by more.
+#[must_use]
+pub fn private_use_scheme(uri: &str) -> Option<&str> {
+    let (scheme, rest) = uri.split_once(':')?;
+    let b = scheme.as_bytes();
+    (scheme.contains('.')
+        && b.first().is_some_and(u8::is_ascii_lowercase)
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'-'))
+        && !rest.is_empty())
+    .then_some(scheme)
+}
+
 pub(crate) fn loopback(uri: &str) -> Option<(&str, &str)> {
     let rest = uri.strip_prefix("http://")?;
     let end = rest.find(['/', '?']).unwrap_or(rest.len());

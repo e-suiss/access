@@ -914,15 +914,7 @@ impl RedirectUri {
                     "127.0.0.1" | "[::1]"
                 ) || a == "[::1]"
             }),
-            _ => {
-                let b = scheme.as_bytes();
-                scheme.contains('.')
-                    && b.first().is_some_and(u8::is_ascii_lowercase)
-                    && b.iter().all(|c| {
-                        c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'-')
-                    })
-                    && !rest.is_empty()
-            }
+            _ => access_identity_oauth::domain::client::private_use_scheme(s).is_some(),
         };
         if ok {
             Ok(Self(String::from(s)))

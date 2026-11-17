@@ -358,7 +358,8 @@ fn redirect_ok(uri: &str, kind: ApplicationType) -> bool {
     if uri.len() > 2048 || uri.contains(['#', '*']) || !uri.bytes().all(|c| c.is_ascii_graphic()) {
         return false;
     }
-    if is_loopback(uri) {
+    // RFC 8252 §7.1, §7.3, AG-6, AG-44
+    if is_loopback(uri) || crate::domain::client::private_use_scheme(uri).is_some() {
         return kind == ApplicationType::Native;
     }
     uri.strip_prefix("https://")
@@ -507,10 +508,14 @@ pub const fn new_app(first_seen_ms: u64, now_ms: u64) -> bool {
     now_ms.saturating_sub(first_seen_ms) < NEW_APP_MS
 }
 
-/// Whether every redirect URI is a loopback one (AG-6): such a client gets the extra warning.
+/// Whether every redirect URI is a loopback or a private-use one (AG-6, AG-44): nothing proves
+/// which app receives the code, so such a client gets the extra warning.
 #[must_use]
 pub fn loopback_only(redirect_uris: &[String]) -> bool {
-    !redirect_uris.is_empty() && redirect_uris.iter().all(|u| is_loopback(u))
+    !redirect_uris.is_empty()
+        && redirect_uris
+            .iter()
+            .all(|u| is_loopback(u) || crate::domain::client::private_use_scheme(u).is_some())
 }
 
 /// The hosts of `redirect_uris`, sorted, shown on the consent screen (AS-M14).
@@ -519,6 +524,10 @@ pub fn redirect_hosts(redirect_uris: &[String]) -> Vec<String> {
     let hosts: BTreeSet<String> = redirect_uris
         .iter()
         .filter_map(|u| {
+            // AG-44
+            if let Some(scheme) = crate::domain::client::private_use_scheme(u) {
+                return Some(String::from(scheme));
+            }
             let rest = u.split_once("://")?.1;
             let authority = rest.split(['/', '?']).next()?;
             let host = match authority.strip_prefix('[') {

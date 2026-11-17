@@ -236,6 +236,33 @@ fn loopback_only_clients_and_redirect_hosts_are_told() {
     assert_eq!(redirect_hosts(&l), vec!["127.0.0.1", "localhost"]);
 }
 
+// AG-44, RFC 8252 §7.1
+#[test]
+fn a_native_app_may_name_a_private_use_scheme_and_is_warned_about() {
+    let private = doc(r#","application_type":"native""#)
+        .replace("https://app.example/cb", "com.example.app:/oauth2redirect");
+    let d = parse(private.as_bytes(), URL).unwrap();
+    assert_eq!(d.redirect_uris, ["com.example.app:/oauth2redirect"]);
+    assert!(loopback_only(&d.redirect_uris));
+    assert_eq!(redirect_hosts(&d.redirect_uris), vec!["com.example.app"]);
+    let web = doc("").replace("https://app.example/cb", "com.example.app:/oauth2redirect");
+    assert_eq!(parse(web.as_bytes(), URL), Err(CimdError::Redirect));
+    for bad in [
+        "Com.example.app:/cb",
+        "comexampleapp:/cb",
+        "com.example.app:",
+        "1com.x:/cb",
+    ] {
+        let d = doc(r#","application_type":"native""#).replace("https://app.example/cb", bad);
+        assert_eq!(parse(d.as_bytes(), URL), Err(CimdError::Redirect), "{bad}");
+    }
+    let mixed = vec![
+        String::from("https://app.example/cb"),
+        String::from("com.example.app:/cb"),
+    ];
+    assert!(!loopback_only(&mixed));
+}
+
 // OP-154 m.3 (i), Ek B 4174
 #[test]
 fn only_raster_logos_are_kept() {
