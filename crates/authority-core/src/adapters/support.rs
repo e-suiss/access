@@ -25,4 +25,14 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
         led.core.support_facts(&party, &issuer).await
     }
+
+    /// The CT3 delay of `domain`, seconds (TN-146).
+    ///
+    /// # Errors
+    /// [`CoreError`]; [`CoreError::Unavailable`] without the domain's leader.
+    pub async fn ct3_delay(&self, domain: Digest) -> Result<u64, CoreError> {
+        let (guard, _) = self.led_now(domain).await?;
+        let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+        led.core.ct3_delay().await
+    }
 }

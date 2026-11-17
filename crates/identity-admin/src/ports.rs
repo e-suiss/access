@@ -30,6 +30,9 @@ pub trait Decider: Send + Sync {
         domain: Digest,
         ais: &[u8],
     ) -> impl Future<Output = Result<Option<Id>, Unavailable>> + Send;
+
+    /// The CT3 delay of `domain`, seconds (TN-146).
+    fn ct3_delay(&self, domain: Digest) -> impl Future<Output = Result<u64, Unavailable>> + Send;
 }
 
 /// The keys of an environment that live outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)):

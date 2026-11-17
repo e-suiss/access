@@ -2294,6 +2294,14 @@ async fn a_deleted_account_cannot_be_told_from_one_that_never_existed() {
     .await
     .unwrap();
     tx.commit().await.unwrap();
+    // TN-146
+    access_store::testing::age_deletion(
+        &e.db,
+        gone,
+        access_store::testing::DeletionStep::Effective,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         tombstone_due(&pg, &e.environment(), &ADMIN).await.unwrap(),
         1

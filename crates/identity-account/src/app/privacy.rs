@@ -47,6 +47,24 @@ pub const DESTROY_AFTER_MIN_S: i64 = 86_400;
 /// A data subject request is answered within this many days (KVKK m.13, TN-78).
 pub const ANSWER_DAYS: i32 = 30;
 
+/// Shortest cancellation window of a deletion, seconds (TN-146).
+pub const WINDOW_MIN_S: u64 = 86_400;
+
+/// Longest cancellation window of a deletion, seconds: the KVKK answer ceiling (TN-146, TN-78).
+pub const WINDOW_MAX_S: u64 = 30 * 86_400;
+
+/// The cancellation window of a deletion from the domain's CT3 delay (TN-146).
+#[must_use]
+pub const fn cancellation_window_s(ct3_delay_s: u64) -> u64 {
+    if ct3_delay_s < WINDOW_MIN_S {
+        WINDOW_MIN_S
+    } else if ct3_delay_s > WINDOW_MAX_S {
+        WINDOW_MAX_S
+    } else {
+        ct3_delay_s
+    }
+}
+
 /// How far back the user's security history reaches (OP-153 m.3 (ff)): 90 days.
 pub const HISTORY_DAYS: i64 = 90;
 
@@ -629,13 +647,13 @@ pub async fn request_deletion(
     subject: [u8; 16],
     source: DeletionSource,
     exercise: Option<&[u8; 32]>,
-    window_s: u64,
+    ct3_delay_s: u64,
     who: &Actor<'_>,
 ) -> Result<Scheduled, AccountError> {
     live(tx, subject, true).await?;
     let now = i64::try_from(tx.server_time().await?).map_err(|_| AccountError::Corrupt)?;
-    let window =
-        i64::try_from(window_s.saturating_mul(1_000)).map_err(|_| AccountError::Corrupt)?;
+    let window = i64::try_from(cancellation_window_s(ct3_delay_s).saturating_mul(1_000))
+        .map_err(|_| AccountError::Corrupt)?;
     let effective = now.saturating_add(window);
     if tx
         .0
@@ -1256,3 +1274,6 @@ pub async fn person_export(
         "derived_excluded": ["risk_level", "ip_pseudonym", "identifier_index"],
     }))
 }
+
+#[cfg(test)]
+mod tests;

@@ -374,7 +374,7 @@ fn abilities(
 }
 
 /// The CT3 time-lock of the domain (OP-141 m.34 (d)).
-fn ct3_delay(view: &Snapshot) -> u64 {
+pub(crate) fn ct3_delay(view: &Snapshot) -> u64 {
     match view.get(&meta::policy_default_key(meta::CT3_DELAY)) {
         Some(Value::Unsigned(s)) => s,
         _ => meta::CT3_DELAY_DEFAULT_S,

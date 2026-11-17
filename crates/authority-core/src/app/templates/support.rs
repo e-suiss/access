@@ -548,12 +548,14 @@ pub fn case_acceptance(view: &Snapshot, issuer: &Id) -> Option<Digest> {
 
 /// What the identity plane needs to draft a person's support Grant (OP-157 m.3 (f)): the
 /// person's self-anchor and the Acceptance the case system's Claims count under.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Facts {
     /// The self-anchor of the person, when the domain knows the Party.
     pub anchor: Option<Id>,
     /// The case system's `support_case` Acceptance, when the domain has one.
     pub acceptance: Option<Digest>,
+    /// The domain's CT3 delay, seconds (TN-146).
+    pub ct3_delay_s: u64,
 }
 
 impl<
@@ -573,8 +575,17 @@ impl<
                 .filter(|p| p.ended.is_none())
                 .map(|p| p.anchor),
             acceptance: case_acceptance(snap, issuer),
+            ct3_delay_s: crate::app::impact::ct3_delay(snap),
         })
         .await
+    }
+
+    /// The domain's CT3 delay at the head, seconds (TN-146).
+    ///
+    /// # Errors
+    /// The reader's errors.
+    pub async fn ct3_delay(&self) -> Result<u64, crate::CoreError> {
+        self.settled(crate::app::impact::ct3_delay).await
     }
 }
 

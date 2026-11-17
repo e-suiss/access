@@ -11,13 +11,15 @@ use access_kernel::model::Id;
 use crate::idp::{Submission, Unavailable, Verdict};
 
 /// What a support Grant is drafted with.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SupportFacts {
     /// The self-anchor of the person, while the domain holds the Party.
     pub anchor: Option<Id>,
     /// The digest of the domain's `predicate-input` Acceptance of the case system's
     /// `support_case` Claims, when it has one.
     pub acceptance: Option<Digest>,
+    /// The domain's CT3 delay, seconds (TN-146).
+    pub ct3_delay_s: u64,
 }
 
 /// The authority plane behind support access.

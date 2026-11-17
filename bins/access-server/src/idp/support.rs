@@ -42,6 +42,7 @@ where
         Ok(SupportFacts {
             anchor: f.anchor,
             acceptance: f.acceptance,
+            ct3_delay_s: f.ct3_delay_s,
         })
     }
 }

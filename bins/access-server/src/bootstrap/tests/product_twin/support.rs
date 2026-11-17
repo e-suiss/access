@@ -2316,7 +2316,16 @@ async fn a_person_deletes_their_own_account_with_their_devices_signature() {
     t.commit().await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].source, "self_service");
-    assert!(rows[0].effective_ms > i64::try_from(now).unwrap() + 3_600_000);
+    // TN-146
+    let floor = i64::try_from(now).unwrap() + 86_400_000;
+    assert!((floor..floor + 600_000).contains(&rows[0].effective_ms));
+    f.change(&d, Change::AccountDelete(weak.subject)).await;
+    let mut t = f.tx(&d).await;
+    let rows = t.deletions(weak.subject).await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source, "admin");
+    assert!((floor..floor + 600_000).contains(&rows[0].effective_ms));
 
     // OP-159 m.50 (a)
     f.change(

@@ -178,7 +178,8 @@ where
         let Ok(bytes) = intent.to_bytes() else {
             return unavailable();
         };
-        let effective = now.saturating_add(window_s().saturating_mul(1_000));
+        let window = privacy::cancellation_window_s(facts.ct3_delay_s);
+        let effective = now.saturating_add(window.saturating_mul(1_000));
         Reply::json(
             200,
             json!({
@@ -255,7 +256,7 @@ where
                 subject,
                 DeletionSource::SelfService,
                 Some(&committed.exercise.0),
-                window_s(),
+                facts.ct3_delay_s,
                 &who,
             )
             .await?;
@@ -277,11 +278,6 @@ where
             Err(_) => unavailable(),
         }
     }
-}
-
-/// The cancellation window: the CT3 delay (OP-153 m.3 (bb)).
-const fn window_s() -> u64 {
-    access_kernel::meta::CT3_DELAY_DEFAULT_S
 }
 
 #[cfg(test)]

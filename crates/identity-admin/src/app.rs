@@ -1307,6 +1307,15 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             return Err(AdminError::Unbound);
         }
         let change = p.change.digest().map_err(|_| AdminError::Encode)?;
+        // TN-146
+        let ct3_delay_s = if matches!(p.change, Change::AccountDelete(_)) {
+            self.decider
+                .ct3_delay(committed.domain)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?
+        } else {
+            access_kernel::meta::CT3_DELAY_DEFAULT_S
+        };
         let domain = DomainId::from_bytes(committed.domain.0);
         let label = p.change.action().label();
         let mut t = TenantTx::begin(self.app, p.tenant, p.environment).await?;
@@ -1331,7 +1340,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
             });
         };
         let secret = self
-            .first_application(t, p, &bound, &committed.exercise, issuer)
+            .first_application(t, p, &bound, &committed.exercise, (issuer, ct3_delay_s))
             .await?;
         self.after(p).await?;
         Ok(Applied::Written {
@@ -1354,7 +1363,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
         p: &Proposal,
         bound: &idp::Bound,
         exercise: &Digest,
-        issuer: Option<[u8; 16]>,
+        (issuer, ct3_delay_s): (Option<[u8; 16]>, u64),
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut t = PgTx::new(t);
         let g = idp::governance(&mut t.0)
@@ -1431,7 +1440,7 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 *subject,
                 access_identity_account::app::privacy::DeletionSource::Admin,
                 Some(&exercise.0),
-                access_kernel::meta::CT3_DELAY_DEFAULT_S,
+                ct3_delay_s,
                 &who,
             )
             .await

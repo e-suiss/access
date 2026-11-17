@@ -472,6 +472,8 @@ async fn tightening_a_policy_default_is_ct1_and_loosening_it_is_ct3() {
         dcbor::decode(&stored, Limits::CEILING).unwrap(),
         Value::Unsigned(60)
     );
+    // TN-146
+    assert_eq!(core.ct3_delay().await.unwrap(), 60);
     let surfaces = PolicyDefaults {
         approval_surfaces: Some(BTreeSet::from(["suiss-approver-sdk".to_owned()])),
         ..PolicyDefaults::default()

@@ -1138,6 +1138,14 @@ async fn delete_now(c: &super::management::Console, subject: [u8; 16]) {
     .await
     .unwrap();
     tx.commit().await.unwrap();
+    // TN-146
+    access_store::testing::age_deletion(
+        &c.w.db,
+        subject,
+        access_store::testing::DeletionStep::Effective,
+    )
+    .await
+    .unwrap();
     assert_eq!(tombstone_due(&db, &environment, &who).await.unwrap(), 1);
 }
 

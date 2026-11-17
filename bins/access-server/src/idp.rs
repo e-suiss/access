@@ -510,6 +510,13 @@ where
             },
         }
     }
+
+    async fn ct3_delay(&self, domain: Digest) -> Result<u64, Unavailable> {
+        self.domains
+            .ct3_delay(domain)
+            .await
+            .map_err(|e| Unavailable(e.to_string()))
+    }
 }
 
 impl<K, B, S, C> Plane<K, B, S, C>
