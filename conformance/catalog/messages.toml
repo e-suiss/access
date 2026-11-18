@@ -1198,6 +1198,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "mail-method_removed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "mail-email_changed-subject"
 surface = "mail"
 class = "notice"
@@ -2132,6 +2139,20 @@ protected = false
 
 [[message]]
 key = "methods-authenticator_key"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-remove_title"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-remove_body"
 surface = "account"
 class = "label"
 owner = "identity_plane"

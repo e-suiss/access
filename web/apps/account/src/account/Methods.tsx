@@ -2,7 +2,18 @@
 // session cookie alone. Passkeys are created, seen and removed here (the first FIDO pattern; the
 // sign-in fallback stays on the hosted login). The authenticator app's key is shown as text with
 // a copy button, so a QR code is never the only path; its code is one pasteable field. Removing
-// the last way to sign in is refused by the server and said plainly.
+// a method is confirmed first and named in the confirmation; removing the last way to sign in is
+// refused by the server and said plainly (TN-148).
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@access/ui/components/alert-dialog";
 import { Button, buttonVariants } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
@@ -143,7 +154,7 @@ function Passkeys(props: {
   readonly reload: () => void;
   readonly say: (text: string, alert?: boolean) => void;
   readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
-  readonly remove: (id: string) => void;
+  readonly remove: (id: string, label: string) => void;
 }): ReactElement {
   const [name, setName] = useState("");
   const [waiting, setWaiting] = useState<Registration | null>(null);
@@ -233,7 +244,7 @@ function Passkeys(props: {
                   size="sm"
                   aria-label={`${t("action.remove")}: ${p.name ?? t("methods.passkey_unnamed")}`}
                   onClick={() => {
-                    props.remove(p.id);
+                    props.remove(p.id, p.name ?? t("methods.passkey_unnamed"));
                   }}
                 >
                   {t("action.remove")}
@@ -359,7 +370,7 @@ function Authenticator(props: {
   readonly reload: () => void;
   readonly say: (text: string, alert?: boolean) => void;
   readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
-  readonly remove: (id: string) => void;
+  readonly remove: (id: string, label: string) => void;
   readonly onCodes: (codes: readonly string[]) => void;
 }): ReactElement {
   const [pending, setPending] = useState<Enrollment | null>(null);
@@ -445,7 +456,7 @@ function Authenticator(props: {
                   size="sm"
                   aria-label={`${t("action.remove")}: ${t("methods.authenticator")}`}
                   onClick={() => {
-                    props.remove(m.id);
+                    props.remove(m.id, t("methods.authenticator"));
                   }}
                 >
                   {t("action.remove")}
@@ -647,8 +658,9 @@ export function SignInMethods(): ReactElement {
       fail(e, REMOVE_CODES);
     },
   });
-  const remove = (id: string) => {
-    removal.mutate(id);
+  const [confirming, setConfirming] = useState<{ id: string; label: string } | null>(null);
+  const remove = (id: string, label: string) => {
+    setConfirming({ id, label });
   };
   return (
     <Panel
@@ -658,6 +670,32 @@ export function SignInMethods(): ReactElement {
       titleId="methods-heading"
     >
       {region}
+      <AlertDialog
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null);
+        }}
+      >
+        <AlertDialogContent data-testid="remove-method-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("methods.remove_title", { method: confirming?.label ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{t("methods.remove_body")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("action.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (confirming !== null) removal.mutate(confirming.id);
+              }}
+            >
+              {t("action.remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {methods === undefined ? (
         <Loading rows={4} />
       ) : (

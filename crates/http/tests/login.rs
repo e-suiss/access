@@ -4911,6 +4911,11 @@ async fn n5_sign_in_methods_are_managed_in_s11() {
         "{}",
         String::from_utf8_lossy(&removed.body)
     );
+    // TN-148
+    assert_eq!(
+        e.sent().last().unwrap().0,
+        "relay.message.method_removed.v1"
+    );
     assert_eq!(
         b.get("/v1/account/methods").await.json()["totp"]
             .as_array()

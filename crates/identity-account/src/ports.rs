@@ -141,11 +141,14 @@ pub trait AccountTx: Send {
         algorithm: &str,
         sealed: &SealedSecret,
     ) -> impl Future<Output = Result<bool, AccountError>> + Send;
-    /// Revokes a credential unless it is the last method (TN-68).
+    /// Revokes a credential unless the subject could no longer sign in without it (TN-68,
+    /// TN-148); `mailbox_signs_in` when the environment signs in with a code or link to a
+    /// proven mailbox.
     fn revoke(
         &mut self,
         subject: [u8; 16],
         id: [u8; 16],
+        mailbox_signs_in: bool,
     ) -> impl Future<Output = Result<Revoke, AccountError>> + Send;
     /// Records a credential's use.
     fn credential_used(

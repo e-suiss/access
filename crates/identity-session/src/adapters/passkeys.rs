@@ -291,7 +291,7 @@ impl PgPasskeys<'_> {
             return Err(failed("unknown user handle"));
         };
         match tx
-            .revoke_credential(subject, p.credential)
+            .revoke_credential(subject, p.credential, false)
             .await
             .map_err(failed)?
         {

@@ -913,10 +913,11 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// Revokes a credential unless it is the subject's last method (TN-68); a live linked
-    /// sign-in counts as a method (OP-153 m.15 (g)). The subject row is
-    /// locked first, so two removals cannot both pass the check; the database trigger is the
-    /// backstop.
+    /// Revokes a credential unless the subject could no longer sign in without it (TN-68,
+    /// TN-148): a password or passkey goes only while another password, passkey or live linked
+    /// sign-in (OP-153 m.15 (g)) stays, or a proven mailbox when `mailbox_signs_in`; a second
+    /// factor is never a first step. The subject row is locked first, so two removals cannot
+    /// both pass the check; the database trigger is the backstop.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -924,12 +925,45 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
         id: [u8; 16],
+        mailbox_signs_in: bool,
     ) -> Result<Revoke, StoreError> {
         let (tenant, environment) = self.scope()?;
         let Some(live) = self.subject(subject, true).await? else {
             return Ok(Revoke::Missing);
         };
-        let others = sqlx::query_scalar!(
+        let row = sqlx::query!(
+            r#"SELECT EXISTS (SELECT 1 FROM access.identity_credentials
+                             WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                               AND credential_id = $4 AND status = 'active'
+                               AND kind IN ('password', 'webauthn')) AS "first_step!",
+                   ((SELECT count(*) FROM access.identity_credentials
+                      WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                        AND status = 'active' AND credential_id <> $4
+                        AND kind IN ('password', 'webauthn'))
+                    + (SELECT count(*) FROM access.identity_federated
+                        WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                          AND ended_ms IS NULL)
+                    + CASE WHEN $5 THEN
+                        (SELECT count(*) FROM access.identity_mailboxes m
+                           JOIN access.identity_identifiers i
+                             ON i.tenant_id = m.tenant_id AND i.environment_id = m.environment_id
+                            AND i.identifier_id = m.identifier_id
+                          WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3
+                            AND i.status = 'active')
+                      ELSE 0 END) AS "others!""#,
+            tenant,
+            environment,
+            uuid(subject),
+            uuid(id),
+            mailbox_signs_in,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        let terminal = matches!(live.status.as_str(), "tombstone" | "purging");
+        if row.first_step && row.others == 0 && !terminal {
+            return Ok(Revoke::LastMethod);
+        }
+        let any_other = sqlx::query_scalar!(
             r#"SELECT (SELECT count(*) FROM access.identity_credentials
                         WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
                           AND status = 'active' AND credential_id <> $4)
@@ -943,8 +977,7 @@ impl TenantTx {
         )
         .fetch_one(&mut *self.tx)
         .await?;
-        let terminal = matches!(live.status.as_str(), "tombstone" | "purging");
-        if others == 0 && !terminal {
+        if any_other == 0 && !terminal {
             let exists = sqlx::query_scalar!(
                 r#"SELECT EXISTS (SELECT 1 FROM access.identity_credentials
                     WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3

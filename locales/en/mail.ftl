@@ -11,6 +11,7 @@ mail-recovery_completed-subject = Your account was recovered
 mail-recovery_codes_regenerated-subject = New recovery codes were made
 mail-second_factor_enabled-subject = A second step was turned on
 mail-new_method-subject = A new sign-in method was added
+mail-method_removed-subject = A sign-in method was removed
 mail-email_changed-subject = Your email address was changed
 mail-invitation-subject = You're invited to join an organization
 mail-reset_intent-subject = A sign-in reset was prepared for you

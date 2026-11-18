@@ -552,7 +552,7 @@ async fn the_last_method_stays() {
     let creds = tx.credentials(s, PASSWORD).await.unwrap();
     tx.commit().await.unwrap();
     assert_eq!(creds.len(), 1);
-    let err = remove_credential(&e.pg(), &e.environment(), s, creds[0].id, &ADMIN)
+    let err = remove_credential(&e.pg(), &e.environment(), s, creds[0].id, false, &ADMIN)
         .await
         .unwrap_err();
     assert!(matches!(err, AccountError::LastMethod));

@@ -737,7 +737,7 @@ where
                     continue;
                 };
                 if self.hasher.verify(&typed, secret).await?.matched {
-                    if tx.revoke(subject, c.id).await? != Revoke::Done {
+                    if tx.revoke(subject, c.id, false).await? != Revoke::Done {
                         return Err(SessionError::Corrupt);
                     }
                     matched = Some(Factor::recovery_code(c.id, now));

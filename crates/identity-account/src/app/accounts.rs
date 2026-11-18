@@ -437,7 +437,7 @@ pub async fn store_password_as<T: AccountTx>(
     };
     let at = tx.server_time().await?;
     for c in old {
-        if tx.revoke(subject, c.id).await? != Revoke::Done {
+        if tx.revoke(subject, c.id, false).await? != Revoke::Done {
             return Err(AccountError::Corrupt);
         }
         // §10.1.3, OP-150 m.12 (j)
@@ -471,7 +471,9 @@ pub async fn store_password_as<T: AccountTx>(
     Ok(id)
 }
 
-/// Removes one credential unless it is the account's last method (TN-68).
+/// Removes one credential unless the account could no longer sign in without it (TN-68,
+/// TN-148); `mailbox_signs_in` when the environment signs in with a code or link to a proven
+/// mailbox.
 ///
 /// # Errors
 /// [`AccountError::LastMethod`], [`AccountError::NotFound`], [`AccountError`].
@@ -480,6 +482,7 @@ pub async fn remove_credential<D: AccountDb>(
     environment: &Environment<'_>,
     subject: [u8; 16],
     credential: [u8; 16],
+    mailbox_signs_in: bool,
     who: &Actor<'_>,
 ) -> Result<(), AccountError> {
     let mut tx = db
@@ -500,7 +503,7 @@ pub async fn remove_credential<D: AccountDb>(
         PASSWORD => CredentialType::Password,
         _ => CredentialType::App,
     };
-    match tx.revoke(subject, credential).await? {
+    match tx.revoke(subject, credential, mailbox_signs_in).await? {
         Revoke::Done => {}
         Revoke::Missing => return Err(AccountError::NotFound),
         Revoke::LastMethod => return Err(AccountError::LastMethod),

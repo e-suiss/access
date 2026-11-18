@@ -1143,7 +1143,7 @@ where
             sealed: &sealed,
         })
         .await?;
-        if tx.revoke(subject, used).await? != Revoke::Done {
+        if tx.revoke(subject, used, false).await? != Revoke::Done {
             return Err(SessionError::Corrupt);
         }
         out.replacement = Some(Secret::new(fresh));

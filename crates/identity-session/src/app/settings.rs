@@ -12,6 +12,7 @@ use access_identity_account::app::signal::{emit as signal, fresh_id};
 use access_identity_account::domain::claims::authentication_ended;
 use access_identity_account::domain::password::Password;
 use access_identity_account::domain::signal::{Initiator, Signal};
+use access_identity_account::notify::message::Notice;
 use access_identity_account::ports::AccountTx as _;
 use access_identity_risk::domain::assess::Breach;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
@@ -63,7 +64,8 @@ where
         Ok(pending)
     }
 
-    /// Removes one method of the subject unless it is the last (TN-68).
+    /// Removes one method of the subject unless the account could no longer sign in without it
+    /// (TN-68, TN-148), and tells the account's address (TN-148).
     ///
     /// # Errors
     /// [`SessionError`].
@@ -78,8 +80,26 @@ where
             actor: &target,
             correlation,
         };
-        match remove_credential(self.db, &self.environment, subject, credential, &who).await {
-            Ok(()) => Ok(Ok(())),
+        // TN-148
+        let mailbox_signs_in = self.policy.email_otp || self.policy.magic_link;
+        match remove_credential(
+            self.db,
+            &self.environment,
+            subject,
+            credential,
+            mailbox_signs_in,
+            &who,
+        )
+        .await
+        {
+            Ok(()) => {
+                let now = self.now();
+                let mut tx = self.begin().await?;
+                self.account_notice(&mut tx, subject, Notice::MethodRemoved, now)
+                    .await?;
+                tx.commit().await?;
+                Ok(Ok(()))
+            }
             Err(AccountError::LastMethod) => Ok(Err(MethodRefusal::LastMethod)),
             Err(AccountError::NotFound) => Ok(Err(MethodRefusal::NotFound)),
             Err(e) => Err(e.into()),

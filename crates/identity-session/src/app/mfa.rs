@@ -597,7 +597,7 @@ where
         let old = tx.credentials(subject, RECOVERY_CODE).await?;
         let codes = self.new_recovery_codes(&mut tx, subject, &dek).await?;
         for c in old {
-            if tx.revoke(subject, c.id).await? != Revoke::Done {
+            if tx.revoke(subject, c.id, false).await? != Revoke::Done {
                 return Err(SessionError::Corrupt);
             }
         }

@@ -1487,7 +1487,7 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     let mut tx = pg.begin(e.tenant, e.environment).await.unwrap();
     let rows = tx.credentials(alice, PASSKEY).await.unwrap();
     tx.commit().await.unwrap();
-    remove_credential(&pg, &e.environment(), alice, rows[0].id, &ADMIN)
+    remove_credential(&pg, &e.environment(), alice, rows[0].id, false, &ADMIN)
         .await
         .unwrap();
     let orders = claim_orders(&e, |o| o.iter().any(|x| x.retract)).await;

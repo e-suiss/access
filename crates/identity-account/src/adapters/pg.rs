@@ -187,8 +187,16 @@ impl AccountTx for PgTx {
         Ok(self.0.reseal_credential(id, algorithm, sealed).await?)
     }
 
-    async fn revoke(&mut self, subject: [u8; 16], id: [u8; 16]) -> Result<Revoke, AccountError> {
-        Ok(self.0.revoke_credential(subject, id).await?)
+    async fn revoke(
+        &mut self,
+        subject: [u8; 16],
+        id: [u8; 16],
+        mailbox_signs_in: bool,
+    ) -> Result<Revoke, AccountError> {
+        Ok(self
+            .0
+            .revoke_credential(subject, id, mailbox_signs_in)
+            .await?)
     }
 
     async fn credential_used(&mut self, id: [u8; 16]) -> Result<(), AccountError> {

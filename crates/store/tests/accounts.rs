@@ -315,10 +315,16 @@ async fn the_last_method_cannot_be_removed() {
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    assert_eq!(tx.revoke_credential(s, pw).await.unwrap(), Revoke::Done);
-    assert_eq!(tx.revoke_credential(s, pw).await.unwrap(), Revoke::Missing);
     assert_eq!(
-        tx.revoke_credential(s, wa).await.unwrap(),
+        tx.revoke_credential(s, pw, false).await.unwrap(),
+        Revoke::Done
+    );
+    assert_eq!(
+        tx.revoke_credential(s, pw, false).await.unwrap(),
+        Revoke::Missing
+    );
+    assert_eq!(
+        tx.revoke_credential(s, wa, false).await.unwrap(),
         Revoke::LastMethod
     );
     tx.commit().await.unwrap();
@@ -334,6 +340,51 @@ async fn the_last_method_cannot_be_removed() {
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert_eq!(tx.credentials(s, "webauthn").await.unwrap().len(), 1);
     assert!(tx.credentials(s, "password").await.unwrap().is_empty());
+    tx.commit().await.unwrap();
+}
+
+// TN-68, TN-148
+#[tokio::test]
+async fn a_second_factor_alone_is_not_a_way_to_sign_in() {
+    let db = fresh().await.unwrap();
+    let (t, r) = environment(&db, 8, "acct-f").await;
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let s = subject(&mut tx).await;
+    let wa = credential(&mut tx, s, "webauthn").await;
+    let totp = credential(&mut tx, s, "totp").await;
+    tx.commit().await.unwrap();
+
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    assert_eq!(
+        tx.revoke_credential(s, wa, false).await.unwrap(),
+        Revoke::LastMethod
+    );
+    assert_eq!(
+        tx.revoke_credential(s, wa, true).await.unwrap(),
+        Revoke::LastMethod
+    );
+    assert!(tx.add_identifier(s, "email", &sealed_id(8)).await.unwrap());
+    let mailbox = tx.identifiers(s).await.unwrap()[0].id;
+    tx.insert_mailbox(mailbox, s, 1).await.unwrap();
+    assert_eq!(
+        tx.revoke_credential(s, wa, false).await.unwrap(),
+        Revoke::LastMethod
+    );
+    let other = credential(&mut tx, s, "webauthn").await;
+    assert_eq!(
+        tx.revoke_credential(s, totp, false).await.unwrap(),
+        Revoke::Done
+    );
+    let totp = credential(&mut tx, s, "totp").await;
+    assert_eq!(
+        tx.revoke_credential(s, other, false).await.unwrap(),
+        Revoke::Done
+    );
+    assert_eq!(
+        tx.revoke_credential(s, wa, true).await.unwrap(),
+        Revoke::Done
+    );
+    assert_eq!(tx.credentials(s, "totp").await.unwrap()[0].id, totp);
     tx.commit().await.unwrap();
 }
 
@@ -353,7 +404,10 @@ async fn a_live_linked_sign_in_is_a_method() {
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    assert_eq!(tx.revoke_credential(s, wa).await.unwrap(), Revoke::Done);
+    assert_eq!(
+        tx.revoke_credential(s, wa, false).await.unwrap(),
+        Revoke::Done
+    );
     let link = tx.federated_of(s).await.unwrap()[0].link;
     assert!(!tx.keeps_a_method(s, link).await.unwrap());
     tx.commit().await.unwrap();

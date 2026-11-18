@@ -1,4 +1,4 @@
-// S11 (§8.5, X32; TN-99, TN-64, TN-68, TN-107, X29, §8.13, OP-153 m.3 (m), (z))
+// S11 (§8.5, X32; TN-99, TN-64, TN-68, TN-107, TN-148, X29, §8.13, OP-153 m.3 (m), (z))
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "./fixtures.js";
@@ -23,6 +23,10 @@ function said(page: Page) {
   return page.getByTestId("sign-in-methods").getByTestId("said");
 }
 
+async function confirmRemoval(page: Page): Promise<void> {
+  await page.getByTestId("remove-method-dialog").getByRole("button", { name: "Remove" }).click();
+}
+
 function alerted(page: Page) {
   return page.getByTestId("sign-in-methods").getByTestId("said-alert");
 }
@@ -42,6 +46,14 @@ test("passkeys are created, seen and removed here (TN-99)", async ({ page, bff }
   expect(finish?.body["credential"]).toEqual({ id: "bmV3", type: "public-key", response: {} });
   expect(finish?.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
   await passkeys.getByRole("button", { name: "Remove: Laptop" }).click();
+  const dialog = page.getByTestId("remove-method-dialog");
+  await expect(dialog).toContainText("Remove Laptop?");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  expect(bff.seen.some((s) => s.path.includes("/account/methods/"))).toBe(false);
+  await expect(passkeys.getByTestId("passkey-row")).toHaveCount(2);
+  await passkeys.getByRole("button", { name: "Remove: Laptop" }).click();
+  await confirmRemoval(page);
   await expect(said(page)).toHaveText("Removed.");
   await expect(passkeys.getByTestId("passkey-row")).toHaveCount(1);
 });
@@ -58,6 +70,7 @@ test("the last way to sign in is kept and said plainly (TN-68)", async ({ page, 
   bff.lastMethod = true;
   await page.goto("/account/");
   await page.getByRole("button", { name: "Remove: Laptop" }).click();
+  await confirmRemoval(page);
   await expect(alerted(page)).toHaveText("Add another way to sign in first.");
   await expect(page.getByTestId("passkey-row")).toHaveCount(1);
 });
@@ -72,6 +85,7 @@ test("a write that needs a fresh confirmation goes to the hosted login and back 
   );
   await page.goto("/account/");
   await page.getByRole("button", { name: "Remove: Laptop" }).click();
+  await confirmRemoval(page);
   await page.waitForURL(/\/login\?reason=reauthenticate&return_to=%2Faccount/);
 });
 
@@ -154,6 +168,7 @@ test("a lost sign-in says only to sign in again (§8.13)", async ({ page, bff })
   await expect(page.getByTestId("passkey-row")).toHaveCount(1);
   bff.signedIn = false;
   await page.getByRole("button", { name: "Remove: Laptop" }).click();
+  await confirmRemoval(page);
   await expect(alerted(page)).toHaveText("Please sign in again to continue.");
 });
 
