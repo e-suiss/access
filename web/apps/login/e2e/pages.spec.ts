@@ -369,7 +369,7 @@ test("a return address on another site is not followed", async ({ page, mock }) 
   share(mock);
   await page.goto(`/login?reason=share&return_to=${encodeURIComponent("https://evil.example/x")}`);
   await expect(page.getByRole("alert")).toHaveText(
-    "Access couldn't complete this request. Try again shortly.",
+    "We couldn't complete this. Please try again in a moment.",
   );
   expect(mock.posted).toEqual([]);
 });
@@ -377,15 +377,13 @@ test("a return address on another site is not followed", async ({ page, mock }) 
 // X-L8, X41, OP-153 m.3 (jj), Ek B 3452
 test("an OAuth error names its owner and a reference, never the raw code", async ({ page }) => {
   await page.goto("/login/error?error=invalid_client&owner=app&ref=7f3k-2q");
-  await expect(page.getByRole("alert")).toHaveText(
-    "This app isn't set up correctly for sign-in. The app's developer can fix this.",
-  );
+  await expect(page.getByRole("alert")).toHaveText("You can't sign in with this app.");
   await expect(page.getByTestId("reference")).toHaveText("Reference: 7F3K-2Q");
   await expect(page.locator("main")).not.toContainText("invalid_client");
 
   await page.goto("/login/error?error=temporarily_unavailable&ref=ZZZZ-ZZ");
   await expect(page.getByRole("alert")).toHaveText(
-    "Access couldn't complete this request. Try again shortly.",
+    "We couldn't complete this. Please try again in a moment.",
   );
   await page.goto("/login/error?error=access_denied");
   await expect(page.getByRole("alert")).toHaveText("You chose not to continue.");

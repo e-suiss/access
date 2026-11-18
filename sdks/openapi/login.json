@@ -710,7 +710,6 @@
           "link.combine_warning",
           "error.reference",
           "error.app_owner",
-          "error.upstream_owner",
           "error.access_owner",
           "step_up.required",
           "claim.issuer_says",

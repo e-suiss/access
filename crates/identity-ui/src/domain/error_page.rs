@@ -11,8 +11,6 @@ pub enum Owner {
     /// The app's developer: an unknown client, an unregistered redirect address, a malformed
     /// request.
     App,
-    /// The sign-in provider upstream.
-    Upstream,
     /// Access itself: briefly unavailable.
     Access,
 }
@@ -23,7 +21,6 @@ impl Owner {
     pub const fn name(self) -> &'static str {
         match self {
             Self::App => "app",
-            Self::Upstream => "upstream",
             Self::Access => "access",
         }
     }

@@ -250,9 +250,6 @@ pub enum TextId {
     /// Text `error.app_owner` (X41, OP-153 m.3 (jj)).
     #[serde(rename = "error.app_owner")]
     ErrorAppOwner,
-    /// Text `error.upstream_owner` (X41, OP-153 m.3 (jj)).
-    #[serde(rename = "error.upstream_owner")]
-    ErrorUpstreamOwner,
     /// Text `error.access_owner` (X41, OP-153 m.3 (jj)).
     #[serde(rename = "error.access_owner")]
     ErrorAccessOwner,
@@ -595,7 +592,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 193] = [
+    pub const ALL: [Self; 192] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -677,7 +674,6 @@ impl TextId {
         Self::CombineWarning,
         Self::ErrorReference,
         Self::ErrorAppOwner,
-        Self::ErrorUpstreamOwner,
         Self::ErrorAccessOwner,
         Self::StepUpRequired,
         Self::IssuerSays,
@@ -877,7 +873,6 @@ impl TextId {
             Self::CombineWarning => "link.combine_warning",
             Self::ErrorReference => "error.reference",
             Self::ErrorAppOwner => "error.app_owner",
-            Self::ErrorUpstreamOwner => "error.upstream_owner",
             Self::ErrorAccessOwner => "error.access_owner",
             Self::StepUpRequired => "step_up.required",
             Self::IssuerSays => "claim.issuer_says",
@@ -1104,13 +1099,8 @@ impl TextId {
                 "Combining accounts can't be reversed. Delegations must be given again afterwards."
             }
             Self::ErrorReference => "Reference",
-            Self::ErrorAppOwner => {
-                "This app isn't set up correctly for sign-in. The app's developer can fix this."
-            }
-            Self::ErrorUpstreamOwner => {
-                "The sign-in provider couldn't complete this request. Try again later."
-            }
-            Self::ErrorAccessOwner => "Access couldn't complete this request. Try again shortly.",
+            Self::ErrorAppOwner => "You can't sign in with this app.",
+            Self::ErrorAccessOwner => "We couldn't complete this. Please try again in a moment.",
             Self::StepUpRequired => "Confirm it's you to continue with this action.",
             Self::IssuerSays => "Issuer says (signed)",
             Self::KeepSignedInLabel => "Keep me signed in on this device",

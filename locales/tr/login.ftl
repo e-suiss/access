@@ -53,9 +53,8 @@ action-accept_invitation = Katıl
 invitation-expired = Bu davetin süresi doldu ya da daha önce kullanıldı.
 label-invitation_code = Davet kodu
 error-reference = Referans
-error-app_owner = Bu uygulama giriş için doğru ayarlanmamış. Uygulamanın geliştiricisi bunu düzeltebilir.
-error-upstream_owner = Giriş sağlayıcısı bu isteği tamamlayamadı. Daha sonra yeniden deneyin.
-error-access_owner = Access bu isteği tamamlayamadı. Birazdan yeniden deneyin.
+error-app_owner = Bu uygulamayla giriş yapılamıyor.
+error-access_owner = İşleminiz tamamlanamadı. Lütfen biraz sonra tekrar deneyin.
 step_up-required = Bu eyleme devam etmek için siz olduğunuzu doğrulayın.
 
 # N5 login pages

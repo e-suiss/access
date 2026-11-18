@@ -19,8 +19,6 @@ export function errorText(error: string | null, owner: string | null): string {
   switch (owner) {
     case "app":
       return "error.app_owner";
-    case "upstream":
-      return "error.upstream_owner";
     default:
       return "error.access_owner";
   }

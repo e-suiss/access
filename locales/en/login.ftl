@@ -53,9 +53,8 @@ action-accept_invitation = Join
 invitation-expired = This invitation has expired or was already used.
 label-invitation_code = Invitation code
 error-reference = Reference
-error-app_owner = This app isn't set up correctly for sign-in. The app's developer can fix this.
-error-upstream_owner = The sign-in provider couldn't complete this request. Try again later.
-error-access_owner = Access couldn't complete this request. Try again shortly.
+error-app_owner = You can't sign in with this app.
+error-access_owner = We couldn't complete this. Please try again in a moment.
 step_up-required = Confirm it's you to continue with this action.
 
 # N5 login pages

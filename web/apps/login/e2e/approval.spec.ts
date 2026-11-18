@@ -98,7 +98,7 @@ test("a return address on another site is not followed", async ({ page, mock }) 
     `/login?reason=approve&return_to=${encodeURIComponent("https://evil.example/x")}`,
   );
   await expect(page.getByRole("alert")).toHaveText(
-    "Access couldn't complete this request. Try again shortly.",
+    "We couldn't complete this. Please try again in a moment.",
   );
   expect(mock.posted).toEqual([]);
 });
