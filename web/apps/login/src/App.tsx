@@ -12,6 +12,7 @@ import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
 import { Recovery } from "./Recovery.js";
 import { SignIn } from "./SignIn.js";
+import { SignedOut, SignOut } from "./SignOut.js";
 import { Spc } from "./Spc.js";
 import { SsoSetup } from "./SsoSetup.js";
 
@@ -30,6 +31,8 @@ export type Page =
   | "sso_setup"
   | "founding"
   | "admin_invite"
+  | "sign_out"
+  | "signed_out"
   | "error";
 
 export function pageOf(path: string, search: string): Page {
@@ -39,6 +42,9 @@ export function pageOf(path: string, search: string): Page {
   if (rest === "/recovery") return "recovery";
   if (rest === "/link") return "link";
   if (rest === "/error") return "error";
+  // TN-152
+  if (rest === "/sign-out") return "sign_out";
+  if (rest === "/signed-out") return "signed_out";
   if (rest === "/invitation" || rest.startsWith("/invitation/")) return "invitation";
   // TN-134, OP-155 m.3 (i)
   if (rest.startsWith("/sso-setup/")) return "sso_setup";
@@ -87,6 +93,10 @@ function Body({ page }: { readonly page: Page }) {
       return <Founding />;
     case "admin_invite":
       return <AdminInvite />;
+    case "sign_out":
+      return <SignOut />;
+    case "signed_out":
+      return <SignedOut />;
     case "error":
       return <ErrorPage />;
   }

@@ -1924,7 +1924,7 @@ async fn logout_ends_the_session_and_notifies_clients() {
     .await;
     assert!(matches!(bad, Reply::Problem { status: 400, .. }), "{bad:?}");
     let unhinted = end(vec![], Some(w.cookie.clone())).await;
-    assert_eq!(location(&unhinted), format!("{ISSUER}/sign-out"));
+    assert_eq!(location(&unhinted), format!("{ISSUER}/login/sign-out"));
     let out = end(
         vec![
             ("id_token_hint", id_token),

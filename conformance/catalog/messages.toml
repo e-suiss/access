@@ -2468,6 +2468,41 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "signout-confirm_title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signout-confirm"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signout-stay"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signout-done_title"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signout-sign_in_again"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "page-signing_in"
 surface = "login"
 class = "status"

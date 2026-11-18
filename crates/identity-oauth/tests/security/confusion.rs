@@ -445,7 +445,11 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
         let r = a
             .end_session(&[("id_token_hint", hint)], Some(&cookie))
             .await;
-        assert_eq!(location(&r), format!("{}/sign-out", a.issuer()), "{class}");
+        assert_eq!(
+            location(&r),
+            format!("{}/login/sign-out", a.issuer()),
+            "{class}"
+        );
         assert!(a.signed_in(&cookie).await, "{class}");
     }
     assert!(

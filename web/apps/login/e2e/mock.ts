@@ -214,7 +214,7 @@ export class LoginMock {
       route.fulfill({ status: 200, contentType: "text/css", body: this.theme }),
     );
     await page.route(
-      /\/v1\/(recovery|invitations|account|login\/link|login\/approval|device|ciba|sso-setup|foundings|admin-invites)(\/|$)/,
+      /\/v1\/(recovery|invitations|account|sessions|login\/link|login\/approval|device|ciba|sso-setup|foundings|admin-invites)(\/|$)/,
       (route) => this.jsonRoute(route),
     );
     await page.route(/\/callback(\?|$)/, (route) =>

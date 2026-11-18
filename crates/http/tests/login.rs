@@ -5497,3 +5497,21 @@ async fn a_sign_in_whose_account_lacks_the_required_name_asks_for_it_before_comp
     let mut again = e.browser("nia-2");
     assert_eq!(again.sign_in("nia@example.com").await.step(), "complete");
 }
+
+// TN-152
+#[tokio::test]
+async fn the_pages_the_end_session_endpoint_sends_a_browser_to_are_served() {
+    let e = env(62, "tn-152", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("out");
+    for path in ["/login/sign-out", "/login/signed-out"] {
+        let page = b.get(path).await;
+        assert_eq!(page.status, StatusCode::OK, "{path}");
+        assert!(
+            page.headers[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/html"),
+            "{path}"
+        );
+    }
+}

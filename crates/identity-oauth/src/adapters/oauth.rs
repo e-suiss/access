@@ -950,11 +950,11 @@ impl LoginPages for HostedPages {
     }
 
     fn confirm_sign_out(&self, issuer: &Issuer) -> String {
-        issuer.endpoint("/sign-out")
+        issuer.endpoint("/login/sign-out")
     }
 
     fn signed_out(&self, issuer: &Issuer) -> String {
-        issuer.endpoint("/signed-out")
+        issuer.endpoint("/login/signed-out")
     }
 }
 

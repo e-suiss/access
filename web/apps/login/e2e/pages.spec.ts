@@ -490,3 +490,30 @@ test("the pages keep Access's texts when the overrides cannot be read", async ({
   await page.goto("/");
   await expect(page.getByLabel("Email or username")).toBeVisible();
 });
+
+// TN-152, OIDC RP-Initiated Logout §2, §5: a sign-out the client did not tie to this browser is
+// confirmed first; a finished one says so, offers a new sign-in and names no app
+test("a sign-out is confirmed, then said, and leads back only to a new sign-in", async ({
+  page,
+  mock,
+}) => {
+  mock.json.set("POST /v1/sessions/current/sign-out", { status: 204 });
+  await page.goto("/login/sign-out");
+  await expect(page.getByRole("heading", { name: "Do you want to sign out?" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Stay signed in" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.waitForURL(/\/login\/signed-out$/);
+  expect(mock.requests).toContain("POST /v1/sessions/current/sign-out");
+  await expect(page.getByRole("heading", { name: "You're signed out" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/login");
+});
+
+test("staying signed in leaves the session alone", async ({ page, mock }) => {
+  await page.route("**/account", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>account</title>" }),
+  );
+  await page.goto("/login/sign-out");
+  await page.getByRole("button", { name: "Stay signed in" }).click();
+  await page.waitForURL(/\/account$/);
+  expect(mock.requests).not.toContain("POST /v1/sessions/current/sign-out");
+});
