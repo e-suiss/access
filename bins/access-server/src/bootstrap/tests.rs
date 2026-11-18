@@ -1099,11 +1099,11 @@ async fn the_test_users_authenticator_app_is_enrolled_once_and_its_seed_kept_own
     let renewed = std::fs::read_to_string(&path).unwrap();
     let renewed = renewed.strip_suffix('\n').unwrap();
     assert_ne!(renewed, seed);
-    let mut seeds = totp_seeds(&w, "Test.User@acme.example").await;
-    seeds.sort();
-    let mut expected = vec![seed, renewed.to_owned()];
-    expected.sort();
-    assert_eq!(seeds, expected);
+    // TN-155
+    assert_eq!(
+        totp_seeds(&w, "Test.User@acme.example").await,
+        vec![renewed.to_owned()]
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
