@@ -595,7 +595,15 @@ export class AccountMock {
       this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: true } };
       return reply(200, { acknowledged: true });
     }
-    if (path === "/linked") return reply(200, { linked: this.linked });
+    if (path === "/linked" && method === "POST") {
+      return reply(200, { redirect_to: "https://accounts.example/authorize?state=s" });
+    }
+    if (path === "/linked") {
+      return reply(200, {
+        linked: this.linked,
+        available: [{ provider: "github", name: "GitHub" }],
+      });
+    }
     const link = /^\/linked\/(.+)$/.exec(path)?.[1];
     if (link !== undefined && method === "DELETE") {
       if (this.lastMethod) return reply(409, { code: "last-sign-in-method" });

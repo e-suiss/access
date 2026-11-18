@@ -371,13 +371,13 @@ impl Externals<'_> {
     /// [`AccountError`].
     pub async fn link_upstream(
         &self,
-        subject: [u8; 16],
+        (subject, keep): ([u8; 16], Option<[u8; 16]>),
         a: &Asserted<'_>,
         up: &UpstreamFacts<'_>,
         now_ms: u64,
         who: &Actor<'_>,
     ) -> Result<Linked, AccountError> {
-        let linked = self.link(subject, a, now_ms, who).await?;
+        let linked = self.link((subject, keep), a, now_ms, who).await?;
         if linked != Linked::Elsewhere {
             let mut tx = self.begin().await?;
             tx.0.resolve_subject_conflicts(a.provider, a.key, now_ms)
@@ -451,14 +451,14 @@ impl Externals<'_> {
     }
 
     /// Links `a` to the signed-in `subject` after its fresh re-authentication and the proof of
-    /// control the provider's assertion is (TN-65 (3), (5), (6)): every session of the account
-    /// ends with the link.
+    /// control the provider's assertion is (TN-65 (3), (5), (6)): every other session of the
+    /// account ends with the link; `keep`, the session that linked, goes on (TN-154).
     ///
     /// # Errors
     /// [`AccountError`].
     pub async fn link(
         &self,
-        subject: [u8; 16],
+        (subject, keep): ([u8; 16], Option<[u8; 16]>),
         a: &Asserted<'_>,
         now_ms: u64,
         who: &Actor<'_>,
@@ -482,7 +482,27 @@ impl Externals<'_> {
         {
             return Err(AccountError::Corrupt);
         }
-        // TN-65 (5)
+        // TN-65 (5), TN-154
+        if let Some(id) = keep
+            && let Some(row) =
+                tx.0.session_by_id(id)
+                    .await?
+                    .filter(|r| r.subject == subject && r.ended_ms.is_none())
+        {
+            let next = row
+                .subject_epoch
+                .checked_add(1)
+                .ok_or(AccountError::Corrupt)?;
+            tx.0.restamp_session(
+                id,
+                row.subject_epoch,
+                next,
+                row.auth_time_ms,
+                &row.assurance,
+                false,
+            )
+            .await?;
+        }
         tx.end_sessions(subject).await?;
         let external = self.environment.external(subject)?;
         audit(

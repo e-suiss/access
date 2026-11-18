@@ -265,3 +265,30 @@ test("an account without an address is sent to give one before adding a passkey"
   await expect(page.getByTestId("add-address")).toHaveText("Add an address");
   await expect(page.getByTestId("add-address")).toHaveAttribute("href", /\/login$/);
 });
+
+// TN-154: another sign-in is linked from the account page; the provider proves it, and the
+// account page says what happened when it comes back
+test("another sign-in is linked from the account page and the outcome is said", async ({
+  page,
+  bff,
+}) => {
+  await page.route("https://accounts.example/**", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>provider</title>" }),
+  );
+  await page.goto("/account/");
+  const linked = page.getByTestId("linked-sign-ins");
+  await linked.getByRole("button", { name: "Link GitHub" }).click();
+  await page.waitForURL(/^https:\/\/accounts\.example\/authorize/);
+  const start = bff.seen.find((s) => s.path.endsWith("/account/linked") && "provider" in s.body);
+  expect(start?.body).toEqual({ provider: "github" });
+
+  await page.goto("/account/?link=linked");
+  await expect(linked.getByTestId("said")).toHaveText(
+    "Linked. Your other sign-ins were signed out.",
+  );
+  await expect(page).toHaveURL(/\/account\/$/);
+  await page.goto("/account/?link=elsewhere");
+  await expect(linked.getByTestId("said-alert")).toHaveText(
+    "That sign-in is already linked to another account. Nothing changed.",
+  );
+});

@@ -5,12 +5,12 @@
 import { Button } from "@access/ui/components/button";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import * as v from "valibot";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
-import { Loading, Meta, Nothing, Panel, RowItem, Rows } from "../lib/ui.js";
+import { Actions, Loading, Meta, Nothing, Panel, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
 
 const LinkedList = v.object({
@@ -22,7 +22,21 @@ const LinkedList = v.object({
       verified_at_ms: v.nullable(v.number()),
     }),
   ),
+  available: v.optional(v.array(v.object({ provider: v.string(), name: v.string() })), []),
 });
+
+const Started = v.object({ redirect_to: v.string() });
+
+/** TN-154: what a link that came back from its provider says, read once from the address. */
+function takeOutcome(): "linked" | "elsewhere" | null {
+  const params = new URLSearchParams(location.search);
+  const outcome = params.get("link");
+  if (outcome === null) return null;
+  params.delete("link");
+  const rest = params.toString();
+  history.replaceState(null, "", `${location.pathname}${rest === "" ? "" : `?${rest}`}`);
+  return outcome === "linked" || outcome === "elsewhere" ? outcome : null;
+}
 
 const Apps = v.object({
   apps: v.array(
@@ -51,6 +65,22 @@ export function LinkedSignIns(): ReactElement {
     queryFn: () => json(frontend("/v1/account/linked"), LinkedList),
   });
   const { say, fail, region } = useAnnouncer(error);
+  const [outcome] = useState(takeOutcome);
+  useEffect(() => {
+    if (outcome === "linked") say(t("linked.added"));
+    if (outcome === "elsewhere") say(t("linked.elsewhere"), true);
+  }, [outcome, say]);
+  // TN-154: the provider proves control of the sign-in; a stale sign-in confirms it's you first
+  const link = useMutation({
+    mutationFn: (provider: string) =>
+      json(frontend("/v1/account/linked", { method: "POST", body: { provider } }), Started),
+    onSuccess: (s) => {
+      location.assign(s.redirect_to);
+    },
+    onError: (e) => {
+      fail(e, LINK_CODES);
+    },
+  });
   const unlink = useMutation({
     mutationFn: (link: string) =>
       json(frontend(`/v1/account/linked/${encodeURIComponent(link)}`, { method: "DELETE" })),
@@ -97,6 +127,23 @@ export function LinkedSignIns(): ReactElement {
             </RowItem>
           ))}
         </Rows>
+      )}
+      {list !== undefined && list.available.length > 0 && (
+        <Actions>
+          {list.available.map((p) => (
+            <Button
+              key={p.provider}
+              variant="outline"
+              data-testid="link-provider"
+              disabled={link.isPending}
+              onClick={() => {
+                link.mutate(p.provider);
+              }}
+            >
+              {t("linked.link_with", { provider: p.name })}
+            </Button>
+          ))}
+        </Actions>
       )}
     </Panel>
   );

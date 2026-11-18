@@ -1065,7 +1065,13 @@ async fn a_new_subject_for_a_known_address_is_a_conflict_and_never_reaches_the_a
     assert_eq!(link.status, StatusCode::OK, "{}", link.code());
     let to = link.json()["redirect_to"].as_str().unwrap().to_owned();
     let d = w.back(&e, &to, "corp", CORP).await;
-    assert_eq!(d.status, StatusCode::OK, "{}", d.code());
+    // TN-154
+    assert_eq!(d.status, StatusCode::SEE_OTHER, "{}", d.code());
+    assert!(
+        d.location().ends_with("/account?link=linked"),
+        "{}",
+        d.location()
+    );
     assert_eq!(e.link_at(CORP, "emp-3-new").await, Some(bob));
     let mut t = e.tx().await;
     let conflicts = t.subject_conflicts(bob).await.unwrap();

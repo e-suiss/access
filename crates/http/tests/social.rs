@@ -1106,12 +1106,17 @@ async fn the_shared_development_client_works_only_in_a_sandbox_environment() {
 
 // TN-65, P-ID-9, TN-68, §8.5 S11
 #[tokio::test]
-async fn linking_needs_a_fresh_session_and_the_providers_proof_and_ends_every_session() {
+async fn linking_needs_a_fresh_session_and_the_providers_proof_and_ends_every_other_session() {
     let e = env(0x45, "soc-e").await;
     e.enable(Some("own-client")).await;
     let ada = e.account("ada@example.com").await;
+    let mut other = e.browser(9);
+    other.sign_in("ada@example.com").await;
     let mut w = e.browser(1);
     w.sign_in("ada@example.com").await;
+    // TN-154
+    let offered = w.send("GET", "/v1/account/linked", None).await.json();
+    assert_eq!(offered["available"][0]["provider"], "google");
     let start = w
         .send(
             "POST",
@@ -1122,10 +1127,22 @@ async fn linking_needs_a_fresh_session_and_the_providers_proof_and_ends_every_se
     assert_eq!(start.status, StatusCode::OK, "{}", start.code());
     e.says("g-5", Some(("ada@example.com", false)));
     let done = w.round_trip(&e, &start).await;
-    assert_eq!(done.status, StatusCode::OK, "{}", done.code());
-    assert_eq!(done.json()["signed_out"], true);
-    assert!(!w.jar.contains_key("__Host-access-session"));
+    // TN-154
+    assert_eq!(done.status, StatusCode::SEE_OTHER, "{}", done.code());
+    assert_eq!(
+        done.location(),
+        format!("https://{HOST}/account?link=linked")
+    );
     assert_eq!(e.link_of("g-5").await, Some(ada));
+    let still = w.send("GET", "/v1/account/linked", None).await;
+    assert_eq!(
+        still.status,
+        StatusCode::OK,
+        "the session that linked goes on"
+    );
+    assert_eq!(still.json()["available"], json!([]));
+    let ended = other.send("GET", "/v1/account/linked", None).await;
+    assert_ne!(ended.status, StatusCode::OK, "every other session ended");
 
     let mut w = e.browser(2);
     w.sign_in("ada@example.com").await;

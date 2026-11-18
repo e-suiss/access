@@ -601,28 +601,17 @@ where
         if ui.step != Step::Identifier || !kit.signin.social {
             return reply;
         }
-        let rows = async {
-            let mut t =
-                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
-                    .await?;
-            let rows = t.social_providers().await?;
-            t.commit().await?;
-            Ok::<_, access_store::StoreError>(rows)
-        };
-        let Ok(rows) = rows.await else {
+        let Ok(social) = self.social_buttons(kit).await else {
             return reply;
         };
-        for row in rows.into_iter().filter(|r| r.active) {
-            let name = shipped_presets()
-                .and_then(|p| p.get(&row.preset))
-                .map_or_else(|| row.preset.clone(), |p| p.display_name.clone());
+        for (preset, name) in social {
             ui.nodes.push(Node::Provider {
                 label: crate::domain::message::Text {
                     id: TextId::ContinueWith,
                     text: format!("Continue with {name}"),
                 },
-                href: format!("/v1/login/social/{}", row.preset),
-                provider: row.preset,
+                href: format!("/v1/login/social/{preset}"),
+                provider: preset,
             });
         }
         // TN-95, OP-155 m.3 (h), Ek B 4678
@@ -639,9 +628,30 @@ where
         reply
     }
 
+    /// The environment's active social providers with the name on their button (OP-153 m.3 (l)).
+    pub(crate) async fn social_buttons(
+        &self,
+        kit: &EnvironmentKit,
+    ) -> Result<Vec<(String, String)>, access_store::StoreError> {
+        let mut t =
+            access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+        let rows = t.social_providers().await?;
+        t.commit().await?;
+        Ok(rows
+            .into_iter()
+            .filter(|r| r.active)
+            .map(|row| {
+                let name = shipped_presets()
+                    .and_then(|p| p.get(&row.preset))
+                    .map_or_else(|| row.preset.clone(), |p| p.display_name.clone());
+                (row.preset, name)
+            })
+            .collect())
+    }
+
     /// The environment's active upstream connections that sign anyone in: not an organization's,
     /// which home environment discovery names (TN-98), with the name on their button.
-    async fn upstream_buttons(&self, kit: &EnvironmentKit) -> Vec<(String, String)> {
+    pub(crate) async fn upstream_buttons(&self, kit: &EnvironmentKit) -> Vec<(String, String)> {
         use access_identity_federation::domain::connection::Profile;
         let rows = async {
             let mut t =

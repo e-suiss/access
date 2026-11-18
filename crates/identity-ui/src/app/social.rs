@@ -25,9 +25,7 @@ use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::flow::device_digest;
-use access_identity_session::domain::session::{
-    FLOW_COOKIE, SESSION_COOKIE, clear_cookie, set_cookie,
-};
+use access_identity_session::domain::session::{FLOW_COOKIE, set_cookie};
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::identity::TenantTx;
@@ -62,14 +60,6 @@ const SOCIAL_FAILED: Problem = Problem {
     status: 401,
     code: "social-sign-in-failed",
     title: "That didn't work. Try again or use another way to sign in.",
-    retry_after_s: None,
-};
-
-/// The external identity is linked to another account; nothing changed.
-const LINKED_ELSEWHERE: Problem = Problem {
-    status: 409,
-    code: "linked-to-another-account",
-    title: "This sign-in is linked to another account",
     retry_after_s: None,
 };
 
@@ -206,6 +196,28 @@ where
             return Err(Reply::problem(STEP_UP_REQUIRED));
         }
         Ok((v.subject, last))
+    }
+
+    /// The signed-in subject and its session (TN-154).
+    pub(crate) async fn linking_session(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+    ) -> Result<([u8; 16], [u8; 16]), Reply> {
+        signin!(self, kit, auth);
+        let Some(cookie) = b.session else {
+            return Err(Reply::problem(SESSION_REQUIRED));
+        };
+        match auth.check_session(cookie).await {
+            Ok(SessionStatus::Valid(v)) => Ok((v.subject, v.id)),
+            Ok(_) => Err(Reply::problem(SESSION_REQUIRED)),
+            Err(e) => Err(failed(&e)),
+        }
+    }
+
+    /// Where a link ends (TN-154): the account page, which says what happened.
+    pub(crate) fn linked_page(&self, kit: &EnvironmentKit, outcome: &str) -> Reply {
+        redirect(format!("{}?link={outcome}", self.done_to(kit)))
     }
 
     /// Opens a social attempt and answers with the provider's authorization URL; a link names
@@ -430,7 +442,7 @@ where
             register: kit.signin.open_registration(),
         };
         if let Some(subject) = attempt.link_to {
-            let (current, _) = match self.fresh(&kit, b, None).await {
+            let (current, session) = match self.linking_session(&kit, b).await {
                 Ok(s) => s,
                 Err(r) => return r,
             };
@@ -442,15 +454,13 @@ where
                 actor: &actor_ref,
                 correlation: b.correlation,
             };
-            return match externals.link(subject, &asserted, now, &who).await {
-                Ok(Linked::Linked) => {
-                    Reply::json(200, json!({ "linked": true, "signed_out": true }))
-                        .cookie(Some(clear_cookie(SESSION_COOKIE)))
-                }
-                Ok(Linked::Already) => {
-                    Reply::json(200, json!({ "linked": true, "signed_out": false }))
-                }
-                Ok(Linked::Elsewhere) => Reply::problem(LINKED_ELSEWHERE),
+            // TN-154
+            return match externals
+                .link((subject, Some(session)), &asserted, now, &who)
+                .await
+            {
+                Ok(Linked::Linked | Linked::Already) => self.linked_page(&kit, "linked"),
+                Ok(Linked::Elsewhere) => self.linked_page(&kit, "elsewhere"),
                 Err(e) => failed(&e.into()),
             };
         }
@@ -504,20 +514,33 @@ where
             environment: &environment,
             vault: &vault,
         };
-        match externals.links(subject).await {
-            Ok(rows) => Reply::json(
-                200,
-                json!({
-                    "linked": rows.iter().map(|r| json!({
-                        "link": b64url_encode(&r.link),
-                        "provider": r.provider,
-                        "linked_at_ms": r.created_ms,
-                        "verified_at_ms": r.verified_ms,
-                    })).collect::<Vec<_>>(),
-                }),
-            ),
-            Err(e) => failed(&e.into()),
+        let rows = match externals.links(subject).await {
+            Ok(rows) => rows,
+            Err(e) => return failed(&e.into()),
+        };
+        // TN-154
+        let mut offered = Vec::new();
+        if kit.signin.social {
+            offered.extend(self.social_buttons(&kit).await.unwrap_or_default());
+            offered.extend(self.upstream_buttons(&kit).await);
         }
+        let available: Vec<_> = offered
+            .into_iter()
+            .filter(|(id, _)| !rows.iter().any(|r| &r.provider == id))
+            .map(|(id, name)| json!({ "provider": id, "name": name }))
+            .collect();
+        Reply::json(
+            200,
+            json!({
+                "linked": rows.iter().map(|r| json!({
+                    "link": b64url_encode(&r.link),
+                    "provider": r.provider,
+                    "linked_at_ms": r.created_ms,
+                    "verified_at_ms": r.verified_ms,
+                })).collect::<Vec<_>>(),
+                "available": available,
+            }),
+        )
     }
 
     /// `DELETE /v1/account/linked/{link}`: ends a linked sign-in after a fresh step-up; the

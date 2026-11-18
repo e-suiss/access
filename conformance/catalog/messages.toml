@@ -2151,6 +2151,27 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "linked-link_with"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linked-added"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linked-elsewhere"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "methods-add_address"
 surface = "account"
 class = "label"

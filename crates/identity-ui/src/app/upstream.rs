@@ -36,13 +36,10 @@ use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::assurance::{Factor, UpstreamStep};
 use access_identity_session::domain::flow::device_digest;
-use access_identity_session::domain::session::{
-    FLOW_COOKIE, SESSION_COOKIE, clear_cookie, set_cookie,
-};
+use access_identity_session::domain::session::{FLOW_COOKIE, set_cookie};
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::identity::TenantTx;
-use serde_json::json;
 
 use super::social::Social;
 use super::{Body, Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
@@ -112,13 +109,6 @@ const UPSTREAM_FAILED: Problem = Problem {
     status: 401,
     code: "social-sign-in-failed",
     title: "That didn't work. Try again or use another way to sign in.",
-    retry_after_s: None,
-};
-
-const LINKED_ELSEWHERE: Problem = Problem {
-    status: 409,
-    code: "linked-to-another-account",
-    title: "This sign-in is linked to another account",
     retry_after_s: None,
 };
 
@@ -629,7 +619,7 @@ where
             national: national.as_deref(),
         };
         if let Some(subject) = link_to {
-            let (current, _) = match self.fresh(kit, b, None).await {
+            let (current, session) = match self.linking_session(kit, b).await {
                 Ok(s) => s,
                 Err(r) => return r,
             };
@@ -641,19 +631,13 @@ where
                 actor: &actor_ref,
                 correlation: b.correlation,
             };
-            // TN-66
+            // TN-66, TN-154
             return match externals
-                .link_upstream(subject, &asserted, &facts, now, &who)
+                .link_upstream((subject, Some(session)), &asserted, &facts, now, &who)
                 .await
             {
-                Ok(Linked::Linked) => {
-                    Reply::json(200, json!({ "linked": true, "signed_out": true }))
-                        .cookie(Some(clear_cookie(SESSION_COOKIE)))
-                }
-                Ok(Linked::Already) => {
-                    Reply::json(200, json!({ "linked": true, "signed_out": false }))
-                }
-                Ok(Linked::Elsewhere) => Reply::problem(LINKED_ELSEWHERE),
+                Ok(Linked::Linked | Linked::Already) => self.linked_page(kit, "linked"),
+                Ok(Linked::Elsewhere) => self.linked_page(kit, "elsewhere"),
                 Err(e) => failed(&e.into()),
             };
         }
