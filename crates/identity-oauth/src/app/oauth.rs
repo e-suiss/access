@@ -195,6 +195,21 @@ pub trait Env: Send + Sync + 'static {
     }
 }
 
+/// What the front-channel sign-out page shows and frames (IDP-24, TN-150).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignOut {
+    /// The clients' front-channel logout URIs, with `iss` and `sid`.
+    pub frames: Vec<String>,
+    /// Their origins, the only ones the page may frame.
+    pub origins: Vec<String>,
+    /// Where the person goes once the frames loaded.
+    pub then: String,
+    /// The environment's stored branding (`idp.environment.branding`).
+    pub branding: Option<Vec<u8>>,
+    /// The environment's stored text overrides (`idp.environment.locale_overrides`).
+    pub overrides: Option<Vec<u8>>,
+}
+
 /// What an endpoint answers; the HTTP layer only renders it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Reply {
@@ -236,13 +251,9 @@ pub enum Reply {
         /// `DPoP-Nonce` to send (TN-29).
         dpop_nonce: Option<String>,
     },
-    /// `200` with an HTML page that may frame only `frames` (front-channel logout, IDP-24).
-    Page {
-        /// The page.
-        body: String,
-        /// The origins it frames.
-        frames: Vec<String>,
-    },
+    /// The front-channel sign-out page (IDP-24, TN-150), drawn by the HTTP layer in the
+    /// person's language.
+    SignOut(SignOut),
     /// `503 + Retry-After` (G50).
     Unavailable,
     /// No environment here.

@@ -455,7 +455,7 @@ const STAGE10: [Route; 45] = [
         Verb::Put,
         "/admin/v1/envs/{slug}/settings/frontchannel-logout",
         "putFrontchannelLogout",
-        "Lets the environment's clients opt in to front-channel logout: idp.environment.frontchannel_logout.",
+        "Lets the environment's clients opt in to front-channel logout: idp.environment.frontchannel_logout. Browsers that block third-party cookies (Safari, Firefox) often drop it; use back-channel logout wherever the app supports it (TN-150).",
     ),
     read(
         "/admin/v1/envs/{slug}/organizations/{organization}/sso-enforcement/preview",

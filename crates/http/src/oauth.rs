@@ -22,6 +22,7 @@ pub mod approval;
 mod ciba;
 mod device;
 mod register;
+mod sign_out;
 
 /// The session cookie of the hosted login (TN-17).
 pub const SESSION_COOKIE: &str = "__Host-access-session";
@@ -316,7 +317,19 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             )
             .await
         }
-        Endpoint::EndSession => s.end_session(&environment, &p, cookie.as_deref()).await,
+        Endpoint::EndSession => {
+            // TN-150
+            match s.end_session(&environment, &p, cookie.as_deref()).await {
+                Reply::SignOut(page) => {
+                    let locale = sign_out::locale(
+                        p.get("ui_locales"),
+                        header_text(&req.headers, header::ACCEPT_LANGUAGE.as_str()),
+                    );
+                    return sign_out::response(&page, &locale);
+                }
+                other => other,
+            }
+        }
         // OP-154 m.3 (p)
         Endpoint::DeviceAuthorization => {
             s.device_authorization(
@@ -437,8 +450,10 @@ pub fn render(reply: Reply) -> Response {
         Reply::NotFound => crate::not_found_problem().into_response(),
         // OP-155 m.3 (k)
         Reply::FormPost { action, body } => form_post(&action, body),
-        // IDP-24
-        Reply::Page { body, frames } => page(&frames, body),
+        // IDP-24, TN-150
+        Reply::SignOut(page) => {
+            sign_out::response(&page, access_identity_ui::domain::locale::DEFAULT_LANGUAGE)
+        }
         Reply::Jwt {
             body,
             media,
@@ -457,29 +472,6 @@ pub fn render(reply: Reply) -> Response {
         }
     };
     no_store(&mut r);
-    r
-}
-
-/// The front-channel sign-out page: HTML that may only frame the clients' origins.
-fn page(frames: &[String], body: String) -> Response {
-    let csp = format!(
-        "default-src 'none'; frame-src {}; frame-ancestors 'none'",
-        frames.join(" ")
-    );
-    let Ok(csp) = HeaderValue::from_str(&csp) else {
-        return Problem::new(StatusCode::BAD_REQUEST, "invalid-frame", "Bad Request")
-            .into_response();
-    };
-    let mut r = (
-        StatusCode::OK,
-        [(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("text/html; charset=utf-8"),
-        )],
-        body,
-    )
-        .into_response();
-    r.headers_mut().insert(header::CONTENT_SECURITY_POLICY, csp);
     r
 }
 

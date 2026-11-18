@@ -22,6 +22,9 @@ use crate::domain::issuer::Issuer;
 use crate::domain::tokens::LoginReason;
 use crate::ports::Unavailable;
 
+/// An environment's stored branding and text overrides (TN-150).
+pub type PageLook = (Option<Vec<u8>>, Option<Vec<u8>>);
+
 /// One transaction in one environment.
 pub trait OAuthTx: Send {
     /// The client with `client_id`, active or retired.
@@ -466,6 +469,9 @@ pub trait OAuthTx: Send {
     > + Send;
     /// Whether the environment lets its clients opt in to front-channel logout (IDP-24).
     fn frontchannel_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The environment's stored branding and text overrides, as the sign-out page draws them
+    /// (TN-150).
+    fn page_look(&mut self) -> impl Future<Output = Result<PageLook, Unavailable>> + Send;
     /// The legacy token endpoint methods some active client of the environment opted in to.
     fn legacy_methods(&mut self) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
     /// The environment's CIBA setting (`idp.environment.ciba`, OP-155 m.3 (l)); off unless the store serves

@@ -88,7 +88,7 @@ fn shape(x: &At<'_>, r: &Reply) -> String {
                 keys.join(",")
             )
         }
-        Reply::FormPost { .. } | Reply::Jwt { .. } | Reply::Page { .. } => String::from("200"),
+        Reply::FormPost { .. } | Reply::Jwt { .. } | Reply::SignOut(_) => String::from("200"),
         Reply::Json { status, body, .. } => {
             let v: Value = serde_json::from_str(body).unwrap_or(Value::Null);
             let mut keys: Vec<String> = v

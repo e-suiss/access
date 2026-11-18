@@ -98,6 +98,16 @@ impl OAuthTx for PgOAuthTx {
             .map_err(down)
     }
 
+    async fn page_look(&mut self) -> Result<crate::ports::oauth::PageLook, Unavailable> {
+        let branding = access_store::idp::branding(&mut self.0)
+            .await
+            .map_err(down)?;
+        let overrides = access_store::idp::locale_overrides(&mut self.0)
+            .await
+            .map_err(down)?;
+        Ok((branding, overrides))
+    }
+
     async fn legacy_methods(&mut self) -> Result<Vec<String>, Unavailable> {
         access_store::client_profiles::legacy_methods(&mut self.0)
             .await

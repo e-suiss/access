@@ -2257,7 +2257,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Lets the environment's clients opt in to front-channel logout: idp.environment.frontchannel_logout. */
+        /** Lets the environment's clients opt in to front-channel logout: idp.environment.frontchannel_logout. Browsers that block third-party cookies (Safari, Firefox) often drop it; use back-channel logout wherever the app supports it (TN-150). */
         put: operations["putFrontchannelLogout"];
         post?: never;
         delete?: never;

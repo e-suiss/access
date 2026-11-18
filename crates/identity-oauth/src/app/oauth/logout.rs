@@ -9,9 +9,9 @@ use access_identity_session::domain::session::cookie_digest;
 use access_kernel::json::{self, Json, b64url_decode};
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 
-use super::{Env, Environment, OAuth, Reply, decode32, session_live, signed};
+use super::{Env, Environment, OAuth, Reply, SignOut, decode32, session_live, signed};
 use crate::domain::client::Client;
-use crate::domain::fapi::{frontchannel_page, frontchannel_uri, origin};
+use crate::domain::fapi::{frontchannel_uri, origin};
 use crate::domain::issuer::form_encode;
 use crate::domain::jwt::environment_key_set;
 use crate::domain::request::Params;
@@ -150,6 +150,12 @@ impl<E: Env> OAuth<E> {
         } else {
             Vec::new()
         };
+        // TN-150
+        let (branding, overrides) = if frames.is_empty() {
+            (None, None)
+        } else {
+            tx.page_look().await?
+        };
         // G57, §10.4.6
         tx.end_session(session.id, signed(now), "logout").await?;
         tx.commit().await?;
@@ -157,10 +163,13 @@ impl<E: Env> OAuth<E> {
             return Ok(Reply::Redirect(target));
         }
         let origins = frames.iter().filter_map(|f| origin(f)).collect();
-        Ok(Reply::Page {
-            body: frontchannel_page(&frames, &target),
-            frames: origins,
-        })
+        Ok(Reply::SignOut(SignOut {
+            frames,
+            origins,
+            then: target,
+            branding,
+            overrides,
+        }))
     }
 
     /// The front-channel logout URIs, with `iss` and `sid`, of the clients that opted in and

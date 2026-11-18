@@ -2447,6 +2447,20 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "signout-title"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signout-body"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "page-signing_in"
 surface = "login"
 class = "status"

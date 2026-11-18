@@ -923,16 +923,16 @@ async fn front_channel_logout_is_an_environment_and_client_opt_in() {
     assert!(matches!(r, Reply::Redirect(_)), "{r:?}");
     a.enable_frontchannel().await;
     let (r, sid) = sign_out().await;
-    let Reply::Page { body: page, frames } = r else {
+    let Reply::SignOut(page) = r else {
         panic!("{r:?}");
     };
-    assert_eq!(frames, vec![String::from("https://shop.example")]);
+    assert_eq!(page.origins, vec![String::from("https://shop.example")]);
     let iss = access_identity_oauth::domain::issuer::Issuer::parse(a.issuer()).unwrap();
     let mut expected = String::from("https://shop.example/fc?iss=");
     access_identity_oauth::domain::issuer::form_encode(iss.as_str(), &mut expected);
-    expected.push_str("&amp;sid=");
+    expected.push_str("&sid=");
     expected.push_str(&sid);
-    assert!(page.contains(&expected), "{page}");
+    assert_eq!(page.frames, vec![expected]);
 }
 
 // CR-2, MD-3, MD-6, OP-125, Ek B 5093, 5094, 5103, 5104, 5106

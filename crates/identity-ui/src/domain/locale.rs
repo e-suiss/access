@@ -290,5 +290,27 @@ pub fn stored_overrides(bytes: Option<&[u8]>) -> serde_json::Value {
     serde_json::Value::Object(out)
 }
 
+/// The environment's stored overrides as [`Overrides`], with the checks of [`stored_overrides`],
+/// for a page the server draws itself (TN-150).
+#[must_use]
+pub fn overrides_of(bytes: Option<&[u8]>) -> Overrides {
+    let serde_json::Value::Object(locales) = stored_overrides(bytes) else {
+        return Overrides::new();
+    };
+    locales
+        .into_iter()
+        .filter_map(|(locale, texts)| {
+            let serde_json::Value::Object(texts) = texts else {
+                return None;
+            };
+            let texts: Messages = texts
+                .into_iter()
+                .filter_map(|(k, v)| v.as_str().map(|v| (k, String::from(v))))
+                .collect();
+            Some((locale, texts))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests;

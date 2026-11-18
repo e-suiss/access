@@ -473,7 +473,9 @@ pub fn frontchannel_uri(registered: &str, issuer: &str, sid: &str) -> String {
     out
 }
 
-fn html_attr(s: &str) -> String {
+/// `s` escaped for HTML text and double- or single-quoted attributes.
+#[must_use]
+pub fn html_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -498,27 +500,6 @@ pub fn origin(uri: &str) -> Option<String> {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b)))
     .then(|| format!("{scheme}://{host}"))
-}
-
-/// The sign-out page that loads each client's front-channel logout URI in a hidden frame, then
-/// goes on to `then` (OIDC Front-Channel Logout §4, IDP-24); no script.
-#[must_use]
-pub fn frontchannel_page(frames: &[String], then: &str) -> String {
-    let mut body = String::from(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Signed out</title>",
-    );
-    body.push_str("<meta http-equiv=\"refresh\" content=\"2;url=");
-    body.push_str(&html_attr(then));
-    body.push_str("\"></head><body>");
-    for f in frames {
-        body.push_str("<iframe hidden src=\"");
-        body.push_str(&html_attr(f));
-        body.push_str("\"></iframe>");
-    }
-    body.push_str("<a href=\"");
-    body.push_str(&html_attr(then));
-    body.push_str("\">Continue</a></body></html>");
-    body
 }
 
 /// The names a client certificate shows, once its chain verified to a CA the environment trusts and
