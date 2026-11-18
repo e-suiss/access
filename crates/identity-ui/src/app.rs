@@ -528,11 +528,11 @@ fn shipped_presets() -> Option<&'static access_identity_federation::domain::pres
 /// TN-151
 fn profile_ui(flow: &FlowId, p: &ProfileStep, reqs: &[Requirement]) -> Ui {
     if p.sent {
-        Ui::profile_code(flow.clone(), reqs)
+        Ui::profile_code(flow.clone(), p.gap.phone, reqs)
     } else {
         Ui::complete_profile(
             flow.clone(),
-            (p.gap.name, p.gap.email),
+            (p.gap.name, p.gap.email, p.gap.phone),
             p.offered.clone(),
             reqs,
         )
@@ -1021,7 +1021,14 @@ where
                 .map_err(|e| failed(&e))?,
             // TN-151
             (Method::Profile, Current::Profile(p)) => {
-                let typed = (field(FieldName::DisplayName), field(FieldName::Email));
+                let typed = (
+                    field(FieldName::DisplayName),
+                    if p.gap.phone {
+                        field(FieldName::Phone)
+                    } else {
+                        field(FieldName::Email)
+                    },
+                );
                 return self
                     .profile_submit(auth, kit, b, (&flow, &fref), p, typed)
                     .await;
@@ -1072,9 +1079,17 @@ where
                     .map_err(|e| failed(&e))?
                     .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
             }
-            if p.gap.email {
-                self.profile_address(kit, b, (fref.handle, fref.device), p.subject, email)
-                    .await?;
+            if p.gap.email || p.gap.phone {
+                if p.gap.phone {
+                    let phone =
+                        access_identity_account::domain::phone::e164(email, kit.auth.country)
+                            .ok_or_else(|| Reply::problem(INVALID_SUBMISSION))?;
+                    self.profile_phone(kit, b, (fref.handle, fref.device), p.subject, &phone)
+                        .await?;
+                } else {
+                    self.profile_address(kit, b, (fref.handle, fref.device), p.subject, email)
+                        .await?;
+                }
                 auth.profile_address_sent(fref, true)
                     .await
                     .map_err(|e| failed(&e))?

@@ -263,6 +263,7 @@ impl EnvironmentSignin {
             require_email: email && !self.has("phone"),
             // TN-156
             phone: self.has("phone"),
+            require_phone: self.has("phone") && !email && self.default_country.is_some(),
             country: self.default_country,
             ..base
         }

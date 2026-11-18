@@ -24,13 +24,15 @@ pub struct ProfileGap {
     pub name: bool,
     /// A proven e-mail address, which the environment signs in with.
     pub email: bool,
+    /// A proven phone number, which the environment signs in with (TN-156).
+    pub phone: bool,
 }
 
 impl ProfileGap {
     /// Whether anything is missing.
     #[must_use]
     pub const fn any(self) -> bool {
-        self.name || self.email
+        self.name || self.email || self.phone
     }
 }
 
@@ -65,6 +67,7 @@ where
         Ok(ProfileGap {
             name: self.policy.require_name && !tx.has_name(subject).await?,
             email: self.policy.require_email && !tx.has_email(subject).await?,
+            phone: self.policy.require_phone && !tx.has_phone(subject).await?,
         })
     }
 
@@ -206,14 +209,14 @@ mod tests {
         assert!(
             ProfileGap {
                 name: true,
-                email: false
+                ..ProfileGap::default()
             }
             .any()
         );
         assert!(
             ProfileGap {
-                name: false,
-                email: true
+                phone: true,
+                ..ProfileGap::default()
             }
             .any()
         );

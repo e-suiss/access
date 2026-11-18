@@ -146,12 +146,12 @@ fn examples() -> Vec<(&'static str, Ui)> {
             "profile",
             Ui::complete_profile(
                 flow(),
-                (true, true),
+                (true, true, false),
                 Some(String::from("ada@example.org")),
                 &POLICY,
             ),
         ),
-        ("profile-code", Ui::profile_code(flow(), &POLICY)),
+        ("profile-code", Ui::profile_code(flow(), false, &POLICY)),
         (
             "complete-recovery-codes",
             Ui::complete(flow(), "/callback?state=example".into(), &POLICY)

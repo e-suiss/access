@@ -180,6 +180,15 @@ impl SessionTx for PgTx {
         Ok(())
     }
 
+    async fn has_phone(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .identifiers(subject)
+            .await?
+            .iter()
+            .any(|i| i.live && i.kind == "phone"))
+    }
+
     async fn has_email(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
         Ok(self
             .0

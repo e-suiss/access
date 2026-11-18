@@ -51,6 +51,8 @@ pub struct AuthPolicy {
     pub require_email: bool,
     /// Phone numbers are identifiers, kept and looked up in E.164 (TN-156).
     pub phone: bool,
+    /// A sign-in completes only once the account has a proven phone number (TN-156, TN-151).
+    pub require_phone: bool,
     /// The country a phone number typed the national way belongs to (TN-156).
     pub country: Option<access_identity_account::domain::phone::Country>,
 }
@@ -72,6 +74,7 @@ impl AuthPolicy {
         require_name: false,
         require_email: false,
         phone: false,
+        require_phone: false,
         country: None,
     };
 }

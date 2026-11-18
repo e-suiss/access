@@ -907,6 +907,87 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         })
     }
 
+    /// Sends a code by text message to the first phone number of `subject` (TN-156, TN-151):
+    /// the same answer whether or not another account holds the number. An account that has a
+    /// phone number already changes it elsewhere.
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    pub async fn start_phone_change(
+        &self,
+        subject: [u8; 16],
+        req: &PhoneStart<'_>,
+        who: &Actor<'_>,
+    ) -> Result<Started, AccountError> {
+        if !req.phone.starts_with('+') {
+            return Ok(Started::Refused(Refused::Address));
+        }
+        let (tenant, environment) = self.ids();
+        let mut tx = self.begin().await?;
+        let key = gate_key(tag::ACCOUNT_MAIL, &tenant, &environment, &subject);
+        if let Some(retry_after_ms) = gate(&mut tx, &key, ACCOUNT_MAIL_RATE, req.now_ms).await? {
+            tx.commit().await?;
+            return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
+        }
+        let index = self.vault.index_of(&tenant, &environment, req.phone)?;
+        let has_phone =
+            tx.0.identifiers(subject)
+                .await?
+                .iter()
+                .any(|i| i.live && i.kind == IdentifierKind::Phone.name());
+        let free = !has_phone
+            && tx.subject_by_identifier(req.phone).await?.is_none()
+            && !tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
+        let code = new_sms_code()?;
+        let digest = free.then(|| code_digest(&req.flow_hash, code.expose()));
+        let assessment = Assessment {
+            bot: BotSignal::Positive,
+            disposable: false,
+        };
+        let id = self
+            .insert(
+                &mut tx,
+                Purpose::EmailChange,
+                (req.flow_hash, req.device_hash, req.now_ms),
+                req.phone,
+                &index,
+                digest.as_ref(),
+                &assessment,
+                Some(subject),
+            )
+            .await?;
+        if free {
+            notify(
+                self.notifier,
+                &mut tx,
+                &Message {
+                    subject: id,
+                    to: Address::Phone(req.phone.to_owned()),
+                    locale: None,
+                    valid_since_ms: None,
+                    body: Body::SmsOtp {
+                        code,
+                        purpose: OtpPurpose::VerifyAddress,
+                        expires_at_ms: req.now_ms.saturating_add(CODE_TTL_MS),
+                    },
+                },
+            )
+            .await?;
+        }
+        audit(
+            &mut tx,
+            "account.phone_change.started",
+            who.actor,
+            &self.environment.external(subject)?,
+            who.correlation,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(Started::Sent {
+            step_up: assessment.step_up(),
+        })
+    }
+
     /// The code of an e-mail change (OP-153 m.3 (i), TN-64, TN-66): the new address becomes the
     /// account's with `mailbox_owner_since` now, the old one is retired under the environment's reuse
     /// policy, the old address is told "If this wasn't you: Secure your account", and every other
@@ -915,6 +996,10 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     /// # Errors
     /// [`AccountError`].
     #[expect(clippy::too_many_arguments, reason = "one change's facts")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one change: the code, the new address and the old one"
+    )]
     pub async fn complete_change(
         &self,
         subject: [u8; 16],
@@ -948,22 +1033,34 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             }
         };
         let (tenant, environment) = self.ids();
-        let old = self.old_email(&mut tx, subject).await?;
-        let identifier =
-            Identifier::new(IdentifierKind::Email, &address).map_err(|_| AccountError::Corrupt)?;
+        // TN-156
+        let phone = address.starts_with('+');
+        let old = if phone {
+            None
+        } else {
+            self.old_email(&mut tx, subject).await?
+        };
+        let kind = if phone {
+            IdentifierKind::Phone
+        } else {
+            IdentifierKind::Email
+        };
+        let identifier = Identifier::new(kind, &address).map_err(|_| AccountError::Corrupt)?;
         if !tx.add_identifier(subject, &identifier).await? {
             tx.0.end_challenge(row.id, "failed", None, i64_of(now_ms)?)
                 .await?;
             tx.commit().await?;
             return Ok(Proven::Wrong);
         }
-        let index = self.vault.index_of(&tenant, &environment, &address)?;
-        let identifier_id =
-            tx.0.identifier_id(subject, &index)
-                .await?
-                .ok_or(AccountError::Corrupt)?;
-        tx.0.insert_mailbox(identifier_id, subject, i64_of(now_ms)?)
-            .await?;
+        if !phone {
+            let index = self.vault.index_of(&tenant, &environment, &address)?;
+            let identifier_id =
+                tx.0.identifier_id(subject, &index)
+                    .await?
+                    .ok_or(AccountError::Corrupt)?;
+            tx.0.insert_mailbox(identifier_id, subject, i64_of(now_ms)?)
+                .await?;
+        }
         if let Some((old_address, old_since)) = &old {
             let old_index = self.vault.index_of(&tenant, &environment, old_address)?;
             tx.0.release_identifier(subject, &old_index, &vault::folded(old_address))

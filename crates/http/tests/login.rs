@@ -5671,3 +5671,57 @@ async fn a_phone_environment_signs_up_with_the_number_and_a_text_message_code() 
         .await;
     assert_eq!(bad.status, StatusCode::BAD_REQUEST);
 }
+
+// TN-156, TN-151, OP-159 m.54 (e)
+#[tokio::test]
+async fn a_phone_environment_asks_an_account_without_a_number_for_one_and_proves_it() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "username", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    assert!(auth.require_phone && !auth.require_email);
+    let e = env_full(66, "tn-156-pr", auth, false, signin).await;
+    let subject = e
+        .account_as(Identifier::new(IdentifierKind::Username, "veli").unwrap())
+        .await;
+    let mut b = e.browser("veli");
+    let step = b.sign_in("veli").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n["name"] == "phone" && n["kind"] == "tel")
+    );
+    let sent = b
+        .submit(&step, "profile", json!({ "phone": "0532 444 55 66" }))
+        .await;
+    assert_eq!(
+        sent.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&sent.body)
+    );
+    let (kind, _, _) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.sms_otp.v1");
+    let code = e.outbox.last();
+    let done = b
+        .submit(&sent, "profile_code", json!({ "email_code": code }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(e.holder("+905324445566").await, Some(subject));
+    let mut again = e.browser("veli-tel");
+    assert_eq!(again.sign_in("0532 444 55 66").await.step(), "complete");
+}

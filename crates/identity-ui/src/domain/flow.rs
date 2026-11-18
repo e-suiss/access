@@ -572,7 +572,7 @@ impl Ui {
     #[must_use]
     pub fn complete_profile(
         flow: FlowId,
-        (name, email): (bool, bool),
+        (name, email, phone): (bool, bool, bool),
         offered: Option<String>,
         policy: &[Requirement],
     ) -> Self {
@@ -603,6 +603,20 @@ impl Ui {
                 read_only: false,
             });
         }
+        // TN-156
+        if phone {
+            nodes.push(Node::Input {
+                name: FieldName::Phone,
+                method: Method::Profile,
+                kind: InputKind::Tel,
+                autocomplete: Autocomplete::Tel,
+                required: true,
+                max_length: FieldName::Phone.max_length(),
+                label: TextId::PhoneLabel.into(),
+                value: None,
+                read_only: false,
+            });
+        }
         nodes.push(Node::Submit {
             method: Method::Profile,
             label: TextId::Continue.into(),
@@ -619,14 +633,19 @@ impl Ui {
     /// The code sent to the address the profile step took (TN-151), the same answer whether or
     /// not another account holds it; the address can be typed again.
     #[must_use]
-    pub fn profile_code(flow: FlowId, policy: &[Requirement]) -> Self {
+    pub fn profile_code(flow: FlowId, sms: bool, policy: &[Requirement]) -> Self {
         let nodes = vec![
             Node::input(
                 FieldName::EmailCode,
                 Method::ProfileCode,
                 InputKind::Code,
                 Autocomplete::OneTimeCode,
-                TextId::EmailCodeLabel.into(),
+                if sms {
+                    TextId::SmsLabel
+                } else {
+                    TextId::EmailCodeLabel
+                }
+                .into(),
             ),
             Node::Submit {
                 method: Method::ProfileCode,

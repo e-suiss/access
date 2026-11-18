@@ -174,6 +174,11 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         subject: [u8; 16],
         name: &str,
     ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Whether the subject has a live phone number (TN-156).
+    fn has_phone(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// Whether the subject has a live proven e-mail address (TN-151).
     fn has_email(
         &mut self,

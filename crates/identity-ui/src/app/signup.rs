@@ -821,6 +821,70 @@ where
         }
     }
 
+    /// Sends a code by text message to the phone number a sign-in's profile step took (TN-156):
+    /// the same answer whether or not another account holds it.
+    pub(crate) async fn profile_phone(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        (handle, device): (&str, &str),
+        subject: [u8; 16],
+        phone: &str,
+    ) -> Result<(), Reply> {
+        let (flow_hash, device_hash) =
+            profile_binding(handle, device).ok_or_else(|| Reply::problem(FLOW_GONE))?;
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        let actor_ref = environment.external(subject).unwrap_or_default();
+        let actor = Actor {
+            actor: &actor_ref,
+            correlation: b.correlation,
+        };
+        let net = prefix(b.ip);
+        match registrar
+            .start_phone_change(
+                subject,
+                &PhoneStart {
+                    phone,
+                    bot_token: None,
+                    prefix: &net,
+                    flow_hash,
+                    device_hash,
+                    now_ms: self.clock.now_ms(),
+                },
+                &actor,
+            )
+            .await
+        {
+            Ok(Started::Sent { .. }) => Ok(()),
+            Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
+                Err(Reply::problem(Problem {
+                    status: 429,
+                    code: "too-many-requests",
+                    title: "Too many attempts",
+                    retry_after_s: Some(retry_after_ms.div_ceil(1000)),
+                }))
+            }
+            Ok(Started::Refused(_)) => Err(Reply::problem(Problem {
+                status: 400,
+                code: "invalid-phone",
+                title: "This phone number can't be used here",
+                retry_after_s: None,
+            })),
+            Err(e) => Err(failed(&e.into())),
+        }
+    }
+
     /// Takes the code a sign-in's profile step sent (TN-151): the address becomes the account's.
     /// `Ok(false)` for a wrong code.
     pub(crate) async fn profile_proof(
