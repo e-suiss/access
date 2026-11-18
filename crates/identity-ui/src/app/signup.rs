@@ -12,7 +12,7 @@ use std::sync::Arc;
 use access_identity_account::adapters::bot::BotProviders;
 use access_identity_account::app::Actor;
 use access_identity_account::app::registration::{
-    Proven, Refused, Registrar, Rules, Start, Started, prefix,
+    PhoneStart, Proven, Refused, Registrar, Rules, Start, Started, prefix,
 };
 use access_identity_account::domain::login::Problem;
 use access_identity_account::domain::registration::{
@@ -140,15 +140,33 @@ fn ui(flow: FlowId, step: Step, nodes: Vec<Node>) -> Ui {
 
 /// The first step: the address and the page's bot token (OP-153 m.3 (g)).
 #[must_use]
-pub fn address_step(flow: FlowId) -> Ui {
-    let nodes = vec![
-        Node::input(
+pub fn address_step(flow: FlowId, contact: Contact) -> Ui {
+    let address = match contact {
+        Contact::Email => Node::input(
             FieldName::Email,
             Method::Register,
             InputKind::Text,
             Autocomplete::Email,
             TextId::EmailLabel.into(),
         ),
+        // TN-156
+        Contact::Phone => Node::input(
+            FieldName::Phone,
+            Method::Register,
+            InputKind::Tel,
+            Autocomplete::Tel,
+            TextId::PhoneLabel.into(),
+        ),
+        Contact::Either => Node::input(
+            FieldName::Email,
+            Method::Register,
+            InputKind::Text,
+            Autocomplete::Email,
+            TextId::IdentifierPhoneLabel.into(),
+        ),
+    };
+    let nodes = vec![
+        address,
         Node::Input {
             name: FieldName::BotToken,
             method: Method::Register,
@@ -171,13 +189,18 @@ pub fn address_step(flow: FlowId) -> Ui {
 /// The second step, the same for every address: the code and the display name (required when
 /// the environment says so).
 #[must_use]
-pub fn code_step(flow: FlowId, name_required: bool) -> Ui {
+pub fn code_step(flow: FlowId, name_required: bool, contact: Contact) -> Ui {
+    let label = match contact {
+        Contact::Email => TextId::EmailCodeLabel,
+        Contact::Phone => TextId::SmsLabel,
+        Contact::Either => TextId::SentCodeLabel,
+    };
     let mut nodes = vec![Node::input(
         FieldName::EmailCode,
         Method::EmailCode,
         InputKind::Code,
         Autocomplete::OneTimeCode,
-        TextId::EmailCodeLabel.into(),
+        label.into(),
     )];
     nodes.push(Node::Input {
         name: FieldName::DisplayName,
@@ -199,6 +222,28 @@ pub fn code_step(flow: FlowId, name_required: bool) -> Ui {
     u
 }
 
+/// What a sign-up takes as its address (TN-156): an e-mail address, a phone number, or either.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Contact {
+    /// An e-mail address.
+    Email,
+    /// A phone number, sent a text message.
+    Phone,
+    /// Either; the field tells them apart by how it is written.
+    Either,
+}
+
+/// The environment's sign-up address (TN-156).
+#[must_use]
+pub fn contact(kit: &EnvironmentKit) -> Contact {
+    let email = kit.signin.methods.contains("email");
+    match (kit.auth.phone, email) {
+        (true, true) => Contact::Either,
+        (true, false) => Contact::Phone,
+        (false, _) => Contact::Email,
+    }
+}
+
 fn rules(kit: &EnvironmentKit, email: &str) -> Rules {
     Rules {
         domain_allowed: kit.signin.registration_allowed(email),
@@ -215,14 +260,14 @@ where
     /// `POST /v1/login/flows` with `kind: registration` (OP-153 m.3 (g)): a new sign-up flow at
     /// its address step, and the flow cookie when the browser has none.
     pub async fn create_signup(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {
-        match self.kit(entry).await {
+        let kit = match self.kit(entry).await {
             Err(r) => return r,
             // OP-159 m.48 (c)
             Ok(kit) if !kit.signin.open_registration() => {
                 return Reply::problem(REGISTRATION_CLOSED);
             }
-            Ok(_) => {}
-        }
+            Ok(kit) => kit,
+        };
         let Ok(secret) = access_crypto::random::bytes::<32>() else {
             return Reply::problem(FLOW_GONE);
         };
@@ -236,7 +281,7 @@ where
                 .ok()
                 .map(|d| set_cookie(FLOW_COOKIE, &b64url_encode(&d), None))
         };
-        Reply::ui(201, address_step(flow)).cookie(cookie)
+        Reply::ui(201, address_step(flow, contact(&kit))).cookie(cookie)
     }
 
     /// `GET /v1/login/flows/{flow}` of a sign-up flow: the address step until a challenge exists
@@ -257,7 +302,10 @@ where
         if device_secret(b.flow).is_none() {
             return Reply::problem(FLOW_GONE);
         }
-        Reply::ui(200, code_step(flow, kit.signin.name_required()))
+        Reply::ui(
+            200,
+            code_step(flow, kit.signin.name_required(), contact(&kit)),
+        )
     }
 
     /// `POST /v1/login/flows/{flow}` of a sign-up flow.
@@ -290,9 +338,9 @@ where
         let flow_hash = handle_digest(&secret);
         let device_hash = device_digest(&device);
         let step = if submission.method == Method::Register {
-            address_step(flow.clone())
+            address_step(flow.clone(), contact(&kit))
         } else {
-            code_step(flow.clone(), kit.signin.name_required())
+            code_step(flow.clone(), kit.signin.name_required(), contact(&kit))
         };
         let Ok(checked) = step.check(submission) else {
             return Reply::problem(super::INVALID_SUBMISSION);
@@ -319,27 +367,62 @@ where
             let email = field(FieldName::Email).unwrap_or_default();
             let token = field(FieldName::BotToken);
             let net = prefix(b.ip);
-            let r = registrar
-                .start(
-                    &Start {
-                        email: &email,
-                        bot_token: token.as_deref(),
-                        prefix: &net,
-                        flow_hash,
-                        device_hash,
-                        now_ms: started_ms,
-                    },
-                    &rules(&kit, &email),
-                    &actor,
-                )
-                .await;
-            let mut reply = match r {
-                Ok(Started::Sent { .. }) => {
-                    Reply::ui(200, code_step(flow, kit.signin.name_required()))
+            // TN-156
+            let typed = match contact(&kit) {
+                Contact::Phone => field(FieldName::Phone),
+                Contact::Either
+                    if access_identity_account::domain::phone::looks_like_phone(&email) =>
+                {
+                    Some(email.clone())
                 }
+                Contact::Either | Contact::Email => None,
+            };
+            let r = match typed {
+                Some(raw) => {
+                    match access_identity_account::domain::phone::e164(&raw, kit.auth.country) {
+                        Some(phone) => {
+                            registrar
+                                .start_phone(
+                                    &PhoneStart {
+                                        phone: &phone,
+                                        bot_token: token.as_deref(),
+                                        prefix: &net,
+                                        flow_hash,
+                                        device_hash,
+                                        now_ms: started_ms,
+                                    },
+                                    &actor,
+                                )
+                                .await
+                        }
+                        None => Ok(Started::Refused(Refused::Address)),
+                    }
+                }
+                None => {
+                    registrar
+                        .start(
+                            &Start {
+                                email: &email,
+                                bot_token: token.as_deref(),
+                                prefix: &net,
+                                flow_hash,
+                                device_hash,
+                                now_ms: started_ms,
+                            },
+                            &rules(&kit, &email),
+                            &actor,
+                        )
+                        .await
+                }
+            };
+            let mut reply = match r {
+                Ok(Started::Sent { .. }) => Reply::ui(
+                    200,
+                    code_step(flow, kit.signin.name_required(), contact(&kit)),
+                ),
                 Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
                     let s = retry_after_ms.div_ceil(1000);
-                    let mut u = address_step(flow);
+                    let mut u = address_step(flow, contact(&kit));
                     u.messages = vec![
                         Message::error(TextId::TooManyAttempts)
                             .retry_after(u32::try_from(s).unwrap_or(u32::MAX)),
@@ -349,7 +432,7 @@ where
                     r
                 }
                 Ok(Started::Refused(_)) => {
-                    let mut u = address_step(flow);
+                    let mut u = address_step(flow, contact(&kit));
                     u.messages = vec![Message::error(TextId::RegistrationFailed)];
                     Reply::ui(400, u)
                 }
@@ -363,7 +446,7 @@ where
         let code = field(FieldName::EmailCode).unwrap_or_default();
         let name = field(FieldName::DisplayName).filter(|n| !n.trim().is_empty());
         if kit.signin.name_required() && name.is_none() {
-            let mut u = code_step(flow, true);
+            let mut u = code_step(flow, true, contact(&kit));
             u.messages = vec![Message::error(TextId::RegistrationFailed)];
             return Reply::ui(400, u);
         }
@@ -383,7 +466,7 @@ where
                 owner_since_ms,
             }) => (subject, owner_since_ms),
             Ok(Proven::Wrong) => {
-                let mut u = code_step(flow, kit.signin.name_required());
+                let mut u = code_step(flow, kit.signin.name_required(), contact(&kit));
                 u.messages = vec![Message::error(TextId::RegistrationFailed)];
                 return Reply::ui(401, u);
             }
@@ -808,10 +891,10 @@ mod tests {
         let signup = format!("{PREFIX}{login}");
         assert!(is_signup(&signup));
         assert_eq!(signup_secret(&signup), Some([7; 32]));
-        let a = address_step(FlowId::parse(&signup).unwrap());
+        let a = address_step(FlowId::parse(&signup).unwrap(), Contact::Email);
         assert_eq!(a.kind, FlowKind::Registration);
         assert!(a.messages.iter().all(|m| m.id.pre_auth()));
-        let c = code_step(FlowId::parse(&signup).unwrap(), true);
+        let c = code_step(FlowId::parse(&signup).unwrap(), true, Contact::Phone);
         assert!(c.messages.iter().all(|m| m.id.pre_auth()));
     }
 }

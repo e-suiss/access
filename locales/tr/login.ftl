@@ -13,6 +13,7 @@ passkey-not_registered = Bu geçiş anahtarı bu hesaba kayıtlı değil.
 label-identifier = E-posta veya kullanıcı adı
 label-phone = Telefon numarası
 label-identifier_phone = E-posta ya da telefon numarası
+label-sent_code = Size gönderdiğimiz kod
 label-password = Parola
 label-totp_code = Doğrulama uygulamanızdaki kod
 label-totp_setup = Bu anahtarı doğrulama uygulamanıza ekleyin, sonra gösterdiği kodu girin

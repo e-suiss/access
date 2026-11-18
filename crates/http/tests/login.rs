@@ -5603,3 +5603,71 @@ async fn a_phone_environment_signs_in_with_the_number_however_it_is_typed() {
         .await;
     assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
 }
+
+// TN-156, OP-159 m.54 (d)
+#[tokio::test]
+async fn a_phone_environment_signs_up_with_the_number_and_a_text_message_code() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(65, "tn-156-up", auth, false, signin).await;
+    let mut b = e.browser("up");
+    let first = b.signup().await;
+    let field = first.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "input" && n["method"] == "register" && n["kind"] != "hidden")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        (field["name"].as_str(), field["kind"].as_str()),
+        (Some("phone"), Some("tel"))
+    );
+    let code_step = b
+        .submit(&first, "register", json!({ "phone": "0532 111 22 33" }))
+        .await;
+    assert_eq!(
+        code_step.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&code_step.body)
+    );
+    assert_eq!(code_step.messages(), vec!["registration.code_sent"]);
+    let (kind, _, _) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.sms_otp.v1");
+    let code = e.outbox.last();
+    assert_eq!(code.len(), 6);
+    assert_eq!(e.holder("+905321112233").await, None);
+    let done = b
+        .submit(&code_step, "email_code", json!({ "email_code": code }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let subject = e.holder("+905321112233").await.unwrap();
+
+    let mut again = e.browser("again");
+    let first = again.signup().await;
+    let taken = again
+        .submit(&first, "register", json!({ "phone": "+90 532 111 22 33" }))
+        .await;
+    assert_eq!(
+        taken.status,
+        StatusCode::OK,
+        "the same answer for a taken number"
+    );
+    let (kind, _, to) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.signup_existing.v1");
+    assert_eq!(to, subject);
+    let bad = again
+        .submit(&first, "register", json!({ "phone": "12" }))
+        .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+}

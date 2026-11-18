@@ -31,7 +31,8 @@ export type FieldName =
   | "bot_token"
   | "keep_signed_in"
   | "remember_device"
-  | "sms_code";
+  | "sms_code"
+  | "phone";
 /** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
 export type OptionName = "keep_signed_in" | "remember_device";
 export type Method =
@@ -232,6 +233,7 @@ const FIELD_NAMES = [
   "keep_signed_in",
   "remember_device",
   "sms_code",
+  "phone",
 ] as const satisfies readonly FieldName[];
 const METHODS = [
   "identifier",

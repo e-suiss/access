@@ -71,7 +71,7 @@ fn node() -> Value {
             "name": r("FieldName"),
             "method": r("Method"),
             "kind": string_enum(&["text", "password", "code", "hidden", "tel"]),
-            "autocomplete": string_enum(&["username webauthn", "username", "current-password", "one-time-code", "off", "new-password", "email", "name"]),
+            "autocomplete": string_enum(&["username webauthn", "username", "current-password", "one-time-code", "off", "new-password", "email", "name", "tel"]),
             "required": { "type": "boolean" },
             "max_length": { "type": "integer", "minimum": 1 },
             "label": r("Text"),

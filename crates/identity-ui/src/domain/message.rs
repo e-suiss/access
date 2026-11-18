@@ -48,6 +48,9 @@ pub enum TextId {
     /// Create a passkey.
     #[serde(rename = "action.passkey_create")]
     PasskeyCreate,
+    /// The code field of a sign-up whose code went by e-mail or text message (TN-156).
+    #[serde(rename = "label.sent_code")]
+    SentCodeLabel,
     /// The identifier field where only phone numbers sign in (TN-156).
     #[serde(rename = "label.phone")]
     PhoneLabel,
@@ -608,7 +611,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 197] = [
+    pub const ALL: [Self; 198] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -626,6 +629,7 @@ impl TextId {
         Self::EnrollSecondFactor,
         Self::ProfileComplete,
         Self::PhoneLabel,
+        Self::SentCodeLabel,
         Self::IdentifierPhoneLabel,
         Self::ProfileAddressHint,
         Self::ChangeAddress,
@@ -830,6 +834,7 @@ impl TextId {
             Self::EnrollSecondFactor => "second_factor.enroll",
             Self::ProfileComplete => "profile.complete",
             Self::PhoneLabel => "label.phone",
+            Self::SentCodeLabel => "label.sent_code",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
             Self::ProfileAddressHint => "profile.address_hint",
             Self::ChangeAddress => "action.change_address",
@@ -1038,6 +1043,7 @@ impl TextId {
             }
             Self::ProfileComplete => "Finish setting up your account to continue.",
             Self::PhoneLabel => "Phone number",
+            Self::SentCodeLabel => "The code we sent you",
             Self::IdentifierPhoneLabel => "Email or phone number",
             Self::ProfileAddressHint => {
                 "If another account already uses this address, sign in to that account and link this sign-in from its settings."

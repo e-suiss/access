@@ -13,6 +13,7 @@ passkey-not_registered = That passkey isn't registered for this account.
 label-identifier = Email or username
 label-phone = Phone number
 label-identifier_phone = Email or phone number
+label-sent_code = The code we sent you
 label-password = Password
 label-totp_code = Code from your authenticator app
 label-totp_setup = Add this key to your authenticator app, then enter the code it shows

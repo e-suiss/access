@@ -226,6 +226,12 @@ function Passkeys(props: {
         {t("methods.passkeys")}
       </h4>
       {/* HL-19 */}
+      {props.methods.passkeys.length === 0 && (
+        // TN-156
+        <p className="text-sm font-medium" data-testid="passkey-suggest">
+          {t("methods.passkey_suggest")}
+        </p>
+      )}
       <Meta data-testid="passkey-no-pqc">{t("security.passkey_no_pqc")}</Meta>
       {props.methods.passkeys.length > 0 && (
         <Rows>

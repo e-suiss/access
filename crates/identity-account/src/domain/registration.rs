@@ -325,6 +325,10 @@ pub mod tag {
     pub const EMAIL_DAY: u8 = 3;
     /// One account's e-mail sends (TN-83 (6), §10.2.1).
     pub const ACCOUNT_MAIL: u8 = 4;
+    /// One phone number, hourly (TN-156).
+    pub const PHONE_HOUR: u8 = 5;
+    /// One phone number, daily (TN-156).
+    pub const PHONE_DAY: u8 = 6;
 }
 
 /// Sends to one account per hour, a mail-bomb amplifier's cap (TN-83 (6), IDP-3).

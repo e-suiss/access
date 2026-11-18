@@ -199,6 +199,33 @@ pub fn new_code() -> Result<Secret<String>, AccountError> {
     Ok(Secret::new(format!("{n:0width$}")))
 }
 
+/// The 6-digit code a text message carries (TN-156, `relay.message.sms_otp.v1`).
+///
+/// # Errors
+/// [`AccountError::Random`].
+pub fn new_sms_code() -> Result<Secret<String>, AccountError> {
+    let r = access_crypto::random::bytes::<16>().map_err(|_| AccountError::Random)?;
+    let n = u128::from_be_bytes(r) % 1_000_000;
+    Ok(Secret::new(format!("{n:06}")))
+}
+
+/// What a phone sign-up's first step names (TN-156).
+#[derive(Clone, Copy, Debug)]
+pub struct PhoneStart<'a> {
+    /// The number in E.164.
+    pub phone: &'a str,
+    /// The hosted page's bot token, if any.
+    pub bot_token: Option<&'a str>,
+    /// The client's /24 or /48 prefix.
+    pub prefix: &'a [u8],
+    /// Digest of the new flow handle.
+    pub flow_hash: [u8; 32],
+    /// Digest of the browser's flow cookie.
+    pub device_hash: [u8; 32],
+    /// Trusted time, Unix ms.
+    pub now_ms: u64,
+}
+
 /// The digest a code is kept as, bound to its flow.
 #[must_use]
 pub fn code_digest(flow_hash: &[u8; 32], code: &str) -> [u8; 32] {
@@ -354,8 +381,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             .insert(
                 &mut tx,
                 Purpose::Registration,
-                req,
-                &email,
+                (req.flow_hash, req.device_hash, req.now_ms),
+                email.raw(),
                 &canonical,
                 digest.as_ref(),
                 &assessment,
@@ -416,13 +443,137 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         })
     }
 
+    /// The first step of a phone sign-up (TN-156, OP-159 m.54 (d)): the same answer whether or
+    /// not the number has an account; a code goes by text message only to a number without one,
+    /// and the holder of a taken number is told instead.
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one first step: gates, challenge and the one message"
+    )]
+    pub async fn start_phone(
+        &self,
+        req: &PhoneStart<'_>,
+        who: &Actor<'_>,
+    ) -> Result<Started, AccountError> {
+        if !req.phone.starts_with('+') {
+            return Ok(Started::Refused(Refused::Address));
+        }
+        let (tenant, environment) = self.ids();
+        let mut tx = self.begin().await?;
+        // TN-80, TN-83
+        let ip_key = gate_key(tag::IP, &tenant, &environment, req.prefix);
+        if let Some(retry_after_ms) = gate(&mut tx, &ip_key, IP_RATE, req.now_ms).await? {
+            tx.commit().await?;
+            return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
+        }
+        let canonical = self.vault.index_of(&tenant, &environment, req.phone)?;
+        for (t, rate) in [
+            (tag::PHONE_HOUR, EMAIL_HOURLY),
+            (tag::PHONE_DAY, EMAIL_DAILY),
+        ] {
+            let key = gate_key(t, &tenant, &environment, &canonical);
+            if let Some(retry_after_ms) = gate(&mut tx, &key, rate, req.now_ms).await? {
+                tx.commit().await?;
+                return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
+            }
+        }
+        tx.commit().await?;
+        // TN-81
+        let bot = self.bots.assess(req.bot_token, req.prefix).await;
+        let assessment = Assessment {
+            bot,
+            disposable: false,
+        };
+        access_telemetry::signals::REGISTRATION_SCORES.incr([assessment.band()]);
+        let mut tx = self.begin().await?;
+        let index = self.vault.index_of(&tenant, &environment, req.phone)?;
+        let holder = tx.subject_by_identifier(req.phone).await?;
+        let retired = tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
+        let status = match holder {
+            Some(s) => tx
+                .subject(s, false)
+                .await?
+                .and_then(|r| AccountStatus::parse(&r.status)),
+            None => None,
+        };
+        let staged = status == Some(AccountStatus::Staged);
+        let takes_code = (holder.is_none() && !retired) || staged;
+        let code = new_sms_code()?;
+        let digest = takes_code.then(|| code_digest(&req.flow_hash, code.expose()));
+        let id = self
+            .insert(
+                &mut tx,
+                Purpose::Registration,
+                (req.flow_hash, req.device_hash, req.now_ms),
+                req.phone,
+                &canonical,
+                digest.as_ref(),
+                &assessment,
+                None,
+            )
+            .await?;
+        if takes_code {
+            notify(
+                self.notifier,
+                &mut tx,
+                &Message {
+                    subject: id,
+                    to: Address::Phone(req.phone.to_owned()),
+                    locale: None,
+                    valid_since_ms: None,
+                    body: Body::SmsOtp {
+                        code,
+                        purpose: OtpPurpose::SignUp,
+                        expires_at_ms: req.now_ms.saturating_add(CODE_TTL_MS),
+                    },
+                },
+            )
+            .await?;
+        } else if let Some(owner) = holder
+            && status == Some(AccountStatus::Active)
+            && account_mail_allowed(&mut tx, &tenant, &environment, owner, req.now_ms).await?
+        {
+            notify(
+                self.notifier,
+                &mut tx,
+                &Message {
+                    subject: owner,
+                    to: Address::Phone(req.phone.to_owned()),
+                    locale: None,
+                    valid_since_ms: None,
+                    body: Body::Notice {
+                        notice: Notice::SignUpExisting,
+                        at_ms: req.now_ms,
+                        until_ms: None,
+                    },
+                },
+            )
+            .await?;
+        }
+        audit(
+            &mut tx,
+            "auth.registration.started",
+            who.actor,
+            "unknown",
+            who.correlation,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(Started::Sent {
+            step_up: assessment.step_up(),
+        })
+    }
+
     #[expect(clippy::too_many_arguments, reason = "one challenge's columns")]
     async fn insert(
         &self,
         tx: &mut PgTx,
         purpose: Purpose,
-        req: &Start<'_>,
-        email: &Email,
+        (flow_hash, device_hash, now_ms): ([u8; 32], [u8; 32], u64),
+        address: &str,
         canonical: &[u8; 32],
         digest: Option<&[u8; 32]>,
         assessment: &Assessment,
@@ -431,19 +582,15 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         let (tenant, environment) = self.ids();
         let dek = Dek::generate()?;
         let wrapped = self.environment.kek.wrap(&dek)?;
-        let sealed = seal_body(
-            dek,
-            &seal_context(&tx.0, &req.flow_hash),
-            email.raw().as_bytes(),
-        )?;
-        let index = self.vault.index_of(&tenant, &environment, email.raw())?;
+        let sealed = seal_body(dek, &seal_context(&tx.0, &flow_hash), address.as_bytes())?;
+        let index = self.vault.index_of(&tenant, &environment, address)?;
         let score = i16::from(assessment.score());
         Ok(tx
             .0
             .insert_challenge(&NewChallenge {
                 purpose: purpose.name(),
-                flow_hash: &req.flow_hash,
-                device_hash: &req.device_hash,
+                flow_hash: &flow_hash,
+                device_hash: &device_hash,
                 kek_id: self.environment.kek.id(),
                 wrapped_dek: &wrapped,
                 nonce: &sealed.nonce,
@@ -455,8 +602,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
                 step_up: assessment.step_up(),
                 score,
                 subject,
-                created_ms: i64_of(req.now_ms)?,
-                expires_ms: i64_of(req.now_ms.saturating_add(CODE_TTL_MS))?,
+                created_ms: i64_of(now_ms)?,
+                expires_ms: i64_of(now_ms.saturating_add(CODE_TTL_MS))?,
             })
             .await?)
     }
@@ -558,8 +705,14 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
                 return Ok(p);
             }
         };
-        let identifier =
-            Identifier::new(IdentifierKind::Email, &address).map_err(|_| AccountError::Corrupt)?;
+        // TN-156
+        let phone = address.starts_with('+');
+        let kind = if phone {
+            IdentifierKind::Phone
+        } else {
+            IdentifierKind::Email
+        };
+        let identifier = Identifier::new(kind, &address).map_err(|_| AccountError::Corrupt)?;
         let (subject, staged) = match tx.subject_by_identifier(&address).await? {
             Some(s) => {
                 let status = tx
@@ -577,16 +730,18 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             }
             None => (self.create(&mut tx, &identifier, who).await?, false),
         };
-        let index = self
-            .vault
-            .index_of(&self.ids().0, &self.ids().1, &address)?;
-        let identifier_id =
-            tx.0.identifier_id(subject, &index)
-                .await?
-                .ok_or(AccountError::Corrupt)?;
-        // TN-66, OP-153 m.3 (i)
-        tx.0.insert_mailbox(identifier_id, subject, i64_of(now_ms)?)
-            .await?;
+        if !phone {
+            let index = self
+                .vault
+                .index_of(&self.ids().0, &self.ids().1, &address)?;
+            let identifier_id =
+                tx.0.identifier_id(subject, &index)
+                    .await?
+                    .ok_or(AccountError::Corrupt)?;
+            // TN-66, OP-153 m.3 (i)
+            tx.0.insert_mailbox(identifier_id, subject, i64_of(now_ms)?)
+                .await?;
+        }
         if staged {
             self.claim_staged(&mut tx, subject, who).await?;
         }
@@ -712,8 +867,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             .insert(
                 &mut tx,
                 Purpose::EmailChange,
-                req,
-                &email,
+                (req.flow_hash, req.device_hash, req.now_ms),
+                email.raw(),
                 &canonical,
                 digest.as_ref(),
                 &assessment,

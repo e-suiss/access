@@ -328,7 +328,8 @@
                   "off",
                   "new-password",
                   "email",
-                  "name"
+                  "name",
+                  "tel"
                 ]
               },
               "required": {
@@ -600,7 +601,8 @@
           "bot_token",
           "keep_signed_in",
           "remember_device",
-          "sms_code"
+          "sms_code",
+          "phone"
         ]
       },
       "Method": {
@@ -651,6 +653,7 @@
           "second_factor.enroll",
           "profile.complete",
           "label.phone",
+          "label.sent_code",
           "label.identifier_phone",
           "profile.address_hint",
           "action.change_address",

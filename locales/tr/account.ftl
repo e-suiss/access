@@ -74,6 +74,7 @@ privacy-saved = Kaydedildi.
 account-failed = Bu işlem olmadı. Tekrar deneyin.
 account-sign_in_again = Devam etmek için lütfen yeniden giriş yapın.
 methods-passkeys = Geçiş anahtarları
+methods-passkey_suggest = Şifre ya da kod girmeden daha hızlı ve güvenli giriş için bir geçiş anahtarı oluşturun.
 methods-passkey_unnamed = Geçiş anahtarı
 methods-passkey_synced = Eşitlenen cihazlarınızda kullanılabilir
 methods-passkey_this_device = Tek bir cihazda tutuluyor

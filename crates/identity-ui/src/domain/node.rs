@@ -45,11 +45,13 @@ pub enum FieldName {
     RememberDevice,
     /// A code sent by SMS (OP-156 m.3 (f)).
     SmsCode,
+    /// The phone number of a new account (TN-156).
+    Phone,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -66,6 +68,7 @@ impl FieldName {
         Self::KeepSignedIn,
         Self::RememberDevice,
         Self::SmsCode,
+        Self::Phone,
     ];
 
     /// The wire name.
@@ -88,6 +91,7 @@ impl FieldName {
             Self::KeepSignedIn => "keep_signed_in",
             Self::RememberDevice => "remember_device",
             Self::SmsCode => "sms_code",
+            Self::Phone => "phone",
         }
     }
 
@@ -113,7 +117,7 @@ impl FieldName {
             Self::DisplayName => 200,
             Self::Acknowledged | Self::KeepSignedIn | Self::RememberDevice => 8,
             // OP-153 m.3 (d)
-            Self::LinkCode => 32,
+            Self::LinkCode | Self::Phone => 32,
             Self::BotToken => 4096,
         }
     }
@@ -289,6 +293,9 @@ pub enum Autocomplete {
     /// A person's name.
     #[serde(rename = "name")]
     Name,
+    /// A phone number (TN-156).
+    #[serde(rename = "tel")]
+    Tel,
 }
 
 /// WebAuthn options in their JSON form (`parseRequestOptionsFromJSON` /

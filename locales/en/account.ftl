@@ -74,6 +74,7 @@ privacy-saved = Saved.
 account-failed = That didn't work. Try again.
 account-sign_in_again = Please sign in again to continue.
 methods-passkeys = Passkeys
+methods-passkey_suggest = Create a passkey to sign in faster and more safely, without a password or a code.
 methods-passkey_unnamed = Passkey
 methods-passkey_synced = Available on your synced devices
 methods-passkey_this_device = Kept on one device
