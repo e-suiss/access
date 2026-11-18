@@ -473,6 +473,17 @@ pub fn frontchannel_uri(registered: &str, issuer: &str, sid: &str) -> String {
     out
 }
 
+/// How long a sign-out waits for its confirmation (TN-153).
+pub const LOGOUT_TICKET_TTL_MS: u64 = 300_000;
+
+/// The stored digest of a sign-out ticket (TN-153).
+#[must_use]
+pub fn logout_ticket_digest(raw: &[u8; 32]) -> [u8; 32] {
+    let mut m = b"access/logout-ticket/v1\0".to_vec();
+    m.extend_from_slice(raw);
+    suiss_crypto::digest::sha256(&m)
+}
+
 /// `s` escaped for HTML text and double- or single-quoted attributes.
 #[must_use]
 pub fn html_attr(s: &str) -> String {

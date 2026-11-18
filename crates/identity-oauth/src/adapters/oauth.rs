@@ -289,6 +289,30 @@ impl OAuthTx for PgOAuthTx {
         self.0.assertion_first_use(day, key).await.map_err(down)
     }
 
+    async fn insert_logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        ticket: &access_store::oauth::LogoutTicket,
+        now_ms: u64,
+        expires_ms: u64,
+    ) -> Result<(), Unavailable> {
+        self.0
+            .insert_logout_ticket(ticket_hash, ticket, now_ms, expires_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn take_logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        now_ms: u64,
+    ) -> Result<Option<access_store::oauth::LogoutTicket>, Unavailable> {
+        self.0
+            .logout_ticket(ticket_hash, now_ms, true)
+            .await
+            .map_err(down)
+    }
+
     async fn session_by_cookie(
         &mut self,
         hash: &[u8; 32],

@@ -11,13 +11,21 @@ use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 
 use super::{Env, Environment, OAuth, Reply, SignOut, decode32, session_live, signed};
 use crate::domain::client::Client;
-use crate::domain::fapi::{frontchannel_uri, origin};
+use crate::domain::fapi::{LOGOUT_TICKET_TTL_MS, frontchannel_uri, logout_ticket_digest, origin};
 use crate::domain::issuer::form_encode;
 use crate::domain::jwt::environment_key_set;
 use crate::domain::request::Params;
 use crate::domain::tokens::ID_TYP;
 use crate::ports::Unavailable;
 use crate::ports::oauth::{LoginPages, OAuthTx, TokenSigner};
+
+/// The stored digest of the browser's session cookie.
+fn cookie_hash(cookie: Option<&str>) -> Option<[u8; 32]> {
+    cookie
+        .map(|c| access_identity_session::domain::dbsc::split_cookie(c).0)
+        .and_then(decode32)
+        .map(|v| cookie_digest(&v))
+}
 
 /// What a verified `id_token_hint` names.
 struct Hint {
@@ -76,6 +84,10 @@ impl<E: Env> OAuth<E> {
         cookie: Option<&str>,
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
+        // TN-153
+        if let Some(ticket) = params.get("logout_ticket") {
+            return self.confirmed(environment, ticket, cookie, now).await;
+        }
         let hint = match params.get("id_token_hint") {
             Some(t) => self.id_token_hint(environment, t).await?,
             None => None,
@@ -96,7 +108,7 @@ impl<E: Env> OAuth<E> {
             Some(id) => tx.client(id).await?.and_then(Client::from_row),
             None => None,
         };
-        let target = match params.get("post_logout_redirect_uri") {
+        let back = match params.get("post_logout_redirect_uri") {
             Some(uri) => match &client {
                 Some(c) if c.post_logout_allowed(uri) => {
                     let mut out = String::from(uri);
@@ -105,7 +117,7 @@ impl<E: Env> OAuth<E> {
                         out.push_str("state=");
                         form_encode(state, &mut out);
                     }
-                    out
+                    Some((out, String::from(uri)))
                 }
                 _ => {
                     return Ok(Reply::Problem {
@@ -114,14 +126,16 @@ impl<E: Env> OAuth<E> {
                     });
                 }
             },
-            None => self.env.pages().signed_out(&environment.issuer),
+            None => None,
         };
-        let session = match cookie
-            .map(|c| access_identity_session::domain::dbsc::split_cookie(c).0)
-            .and_then(decode32)
-        {
-            Some(v) => tx
-                .session_by_cookie(&cookie_digest(&v))
+        let target = back.as_ref().map_or_else(
+            || self.env.pages().signed_out(&environment.issuer),
+            |b| b.0.clone(),
+        );
+        let hashed = cookie_hash(cookie);
+        let session = match hashed {
+            Some(h) => tx
+                .session_by_cookie(&h)
                 .await?
                 .filter(|s| session_live(s, now)),
             None => None,
@@ -138,14 +152,83 @@ impl<E: Env> OAuth<E> {
             None => false,
         };
         if !tied {
+            // TN-153
+            let raw = self.random::<32>()?;
+            let ticket = access_store::oauth::LogoutTicket {
+                cookie_hash: hashed.ok_or(Unavailable)?,
+                then_uri: back.as_ref().map(|b| b.0.clone()),
+                cancel_uri: back.map(|b| b.1),
+            };
+            tx.insert_logout_ticket(
+                &logout_ticket_digest(&raw),
+                &ticket,
+                now,
+                now.saturating_add(LOGOUT_TICKET_TTL_MS),
+            )
+            .await?;
             tx.commit().await?;
-            return Ok(Reply::Redirect(
+            return Ok(Reply::Redirect(format!(
+                "{}#ticket={}",
                 self.env.pages().confirm_sign_out(&environment.issuer),
-            ));
+                access_kernel::json::b64url_encode(&raw)
+            )));
         }
+        self.finish(environment, tx, session.id, target, now).await
+    }
+
+    /// The confirmation of a sign-out its client did not tie to this browser's session
+    /// (TN-153): the ticket the confirmation page carries is used once, by the browser it was
+    /// issued to, and the sign-out then ends as a tied one does.
+    async fn confirmed(
+        &self,
+        environment: &Environment,
+        ticket: &str,
+        cookie: Option<&str>,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
+        let again = format!(
+            "{}#expired",
+            self.env.pages().confirm_sign_out(&environment.issuer)
+        );
+        let (Some(raw), Some(hashed)) = (decode32(ticket), cookie_hash(cookie)) else {
+            return Ok(Reply::Redirect(again));
+        };
+        let mut tx = self.begin(environment).await?;
+        let taken = tx
+            .take_logout_ticket(&logout_ticket_digest(&raw), now)
+            .await?
+            .filter(|t| t.cookie_hash == hashed);
+        let Some(t) = taken else {
+            tx.commit().await?;
+            return Ok(Reply::Redirect(again));
+        };
+        let target = t
+            .then_uri
+            .unwrap_or_else(|| self.env.pages().signed_out(&environment.issuer));
+        let session = tx
+            .session_by_cookie(&hashed)
+            .await?
+            .filter(|s| session_live(s, now));
+        let Some(session) = session else {
+            tx.commit().await?;
+            return Ok(Reply::Redirect(target));
+        };
+        self.finish(environment, tx, session.id, target, now).await
+    }
+
+    /// Ends `session` and sends the browser on to `target`, through the front-channel page when
+    /// clients opted in (G57, IDP-24).
+    async fn finish(
+        &self,
+        environment: &Environment,
+        mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        session: [u8; 16],
+        target: String,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
         // IDP-24, OP-155 m.3 (k)
         let frames = if tx.frontchannel_enabled().await? {
-            self.frontchannel_frames(&mut tx, environment, session.id)
+            self.frontchannel_frames(&mut tx, environment, session)
                 .await?
         } else {
             Vec::new()
@@ -157,7 +240,7 @@ impl<E: Env> OAuth<E> {
             tx.page_look().await?
         };
         // G57, §10.4.6
-        tx.end_session(session.id, signed(now), "logout").await?;
+        tx.end_session(session, signed(now), "logout").await?;
         tx.commit().await?;
         if frames.is_empty() {
             return Ok(Reply::Redirect(target));

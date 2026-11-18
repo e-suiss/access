@@ -96,6 +96,20 @@ pub trait OAuthTx: Send {
         day: i32,
         key: &[u8; 32],
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Stores a sign-out waiting for its confirmation (TN-153).
+    fn insert_logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        ticket: &access_store::oauth::LogoutTicket,
+        now_ms: u64,
+        expires_ms: u64,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// The open, unexpired sign-out ticket `ticket_hash`, used once (TN-153).
+    fn take_logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        now_ms: u64,
+    ) -> impl Future<Output = Result<Option<access_store::oauth::LogoutTicket>, Unavailable>> + Send;
     /// The login session with `cookie_hash`, locked.
     fn session_by_cookie(
         &mut self,

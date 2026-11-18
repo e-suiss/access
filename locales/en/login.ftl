@@ -61,6 +61,7 @@ signout-body = We're signing you out of your apps too. You'll be taken on in a m
 signout-confirm_title = Do you want to sign out?
 signout-confirm = Sign out
 signout-stay = Stay signed in
+signout-expired = This sign-out request has expired. You can still sign out of this browser.
 signout-done_title = You're signed out
 signout-sign_in_again = Sign in again
 error-app_owner = You can't sign in with this app.

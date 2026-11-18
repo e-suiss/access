@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cookie_hash, then_uri, cancel_uri FROM access.oauth_logout_tickets\n              WHERE tenant_id = $1 AND environment_id = $2 AND ticket_hash = $3\n                AND used_ms IS NULL AND expires_ms > $4\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cookie_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_logout_tickets",
+            "name": "cookie_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "then_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_logout_tickets",
+            "name": "then_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "cancel_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_logout_tickets",
+            "name": "cancel_uri"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "2f08b37cab37cc0deeff5a0c8c081196ada7a496c9ee9c297ee03f140edb63d3"
+}

@@ -377,6 +377,12 @@ struct LinkBody {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct TicketBody {
+    ticket: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StepUpBody {
     #[serde(default)]
     max_age: Option<u64>,
@@ -523,6 +529,15 @@ handler! {
         let _ = &p;
         let link: LinkBody = body(&bytes)?;
         Ok(s.hosted.preview_link(&entry, &b, bounded(&link.token, 128)?).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/login/sign-out/preview` (TN-153).
+    preview_sign_out(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let t: TicketBody = body(&bytes)?;
+        Ok(s.hosted.preview_sign_out(&entry, &b, bounded(&t.ticket, 64)?).await)
     }
 }
 

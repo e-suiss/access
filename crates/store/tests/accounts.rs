@@ -494,3 +494,50 @@ async fn throttle_state_carries_across_days() {
             .is_err()
     );
 }
+
+// TN-153
+#[tokio::test]
+async fn a_logout_ticket_is_read_until_used_once_and_never_after_its_end() {
+    use access_store::oauth::LogoutTicket;
+    let db = fresh().await.unwrap();
+    let (t, r) = environment(&db, 9, "acct-lt").await;
+    let ticket = LogoutTicket {
+        cookie_hash: [3; 32],
+        then_uri: Some(String::from("https://shop.example/bye?state=s")),
+        cancel_uri: Some(String::from("https://shop.example/bye")),
+    };
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    tx.insert_logout_ticket(&[1; 32], &ticket, 1_000, 301_000)
+        .await
+        .unwrap();
+    tx.insert_logout_ticket(&[2; 32], &ticket, 1_000, 301_000)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.logout_ticket(&[1; 32], 2_000, false).await.unwrap(),
+        Some(ticket.clone())
+    );
+    assert!(
+        tx.logout_ticket(&[1; 32], 2_000, false)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        tx.logout_ticket(&[1; 32], 2_000, true).await.unwrap(),
+        Some(ticket)
+    );
+    assert_eq!(tx.logout_ticket(&[1; 32], 2_000, true).await.unwrap(), None);
+    assert_eq!(
+        tx.logout_ticket(&[2; 32], 301_000, true).await.unwrap(),
+        None
+    );
+    tx.commit().await.unwrap();
+
+    let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    assert!(
+        tx.raw_rows("DELETE FROM access.oauth_logout_tickets")
+            .await
+            .is_err()
+    );
+}

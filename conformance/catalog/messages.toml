@@ -2489,6 +2489,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "signout-expired"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "signout-done_title"
 surface = "login"
 class = "status"

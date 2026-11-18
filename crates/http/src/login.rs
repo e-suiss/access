@@ -105,6 +105,10 @@ where
                 post(web::preview_link::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/login/sign-out/preview"),
+                post(web::preview_sign_out::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/login/link/confirm"),
                 post(web::confirm_link::<D, K, KI, C, M>),
             )

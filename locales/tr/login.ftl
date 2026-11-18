@@ -61,6 +61,7 @@ signout-body = Uygulamalardan da çıkış yapılıyor. Birazdan yönlendirilece
 signout-confirm_title = Çıkış yapmak istiyor musunuz?
 signout-confirm = Çıkış yap
 signout-stay = Vazgeç
+signout-expired = Bu çıkış isteğinin süresi doldu. Bu tarayıcıdan yine de çıkış yapabilirsiniz.
 signout-done_title = Çıkış yaptınız
 signout-sign_in_again = Tekrar giriş yap
 error-app_owner = Bu uygulamayla giriş yapılamıyor.

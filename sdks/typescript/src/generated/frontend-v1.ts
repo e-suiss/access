@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/login/sign-out/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Whether a sign-out waiting for its confirmation is still open, and where staying signed in goes (TN-153). */
+        post: operations["previewSignOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/login/link/confirm": {
         parameters: {
             query?: never;
@@ -2776,6 +2793,31 @@ export interface operations {
         };
     };
     previewLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewSignOut: {
         parameters: {
             query?: never;
             header?: never;

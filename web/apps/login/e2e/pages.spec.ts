@@ -517,3 +517,47 @@ test("staying signed in leaves the session alone", async ({ page, mock }) => {
   await page.waitForURL(/\/account$/);
   expect(mock.requests).not.toContain("POST /v1/sessions/current/sign-out");
 });
+
+// TN-153: with its ticket the confirmed sign-out goes back to the end-session endpoint, which
+// ends it as the app asked; staying signed in goes back to the app; the ticket leaves the address
+test("a confirmed sign-out ends as its app asked, and staying signed in goes back to the app", async ({
+  page,
+  mock,
+}) => {
+  const ticket = "A".repeat(43);
+  mock.json.set("POST /v1/login/sign-out/preview", {
+    status: 200,
+    body: { cancel_to: "https://wallet.example/bye" },
+  });
+  let asked = "";
+  await page.route(/\/end-session\?/, (r) => {
+    asked = new URL(r.request().url()).search;
+    return r.fulfill({ status: 200, contentType: "text/html", body: "<title>ended</title>" });
+  });
+  await page.route("https://wallet.example/**", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>wallet</title>" }),
+  );
+  await page.goto(`/login/sign-out#ticket=${ticket}`);
+  await expect(page).toHaveURL(/\/login\/sign-out$/);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.waitForURL(/\/end-session\?logout_ticket=/);
+  expect(asked).toBe(`?logout_ticket=${ticket}`);
+  expect(mock.requests).not.toContain("POST /v1/sessions/current/sign-out");
+
+  await page.goto(`/login/sign-out#ticket=${ticket}`);
+  await page.getByRole("button", { name: "Stay signed in" }).click();
+  await page.waitForURL("https://wallet.example/bye");
+});
+
+test("an expired sign-out request says so and still signs this browser out", async ({
+  page,
+  mock,
+}) => {
+  mock.json.set("POST /v1/sessions/current/sign-out", { status: 204 });
+  await page.goto(`/login/sign-out#ticket=${"B".repeat(43)}`);
+  await expect(page.getByTestId("sign-out-expired")).toHaveText(
+    "This sign-out request has expired. You can still sign out of this browser.",
+  );
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.waitForURL(/\/login\/signed-out$/);
+});

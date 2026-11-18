@@ -187,7 +187,95 @@ impl GrantRecord {
     }
 }
 
+/// A sign-out waiting for its confirmation (TN-153).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogoutTicket {
+    /// The digest of the session cookie it is bound to.
+    pub cookie_hash: [u8; 32],
+    /// The client's checked post-logout redirect with its `state`.
+    pub then_uri: Option<String>,
+    /// The same redirect without `state`, for staying signed in.
+    pub cancel_uri: Option<String>,
+}
+
 impl TenantTx {
+    /// Stores a sign-out ticket (TN-153).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        t: &LogoutTicket,
+        now_ms: u64,
+        expires_ms: u64,
+    ) -> Result<(), StoreError> {
+        let (tenant, environment) = self.oauth_scope()?;
+        sqlx::query!(
+            "INSERT INTO access.oauth_logout_tickets
+                    (tenant_id, environment_id, ticket_hash, cookie_hash, then_uri, cancel_uri,
+                     created_ms, expires_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            tenant,
+            environment,
+            ticket_hash.as_slice(),
+            t.cookie_hash.as_slice(),
+            t.then_uri.as_deref(),
+            t.cancel_uri.as_deref(),
+            i64::try_from(now_ms).map_err(|_| StoreError::Range)?,
+            i64::try_from(expires_ms).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// The open, unexpired sign-out ticket `ticket_hash` (TN-153); `take` uses it.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn logout_ticket(
+        &mut self,
+        ticket_hash: &[u8; 32],
+        now_ms: u64,
+        take: bool,
+    ) -> Result<Option<LogoutTicket>, StoreError> {
+        let (tenant, environment) = self.oauth_scope()?;
+        let now = i64::try_from(now_ms).map_err(|_| StoreError::Range)?;
+        let row = sqlx::query!(
+            "SELECT cookie_hash, then_uri, cancel_uri FROM access.oauth_logout_tickets
+              WHERE tenant_id = $1 AND environment_id = $2 AND ticket_hash = $3
+                AND used_ms IS NULL AND expires_ms > $4
+              FOR UPDATE",
+            tenant,
+            environment,
+            ticket_hash.as_slice(),
+            now,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        if take {
+            sqlx::query!(
+                "UPDATE access.oauth_logout_tickets SET used_ms = $4
+                  WHERE tenant_id = $1 AND environment_id = $2 AND ticket_hash = $3",
+                tenant,
+                environment,
+                ticket_hash.as_slice(),
+                now,
+            )
+            .execute(&mut *self.tx)
+            .await?;
+        }
+        Ok(Some(LogoutTicket {
+            cookie_hash: <[u8; 32]>::try_from(row.cookie_hash).map_err(|_| StoreError::Range)?,
+            then_uri: row.then_uri,
+            cancel_uri: row.cancel_uri,
+        }))
+    }
+
     fn oauth_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
         let environment = self.environment().ok_or(StoreError::Range)?;
         Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))

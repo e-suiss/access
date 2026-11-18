@@ -219,6 +219,49 @@ where
         }
     }
 
+    /// `POST /v1/login/sign-out/preview` (TN-153): whether the sign-out ticket is open for this
+    /// browser's session, and where staying signed in goes; nothing is used.
+    pub async fn preview_sign_out(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        ticket: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let raw = access_kernel::json::b64url_decode(ticket)
+            .ok()
+            .and_then(|v| <[u8; 32]>::try_from(v).ok());
+        let cookie = b
+            .session
+            .map(|c| access_identity_session::domain::dbsc::split_cookie(c).0)
+            .and_then(|c| access_kernel::json::b64url_decode(c).ok())
+            .and_then(|v| <[u8; 32]>::try_from(v).ok())
+            .map(|v| access_identity_session::domain::session::cookie_digest(&v));
+        let (Some(raw), Some(cookie)) = (raw, cookie) else {
+            return Reply::problem(access_identity_session::app::FLOW_GONE);
+        };
+        let digest = access_identity_oauth::domain::fapi::logout_ticket_digest(&raw);
+        let now = self.clock.now_ms();
+        let read = async {
+            let mut t =
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                    .await?;
+            let row = t.logout_ticket(&digest, now, false).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(row)
+        };
+        match read.await {
+            Ok(Some(t)) if t.cookie_hash == cookie => {
+                Reply::json(200, serde_json::json!({ "cancel_to": t.cancel_uri }))
+            }
+            Ok(_) => Reply::problem(access_identity_session::app::FLOW_GONE),
+            Err(_) => super::me::unavailable(),
+        }
+    }
+
     /// `POST /v1/sessions/sign-out-everywhere`: one `session_epoch` step ends every session
     /// and refresh family of the user, this one included (TN-50, MD-7).
     pub async fn sign_out_everywhere(&self, entry: &EnvironmentEntry, b: &Browser<'_>) -> Reply {

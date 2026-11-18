@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_logout_tickets\n                    (tenant_id, environment_id, ticket_hash, cookie_hash, then_uri, cancel_uri,\n                     created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f8dcfb6e334860e3a03e6b638e27f7382ee2347ba2fd867f0717ca61e46a1921"
+}

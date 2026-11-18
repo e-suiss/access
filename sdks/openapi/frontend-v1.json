@@ -165,6 +165,36 @@
         }
       }
     },
+    "/v1/login/sign-out/preview": {
+      "post": {
+        "operationId": "previewSignOut",
+        "summary": "Whether a sign-out waiting for its confirmation is still open, and where staying signed in goes (TN-153).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/login/link/confirm": {
       "post": {
         "operationId": "confirmLink",

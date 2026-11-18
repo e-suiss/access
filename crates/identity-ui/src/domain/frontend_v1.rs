@@ -225,6 +225,12 @@ pub const ROUTES: &[Route] = &[
     ),
     served(
         Verb::Post,
+        "/v1/login/sign-out/preview",
+        "previewSignOut",
+        "Whether a sign-out waiting for its confirmation is still open, and where staying signed in goes (TN-153).",
+    ),
+    served(
+        Verb::Post,
         "/v1/login/link/confirm",
         "confirmLink",
         "Confirms a sign-in link on the device that asked for it.",

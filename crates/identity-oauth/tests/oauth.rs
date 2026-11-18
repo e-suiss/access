@@ -1924,7 +1924,61 @@ async fn logout_ends_the_session_and_notifies_clients() {
     .await;
     assert!(matches!(bad, Reply::Problem { status: 400, .. }), "{bad:?}");
     let unhinted = end(vec![], Some(w.cookie.clone())).await;
-    assert_eq!(location(&unhinted), format!("{ISSUER}/login/sign-out"));
+    assert!(
+        location(&unhinted).starts_with(&format!("{ISSUER}/login/sign-out#ticket=")),
+        "{unhinted:?}"
+    );
+    // TN-153
+    let asked = end(
+        vec![
+            ("client_id", PUBLIC),
+            ("post_logout_redirect_uri", "https://shop.example/bye"),
+            ("state", "s 1"),
+        ],
+        Some(w.cookie.clone()),
+    )
+    .await;
+    let ticket = location(&asked)
+        .split_once("#ticket=")
+        .unwrap()
+        .1
+        .to_owned();
+    let elsewhere = end(vec![("logout_ticket", &ticket)], Some(String::from("AAAA"))).await;
+    assert_eq!(
+        location(&elsewhere),
+        format!("{ISSUER}/login/sign-out#expired"),
+        "another browser's cookie does not take the ticket"
+    );
+    let confirmed = end(vec![("logout_ticket", &ticket)], Some(w.cookie.clone())).await;
+    assert_eq!(
+        location(&confirmed),
+        "https://shop.example/bye?state=s+1",
+        "the confirmed sign-out goes back to the app with its state"
+    );
+    let reused = end(vec![("logout_ticket", &ticket)], Some(w.cookie.clone())).await;
+    assert_eq!(
+        location(&reused),
+        format!("{ISSUER}/login/sign-out#expired")
+    );
+    let w = world().await;
+    let code = w.code(PUBLIC).await;
+    let t = body(&w.exchange(&code).await, 200);
+    let id_token = t["id_token"].as_str().unwrap();
+    let end = |pairs: Vec<(&str, &str)>, cookie: Option<String>| {
+        let p = Params::new(
+            pairs
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect(),
+        )
+        .unwrap();
+        let w = &w;
+        async move {
+            w.oauth
+                .end_session(&w.environment, &p, cookie.as_deref())
+                .await
+        }
+    };
     let out = end(
         vec![
             ("id_token_hint", id_token),

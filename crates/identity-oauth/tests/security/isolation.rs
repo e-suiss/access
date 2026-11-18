@@ -84,7 +84,7 @@ fn shape(x: &At<'_>, r: &Reply) -> String {
             keys.sort();
             format!(
                 "303 {} {}",
-                to.split('?').next().unwrap_or_default(),
+                to.split(['?', '#']).next().unwrap_or_default(),
                 keys.join(",")
             )
         }
