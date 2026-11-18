@@ -5515,3 +5515,49 @@ async fn the_pages_the_end_session_endpoint_sends_a_browser_to_are_served() {
         );
     }
 }
+
+// TN-155
+#[tokio::test]
+async fn a_new_authenticator_app_replaces_the_old_one_once_its_first_code_verifies() {
+    let e = env(63, "tn-155", AuthPolicy::DEFAULT).await;
+    e.account("tia@example.com").await;
+    let (mut b, old) = e.strong("tia@example.com", "tia").await;
+    let first = b.get("/v1/account/methods").await.json()["totp"].clone();
+    assert_eq!(first.as_array().unwrap().len(), 1);
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "new" })))
+        .await;
+    assert_eq!(started.status, StatusCode::CREATED);
+    let s = started.json();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    assert_ne!(seed, old);
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    e.advance(30_000);
+    assert_eq!(
+        b.post(&path, Some(json!({ "code": e.totp(&seed) })))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let after = b.get("/v1/account/methods").await.json()["totp"].clone();
+    assert_eq!(after.as_array().unwrap().len(), 1, "one authenticator app");
+    assert_ne!(after[0]["id"], first[0]["id"]);
+    e.advance(30_000);
+    let mut c = e.browser("tia-again");
+    let second = c.sign_in("tia@example.com").await;
+    let stale = c
+        .submit(&second, "totp", json!({ "totp_code": e.totp(&old) }))
+        .await;
+    assert_ne!(
+        stale.step(),
+        "complete",
+        "the old app's code no longer works"
+    );
+    e.advance(30_000);
+    let mut d = e.browser("tia-new");
+    let next = d.sign_in("tia@example.com").await;
+    let fresh = d
+        .submit(&next, "totp", json!({ "totp_code": e.totp(&seed) }))
+        .await;
+    assert_eq!(fresh.step(), "complete");
+}

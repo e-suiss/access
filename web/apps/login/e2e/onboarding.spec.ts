@@ -260,6 +260,8 @@ test("a required second step is set up during the sign-in", async ({ page, mock 
   await page.getByLabel("Password").fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId("totp-secret")).toHaveText("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+  // TN-155
+  await expect(page.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
   await expect(page.getByTestId("totp-uri")).toHaveAttribute("href", /^otpauth:\/\/totp\//);
   await expect(page.getByTestId("second-step-missing")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Create a passkey" })).toBeVisible();

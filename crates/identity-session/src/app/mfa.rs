@@ -455,6 +455,7 @@ where
         else {
             return Ok(None);
         };
+        let replaced = tx.credentials(subject, TOTP).await?;
         let credential = tx
             .insert_credential(&NewCredential {
                 subject,
@@ -467,13 +468,34 @@ where
             return Err(SessionError::Corrupt);
         }
         totp_enrolled(tx, subject, credential, now).await?;
+        // TN-155
+        let at = tx.server_time().await?;
+        for old in &replaced {
+            if tx.revoke(subject, old.id, false).await? != Revoke::Done {
+                return Err(SessionError::Corrupt);
+            }
+            access_identity_account::app::claims::emit(
+                tx,
+                &access_identity_account::domain::claims::authenticator_removed(
+                    subject,
+                    access_kernel::claim::body::AuthenticatorKind::Totp,
+                    &old.id,
+                    at,
+                ),
+            )
+            .await?;
+        }
         // OP-151 m.3 (i)
         events::credential(
             tx,
             &self.environment,
             subject,
             TOTP,
-            CredentialChange::Added,
+            if replaced.is_empty() {
+                CredentialChange::Added
+            } else {
+                CredentialChange::Replaced
+            },
         )
         .await?;
         let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {

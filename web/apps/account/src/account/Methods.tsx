@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@access/ui/components/alert-dialog";
 import { Button, buttonVariants } from "@access/ui/components/button";
+import { QrCode } from "@access/ui/components/qr-code";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
@@ -469,7 +470,9 @@ function Authenticator(props: {
       {pending === null ? (
         <Actions>
           <Button variant="outline" onClick={begin}>
-            {t("action.add_authenticator")}
+            {props.methods.totp.length > 0
+              ? t("action.replace_authenticator")
+              : t("action.add_authenticator")}
           </Button>
         </Actions>
       ) : pending.proof ? (
@@ -489,6 +492,14 @@ function Authenticator(props: {
           className="flex flex-col gap-3 rounded-xl border p-4"
           data-testid="totp-enrollment"
         >
+          {/* TN-155 */}
+          {props.methods.totp.length > 0 && (
+            <p className="text-sm font-medium" data-testid="totp-replaces">
+              {t("methods.authenticator_replaces")}
+            </p>
+          )}
+          <QrCode value={pending.uri} label={t("methods.authenticator_qr")} />
+          <p className="text-sm">{t("methods.authenticator_scan")}</p>
           <p className="text-sm">{t("methods.authenticator_key")}</p>
           <p
             className={cn(MONO, "rounded-lg bg-muted px-3 py-2 text-base")}

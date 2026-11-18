@@ -2,6 +2,7 @@ import { Button } from "@access/ui/components/button";
 import { Checkbox } from "@access/ui/components/checkbox";
 import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { QrCode } from "@access/ui/components/qr-code";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 
@@ -178,6 +179,9 @@ function TotpSetup({ node }: { readonly node: TotpSetupNode }) {
   return (
     <div className="flex flex-col gap-2" data-testid="totp-setup">
       <p className="text-sm">{text(node.label)}</p>
+      {/* TN-155 */}
+      <QrCode value={node.uri} label={t("page.totp_qr")} className="self-center" />
+      <p className="text-sm text-muted-foreground">{t("page.totp_scan")}</p>
       <p
         className="break-all rounded-lg bg-muted px-3 py-2 font-mono text-base tracking-widest"
         data-testid="totp-secret"

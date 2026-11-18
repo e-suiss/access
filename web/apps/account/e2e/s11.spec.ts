@@ -115,6 +115,9 @@ test("the authenticator key is text with a copy button; one pasteable code field
   await expect(app).toContainText("No authenticator app is set up.");
   await app.getByRole("button", { name: "Set up an authenticator app" }).click();
   await expect(app.getByTestId("totp-secret")).toHaveText("JBSWY3DPEHPK3PXP");
+  // TN-155
+  await expect(app.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
+  await expect(app.getByTestId("totp-replaces")).toHaveCount(0);
   await expect(app.getByRole("button", { name: "Copy the key" })).toBeVisible();
   const code = app.getByLabel("Code from your authenticator app");
   await expect(code).toBeFocused();
@@ -131,6 +134,11 @@ test("the authenticator key is text with a copy button; one pasteable code field
   await expect(codes.getByTestId("code-list").locator("li")).toHaveCount(2);
   await codes.getByRole("button", { name: "I saved them" }).click();
   await expect(codes).toContainText("You have recovery codes.");
+  // TN-155: a second app replaces the first, and says so before it does
+  await app.getByRole("button", { name: "Set up a new authenticator app" }).click();
+  await expect(app.getByTestId("totp-replaces")).toHaveText(
+    "Your current authenticator app stops working once this one is set up.",
+  );
 });
 
 test("new recovery codes are shown once and need the saved acknowledgement", async ({ page }) => {
