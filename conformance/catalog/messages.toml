@@ -5382,6 +5382,22 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "label-phone"
+text_id = "label.phone"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-identifier_phone"
+text_id = "label.identifier_phone"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "second_factor-enroll"
 text_id = "second_factor.enroll"
 surface = "login"

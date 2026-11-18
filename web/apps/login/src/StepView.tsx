@@ -53,7 +53,7 @@ interface Props {
 
 type Fields = Partial<Record<FieldName, string>>;
 
-const htmlType = { text: "text", password: "password", code: "text" } as const;
+const htmlType = { text: "text", password: "password", code: "text", tel: "tel" } as const;
 
 /** Codes that are digits only get the numeric keyboard; recovery codes are not (TN-107). */
 const numeric = new Set<FieldName>(["totp_code", "email_code"]);

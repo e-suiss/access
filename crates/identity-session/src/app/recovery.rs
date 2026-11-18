@@ -694,7 +694,7 @@ where
         ) {
             return Ok(Answer::Refused(RECOVERY_INVALID));
         }
-        let folded = Self::folded(identifier)?;
+        let folded = self.keyed(identifier)?;
         let now = self.now();
         let (tenant, environment) = (
             self.environment.tenant.as_bytes(),

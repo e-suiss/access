@@ -423,6 +423,33 @@ fn strict(mut ui: Ui) -> Ui {
 }
 
 /// The identifier step as the environment's enumeration mode draws it.
+/// TN-156: the identifier field names what the environment signs in with; where only phone
+/// numbers do, it is a phone field.
+fn phone_labels(kit: &EnvironmentKit, ui: &mut Ui) {
+    use crate::domain::node::{InputKind, Node};
+    if !kit.auth.phone {
+        return;
+    }
+    let phone_only =
+        !kit.signin.methods.contains("email") && !kit.signin.methods.contains("username");
+    for node in &mut ui.nodes {
+        if let Node::Input {
+            name: FieldName::Identifier,
+            kind,
+            label,
+            ..
+        } = node
+        {
+            if phone_only {
+                *kind = InputKind::Tel;
+                *label = TextId::PhoneLabel.into();
+            } else {
+                *label = TextId::IdentifierPhoneLabel.into();
+            }
+        }
+    }
+}
+
 fn first_step(kit: &EnvironmentKit, ui: Ui) -> Ui {
     if kit.signin.strict && kit.auth.password {
         strict(ui)
@@ -597,6 +624,7 @@ where
             return reply;
         }
         **ui = with_options(kit, (**ui).clone());
+        phone_labels(kit, ui);
         // OP-159 m.48 (c)
         if ui.step != Step::Identifier || !kit.signin.social {
             return reply;

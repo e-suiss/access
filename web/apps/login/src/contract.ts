@@ -96,7 +96,7 @@ export interface InputNode {
   readonly type: "input";
   readonly name: FieldName;
   readonly method: Method;
-  readonly kind: "text" | "password" | "code" | "hidden";
+  readonly kind: "text" | "password" | "code" | "hidden" | "tel";
   readonly autocomplete: string;
   readonly required: boolean;
   readonly max_length: number;
@@ -278,7 +278,7 @@ const InputS: v.GenericSchema<unknown, InputNode> = v.object({
   type: v.literal("input"),
   name: FieldNameS,
   method: MethodS,
-  kind: v.picklist(["text", "password", "code", "hidden"]),
+  kind: v.picklist(["text", "password", "code", "hidden", "tel"]),
   autocomplete: v.string(),
   required: v.boolean(),
   max_length: v.number(),

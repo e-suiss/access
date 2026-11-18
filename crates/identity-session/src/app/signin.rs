@@ -271,6 +271,22 @@ where
         Ok(n.to_lowercase())
     }
 
+    /// The form an identifier is kept and looked up in: a phone number in E.164 where the
+    /// environment signs in with phone numbers (TN-156), otherwise [`Self::folded`].
+    ///
+    /// # Errors
+    /// [`SessionError::Invalid`].
+    pub(crate) fn keyed(&self, raw: &str) -> Result<String, SessionError> {
+        use access_identity_account::domain::phone;
+        if self.policy.phone
+            && phone::looks_like_phone(raw)
+            && let Some(p) = phone::e164(raw, self.policy.country)
+        {
+            return Ok(p);
+        }
+        Self::folded(raw)
+    }
+
     fn identifier_digest(&self, folded: &str) -> [u8; 32] {
         identifier_digest(
             self.environment.tenant.as_bytes(),
@@ -305,7 +321,7 @@ where
         state.second_factor = req.second_factor;
         state.remember_device = req.remember_device;
         state.marker = req.marker.and_then(decode32).map(|m| marker_digest(&m));
-        let folded = req.identifier.map(Self::folded).transpose()?;
+        let folded = req.identifier.map(|i| self.keyed(i)).transpose()?;
         let mut tx = self.begin().await?;
         let mut user = None;
         if let Some(f) = &folded {
@@ -373,7 +389,7 @@ where
             Err(e) => return Ok(gone(e)),
         };
         tx.commit().await?;
-        let folded = Self::folded(step.identifier)?;
+        let folded = self.keyed(step.identifier)?;
         let named = l
             .state
             .identifier
@@ -455,7 +471,7 @@ where
             Ok(l) => l,
             Err(e) => return Ok(Err(gone(e))),
         };
-        let folded = identifier.map(Self::folded).transpose()?;
+        let folded = identifier.map(|i| self.keyed(i)).transpose()?;
         let user = match l.state.subject {
             Some(s) => tx.user_handle(s).await?.map(UserHandle::from_bytes),
             None => None,

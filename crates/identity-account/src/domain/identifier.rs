@@ -73,6 +73,11 @@ impl Identifier {
         if value.chars().any(char::is_control) {
             return Err(IdentifierError::Control);
         }
+        // TN-156
+        let value = match kind {
+            IdentifierKind::Phone => super::phone::e164(&value, None).unwrap_or(value),
+            IdentifierKind::Username | IdentifierKind::Email => value,
+        };
         Ok(Self { kind, value })
     }
 
@@ -117,5 +122,8 @@ mod tests {
             Identifier::new(IdentifierKind::Username, &"x".repeat(MAX_CHARS + 1)),
             Err(IdentifierError::TooLong)
         );
+        // TN-156
+        let p = Identifier::new(IdentifierKind::Phone, " +90 532 123 45 67 ").unwrap();
+        assert_eq!(p.value(), "+905321234567");
     }
 }

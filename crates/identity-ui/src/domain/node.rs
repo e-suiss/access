@@ -258,6 +258,8 @@ pub enum InputKind {
     Code,
     /// N1: not drawn; the page fills it itself (a bot token, OP-153 m.1 (b)).
     Hidden,
+    /// A phone number (TN-156).
+    Tel,
 }
 
 /// The HTML `autocomplete` token list of an input.

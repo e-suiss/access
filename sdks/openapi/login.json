@@ -314,7 +314,8 @@
                   "text",
                   "password",
                   "code",
-                  "hidden"
+                  "hidden",
+                  "tel"
                 ]
               },
               "autocomplete": {
@@ -649,6 +650,8 @@
           "action.passkey_create",
           "second_factor.enroll",
           "profile.complete",
+          "label.phone",
+          "label.identifier_phone",
           "profile.address_hint",
           "action.change_address",
           "label.totp_setup",

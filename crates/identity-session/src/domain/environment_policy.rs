@@ -78,6 +78,8 @@ pub struct EnvironmentSignin {
     pub social: bool,
     /// Whether a person may delete their own account from the account page (OP-159 m.50, TN-145).
     pub self_deletion: bool,
+    /// The country a phone number typed the national way belongs to (TN-156).
+    pub default_country: Option<access_identity_account::domain::phone::Country>,
 }
 
 impl Default for EnvironmentSignin {
@@ -98,6 +100,7 @@ impl Default for EnvironmentSignin {
             registration: Registration::Open,
             social: true,
             self_deletion: true,
+            default_country: None,
         }
     }
 }
@@ -210,10 +213,17 @@ impl EnvironmentSignin {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // TN-156
+        let default_country = match get("default_country") {
+            None => None,
+            Some(Value::Text(t)) => Some(access_identity_account::domain::phone::country(t)?),
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
             registration,
             self_deletion,
+            default_country,
             social: true,
             methods,
             mfa_required,
@@ -243,7 +253,7 @@ impl EnvironmentSignin {
             } else {
                 base.mfa
             },
-            password: base.password && (email || self.has("username")),
+            password: base.password && (email || self.has("username") || self.has("phone")),
             passkey: base.passkey && self.has("passkey"),
             email_otp: base.email_otp && email,
             magic_link: base.magic_link && email,
@@ -251,6 +261,9 @@ impl EnvironmentSignin {
             // TN-151
             require_name: self.name_required(),
             require_email: email && !self.has("phone"),
+            // TN-156
+            phone: self.has("phone"),
+            country: self.default_country,
             ..base
         }
     }

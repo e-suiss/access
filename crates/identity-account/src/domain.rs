@@ -15,6 +15,7 @@ pub mod invitation;
 pub mod legacy;
 pub mod login;
 pub mod password;
+pub mod phone;
 pub mod recovery_policy;
 pub mod recovery_token;
 pub mod registration;

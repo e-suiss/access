@@ -717,8 +717,12 @@ impl Env {
     }
 
     async fn account(&self, who: &str) -> [u8; 16] {
+        self.account_as(Identifier::new(IdentifierKind::Email, who).unwrap())
+            .await
+    }
+
+    async fn account_as(&self, id: Identifier) -> [u8; 16] {
         let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
-        let id = Identifier::new(IdentifierKind::Email, who).unwrap();
         let s = create(&pg, &self.environment(), &[id], &ADMIN)
             .await
             .unwrap();
@@ -5560,4 +5564,42 @@ async fn a_new_authenticator_app_replaces_the_old_one_once_its_first_code_verifi
         .submit(&next, "totp", json!({ "totp_code": e.totp(&seed) }))
         .await;
     assert_eq!(fresh.step(), "complete");
+}
+
+// TN-156, OP-159 m.54 (c)
+#[tokio::test]
+async fn a_phone_environment_signs_in_with_the_number_however_it_is_typed() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(64, "tn-156", auth, false, signin).await;
+    e.account_as(Identifier::new(IdentifierKind::Phone, "+905321234567").unwrap())
+        .await;
+    let mut b = e.browser("tel");
+    let first = b.start().await;
+    let field = first.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["name"] == "identifier")
+        .cloned()
+        .unwrap();
+    assert_eq!(field["kind"], "tel");
+    assert_eq!(field["label"]["id"], "label.phone");
+    for (i, typed) in ["0532 123 45 67", "+90 532 123 45 67", "5321234567"]
+        .into_iter()
+        .enumerate()
+    {
+        let mut w = e.browser(&format!("tel-{i}"));
+        assert_eq!(w.sign_in(typed).await.step(), "complete", "{typed}");
+    }
+    let mut stranger = e.browser("stranger");
+    let at = stranger.identify("0533 000 00 00").await;
+    let refused = stranger
+        .submit(&at, "password", json!({ "password": PW }))
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
 }

@@ -637,6 +637,9 @@ pub struct SigninPolicy {
     pub registration: Registration,
     /// Whether a person may delete their own account (OP-159 m.50, TN-145); on by default.
     pub self_deletion: bool,
+    /// The country a phone number typed the national way belongs to (TN-156), ISO 3166-1
+    /// alpha-2; only with the `phone` method.
+    pub default_country: Option<String>,
 }
 
 impl SigninPolicy {
@@ -657,7 +660,13 @@ impl SigninPolicy {
         let keep_ok = self
             .email_keep_days
             .is_none_or(|d| d >= MIN_EMAIL_KEEP_DAYS);
-        if fields_ok && lists_ok && methods_ok && keep_ok && self.attestation.check() {
+        // TN-156
+        let country_ok = self.default_country.as_deref().is_none_or(|c| {
+            self.methods.contains(&SigninMethod::Phone)
+                && access_identity_account::domain::phone::country(c).is_some_and(|k| k.iso == c)
+        });
+        if fields_ok && lists_ok && methods_ok && keep_ok && country_ok && self.attestation.check()
+        {
             Ok(())
         } else {
             Err(Invalid::SigninPolicy)
@@ -726,6 +735,10 @@ impl SigninPolicy {
         // OP-159 m.50
         if !self.self_deletion {
             m.push((Value::text("self_deletion"), Value::Bool(false)));
+        }
+        // TN-156
+        if let Some(c) = &self.default_country {
+            m.push((Value::text("default_country"), Value::text(c)));
         }
         Value::Map(m)
     }

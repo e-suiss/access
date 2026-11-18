@@ -1718,6 +1718,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "attestation",
     "registration",
     "self_deletion",
+    "default_country",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];

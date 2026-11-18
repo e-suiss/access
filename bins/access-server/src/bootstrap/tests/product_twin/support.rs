@@ -2332,6 +2332,7 @@ async fn a_person_deletes_their_own_account_with_their_devices_signature() {
         &d,
         Change::SigninPolicy(access_identity_admin::domain::environment::SigninPolicy {
             self_deletion: false,
+            default_country: None,
             ..access_identity_admin::app::rest::default_signin()
         }),
     )

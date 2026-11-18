@@ -48,6 +48,12 @@ pub enum TextId {
     /// Create a passkey.
     #[serde(rename = "action.passkey_create")]
     PasskeyCreate,
+    /// The identifier field where only phone numbers sign in (TN-156).
+    #[serde(rename = "label.phone")]
+    PhoneLabel,
+    /// The identifier field where e-mail addresses and phone numbers sign in (TN-156).
+    #[serde(rename = "label.identifier_phone")]
+    IdentifierPhoneLabel,
     /// The environment requires a second step and the account has none yet: set one up now. Only
     /// after the first factor (OP-159 m.48 (a)).
     #[serde(rename = "second_factor.enroll")]
@@ -602,7 +608,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 195] = [
+    pub const ALL: [Self; 197] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -619,6 +625,8 @@ impl TextId {
         Self::PasskeyCreate,
         Self::EnrollSecondFactor,
         Self::ProfileComplete,
+        Self::PhoneLabel,
+        Self::IdentifierPhoneLabel,
         Self::ProfileAddressHint,
         Self::ChangeAddress,
         Self::TotpSetup,
@@ -821,6 +829,8 @@ impl TextId {
             Self::PasskeyCreate => "action.passkey_create",
             Self::EnrollSecondFactor => "second_factor.enroll",
             Self::ProfileComplete => "profile.complete",
+            Self::PhoneLabel => "label.phone",
+            Self::IdentifierPhoneLabel => "label.identifier_phone",
             Self::ProfileAddressHint => "profile.address_hint",
             Self::ChangeAddress => "action.change_address",
             Self::TotpSetup => "label.totp_setup",
@@ -1027,6 +1037,8 @@ impl TextId {
                 "This sign-in needs a second step. Set up an authenticator app or a passkey to continue."
             }
             Self::ProfileComplete => "Finish setting up your account to continue.",
+            Self::PhoneLabel => "Phone number",
+            Self::IdentifierPhoneLabel => "Email or phone number",
             Self::ProfileAddressHint => {
                 "If another account already uses this address, sign in to that account and link this sign-in from its settings."
             }
