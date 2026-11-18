@@ -127,6 +127,8 @@ pub enum Step {
     Authenticate,
     /// MFA, after the first factor.
     SecondFactor,
+    /// What the account lacks, after authentication (TN-151).
+    Profile,
     /// Done; follow `redirect_to`.
     Complete,
 }
@@ -141,6 +143,8 @@ pub enum Requirement {
     FirstFactor,
     /// A second factor, when environment policy requires MFA.
     SecondFactor,
+    /// What the environment asks of every account: a display name, a proven address (TN-151).
+    Profile,
 }
 
 /// Whether a requirement is met.
@@ -244,6 +248,14 @@ pub struct Ui {
     pub redirect_to: Option<String>,
 }
 
+fn with_profile(policy: &[Requirement]) -> Vec<Requirement> {
+    let mut out = policy.to_vec();
+    if !out.contains(&Requirement::Profile) {
+        out.push(Requirement::Profile);
+    }
+    out
+}
+
 fn requirements(policy: &[Requirement], step: Step) -> Vec<RequirementStatus> {
     let mut list = vec![Requirement::Identifier, Requirement::FirstFactor];
     for r in policy {
@@ -260,6 +272,12 @@ fn requirements(policy: &[Requirement], step: Step) -> Vec<RequirementStatus> {
                     | (
                         Step::SecondFactor,
                         Requirement::Identifier | Requirement::FirstFactor
+                    )
+                    | (
+                        Step::Profile,
+                        Requirement::Identifier
+                            | Requirement::FirstFactor
+                            | Requirement::SecondFactor
                     )
             );
             RequirementStatus {
@@ -545,6 +563,84 @@ impl Ui {
         });
         let mut ui = Self::new(flow, Step::SecondFactor, policy, nodes);
         ui.messages.push(Message::info(TextId::EnrollSecondFactor));
+        ui
+    }
+
+    /// What the account lacks, after authentication (TN-151): the display name when the
+    /// environment requires one, the address when the account has no proven one (`offered` is
+    /// what a provider gave without vouching for it). Nothing here can be skipped.
+    #[must_use]
+    pub fn complete_profile(
+        flow: FlowId,
+        (name, email): (bool, bool),
+        offered: Option<String>,
+        policy: &[Requirement],
+    ) -> Self {
+        let mut nodes = Vec::new();
+        if name {
+            nodes.push(Node::Input {
+                name: FieldName::DisplayName,
+                method: Method::Profile,
+                kind: InputKind::Text,
+                autocomplete: Autocomplete::Name,
+                required: true,
+                max_length: FieldName::DisplayName.max_length(),
+                label: TextId::DisplayNameLabel.into(),
+                value: None,
+                read_only: false,
+            });
+        }
+        if email {
+            nodes.push(Node::Input {
+                name: FieldName::Email,
+                method: Method::Profile,
+                kind: InputKind::Text,
+                autocomplete: Autocomplete::Email,
+                required: true,
+                max_length: FieldName::Email.max_length(),
+                label: TextId::EmailLabel.into(),
+                value: offered,
+                read_only: false,
+            });
+        }
+        nodes.push(Node::Submit {
+            method: Method::Profile,
+            label: TextId::Continue.into(),
+        });
+        nodes.push(Node::Submit {
+            method: Method::Restart,
+            label: TextId::Restart.into(),
+        });
+        let mut ui = Self::new(flow, Step::Profile, &with_profile(policy), nodes);
+        ui.messages.push(Message::info(TextId::ProfileComplete));
+        ui
+    }
+
+    /// The code sent to the address the profile step took (TN-151), the same answer whether or
+    /// not another account holds it; the address can be typed again.
+    #[must_use]
+    pub fn profile_code(flow: FlowId, policy: &[Requirement]) -> Self {
+        let nodes = vec![
+            Node::input(
+                FieldName::EmailCode,
+                Method::ProfileCode,
+                InputKind::Code,
+                Autocomplete::OneTimeCode,
+                TextId::EmailCodeLabel.into(),
+            ),
+            Node::Submit {
+                method: Method::ProfileCode,
+                label: TextId::Verify.into(),
+            },
+            Node::Submit {
+                method: Method::Profile,
+                label: TextId::ChangeAddress.into(),
+            },
+        ];
+        let mut ui = Self::new(flow, Step::Profile, &with_profile(policy), nodes);
+        ui.messages
+            .push(Message::info(TextId::RegistrationCodeSent));
+        ui.messages.push(Message::info(TextId::ProfileAddressHint));
         ui
     }
 

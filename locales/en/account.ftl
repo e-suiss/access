@@ -99,6 +99,7 @@ methods-authenticator_key = Enter this key in your authenticator app:
 methods-proof_sent = We sent a code to the email address or phone number on your account. Enter it to continue.
 methods-proof_failed = That code isn't right. Check the newest message and try again.
 methods-proof_unavailable = Add an email address or phone number to your account first.
+methods-add_address = Add an address
 label-proof_code = Code we sent you
 action-copy_key = Copy the key
 methods-key_copied = Key copied.

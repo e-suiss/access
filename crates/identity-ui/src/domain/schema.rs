@@ -209,7 +209,7 @@ fn components() -> Value {
                     "invitation",
                     "link",
                 ]),
-                "step": string_enum(&["identifier", "authenticate", "second_factor", "complete"]),
+                "step": string_enum(&["identifier", "authenticate", "second_factor", "profile", "complete"]),
                 "action": { "type": "string" },
                 "requirements": { "type": "array", "items": r("RequirementStatus") },
                 "nodes": { "type": "array", "items": r("Node") },
@@ -221,7 +221,7 @@ fn components() -> Value {
         "FlowId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
         "RequirementStatus": object(
             &json!({
-                "requirement": string_enum(&["identifier", "first_factor", "second_factor"]),
+                "requirement": string_enum(&["identifier", "first_factor", "second_factor", "profile"]),
                 "state": string_enum(&["missing", "satisfied"]),
             }),
             &["requirement", "state"],

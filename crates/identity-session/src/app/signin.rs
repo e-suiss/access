@@ -1340,7 +1340,14 @@ where
             tx.commit().await?;
             return Ok(neutral(self.gate.mean_ms()));
         }
-        let needs = self.needs(&l.state, enrolled, marker);
+        let mut needs = self.needs(&l.state, enrolled, marker);
+        // TN-151
+        if needs.is_empty()
+            && matches!(l.state.purpose, Purpose::Login)
+            && self.profile_gap(&mut tx, subject).await?.any()
+        {
+            needs.push(Requirement::CompleteProfile);
+        }
         if !needs.is_empty() {
             save(&mut tx, &l, "open", Resume::Keep).await?;
             tx.commit().await?;

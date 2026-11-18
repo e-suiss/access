@@ -56,6 +56,7 @@ use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::profile::ProfileStep;
 use access_identity_session::app::push::{PushEnd, PushPoll, PushWait};
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
 use access_identity_session::app::{
@@ -237,6 +238,8 @@ enum Current {
     /// OP-159 m.48 (a): the account's first second factor, enrolled now; the label its key and
     /// passkey are named by.
     Enroll(String),
+    /// TN-151: what the account lacks; the code step once a code went to the address.
+    Profile(ProfileStep),
     Done(Reply),
 }
 
@@ -495,6 +498,20 @@ fn shipped_presets() -> Option<&'static access_identity_federation::domain::pres
         .as_ref()
 }
 
+/// TN-151
+fn profile_ui(flow: &FlowId, p: &ProfileStep, reqs: &[Requirement]) -> Ui {
+    if p.sent {
+        Ui::profile_code(flow.clone(), reqs)
+    } else {
+        Ui::complete_profile(
+            flow.clone(),
+            (p.gap.name, p.gap.email),
+            p.offered.clone(),
+            reqs,
+        )
+    }
+}
+
 fn shape(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     shape_bare(kit, flow, current).map(|ui| with_options(kit, ui))
 }
@@ -530,6 +547,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             kit.auth.passkey.then(|| blank.clone()),
             &reqs,
         ),
+        Current::Profile(p) => profile_ui(flow, p, &reqs),
         Current::Done(_) => return None,
     })
 }
@@ -963,9 +981,76 @@ where
                 .sms(&fref, field(FieldName::SmsCode), corr)
                 .await
                 .map_err(|e| failed(&e))?,
+            // TN-151
+            (Method::Profile, Current::Profile(p)) => {
+                let typed = (field(FieldName::DisplayName), field(FieldName::Email));
+                return self
+                    .profile_submit(auth, kit, b, (&flow, &fref), p, typed)
+                    .await;
+            }
+            (Method::ProfileCode, Current::Profile(p)) if p.sent => {
+                if !self
+                    .profile_proof(
+                        kit,
+                        b,
+                        (fref.handle, fref.device),
+                        p.subject,
+                        field(FieldName::EmailCode),
+                    )
+                    .await?
+                {
+                    let mut ui = profile_ui(&flow, p, &policy(kit));
+                    ui.messages.push(Message::error(TextId::SecondFactorFailed));
+                    return Ok(Reply::ui(401, ui));
+                }
+                auth.resume(&fref, corr).await.map_err(|e| failed(&e))?
+            }
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
+    }
+
+    /// The profile step's details (TN-151): the name is kept, a code goes to the address; on the
+    /// code step the address is typed again.
+    async fn profile_submit<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        (flow, fref): (&FlowId, &FlowRef<'_>),
+        p: &ProfileStep,
+        (name, email): (&str, &str),
+    ) -> Result<Reply, Reply> {
+        let gone = |_| Reply::problem(FLOW_GONE);
+        if p.sent {
+            auth.profile_address_sent(fref, false)
+                .await
+                .map_err(|e| failed(&e))?
+                .map_err(gone)?;
+        } else {
+            if p.gap.name {
+                auth.profile_name(fref, name, b.correlation)
+                    .await
+                    .map_err(|e| failed(&e))?
+                    .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
+            }
+            if p.gap.email {
+                self.profile_address(kit, b, (fref.handle, fref.device), p.subject, email)
+                    .await?;
+                auth.profile_address_sent(fref, true)
+                    .await
+                    .map_err(|e| failed(&e))?
+                    .map_err(gone)?;
+            } else {
+                let outcome = auth
+                    .resume(fref, b.correlation)
+                    .await
+                    .map_err(|e| failed(&e))?;
+                return self.outcome(auth, kit, b, flow, fref, outcome).await;
+            }
+        }
+        let current = self.current(auth, kit, b, fref).await?;
+        self.render(auth, kit, flow, fref, current, 200).await
     }
 
     /// The strict mode's one-screen step (OP-153 m.3 (j)): the identifier opens the flow and the
@@ -1082,6 +1167,16 @@ where
             } if needs.contains(&Needed::EnrollSecondFactor) => {
                 Current::Enroll(typed(b, fref.handle).unwrap_or_else(|| String::from(ENROLL_LABEL)))
             }
+            // TN-151
+            Outcome::Continue {
+                needs,
+                enrolled: Some(_),
+            } if needs.contains(&Needed::CompleteProfile) => {
+                match auth.profile_step(fref).await.map_err(|e| failed(&e))? {
+                    Ok(p) => Current::Profile(p),
+                    Err(_) => Current::Done(Reply::problem(FLOW_GONE)),
+                }
+            }
             Outcome::Continue {
                 enrolled: Some(e), ..
             } => {
@@ -1197,6 +1292,8 @@ where
                 &reqs,
             ),
             Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
+            // TN-151
+            Current::Profile(p) => profile_ui(flow, &p, &reqs),
             // OP-159 m.48 (a)
             Current::Enroll(label) => {
                 match auth
@@ -1281,7 +1378,9 @@ where
             Outcome::Continue {
                 ref needs,
                 enrolled: Some(_),
-            } if needs.contains(&Needed::EnrollSecondFactor) => {
+            } if needs.contains(&Needed::EnrollSecondFactor)
+                || needs.contains(&Needed::CompleteProfile) =>
+            {
                 let current = self.current(auth, kit, b, fref).await?;
                 self.render(auth, kit, flow, fref, current, 200).await
             }

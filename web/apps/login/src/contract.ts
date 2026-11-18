@@ -6,7 +6,7 @@ export const contractVersion = 1;
 export const flowsPath = "/v1/login/flows";
 export const stepUpPath = "/v1/login/step-up";
 
-export type Step = "identifier" | "authenticate" | "second_factor" | "complete";
+export type Step = "identifier" | "authenticate" | "second_factor" | "profile" | "complete";
 export type FlowKind =
   | "login"
   | "registration"
@@ -55,7 +55,9 @@ export type Method =
   | "acknowledge"
   | "push"
   | "send_sms"
-  | "sms";
+  | "sms"
+  | "profile"
+  | "profile_code";
 
 export interface Text {
   readonly id: string;
@@ -68,7 +70,7 @@ export interface Message extends Text {
 }
 
 export interface RequirementStatus {
-  readonly requirement: "identifier" | "first_factor" | "second_factor";
+  readonly requirement: "identifier" | "first_factor" | "second_factor" | "profile";
   readonly state: "missing" | "satisfied";
 }
 
@@ -203,7 +205,7 @@ export interface Submission {
 }
 
 // OP-159 m.46 (f)
-const STEPS = ["identifier", "authenticate", "second_factor", "complete"] as const;
+const STEPS = ["identifier", "authenticate", "second_factor", "profile", "complete"] as const;
 const FLOW_KINDS = [
   "login",
   "registration",
@@ -253,6 +255,8 @@ const METHODS = [
   "push",
   "send_sms",
   "sms",
+  "profile",
+  "profile_code",
 ] as const satisfies readonly Method[];
 
 const TextS = v.object({ id: v.string(), text: v.string() });
@@ -263,7 +267,7 @@ const MessageS: v.GenericSchema<unknown, Message> = v.object({
   retry_after_s: v.exactOptional(v.number()),
 });
 const RequirementS: v.GenericSchema<unknown, RequirementStatus> = v.object({
-  requirement: v.picklist(["identifier", "first_factor", "second_factor"]),
+  requirement: v.picklist(["identifier", "first_factor", "second_factor", "profile"]),
   state: v.picklist(["missing", "satisfied"]),
 });
 const OptionsS = v.record(v.string(), v.unknown());

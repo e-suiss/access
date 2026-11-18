@@ -181,11 +181,15 @@ pub enum Method {
     SendSms,
     /// The SMS code step (OP-156 m.3 (f)).
     Sms,
+    /// Give what the account lacks, or take the address again (TN-151).
+    Profile,
+    /// The code sent to the address the profile step took (TN-151).
+    ProfileCode,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -207,6 +211,8 @@ impl Method {
         Self::Push,
         Self::SendSms,
         Self::Sms,
+        Self::Profile,
+        Self::ProfileCode,
     ];
 
     /// The wire name.
@@ -234,6 +240,8 @@ impl Method {
             Self::Push => "push",
             Self::SendSms => "send_sms",
             Self::Sms => "sms",
+            Self::Profile => "profile",
+            Self::ProfileCode => "profile_code",
         }
     }
 }

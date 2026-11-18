@@ -45,6 +45,10 @@ pub struct AuthPolicy {
     /// Secure Payment Confirmation on the approval surface (`idp.environment.spc`, OP-156 m.3 (g)); off
     /// by default.
     pub spc: bool,
+    /// A sign-in completes only once the account has a display name (TN-132, TN-151).
+    pub require_name: bool,
+    /// A sign-in completes only once the account has a proven e-mail address (TN-151).
+    pub require_email: bool,
 }
 
 impl AuthPolicy {
@@ -61,6 +65,8 @@ impl AuthPolicy {
         sms: false,
         profile: AssuranceProfile::Standard,
         spc: false,
+        require_name: false,
+        require_email: false,
     };
 }
 
@@ -105,6 +111,10 @@ pub enum Requirement {
     EnrollSecondFactor,
     /// The environment's minimum AAL is not reached.
     Aal(Aal),
+    /// The account lacks what the environment asks of every account: a display name or a proven
+    /// e-mail address (TN-151). Asked after every authentication step, at every sign-in until
+    /// complete.
+    CompleteProfile,
 }
 
 /// Methods that may open a sign-in.

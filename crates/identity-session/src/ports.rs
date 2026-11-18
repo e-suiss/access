@@ -163,6 +163,28 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<(String, String)>, SessionError>> + Send;
+    /// Whether the subject has a readable display name (TN-151).
+    fn has_name(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Sets the subject's display name (TN-151).
+    fn set_name(
+        &mut self,
+        subject: [u8; 16],
+        name: &str,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Whether the subject has a live proven e-mail address (TN-151).
+    fn has_email(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// The address the subject's newest live provider link gave, when it did not vouch for it
+    /// (TN-151): offered, never kept.
+    fn provider_email(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<String>, SessionError>> + Send;
     /// Queues `message` through `notifier` in this transaction.
     fn notify<N: Notifier + Sync>(
         &mut self,

@@ -10,6 +10,7 @@ pub mod enroll;
 pub mod epochs;
 pub mod mfa;
 pub mod portability;
+pub mod profile;
 pub mod push;
 pub mod recovery;
 pub mod registered;

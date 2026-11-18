@@ -55,6 +55,16 @@ pub enum TextId {
     /// The key of a TOTP set up at sign-in (OP-159 m.48 (a)).
     #[serde(rename = "label.totp_setup")]
     TotpSetup,
+    /// The account lacks what the environment asks of every account: give it to go on. Only
+    /// after authentication (TN-151).
+    #[serde(rename = "profile.complete")]
+    ProfileComplete,
+    /// An address another account holds is linked from that account, never taken (TN-151).
+    #[serde(rename = "profile.address_hint")]
+    ProfileAddressHint,
+    /// Type the address again (TN-151).
+    #[serde(rename = "action.change_address")]
+    ChangeAddress,
     /// Verify a second-factor code.
     #[serde(rename = "action.verify")]
     Verify,
@@ -592,7 +602,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 192] = [
+    pub const ALL: [Self; 195] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -608,6 +618,9 @@ impl TextId {
         Self::PasskeySignIn,
         Self::PasskeyCreate,
         Self::EnrollSecondFactor,
+        Self::ProfileComplete,
+        Self::ProfileAddressHint,
+        Self::ChangeAddress,
         Self::TotpSetup,
         Self::Verify,
         Self::UseRecoveryCode,
@@ -807,6 +820,9 @@ impl TextId {
             Self::PasskeySignIn => "action.passkey",
             Self::PasskeyCreate => "action.passkey_create",
             Self::EnrollSecondFactor => "second_factor.enroll",
+            Self::ProfileComplete => "profile.complete",
+            Self::ProfileAddressHint => "profile.address_hint",
+            Self::ChangeAddress => "action.change_address",
             Self::TotpSetup => "label.totp_setup",
             Self::Verify => "action.verify",
             Self::UseRecoveryCode => "action.recovery_code",
@@ -1010,6 +1026,11 @@ impl TextId {
             Self::EnrollSecondFactor => {
                 "This sign-in needs a second step. Set up an authenticator app or a passkey to continue."
             }
+            Self::ProfileComplete => "Finish setting up your account to continue.",
+            Self::ProfileAddressHint => {
+                "If another account already uses this address, sign in to that account and link this sign-in from its settings."
+            }
+            Self::ChangeAddress => "Use another address",
             Self::TotpSetup => {
                 "Add this key to your authenticator app, then enter the code it shows"
             }
@@ -1293,6 +1314,8 @@ impl TextId {
             self,
             Self::SecondFactorFailed
                 | Self::EnrollSecondFactor
+                | Self::ProfileComplete
+                | Self::ProfileAddressHint
                 | Self::TotpSetup
                 | Self::PasskeyNotRegistered
                 | Self::PasskeyAttestationRefused

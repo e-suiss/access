@@ -223,6 +223,7 @@
               "identifier",
               "authenticate",
               "second_factor",
+              "profile",
               "complete"
             ]
           },
@@ -269,7 +270,8 @@
             "enum": [
               "identifier",
               "first_factor",
-              "second_factor"
+              "second_factor",
+              "profile"
             ]
           },
           "state": {
@@ -623,7 +625,9 @@
           "acknowledge",
           "push",
           "send_sms",
-          "sms"
+          "sms",
+          "profile",
+          "profile_code"
         ]
       },
       "TextId": {
@@ -644,6 +648,9 @@
           "action.passkey",
           "action.passkey_create",
           "second_factor.enroll",
+          "profile.complete",
+          "profile.address_hint",
+          "action.change_address",
           "label.totp_setup",
           "action.verify",
           "action.recovery_code",

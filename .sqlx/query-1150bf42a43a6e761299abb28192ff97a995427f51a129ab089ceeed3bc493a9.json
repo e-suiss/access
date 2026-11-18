@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT address_nonce AS \"nonce!\", address_ciphertext AS \"ciphertext!\"\n                 FROM access.identity_federated\n                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n                  AND ended_ms IS NULL AND address_vouched = false\n                  AND address_nonce IS NOT NULL AND address_ciphertext IS NOT NULL\n                ORDER BY created_ms DESC, link_id DESC\n                LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "address_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ciphertext!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "address_ciphertext"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "1150bf42a43a6e761299abb28192ff97a995427f51a129ab089ceeed3bc493a9"
+}

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "profile",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "profile",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "email_code",
+      "method": "profile_code",
+      "kind": "code",
+      "autocomplete": "one-time-code",
+      "required": true,
+      "max_length": 16,
+      "label": {
+        "id": "label.email_code",
+        "text": "Code from your email"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "profile_code",
+      "label": {
+        "id": "action.verify",
+        "text": "Verify"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "profile",
+      "label": {
+        "id": "action.change_address",
+        "text": "Use another address"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "registration.code_sent",
+      "text": "If this address can be used, we've sent a code to it.",
+      "severity": "info"
+    },
+    {
+      "id": "profile.address_hint",
+      "text": "If another account already uses this address, sign in to that account and link this sign-in from its settings.",
+      "severity": "info"
+    }
+  ]
+}

@@ -393,6 +393,27 @@ export class LoginMock {
         this.flows.set(ui.flow, ui);
         return { status: 200, ui };
       }
+      // TN-151
+      case "profile":
+        return (fields.email ?? "").includes("@")
+          ? { status: 200, ui: example("profile-code") }
+          : { status: 200, ui: example("profile") };
+      case "profile_code":
+        return fields.email_code === totp
+          ? { status: 200, ui: withoutNodes(example("complete")) }
+          : {
+              status: 401,
+              ui: {
+                ...example("profile-code"),
+                messages: [
+                  {
+                    id: "second_factor.failed",
+                    text: "That code didn't work. Check it and try again.",
+                    severity: "error",
+                  },
+                ],
+              },
+            };
       default:
         return { status: 400, ui: this.identifierStep() };
     }

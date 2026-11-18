@@ -301,3 +301,33 @@ test("a sign-in whose request asks for a second factor passes its acr to the new
   expect(mock.created.map((b) => (b === null ? null : JSON.parse(b)))).toEqual([{ acr }]);
   expect(mock.requests).not.toContain("POST /env/acme/v1/login/step-up");
 });
+
+// TN-151: an account without what the environment asks of every account gives it before the
+// sign-in completes; the provider's unvouched address is offered, and a code proves it
+test("a sign-in that lacks a name or a proven address asks for them first", async ({
+  page,
+  mock,
+}) => {
+  mock.secondFactor = example("profile");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("Finish setting up your account to continue.")).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue("ada@example.org");
+  await page.getByLabel("Your name").fill("Ada");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(
+    page.getByText("If this address can be used, we've sent a code to it."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use another address" })).toBeVisible();
+  await page.getByLabel("Code from your email").fill("000000");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.getByText("That code didn't work. Check it and try again.")).toBeVisible();
+  await page.getByLabel("Code from your email").fill("123456");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+  const profile = mock.submissions.find((s) => JSON.stringify(s).includes('"profile"'));
+  expect(JSON.stringify(profile)).toContain('"display_name":"Ada"');
+});

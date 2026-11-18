@@ -192,6 +192,36 @@ impl Externals<'_> {
         Ok(r)
     }
 
+    /// Makes an address the provider vouched for the account's own, with its mailbox, unless
+    /// another account holds it (IDP-31 (3), MD-5, TN-66).
+    async fn adopt_address(
+        &self,
+        tx: &mut PgTx,
+        subject: [u8; 16],
+        address: Option<(&str, bool)>,
+        now_ms: u64,
+    ) -> Result<(), AccountError> {
+        if let Some((value, true)) = address
+            && let Ok(id) = Identifier::new(IdentifierKind::Email, value)
+            && tx.add_identifier(subject, &id).await?
+        {
+            let index = self.vault.index_of(
+                self.environment.tenant.as_bytes(),
+                self.environment.environment.as_bytes(),
+                value,
+            )?;
+            if let Some(identifier) = tx.0.identifier_id(subject, &index).await? {
+                tx.0.insert_mailbox(
+                    identifier,
+                    subject,
+                    i64::try_from(now_ms).map_err(|_| AccountError::Corrupt)?,
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
     async fn resolve(
         &self,
         tx: &mut PgTx,
@@ -209,6 +239,17 @@ impl Externals<'_> {
                 return Ok(Resolved::Unusable);
             }
             tx.0.federated_verified(row.link, now_ms).await?;
+            // TN-151
+            if !tx
+                .0
+                .identifiers(row.subject)
+                .await?
+                .iter()
+                .any(|i| i.live && i.kind == "email")
+            {
+                self.adopt_address(tx, row.subject, a.address, now_ms)
+                    .await?;
+            }
             return Ok(Resolved::Existing(row.subject));
         }
         // OP-159 m.48 (c)
@@ -232,26 +273,7 @@ impl Externals<'_> {
         // OP-151 m.3 (i)
         events::created(tx, self.environment, subject).await?;
         crate::app::accounts::status_claim(tx, subject, AccountStatus::Active).await?;
-        // IDP-31 (3), MD-5
-        if let Some((value, true)) = a.address
-            && let Ok(id) = Identifier::new(IdentifierKind::Email, value)
-            && tx.add_identifier(subject, &id).await?
-        {
-            let index = self.vault.index_of(
-                self.environment.tenant.as_bytes(),
-                self.environment.environment.as_bytes(),
-                value,
-            )?;
-            if let Some(identifier) = tx.0.identifier_id(subject, &index).await? {
-                // TN-66
-                tx.0.insert_mailbox(
-                    identifier,
-                    subject,
-                    i64::try_from(now_ms).map_err(|_| AccountError::Corrupt)?,
-                )
-                .await?;
-            }
-        }
+        self.adopt_address(tx, subject, a.address, now_ms).await?;
         if let Some(n) = a.name.map(str::trim).filter(|n| !n.is_empty()) {
             vault::set_profile(&mut tx.0, self.vault, subject, "name", n).await?;
         }

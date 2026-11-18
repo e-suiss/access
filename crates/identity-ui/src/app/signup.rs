@@ -655,6 +655,138 @@ where
     }
 }
 
+/// The address challenge of a sign-in's profile step (TN-151), bound to the login flow and its
+/// browser: `(flow_hash, device_hash)`.
+fn profile_binding(handle: &str, device: &str) -> Option<([u8; 32], [u8; 32])> {
+    let secret = <[u8; 32]>::try_from(b64url_decode(handle).ok()?).ok()?;
+    let mut m = b"access/profile-address/v1\0".to_vec();
+    m.extend_from_slice(&handle_digest(&secret));
+    Some((
+        suiss_crypto::digest::sha256(&m),
+        device_digest(&device_secret(Some(device))?),
+    ))
+}
+
+impl<K, C, M> Hosted<K, C, M>
+where
+    K: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    /// Sends a code to the address a sign-in's profile step took (TN-151): the same answer
+    /// whether or not another account holds it.
+    pub(crate) async fn profile_address(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        (handle, device): (&str, &str),
+        subject: [u8; 16],
+        email: &str,
+    ) -> Result<(), Reply> {
+        let (flow_hash, device_hash) =
+            profile_binding(handle, device).ok_or_else(|| Reply::problem(FLOW_GONE))?;
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        let actor_ref = environment.external(subject).unwrap_or_default();
+        let actor = Actor {
+            actor: &actor_ref,
+            correlation: b.correlation,
+        };
+        let net = prefix(b.ip);
+        match registrar
+            .start_change(
+                subject,
+                &Start {
+                    email: email.trim(),
+                    bot_token: None,
+                    prefix: &net,
+                    flow_hash,
+                    device_hash,
+                    now_ms: self.clock.now_ms(),
+                },
+                &rules(kit, email.trim()),
+                &actor,
+            )
+            .await
+        {
+            Ok(Started::Sent { .. }) => Ok(()),
+            Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
+                Err(Reply::problem(Problem {
+                    status: 429,
+                    code: "too-many-requests",
+                    title: "Too many attempts",
+                    retry_after_s: Some(retry_after_ms.div_ceil(1000)),
+                }))
+            }
+            Ok(Started::Refused(_)) => Err(Reply::problem(Problem {
+                status: 400,
+                code: "invalid-email",
+                title: "This address can't be used here",
+                retry_after_s: None,
+            })),
+            Err(e) => Err(failed(&e.into())),
+        }
+    }
+
+    /// Takes the code a sign-in's profile step sent (TN-151): the address becomes the account's.
+    /// `Ok(false)` for a wrong code.
+    pub(crate) async fn profile_proof(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        (handle, device): (&str, &str),
+        subject: [u8; 16],
+        code: &str,
+    ) -> Result<bool, Reply> {
+        let (flow_hash, device_hash) =
+            profile_binding(handle, device).ok_or_else(|| Reply::problem(FLOW_GONE))?;
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        let actor_ref = environment.external(subject).unwrap_or_default();
+        let actor = Actor {
+            actor: &actor_ref,
+            correlation: b.correlation,
+        };
+        match registrar
+            .complete_change(
+                subject,
+                &flow_hash,
+                &device_hash,
+                code,
+                kit.signin.email_keep_days,
+                self.clock.now_ms(),
+                &actor,
+            )
+            .await
+        {
+            Ok(Proven::Done { .. }) => Ok(true),
+            Ok(Proven::Wrong) => Ok(false),
+            Ok(Proven::Gone) => Err(Reply::problem(FLOW_GONE)),
+            Err(e) => Err(failed(&e.into())),
+        }
+    }
+}
+
 fn session_digest(cookie: &str) -> [u8; 32] {
     let mut m = b"access/address-challenge-session/v1\0".to_vec();
     m.extend_from_slice(cookie.as_bytes());

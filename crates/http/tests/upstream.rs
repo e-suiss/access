@@ -634,6 +634,19 @@ impl Env {
             .unwrap()
     }
 
+    async fn live_emails(&self, subject: [u8; 16]) -> usize {
+        let mut t = self.tx().await;
+        let n = t
+            .identifiers(subject)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|i| i.live && i.kind == "email")
+            .count();
+        t.commit().await.unwrap();
+        n
+    }
+
     async fn link_at(&self, issuer: &str, sub: &str) -> Option<[u8; 16]> {
         let mut t = self.tx().await;
         let row = t
@@ -843,6 +856,12 @@ async fn an_accepted_connection_signs_in_just_in_time_and_its_claims_carry_only_
     // §10.2.6
     let subject = e.link_at(CORP, "emp-1").await.unwrap();
     assert_eq!(e.status(subject).await, "active");
+    // TN-151
+    assert_eq!(
+        e.live_emails(subject).await,
+        0,
+        "a connection that is no organization's own vouches for no address"
+    );
 
     // §10.1.2 rule 1
     let token = e.provider.says.lock().unwrap().tokens[0].clone();
@@ -1450,6 +1469,12 @@ async fn an_organization_connection_speaks_only_for_its_verified_domains_and_sig
     let a = e.browser(3).upstream(&e, "corp", CORP).await;
     assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
     let subject = e.link_at(CORP, "emp-9").await.unwrap();
+    // TN-151
+    assert_eq!(
+        e.live_emails(subject).await,
+        1,
+        "the organization's own connection vouches for an address in its verified domain"
+    );
 
     // TN-94
     let mut t = e.tx().await;

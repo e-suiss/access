@@ -2151,6 +2151,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "methods-add_address"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "methods-proof_sent"
 surface = "account"
 class = "label"
@@ -5274,6 +5281,30 @@ key = "second_factor-enroll"
 text_id = "second_factor.enroll"
 surface = "login"
 class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-complete"
+text_id = "profile.complete"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-address_hint"
+text_id = "profile.address_hint"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-change_address"
+text_id = "action.change_address"
+surface = "login"
+class = "action"
 owner = "identity_plane"
 protected = false
 

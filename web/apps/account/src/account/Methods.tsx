@@ -23,7 +23,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 
-import { frontend, json } from "../lib/api.js";
+import { FRONTEND, frontend, json, Problem } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
 import { Actions, Loading, Meta, MONO, Panel, Part, RowItem, Rows } from "../lib/ui.js";
 import { useAnnouncer, when } from "./common.js";
@@ -643,7 +643,13 @@ export function SignInMethods(): ReactElement {
     queryKey: KEY,
     queryFn: () => json(frontend("/v1/account/methods"), Methods),
   });
-  const { say, fail, region } = useAnnouncer(error);
+  const { say, fail: announce, region } = useAnnouncer(error);
+  // TN-151: an account without an address gives one at a fresh sign-in, then adds the method
+  const [noAddress, setNoAddress] = useState(false);
+  const fail = (e: unknown, codes?: Readonly<Record<string, string>>) => {
+    if (e instanceof Problem && e.code === "proof-unavailable") setNoAddress(true);
+    announce(e, codes);
+  };
   const reload = () => {
     void queries.invalidateQueries({ queryKey: KEY });
   };
@@ -670,6 +676,17 @@ export function SignInMethods(): ReactElement {
       titleId="methods-heading"
     >
       {region}
+      {noAddress && (
+        <Actions>
+          <a
+            className={buttonVariants({ variant: "outline" })}
+            data-testid="add-address"
+            href={`${FRONTEND}/login`}
+          >
+            {t("methods.add_address")}
+          </a>
+        </Actions>
+      )}
       <AlertDialog
         open={confirming !== null}
         onOpenChange={(open) => {

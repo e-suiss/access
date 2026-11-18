@@ -436,12 +436,12 @@ where
         kit: &EnvironmentKit,
         name: &str,
         address: Option<&str>,
-    ) -> Result<(), Reply> {
+    ) -> Result<bool, Reply> {
         let Some((connection, _, _)) = self.registered_connection(kit, name).await? else {
             return Err(Reply::problem(NO_CONNECTION));
         };
         let Some(party) = connection.profile.organization_party() else {
-            return Ok(());
+            return Ok(false);
         };
         let read = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
@@ -454,7 +454,7 @@ where
         };
         let verified = read.await.map_err(|_| unavailable())?;
         if address.is_some_and(|a| crate::domain::sso_setup::admits(a, &verified)) {
-            Ok(())
+            Ok(true)
         } else {
             Err(Reply::problem(OUTSIDE_ORGANIZATION))
         }
@@ -602,15 +602,17 @@ where
             environment: &environment,
             vault: &vault,
         };
-        let address = signed
-            .external
-            .email
-            .as_ref()
-            .map(|e| (e.address.as_str(), false));
+        let typed = signed.external.email.as_ref().map(|e| e.address.as_str());
         // OP-159 m.48 (c)
         if !kit.signin.social {
             return Reply::problem(UPSTREAM_FAILED);
         }
+        // TN-134 (1), (3), TN-151
+        let vouched = match self.organization_scope(kit, name, typed).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+        let address = typed.map(|a| (a, vouched));
         let asserted = Asserted {
             provider: name,
             key: &signed.external.key,
@@ -618,13 +620,6 @@ where
             name: signed.external.name.as_deref(),
             register: kit.signin.open_registration(),
         };
-        // TN-134 (1), (3)
-        if let Err(r) = self
-            .organization_scope(kit, name, address.map(|a| a.0))
-            .await
-        {
-            return r;
-        }
         let national = signed.national.as_ref().map(|n| n.expose().clone());
         let facts = UpstreamFacts {
             connection: name,

@@ -248,6 +248,9 @@ impl EnvironmentSignin {
             email_otp: base.email_otp && email,
             magic_link: base.magic_link && email,
             profile: self.profile,
+            // TN-151
+            require_name: self.name_required(),
+            require_email: email && !self.has("phone"),
             ..base
         }
     }
@@ -314,8 +317,17 @@ mod tests {
     fn the_default_policy_keeps_the_default_flows() {
         assert_eq!(
             EnvironmentSignin::default().apply(AuthPolicy::DEFAULT),
-            AuthPolicy::DEFAULT
+            AuthPolicy {
+                require_email: true,
+                ..AuthPolicy::DEFAULT
+            },
+            "TN-151: an e-mail environment asks every account for a proven address"
         );
+        let phone = EnvironmentSignin {
+            methods: ["email", "phone"].map(String::from).into(),
+            ..EnvironmentSignin::default()
+        };
+        assert!(!phone.apply(AuthPolicy::DEFAULT).require_email);
     }
 
     // TN-132

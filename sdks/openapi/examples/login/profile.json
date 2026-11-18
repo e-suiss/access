@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "profile",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "profile",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "display_name",
+      "method": "profile",
+      "kind": "text",
+      "autocomplete": "name",
+      "required": true,
+      "max_length": 200,
+      "label": {
+        "id": "label.display_name",
+        "text": "Your name"
+      }
+    },
+    {
+      "type": "input",
+      "name": "email",
+      "method": "profile",
+      "kind": "text",
+      "autocomplete": "email",
+      "required": true,
+      "max_length": 320,
+      "label": {
+        "id": "label.email",
+        "text": "Email"
+      },
+      "value": "ada@example.org"
+    },
+    {
+      "type": "submit",
+      "method": "profile",
+      "label": {
+        "id": "action.continue",
+        "text": "Continue"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "profile.complete",
+      "text": "Finish setting up your account to continue.",
+      "severity": "info"
+    }
+  ]
+}

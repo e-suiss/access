@@ -423,6 +423,37 @@ impl TenantTx {
         Ok(n == 1)
     }
 
+    /// The sealed address the subject's newest live link gave without vouching for it (TN-151):
+    /// `(nonce, ciphertext)` under the account's contact key.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn unvouched_provider_address(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Option<([u8; 12], Vec<u8>)>, StoreError> {
+        let (tenant, environment) = scope(self)?;
+        let row = sqlx::query!(
+            r#"SELECT address_nonce AS "nonce!", address_ciphertext AS "ciphertext!"
+                 FROM access.identity_federated
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                  AND ended_ms IS NULL AND address_vouched = false
+                  AND address_nonce IS NOT NULL AND address_ciphertext IS NOT NULL
+                ORDER BY created_ms DESC, link_id DESC
+                LIMIT 1"#,
+            tenant,
+            environment,
+            Uuid::from_bytes(subject),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(row.and_then(|r| {
+            <[u8; 12]>::try_from(r.nonce)
+                .ok()
+                .map(|n| (n, r.ciphertext))
+        }))
+    }
+
     /// Records a fresh proof of control of the live link `link` (P-ID-9 `verified_at`).
     ///
     /// # Errors

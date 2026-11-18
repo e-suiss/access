@@ -5460,3 +5460,40 @@ async fn an_unknown_invitation_code_answers_in_the_size_class_of_a_valid_one() {
         "padding leaves the content as it is"
     );
 }
+
+// TN-151, TN-132
+#[tokio::test]
+async fn a_sign_in_whose_account_lacks_the_required_name_asks_for_it_before_completing() {
+    let e = env(
+        61,
+        "tn-151",
+        AuthPolicy {
+            require_name: true,
+            require_email: true,
+            ..AuthPolicy::DEFAULT
+        },
+    )
+    .await;
+    e.account("nia@example.com").await;
+    let mut b = e.browser("nia");
+    let step = b.sign_in("nia@example.com").await;
+    assert_eq!(step.status, StatusCode::OK);
+    assert_eq!(step.step(), "profile");
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    assert!(nodes.iter().any(|n| n["name"] == "display_name"));
+    assert!(
+        !nodes.iter().any(|n| n["name"] == "email"),
+        "an account with a proven address is not asked for one"
+    );
+    let empty = b
+        .submit(&step, "profile", json!({ "display_name": "  " }))
+        .await;
+    assert_ne!(empty.status, StatusCode::OK);
+    let done = b
+        .submit(&step, "profile", json!({ "display_name": "Nia" }))
+        .await;
+    assert_eq!(done.status, StatusCode::OK);
+    assert_eq!(done.step(), "complete");
+    let mut again = e.browser("nia-2");
+    assert_eq!(again.sign_in("nia@example.com").await.step(), "complete");
+}

@@ -163,6 +163,44 @@ impl SessionTx for PgTx {
         Ok(self.reveal(subject, &stored).await?.map(|v| (kind, v)))
     }
 
+    async fn has_name(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        let v = self.vault()?.clone();
+        Ok(
+            access_identity_account::app::vault::profile(&mut self.0, &v, subject)
+                .await?
+                .iter()
+                .any(|(k, n)| k == "name" && !n.trim().is_empty()),
+        )
+    }
+
+    async fn set_name(&mut self, subject: [u8; 16], name: &str) -> Result<(), SessionError> {
+        let v = self.vault()?.clone();
+        access_identity_account::app::vault::set_profile(&mut self.0, &v, subject, "name", name)
+            .await?;
+        Ok(())
+    }
+
+    async fn has_email(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .identifiers(subject)
+            .await?
+            .iter()
+            .any(|i| i.live && i.kind == "email"))
+    }
+
+    async fn provider_email(&mut self, subject: [u8; 16]) -> Result<Option<String>, SessionError> {
+        let Some((nonce, ciphertext)) = self.0.unvouched_provider_address(subject).await? else {
+            return Ok(None);
+        };
+        let stored = access_store::accounts::StoredValue::Sealed {
+            class: String::from(access_identity_account::app::vault::PiiClass::Contact.name()),
+            nonce,
+            ciphertext,
+        };
+        Ok(self.reveal(subject, &stored).await?)
+    }
+
     async fn notify<N: Notifier + Sync>(
         &mut self,
         notifier: &N,

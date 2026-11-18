@@ -106,9 +106,9 @@ impl BreachRanges for Corpus {
 }
 
 #[derive(Clone, Default)]
-struct Outbox;
+struct Outbox(Arc<Mutex<Vec<(&'static str, String)>>>);
 
-struct Recording;
+struct Recording(Outbox);
 
 impl Notifier for Recording {
     fn notify(
@@ -116,6 +116,13 @@ impl Notifier for Recording {
         _: &mut TenantTx,
         m: &Message,
     ) -> impl Future<Output = Result<EventId, NotifyError>> + Send {
+        let secret = match &m.body {
+            access_identity_account::notify::message::Body::Otp { code, .. } => {
+                code.expose().clone()
+            }
+            _ => String::new(),
+        };
+        self.0.0.lock().unwrap().push((m.body.kind(), secret));
         let checked = m.validate().map_err(NotifyError::from);
         std::future::ready(checked.map(|()| EventId([1; 16])))
     }
@@ -125,7 +132,7 @@ impl Messages for Outbox {
     type For<'a> = Recording;
 
     fn notifier<'a>(&'a self, _: &'a Environment<'a>) -> Recording {
-        Recording
+        Recording(self.clone())
     }
 }
 
@@ -403,6 +410,7 @@ struct Env {
     provider: Provider,
     hasher: Hasher,
     pos: AtomicU64,
+    outbox: Outbox,
 }
 
 fn secrets_dir() -> std::path::PathBuf {
@@ -443,6 +451,10 @@ static APPLE_KEY: std::sync::LazyLock<aws_lc_rs::pkcs8::Document> =
     });
 
 async fn env(seed: u8, slug: &str) -> Env {
+    env_with(seed, slug, AuthPolicy::DEFAULT).await
+}
+
+async fn env_with(seed: u8, slug: &str, auth: AuthPolicy) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
@@ -482,7 +494,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         },
         webauthn: EnvironmentPolicy::default(),
         attestation: std::sync::Arc::new(access_identity_webauthn::adapters::NoAttestationSources),
-        auth: AuthPolicy::DEFAULT,
+        auth,
         lifetimes: SessionPolicy::DEFAULT,
         signin: EnvironmentSignin::default(),
         hash: access_identity_account::domain::password::HashPolicy::Argon2(
@@ -490,6 +502,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         ),
     });
     let clock = TestClock(Arc::new(AtomicU64::new(T0)));
+    let outbox = Outbox::default();
     let entry = EnvironmentEntry {
         tenant,
         environment,
@@ -502,7 +515,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         db: db.app.clone(),
         products: db.reader.clone(),
         clock,
-        messages: Outbox,
+        messages: outbox.clone(),
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(config),
         redirect_to: "/account".into(),
@@ -543,6 +556,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         provider,
         hasher: Hasher::new(config),
         pos: AtomicU64::new(1),
+        outbox,
     }
 }
 
@@ -1762,4 +1776,107 @@ async fn the_first_step_offers_the_environments_active_providers() {
     assert_eq!(provider["href"], "/v1/login/social/google");
     assert_eq!(provider["label"]["id"], "action.continue_with");
     assert_eq!(provider["label"]["text"], "Continue with Google");
+}
+
+// TN-151
+#[tokio::test]
+async fn a_sign_in_that_lacks_a_name_or_a_proven_address_asks_for_them_and_completes_once_proven() {
+    let e = env_with(
+        0x4c,
+        "soc-p",
+        AuthPolicy {
+            require_name: true,
+            require_email: true,
+            ..AuthPolicy::DEFAULT
+        },
+    )
+    .await;
+    e.enable_preset("facebook", Some("fb-client")).await;
+    e.says("fb-9", Some(("cyd@example.org", true)));
+    let mut w = e.browser(1);
+    let back = w.social_at(&e, "facebook").await;
+    assert_eq!(back.status, StatusCode::SEE_OTHER, "{}", back.code());
+    let location = back.location();
+    let flow = location.split_once("flow=").unwrap().1.to_owned();
+    assert!(!w.jar.contains_key("__Host-access-session"));
+    let subject = e.link_at("https://www.facebook.com", "fb-9").await.unwrap();
+    assert_eq!(e.live_identifiers(subject).await, 0);
+
+    let step = w
+        .send("GET", &format!("/v1/login/flows/{flow}"), None)
+        .await;
+    assert_eq!(step.status, StatusCode::OK, "{}", step.code());
+    let ui = step.json();
+    assert_eq!(ui["step"], "profile");
+    let action = ui["action"].as_str().unwrap().to_owned();
+    let nodes = ui["nodes"].as_array().unwrap();
+    let email = nodes
+        .iter()
+        .find(|n| n["name"] == "email")
+        .expect("the address is asked");
+    assert_eq!(
+        email["value"], "cyd@example.org",
+        "the provider's address is offered"
+    );
+    assert!(
+        !nodes.iter().any(|n| n["name"] == "display_name"),
+        "only what is missing is asked: the provider gave the name"
+    );
+
+    let sent = w
+        .send(
+            "POST",
+            &action,
+            Some(json!({ "method": "profile", "fields": { "email": "cyd@example.org" } })),
+        )
+        .await;
+    assert_eq!(sent.status, StatusCode::OK, "{}", sent.code());
+    assert!(
+        sent.json()["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["method"] == "profile_code")
+    );
+    let code = e
+        .outbox
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|(k, c)| *k == "relay.message.otp.v1" && !c.is_empty())
+        .unwrap()
+        .1
+        .clone();
+
+    let wrong = w
+        .send(
+            "POST",
+            &action,
+            Some(json!({ "method": "profile_code", "fields": { "email_code": "00000000" } })),
+        )
+        .await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert!(!w.jar.contains_key("__Host-access-session"));
+
+    let done = w
+        .send(
+            "POST",
+            &action,
+            Some(json!({ "method": "profile_code", "fields": { "email_code": code } })),
+        )
+        .await;
+    assert_eq!(done.status, StatusCode::OK, "{}", done.code());
+    assert_eq!(done.json()["step"], "complete");
+    assert!(w.jar.contains_key("__Host-access-session"));
+    assert_eq!(e.live_identifiers(subject).await, 1);
+
+    let mut again = e.browser(2);
+    let second = again.social_at(&e, "facebook").await;
+    assert_eq!(
+        second.location(),
+        format!("https://{HOST}/account"),
+        "complete stays complete"
+    );
 }

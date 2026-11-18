@@ -193,6 +193,10 @@ impl Pending {
 }
 
 /// The flow state.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each choice and mark of one sign-in is one flag"
+)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FlowState {
     /// Purpose.
@@ -230,6 +234,9 @@ pub struct FlowState {
     /// sign-in, whatever the environment's policy (OP-159 m.49 (c), TN-144).
     #[serde(default)]
     pub second_factor: bool,
+    /// A code went to the address the profile step took (TN-151).
+    #[serde(default)]
+    pub address_sent: bool,
 }
 
 /// What SL2 notes in a sign-in flow (§12.2.4, TN-46): the password step's breach check and
@@ -300,6 +307,7 @@ impl FlowState {
             expires_ms: now_ms.saturating_add(FLOW_TTL_MS),
             risk: None,
             second_factor: false,
+            address_sent: false,
         }
     }
 

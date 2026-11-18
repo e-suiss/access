@@ -247,3 +247,21 @@ test("an authenticator app shows its key only after the address code", async ({ 
   await app.getByRole("button", { name: "Verify" }).click();
   await expect(app.getByTestId("totp-row")).toHaveCount(1);
 });
+
+// TN-151: an account without an address gives one at a fresh sign-in
+test("an account without an address is sent to give one before adding a passkey", async ({
+  page,
+  bff,
+}) => {
+  bff.noAddress = true;
+  await stubPasskeys(page);
+  await page.goto("/account/");
+  const passkeys = page.getByTestId("passkeys");
+  await passkeys.getByLabel("Name for a new passkey").fill("Work key");
+  await passkeys.getByRole("button", { name: "Create a passkey" }).click();
+  await expect(alerted(page)).toHaveText(
+    "Add an email address or phone number to your account first.",
+  );
+  await expect(page.getByTestId("add-address")).toHaveText("Add an address");
+  await expect(page.getByTestId("add-address")).toHaveAttribute("href", /\/login$/);
+});

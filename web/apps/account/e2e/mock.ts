@@ -80,6 +80,8 @@ export class AccountMock {
   freshNeeded = false;
   /** TN-147: a first strong method waits for a code at the account's address. */
   proofNeeded = false;
+  /** TN-151: the account has no address a proof code could go to. */
+  noAddress = false;
   private proved = false;
   /** S11: the server refuses removing the last way to sign in. */
   lastMethod = false;
@@ -532,6 +534,7 @@ export class AccountMock {
       this.proved = true;
       return reply(204);
     }
+    if (path === "/passkeys" && this.noAddress) return reply(409, { code: "proof-unavailable" });
     if (path === "/passkeys") {
       return reply(200, {
         proof: this.proofNeeded,
