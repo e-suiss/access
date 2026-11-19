@@ -25,6 +25,11 @@ const Preview = v.looseObject({
   client_id: v.string(),
   app: v.string(),
   claims: v.array(v.string()),
+  offline: v.optional(v.boolean(), false),
+  redirect_host: v.optional(v.nullable(v.string()), null),
+  account: v.optional(v.nullable(v.string()), null),
+  policy_uri: v.optional(v.nullable(v.pipe(v.string(), v.startsWith("https://"))), null),
+  tos_uri: v.optional(v.nullable(v.pipe(v.string(), v.startsWith("https://"))), null),
 });
 
 type Preview = Readonly<v.InferOutput<typeof Preview>>;
@@ -34,7 +39,6 @@ const Redirect = v.looseObject({ redirect_to: v.string() });
 type State =
   | { readonly phase: "loading" }
   | { readonly phase: "ready"; readonly preview: Preview }
-  | { readonly phase: "sign_in" }
   | { readonly phase: "declined" }
   | { readonly phase: "failed" };
 
@@ -56,6 +60,11 @@ function claimLabel(claim: string): string {
   return maybe(`claim.${claim}`) ?? claim;
 }
 
+/** TN-161: the sign-in that comes back to this request. */
+function signInHere(returnTo: string): string {
+  return `${LOGIN}?return_to=${encodeURIComponent(returnTo)}`;
+}
+
 export function Consent() {
   const returnTo = sameOrigin(new URL(window.location.href).searchParams.get("return_to"));
   const [state, setState] = useState<State>(
@@ -69,7 +78,8 @@ export function Consent() {
     void postJson("/v1/account/connected-apps/preview", { return_to: returnTo }, Preview).then(
       (a) => {
         if (a.ok) setState({ phase: "ready", preview: a.body });
-        else if (a.status === 401) setState({ phase: "sign_in" });
+        // TN-161
+        else if (a.status === 401) window.location.assign(signInHere(returnTo));
         else setState({ phase: "failed" });
       },
     );
@@ -129,8 +139,49 @@ export function Consent() {
                   {claimLabel(c)}
                 </li>
               ))}
+              {state.preview.offline && (
+                <li data-claim="offline_access">{t("scope.offline_access")}</li>
+              )}
             </ul>
+            {state.preview.redirect_host !== null && (
+              <p className={note} data-testid="redirect-host">
+                {t("consent.redirect_host", { host: state.preview.redirect_host })}
+              </p>
+            )}
+            {(state.preview.policy_uri !== null || state.preview.tos_uri !== null) && (
+              <p className={note} data-testid="documents">
+                {state.preview.policy_uri !== null && (
+                  <a
+                    className={inlineLink}
+                    href={state.preview.policy_uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t("consent.policy", { app })}
+                  </a>
+                )}
+                {state.preview.policy_uri !== null && state.preview.tos_uri !== null && " · "}
+                {state.preview.tos_uri !== null && (
+                  <a
+                    className={inlineLink}
+                    href={state.preview.tos_uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t("consent.tos", { app })}
+                  </a>
+                )}
+              </p>
+            )}
             <p className={note}>{t("page.consent_stop")}</p>
+            {state.preview.account !== null && returnTo !== null && (
+              <p data-testid="account" className="text-sm">
+                {t("consent.account", { account: state.preview.account })}{" "}
+                <a className={inlineLink} href={signInHere(returnTo)}>
+                  {t("consent.other_account")}
+                </a>
+              </p>
+            )}
             <div className="flex flex-col gap-2">
               <Button {...primary} disabled={busy} onClick={() => void share()}>
                 {t("action.share")}
@@ -144,13 +195,6 @@ export function Consent() {
         {state.phase === "declined" && (
           <p role="status" className={outcome} data-testid="declined">
             {t("page.access_denied")}
-          </p>
-        )}
-        {state.phase === "sign_in" && (
-          <p role="alert">
-            <a className={inlineLink} href={LOGIN}>
-              {t("action.sign_in")}
-            </a>
           </p>
         )}
         {state.phase === "failed" && (

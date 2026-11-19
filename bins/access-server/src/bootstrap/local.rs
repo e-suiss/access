@@ -587,6 +587,7 @@ where
             require_par: false,
             subject: access_identity_admin::domain::Subject::default(),
             third_party: false,
+            documents: access_identity_admin::domain::ClientDocuments::default(),
             platform: None,
         };
         let id = String::from(client.id.as_str());

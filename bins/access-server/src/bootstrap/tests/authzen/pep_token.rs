@@ -148,6 +148,7 @@ async fn tokens(label: &str) -> Tokens {
             platform: None,
             subject: Subject::default(),
             third_party: false,
+            documents: access_identity_admin::domain::ClientDocuments::default(),
         }),
     )
     .await

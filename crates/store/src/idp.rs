@@ -260,6 +260,10 @@ pub struct ClientRow {
     /// Whether the environment registered it as a third party, which asks before it receives identity
     /// claims (OP-153 m.3 (z)).
     pub third_party: bool,
+    /// The privacy policy its operator gave (TN-161).
+    pub policy_uri: Option<String>,
+    /// The terms of service its operator gave (TN-161).
+    pub tos_uri: Option<String>,
 }
 
 /// Inserts a client under `bound`.
@@ -277,9 +281,9 @@ pub async fn insert_client(
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
                 post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
                 service_key, suiss_event_receiver, require_pushed_authorization_requests,
-                subject_type, sector_identifier_uri, third_party)
+                subject_type, sector_identifier_uri, third_party, policy_uri, tos_uri)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                 $19, $20, $21)",
+                 $19, $20, $21, $22, $23)",
         tenant,
         environment,
         Uuid::from_bytes(c.client_uuid),
@@ -301,6 +305,8 @@ pub async fn insert_client(
         subject_type(c.public_sub),
         c.sector_identifier_uri,
         c.third_party,
+        c.policy_uri,
+        c.tos_uri,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -323,7 +329,7 @@ pub async fn update_client(
                 post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,
                 platform_product = $14, service_key = $15, suiss_event_receiver = $16,
                 require_pushed_authorization_requests = $17, subject_type = $18,
-                sector_identifier_uri = $19, third_party = $20
+                sector_identifier_uri = $19, third_party = $20, policy_uri = $21, tos_uri = $22
           WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         environment,
@@ -345,6 +351,8 @@ pub async fn update_client(
         subject_type(c.public_sub),
         c.sector_identifier_uri,
         c.third_party,
+        c.policy_uri,
+        c.tos_uri,
     )
     .execute(&mut *t.tx)
     .await?
@@ -393,7 +401,7 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
                 secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
                 platform_product, service_key, suiss_event_receiver,
                 require_pushed_authorization_requests, subject_type, sector_identifier_uri,
-                third_party
+                third_party, policy_uri, tos_uri
            FROM access.idp_clients WHERE tenant_id = $1 AND environment_id = $2 AND client_id = $3",
         tenant,
         environment,
@@ -424,6 +432,8 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
             public_sub: r.subject_type == "public",
             sector_identifier_uri: r.sector_identifier_uri,
             third_party: r.third_party,
+            policy_uri: r.policy_uri,
+            tos_uri: r.tos_uri,
         })
     })
     .transpose()

@@ -24,6 +24,8 @@ fn client() -> Client {
         public_sub: false,
         sector_identifier_uri: None,
         third_party: false,
+        policy_uri: None,
+        tos_uri: None,
     })
     .unwrap()
 }

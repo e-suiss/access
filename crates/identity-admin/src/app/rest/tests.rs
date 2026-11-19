@@ -558,6 +558,8 @@ fn a_client_view_has_no_secret() {
         public_sub: false,
         sector_identifier_uri: None,
         third_party: false,
+        policy_uri: None,
+        tos_uri: None,
     };
     let text = client_view(&row).to_string();
     assert!(

@@ -572,6 +572,34 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "consent-policy"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-tos"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-account"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-other_account"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "action-share"
 text_id = "action.share"
 surface = "login"

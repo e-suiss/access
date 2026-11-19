@@ -1473,6 +1473,8 @@ impl Env {
                     public_sub: false,
                     sector_identifier_uri: None,
                     third_party: true,
+                    policy_uri: Some(String::from("https://ledgerly.example/privacy")),
+                    tos_uri: None,
                 },
             )
             .await
@@ -1533,7 +1535,7 @@ impl Env {
 async fn a_person_shares_claims_with_a_third_party_and_stops_from_connected_apps() {
     let e = env(0x4a, "soc-j").await;
     e.account("ada@example.org").await;
-    let return_to = e.waiting_third_party("openid email").await;
+    let return_to = e.waiting_third_party("openid email offline_access").await;
     let mut anon = e.browser(9);
     let refused = anon
         .send(
@@ -1554,10 +1556,13 @@ async fn a_person_shares_claims_with_a_third_party_and_stops_from_connected_apps
         )
         .await;
     assert_eq!(preview.status, StatusCode::OK, "{}", preview.code());
+    // TN-161
     assert_eq!(
         preview.json(),
         json!({ "client_id": "cli_0000000000000000000000000g", "app": "Ledgerly",
-                "claims": ["email", "email_verified", "locale"] })
+                "claims": ["email", "email_verified", "locale"], "offline": true,
+                "redirect_host": "ledgerly.example", "account": "ada@example.org",
+                "policy_uri": "https://ledgerly.example/privacy", "tos_uri": null })
     );
     let bogus = w
         .send(

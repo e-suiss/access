@@ -561,3 +561,55 @@ test("an expired sign-out request says so and still signs this browser out", asy
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL(/\/login\/signed-out$/);
 });
+
+// TN-161: the account that shares, lasting access, where the answer goes and the app's own
+// documents, as its operator gave them
+test("Share names the account, lasting access, where the answer goes and the app's documents", async ({
+  page,
+  mock,
+}) => {
+  share(mock);
+  mock.json.set("POST /v1/account/connected-apps/preview", {
+    status: 200,
+    body: {
+      client_id: "cli_x",
+      app: "Photo Prints",
+      claims: ["email"],
+      offline: true,
+      redirect_host: "prints.example",
+      account: "ada@example.org",
+      policy_uri: "https://prints.example/privacy",
+      tos_uri: "https://prints.example/terms",
+    },
+  });
+  await page.goto(`/login?reason=share&return_to=${encodeURIComponent(returnTo)}`);
+  await expect(page.getByRole("listitem")).toHaveText([
+    "Your email address",
+    "Keep access while you're not using it",
+  ]);
+  await expect(page.getByTestId("redirect-host")).toHaveText(
+    "After you answer, you go to prints.example.",
+  );
+  const policy = page.getByRole("link", { name: "Photo Prints's privacy policy" });
+  await expect(policy).toHaveAttribute("href", "https://prints.example/privacy");
+  await expect(policy).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Photo Prints's terms of service" })).toBeVisible();
+  await expect(page.getByTestId("account")).toContainText("You're sharing as ada@example.org.");
+  await expect(page.getByRole("link", { name: "Use another account" })).toHaveAttribute(
+    "href",
+    /return_to=.*%2Fauthorize%3F/,
+  );
+});
+
+// TN-161: a person whose session ended signs in and comes back to the same request
+test("Share sends a signed-out person to sign in and back to the request", async ({
+  page,
+  mock,
+}) => {
+  mock.json.set("POST /v1/account/connected-apps/preview", {
+    status: 401,
+    body: { type: "urn:suiss:access:problem:session-required", status: 401 },
+  });
+  await page.goto(`/login?reason=share&return_to=${encodeURIComponent(returnTo)}`);
+  await expect(page).toHaveURL(/\/login\?return_to=.*%2Fauthorize%3Fclient_id%3Dcli_x/);
+});

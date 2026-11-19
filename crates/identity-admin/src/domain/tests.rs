@@ -21,6 +21,7 @@ fn client(uris: &[&str]) -> Client {
         subject: crate::domain::Subject::default(),
         platform: None,
         third_party: false,
+        documents: crate::domain::ClientDocuments::default(),
     }
 }
 
@@ -442,4 +443,15 @@ fn the_extension_policy_defaults_closed() {
     });
     assert_eq!(change.resource("shop").path, ["shop", "environment"]);
     assert_eq!(change.action().label(), "idp.environment.extension_policy");
+}
+
+// TN-161
+#[test]
+fn a_clients_privacy_policy_and_terms_are_https_only() {
+    let mut c = client(&["https://shop.example/cb"]);
+    c.documents.policy_uri = Some(String::from("https://shop.example/privacy"));
+    c.documents.tos_uri = Some(String::from("https://shop.example/terms"));
+    assert_eq!(c.check(&DeclaredTargets::default()), Ok(()));
+    c.documents.tos_uri = Some(String::from("http://shop.example/terms"));
+    assert!(c.check(&DeclaredTargets::default()).is_err());
 }

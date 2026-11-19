@@ -386,6 +386,8 @@ fn client(n: u8, id: &str, method: &str) -> ClientRow {
         public_sub: false,
         sector_identifier_uri: None,
         third_party: false,
+        policy_uri: None,
+        tos_uri: None,
     }
 }
 
@@ -462,6 +464,8 @@ async fn world() -> World {
             public_sub: false,
             sector_identifier_uri: None,
             third_party: id == SHARING,
+            policy_uri: None,
+            tos_uri: None,
             ..client(n, id, method)
         };
         if id == PRODUCT || id == THIRD {

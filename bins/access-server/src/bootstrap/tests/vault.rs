@@ -853,6 +853,7 @@ async fn register_client(
             platform: None,
             subject: access_identity_admin::domain::Subject::default(),
             third_party: false,
+            documents: access_identity_admin::domain::ClientDocuments::default(),
         }),
     )
     .await

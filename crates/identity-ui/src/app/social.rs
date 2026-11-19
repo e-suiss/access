@@ -108,6 +108,14 @@ fn redirect_uri(kit: &EnvironmentKit, provider: &str) -> String {
     format!("{}/v1/login/social/{provider}/callback", kit.issuer)
 }
 
+/// TN-161: the host of an `https`, loopback or private-scheme redirect, as the share page names it.
+fn url_host(uri: &str) -> Option<String> {
+    let rest = uri.split_once("://")?.1;
+    let host = rest.split(['/', '?', '#']).next()?;
+    let host = host.rsplit_once('@').map_or(host, |(_, h)| h);
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
+}
+
 /// TN-159: how long a provider identity waits for its account's sign-in (PD).
 const PENDING_LINK_TTL_MS: u64 = 600_000;
 
@@ -557,6 +565,29 @@ where
         )
     }
 
+    /// TN-161: the signed-in account as the share page names it: its e-mail address, else its
+    /// phone number.
+    async fn account_label(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Result<Option<String>, access_identity_account::AccountError> {
+        let t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+        let mut tx = access_identity_account::adapters::pg::PgTx(t, Some(kit.vault()));
+        let rows = tx.0.identifiers(subject).await?;
+        let mut out = None;
+        for kind in ["email", "phone"] {
+            if let Some(row) = rows.iter().find(|r| r.live && r.kind == kind) {
+                out = tx.reveal(subject, &row.stored).await?;
+                if out.is_some() {
+                    break;
+                }
+            }
+        }
+        tx.0.commit().await?;
+        Ok(out)
+    }
+
     /// TN-159: whether a provider identity waits for a sign-in in the browser of `device`.
     pub(crate) async fn link_waiting(&self, kit: &EnvironmentKit, device: &str) -> bool {
         let Some(device) = b64url_decode(device)
@@ -815,6 +846,7 @@ const NO_SHARE: Problem = Problem {
 struct Pending {
     client: access_store::idp::ClientRow,
     claims: Vec<String>,
+    offline: bool,
     authority: Option<access_identity_oauth::domain::request::AuthorityAsk>,
     redirect_uri: String,
     state: Option<String>,
@@ -885,6 +917,8 @@ where
         Ok(Pending {
             client,
             claims,
+            // TN-161
+            offline: req.scope.iter().any(|s| s == "offline_access"),
             authority: req.authority,
             redirect_uri: req.redirect_uri,
             state: req.state,
@@ -904,18 +938,29 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        if let Err(r) = self.fresh(&kit, b, None).await {
-            return r;
-        }
+        let subject = match self.fresh(&kit, b, None).await {
+            Ok((s, _)) => s,
+            Err(r) => return r,
+        };
         match self.pending(&kit, return_to).await {
-            Ok(p) => Reply::json(
-                200,
-                json!({
-                    "client_id": p.client.client_id,
-                    "app": p.client.display_name,
-                    "claims": p.claims,
-                }),
-            ),
+            Ok(p) => {
+                // TN-161
+                let account = self.account_label(&kit, subject).await.unwrap_or(None);
+                let host = url_host(&p.redirect_uri);
+                Reply::json(
+                    200,
+                    json!({
+                        "client_id": p.client.client_id,
+                        "app": p.client.display_name,
+                        "claims": p.claims,
+                        "offline": p.offline,
+                        "redirect_host": host,
+                        "account": account,
+                        "policy_uri": p.client.policy_uri,
+                        "tos_uri": p.client.tos_uri,
+                    }),
+                )
+            }
             Err(r) => r,
         }
     }

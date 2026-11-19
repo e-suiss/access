@@ -1841,6 +1841,8 @@ impl<D: Decider, G: Governance + Instances, K: EnvironmentKeys> Admin<'_, D, G, 
                 public_sub: c.subject.public,
                 sector_identifier_uri: c.subject.sector_identifier_uri.clone(),
                 third_party: c.third_party,
+                policy_uri: c.documents.policy_uri.clone(),
+                tos_uri: c.documents.tos_uri.clone(),
             },
             secret,
         ))

@@ -669,6 +669,7 @@ async fn new_client(w: &World) -> Client {
         require_par: false,
         subject: access_identity_admin::domain::Subject::default(),
         third_party: false,
+        documents: access_identity_admin::domain::ClientDocuments::default(),
         platform: None,
     }
 }
@@ -1095,6 +1096,7 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
         require_par: false,
         subject: access_identity_admin::domain::Subject::default(),
         third_party: false,
+        documents: access_identity_admin::domain::ClientDocuments::default(),
         platform: Some(Platform {
             product,
             service_key: public(seed.wrapping_add(1)),

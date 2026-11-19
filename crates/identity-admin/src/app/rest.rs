@@ -667,6 +667,8 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
             "public_sub_opt_in",
             "sector_identifier_uri",
             "third_party",
+            "policy_uri",
+            "tos_uri",
             "spiffe_id",
             "spiffe_bundle_endpoint",
             "agent",
@@ -712,6 +714,10 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
         platform: None,
         subject: subject_of(m)?,
         third_party: flag(m, "third_party")?,
+        documents: crate::domain::ClientDocuments {
+            policy_uri: opt_text(m, "policy_uri")?.map(String::from),
+            tos_uri: opt_text(m, "tos_uri")?.map(String::from),
+        },
     })
 }
 
@@ -2523,6 +2529,8 @@ pub fn client_view(c: &ClientRow) -> Json {
         "subject_type": if c.public_sub { "public" } else { "pairwise" },
         "public_sub_opt_in": c.public_sub,
         "third_party": c.third_party,
+        "policy_uri": c.policy_uri,
+        "tos_uri": c.tos_uri,
         "sector_identifier_uri": c.sector_identifier_uri,
         "status": if c.active { "active" } else { "retired" },
     })

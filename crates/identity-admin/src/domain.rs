@@ -1207,6 +1207,17 @@ pub struct Client {
     /// Whether it is a third party, asked about before it receives identity claims
     /// (OP-153 m.3 (z)).
     pub third_party: bool,
+    /// The privacy policy and terms of service the share page links, `https` (TN-161).
+    pub documents: ClientDocuments,
+}
+
+/// A client's privacy policy and terms of service, as its operator gave them (TN-161).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ClientDocuments {
+    /// The privacy policy.
+    pub policy_uri: Option<String>,
+    /// The terms of service.
+    pub tos_uri: Option<String>,
 }
 
 impl Client {
@@ -1230,6 +1241,14 @@ impl Client {
             .backchannel_logout_uri
             .as_deref()
             .is_some_and(|u| !https(u))
+        {
+            return Err(Invalid::RedirectUri);
+        }
+        // TN-161
+        if [&self.documents.policy_uri, &self.documents.tos_uri]
+            .into_iter()
+            .flatten()
+            .any(|u| !https(u) || u.len() > 2048 || u.chars().any(char::is_whitespace))
         {
             return Err(Invalid::RedirectUri);
         }
@@ -1351,6 +1370,13 @@ impl Client {
         // OP-153 m.3 (z)
         if self.third_party {
             m.push((Value::text("third_party"), Value::Bool(true)));
+        }
+        // TN-161
+        if let Some(u) = &self.documents.policy_uri {
+            m.push((Value::text("policy_uri"), Value::text(u)));
+        }
+        if let Some(u) = &self.documents.tos_uri {
+            m.push((Value::text("tos_uri"), Value::text(u)));
         }
         Value::Map(m)
     }
