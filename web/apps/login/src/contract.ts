@@ -32,7 +32,9 @@ export type FieldName =
   | "keep_signed_in"
   | "remember_device"
   | "sms_code"
-  | "phone";
+  | "phone"
+  | "national_id"
+  | "birthdate";
 /** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
 export type OptionName = "keep_signed_in" | "remember_device";
 export type Method =
@@ -97,7 +99,7 @@ export interface InputNode {
   readonly type: "input";
   readonly name: FieldName;
   readonly method: Method;
-  readonly kind: "text" | "password" | "code" | "hidden" | "tel";
+  readonly kind: "text" | "password" | "code" | "hidden" | "tel" | "date";
   readonly autocomplete: string;
   readonly required: boolean;
   readonly max_length: number;
@@ -234,6 +236,8 @@ const FIELD_NAMES = [
   "remember_device",
   "sms_code",
   "phone",
+  "national_id",
+  "birthdate",
 ] as const satisfies readonly FieldName[];
 const METHODS = [
   "identifier",
@@ -280,7 +284,7 @@ const InputS: v.GenericSchema<unknown, InputNode> = v.object({
   type: v.literal("input"),
   name: FieldNameS,
   method: MethodS,
-  kind: v.picklist(["text", "password", "code", "hidden", "tel"]),
+  kind: v.picklist(["text", "password", "code", "hidden", "tel", "date"]),
   autocomplete: v.string(),
   required: v.boolean(),
   max_length: v.number(),

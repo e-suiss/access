@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "profile",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "profile",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "national_id",
+      "method": "profile",
+      "kind": "text",
+      "autocomplete": "off",
+      "required": true,
+      "max_length": 32,
+      "label": {
+        "id": "label.national_id_tr_tckn",
+        "text": "Turkish identity number (T.C. Kimlik No)"
+      }
+    },
+    {
+      "type": "input",
+      "name": "birthdate",
+      "method": "profile",
+      "kind": "date",
+      "autocomplete": "bday",
+      "required": true,
+      "max_length": 10,
+      "label": {
+        "id": "label.birthdate",
+        "text": "Date of birth"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "profile",
+      "label": {
+        "id": "action.continue",
+        "text": "Continue"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "profile.complete",
+      "text": "Finish setting up your account to continue.",
+      "severity": "info"
+    }
+  ]
+}

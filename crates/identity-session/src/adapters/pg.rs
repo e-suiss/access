@@ -180,6 +180,46 @@ impl SessionTx for PgTx {
         Ok(())
     }
 
+    async fn has_national_id(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self.0.has_national_id(subject).await?)
+    }
+
+    async fn keep_national_id(
+        &mut self,
+        subject: [u8; 16],
+        scheme: &str,
+        number: &str,
+    ) -> Result<bool, SessionError> {
+        let v = self.vault()?.clone();
+        Ok(
+            access_identity_account::app::national_id::keep(self, &v, subject, (scheme, number))
+                .await?,
+        )
+    }
+
+    async fn has_birthdate(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        let v = self.vault()?.clone();
+        Ok(
+            access_identity_account::app::vault::profile(&mut self.0, &v, subject)
+                .await?
+                .iter()
+                .any(|(k, d)| k == "birthdate" && !d.is_empty()),
+        )
+    }
+
+    async fn set_birthdate(&mut self, subject: [u8; 16], date: &str) -> Result<(), SessionError> {
+        let v = self.vault()?.clone();
+        access_identity_account::app::vault::set_profile(
+            &mut self.0,
+            &v,
+            subject,
+            "birthdate",
+            date,
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn has_phone(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
         Ok(self
             .0

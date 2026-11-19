@@ -333,3 +333,20 @@ test("a sign-in that lacks a name or a proven address asks for them first", asyn
   const profile = mock.submissions.find((s) => JSON.stringify(s).includes('"profile"'));
   expect(JSON.stringify(profile)).toContain('"display_name":"Ada"');
 });
+
+// TN-158: the national identity number field is named by the environment's scheme, and the
+// birth date is a date field
+test("a sign-in that lacks a national identity number and a birth date asks for them", async ({
+  page,
+  mock,
+}) => {
+  mock.secondFactor = example("profile-identity");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByLabel("Turkish identity number (T.C. Kimlik No)")).toBeVisible();
+  await expect(page.getByLabel("Date of birth")).toHaveAttribute("type", "date");
+  await expect(page.getByLabel("Date of birth")).toHaveAttribute("autocomplete", "bday");
+});

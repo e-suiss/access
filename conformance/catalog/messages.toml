@@ -5548,6 +5548,94 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "label-national_id"
+text_id = "label.national_id"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_tr_tckn"
+text_id = "label.national_id_tr_tckn"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_us_ssn"
+text_id = "label.national_id_us_ssn"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_de_steuer_id"
+text_id = "label.national_id_de_steuer_id"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_gb_nino"
+text_id = "label.national_id_gb_nino"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_nl_bsn"
+text_id = "label.national_id_nl_bsn"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_az_fin"
+text_id = "label.national_id_az_fin"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-birthdate"
+text_id = "label.birthdate"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-facts_invalid"
+text_id = "profile.facts_invalid"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-too_young"
+text_id = "profile.too_young"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-facts_taken"
+text_id = "profile.facts_taken"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "second_factor-enroll"
 text_id = "second_factor.enroll"
 surface = "login"

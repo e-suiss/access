@@ -18,6 +18,7 @@ pub mod import;
 pub mod ldap;
 pub mod local;
 pub mod login;
+pub mod national_id;
 pub mod privacy;
 pub mod registration;
 pub mod sealing;

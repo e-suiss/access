@@ -147,7 +147,22 @@ fn examples() -> Vec<(&'static str, Ui)> {
             Ui::complete_profile(
                 flow(),
                 (true, true, false),
+                (None, false),
                 Some(String::from("ada@example.org")),
+                &POLICY,
+            ),
+        ),
+        // TN-158
+        (
+            "profile-identity",
+            Ui::complete_profile(
+                flow(),
+                (false, false, false),
+                (
+                    Some(access_identity_ui::domain::message::TextId::TcknLabel),
+                    true,
+                ),
+                None,
                 &POLICY,
             ),
         ),

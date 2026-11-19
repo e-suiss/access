@@ -26,7 +26,8 @@ pub const CONSOLE_IDLE_MAX_MS: u64 = 15 * 60_000;
 pub const CONSOLE_MIN_MS: u64 = 60_000;
 
 /// The profile fields an environment may require at registration (TN-132).
-pub const REQUIRED_FIELDS: [&str; 7] = [
+pub const REQUIRED_FIELDS: [&str; 8] = [
+    "national_id",
     "email",
     "phone_number",
     "username",
@@ -647,6 +648,10 @@ pub struct SigninPolicy {
     /// The account's secret is a six-digit PIN instead of a password (TN-157); only with the
     /// `phone` method and a required second factor.
     pub pin: bool,
+    /// The national identity number schemes the environment takes (TN-158).
+    pub national_id: BTreeSet<String>,
+    /// The youngest age that registers (TN-158).
+    pub min_age: Option<u8>,
 }
 
 impl SigninPolicy {
@@ -675,12 +680,28 @@ impl SigninPolicy {
         // TN-157
         let pin_ok =
             !self.pin || (self.methods.contains(&SigninMethod::Phone) && self.mfa_required);
+        // TN-158
+        let schemes_ok = self.national_id.len() <= 8
+            && self
+                .national_id
+                .iter()
+                .all(|s| access_identity_account::domain::national_id::Scheme::parse(s).is_some())
+            && (!self.required_fields.contains("national_id") || !self.national_id.is_empty());
+        let age_ok = self.min_age.is_none_or(|a| (1..=125).contains(&a));
+        let profile_ok = self.profile != AssuranceProfile::TrPayment
+            || (self.national_id.contains("tr-tckn")
+                && self.required_fields.contains("national_id")
+                && self.required_fields.contains("birthdate")
+                && self.min_age.is_some_and(|a| a >= 18));
         if fields_ok
             && lists_ok
             && methods_ok
             && keep_ok
             && country_ok
             && pin_ok
+            && schemes_ok
+            && age_ok
+            && profile_ok
             && self.attestation.check()
         {
             Ok(())
@@ -759,6 +780,16 @@ impl SigninPolicy {
         // TN-157
         if self.pin {
             m.push((Value::text("pin"), Value::Bool(true)));
+        }
+        // TN-158
+        if !self.national_id.is_empty() {
+            m.push((
+                Value::text("national_id"),
+                text_array(self.national_id.iter().map(String::as_str)),
+            ));
+        }
+        if let Some(a) = self.min_age {
+            m.push((Value::text("min_age"), Value::Unsigned(u64::from(a))));
         }
         Value::Map(m)
     }

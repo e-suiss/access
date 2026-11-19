@@ -47,11 +47,15 @@ pub enum FieldName {
     SmsCode,
     /// The phone number of a new account (TN-156).
     Phone,
+    /// A national identity number (TN-158).
+    NationalId,
+    /// A birth date, ISO `YYYY-MM-DD` (TN-158).
+    Birthdate,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -69,6 +73,8 @@ impl FieldName {
         Self::RememberDevice,
         Self::SmsCode,
         Self::Phone,
+        Self::NationalId,
+        Self::Birthdate,
     ];
 
     /// The wire name.
@@ -92,6 +98,8 @@ impl FieldName {
             Self::RememberDevice => "remember_device",
             Self::SmsCode => "sms_code",
             Self::Phone => "phone",
+            Self::NationalId => "national_id",
+            Self::Birthdate => "birthdate",
         }
     }
 
@@ -108,7 +116,7 @@ impl FieldName {
             Self::Identifier | Self::Email => 320,
             // OP-146 m.10 (c)
             Self::Password | Self::NewPassword => 128,
-            Self::TotpCode => 10,
+            Self::TotpCode | Self::Birthdate => 10,
             Self::RecoveryCode => 64,
             // CR-10
             Self::PasskeyCredential => 16_384,
@@ -117,7 +125,7 @@ impl FieldName {
             Self::DisplayName => 200,
             Self::Acknowledged | Self::KeepSignedIn | Self::RememberDevice => 8,
             // OP-153 m.3 (d)
-            Self::LinkCode | Self::Phone => 32,
+            Self::LinkCode | Self::Phone | Self::NationalId => 32,
             Self::BotToken => 4096,
         }
     }
@@ -264,6 +272,8 @@ pub enum InputKind {
     Hidden,
     /// A phone number (TN-156).
     Tel,
+    /// A calendar date (TN-158).
+    Date,
 }
 
 /// The HTML `autocomplete` token list of an input.
@@ -296,6 +306,9 @@ pub enum Autocomplete {
     /// A phone number (TN-156).
     #[serde(rename = "tel")]
     Tel,
+    /// A birth date (TN-158).
+    #[serde(rename = "bday")]
+    Bday,
 }
 
 /// WebAuthn options in their JSON form (`parseRequestOptionsFromJSON` /

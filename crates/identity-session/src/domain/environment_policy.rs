@@ -82,6 +82,10 @@ pub struct EnvironmentSignin {
     pub default_country: Option<access_identity_account::domain::phone::Country>,
     /// The account's secret is a six-digit PIN (TN-157).
     pub pin: bool,
+    /// The national identity number schemes the environment takes, by stored name (TN-158).
+    pub national_id: Vec<String>,
+    /// The youngest age that registers (TN-158).
+    pub min_age: Option<u8>,
 }
 
 impl Default for EnvironmentSignin {
@@ -104,6 +108,8 @@ impl Default for EnvironmentSignin {
             self_deletion: true,
             default_country: None,
             pin: false,
+            national_id: Vec::new(),
+            min_age: None,
         }
     }
 }
@@ -160,6 +166,7 @@ fn texts(v: Option<&Value>) -> Option<BTreeSet<String>> {
 impl EnvironmentSignin {
     /// The stored policy; `None` when the bytes are not the written form.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one decoder per written field")]
     pub fn decode(bytes: &[u8]) -> Option<Self> {
         let Ok(Value::Map(m)) = dcbor::decode(bytes, Limits::CEILING) else {
             return None;
@@ -198,10 +205,34 @@ impl EnvironmentSignin {
             Some(Value::Text(t)) => AssuranceProfile::parse(t)?,
             Some(_) => return None,
         };
-        let required_fields = match get("required_fields") {
+        let mut required_fields = match get("required_fields") {
             None => BTreeSet::from([String::from("email")]),
             v => texts(v)?,
         };
+        // TN-158
+        let mut national_id: Vec<String> = match get("national_id") {
+            None => Vec::new(),
+            v => texts(v)?.into_iter().collect(),
+        };
+        if national_id
+            .iter()
+            .any(|s| access_identity_account::domain::national_id::Scheme::parse(s).is_none())
+        {
+            return None;
+        }
+        let mut min_age = match get("min_age") {
+            None => None,
+            Some(Value::Unsigned(a)) => Some(u8::try_from(*a).ok()?),
+            Some(_) => return None,
+        };
+        if profile == AssuranceProfile::TrPayment {
+            if !national_id.iter().any(|s| s == "tr-tckn") {
+                national_id.insert(0, String::from("tr-tckn"));
+            }
+            required_fields.insert(String::from("national_id"));
+            required_fields.insert(String::from("birthdate"));
+            min_age = Some(min_age.unwrap_or(18).max(18));
+        }
         // OP-159 m.3 (ll)
         let attestation = attestation(get("attestation"))?;
         // OP-159 m.48 (c)
@@ -234,6 +265,8 @@ impl EnvironmentSignin {
             self_deletion,
             default_country,
             pin,
+            national_id,
+            min_age,
             social: true,
             methods,
             mfa_required,
@@ -273,6 +306,11 @@ impl EnvironmentSignin {
             require_email: email && !self.has("phone"),
             // TN-157
             pin: self.pin,
+            // TN-158
+            require_national_id: self.required_fields.contains("national_id")
+                && !self.national_id.is_empty(),
+            require_birthdate: self.required_fields.contains("birthdate"),
+            min_age: self.min_age,
             // TN-156
             phone: self.has("phone"),
             require_phone: self.has("phone") && !email && self.default_country.is_some(),

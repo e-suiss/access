@@ -525,14 +525,43 @@ fn shipped_presets() -> Option<&'static access_identity_federation::domain::pres
         .as_ref()
 }
 
+/// TN-158: the environment's national identity number scheme and the field's caption.
+pub(crate) fn national_scheme(
+    kit: &EnvironmentKit,
+) -> Option<(
+    String,
+    access_identity_account::domain::national_id::Scheme,
+    TextId,
+)> {
+    use access_identity_account::domain::national_id::Scheme;
+    let name = kit.signin.national_id.first()?;
+    let scheme = Scheme::parse(name)?;
+    let label = match scheme {
+        Scheme::TrTckn => TextId::TcknLabel,
+        Scheme::UsSsn => TextId::SsnLabel,
+        Scheme::DeSteuerId => TextId::SteuerIdLabel,
+        Scheme::GbNino => TextId::NinoLabel,
+        Scheme::NlBsn => TextId::BsnLabel,
+        Scheme::AzFin => TextId::FinLabel,
+        Scheme::Generic { .. } => TextId::NationalIdLabel,
+    };
+    Some((name.clone(), scheme, label))
+}
+
 /// TN-151
-fn profile_ui(flow: &FlowId, p: &ProfileStep, reqs: &[Requirement]) -> Ui {
+fn profile_ui(kit: &EnvironmentKit, flow: &FlowId, p: &ProfileStep, reqs: &[Requirement]) -> Ui {
     if p.sent {
         Ui::profile_code(flow.clone(), p.gap.phone, reqs)
     } else {
+        let national = p
+            .gap
+            .national_id
+            .then(|| national_scheme(kit).map(|(_, _, l)| l))
+            .flatten();
         Ui::complete_profile(
             flow.clone(),
             (p.gap.name, p.gap.email, p.gap.phone),
+            (national, p.gap.birthdate),
             p.offered.clone(),
             reqs,
         )
@@ -574,7 +603,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             kit.auth.passkey.then(|| blank.clone()),
             &reqs,
         ),
-        Current::Profile(p) => profile_ui(flow, p, &reqs),
+        Current::Profile(p) => profile_ui(kit, flow, p, &reqs),
         Current::Done(_) => return None,
     })
 }
@@ -1029,6 +1058,23 @@ where
                         field(FieldName::Email)
                     },
                 );
+                // TN-158
+                if !p.sent
+                    && (p.gap.national_id || p.gap.birthdate)
+                    && let Some(refused) = self
+                        .profile_facts(
+                            auth,
+                            kit,
+                            b,
+                            &fref,
+                            (field(FieldName::NationalId), field(FieldName::Birthdate)),
+                        )
+                        .await?
+                {
+                    let mut ui = profile_ui(kit, &flow, p, &policy(kit));
+                    ui.messages.push(Message::error(refused));
+                    return Ok(Reply::ui(400, ui));
+                }
                 return self
                     .profile_submit(auth, kit, b, (&flow, &fref), p, typed)
                     .await;
@@ -1044,7 +1090,7 @@ where
                     )
                     .await?
                 {
-                    let mut ui = profile_ui(&flow, p, &policy(kit));
+                    let mut ui = profile_ui(kit, &flow, p, &policy(kit));
                     ui.messages.push(Message::error(TextId::SecondFactorFailed));
                     return Ok(Reply::ui(401, ui));
                 }
@@ -1053,6 +1099,45 @@ where
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
+    }
+
+    /// The profile step's national identity number and birth date (TN-158): the number is
+    /// normalized by the environment's scheme first; the message of a refusal, if any.
+    async fn profile_facts<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        fref: &FlowRef<'_>,
+        (number, birthdate): (&str, &str),
+    ) -> Result<Option<TextId>, Reply> {
+        use access_identity_session::app::profile::FactsRefusal;
+        let normalized = match national_scheme(kit) {
+            Some((name, scheme, _)) if !number.trim().is_empty() => {
+                match scheme.normalize(number) {
+                    Some(n) => Some((name, n)),
+                    None => return Ok(Some(TextId::FactsInvalid)),
+                }
+            }
+            _ => None,
+        };
+        let date = (!birthdate.trim().is_empty()).then_some(birthdate);
+        let outcome = auth
+            .profile_facts(
+                fref,
+                normalized.as_ref().map(|(s, n)| (s.as_str(), n.as_str())),
+                date,
+                b.correlation,
+            )
+            .await
+            .map_err(|e| failed(&e))?
+            .map_err(|_| Reply::problem(FLOW_GONE))?;
+        Ok(match outcome {
+            Ok(_) => None,
+            Err(FactsRefusal::Invalid) => Some(TextId::FactsInvalid),
+            Err(FactsRefusal::TooYoung) => Some(TextId::TooYoung),
+            Err(FactsRefusal::Taken) => Some(TextId::FactsTaken),
+        })
     }
 
     /// The profile step's details (TN-151): the name is kept, a code goes to the address; on the
@@ -1346,7 +1431,7 @@ where
             ),
             Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
             // TN-151
-            Current::Profile(p) => profile_ui(flow, &p, &reqs),
+            Current::Profile(p) => profile_ui(kit, flow, &p, &reqs),
             // OP-159 m.48 (a)
             Current::Enroll(label) => {
                 match auth

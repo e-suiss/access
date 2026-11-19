@@ -48,6 +48,39 @@ pub enum TextId {
     /// Create a passkey.
     #[serde(rename = "action.passkey_create")]
     PasskeyCreate,
+    /// The national identity number field (TN-158).
+    #[serde(rename = "label.national_id")]
+    NationalIdLabel,
+    /// The national identity number field of `tr-tckn` (TN-158).
+    #[serde(rename = "label.national_id_tr_tckn")]
+    TcknLabel,
+    /// The national identity number field of `us-ssn` (TN-158).
+    #[serde(rename = "label.national_id_us_ssn")]
+    SsnLabel,
+    /// The national identity number field of `de-steuer-id` (TN-158).
+    #[serde(rename = "label.national_id_de_steuer_id")]
+    SteuerIdLabel,
+    /// The national identity number field of `gb-nino` (TN-158).
+    #[serde(rename = "label.national_id_gb_nino")]
+    NinoLabel,
+    /// The national identity number field of `nl-bsn` (TN-158).
+    #[serde(rename = "label.national_id_nl_bsn")]
+    BsnLabel,
+    /// The national identity number field of `az-fin` (TN-158).
+    #[serde(rename = "label.national_id_az_fin")]
+    FinLabel,
+    /// The birth date field (TN-158).
+    #[serde(rename = "label.birthdate")]
+    BirthdateLabel,
+    /// A number its scheme refuses, or no real birth date (TN-158).
+    #[serde(rename = "profile.facts_invalid")]
+    FactsInvalid,
+    /// Younger than the environment's youngest age (TN-158).
+    #[serde(rename = "profile.too_young")]
+    TooYoung,
+    /// A number another account holds (TN-158).
+    #[serde(rename = "profile.facts_taken")]
+    FactsTaken,
     /// The six-digit PIN a phone sign-up sets (TN-157).
     #[serde(rename = "label.pin")]
     PinLabel,
@@ -617,7 +650,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 200] = [
+    pub const ALL: [Self; 211] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -636,6 +669,17 @@ impl TextId {
         Self::ProfileComplete,
         Self::PhoneLabel,
         Self::SentCodeLabel,
+        Self::NationalIdLabel,
+        Self::TcknLabel,
+        Self::SsnLabel,
+        Self::SteuerIdLabel,
+        Self::NinoLabel,
+        Self::BsnLabel,
+        Self::FinLabel,
+        Self::BirthdateLabel,
+        Self::FactsInvalid,
+        Self::TooYoung,
+        Self::FactsTaken,
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
@@ -843,6 +887,17 @@ impl TextId {
             Self::ProfileComplete => "profile.complete",
             Self::PhoneLabel => "label.phone",
             Self::SentCodeLabel => "label.sent_code",
+            Self::NationalIdLabel => "label.national_id",
+            Self::TcknLabel => "label.national_id_tr_tckn",
+            Self::SsnLabel => "label.national_id_us_ssn",
+            Self::SteuerIdLabel => "label.national_id_de_steuer_id",
+            Self::NinoLabel => "label.national_id_gb_nino",
+            Self::BsnLabel => "label.national_id_nl_bsn",
+            Self::FinLabel => "label.national_id_az_fin",
+            Self::BirthdateLabel => "label.birthdate",
+            Self::FactsInvalid => "profile.facts_invalid",
+            Self::TooYoung => "profile.too_young",
+            Self::FactsTaken => "profile.facts_taken",
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
@@ -1054,6 +1109,17 @@ impl TextId {
             Self::ProfileComplete => "Finish setting up your account to continue.",
             Self::PhoneLabel => "Phone number",
             Self::SentCodeLabel => "The code we sent you",
+            Self::NationalIdLabel => "National identity number",
+            Self::TcknLabel => "Turkish identity number (T.C. Kimlik No)",
+            Self::SsnLabel => "Social Security number",
+            Self::SteuerIdLabel => "Tax identification number (Steuer-ID)",
+            Self::NinoLabel => "National Insurance number",
+            Self::BsnLabel => "Citizen service number (BSN)",
+            Self::FinLabel => "Personal identification code (FİN)",
+            Self::BirthdateLabel => "Date of birth",
+            Self::FactsInvalid => "Check the number and the date and try again.",
+            Self::TooYoung => "You don't meet the age requirement for this service.",
+            Self::FactsTaken => "You can't continue with these details. Contact support for help.",
             Self::PinLabel => "Choose a 6-digit PIN",
             Self::SecretRefused => {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."
@@ -1348,6 +1414,7 @@ impl TextId {
                 | Self::EnrollSecondFactor
                 | Self::ProfileComplete
                 | Self::ProfileAddressHint
+                | Self::FactsTaken
                 | Self::TotpSetup
                 | Self::PasskeyNotRegistered
                 | Self::PasskeyAttestationRefused

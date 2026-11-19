@@ -174,6 +174,30 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         subject: [u8; 16],
         name: &str,
     ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Whether the subject has a national identity number (TN-158).
+    fn has_national_id(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Keeps `number` of `scheme` as the subject's; `false` when another account holds it
+    /// (TN-158).
+    fn keep_national_id(
+        &mut self,
+        subject: [u8; 16],
+        scheme: &str,
+        number: &str,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Whether the subject has a birth date (TN-158).
+    fn has_birthdate(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Keeps the subject's birth date, ISO `YYYY-MM-DD` (TN-158).
+    fn set_birthdate(
+        &mut self,
+        subject: [u8; 16],
+        date: &str,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
     /// Whether the subject has a live phone number (TN-156).
     fn has_phone(
         &mut self,

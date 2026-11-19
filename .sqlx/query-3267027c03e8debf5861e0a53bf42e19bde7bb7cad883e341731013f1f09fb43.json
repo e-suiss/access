@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id FROM access.identity_national_ids\n              WHERE tenant_id = $1 AND environment_id = $2 AND scheme = $3\n                AND number_index = $4 AND released_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_national_ids",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3267027c03e8debf5861e0a53bf42e19bde7bb7cad883e341731013f1f09fb43"
+}

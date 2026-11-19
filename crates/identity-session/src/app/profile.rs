@@ -19,6 +19,10 @@ pub const NAME_MAX_CHARS: usize = 200;
 
 /// What an account still lacks (TN-151).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each thing an environment asks of every account is one flag"
+)]
 pub struct ProfileGap {
     /// A display name, which the environment requires.
     pub name: bool,
@@ -26,14 +30,29 @@ pub struct ProfileGap {
     pub email: bool,
     /// A proven phone number, which the environment signs in with (TN-156).
     pub phone: bool,
+    /// A national identity number, which the environment requires (TN-158).
+    pub national_id: bool,
+    /// A birth date, which the environment requires (TN-158).
+    pub birthdate: bool,
 }
 
 impl ProfileGap {
     /// Whether anything is missing.
     #[must_use]
     pub const fn any(self) -> bool {
-        self.name || self.email || self.phone
+        self.name || self.email || self.phone || self.national_id || self.birthdate
     }
+}
+
+/// Why the profile step's facts were refused (TN-158).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FactsRefusal {
+    /// Not a birth date, or a number the scheme refuses.
+    Invalid,
+    /// Younger than the environment's youngest age.
+    TooYoung,
+    /// Another account holds the number.
+    Taken,
 }
 
 /// What the profile step shows.
@@ -68,6 +87,8 @@ where
             name: self.policy.require_name && !tx.has_name(subject).await?,
             email: self.policy.require_email && !tx.has_email(subject).await?,
             phone: self.policy.require_phone && !tx.has_phone(subject).await?,
+            national_id: self.policy.require_national_id && !tx.has_national_id(subject).await?,
+            birthdate: self.policy.require_birthdate && !tx.has_birthdate(subject).await?,
         })
     }
 
@@ -170,6 +191,71 @@ where
         .await?;
         tx.commit().await?;
         Ok(Ok(ProfileGap { name: false, ..gap }))
+    }
+
+    /// Keeps the national identity number (already normalized by its scheme) and the birth date
+    /// the profile step took (TN-158); what the account still lacks after them.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn profile_facts(
+        &self,
+        flow: &FlowRef<'_>,
+        national_id: Option<(&str, &str)>,
+        birthdate: Option<&str>,
+        correlation: &str,
+    ) -> Result<Result<Result<ProfileGap, FactsRefusal>, Step>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let (_, subject, mut gap) = match self.profile_flow(&mut tx, flow, now).await? {
+            Ok(x) => x,
+            Err(step) => {
+                tx.commit().await?;
+                return Ok(Err(step));
+            }
+        };
+        if gap.birthdate {
+            let Some(raw) = birthdate else {
+                tx.commit().await?;
+                return Ok(Ok(Err(FactsRefusal::Invalid)));
+            };
+            let min = u32::from(self.policy.min_age.unwrap_or(0));
+            match access_identity_account::domain::birthdate::old_enough(raw, min, now) {
+                None => {
+                    tx.commit().await?;
+                    return Ok(Ok(Err(FactsRefusal::Invalid)));
+                }
+                Some(false) => {
+                    tx.commit().await?;
+                    return Ok(Ok(Err(FactsRefusal::TooYoung)));
+                }
+                Some(true) => {}
+            }
+            tx.set_birthdate(subject, raw.trim()).await?;
+            gap.birthdate = false;
+        }
+        if gap.national_id {
+            let Some((scheme, number)) = national_id else {
+                tx.commit().await?;
+                return Ok(Ok(Err(FactsRefusal::Invalid)));
+            };
+            if !tx.keep_national_id(subject, scheme, number).await? {
+                tx.commit().await?;
+                return Ok(Ok(Err(FactsRefusal::Taken)));
+            }
+            gap.national_id = false;
+        }
+        let target = self.external(subject)?;
+        audit(
+            &mut tx,
+            "account.profile_completed",
+            &target,
+            &target,
+            correlation,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(Ok(Ok(gap)))
     }
 
     /// Notes that a code went to the address the profile step took, or that the step takes an

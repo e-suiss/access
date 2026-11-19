@@ -573,10 +573,38 @@ impl Ui {
     pub fn complete_profile(
         flow: FlowId,
         (name, email, phone): (bool, bool, bool),
+        (national_id, birthdate): (Option<TextId>, bool),
         offered: Option<String>,
         policy: &[Requirement],
     ) -> Self {
         let mut nodes = Vec::new();
+        // TN-158
+        if let Some(label) = national_id {
+            nodes.push(Node::Input {
+                name: FieldName::NationalId,
+                method: Method::Profile,
+                kind: InputKind::Text,
+                autocomplete: Autocomplete::Off,
+                required: true,
+                max_length: FieldName::NationalId.max_length(),
+                label: label.into(),
+                value: None,
+                read_only: false,
+            });
+        }
+        if birthdate {
+            nodes.push(Node::Input {
+                name: FieldName::Birthdate,
+                method: Method::Profile,
+                kind: InputKind::Date,
+                autocomplete: Autocomplete::Bday,
+                required: true,
+                max_length: FieldName::Birthdate.max_length(),
+                label: TextId::BirthdateLabel.into(),
+                value: None,
+                read_only: false,
+            });
+        }
         if name {
             nodes.push(Node::Input {
                 name: FieldName::DisplayName,

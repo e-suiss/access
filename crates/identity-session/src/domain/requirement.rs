@@ -57,6 +57,12 @@ pub struct AuthPolicy {
     pub country: Option<access_identity_account::domain::phone::Country>,
     /// The account's secret is a six-digit PIN instead of a password (TN-157).
     pub pin: bool,
+    /// A sign-in completes only once the account has a national identity number (TN-158).
+    pub require_national_id: bool,
+    /// A sign-in completes only once the account has a birth date (TN-158).
+    pub require_birthdate: bool,
+    /// The youngest age that registers (TN-158).
+    pub min_age: Option<u8>,
 }
 
 impl AuthPolicy {
@@ -79,6 +85,9 @@ impl AuthPolicy {
         require_phone: false,
         country: None,
         pin: false,
+        require_national_id: false,
+        require_birthdate: false,
+        min_age: None,
     };
 }
 

@@ -38,6 +38,15 @@ export = false
 note = "Keyed blind index; outlives the DEK as the peppered tombstone (TN-76 m.5)."
 
 [[field]]
+column = "access.identity_national_ids.number_index"
+vault = "none"
+retention = "suppression"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "Keyed blind index of a national identity number: one account per number in an environment (TN-158)."
+
+[[field]]
 column = "access.identity_profile_fields.ciphertext"
 vault = "profile"
 retention = "profile"

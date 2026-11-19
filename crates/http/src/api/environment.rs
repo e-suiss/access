@@ -1720,6 +1720,8 @@ const SIGNIN_PATCH: &[&str] = &[
     "self_deletion",
     "default_country",
     "pin",
+    "national_id",
+    "min_age",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];

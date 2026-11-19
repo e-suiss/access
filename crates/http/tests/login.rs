@@ -5853,3 +5853,135 @@ async fn a_pin_environment_signs_up_with_a_six_digit_pin_and_asks_a_second_facto
     );
     assert_ne!(next.step(), "complete", "a PIN never signs in alone");
 }
+
+// TN-158
+#[tokio::test]
+async fn an_environment_that_requires_a_national_id_and_an_age_asks_for_them_once() {
+    let signin = EnvironmentSignin {
+        required_fields: ["email", "national_id", "birthdate"]
+            .map(String::from)
+            .into(),
+        national_id: vec![String::from("tr-tckn")],
+        min_age: Some(18),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    assert!(auth.require_national_id && auth.require_birthdate);
+    let e = env_full(69, "tn-158", auth, false, signin).await;
+    e.account("kemal@example.com").await;
+    e.account("other@example.com").await;
+    let mut b = e.browser("kemal");
+    let step = b.sign_in("kemal@example.com").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    let id = nodes.iter().find(|n| n["name"] == "national_id").unwrap();
+    assert_eq!(id["label"]["id"], "label.national_id_tr_tckn");
+    let date = nodes.iter().find(|n| n["name"] == "birthdate").unwrap();
+    assert_eq!(date["kind"], "date");
+    let bad = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id": "10000000147", "birthdate": "1990-05-04" }),
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    assert!(
+        bad.messages()
+            .contains(&String::from("profile.facts_invalid"))
+    );
+    let young = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id": "10000000146", "birthdate": "2015-05-04" }),
+        )
+        .await;
+    assert!(
+        young
+            .messages()
+            .contains(&String::from("profile.too_young"))
+    );
+    let done = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id": "100 000 001 46", "birthdate": "1990-05-04" }),
+        )
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let mut again = e.browser("kemal-2");
+    assert_eq!(again.sign_in("kemal@example.com").await.step(), "complete");
+
+    let mut o = e.browser("other");
+    let step = o.sign_in("other@example.com").await;
+    let taken = o
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id": "10000000146", "birthdate": "1985-01-02" }),
+        )
+        .await;
+    assert!(
+        taken
+            .messages()
+            .contains(&String::from("profile.facts_taken")),
+        "{}",
+        String::from_utf8_lossy(&taken.body)
+    );
+}
+
+// TN-158, TN-151
+#[tokio::test]
+async fn a_sign_up_goes_on_to_the_national_id_the_environment_requires() {
+    let signin = EnvironmentSignin {
+        required_fields: ["email", "national_id"].map(String::from).into(),
+        national_id: vec![String::from("us-ssn")],
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(70, "tn-158-up", auth, false, signin).await;
+    let mut b = e.browser("ssn");
+    let code_step = b.register("sam@example.com").await;
+    let code = e.outbox.last();
+    let next = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "display_name": "Sam" }),
+        )
+        .await;
+    assert_eq!(
+        next.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&next.body)
+    );
+    let field = next.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["name"] == "national_id")
+        .cloned()
+        .unwrap();
+    assert_eq!(field["label"]["id"], "label.national_id_us_ssn");
+    let done = b
+        .submit(&next, "profile", json!({ "national_id": "123-45-6789" }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+}

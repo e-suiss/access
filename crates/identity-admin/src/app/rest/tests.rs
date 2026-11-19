@@ -850,3 +850,23 @@ fn a_pin_needs_the_phone_method_and_a_required_second_factor() {
         "the country is written as ISO 3166-1 alpha-2"
     );
 }
+
+// TN-158
+#[test]
+fn the_tr_payment_profile_keeps_its_identity_rules_on() {
+    use crate::domain::environment::AssuranceProfile;
+    let mut p = default_signin();
+    p.profile = AssuranceProfile::TrPayment;
+    assert!(p.check().is_err(), "no national id, birth date or age");
+    p.national_id.insert(String::from("tr-tckn"));
+    p.required_fields.insert(String::from("national_id"));
+    p.required_fields.insert(String::from("birthdate"));
+    p.min_age = Some(16);
+    assert!(p.check().is_err(), "the age is never below 18");
+    p.min_age = Some(18);
+    assert!(p.check().is_ok());
+    p.national_id.insert(String::from("generic:6-12:digits"));
+    assert!(p.check().is_ok());
+    p.national_id.insert(String::from("generic:0-12:digits"));
+    assert!(p.check().is_err(), "a scheme that does not parse");
+}

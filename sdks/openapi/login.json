@@ -315,7 +315,8 @@
                   "password",
                   "code",
                   "hidden",
-                  "tel"
+                  "tel",
+                  "date"
                 ]
               },
               "autocomplete": {
@@ -329,7 +330,8 @@
                   "new-password",
                   "email",
                   "name",
-                  "tel"
+                  "tel",
+                  "bday"
                 ]
               },
               "required": {
@@ -602,7 +604,9 @@
           "keep_signed_in",
           "remember_device",
           "sms_code",
-          "phone"
+          "phone",
+          "national_id",
+          "birthdate"
         ]
       },
       "Method": {
@@ -654,6 +658,17 @@
           "profile.complete",
           "label.phone",
           "label.sent_code",
+          "label.national_id",
+          "label.national_id_tr_tckn",
+          "label.national_id_us_ssn",
+          "label.national_id_de_steuer_id",
+          "label.national_id_gb_nino",
+          "label.national_id_nl_bsn",
+          "label.national_id_az_fin",
+          "label.birthdate",
+          "profile.facts_invalid",
+          "profile.too_young",
+          "profile.facts_taken",
           "label.pin",
           "registration.secret_refused",
           "label.identifier_phone",

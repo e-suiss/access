@@ -913,6 +913,77 @@ impl TenantTx {
         Ok(n == 1)
     }
 
+    /// Records the subject's national identity number by its blind index (TN-158); `false`
+    /// when another account, or this one, holds a number of the scheme already.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_national_id(
+        &mut self,
+        subject: [u8; 16],
+        scheme: &str,
+        number_index: &[u8; 32],
+    ) -> Result<bool, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        let n = sqlx::query!(
+            "INSERT INTO access.identity_national_ids
+                    (tenant_id, environment_id, subject_id, scheme, number_index)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT DO NOTHING",
+            tenant,
+            environment,
+            uuid(subject),
+            scheme,
+            number_index.as_slice(),
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// The account that holds the national identity number with `number_index` (TN-158).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn national_id_holder(
+        &mut self,
+        scheme: &str,
+        number_index: &[u8; 32],
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        let row = sqlx::query_scalar!(
+            "SELECT subject_id FROM access.identity_national_ids
+              WHERE tenant_id = $1 AND environment_id = $2 AND scheme = $3
+                AND number_index = $4 AND released_at IS NULL",
+            tenant,
+            environment,
+            scheme,
+            number_index.as_slice(),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(row.map(|u| *u.as_bytes()))
+    }
+
+    /// Whether the subject holds a national identity number (TN-158).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn has_national_id(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM access.identity_national_ids
+                WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                  AND released_at IS NULL) AS "e!""#,
+            tenant,
+            environment,
+            uuid(subject),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// Revokes a credential unless the subject could no longer sign in without it (TN-68,
     /// TN-148): a password or passkey goes only while another password, passkey or live linked
     /// sign-in (OP-153 m.15 (g)) stays, or a proven mailbox when `mailbox_signs_in`; a second

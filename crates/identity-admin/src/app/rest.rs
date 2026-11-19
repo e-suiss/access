@@ -1675,6 +1675,8 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "self_deletion",
                     "default_country",
                     "pin",
+                    "national_id",
+                    "min_age",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1728,6 +1730,19 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     None => false,
                     Some(Json::Bool(b)) => *b,
                     Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                // TN-158
+                national_id: match m.get("national_id") {
+                    None | Some(Json::Null) => BTreeSet::new(),
+                    Some(_) => set("national_id")?,
+                },
+                min_age: match m.get("min_age") {
+                    None | Some(Json::Null) => None,
+                    Some(v) => Some(
+                        v.as_u64()
+                            .and_then(|a| u8::try_from(a).ok())
+                            .ok_or(Invalid::SigninPolicy)?,
+                    ),
                 },
                 // OP-156 m.3 (e)
                 profile: match m.get("profile") {
@@ -2734,6 +2749,8 @@ pub fn default_signin() -> SigninPolicy {
         self_deletion: true,
         default_country: None,
         pin: false,
+        national_id: BTreeSet::new(),
+        min_age: None,
     }
 }
 

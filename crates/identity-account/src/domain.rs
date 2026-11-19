@@ -2,6 +2,7 @@
 
 pub mod approver;
 pub mod binding_offer;
+pub mod birthdate;
 pub mod bot;
 pub mod breach;
 pub mod claim_classes;
@@ -14,6 +15,7 @@ pub mod identifier;
 pub mod invitation;
 pub mod legacy;
 pub mod login;
+pub mod national_id;
 pub mod password;
 pub mod phone;
 pub mod recovery_policy;

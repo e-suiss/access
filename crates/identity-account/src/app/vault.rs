@@ -324,13 +324,15 @@ pub async fn seal_plaintext(
 }
 
 /// A profile field the vault keeps (OP-153 m.3 (aa), (q)).
-pub const PROFILE_FIELDS: [&str; 6] = [
+pub const PROFILE_FIELDS: [&str; 8] = [
     "name",
     "given_name",
     "family_name",
     "birthdate",
     "locale",
     "zoneinfo",
+    "national_id",
+    "national_id_scheme",
 ];
 
 /// Longest profile value, in bytes.

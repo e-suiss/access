@@ -23,6 +23,7 @@ use access_identity_oauth::ports::EnvironmentEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
 use access_identity_session::domain::flow::{device_digest, handle_digest};
+use access_identity_session::domain::requirement::Requirement as Needed;
 use access_identity_session::domain::session::{FLOW_COOKIE, set_cookie};
 use access_identity_session::ports::Clock;
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -553,6 +554,23 @@ where
                         Reply::ui(200, Ui::complete(next, self.done_to(&kit), &reqs))
                             .cookie(s.set_cookie)
                             .cookie(s.marker_cookie)
+                    }
+                    // TN-151, TN-158, OP-159 m.48 (a)
+                    Outcome::Continue {
+                        ref needs,
+                        enrolled: Some(_),
+                    } if needs.contains(&Needed::CompleteProfile)
+                        || needs.contains(&Needed::EnrollSecondFactor) =>
+                    {
+                        let fref = access_identity_session::app::FlowRef {
+                            handle: &opened.handle,
+                            device: b.flow.unwrap_or_default(),
+                        };
+                        let shown = async {
+                            let current = self.current(&auth, &kit, b, &fref).await?;
+                            self.render(&auth, &kit, &next, &fref, current, 200).await
+                        };
+                        shown.await.unwrap_or_else(|r| r)
                     }
                     Outcome::Continue {
                         enrolled: Some(e), ..

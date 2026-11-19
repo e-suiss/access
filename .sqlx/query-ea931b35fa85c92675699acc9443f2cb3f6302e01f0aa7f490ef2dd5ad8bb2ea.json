@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_national_ids\n                    (tenant_id, environment_id, subject_id, scheme, number_index)\n             VALUES ($1, $2, $3, $4, $5)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea931b35fa85c92675699acc9443f2cb3f6302e01f0aa7f490ef2dd5ad8bb2ea"
+}
