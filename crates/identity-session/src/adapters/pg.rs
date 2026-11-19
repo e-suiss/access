@@ -180,6 +180,27 @@ impl SessionTx for PgTx {
         Ok(())
     }
 
+    async fn secret_facts(&mut self, subject: [u8; 16]) -> Result<Vec<String>, SessionError> {
+        let v = self.vault()?.clone();
+        let mut out = Vec::new();
+        for row in self.0.identifiers(subject).await? {
+            if row.live
+                && row.kind == "phone"
+                && let Some(p) = self.reveal(subject, &row.stored).await?
+            {
+                out.push(p);
+            }
+        }
+        for (k, value) in
+            access_identity_account::app::vault::profile(&mut self.0, &v, subject).await?
+        {
+            if k == "birthdate" || k == "national_id" {
+                out.push(value);
+            }
+        }
+        Ok(out)
+    }
+
     async fn has_national_id(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
         Ok(self.0.has_national_id(subject).await?)
     }

@@ -495,7 +495,15 @@ where
             None
         } else {
             let raw = field(FieldName::NewPassword).unwrap_or_default();
-            match auth.check_secret(&raw).await {
+            // TN-158 (7)
+            let facts: Vec<String> = registrar
+                .pending_address(&flow_hash, &device_hash, started_ms)
+                .await
+                .ok()
+                .flatten()
+                .into_iter()
+                .collect();
+            match auth.check_secret_apart(&raw, &facts).await {
                 Ok(Ok(p)) => Some(p),
                 Ok(Err(_)) => {
                     let mut u = code_step(

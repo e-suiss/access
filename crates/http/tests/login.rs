@@ -5827,6 +5827,19 @@ async fn a_pin_environment_signs_up_with_a_six_digit_pin_and_asks_a_second_facto
         None,
         "a weak PIN spends no code"
     );
+    // TN-158 (7)
+    let own = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "new_password": "777665" }),
+        )
+        .await;
+    assert_eq!(
+        own.messages(),
+        vec!["registration.secret_refused"],
+        "a PIN inside the number"
+    );
     let done = b
         .submit(
             &code_step,
@@ -5984,4 +5997,31 @@ async fn a_sign_up_goes_on_to_the_national_id_the_environment_requires() {
         "{}",
         String::from_utf8_lossy(&done.body)
     );
+}
+
+// TN-158 (6)
+#[tokio::test]
+async fn a_phone_environment_that_requires_an_email_too_asks_for_it() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        email_required: true,
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    assert!(auth.require_phone && auth.require_email);
+    let e = env_full(71, "tn-158-em", auth, false, signin).await;
+    e.account_as(Identifier::new(IdentifierKind::Phone, "+905320001122").unwrap())
+        .await;
+    let mut b = e.browser("em");
+    let step = b.sign_in("0532 000 11 22").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    assert!(nodes.iter().any(|n| n["name"] == "email"));
+    assert!(!nodes.iter().any(|n| n["name"] == "phone"));
 }

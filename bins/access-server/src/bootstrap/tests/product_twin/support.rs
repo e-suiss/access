@@ -2336,6 +2336,7 @@ async fn a_person_deletes_their_own_account_with_their_devices_signature() {
             pin: false,
             national_id: std::collections::BTreeSet::new(),
             min_age: None,
+            email_required: false,
             ..access_identity_admin::app::rest::default_signin()
         }),
     )

@@ -86,6 +86,8 @@ pub struct EnvironmentSignin {
     pub national_id: Vec<String>,
     /// The youngest age that registers (TN-158).
     pub min_age: Option<u8>,
+    /// A phone environment asks every account for a proven e-mail address too (TN-158 (6)).
+    pub email_required: bool,
 }
 
 impl Default for EnvironmentSignin {
@@ -110,6 +112,7 @@ impl Default for EnvironmentSignin {
             pin: false,
             national_id: Vec::new(),
             min_age: None,
+            email_required: false,
         }
     }
 }
@@ -259,6 +262,12 @@ impl EnvironmentSignin {
             Some(Value::Bool(b)) => *b && mfa_required,
             Some(_) => return None,
         };
+        // TN-158 (6)
+        let email_required = match get("email_required") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
             registration,
@@ -267,6 +276,7 @@ impl EnvironmentSignin {
             pin,
             national_id,
             min_age,
+            email_required,
             social: true,
             methods,
             mfa_required,
@@ -303,7 +313,8 @@ impl EnvironmentSignin {
             profile: self.profile,
             // TN-151
             require_name: self.name_required(),
-            require_email: email && !self.has("phone"),
+            require_email: (email && !self.has("phone"))
+                || (self.has("phone") && self.email_required),
             // TN-157
             pin: self.pin,
             // TN-158

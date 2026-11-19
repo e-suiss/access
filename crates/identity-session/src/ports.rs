@@ -174,6 +174,11 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         subject: [u8; 16],
         name: &str,
     ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The account's own numbers and birth date a PIN may not repeat (TN-158 (7)).
+    fn secret_facts(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<String>, SessionError>> + Send;
     /// Whether the subject has a national identity number (TN-158).
     fn has_national_id(
         &mut self,

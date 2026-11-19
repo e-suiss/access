@@ -652,6 +652,8 @@ pub struct SigninPolicy {
     pub national_id: BTreeSet<String>,
     /// The youngest age that registers (TN-158).
     pub min_age: Option<u8>,
+    /// A phone environment asks every account for a proven e-mail address too (TN-158 (6)).
+    pub email_required: bool,
 }
 
 impl SigninPolicy {
@@ -688,6 +690,7 @@ impl SigninPolicy {
                 .all(|s| access_identity_account::domain::national_id::Scheme::parse(s).is_some())
             && (!self.required_fields.contains("national_id") || !self.national_id.is_empty());
         let age_ok = self.min_age.is_none_or(|a| (1..=125).contains(&a));
+        let email_required_ok = !self.email_required || self.methods.contains(&SigninMethod::Phone);
         let profile_ok = self.profile != AssuranceProfile::TrPayment
             || (self.national_id.contains("tr-tckn")
                 && self.required_fields.contains("national_id")
@@ -701,6 +704,7 @@ impl SigninPolicy {
             && pin_ok
             && schemes_ok
             && age_ok
+            && email_required_ok
             && profile_ok
             && self.attestation.check()
         {
@@ -790,6 +794,9 @@ impl SigninPolicy {
         }
         if let Some(a) = self.min_age {
             m.push((Value::text("min_age"), Value::Unsigned(u64::from(a))));
+        }
+        if self.email_required {
+            m.push((Value::text("email_required"), Value::Bool(true)));
         }
         Value::Map(m)
     }

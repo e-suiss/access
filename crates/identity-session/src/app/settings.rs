@@ -116,8 +116,24 @@ where
         &self,
         raw: &str,
     ) -> Result<Result<Password, MethodRefusal>, SessionError> {
+        self.check_secret_apart(raw, &[]).await
+    }
+
+    /// [`Self::check_secret`] for a PIN that may not repeat the account's own numbers or birth
+    /// date in `facts` (TN-158 (7)).
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn check_secret_apart(
+        &self,
+        raw: &str,
+        facts: &[String],
+    ) -> Result<Result<Password, MethodRefusal>, SessionError> {
         if self.policy.pin {
-            return Ok(Password::pin(raw).map_err(|_| MethodRefusal::PasswordRefused));
+            let facts: Vec<&str> = facts.iter().map(String::as_str).collect();
+            return Ok(
+                Password::pin_apart_from(raw, &facts).map_err(|_| MethodRefusal::PasswordRefused)
+            );
         }
         let Ok(password) = Password::new(raw) else {
             return Ok(Err(MethodRefusal::PasswordRefused));
@@ -165,7 +181,13 @@ where
         raw: &str,
         correlation: &str,
     ) -> Result<Result<(), MethodRefusal>, SessionError> {
-        let password = match self.check_secret(raw).await? {
+        let facts = {
+            let mut tx = self.begin().await?;
+            let f = tx.secret_facts(subject).await?;
+            tx.commit().await?;
+            f
+        };
+        let password = match self.check_secret_apart(raw, &facts).await? {
             Ok(p) => p,
             Err(r) => return Ok(Err(r)),
         };

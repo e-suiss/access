@@ -1677,6 +1677,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "pin",
                     "national_id",
                     "min_age",
+                    "email_required",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1735,6 +1736,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 national_id: match m.get("national_id") {
                     None | Some(Json::Null) => BTreeSet::new(),
                     Some(_) => set("national_id")?,
+                },
+                email_required: match m.get("email_required") {
+                    None => false,
+                    Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err(Invalid::SigninPolicy),
                 },
                 min_age: match m.get("min_age") {
                     None | Some(Json::Null) => None,
@@ -2751,6 +2757,7 @@ pub fn default_signin() -> SigninPolicy {
         pin: false,
         national_id: BTreeSet::new(),
         min_age: None,
+        email_required: false,
     }
 }
 

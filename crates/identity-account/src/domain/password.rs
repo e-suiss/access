@@ -92,6 +92,26 @@ impl Password {
         Ok(Self(nfkc(raw.trim())))
     }
 
+    /// [`Self::pin`], and none found in the account's own facts (TN-158 (7)): a PIN that is part
+    /// of a phone or identity number in `facts`, or a birth date in `facts` (`YYYY-MM-DD`)
+    /// written as `DDMMYY`, `YYMMDD` or `MMDDYY`.
+    ///
+    /// # Errors
+    /// [`PasswordRejected::WeakPin`].
+    pub fn pin_apart_from(raw: &str, facts: &[&str]) -> Result<Self, PasswordRejected> {
+        let pin = Self::pin(raw)?;
+        let typed = raw.trim();
+        let found = facts.iter().any(|f| {
+            let digits: String = f.chars().filter(char::is_ascii_digit).collect();
+            let date = date_forms(f).iter().any(|d| d == typed);
+            date || digits.contains(typed)
+        });
+        if found {
+            return Err(PasswordRejected::WeakPin);
+        }
+        Ok(pin)
+    }
+
     /// A presented password at login, without the policy: a stored password may predate it.
     /// `None` when the input is too long to be any stored password.
     #[must_use]
@@ -108,6 +128,27 @@ impl Password {
     pub fn bytes(&self) -> &[u8] {
         self.0.expose().as_bytes()
     }
+}
+
+/// `DDMMYY`, `YYMMDD` and `MMDDYY` of an ISO date; nothing for anything else.
+fn date_forms(fact: &str) -> Vec<String> {
+    let mut parts = fact.trim().split('-');
+    let (Some(y), Some(m), Some(d), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Vec::new();
+    };
+    let Some(yy) = y.get(2..4).filter(|_| y.len() == 4) else {
+        return Vec::new();
+    };
+    if m.len() != 2 || d.len() != 2 {
+        return Vec::new();
+    }
+    vec![
+        format!("{d}{m}{yy}"),
+        format!("{yy}{m}{d}"),
+        format!("{m}{d}{yy}"),
+    ]
 }
 
 /// The digits of a PIN: exactly [`PIN_DIGITS`] ASCII digits (TN-157).

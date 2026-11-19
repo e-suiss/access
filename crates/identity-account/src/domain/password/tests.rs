@@ -179,3 +179,17 @@ fn a_pin_is_six_digits_and_none_of_the_easily_guessed() {
         );
     }
 }
+
+// TN-158 (7)
+#[test]
+fn a_pin_is_none_of_the_accounts_own_numbers_or_its_birth_date() {
+    let facts = ["+905324829157", "1990-05-04", "10000000146"];
+    assert!(Password::pin_apart_from("730264", &facts).is_ok());
+    for bad in ["482915", "040590", "900504", "050490", "000001"] {
+        assert_eq!(
+            Password::pin_apart_from(bad, &facts).err(),
+            Some(PasswordRejected::WeakPin),
+            "{bad}"
+        );
+    }
+}

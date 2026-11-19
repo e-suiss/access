@@ -560,7 +560,7 @@ fn profile_ui(kit: &EnvironmentKit, flow: &FlowId, p: &ProfileStep, reqs: &[Requ
             .flatten();
         Ui::complete_profile(
             flow.clone(),
-            (p.gap.name, p.gap.email, p.gap.phone),
+            (p.gap.name, p.gap.email && !p.gap.phone, p.gap.phone),
             (national, p.gap.birthdate),
             p.offered.clone(),
             reqs,

@@ -1722,6 +1722,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "pin",
     "national_id",
     "min_age",
+    "email_required",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];
