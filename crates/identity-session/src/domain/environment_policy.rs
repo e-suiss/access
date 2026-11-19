@@ -80,6 +80,8 @@ pub struct EnvironmentSignin {
     pub self_deletion: bool,
     /// The country a phone number typed the national way belongs to (TN-156).
     pub default_country: Option<access_identity_account::domain::phone::Country>,
+    /// The account's secret is a six-digit PIN (TN-157).
+    pub pin: bool,
 }
 
 impl Default for EnvironmentSignin {
@@ -101,6 +103,7 @@ impl Default for EnvironmentSignin {
             social: true,
             self_deletion: true,
             default_country: None,
+            pin: false,
         }
     }
 }
@@ -219,11 +222,18 @@ impl EnvironmentSignin {
             Some(Value::Text(t)) => Some(access_identity_account::domain::phone::country(t)?),
             Some(_) => return None,
         };
+        // TN-157
+        let pin = match get("pin") {
+            None => false,
+            Some(Value::Bool(b)) => *b && mfa_required,
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
             registration,
             self_deletion,
             default_country,
+            pin,
             social: true,
             methods,
             mfa_required,
@@ -261,6 +271,8 @@ impl EnvironmentSignin {
             // TN-151
             require_name: self.name_required(),
             require_email: email && !self.has("phone"),
+            // TN-157
+            pin: self.pin,
             // TN-156
             phone: self.has("phone"),
             require_phone: self.has("phone") && !email && self.default_country.is_some(),

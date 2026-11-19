@@ -55,6 +55,8 @@ pub struct AuthPolicy {
     pub require_phone: bool,
     /// The country a phone number typed the national way belongs to (TN-156).
     pub country: Option<access_identity_account::domain::phone::Country>,
+    /// The account's secret is a six-digit PIN instead of a password (TN-157).
+    pub pin: bool,
 }
 
 impl AuthPolicy {
@@ -76,6 +78,7 @@ impl AuthPolicy {
         phone: false,
         require_phone: false,
         country: None,
+        pin: false,
     };
 }
 

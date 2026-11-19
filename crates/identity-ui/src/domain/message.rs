@@ -48,6 +48,12 @@ pub enum TextId {
     /// Create a passkey.
     #[serde(rename = "action.passkey_create")]
     PasskeyCreate,
+    /// The six-digit PIN a phone sign-up sets (TN-157).
+    #[serde(rename = "label.pin")]
+    PinLabel,
+    /// A PIN or password the environment's rule refuses (TN-157, §10.2.1).
+    #[serde(rename = "registration.secret_refused")]
+    SecretRefused,
     /// The code field of a sign-up whose code went by e-mail or text message (TN-156).
     #[serde(rename = "label.sent_code")]
     SentCodeLabel,
@@ -611,7 +617,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 198] = [
+    pub const ALL: [Self; 200] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -630,6 +636,8 @@ impl TextId {
         Self::ProfileComplete,
         Self::PhoneLabel,
         Self::SentCodeLabel,
+        Self::PinLabel,
+        Self::SecretRefused,
         Self::IdentifierPhoneLabel,
         Self::ProfileAddressHint,
         Self::ChangeAddress,
@@ -835,6 +843,8 @@ impl TextId {
             Self::ProfileComplete => "profile.complete",
             Self::PhoneLabel => "label.phone",
             Self::SentCodeLabel => "label.sent_code",
+            Self::PinLabel => "label.pin",
+            Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
             Self::ProfileAddressHint => "profile.address_hint",
             Self::ChangeAddress => "action.change_address",
@@ -1044,6 +1054,10 @@ impl TextId {
             Self::ProfileComplete => "Finish setting up your account to continue.",
             Self::PhoneLabel => "Phone number",
             Self::SentCodeLabel => "The code we sent you",
+            Self::PinLabel => "Choose a 6-digit PIN",
+            Self::SecretRefused => {
+                "Choose another one. It is easy to guess, too short, or appeared in a data breach."
+            }
             Self::IdentifierPhoneLabel => "Email or phone number",
             Self::ProfileAddressHint => {
                 "If another account already uses this address, sign in to that account and link this sign-in from its settings."

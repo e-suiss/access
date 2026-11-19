@@ -575,7 +575,11 @@ where
         Reply::json(
             200,
             json!({
-                "password": { "set": of("password").next().is_some() },
+                "password": {
+                    "set": of("password").next().is_some(),
+                    // TN-157
+                    "kind": if kit.auth.pin { "pin" } else { "password" },
+                },
                 "passkeys": of("webauthn").map(|r| json!({
                     "id": id(r),
                     "name": Value::Null,

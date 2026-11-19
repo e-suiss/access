@@ -830,3 +830,23 @@ fn an_upstream_registration_carries_its_profile_with_private_key_jwt_by_default(
         "unsolicited is SAML only"
     );
 }
+
+// TN-157
+#[test]
+fn a_pin_needs_the_phone_method_and_a_required_second_factor() {
+    use crate::domain::environment::SigninMethod;
+    let mut p = default_signin();
+    p.pin = true;
+    assert!(p.check().is_err(), "no phone, no required second factor");
+    p.methods.insert(SigninMethod::Phone);
+    assert!(p.check().is_err(), "no required second factor");
+    p.mfa_required = true;
+    assert!(p.check().is_ok());
+    p.default_country = Some(String::from("TR"));
+    assert!(p.check().is_ok());
+    p.default_country = Some(String::from("tr"));
+    assert!(
+        p.check().is_err(),
+        "the country is written as ISO 3166-1 alpha-2"
+    );
+}

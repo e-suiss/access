@@ -33,6 +33,9 @@ pub enum PasswordRejected {
         /// The maximum.
         max: usize,
     },
+    /// A PIN that is not six digits, or one of the easily guessed (TN-157).
+    #[error("PIN refused")]
+    WeakPin,
     /// Listed in the breached-password corpus (IDP-3).
     #[error("password appears in a breach corpus")]
     Breached,
@@ -46,6 +49,7 @@ impl PasswordRejected {
             Self::TooShort { .. } => "password-too-short",
             Self::TooLong { .. } => "password-too-long",
             Self::Breached => "password-breached",
+            Self::WeakPin => "pin-refused",
         }
     }
 }
@@ -75,6 +79,19 @@ impl Password {
         Ok(Self(p))
     }
 
+    /// A new six-digit PIN (TN-157): digits only, and none of the easily guessed: one digit
+    /// repeated, a run up or down, a pair or a triple repeated, or a year from 1900 to 2099
+    /// followed by two digits that make a day or month.
+    ///
+    /// # Errors
+    /// [`PasswordRejected::WeakPin`].
+    pub fn pin(raw: &str) -> Result<Self, PasswordRejected> {
+        if pin_refused(raw.trim()) {
+            return Err(PasswordRejected::WeakPin);
+        }
+        Ok(Self(nfkc(raw.trim())))
+    }
+
     /// A presented password at login, without the policy: a stored password may predate it.
     /// `None` when the input is too long to be any stored password.
     #[must_use]
@@ -91,6 +108,30 @@ impl Password {
     pub fn bytes(&self) -> &[u8] {
         self.0.expose().as_bytes()
     }
+}
+
+/// The digits of a PIN: exactly [`PIN_DIGITS`] ASCII digits (TN-157).
+pub const PIN_DIGITS: usize = 6;
+
+fn pin_refused(pin: &str) -> bool {
+    let Ok(bytes) = <[u8; PIN_DIGITS]>::try_from(pin.as_bytes()) else {
+        return true;
+    };
+    if !bytes.iter().all(u8::is_ascii_digit) {
+        return true;
+    }
+    let digits = bytes.map(|byte| i16::from(byte.saturating_sub(b'0')));
+    let [d0, d1, d2, d3, d4, d5] = digits;
+    let pairs = [(d0, d1), (d1, d2), (d2, d3), (d3, d4), (d4, d5)];
+    let step = |k: i16| pairs.iter().all(|(x, y)| y.checked_sub(*x) == Some(k));
+    let one_digit = digits.iter().all(|x| *x == d0);
+    let run = step(1) || step(-1);
+    let repeated_pair = d0 == d2 && d2 == d4 && d1 == d3 && d3 == d5;
+    let repeated_triple = d0 == d3 && d1 == d4 && d2 == d5;
+    let year = matches!((d0, d1), (1, 9) | (2, 0));
+    let tail = d4.saturating_mul(10).saturating_add(d5);
+    let dated = year && (1..=31).contains(&tail);
+    one_digit || run || repeated_pair || repeated_triple || dated
 }
 
 /// Argon2id cost parameters.

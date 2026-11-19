@@ -106,6 +106,54 @@ where
         }
     }
 
+    /// A new secret under the environment's rule: a six-digit PIN that is none of the easily
+    /// guessed where the environment uses PINs (TN-157), otherwise a password under the policy
+    /// that passes the mandatory breach check (§10.2.1).
+    ///
+    /// # Errors
+    /// [`SessionError`]; a breach list that cannot be read is an error, never a pass.
+    pub async fn check_secret(
+        &self,
+        raw: &str,
+    ) -> Result<Result<Password, MethodRefusal>, SessionError> {
+        if self.policy.pin {
+            return Ok(Password::pin(raw).map_err(|_| MethodRefusal::PasswordRefused));
+        }
+        let Ok(password) = Password::new(raw) else {
+            return Ok(Err(MethodRefusal::PasswordRefused));
+        };
+        match self.risk.services.breach.check(&password).await {
+            Breach::Clean => Ok(Ok(password)),
+            Breach::Listed => Ok(Err(MethodRefusal::PasswordRefused)),
+            Breach::Unavailable | Breach::NotChecked => {
+                Err(SessionError::Account(AccountError::BreachUnavailable))
+            }
+        }
+    }
+
+    /// Keeps the first secret of an account that has none, checked by [`Self::check_secret`]
+    /// (TN-156, TN-157): a phone sign-up's PIN or password; no session ends.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn store_first_secret(
+        &self,
+        subject: [u8; 16],
+        password: &Password,
+        correlation: &str,
+    ) -> Result<(), SessionError> {
+        let phc = self.hasher.hash(password, self.random.salt()?).await?;
+        let target = self.external(subject)?;
+        let who = Actor {
+            actor: &target,
+            correlation,
+        };
+        let mut tx = self.begin().await?;
+        store_password(&mut tx, &self.environment, subject, phc.expose(), &who).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Sets or changes the subject's password (§10.2.1): policy, the mandatory breach check,
     /// Argon2id; then every sign-in of the person ends with reason `password` (TN-50).
     ///
@@ -117,16 +165,10 @@ where
         raw: &str,
         correlation: &str,
     ) -> Result<Result<(), MethodRefusal>, SessionError> {
-        let Ok(password) = Password::new(raw) else {
-            return Ok(Err(MethodRefusal::PasswordRefused));
+        let password = match self.check_secret(raw).await? {
+            Ok(p) => p,
+            Err(r) => return Ok(Err(r)),
         };
-        match self.risk.services.breach.check(&password).await {
-            Breach::Clean => {}
-            Breach::Listed => return Ok(Err(MethodRefusal::PasswordRefused)),
-            Breach::Unavailable | Breach::NotChecked => {
-                return Err(SessionError::Account(AccountError::BreachUnavailable));
-            }
-        }
         let phc = self.hasher.hash(&password, self.random.salt()?).await?;
         let now = self.now();
         let target = self.external(subject)?;

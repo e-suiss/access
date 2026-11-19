@@ -5610,6 +5610,8 @@ async fn a_phone_environment_signs_up_with_the_number_and_a_text_message_code() 
     let signin = EnvironmentSignin {
         methods: ["phone", "passkey"].map(String::from).into(),
         default_country: access_identity_account::domain::phone::country("TR"),
+        mfa_required: true,
+        pin: true,
         ..EnvironmentSignin::default()
     };
     let auth = signin.apply(AuthPolicy::DEFAULT);
@@ -5643,11 +5645,15 @@ async fn a_phone_environment_signs_up_with_the_number_and_a_text_message_code() 
     assert_eq!(code.len(), 6);
     assert_eq!(e.holder("+905321112233").await, None);
     let done = b
-        .submit(&code_step, "email_code", json!({ "email_code": code }))
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "new_password": "730264" }),
+        )
         .await;
     assert_eq!(
-        done.step(),
-        "complete",
+        done.status,
+        StatusCode::OK,
         "{}",
         String::from_utf8_lossy(&done.body)
     );
@@ -5778,4 +5784,72 @@ async fn a_phone_number_is_changed_with_a_code_to_the_new_one_and_the_old_one_is
     assert_eq!(e.holder("+905321230000").await, None);
     let mut again = e.browser("ch-new");
     assert_eq!(again.sign_in("0533 999 88 77").await.step(), "complete");
+}
+
+// TN-157
+#[tokio::test]
+async fn a_pin_environment_signs_up_with_a_six_digit_pin_and_asks_a_second_factor() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        mfa_required: true,
+        pin: true,
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    assert!(auth.pin);
+    let e = env_full(68, "tn-157", auth, false, signin).await;
+    let mut b = e.browser("pin");
+    let first = b.signup().await;
+    let code_step = b
+        .submit(&first, "register", json!({ "phone": "0532 777 66 55" }))
+        .await;
+    let pin_field = code_step.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["name"] == "new_password")
+        .cloned()
+        .unwrap();
+    assert_eq!(pin_field["label"]["id"], "label.pin");
+    let code = e.outbox.last();
+    let weak = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "new_password": "123456" }),
+        )
+        .await;
+    assert_eq!(weak.status, StatusCode::BAD_REQUEST);
+    assert_eq!(weak.messages(), vec!["registration.secret_refused"]);
+    assert_eq!(
+        e.holder("+905327776655").await,
+        None,
+        "a weak PIN spends no code"
+    );
+    let done = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "new_password": "482915" }),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let mut again = e.browser("pin-again");
+    let at = again.identify("0532 777 66 55").await;
+    let next = again
+        .submit(&at, "password", json!({ "password": "482915" }))
+        .await;
+    assert_eq!(
+        next.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&next.body)
+    );
+    assert_ne!(next.step(), "complete", "a PIN never signs in alone");
 }

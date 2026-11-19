@@ -654,6 +654,8 @@
           "profile.complete",
           "label.phone",
           "label.sent_code",
+          "label.pin",
+          "registration.secret_refused",
           "label.identifier_phone",
           "profile.address_hint",
           "action.change_address",

@@ -2291,6 +2291,55 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "methods-pin"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-pin_set"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-pin_none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-change_pin"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-set_pin"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-new_pin"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-pin_rejected"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "methods-add_address"
 surface = "account"
 class = "label"
@@ -5479,6 +5528,22 @@ key = "label-sent_code"
 text_id = "label.sent_code"
 surface = "login"
 class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-pin"
+text_id = "label.pin"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "registration-secret_refused"
+text_id = "registration.secret_refused"
+surface = "login"
+class = "error"
 owner = "identity_plane"
 protected = false
 

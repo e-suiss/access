@@ -31,7 +31,10 @@ import { useAnnouncer, when } from "./common.js";
 
 /** What `GET /v1/account/methods` answers. */
 export const Methods = v.object({
-  password: v.object({ set: v.boolean() }),
+  password: v.object({
+    set: v.boolean(),
+    kind: v.optional(v.picklist(["password", "pin"]), "password"),
+  }),
   passkeys: v.array(
     v.object({
       id: v.string(),
@@ -303,6 +306,7 @@ function Passkeys(props: {
 
 function Password(props: {
   readonly set: boolean;
+  readonly pin: boolean;
   readonly reload: () => void;
   readonly say: (text: string, alert?: boolean) => void;
   readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
@@ -321,7 +325,9 @@ function Password(props: {
       props.reload();
     },
     onError: (err) => {
-      props.fail(err, { "password-rejected": "methods.password_rejected" });
+      props.fail(err, {
+        "password-rejected": props.pin ? "methods.pin_rejected" : "methods.password_rejected",
+      });
     },
   });
   const save = (e: SyntheticEvent<HTMLFormElement>) => {
@@ -332,13 +338,23 @@ function Password(props: {
   return (
     <Part aria-labelledby="password-heading" data-testid="password">
       <h4 id="password-heading" className="font-semibold">
-        {t("methods.password")}
+        {props.pin ? t("methods.pin") : t("methods.password")}
       </h4>
-      <Meta>{props.set ? t("methods.password_set") : t("methods.password_none")}</Meta>
+      <Meta>
+        {props.pin
+          ? props.set
+            ? t("methods.pin_set")
+            : t("methods.pin_none")
+          : props.set
+            ? t("methods.password_set")
+            : t("methods.password_none")}
+      </Meta>
       {open ? (
         <form onSubmit={save} className="flex flex-col gap-3">
           <Field>
-            <FieldLabel htmlFor="new-password">{t("label.new_password")}</FieldLabel>
+            <FieldLabel htmlFor="new-password">
+              {props.pin ? t("label.new_pin") : t("label.new_password")}
+            </FieldLabel>
             <Input
               id="new-password"
               ref={field}
@@ -346,7 +362,8 @@ function Password(props: {
               name="new_password"
               type="password"
               autoComplete="new-password"
-              maxLength={128}
+              maxLength={props.pin ? 6 : 128}
+              {...(props.pin ? { inputMode: "numeric" as const } : {})}
               required
             />
           </Field>
@@ -370,7 +387,13 @@ function Password(props: {
               setOpen(true);
             }}
           >
-            {props.set ? t("action.change_password") : t("action.set_password")}
+            {props.pin
+              ? props.set
+                ? t("action.change_pin")
+                : t("action.set_pin")
+              : props.set
+                ? t("action.change_password")
+                : t("action.set_password")}
           </Button>
         </Actions>
       )}
@@ -868,7 +891,13 @@ export function SignInMethods(): ReactElement {
       ) : (
         <>
           <Passkeys methods={methods} reload={reload} say={say} fail={fail} remove={remove} />
-          <Password set={methods.password.set} reload={reload} say={say} fail={fail} />
+          <Password
+            set={methods.password.set}
+            pin={methods.password.kind === "pin"}
+            reload={reload}
+            say={say}
+            fail={fail}
+          />
           {methods.phone !== null && <Phone phone={methods.phone} say={say} fail={fail} />}
           <Authenticator
             methods={methods}

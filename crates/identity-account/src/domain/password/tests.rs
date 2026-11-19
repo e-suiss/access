@@ -161,3 +161,21 @@ fn the_argon2_profile_may_only_be_raised() {
     }
     assert_eq!(HashProfile::parse("low"), None);
 }
+
+// TN-157
+#[test]
+fn a_pin_is_six_digits_and_none_of_the_easily_guessed() {
+    for good in ["482915", "730264", "195742", "201299"] {
+        assert!(Password::pin(good).is_ok(), "{good}");
+    }
+    for bad in [
+        "111111", "123456", "654321", "121212", "123123", "198512", "200001", "12345", "1234567",
+        "12a456", "",
+    ] {
+        assert_eq!(
+            Password::pin(bad).err(),
+            Some(PasswordRejected::WeakPin),
+            "{bad}"
+        );
+    }
+}

@@ -610,6 +610,10 @@ pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
 /// server keeps the rules no order breaks: unverified data activates nothing, required MFA is
 /// never skipped.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each switch of the written policy is one flag (TN-132)"
+)]
 pub struct SigninPolicy {
     /// Enabled methods; at least one.
     pub methods: BTreeSet<SigninMethod>,
@@ -640,6 +644,9 @@ pub struct SigninPolicy {
     /// The country a phone number typed the national way belongs to (TN-156), ISO 3166-1
     /// alpha-2; only with the `phone` method.
     pub default_country: Option<String>,
+    /// The account's secret is a six-digit PIN instead of a password (TN-157); only with the
+    /// `phone` method and a required second factor.
+    pub pin: bool,
 }
 
 impl SigninPolicy {
@@ -665,7 +672,16 @@ impl SigninPolicy {
             self.methods.contains(&SigninMethod::Phone)
                 && access_identity_account::domain::phone::country(c).is_some_and(|k| k.iso == c)
         });
-        if fields_ok && lists_ok && methods_ok && keep_ok && country_ok && self.attestation.check()
+        // TN-157
+        let pin_ok =
+            !self.pin || (self.methods.contains(&SigninMethod::Phone) && self.mfa_required);
+        if fields_ok
+            && lists_ok
+            && methods_ok
+            && keep_ok
+            && country_ok
+            && pin_ok
+            && self.attestation.check()
         {
             Ok(())
         } else {
@@ -739,6 +755,10 @@ impl SigninPolicy {
         // TN-156
         if let Some(c) = &self.default_country {
             m.push((Value::text("default_country"), Value::text(c)));
+        }
+        // TN-157
+        if self.pin {
+            m.push((Value::text("pin"), Value::Bool(true)));
         }
         Value::Map(m)
     }
