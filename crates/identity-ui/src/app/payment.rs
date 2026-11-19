@@ -257,7 +257,7 @@ where
         fref: &FlowRef<'_>,
         current: Current,
     ) -> Result<Reply, Reply> {
-        if !matches!(current, Current::Second(_) | Current::PushEnded(..)) {
+        if !matches!(current, Current::Second(..) | Current::PushEnded(..)) {
             return Err(Reply::problem(INVALID_SUBMISSION));
         }
         let (status, message) = match auth
@@ -265,11 +265,10 @@ where
             .await
             .map_err(|e| failed(&e))?
         {
-            SmsStart::Sent { last_digits, .. } => {
-                let mut m = Message::info(TextId::SmsSent);
-                m.text = m.text.replace("{ $last_digits }", &last_digits);
-                (200, m)
-            }
+            SmsStart::Sent { last_digits, .. } => (
+                200,
+                Message::info(TextId::SmsSent).with_arg("last_digits", &last_digits),
+            ),
             SmsStart::Refused(why) => {
                 tracing::info!(reason = why.reason(), "sms refused");
                 (403, Message::error(TextId::SmsRefused))

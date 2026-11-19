@@ -72,6 +72,8 @@ export interface Text {
 export interface Message extends Text {
   readonly severity: "info" | "error";
   readonly retry_after_s?: number;
+  /** TN-162: the values of the text's placeholders. */
+  readonly args?: Readonly<Record<string, string>>;
 }
 
 export interface RequirementStatus {
@@ -295,6 +297,7 @@ const MessageS: v.GenericSchema<unknown, Message> = v.object({
   text: v.string(),
   severity: v.picklist(["info", "error"]),
   retry_after_s: v.exactOptional(v.number()),
+  args: v.exactOptional(v.record(v.string(), v.string())),
 });
 const RequirementS: v.GenericSchema<unknown, RequirementStatus> = v.object({
   requirement: v.picklist(["identifier", "first_factor", "second_factor", "profile"]),

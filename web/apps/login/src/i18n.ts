@@ -102,8 +102,8 @@ export function maybe(id: string, args?: Readonly<Record<string, string>>): stri
 }
 
 /** A server text: the catalog's for its id in the viewer's locale, else the server's own words. */
-export function text(value: Text): string {
-  return catalogs.format(keyOf(value.id), locale, environment) ?? value.text;
+export function text(value: Text & { readonly args?: Readonly<Record<string, string>> }): string {
+  return catalogs.format(keyOf(value.id), locale, environment, value.args) ?? value.text;
 }
 
 /** A time as the viewer reads it. */

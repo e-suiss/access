@@ -326,7 +326,9 @@ test("a sign-in that lacks a name or a proven address asks for them first", asyn
   await expect(page.getByRole("button", { name: "Use another address" })).toBeVisible();
   await page.getByLabel("Code from your email").fill("000000");
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page.getByText("That code didn't work. Check it and try again.")).toBeVisible();
+  await expect(
+    page.getByText("That code didn't work. Check it, or get a new code and try again."),
+  ).toBeVisible();
   await page.getByLabel("Code from your email").fill("123456");
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
@@ -394,4 +396,34 @@ test("the profile step asks for the documents to be accepted", async ({ page, mo
   await expect
     .poll(() => mock.submissions.at(-1))
     .toMatchObject({ method: "profile", fields: { accept_documents: "true" } });
+});
+
+// TN-162: one way at a time on the second step, the strongest first; the others behind "Try
+// another way"; a text message's code field only once the code went
+test("the second step shows one way at a time and the code field only after the text", async ({
+  page,
+  mock,
+}) => {
+  mock.secondFactor = example("second-factor-all");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
+  await expect(page.getByText("You're signing in to ada@example.org.")).toBeVisible();
+  await expect(page.getByLabel("Code from your authenticator app")).toBeVisible();
+  await expect(page.getByLabel("Recovery code")).toHaveCount(0);
+  await expect(page.getByLabel("Code from the text message")).toHaveCount(0);
+  await page.getByRole("button", { name: "Try another way" }).click();
+  await page.locator("[data-way=sms]").click();
+  await expect(page.getByLabel("Code from your authenticator app")).toHaveCount(0);
+  await expect(page.getByLabel("Code from the text message")).toHaveCount(0);
+  await page.getByRole("button", { name: "Text me a code" }).click();
+  await expect(page.getByText("We sent a code to the number ending in 67.")).toBeVisible();
+  const sms = page.getByLabel("Code from the text message");
+  await expect(sms).toBeVisible();
+  await expect(sms).toHaveAttribute("inputmode", "numeric");
+  await page.getByRole("button", { name: "Try another way" }).click();
+  await expect(page.locator("[data-way=recovery_code]")).toBeVisible();
 });

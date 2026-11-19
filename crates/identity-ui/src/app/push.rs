@@ -181,7 +181,7 @@ where
         current: Current,
     ) -> Result<Reply, Reply> {
         match current {
-            Current::Second(_) | Current::PushEnded(..) => {
+            Current::Second(..) | Current::PushEnded(..) => {
                 self.push(auth, kit, b, flow, fref, None).await
             }
             Current::Push(..) => self.render(auth, kit, flow, fref, current, 200).await,
@@ -224,7 +224,7 @@ where
             };
             let current = self.current(&auth, &kit, b, &fref).await?;
             match current {
-                Current::Second(_) | Current::PushEnded(..) => {
+                Current::Second(..) | Current::PushEnded(..) => {
                     let proof = decoded.as_ref().map(|(k, s)| SameDevice {
                         device_key: *k,
                         signature: s,

@@ -64,7 +64,7 @@
   "messages": [
     {
       "id": "second_factor.failed",
-      "text": "That code didn't work. Check it and try again.",
+      "text": "That code didn't work. Check it, or get a new code and try again.",
       "severity": "error"
     }
   ]

@@ -942,6 +942,15 @@ impl Env {
         let mut b = self.browser(name);
         let second = b.sign_in(who).await;
         assert_eq!(second.step(), "second_factor");
+        // TN-162
+        let shown = second.json()["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == "second_factor.account")
+            .cloned()
+            .unwrap();
+        assert_eq!(shown["args"]["account"], who);
         let done = b
             .submit(&second, "totp", json!({ "totp_code": self.totp(&seed) }))
             .await;
@@ -1528,7 +1537,10 @@ async fn totp_recovery_codes_and_sign_out() {
         .submit(&second, "totp", json!({ "totp_code": "000000" }))
         .await;
     assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(wrong.messages(), ["second_factor.failed"]);
+    assert_eq!(
+        wrong.messages(),
+        ["second_factor.account", "second_factor.failed"]
+    );
     e.advance(30_000);
     let done = c
         .submit(&wrong, "totp", json!({ "totp_code": e.totp(&seed) }))

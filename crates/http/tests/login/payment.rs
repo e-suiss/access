@@ -361,18 +361,27 @@ async fn an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries
     let wrong = if code == "000000" { "111111" } else { "000000" };
     for _ in 0..3 {
         let r = b.submit(&sent, "sms", json!({ "sms_code": wrong })).await;
-        assert_eq!(r.messages(), ["second_factor.failed"]);
+        assert_eq!(
+            r.messages(),
+            ["second_factor.account", "second_factor.failed"]
+        );
         e.advance(10_000);
     }
     let spent = b.submit(&sent, "sms", json!({ "sms_code": code })).await;
-    assert_eq!(spent.messages(), ["second_factor.failed"]);
+    assert_eq!(
+        spent.messages(),
+        ["second_factor.account", "second_factor.failed"]
+    );
 
     e.advance(30_000);
     let sent = b.submit(&second, "send_sms", json!({})).await;
     let code = e.outbox.last();
     e.advance(300_000);
     let late = b.submit(&sent, "sms", json!({ "sms_code": code })).await;
-    assert_eq!(late.messages(), ["second_factor.failed"]);
+    assert_eq!(
+        late.messages(),
+        ["second_factor.account", "second_factor.failed"]
+    );
 
     e.advance(60_000);
     let sent = b.submit(&second, "send_sms", json!({})).await;

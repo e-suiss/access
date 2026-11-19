@@ -327,7 +327,7 @@ async fn the_fourth_push_in_ten_minutes_and_a_push_after_a_refusal_are_held() {
     let mut fourth = e.browser("w3");
     let held = fourth.push("fay@example.com").await;
     assert_eq!(held.status, StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(held.messages(), ["push.held"]);
+    assert_eq!(held.messages(), ["second_factor.account", "push.held"]);
     assert!(held.headers.get(header::RETRY_AFTER).is_some());
     assert_eq!(e.pushes(), sent, "a held push reaches no device");
     for (challenge, n) in open {

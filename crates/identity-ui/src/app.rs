@@ -228,7 +228,8 @@ enum Current {
     Identifier,
     Authenticate(String),
     Email(EmailWait),
-    Second(SecondFactors),
+    /// The second step; the identifier this browser typed, when it typed one (TN-162).
+    Second(SecondFactors, Option<String>),
     /// OP-156 m.3 (d): a push waits; the page shows the number until the end.
     Push(PushWait),
     /// OP-156 m.3 (d): the push ended without an approval; the second step again, with why.
@@ -360,6 +361,15 @@ fn options(v: Value) -> Result<PasskeyOptions, Reply> {
 pub(crate) fn login_cookie(handle: &str, identifier: &str) -> String {
     let value = format!("{handle}.{}", b64url_encode(identifier.as_bytes()));
     set_cookie(LOGIN_COOKIE, &value, Some(LOGIN_COOKIE_MAX_AGE_S))
+}
+
+/// TN-162: the second step names the account it signs in to, as this browser typed it.
+fn with_account(mut ui: Ui, account: Option<String>) -> Ui {
+    if let Some(a) = account {
+        ui.messages
+            .push(Message::info(TextId::SecondFactorAccount).with_arg("account", &a));
+    }
+    ui
 }
 
 /// The identifier the browser typed for `handle`, if its cookie names that flow.
@@ -610,7 +620,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             .with_email(email(kit))
             .with_first_steps(kit.auth.password, kit.auth.passkey),
         Current::Email(wait) => Ui::email_sent(flow.clone(), *wait, &reqs),
-        Current::Second(offered) | Current::PushEnded(offered, _) => {
+        Current::Second(offered, _) | Current::PushEnded(offered, _) => {
             Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs)
         }
         Current::Push(w) => Ui::push_sent(
@@ -1370,7 +1380,7 @@ where
                 };
                 match ended {
                     Some(why) => Current::PushEnded(offered, why),
-                    None => Current::Second(offered),
+                    None => Current::Second(offered, typed(b, fref.handle)),
                 }
             }
             Outcome::Suspended {
@@ -1453,13 +1463,16 @@ where
                 ui
             }
             Current::Email(wait) => Ui::email_sent(flow.clone(), wait, &reqs),
-            Current::Second(offered) => {
+            Current::Second(offered, account) => {
                 let passkey = if offered.passkey {
                     Some(fresh(None).await?)
                 } else {
                     None
                 };
-                Ui::second_factor(flow.clone(), offered, passkey, &reqs)
+                with_account(
+                    Ui::second_factor(flow.clone(), offered, passkey, &reqs),
+                    account,
+                )
             }
             // OP-156 m.3 (d)
             Current::PushEnded(offered, why) => {
@@ -1534,7 +1547,7 @@ where
         let current = self.current(auth, kit, b, fref).await?;
         let second = matches!(
             current,
-            Current::Second(_) | Current::PushEnded(..) | Current::Enroll(_)
+            Current::Second(..) | Current::PushEnded(..) | Current::Enroll(_)
         );
         let mut reply = self.render(auth, kit, flow, fref, current, 401).await?;
         if let Body::Ui(ui) = &mut reply.body {
@@ -1596,7 +1609,10 @@ where
                 };
                 Ok(Reply::ui(
                     200,
-                    Ui::second_factor(flow.clone(), offered, passkey, &reqs),
+                    with_account(
+                        Ui::second_factor(flow.clone(), offered, passkey, &reqs),
+                        typed(b, fref.handle),
+                    ),
                 ))
             }
             Outcome::Continue { enrolled: None, .. } => {

@@ -104,6 +104,22 @@ fn examples() -> Vec<(&'static str, Ui)> {
             "second-factor",
             Ui::second_factor(flow(), mfa, None, &POLICY),
         ),
+        // TN-162
+        (
+            "second-factor-all",
+            Ui::second_factor(flow(), SecondFactors { sms: true, ..mfa }, None, &POLICY)
+                .with_message(
+                    Message::info(TextId::SecondFactorAccount)
+                        .with_arg("account", "ada@example.org"),
+                )
+                .unwrap(),
+        ),
+        (
+            "second-factor-sms-sent",
+            Ui::second_factor(flow(), SecondFactors { sms: true, ..mfa }, None, &POLICY)
+                .with_message(Message::info(TextId::SmsSent).with_arg("last_digits", "67"))
+                .unwrap(),
+        ),
         (
             "second-factor-failed",
             Ui::second_factor(flow(), mfa, None, &POLICY)

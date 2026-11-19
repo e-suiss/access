@@ -5820,6 +5820,35 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "second_factor-account"
+text_id = "second_factor.account"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-second_factor_title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-other_ways"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-other_ways_title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "second_factor-enroll"
 text_id = "second_factor.enroll"
 surface = "login"

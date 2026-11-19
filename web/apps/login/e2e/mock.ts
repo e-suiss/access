@@ -383,6 +383,9 @@ export class LoginMock {
         return { status: 200, ui: withoutNodes(example("complete")) };
       case "recovery_code":
         return { status: 200, ui: example("second-factor-failed") };
+      // TN-162
+      case "send_sms":
+        return { status: 200, ui: example("second-factor-sms-sent") };
       case "push": {
         const ui = this.pushSent ?? example("push-sent");
         this.flows.set(ui.flow, ui);
@@ -408,7 +411,7 @@ export class LoginMock {
                 messages: [
                   {
                     id: "second_factor.failed",
-                    text: "That code didn't work. Check it and try again.",
+                    text: "That code didn't work. Check it, or get a new code and try again.",
                     severity: "error",
                   },
                 ],

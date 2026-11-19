@@ -292,6 +292,7 @@ fn components() -> Value {
                 "text": s,
                 "severity": string_enum(&["info", "error"]),
                 "retry_after_s": { "type": "integer", "minimum": 0 },
+                "args": { "type": "object", "additionalProperties": { "type": "string" } },
             }),
             &["id", "text", "severity"],
         ),

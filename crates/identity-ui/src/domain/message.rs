@@ -93,6 +93,9 @@ pub enum TextId {
     /// A provider identity waits for this account's sign-in (TN-159).
     #[serde(rename = "login.link_waiting")]
     LinkWaiting,
+    /// The account the second step signs in to, as the browser typed it (TN-162).
+    #[serde(rename = "second_factor.account")]
+    SecondFactorAccount,
     /// The six-digit PIN a phone sign-up sets (TN-157).
     #[serde(rename = "label.pin")]
     PinLabel,
@@ -677,7 +680,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 220] = [
+    pub const ALL: [Self; 221] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -711,6 +714,7 @@ impl TextId {
         Self::OtherCountryLabel,
         Self::AcceptDocumentsLabel,
         Self::LinkWaiting,
+        Self::SecondFactorAccount,
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
@@ -938,6 +942,7 @@ impl TextId {
             Self::OtherCountryLabel => "label.national_id_other",
             Self::AcceptDocumentsLabel => "label.accept_documents",
             Self::LinkWaiting => "login.link_waiting",
+            Self::SecondFactorAccount => "second_factor.account",
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
@@ -1138,7 +1143,9 @@ impl TextId {
             Self::TooManyAttempts => "Too many attempts. Try again in a moment.",
             Self::Unavailable => "Sign-in is briefly unavailable. Try again shortly.",
             Self::FlowExpired => "This sign-in page has expired. Start again.",
-            Self::SecondFactorFailed => "That code didn't work. Check it and try again.",
+            Self::SecondFactorFailed => {
+                "That code didn't work. Check it, or get a new code and try again."
+            }
             Self::PasskeyNotRegistered => "That passkey isn't registered for this account.",
             Self::IdentifierLabel => "Email or username",
             Self::PasswordLabel => "Password",
@@ -1171,6 +1178,7 @@ impl TextId {
             Self::LinkWaiting => {
                 "You already have an account with this email. Sign in to it to link the sign-in you used."
             }
+            Self::SecondFactorAccount => "You're signing in to { $account }.",
             Self::PinLabel => "Choose a 6-digit PIN",
             Self::SecretRefused => {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."
@@ -1641,6 +1649,10 @@ pub struct Message {
     /// [`TextId::Unavailable`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after_s: Option<u32>,
+    /// The values of the text's placeholders, by name, for a client that words the text in its
+    /// own language (TN-162).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub args: std::collections::BTreeMap<String, String>,
 }
 
 impl Message {
@@ -1652,6 +1664,7 @@ impl Message {
             text: id.default_text().to_owned(),
             severity: Severity::Error,
             retry_after_s: None,
+            args: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1663,6 +1676,7 @@ impl Message {
             text: id.default_text().to_owned(),
             severity: Severity::Info,
             retry_after_s: None,
+            args: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1670,6 +1684,15 @@ impl Message {
     #[must_use]
     pub fn retry_after(mut self, seconds: u32) -> Self {
         self.retry_after_s = Some(seconds);
+        self
+    }
+
+    /// With the placeholder `name` filled by `value`, in the default text and for the client
+    /// (TN-162).
+    #[must_use]
+    pub fn with_arg(mut self, name: &str, value: &str) -> Self {
+        self.text = self.text.replace(&format!("{{ ${name} }}"), value);
+        self.args.insert(String::from(name), String::from(value));
         self
     }
 }

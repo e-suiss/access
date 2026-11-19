@@ -22,6 +22,7 @@ import type {
   RecoveryCodesNode,
   Submission,
   SubmitNode,
+  Text,
   TotpSetupNode,
   UiNode,
 } from "./contract.js";
@@ -65,7 +66,43 @@ const htmlType = {
 } as const;
 
 /** Codes that are digits only get the numeric keyboard; recovery codes are not (TN-107). */
-const numeric = new Set<FieldName>(["totp_code", "email_code"]);
+const numeric = new Set<FieldName>(["totp_code", "email_code", "sms_code"]);
+
+/** TN-162: the ways a second step can be given, strongest first; a recovery code only on request. */
+type Way = "passkey" | "push" | "totp" | "sms" | "recovery_code";
+const WAYS: readonly Way[] = ["passkey", "push", "totp", "sms", "recovery_code"];
+const WAY_METHODS: Readonly<Record<Way, readonly Method[]>> = {
+  passkey: [],
+  push: ["push"],
+  totp: ["totp"],
+  sms: ["send_sms", "sms"],
+  recovery_code: ["recovery_code"],
+};
+
+/** TN-162: the way chosen on each flow, and the flows whose text message went. */
+const chosenWay = new Map<string, Way>();
+const smsSent = new Set<string>();
+
+function waysOf(nodes: readonly UiNode[]): Way[] {
+  return WAYS.filter((w) =>
+    w === "passkey"
+      ? nodes.some((n) => n.type === "passkey_get")
+      : nodes.some((n) => n.type === "submit" && WAY_METHODS[w].includes(n.method)),
+  );
+}
+
+/** TN-162: the label a way is offered under in "Try another way". */
+function wayLabel(way: Way, nodes: readonly UiNode[]): string {
+  let label: Text | undefined;
+  for (const x of nodes) {
+    if (way === "passkey" && x.type === "passkey_get") label = x.label;
+    else if (way === "totp" && x.type === "input" && x.method === "totp") label = x.label;
+    else if (x.type === "submit" && x.method === (way === "sms" ? "send_sms" : WAY_METHODS[way][0]))
+      label = x.label;
+    if (label !== undefined) break;
+  }
+  return label === undefined ? way : text(label);
+}
 
 function methodsInOrder(nodes: readonly UiNode[]): Method[] {
   const seen: Method[] = [];
@@ -322,6 +359,8 @@ function credentialId(json: string): string {
 function heading(ui: LoginUi): string {
   if (ui.kind === "registration") return t("registration.title");
   if (ui.step === "complete") return t("page.signing_in");
+  // TN-162
+  if (ui.step === "second_factor") return t("page.second_factor_title");
   return t("page.sign_in");
 }
 
@@ -469,6 +508,30 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const infos = ui.messages.filter((m) => m.severity === "info");
   const login = ui.kind === undefined || ui.kind === "login";
 
+  // TN-162: one way at a time on the second step, the others behind "Try another way"
+  const second = ui.step === "second_factor";
+  const ways = second ? waysOf(ui.nodes) : [];
+  const primary = ways.find((w) => w !== "recovery_code") ?? ways[0];
+  const remembered = chosenWay.get(ui.flow);
+  const way = remembered !== undefined && ways.includes(remembered) ? remembered : primary;
+  const [listing, setListing] = useState(false);
+  const [, setPicked] = useState(0);
+  if (ui.messages.some((m) => m.id === "sms.sent")) smsSent.add(ui.flow);
+  const pick = (w: Way) => {
+    chosenWay.set(ui.flow, w);
+    setListing(false);
+    setPicked((n) => n + 1);
+  };
+  const visible = (method: Method): boolean => {
+    if (!second || way === undefined) return true;
+    if (!WAY_METHODS[way].includes(method)) return false;
+    return method !== "sms" || smsSent.has(ui.flow);
+  };
+  const submit = (s: Submission) => {
+    if (s.method === "send_sms") smsSent.add(ui.flow);
+    onSubmit(s);
+  };
+
   return (
     <section
       aria-labelledby="step-heading"
@@ -520,7 +583,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
         </FieldSet>
       )}
       {methodsInOrder(ui.nodes)
-        .filter((m) => m !== "restart" && m !== "skip")
+        .filter((m) => m !== "restart" && m !== "skip" && visible(m))
         .map((method) => (
           <MethodForm
             key={method}
@@ -528,10 +591,10 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             nodes={ui.nodes}
             busy={busy}
             options={options}
-            onSubmit={onSubmit}
+            onSubmit={submit}
           />
         ))}
-      {passkeyButton !== undefined && (
+      {passkeyButton !== undefined && (!second || way === "passkey") && (
         <Button {...other} disabled={busy} onClick={() => void signInWithPasskey()}>
           {text(passkeyButton.label)}
         </Button>
@@ -540,6 +603,22 @@ export function StepView({ ui, busy, onSubmit }: Props) {
         <Button {...other} disabled={busy} onClick={() => void registerPasskey()}>
           {text(create.label)}
         </Button>
+      )}
+      {second && ways.length > 1 && !listing && (
+        <Button {...quiet} disabled={busy} onClick={() => setListing(true)}>
+          {t("page.other_ways")}
+        </Button>
+      )}
+      {second && listing && (
+        <nav className="flex flex-col gap-2" aria-label={t("page.other_ways_title")}>
+          {ways
+            .filter((w) => w !== way)
+            .map((w) => (
+              <Button key={w} {...other} disabled={busy} onClick={() => pick(w)} data-way={w}>
+                {wayLabel(w, ui.nodes)}
+              </Button>
+            ))}
+        </nav>
       )}
       {providers.length > 0 && (
         <nav className="flex flex-col gap-2" aria-label={t("page.providers")}>

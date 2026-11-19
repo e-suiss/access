@@ -766,6 +766,7 @@
           "label.national_id_other",
           "label.accept_documents",
           "login.link_waiting",
+          "second_factor.account",
           "label.pin",
           "registration.secret_refused",
           "label.identifier_phone",
@@ -996,6 +997,12 @@
           "retry_after_s": {
             "type": "integer",
             "minimum": 0
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
