@@ -79,7 +79,8 @@ test("the device page shows no country when none is known", async ({ page, mock 
   });
   await page.goto("/device?user_code=BCDF-GHJZ");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByTestId("request")).toHaveText(
-    "Living room TV asks for openid. The request came from 192.0.2.0/24.",
+  await expect(page.getByTestId("origin")).toHaveText(
+    "The request came from network 192.0.2.0/24.",
   );
+  await expect(page.getByTestId("account")).toHaveCount(0);
 });

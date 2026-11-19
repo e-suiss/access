@@ -371,9 +371,24 @@ pub enum TextId {
     /// L2: a user code that did not match; the same for every wrong code.
     #[serde(rename = "device_code.invalid")]
     DeviceCodeInvalid,
-    /// L2: what the device asks for and where the request came from (OP-154 m.3 (p)).
-    #[serde(rename = "device_code.request")]
-    DeviceRequest,
+    /// L2: which app asks; the scopes follow as a list in words (OP-154 m.3 (p), TN-160).
+    #[serde(rename = "device_code.asks")]
+    DeviceAsks,
+    /// L2: where the request came from, by country name (TN-160).
+    #[serde(rename = "device_code.from")]
+    DeviceFrom,
+    /// L2: the code to compare with the device's screen (RFC 8628 §5.4, TN-160).
+    #[serde(rename = "device_code.match")]
+    DeviceMatch,
+    /// L2: approve only a code the person's own device shows (RFC 8628 §5.4, TN-160).
+    #[serde(rename = "device_code.warning")]
+    DeviceWarning,
+    /// L2: the signed-in account that approves (TN-160).
+    #[serde(rename = "device_code.account")]
+    DeviceAccount,
+    /// L2: sign in with another account and come back (TN-160).
+    #[serde(rename = "device_code.other_account")]
+    DeviceOtherAccount,
     /// L2: the device was connected.
     #[serde(rename = "device_code.approved")]
     DeviceApproved,
@@ -398,9 +413,9 @@ pub enum TextId {
     /// P8: the CIBA request expired before an answer.
     #[serde(rename = "ciba.expired")]
     CibaExpired,
-    /// P8: the device request when no country is known; no placeholder stands in for it (OP-155 m.3 (l)).
-    #[serde(rename = "device_code.request_prefix")]
-    DeviceRequestNoCountry,
+    /// P8: where the request came from when no country is known; no placeholder stands in for it (OP-155 m.3 (l), TN-160).
+    #[serde(rename = "device_code.from_prefix")]
+    DeviceFromPrefix,
     /// P4: the upstream identity provider cannot be reached (OP-155 m.3 (h)); nothing falls back.
     #[serde(rename = "upstream.unreachable")]
     UpstreamUnreachable,
@@ -662,7 +677,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 215] = [
+    pub const ALL: [Self; 220] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -784,7 +799,12 @@ impl TextId {
         Self::DeviceTitle,
         Self::DeviceCodeLabel,
         Self::DeviceCodeInvalid,
-        Self::DeviceRequest,
+        Self::DeviceAsks,
+        Self::DeviceFrom,
+        Self::DeviceMatch,
+        Self::DeviceWarning,
+        Self::DeviceAccount,
+        Self::DeviceOtherAccount,
         Self::DeviceApproved,
         Self::DeviceDenied,
         Self::ConsentVisualChanged,
@@ -793,7 +813,7 @@ impl TextId {
         Self::CibaApproved,
         Self::CibaDenied,
         Self::CibaExpired,
-        Self::DeviceRequestNoCountry,
+        Self::DeviceFromPrefix,
         Self::UpstreamUnreachable,
         Self::UpstreamSubjectConflict,
         Self::HrdTitle,
@@ -1006,7 +1026,12 @@ impl TextId {
             Self::DeviceTitle => "device_code.title",
             Self::DeviceCodeLabel => "label.device_code",
             Self::DeviceCodeInvalid => "device_code.invalid",
-            Self::DeviceRequest => "device_code.request",
+            Self::DeviceAsks => "device_code.asks",
+            Self::DeviceFrom => "device_code.from",
+            Self::DeviceMatch => "device_code.match",
+            Self::DeviceWarning => "device_code.warning",
+            Self::DeviceAccount => "device_code.account",
+            Self::DeviceOtherAccount => "device_code.other_account",
             Self::DeviceApproved => "device_code.approved",
             Self::DeviceDenied => "device_code.denied",
             Self::ConsentVisualChanged => "consent.visual_changed",
@@ -1015,7 +1040,7 @@ impl TextId {
             Self::CibaApproved => "ciba.approved",
             Self::CibaDenied => "ciba.denied",
             Self::CibaExpired => "ciba.expired",
-            Self::DeviceRequestNoCountry => "device_code.request_prefix",
+            Self::DeviceFromPrefix => "device_code.from_prefix",
             Self::UpstreamUnreachable => "upstream.unreachable",
             Self::UpstreamSubjectConflict => "upstream.subject_conflict",
             Self::HrdTitle => "hrd.title",
@@ -1266,9 +1291,14 @@ impl TextId {
             Self::DeviceTitle => "Connect a device",
             Self::DeviceCodeLabel => "Code shown on the device",
             Self::DeviceCodeInvalid => "This code didn't work. Check it and try again.",
-            Self::DeviceRequest => {
-                "{ $client } asks for { $scope }. The request came from { $prefix } in { $country }."
+            Self::DeviceAsks => "{ $client } asks to:",
+            Self::DeviceFrom => "The request came from { $country } (network { $prefix }).",
+            Self::DeviceMatch => "Your device should show this code:",
+            Self::DeviceWarning => {
+                "If someone else sent you this code, don't approve. They could get into your account."
             }
+            Self::DeviceAccount => "You're approving as { $account }.",
+            Self::DeviceOtherAccount => "Use another account",
             Self::DeviceApproved => "The device is connected. You can close this page.",
             Self::DeviceDenied => "The device wasn't connected.",
             Self::ConsentVisualChanged => {
@@ -1279,9 +1309,7 @@ impl TextId {
             Self::CibaApproved => "Approved. You can go back to { $client }.",
             Self::CibaDenied => "Not approved. Nothing was done.",
             Self::CibaExpired => "This request has expired.",
-            Self::DeviceRequestNoCountry => {
-                "{ $client } asks for { $scope }. The request came from { $prefix }."
-            }
+            Self::DeviceFromPrefix => "The request came from network { $prefix }.",
             Self::UpstreamUnreachable => {
                 "{ $provider } isn't responding. Try another sign-in method if you've set one up."
             }
@@ -1496,7 +1524,12 @@ impl TextId {
                 | Self::ConsentNewApp
                 | Self::ApproveAccess
                 | Self::DeclineAccess
-                | Self::DeviceRequest
+                | Self::DeviceAsks
+                | Self::DeviceFrom
+                | Self::DeviceMatch
+                | Self::DeviceWarning
+                | Self::DeviceAccount
+                | Self::DeviceOtherAccount
                 | Self::DeviceApproved
                 | Self::DeviceDenied
                 | Self::ConsentVisualChanged
@@ -1505,7 +1538,7 @@ impl TextId {
                 | Self::CibaApproved
                 | Self::CibaDenied
                 | Self::CibaExpired
-                | Self::DeviceRequestNoCountry
+                | Self::DeviceFromPrefix
                 | Self::SsoSetupTitle
                 | Self::SsoSetupChoose
                 | Self::SsoSetupConfigure

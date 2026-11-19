@@ -3166,10 +3166,100 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
-key = "device_code-request"
-text_id = "device_code.request"
+key = "device_code-asks"
+text_id = "device_code.asks"
 surface = "login"
 class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-from"
+text_id = "device_code.from"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-from_prefix"
+text_id = "device_code.from_prefix"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-match"
+text_id = "device_code.match"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-warning"
+text_id = "device_code.warning"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-account"
+text_id = "device_code.account"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-other_account"
+text_id = "device_code.other_account"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-openid"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-profile"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-email"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-phone"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-address"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "scope-offline_access"
+surface = "login"
+class = "claim"
 owner = "identity_plane"
 protected = false
 
@@ -3640,14 +3730,6 @@ key = "ciba-expired"
 text_id = "ciba.expired"
 surface = "login"
 class = "info"
-owner = "identity_plane"
-protected = false
-
-[[message]]
-key = "device_code-request_prefix"
-text_id = "device_code.request_prefix"
-surface = "login"
-class = "consent"
 owner = "identity_plane"
 protected = false
 

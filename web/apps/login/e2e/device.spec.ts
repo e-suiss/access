@@ -9,9 +9,10 @@ function device(mock: import("./mock.js").LoginMock) {
           status: 200,
           body: {
             client: "Living room TV",
-            scopes: ["openid"],
+            scopes: ["openid", "offline_access", "custom:thing"],
             ip_prefix: "192.0.2.0/24",
             country: "CH",
+            account: "ada@example.org",
             csrf: "device-csrf",
           },
         }
@@ -34,11 +35,28 @@ test("the device page shows the app, the scope and where the request came from",
     csrf.push(route.request().headers()["x-csrf-token"] ?? "");
     await route.fallback();
   });
-  await page.goto("/device?user_code=BCDF-GHJZ");
+  await page.goto("/device?user_code=bcdf-ghjz");
   await expect(page.getByRole("heading", { name: "Connect a device" })).toBeVisible();
+  await expect(page.getByLabel("Code shown on the device")).toHaveAttribute("autocomplete", "off");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByTestId("request")).toHaveText(
-    "Living room TV asks for openid. The request came from 192.0.2.0/24 in CH.",
+  // TN-160
+  await expect(page.getByTestId("match")).toHaveText(
+    "Your device should show this code: BCDF-GHJZ",
+  );
+  await expect(page.getByTestId("request")).toHaveText("Living room TV asks to:");
+  await expect(page.getByTestId("scopes").locator("li")).toHaveText([
+    "Sign you in with your account",
+    "Keep access while you're not using it",
+    "custom:thing",
+  ]);
+  await expect(page.getByTestId("origin")).toHaveText(
+    "The request came from Switzerland (network 192.0.2.0/24).",
+  );
+  await expect(page.getByTestId("warning")).toContainText("If someone else sent you this code");
+  await expect(page.getByTestId("account")).toContainText("You're approving as ada@example.org.");
+  await expect(page.getByRole("link", { name: "Use another account" })).toHaveAttribute(
+    "href",
+    /return_to=.*%2Fdevice%3Fuser_code%3DBCDF-GHJZ/,
   );
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByTestId("approved")).toHaveText(
@@ -56,4 +74,18 @@ test("a wrong code says only that it didn't work", async ({ page, mock }) => {
   await expect(page.getByTestId("invalid")).toHaveText(
     "This code didn't work. Check it and try again.",
   );
+});
+
+// TN-160: a person who isn't signed in signs in and comes back with the code
+test("a person who isn't signed in signs in and comes back to the code", async ({ page, mock }) => {
+  mock.json.set("POST /v1/device/preview", {
+    status: 401,
+    body: { type: "urn:suiss:access:problem:session-required", status: 401 },
+  });
+  await page.route("**/login?return_to=*", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>login</title>" }),
+  );
+  await page.goto("/device?user_code=BCDF-GHJZ");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/login\?return_to=.*%2Fdevice%3Fuser_code%3DBCDF-GHJZ/);
 });

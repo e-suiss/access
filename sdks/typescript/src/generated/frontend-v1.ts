@@ -1284,7 +1284,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What a user code asks for: the client's name, the scope, and the IP prefix and country the request came from; five wrong codes wait 15 minutes (OP-154 m.3 (p)). */
+        /** What a user code asks for: the client's name, the scope, the IP prefix and country the request came from, and the signed-in account that approves; five wrong codes wait 15 minutes (OP-154 m.3 (p), TN-160). */
         post: operations["previewDeviceCode"];
         delete?: never;
         options?: never;

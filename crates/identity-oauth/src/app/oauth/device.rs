@@ -39,6 +39,8 @@ pub struct DeviceView {
     pub ip_prefix: String,
     /// Its country, when known.
     pub country: Option<String>,
+    /// Who approves: the signed-in account's proven e-mail address, or its name (TN-160).
+    pub account: Option<String>,
 }
 
 /// Why a user code is not shown or decided.
@@ -242,7 +244,7 @@ impl<E: Env> OAuth<E> {
     ) -> Result<Result<DeviceView, DeviceRefused>, Unavailable> {
         let now = self.now()?;
         let mut tx = self.begin(environment).await?;
-        let (_, d) = match self
+        let (session, d) = match self
             .waiting_device(&mut tx, cookie, entered, peer, now)
             .await?
         {
@@ -254,7 +256,20 @@ impl<E: Env> OAuth<E> {
         };
         let client = tx.client_by_uuid(d.client).await?;
         tx.commit().await?;
+        // TN-160
+        let held = self
+            .env
+            .claims()
+            .held(environment.tenant, environment.environment, session.subject)
+            .await?;
+        let account = held.proven_email.clone().or_else(|| {
+            held.profile
+                .iter()
+                .find(|(k, _)| *k == "name")
+                .map(|(_, v)| v.clone())
+        });
         Ok(Ok(DeviceView {
+            account,
             client: client.map(|c| c.display_name).unwrap_or_default(),
             scopes: d
                 .scope

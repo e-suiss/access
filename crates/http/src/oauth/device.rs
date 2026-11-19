@@ -118,6 +118,7 @@ async fn preview<E: Env>(
                     "scopes": v.scopes,
                     "ip_prefix": v.ip_prefix,
                     "country": v.country,
+                    "account": v.account,
                     "csrf": csrf,
                 }),
             )

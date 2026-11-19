@@ -257,6 +257,11 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     assert!(view["ip_prefix"].is_string());
     // OP-155 m.3 (l), §10.4.1, Ek B 4884
     assert!(view["country"].is_null(), "{view}");
+    // TN-160
+    assert!(
+        view["account"].is_null(),
+        "no proven address or name: nothing shown {view}"
+    );
     let csrf = view["csrf"].as_str().unwrap().to_owned();
     // §11.4.5
     let (status, _) = page(

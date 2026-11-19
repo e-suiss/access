@@ -108,10 +108,13 @@ export function returnTo(): string | null {
     const url = new URL(raw, window.location.origin);
     const base = window.location.pathname.replace(/\/login(?:\/.*)?$/, "");
     const flow = /^\?flow=[A-Za-z0-9_-]{1,64}$/.test(url.search);
+    // TN-160: the device page, with the code being entered
+    const device = url.search === "" || /^\?user_code=[A-Za-z0-9-]{1,32}$/.test(url.search);
     const ok =
       url.origin === window.location.origin &&
       url.hash === "" &&
-      ((url.pathname === `${base}/authorize` && url.search.length > 1) ||
+      ((url.pathname === `${base}/device` && device) ||
+        (url.pathname === `${base}/authorize` && url.search.length > 1) ||
         ((url.pathname === `${base}/saml/sso` || url.pathname === `${base}/wsfed`) && flow));
     return ok ? url.href : null;
   } catch {
