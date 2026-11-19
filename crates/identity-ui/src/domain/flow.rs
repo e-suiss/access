@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::message::{Message, Text, TextId};
 use super::node::{
-    Autocomplete, ChoiceOption, CreateMediation, FieldName, InputKind, Method, Node,
+    Autocomplete, ChoiceOption, CreateMediation, DocumentLink, FieldName, InputKind, Method, Node,
     PasskeyOptions, PasskeySignal,
 };
 
@@ -290,6 +290,54 @@ fn requirements(policy: &[Requirement], step: Step) -> Vec<RequirementStatus> {
             }
         })
         .collect()
+}
+
+/// TN-158: the national identity number's scheme choice and field, and the documents to accept.
+fn identity_nodes(national: &[(String, TextId)], documents: &[DocumentLink]) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    // TN-158
+    if let [_, _, ..] = national {
+        nodes.push(Node::Choice {
+            name: FieldName::NationalIdScheme,
+            method: Method::Profile,
+            label: TextId::NationalIdSchemeLabel.into(),
+            options: national
+                .iter()
+                .map(|(value, label)| ChoiceOption {
+                    value: value.clone(),
+                    label: (*label).into(),
+                })
+                .collect(),
+        });
+    }
+    let label = match national {
+        [] => None,
+        [(_, one)] => Some(*one),
+        _ => Some(TextId::NationalIdLabel),
+    };
+    if let Some(label) = label {
+        nodes.push(Node::Input {
+            name: FieldName::NationalId,
+            method: Method::Profile,
+            kind: InputKind::Text,
+            autocomplete: Autocomplete::Off,
+            required: true,
+            max_length: FieldName::NationalId.max_length(),
+            label: label.into(),
+            value: None,
+            read_only: false,
+        });
+    }
+    // TN-158 (12)
+    if !documents.is_empty() {
+        nodes.push(Node::Documents {
+            name: FieldName::AcceptDocuments,
+            method: Method::Profile,
+            label: TextId::AcceptDocumentsLabel.into(),
+            documents: documents.to_vec(),
+        });
+    }
+    nodes
 }
 
 impl Ui {
@@ -573,44 +621,11 @@ impl Ui {
     pub fn complete_profile(
         flow: FlowId,
         (name, email, phone): (bool, bool, bool),
-        (national, birthdate): (&[(String, TextId)], bool),
+        (national, birthdate, documents): (&[(String, TextId)], bool, &[DocumentLink]),
         offered: Option<String>,
         policy: &[Requirement],
     ) -> Self {
-        let mut nodes = Vec::new();
-        // TN-158
-        if let [_, _, ..] = national {
-            nodes.push(Node::Choice {
-                name: FieldName::NationalIdScheme,
-                method: Method::Profile,
-                label: TextId::NationalIdSchemeLabel.into(),
-                options: national
-                    .iter()
-                    .map(|(value, label)| ChoiceOption {
-                        value: value.clone(),
-                        label: (*label).into(),
-                    })
-                    .collect(),
-            });
-        }
-        let label = match national {
-            [] => None,
-            [(_, one)] => Some(*one),
-            _ => Some(TextId::NationalIdLabel),
-        };
-        if let Some(label) = label {
-            nodes.push(Node::Input {
-                name: FieldName::NationalId,
-                method: Method::Profile,
-                kind: InputKind::Text,
-                autocomplete: Autocomplete::Off,
-                required: true,
-                max_length: FieldName::NationalId.max_length(),
-                label: label.into(),
-                value: None,
-                read_only: false,
-            });
-        }
+        let mut nodes = identity_nodes(national, documents);
         if birthdate {
             nodes.push(Node::Input {
                 name: FieldName::Birthdate,

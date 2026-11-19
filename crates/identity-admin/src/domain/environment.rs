@@ -654,6 +654,8 @@ pub struct SigninPolicy {
     pub min_age: Option<u8>,
     /// A phone environment asks every account for a proven e-mail address too (TN-158 (6)).
     pub email_required: bool,
+    /// The documents an account accepts (TN-158 (12)).
+    pub documents: Vec<access_identity_account::domain::document::Document>,
 }
 
 impl SigninPolicy {
@@ -711,6 +713,7 @@ impl SigninPolicy {
             && schemes_ok
             && age_ok
             && email_required_ok
+            && access_identity_account::domain::document::valid_list(&self.documents)
             && profile_ok
             && self.attestation.check()
         {
@@ -803,6 +806,17 @@ impl SigninPolicy {
         }
         if self.email_required {
             m.push((Value::text("email_required"), Value::Bool(true)));
+        }
+        if !self.documents.is_empty() {
+            m.push((
+                Value::text("documents"),
+                Value::Array(
+                    self.documents
+                        .iter()
+                        .map(access_identity_account::domain::document::Document::to_value)
+                        .collect(),
+                ),
+            ));
         }
         Value::Map(m)
     }

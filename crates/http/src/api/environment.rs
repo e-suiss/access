@@ -1723,6 +1723,7 @@ const SIGNIN_PATCH: &[&str] = &[
     "national_id",
     "min_age",
     "email_required",
+    "documents",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];

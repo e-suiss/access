@@ -876,3 +876,26 @@ fn the_tr_payment_profile_keeps_its_identity_rules_on() {
     p.national_id.insert(String::from("generic:0-12:digits"));
     assert!(p.check().is_err(), "a scheme that does not parse");
 }
+
+// TN-158 (12)
+#[test]
+fn the_sign_in_policy_takes_well_formed_documents_only() {
+    use access_identity_account::domain::document::Document;
+    let terms = Document {
+        kind: String::from("terms"),
+        version: String::from("2026-11"),
+        title: String::from("Terms of Service"),
+        url: String::from("https://example.com/terms"),
+        digest: [1; 32],
+        required: true,
+    };
+    let mut p = default_signin();
+    p.documents = vec![terms.clone()];
+    assert!(p.check().is_ok());
+    p.documents.push(terms.clone());
+    assert!(p.check().is_err(), "one document per type");
+    let mut plain = terms;
+    plain.url = String::from("http://example.com/terms");
+    p.documents = vec![plain];
+    assert!(p.check().is_err(), "a document is read over https");
+}

@@ -25,6 +25,7 @@ label-national_id_az_fin = Personal identification code (FİN)
 label-national_id_scheme = Country of your identity number
 label-national_id_other = Another country
 label-birthdate = Date of birth
+label-accept_documents = I have read and accept the documents above
 profile-facts_invalid = Check the number and the date and try again.
 profile-too_young = You don't meet the age requirement for this service.
 profile-facts_taken = You can't continue with these details. Contact support for help.

@@ -35,6 +35,7 @@ export type FieldName =
   | "phone"
   | "national_id"
   | "national_id_scheme"
+  | "accept_documents"
   | "birthdate";
 /** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
 export type OptionName = "keep_signed_in" | "remember_device";
@@ -148,6 +149,15 @@ export interface ChoiceNode {
   readonly options: readonly { readonly value: string; readonly label: Text }[];
 }
 
+/** TN-158 (12): the environment's documents and one required checkbox that accepts them all. */
+export interface DocumentsNode {
+  readonly type: "documents";
+  readonly name: FieldName;
+  readonly method: Method;
+  readonly label: Text;
+  readonly documents: readonly { readonly title: string; readonly href: string }[];
+}
+
 export interface OptionNode {
   readonly type: "option";
   readonly name: OptionName;
@@ -190,6 +200,7 @@ export interface RecoveryCodesNode {
 export type UiNode =
   | InputNode
   | ChoiceNode
+  | DocumentsNode
   | TotpSetupNode
   | RecoveryCodesNode
   | PushNumberNode
@@ -249,6 +260,7 @@ const FIELD_NAMES = [
   "phone",
   "national_id",
   "national_id_scheme",
+  "accept_documents",
   "birthdate",
 ] as const satisfies readonly FieldName[];
 const METHODS = [
@@ -356,6 +368,17 @@ const ChoiceS: v.GenericSchema<unknown, ChoiceNode> = v.object({
   label: TextS,
   options: v.pipe(v.array(v.object({ value: v.string(), label: TextS })), v.minLength(1)),
 });
+// TN-158 (12): a document opens only over https, in a new tab
+const DocumentsS: v.GenericSchema<unknown, DocumentsNode> = v.object({
+  type: v.literal("documents"),
+  name: v.picklist(FIELD_NAMES),
+  method: v.picklist(METHODS),
+  label: TextS,
+  documents: v.pipe(
+    v.array(v.object({ title: v.string(), href: v.pipe(v.string(), v.startsWith("https://")) })),
+    v.minLength(1),
+  ),
+});
 const OptionS: v.GenericSchema<unknown, OptionNode> = v.object({
   type: v.literal("option"),
   name: v.picklist(["keep_signed_in", "remember_device"]),
@@ -398,6 +421,7 @@ const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
   passkey_signal: PasskeySignalS,
   option: OptionS,
   choice: ChoiceS,
+  documents: DocumentsS,
   provider: ProviderS,
   push_number: PushNumberS,
   totp_setup: TotpSetupS,

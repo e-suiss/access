@@ -371,3 +371,27 @@ test("several identity number schemes ask which country the number is of", async
   ]);
   await expect(page.getByLabel("National identity number")).toBeVisible();
 });
+
+// TN-158 (12): the documents open in a new tab, and the step goes on only once they are accepted
+test("the profile step asks for the documents to be accepted", async ({ page, mock }) => {
+  mock.secondFactor = example("profile-documents");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const terms = page.getByRole("link", { name: "Terms of Service" });
+  await expect(terms).toHaveAttribute("href", "https://example.com/terms");
+  await expect(terms).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Privacy Notice" })).toBeVisible();
+  const accept = page.getByRole("checkbox", {
+    name: "I have read and accept the documents above",
+  });
+  await expect(accept).toBeVisible();
+  await accept.click();
+  await expect(accept).toBeChecked();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect
+    .poll(() => mock.submissions.at(-1))
+    .toMatchObject({ method: "profile", fields: { accept_documents: "true" } });
+});

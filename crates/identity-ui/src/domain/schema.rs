@@ -78,6 +78,31 @@ fn push_number_node() -> Value {
     )
 }
 
+/// TN-158 (12)
+fn documents_node() -> Value {
+    variant(
+        "type",
+        "documents",
+        &json!({
+            "name": r("FieldName"),
+            "method": r("Method"),
+            "label": r("Text"),
+            "documents": {
+                "type": "array",
+                "minItems": 1,
+                "items": object(
+                    &json!({
+                        "title": { "type": "string" },
+                        "href": { "type": "string", "pattern": "^https://" },
+                    }),
+                    &["title", "href"],
+                ),
+            },
+        }),
+        &["name", "method", "label", "documents"],
+    )
+}
+
 /// TN-158
 fn choice_node() -> Value {
     variant(
@@ -177,6 +202,7 @@ fn node() -> Value {
     );
     let push_number = push_number_node();
     let choice = choice_node();
+    let documents = documents_node();
     let (totp_setup, recovery_codes) = enrollment_nodes();
     json!({ "oneOf": [
         input,
@@ -191,6 +217,7 @@ fn node() -> Value {
         totp_setup,
         recovery_codes,
         choice,
+        documents,
     ] })
 }
 

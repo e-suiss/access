@@ -148,6 +148,9 @@ impl Ui {
                 // TN-158
                 Node::Choice {
                     name, method: m, ..
+                }
+                | Node::Documents {
+                    name, method: m, ..
                 } if *m == method => Some((*name, true, name.max_length())),
                 _ => None,
             })
@@ -173,6 +176,10 @@ impl Ui {
                 } if *c == name => options
                     .iter()
                     .any(|o| FieldValue::new(o.value.clone()) == value),
+                // TN-158 (12)
+                Node::Documents { name: c, .. } if *c == name => {
+                    FieldValue::new(String::from("true")) == value
+                }
                 _ => true,
             });
             if !chosen {

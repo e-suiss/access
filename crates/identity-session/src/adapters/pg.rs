@@ -205,6 +205,55 @@ impl SessionTx for PgTx {
         Ok(self.0.has_national_id(subject).await?)
     }
 
+    async fn pending_documents(
+        &mut self,
+        subject: [u8; 16],
+        digests: &[[u8; 32]],
+    ) -> Result<Vec<[u8; 32]>, SessionError> {
+        let accepted = self.0.acceptances(subject).await?;
+        Ok(digests
+            .iter()
+            .filter(|d| {
+                !accepted
+                    .iter()
+                    .any(|a| a.document_digest.as_slice() == d.as_slice())
+            })
+            .copied()
+            .collect())
+    }
+
+    async fn accept_documents(
+        &mut self,
+        environment: &access_identity_account::app::Environment<'_>,
+        subject: [u8; 16],
+        documents: &[access_identity_account::domain::document::Document],
+        (locale, correlation): (&str, &str),
+    ) -> Result<(), SessionError> {
+        let actor = environment.external(subject)?;
+        let who = access_identity_account::app::Actor {
+            actor: &actor,
+            correlation,
+        };
+        for d in documents {
+            access_identity_account::app::privacy::record_acceptance(
+                self,
+                environment,
+                subject,
+                &access_identity_account::app::privacy::Acceptance {
+                    document_type: &d.kind,
+                    version: &d.version,
+                    document_digest: d.digest,
+                    locale,
+                    method: "checkbox",
+                    client: None,
+                },
+                &who,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     async fn national_id_holder(
         &mut self,
         scheme: &str,

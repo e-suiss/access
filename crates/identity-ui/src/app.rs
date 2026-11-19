@@ -569,10 +569,24 @@ fn profile_ui(kit: &EnvironmentKit, flow: &FlowId, p: &ProfileStep, reqs: &[Requ
         } else {
             Vec::new()
         };
+        // TN-158 (12)
+        let documents: Vec<crate::domain::node::DocumentLink> = if p.gap.documents {
+            kit.signin
+                .documents
+                .iter()
+                .filter(|d| d.required)
+                .map(|d| crate::domain::node::DocumentLink {
+                    title: d.title.clone(),
+                    href: d.url.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ui::complete_profile(
             flow.clone(),
             (p.gap.name, p.gap.email && !p.gap.phone, p.gap.phone),
-            (&national, p.gap.birthdate),
+            (&national, p.gap.birthdate, &documents),
             p.offered.clone(),
             reqs,
         )
@@ -1089,6 +1103,13 @@ where
                     let mut ui = profile_ui(kit, &flow, p, &policy(kit));
                     ui.messages.push(Message::error(refused));
                     return Ok(Reply::ui(400, ui));
+                }
+                // TN-158 (12)
+                if !p.sent && p.gap.documents {
+                    auth.profile_documents(&fref, &kit.signin.documents, "und", b.correlation)
+                        .await
+                        .map_err(|e| failed(&e))?
+                        .map_err(|_| Reply::problem(FLOW_GONE))?;
                 }
                 return self
                     .profile_submit(auth, kit, b, (&flow, &fref), p, typed)

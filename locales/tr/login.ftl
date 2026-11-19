@@ -25,6 +25,7 @@ label-national_id_az_fin = Kişisel kimlik kodu (FİN)
 label-national_id_scheme = Kimlik numaranızın ülkesi
 label-national_id_other = Başka bir ülke
 label-birthdate = Doğum tarihi
+label-accept_documents = Yukarıdaki belgeleri okudum ve kabul ediyorum
 profile-facts_invalid = Numarayı ve tarihi kontrol edip tekrar deneyin.
 profile-too_young = Bu hizmetin yaş koşulunu karşılamıyorsunuz.
 profile-facts_taken = Bu bilgilerle devam edilemiyor. Yardım için destek ekibiyle iletişime geçin.

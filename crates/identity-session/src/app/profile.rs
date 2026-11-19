@@ -35,13 +35,20 @@ pub struct ProfileGap {
     pub national_id: bool,
     /// A birth date, which the environment requires (TN-158).
     pub birthdate: bool,
+    /// An acceptance of the environment's current required documents (TN-158 (12)).
+    pub documents: bool,
 }
 
 impl ProfileGap {
     /// Whether anything is missing.
     #[must_use]
     pub const fn any(self) -> bool {
-        self.name || self.email || self.phone || self.national_id || self.birthdate
+        self.name
+            || self.email
+            || self.phone
+            || self.national_id
+            || self.birthdate
+            || self.documents
     }
 }
 
@@ -78,6 +85,11 @@ where
     P: CredentialRegistry + Sync,
     S: SignalSink + Sync,
 {
+    /// TN-158 (12): the digests of the environment's current required documents.
+    fn required_documents(&self) -> Vec<[u8; 32]> {
+        self.policy.documents.iter().flatten().copied().collect()
+    }
+
     /// What `subject` lacks under the environment's policy (TN-151).
     pub(crate) async fn profile_gap(
         &self,
@@ -90,6 +102,10 @@ where
             phone: self.policy.require_phone && !tx.has_phone(subject).await?,
             national_id: self.policy.require_national_id && !tx.has_national_id(subject).await?,
             birthdate: self.policy.require_birthdate && !tx.has_birthdate(subject).await?,
+            documents: !tx
+                .pending_documents(subject, &self.required_documents())
+                .await?
+                .is_empty(),
         })
     }
 
@@ -264,6 +280,44 @@ where
         .await?;
         tx.commit().await?;
         Ok(Ok(Ok(gap)))
+    }
+
+    /// The profile step's acceptance of the environment's required documents (TN-158 (12)):
+    /// every pending one is recorded as ticked in `locale`.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn profile_documents(
+        &self,
+        flow: &FlowRef<'_>,
+        documents: &[access_identity_account::domain::document::Document],
+        locale: &str,
+        correlation: &str,
+    ) -> Result<Result<ProfileGap, Step>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let (_, subject, mut gap) = match self.profile_flow(&mut tx, flow, now).await? {
+            Ok(x) => x,
+            Err(step) => {
+                tx.commit().await?;
+                return Ok(Err(step));
+            }
+        };
+        if gap.documents {
+            let pending = tx
+                .pending_documents(subject, &self.required_documents())
+                .await?;
+            let ticked: Vec<_> = documents
+                .iter()
+                .filter(|d| pending.contains(&d.digest))
+                .cloned()
+                .collect();
+            tx.accept_documents(&self.environment, subject, &ticked, (locale, correlation))
+                .await?;
+            gap.documents = false;
+        }
+        tx.commit().await?;
+        Ok(Ok(gap))
     }
 
     /// Notes that a code went to the address the profile step took, or that the step takes an

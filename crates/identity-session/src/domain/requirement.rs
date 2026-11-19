@@ -61,6 +61,9 @@ pub struct AuthPolicy {
     pub require_national_id: bool,
     /// A sign-in completes only once the account has a birth date (TN-158).
     pub require_birthdate: bool,
+    /// The SHA-256 of each current required document of the environment, which every account
+    /// accepts (TN-158 (12)).
+    pub documents: [Option<[u8; 32]>; access_identity_account::domain::document::MAX_DOCUMENTS],
     /// The youngest age that registers (TN-158).
     pub min_age: Option<u8>,
 }
@@ -87,6 +90,7 @@ impl AuthPolicy {
         pin: false,
         require_national_id: false,
         require_birthdate: false,
+        documents: [None; access_identity_account::domain::document::MAX_DOCUMENTS],
         min_age: None,
     };
 }

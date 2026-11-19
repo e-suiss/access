@@ -88,6 +88,8 @@ pub struct EnvironmentSignin {
     pub min_age: Option<u8>,
     /// A phone environment asks every account for a proven e-mail address too (TN-158 (6)).
     pub email_required: bool,
+    /// The documents an account accepts (TN-158 (12)).
+    pub documents: Vec<access_identity_account::domain::document::Document>,
 }
 
 impl Default for EnvironmentSignin {
@@ -113,6 +115,7 @@ impl Default for EnvironmentSignin {
             national_id: Vec::new(),
             min_age: None,
             email_required: false,
+            documents: Vec::new(),
         }
     }
 }
@@ -268,6 +271,15 @@ impl EnvironmentSignin {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // TN-158 (12)
+        let documents = match get("documents") {
+            None => Vec::new(),
+            Some(Value::Array(a)) => a
+                .iter()
+                .map(access_identity_account::domain::document::Document::from_value)
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
         Some(Self {
             attestation,
             registration,
@@ -277,6 +289,7 @@ impl EnvironmentSignin {
             national_id,
             min_age,
             email_required,
+            documents,
             social: true,
             methods,
             mfa_required,
@@ -321,6 +334,16 @@ impl EnvironmentSignin {
             require_national_id: self.required_fields.contains("national_id")
                 && !self.national_id.is_empty(),
             require_birthdate: self.required_fields.contains("birthdate"),
+            documents: {
+                let mut out = [None; access_identity_account::domain::document::MAX_DOCUMENTS];
+                for (slot, d) in out
+                    .iter_mut()
+                    .zip(self.documents.iter().filter(|d| d.required))
+                {
+                    *slot = Some(d.digest);
+                }
+                out
+            },
             min_age: self.min_age,
             // TN-156
             phone: self.has("phone"),

@@ -6244,3 +6244,98 @@ async fn several_schemes_ask_which_country_the_number_is_of() {
         String::from_utf8_lossy(&done.body)
     );
 }
+
+fn documents() -> Vec<access_identity_account::domain::document::Document> {
+    use access_identity_account::domain::document::Document;
+    vec![
+        Document {
+            kind: String::from("terms"),
+            version: String::from("2026-11"),
+            title: String::from("Terms of Service"),
+            url: String::from("https://example.com/terms"),
+            digest: [3; 32],
+            required: true,
+        },
+        Document {
+            kind: String::from("newsletter"),
+            version: String::from("1"),
+            title: String::from("Newsletter"),
+            url: String::from("https://example.com/news"),
+            digest: [4; 32],
+            required: false,
+        },
+    ]
+}
+
+// TN-158 (12)
+#[tokio::test]
+async fn an_account_accepts_the_current_terms_once_before_it_signs_in() {
+    let signin = EnvironmentSignin {
+        documents: documents(),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    assert_eq!(
+        auth.documents.iter().flatten().count(),
+        1,
+        "only the required one"
+    );
+    let e = env_full(75, "tn-158-doc", auth, false, signin).await;
+    e.account("old@example.com").await;
+    let mut b = e.browser("old");
+    let step = b.sign_in("old@example.com").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    let docs = nodes.iter().find(|n| n["type"] == "documents").unwrap();
+    assert_eq!(docs["name"], "accept_documents");
+    assert_eq!(docs["documents"].as_array().unwrap().len(), 1);
+    assert_eq!(docs["documents"][0]["href"], "https://example.com/terms");
+    let unticked = b.submit(&step, "profile", json!({})).await;
+    assert_eq!(unticked.status, StatusCode::BAD_REQUEST);
+    let forged = b
+        .submit(&step, "profile", json!({ "accept_documents": "yes" }))
+        .await;
+    assert_eq!(forged.status, StatusCode::BAD_REQUEST);
+    let done = b
+        .submit(&step, "profile", json!({ "accept_documents": "true" }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let mut again = e.browser("old-2");
+    assert_eq!(again.sign_in("old@example.com").await.step(), "complete");
+
+    let mut n = e.browser("new");
+    let code_step = n.register("new@example.com").await;
+    let code = e.outbox.last();
+    let next = n
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "display_name": "New" }),
+        )
+        .await;
+    assert_eq!(
+        next.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&next.body)
+    );
+    let done = n
+        .submit(&next, "profile", json!({ "accept_documents": "true" }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+}

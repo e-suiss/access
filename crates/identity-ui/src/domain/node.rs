@@ -51,13 +51,15 @@ pub enum FieldName {
     NationalId,
     /// The scheme a national identity number is of, when the environment takes several (TN-158).
     NationalIdScheme,
+    /// The acceptance of the environment's documents: `"true"` (TN-158 (12)).
+    AcceptDocuments,
     /// A birth date, ISO `YYYY-MM-DD` (TN-158).
     Birthdate,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -77,6 +79,7 @@ impl FieldName {
         Self::Phone,
         Self::NationalId,
         Self::NationalIdScheme,
+        Self::AcceptDocuments,
         Self::Birthdate,
     ];
 
@@ -103,6 +106,7 @@ impl FieldName {
             Self::Phone => "phone",
             Self::NationalId => "national_id",
             Self::NationalIdScheme => "national_id_scheme",
+            Self::AcceptDocuments => "accept_documents",
             Self::Birthdate => "birthdate",
         }
     }
@@ -121,6 +125,7 @@ impl FieldName {
             // OP-146 m.10 (c)
             Self::Password | Self::NewPassword => 128,
             Self::TotpCode | Self::Birthdate => 10,
+            Self::AcceptDocuments => 4,
             Self::RecoveryCode => 64,
             // CR-10
             Self::PasskeyCredential => 16_384,
@@ -400,6 +405,16 @@ pub struct ChoiceOption {
     pub label: Text,
 }
 
+/// One document of a [`Node::Documents`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentLink {
+    /// Its title, as the environment wrote it.
+    pub title: String,
+    /// Its `https://` address.
+    pub href: String,
+}
+
 /// One thing to draw.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -477,6 +492,18 @@ pub enum Node {
         /// The options, in order.
         options: Vec<ChoiceOption>,
     },
+    /// The environment's documents and one required checkbox that accepts them all (TN-158
+    /// (12)): submitted as its method's field `name` with `"true"`.
+    Documents {
+        /// [`FieldName::AcceptDocuments`].
+        name: FieldName,
+        /// The method this field is submitted with.
+        method: Method,
+        /// The checkbox's caption.
+        label: Text,
+        /// The documents, each a link that opens in a new tab.
+        documents: Vec<DocumentLink>,
+    },
     /// N5: a checkbox that belongs to the whole step: when checked, the client sends
     /// `fields[name] = "true"` with every submission of the step (TN-36, X33).
     Option {
@@ -541,7 +568,8 @@ impl Node {
         match self {
             Self::Input { method, .. }
             | Self::Submit { method, .. }
-            | Self::Choice { method, .. } => Some(*method),
+            | Self::Choice { method, .. }
+            | Self::Documents { method, .. } => Some(*method),
             Self::PasskeyGet { .. } | Self::PasskeyAutofill { .. } => Some(Method::Passkey),
             Self::PasskeyCreate { .. } => Some(Method::PasskeyRegister),
             Self::PasskeySignal { .. }

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "profile",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "profile",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "documents",
+      "name": "accept_documents",
+      "method": "profile",
+      "label": {
+        "id": "label.accept_documents",
+        "text": "I have read and accept the documents above"
+      },
+      "documents": [
+        {
+          "title": "Terms of Service",
+          "href": "https://example.com/terms"
+        },
+        {
+          "title": "Privacy Notice",
+          "href": "https://example.com/privacy"
+        }
+      ]
+    },
+    {
+      "type": "submit",
+      "method": "profile",
+      "label": {
+        "id": "action.continue",
+        "text": "Continue"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "profile.complete",
+      "text": "Finish setting up your account to continue.",
+      "severity": "info"
+    }
+  ]
+}

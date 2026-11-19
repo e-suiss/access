@@ -147,7 +147,7 @@ fn examples() -> Vec<(&'static str, Ui)> {
             Ui::complete_profile(
                 flow(),
                 (true, true, false),
-                (&[], false),
+                (&[], false, &[]),
                 Some(String::from("ada@example.org")),
                 &POLICY,
             ),
@@ -158,7 +158,7 @@ fn examples() -> Vec<(&'static str, Ui)> {
             Ui::complete_profile(
                 flow(),
                 (false, false, false),
-                (&[(String::from("tr-tckn"), TextId::TcknLabel)], true),
+                (&[(String::from("tr-tckn"), TextId::TcknLabel)], true, &[]),
                 None,
                 &POLICY,
             ),
@@ -178,6 +178,31 @@ fn examples() -> Vec<(&'static str, Ui)> {
                         ),
                     ],
                     false,
+                    &[],
+                ),
+                None,
+                &POLICY,
+            ),
+        ),
+        // TN-158 (12)
+        (
+            "profile-documents",
+            Ui::complete_profile(
+                flow(),
+                (false, false, false),
+                (
+                    &[],
+                    false,
+                    &[
+                        access_identity_ui::domain::node::DocumentLink {
+                            title: String::from("Terms of Service"),
+                            href: String::from("https://example.com/terms"),
+                        },
+                        access_identity_ui::domain::node::DocumentLink {
+                            title: String::from("Privacy Notice"),
+                            href: String::from("https://example.com/privacy"),
+                        },
+                    ],
                 ),
                 None,
                 &POLICY,

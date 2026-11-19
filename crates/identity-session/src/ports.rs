@@ -179,6 +179,20 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Vec<String>, SessionError>> + Send;
+    /// Which of the documents named by `digests` the subject has not accepted (TN-158 (12)).
+    fn pending_documents(
+        &mut self,
+        subject: [u8; 16],
+        digests: &[[u8; 32]],
+    ) -> impl Future<Output = Result<Vec<[u8; 32]>, SessionError>> + Send;
+    /// Records the subject's acceptance of `documents`, ticked in `locale` (TN-158 (12)).
+    fn accept_documents(
+        &mut self,
+        environment: &access_identity_account::app::Environment<'_>,
+        subject: [u8; 16],
+        documents: &[access_identity_account::domain::document::Document],
+        locale_correlation: (&str, &str),
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
     /// The account that holds a national identity number, if any (TN-158).
     fn national_id_holder(
         &mut self,

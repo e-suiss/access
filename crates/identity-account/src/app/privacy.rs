@@ -467,6 +467,22 @@ pub async fn accept_document(
         .begin(environment.tenant, environment.environment)
         .await?;
     live(&mut tx, subject, true).await?;
+    record_acceptance(&mut tx, environment, subject, a, who).await?;
+    tx.commit().await
+}
+
+/// [`accept_document`] in an open transaction, for a subject the caller knows is live: the
+/// acceptance, its audit row and `document.accepted` (TN-158 (12)).
+///
+/// # Errors
+/// [`AccountError::Invalid`] for a malformed field; [`AccountError`].
+pub async fn record_acceptance(
+    tx: &mut PgTx,
+    environment: &Environment<'_>,
+    subject: [u8; 16],
+    a: &Acceptance<'_>,
+    who: &Actor<'_>,
+) -> Result<(), AccountError> {
     let account = environment.external(subject)?;
     let body = json!({
         "account": account,
@@ -497,14 +513,14 @@ pub async fn accept_document(
             other => AccountError::Store(other),
         })?;
     audit(
-        &mut tx,
+        tx,
         "document.accepted",
         who,
         &format!("{account}:doc:{}", hex(&record)),
     )
     .await?;
     outbox(
-        &mut tx,
+        tx,
         "event.document.accepted",
         json!({
             "environment": environment_uuid(environment),
@@ -515,7 +531,7 @@ pub async fn accept_document(
         }),
     )
     .await?;
-    tx.commit().await
+    Ok(())
 }
 
 /// Whether the subject must accept `version` of `document_type` again: it never accepted that

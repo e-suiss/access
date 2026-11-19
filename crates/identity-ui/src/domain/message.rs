@@ -87,6 +87,9 @@ pub enum TextId {
     /// The generic scheme in a choice of schemes (TN-158).
     #[serde(rename = "label.national_id_other")]
     OtherCountryLabel,
+    /// The checkbox that accepts the environment's documents (TN-158 (12)).
+    #[serde(rename = "label.accept_documents")]
+    AcceptDocumentsLabel,
     /// The six-digit PIN a phone sign-up sets (TN-157).
     #[serde(rename = "label.pin")]
     PinLabel,
@@ -656,7 +659,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 213] = [
+    pub const ALL: [Self; 214] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -688,6 +691,7 @@ impl TextId {
         Self::FactsTaken,
         Self::NationalIdSchemeLabel,
         Self::OtherCountryLabel,
+        Self::AcceptDocumentsLabel,
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
@@ -908,6 +912,7 @@ impl TextId {
             Self::FactsTaken => "profile.facts_taken",
             Self::NationalIdSchemeLabel => "label.national_id_scheme",
             Self::OtherCountryLabel => "label.national_id_other",
+            Self::AcceptDocumentsLabel => "label.accept_documents",
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
@@ -1132,6 +1137,7 @@ impl TextId {
             Self::FactsTaken => "You can't continue with these details. Contact support for help.",
             Self::NationalIdSchemeLabel => "Country of your identity number",
             Self::OtherCountryLabel => "Another country",
+            Self::AcceptDocumentsLabel => "I have read and accept the documents above",
             Self::PinLabel => "Choose a 6-digit PIN",
             Self::SecretRefused => {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."

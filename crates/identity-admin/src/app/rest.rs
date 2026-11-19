@@ -1678,6 +1678,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "national_id",
                     "min_age",
                     "email_required",
+                    "documents",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1736,6 +1737,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 national_id: match m.get("national_id") {
                     None | Some(Json::Null) => BTreeSet::new(),
                     Some(_) => set("national_id")?,
+                },
+                documents: match m.get("documents") {
+                    None | Some(Json::Null) => Vec::new(),
+                    Some(Json::Array(a)) => a.iter().map(document).collect::<Result<_, _>>()?,
+                    Some(_) => return Err(Invalid::SigninPolicy),
                 },
                 email_required: match m.get("email_required") {
                     None => false,
@@ -2758,7 +2764,43 @@ pub fn default_signin() -> SigninPolicy {
         national_id: BTreeSet::new(),
         min_age: None,
         email_required: false,
+        documents: Vec::new(),
     }
+}
+
+/// TN-158 (12): one document of the sign-in policy, `sha256` in lower-case hex.
+fn document(v: &Json) -> Result<access_identity_account::domain::document::Document, Invalid> {
+    let Json::Object(m) = v else {
+        return Err(Invalid::SigninPolicy);
+    };
+    let text = |k: &str| {
+        m.get(k)
+            .and_then(Json::as_str)
+            .map(String::from)
+            .ok_or(Invalid::SigninPolicy)
+    };
+    let hex = text("sha256")?;
+    let mut digest = [0_u8; 32];
+    if hex.len() != 64 {
+        return Err(Invalid::SigninPolicy);
+    }
+    for (out, pair) in digest.iter_mut().zip(hex.as_bytes().chunks(2)) {
+        let s = core::str::from_utf8(pair).map_err(|_| Invalid::SigninPolicy)?;
+        *out = u8::from_str_radix(s, 16).map_err(|_| Invalid::SigninPolicy)?;
+    }
+    if m.keys()
+        .any(|k| !["type", "version", "title", "url", "sha256", "required"].contains(&k.as_str()))
+    {
+        return Err(Invalid::SigninPolicy);
+    }
+    Ok(access_identity_account::domain::document::Document {
+        kind: text("type")?,
+        version: text("version")?,
+        title: text("title")?,
+        url: text("url")?,
+        digest,
+        required: m.get("required").and_then(Json::as_bool).unwrap_or(true),
+    })
 }
 
 /// What one read returned: views with their `ETag` positions, and the natural key the next page
