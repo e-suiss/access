@@ -26,6 +26,7 @@ label-national_id_scheme = Kimlik numaranızın ülkesi
 label-national_id_other = Başka bir ülke
 label-birthdate = Doğum tarihi
 label-accept_documents = Yukarıdaki belgeleri okudum ve kabul ediyorum
+login-link_waiting = Bu e-postayla zaten bir hesabınız var. Kullandığınız giriş yöntemini bağlamak için bu hesaba giriş yapın.
 profile-facts_invalid = Numarayı ve tarihi kontrol edip tekrar deneyin.
 profile-too_young = Bu hizmetin yaş koşulunu karşılamıyorsunuz.
 profile-facts_taken = Bu bilgilerle devam edilemiyor. Yardım için destek ekibiyle iletişime geçin.

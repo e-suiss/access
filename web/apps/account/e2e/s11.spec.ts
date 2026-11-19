@@ -297,7 +297,7 @@ test("another sign-in is linked from the account page and the outcome is said", 
   await expect(page).toHaveURL(/\/account\/$/);
   await page.goto("/account/?link=elsewhere");
   await expect(linked.getByTestId("said-alert")).toHaveText(
-    "That sign-in is already linked to another account. Nothing changed.",
+    "That sign-in is already linked to another account. To move it here, sign in to that account with it, remove it there, then link it here.",
   );
 });
 

@@ -5662,6 +5662,14 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "login-link_waiting"
+text_id = "login.link_waiting"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "label-accept_documents"
 text_id = "label.accept_documents"
 surface = "login"

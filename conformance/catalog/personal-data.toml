@@ -184,6 +184,15 @@ export = false
 note = "Digest of (provider, provider subject); the provider's own id is never stored (P-ID-9)."
 
 [[field]]
+column = "access.identity_pending_links.identity_key"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "Digest of (provider, provider subject) waiting ten minutes for its account's sign-in (TN-159)."
+
+[[field]]
 column = "access.identity_federated.address_ciphertext"
 vault = "contact"
 retention = "profile"

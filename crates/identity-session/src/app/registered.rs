@@ -186,6 +186,20 @@ where
     ///
     /// # Errors
     /// [`SessionError`].
+    /// Tells the account a sign-in method was added outside the account page: a provider linked
+    /// after a sign-in (TN-159).
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn method_added(&self, subject: [u8; 16]) -> Result<(), SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        self.account_notice(&mut tx, subject, Notice::NewMethod, now)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub(crate) async fn account_notice(
         &self,
         tx: &mut D::Tx,

@@ -967,28 +967,105 @@ async fn a_social_sign_in_creates_the_account_once_and_then_finds_it_by_its_key(
     assert_eq!(replay.status, StatusCode::GONE);
 }
 
-// IDP-31 (3), §7.1, MD-5, TN-3, TN-65 (7), CR-40
+// TN-159, IDP-31 (3), MD-5, TN-3, TN-65 (7)
 #[tokio::test]
-async fn a_matching_verified_address_never_links_and_the_answer_does_not_tell() {
+async fn a_vouched_address_of_an_account_asks_for_its_sign_in_and_links_only_after_it() {
     let e = env(0x42, "soc-b").await;
     e.enable(Some("own-client")).await;
     let ada = e.account("ada@gmail.com").await;
     e.says("g-2", Some(("ada@gmail.com", true)));
     let mut w = e.browser(1);
     let a = w.social(&e).await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER);
+    let to = a.location();
+    assert!(
+        to.starts_with(&format!("https://{HOST}/login?flow=")),
+        "{to}"
+    );
+    assert_eq!(
+        e.link_of("g-2").await,
+        None,
+        "nothing is linked or created yet"
+    );
+    let handle = to.split_once("flow=").unwrap().1.to_owned();
+    let step = w
+        .send("GET", &format!("/v1/login/flows/{handle}"), None)
+        .await;
+    assert_eq!(
+        step.json()["step"],
+        "authenticate",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let body = step.json();
+    let messages: Vec<&str> = body["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_str().unwrap())
+        .collect();
+    assert!(messages.contains(&"login.link_waiting"), "{messages:?}");
+    let action = step.json()["action"].as_str().unwrap().to_owned();
+    let done = w
+        .send(
+            "POST",
+            &action,
+            Some(json!({ "method": "password", "fields": { "password": PW } })),
+        )
+        .await;
+    assert_eq!(
+        done.json()["step"],
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(
+        e.link_of("g-2").await,
+        Some(ada),
+        "linked after the account's own sign-in"
+    );
+    assert_eq!(e.live_identifiers(ada).await, 1);
+    let mut again = e.browser(2);
+    let back = again.social(&e).await;
+    assert_eq!(
+        back.location(),
+        format!("https://{HOST}/account"),
+        "the identity signs in now"
+    );
+}
+
+// TN-159 (3)
+#[tokio::test]
+async fn a_pending_link_is_not_completed_by_a_sign_in_to_another_account() {
+    let e = env(0x53, "soc-x").await;
+    e.enable(Some("own-client")).await;
+    e.account("ada@gmail.com").await;
+    let bob = e.account("bob@gmail.com").await;
+    e.says("g-x", Some(("ada@gmail.com", true)));
+    let mut w = e.browser(3);
+    let a = w.social(&e).await;
+    assert!(a.location().contains("/login?flow="));
+    w.sign_in("bob@gmail.com").await;
+    assert_eq!(e.link_of("g-x").await, None);
+    assert_eq!(e.links_of(bob).await.len(), 0);
+}
+
+// TN-159 (4), CR-40
+#[tokio::test]
+async fn an_unvouched_address_never_tells_whether_it_is_held() {
+    let e = env(0x52, "soc-u").await;
+    e.enable(Some("own-client")).await;
+    let ada = e.account("ada@gmail.com").await;
+    e.says("g-u", Some(("ada@gmail.com", false)));
+    let mut w = e.browser(4);
+    let a = w.social(&e).await;
     assert_eq!(
         (a.status, a.location()),
         (StatusCode::SEE_OTHER, format!("https://{HOST}/account"))
     );
-    let new = e.link_of("g-2").await.unwrap();
+    let new = e.link_of("g-u").await.unwrap();
     assert_ne!(new, ada, "an address is never a key");
     assert_eq!(e.links_of(ada).await.len(), 0);
-    assert_eq!(e.live_identifiers(ada).await, 1);
-    assert_eq!(
-        e.live_identifiers(new).await,
-        0,
-        "the address stays only with its owner"
-    );
 }
 
 /// The answer with cookie values, `Date` and the request id masked.
@@ -1013,9 +1090,10 @@ fn masked(a: &Answer) -> (u16, Vec<(String, String)>, Vec<u8>) {
     (a.status.as_u16(), headers, a.body.clone())
 }
 
-// 4107, 4111, CR-40, TN-96, X34, OP-153 m.15 (a)
+// 4107, 4111, CR-40, TN-96, X34, OP-153 m.15 (a), TN-159 (4)
 #[tokio::test]
-async fn a_social_sign_in_answers_byte_for_byte_alike_whether_or_not_its_address_is_held() {
+async fn a_social_sign_in_answers_byte_for_byte_alike_whether_or_not_its_unvouched_address_is_held()
+{
     let e = env(0x47, "soc-p").await;
     e.enable(Some("own-client")).await;
     e.account("held@gmail.com").await;
@@ -1024,7 +1102,7 @@ async fn a_social_sign_in_answers_byte_for_byte_alike_whether_or_not_its_address
         .into_iter()
         .enumerate()
     {
-        e.says(sub, Some((mail, true)));
+        e.says(sub, Some((mail, false)));
         let mut w = e.browser(10 + u8::try_from(i).unwrap());
         answers.push(masked(&w.social(&e).await));
     }

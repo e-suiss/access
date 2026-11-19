@@ -90,6 +90,9 @@ pub enum TextId {
     /// The checkbox that accepts the environment's documents (TN-158 (12)).
     #[serde(rename = "label.accept_documents")]
     AcceptDocumentsLabel,
+    /// A provider identity waits for this account's sign-in (TN-159).
+    #[serde(rename = "login.link_waiting")]
+    LinkWaiting,
     /// The six-digit PIN a phone sign-up sets (TN-157).
     #[serde(rename = "label.pin")]
     PinLabel,
@@ -659,7 +662,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 214] = [
+    pub const ALL: [Self; 215] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -692,6 +695,7 @@ impl TextId {
         Self::NationalIdSchemeLabel,
         Self::OtherCountryLabel,
         Self::AcceptDocumentsLabel,
+        Self::LinkWaiting,
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
@@ -913,6 +917,7 @@ impl TextId {
             Self::NationalIdSchemeLabel => "label.national_id_scheme",
             Self::OtherCountryLabel => "label.national_id_other",
             Self::AcceptDocumentsLabel => "label.accept_documents",
+            Self::LinkWaiting => "login.link_waiting",
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
@@ -1138,6 +1143,9 @@ impl TextId {
             Self::NationalIdSchemeLabel => "Country of your identity number",
             Self::OtherCountryLabel => "Another country",
             Self::AcceptDocumentsLabel => "I have read and accept the documents above",
+            Self::LinkWaiting => {
+                "You already have an account with this email. Sign in to it to link the sign-in you used."
+            }
             Self::PinLabel => "Choose a 6-digit PIN",
             Self::SecretRefused => {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."

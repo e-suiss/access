@@ -89,6 +89,21 @@ pub struct AttemptRow {
     pub verifier: String,
 }
 
+/// A provider identity waiting for its account's sign-in in one browser (TN-159).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingLink {
+    /// The browser's device digest.
+    pub device_hash: [u8; 32],
+    /// The provider.
+    pub provider: String,
+    /// `identity_key(provider, subject)`.
+    pub identity_key: [u8; 32],
+    /// The account whose address the provider vouched for.
+    pub subject: [u8; 16],
+    /// When it was recorded.
+    pub created_ms: u64,
+}
+
 impl core::fmt::Debug for AttemptRow {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AttemptRow")
@@ -250,6 +265,85 @@ impl TenantTx {
             .await?;
         }
         Ok(())
+    }
+
+    /// Records a provider identity waiting for `subject`'s sign-in in this browser (TN-159).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_pending_link(
+        &mut self,
+        p: &PendingLink,
+        expires_ms: u64,
+    ) -> Result<(), StoreError> {
+        let (tenant, environment) = scope(self)?;
+        sqlx::query!(
+            "INSERT INTO access.identity_pending_links (tenant_id, environment_id, device_hash,
+                    provider, identity_key, subject_id, created_ms, expires_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            tenant,
+            environment,
+            p.device_hash.as_slice(),
+            p.provider,
+            p.identity_key.as_slice(),
+            Uuid::from_bytes(p.subject),
+            i64_of(p.created_ms)?,
+            i64_of(expires_ms)?,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// The newest open, unexpired pending link of this browser (TN-159); `take` uses it.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn pending_link(
+        &mut self,
+        device_hash: &[u8; 32],
+        now_ms: u64,
+        take: bool,
+    ) -> Result<Option<PendingLink>, StoreError> {
+        let (tenant, environment) = scope(self)?;
+        let now = i64_of(now_ms)?;
+        let row = sqlx::query!(
+            "SELECT pending_id, provider, identity_key, subject_id, created_ms
+               FROM access.identity_pending_links
+              WHERE tenant_id = $1 AND environment_id = $2 AND device_hash = $3
+                AND used_ms IS NULL AND expires_ms > $4
+              ORDER BY pending_id DESC
+              LIMIT 1
+              FOR UPDATE",
+            tenant,
+            environment,
+            device_hash.as_slice(),
+            now,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        if take {
+            sqlx::query!(
+                "UPDATE access.identity_pending_links SET used_ms = $4
+                  WHERE tenant_id = $1 AND environment_id = $2 AND pending_id = $3",
+                tenant,
+                environment,
+                row.pending_id,
+                now,
+            )
+            .execute(&mut *self.tx)
+            .await?;
+        }
+        Ok(Some(PendingLink {
+            device_hash: *device_hash,
+            provider: row.provider,
+            identity_key: <[u8; 32]>::try_from(row.identity_key).map_err(|_| StoreError::Range)?,
+            subject: *row.subject_id.as_bytes(),
+            created_ms: u64::try_from(row.created_ms).map_err(|_| StoreError::Range)?,
+        }))
     }
 
     /// Opens a social attempt.

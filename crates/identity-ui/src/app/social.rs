@@ -108,6 +108,9 @@ fn redirect_uri(kit: &EnvironmentKit, provider: &str) -> String {
     format!("{}/v1/login/social/{provider}/callback", kit.issuer)
 }
 
+/// TN-159: how long a provider identity waits for its account's sign-in (PD).
+const PENDING_LINK_TTL_MS: u64 = 600_000;
+
 fn redirect(to: String) -> Reply {
     Reply::new(303, Body::Redirect(to))
 }
@@ -471,6 +474,16 @@ where
         let subject = match externals.sign_in(&asserted, now, &who).await {
             Ok(Resolved::Existing(s) | Resolved::Created(s)) => s,
             Ok(Resolved::Unusable) => return Reply::problem(SOCIAL_FAILED),
+            // TN-159
+            Ok(Resolved::Claimed(holder)) => {
+                let Some((value, _)) = address else {
+                    return Reply::problem(SOCIAL_FAILED);
+                };
+                return self
+                    .offer_link(&kit, b, (provider, &external.key), holder, value, device)
+                    .await
+                    .unwrap_or_else(|r| r);
+            }
             Err(e) => return failed(&e.into()),
         };
         // TN-90, Ek B 3611
@@ -494,6 +507,137 @@ where
                 _ => Reply::problem(FLOW_GONE),
             },
             Err(e) => failed(&e),
+        }
+    }
+
+    /// TN-159: the provider identity waits for its account's sign-in in this browser, and a
+    /// sign-in to that address opens.
+    async fn offer_link(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        (provider, key): (&str, &[u8; 32]),
+        holder: [u8; 16],
+        address: &str,
+        device: [u8; 32],
+    ) -> Result<Reply, Reply> {
+        let now = self.clock.now_ms();
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment)
+            .await
+            .map_err(|_| unavailable())?;
+        t.insert_pending_link(
+            &access_store::federation::PendingLink {
+                device_hash: device_digest(&device),
+                provider: String::from(provider),
+                identity_key: *key,
+                subject: holder,
+                created_ms: now,
+            },
+            now.saturating_add(PENDING_LINK_TTL_MS),
+        )
+        .await
+        .map_err(|_| unavailable())?;
+        t.commit().await.map_err(|_| unavailable())?;
+        signin!(self, kit, auth, Some(b.ip));
+        let started = auth
+            .identify(&access_identity_session::app::signin::Identify {
+                identifier: Some(address),
+                device: b.flow,
+                marker: b.marker,
+                keep_signed_in: false,
+                remember_device: false,
+                second_factor: false,
+            })
+            .await
+            .map_err(|e| failed(&e))?;
+        Ok(
+            redirect(format!("{}/login?flow={}", kit.issuer, started.handle))
+                .cookie(started.set_cookie)
+                .cookie(Some(super::login_cookie(&started.handle, address))),
+        )
+    }
+
+    /// TN-159: whether a provider identity waits for a sign-in in the browser of `device`.
+    pub(crate) async fn link_waiting(&self, kit: &EnvironmentKit, device: &str) -> bool {
+        let Some(device) = b64url_decode(device)
+            .ok()
+            .and_then(|d| <[u8; 32]>::try_from(d).ok())
+        else {
+            return false;
+        };
+        let now = self.clock.now_ms();
+        let found = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+            let p = t.pending_link(&device_digest(&device), now, false).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(p.is_some())
+        };
+        found.await.unwrap_or(false)
+    }
+
+    /// TN-159: a sign-in this browser completed to the account a provider identity waits for
+    /// links that identity, keeping the new session; a sign-in to another account leaves it.
+    pub(crate) async fn finish_link(
+        &self,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        s: &access_identity_session::app::SignedIn,
+    ) {
+        let Some(device) = b
+            .flow
+            .and_then(|f| b64url_decode(f).ok())
+            .and_then(|d| <[u8; 32]>::try_from(d).ok())
+        else {
+            return;
+        };
+        let subject = s.result.subject;
+        let now = self.clock.now_ms();
+        let taken = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+            let hash = device_digest(&device);
+            let open = t.pending_link(&hash, now, false).await?;
+            let out = match open {
+                Some(p) if p.subject == subject => t.pending_link(&hash, now, true).await?,
+                _ => None,
+            };
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(out)
+        }
+        .await;
+        let Ok(Some(pending)) = taken else {
+            return;
+        };
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let externals = Externals {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+        };
+        let actor = environment.external(subject).unwrap_or_default();
+        let who = Actor {
+            actor: &actor,
+            correlation: b.correlation,
+        };
+        let asserted = Asserted {
+            provider: &pending.provider,
+            key: &pending.identity_key,
+            address: None,
+            name: None,
+            register: false,
+        };
+        match externals
+            .link((subject, Some(s.session)), &asserted, now, &who)
+            .await
+        {
+            Ok(Linked::Linked) => {
+                signin!(self, kit, auth);
+                if let Err(e) = auth.method_added(subject).await {
+                    tracing::warn!(error = %e, "link notice not queued");
+                }
+            }
+            Ok(Linked::Already | Linked::Elsewhere) => {}
+            Err(e) => tracing::warn!(error = %e, "pending link not completed"),
         }
     }
 

@@ -43,6 +43,9 @@ pub enum Resolved {
     Created([u8; 16]),
     /// The linked account cannot sign in (not active).
     Unusable,
+    /// The identity is linked to no account, and the address the provider vouched for is this
+    /// account's: nothing is created, the person signs in to it to link (TN-159).
+    Claimed([u8; 16]),
 }
 
 /// The field the raw upstream assertion is sealed under.
@@ -187,7 +190,7 @@ impl Externals<'_> {
         who: &Actor<'_>,
     ) -> Result<Resolved, AccountError> {
         let mut tx = self.begin().await?;
-        let r = self.resolve(&mut tx, a, now_ms, who).await?;
+        let r = self.resolve(&mut tx, (a, true), now_ms, who).await?;
         tx.commit().await?;
         Ok(r)
     }
@@ -225,7 +228,7 @@ impl Externals<'_> {
     async fn resolve(
         &self,
         tx: &mut PgTx,
-        a: &Asserted<'_>,
+        (a, offer_link): (&Asserted<'_>, bool),
         now_ms: u64,
         who: &Actor<'_>,
     ) -> Result<Resolved, AccountError> {
@@ -251,6 +254,26 @@ impl Externals<'_> {
                     .await?;
             }
             return Ok(Resolved::Existing(row.subject));
+        }
+        // TN-159
+        if offer_link
+            && let Some((value, true)) = a.address
+            && let Some(holder) = tx.subject_by_identifier(value).await?
+            && tx
+                .subject(holder, false)
+                .await?
+                .is_some_and(|s| s.status == AccountStatus::Active.name())
+        {
+            let external = self.environment.external(holder)?;
+            audit(
+                tx,
+                "account.link_offered",
+                who.actor,
+                &format!("{external}:{}", a.provider),
+                who.correlation,
+            )
+            .await?;
+            return Ok(Resolved::Claimed(holder));
         }
         // OP-159 m.48 (c)
         if !a.register {
@@ -346,10 +369,10 @@ impl Externals<'_> {
                 return Ok(UpstreamResolved::Conflict { holder, fresh });
             }
         }
-        let resolved = self.resolve(&mut tx, a, now_ms, who).await?;
+        let resolved = self.resolve(&mut tx, (a, false), now_ms, who).await?;
         let subject = match resolved {
             Resolved::Existing(s) | Resolved::Created(s) => s,
-            Resolved::Unusable => {
+            Resolved::Unusable | Resolved::Claimed(_) => {
                 tx.commit().await?;
                 return Ok(UpstreamResolved::Unusable);
             }

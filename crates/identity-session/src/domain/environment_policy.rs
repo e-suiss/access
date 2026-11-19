@@ -335,7 +335,7 @@ impl EnvironmentSignin {
                 && !self.national_id.is_empty(),
             require_birthdate: self.required_fields.contains("birthdate"),
             documents: {
-                let mut out = [None; access_identity_account::domain::document::MAX_DOCUMENTS];
+                let mut out = [None; access_identity_account::domain::document::MAX_REQUIRED];
                 for (slot, d) in out
                     .iter_mut()
                     .zip(self.documents.iter().filter(|d| d.required))

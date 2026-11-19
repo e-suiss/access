@@ -6,6 +6,8 @@ use suiss_crypto::dcbor::Value;
 
 /// The most documents an environment names.
 pub const MAX_DOCUMENTS: usize = 8;
+/// The most of them that are required.
+pub const MAX_REQUIRED: usize = 4;
 /// The longest title.
 pub const TITLE_MAX_CHARS: usize = 120;
 /// The longest address.
@@ -102,11 +104,12 @@ impl Document {
     }
 }
 
-/// Whether a list of documents is well formed: at most [`MAX_DOCUMENTS`], each valid, one per
-/// type.
+/// Whether a list of documents is well formed: at most [`MAX_DOCUMENTS`], of which at most
+/// [`MAX_REQUIRED`] are required, each valid, one per type.
 #[must_use]
 pub fn valid_list(docs: &[Document]) -> bool {
     docs.len() <= MAX_DOCUMENTS
+        && docs.iter().filter(|d| d.required).count() <= MAX_REQUIRED
         && docs.iter().all(Document::valid)
         && docs.iter().enumerate().all(|(i, d)| {
             docs.iter()

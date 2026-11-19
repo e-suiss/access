@@ -357,7 +357,7 @@ fn options(v: Value) -> Result<PasskeyOptions, Reply> {
 }
 
 /// The identifier cookie: `<flow handle>.<base64url identifier>`.
-fn login_cookie(handle: &str, identifier: &str) -> String {
+pub(crate) fn login_cookie(handle: &str, identifier: &str) -> String {
     let value = format!("{handle}.{}", b64url_encode(identifier.as_bytes()));
     set_cookie(LOGIN_COOKIE, &value, Some(LOGIN_COOKIE_MAX_AGE_S))
 }
@@ -1381,6 +1381,8 @@ where
             } => Current::Done(Reply::problem(FLOW_GONE)),
             Outcome::Suspended { .. } => Current::Email(EmailWait::Code),
             Outcome::SignedIn(s) => {
+                // TN-159
+                self.finish_link(kit, b, &s).await;
                 let flow = flow_id(fref.handle)?;
                 let reply = Reply::ui(200, Ui::complete(flow, self.done_to(kit), &policy(kit)))
                     .cookie(s.set_cookie)
@@ -1441,9 +1443,14 @@ where
                 } else {
                     blank()?
                 };
-                Ui::authenticate(flow.clone(), &id, passkey, &reqs)
+                let mut ui = Ui::authenticate(flow.clone(), &id, passkey, &reqs)
                     .with_email(email(kit))
-                    .with_first_steps(kit.auth.password, kit.auth.passkey)
+                    .with_first_steps(kit.auth.password, kit.auth.passkey);
+                // TN-159
+                if self.link_waiting(kit, fref.device).await {
+                    ui.messages.push(Message::info(TextId::LinkWaiting));
+                }
+                ui
             }
             Current::Email(wait) => Ui::email_sent(flow.clone(), wait, &reqs),
             Current::Second(offered) => {
@@ -1605,6 +1612,8 @@ where
                 Ok(Reply::ui(200, Ui::email_sent(flow.clone(), wait, &reqs)))
             }
             Outcome::SignedIn(s) => {
+                // TN-159
+                self.finish_link(kit, b, &s).await;
                 let reply = Reply::ui(200, Ui::complete(flow.clone(), self.done_to(kit), &reqs))
                     .cookie(s.set_cookie)
                     .cookie(s.marker_cookie)
@@ -1648,6 +1657,8 @@ where
         let Outcome::SignedIn(s) = done.step else {
             return self.outcome(auth, kit, b, flow, fref, done.step).await;
         };
+        // TN-159
+        self.finish_link(kit, b, &s).await;
         let codes = done
             .recovery_codes
             .unwrap_or_default()

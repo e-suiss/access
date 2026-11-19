@@ -765,6 +765,7 @@
           "label.national_id_scheme",
           "label.national_id_other",
           "label.accept_documents",
+          "login.link_waiting",
           "label.pin",
           "registration.secret_refused",
           "label.identifier_phone",
