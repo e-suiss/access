@@ -85,7 +85,7 @@ where
     P: CredentialRegistry + Sync,
     S: SignalSink + Sync,
 {
-    fn sms_code_now(&self) -> Result<String, SessionError> {
+    pub(crate) fn sms_code(&self) -> Result<String, SessionError> {
         loop {
             let mut b = [0_u8; 4];
             self.random.fill(&mut b)?;
@@ -145,7 +145,7 @@ where
                 retry_after_s: SEND_WINDOW_MS / 1000,
             });
         }
-        let code = self.sms_code_now()?;
+        let code = self.sms_code()?;
         let expires_ms = now.saturating_add(CODE_TTL_MS);
         tx.insert_sms_code(&NewSmsCode {
             subject,

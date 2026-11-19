@@ -300,3 +300,30 @@ test("another sign-in is linked from the account page and the outcome is said", 
     "That sign-in is already linked to another account. Nothing changed.",
   );
 });
+
+// TN-156: the phone number is changed with a text message code to the new number, and the page
+// shows no more of it than its last two digits
+test("the phone number is changed with a code sent to the new one", async ({ page, bff }) => {
+  bff.methods = { ...bff.methods, phone: { set: true, ends_with: "67" } };
+  await page.route("**/login", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: "<title>login</title>" }),
+  );
+  await page.goto("/account/");
+  const phone = page.getByTestId("phone");
+  await expect(phone).toContainText("A number ending in 67");
+  await phone.getByRole("button", { name: "Change phone number" }).click();
+  await phone.getByLabel("New phone number").fill("0533 999 88 77");
+  await phone.getByRole("button", { name: "Continue" }).click();
+  await expect(said(page)).toHaveText("We sent a code by text message to the new number.");
+  expect(bff.seen.find((s) => s.path.endsWith("/account/phone"))?.body).toEqual({
+    phone: "0533 999 88 77",
+  });
+  await phone.getByLabel("Code from the text message").fill("000000");
+  await phone.getByRole("button", { name: "Verify" }).click();
+  await expect(alerted(page)).toHaveText(
+    "That code isn't right. Check the newest message and try again.",
+  );
+  await phone.getByLabel("Code from the text message").fill("123456");
+  await phone.getByRole("button", { name: "Verify" }).click();
+  await page.waitForURL(/\/login$/);
+});

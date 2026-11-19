@@ -161,7 +161,7 @@ export class AccountMock {
     await context.route("**/account/api/**", (r) => this.bff(r));
     await context.route("**/v1/account/**", (r) => this.frontend(r));
     await context.route(
-      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps|method-proof)/,
+      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps|method-proof|phone)/,
       (r) => this.s11(r),
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
@@ -595,6 +595,11 @@ export class AccountMock {
       this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: true } };
       return reply(200, { acknowledged: true });
     }
+    // TN-156
+    if (path === "/phone") return reply(202, { change: "rph_1" });
+    if (path === "/phone/rph_1") {
+      return s.body["code"] === "123456" ? reply(204) : reply(401, { code: "code-not-accepted" });
+    }
     if (path === "/linked" && method === "POST") {
       return reply(200, { redirect_to: "https://accounts.example/authorize?state=s" });
     }
@@ -670,6 +675,7 @@ export interface S11Methods {
   passkeys: { id: string; name: string | null; created_at: string; synced: boolean }[];
   totp: { id: string; created_at: string }[];
   recovery_codes: { set: boolean; acknowledged: boolean };
+  phone?: { set: boolean; ends_with: string | null } | null;
 }
 
 /** A holding row as ADP's inventory answers it. */

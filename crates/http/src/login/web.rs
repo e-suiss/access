@@ -427,6 +427,12 @@ struct EmailBody {
     email: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PhoneBody {
+    phone: String,
+}
+
 handler! {
     /// `POST /v1/login/flows`: a login flow, or a sign-up flow when the body names
     /// `kind: registration` (OP-153 m.3 (g)).
@@ -464,6 +470,26 @@ handler! {
         let req: EmailBody = body(&bytes)?;
         let email = bounded(&req.email, 320)?;
         Ok(s.hosted.start_email_change(&entry, &b, email).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/phone` (TN-156).
+    start_phone_change(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: PhoneBody = body(&bytes)?;
+        let phone = bounded(&req.phone, 32)?;
+        Ok(s.hosted.start_phone_change(&entry, &b, phone).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/phone/{change}` (TN-156).
+    confirm_phone_change(s, entry, b, p, bytes, headers) true {
+        let req: CodeBody = body(&bytes)?;
+        let code = bounded(&req.code, 16)?;
+        let change = bounded(param(&p, "change"), 64)?;
+        Ok(s.hosted.confirm_email_change(&entry, &b, change, code).await)
     }
 }
 

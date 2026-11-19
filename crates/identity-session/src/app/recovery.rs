@@ -50,6 +50,7 @@ use crate::domain::recovery::{
     link_code_bits, path, too_weak,
 };
 use crate::domain::session::{SESSION_COOKIE, clear_cookie, cookie_digest, set_cookie};
+use crate::ports::PaymentTx as _;
 use crate::ports::{
     AttemptRow, Clock, NewAttempt, NewToken, NewTransition, NoticeAddress, Random, RecoveryTx,
     SessionDb, SessionTx, TransitionRow,
@@ -634,9 +635,29 @@ where
             .filter(|a| a.recovery_target && a.recovery_contact == contact)
             .collect();
         for t in targets {
-            let mut raw = [0; 8];
-            self.random.fill(&mut raw)?;
-            let code = email_code(&raw);
+            // TN-156, IDP-9
+            let sms = matches!(t.to, Address::Phone(_));
+            if sms {
+                let signals = tx
+                    .sim_signals(subject)
+                    .await?
+                    .map(
+                        |(last_change_ms, checked_ms)| crate::domain::payment::SimSignals {
+                            last_change_ms,
+                            checked_ms,
+                        },
+                    );
+                if crate::domain::payment::sim_rule(signals, self.policy.profile, now).is_err() {
+                    continue;
+                }
+            }
+            let code = if sms {
+                self.sms_code()?
+            } else {
+                let mut raw = [0; 8];
+                self.random.fill(&mut raw)?;
+                email_code(&raw)
+            };
             let expires = now.saturating_add(ttl);
             tx.insert_evidence(
                 attempt,
@@ -654,10 +675,18 @@ where
                     to: t.to,
                     locale: None,
                     valid_since_ms,
-                    body: Body::Otp {
-                        code: Secret::new(code),
-                        purpose: OtpPurpose::Recovery,
-                        expires_at_ms: expires,
+                    body: if sms {
+                        Body::SmsOtp {
+                            code: Secret::new(code),
+                            purpose: OtpPurpose::Recovery,
+                            expires_at_ms: expires,
+                        }
+                    } else {
+                        Body::Otp {
+                            code: Secret::new(code),
+                            purpose: OtpPurpose::Recovery,
+                            expires_at_ms: expires,
+                        }
                     },
                 },
             )

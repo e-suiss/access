@@ -82,7 +82,8 @@
         "relay.message.degraded_alarm.v1",
         "relay.message.decommission_notice.v1",
         "relay.message.algorithm_retired.v1",
-        "relay.message.method_removed.v1"
+        "relay.message.method_removed.v1",
+        "relay.message.phone_changed.v1"
       ]
     },
     "subject": {
@@ -937,6 +938,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.method_removed.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.phone_changed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.phone_changed.v1"
           }
         }
       }
@@ -2871,6 +2888,29 @@
       }
     },
     "relay.message.method_removed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.phone_changed.v1": {
       "type": "object",
       "additionalProperties": false,
       "required": [

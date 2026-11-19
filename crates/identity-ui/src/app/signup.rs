@@ -666,6 +666,112 @@ where
         }
     }
 
+    /// `POST /v1/account/phone` (TN-156): after a fresh sign-in, at two factors once the account
+    /// holds a strong method (TN-147), a code by text message goes to the new number; the answer
+    /// is the same whether or not another account holds it.
+    pub async fn start_phone_change(
+        &self,
+        entry: &EnvironmentEntry,
+        b: &Browser<'_>,
+        raw: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if !kit.auth.phone {
+            return Reply::problem(Problem {
+                status: 404,
+                code: "not-found",
+                title: "Not Found",
+                retry_after_s: None,
+            });
+        }
+        // TN-56, OP-153 m.3 (e)
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::ContactChange,
+            )
+            .await
+        {
+            return r;
+        }
+        let Some(session) = b.session else {
+            return Reply::problem(SESSION_REQUIRED);
+        };
+        signin!(self, kit, auth);
+        let subject = match auth.change_subject(session).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(g)) => return super::account::gated(&g),
+            Err(e) => return failed(&e),
+        };
+        let Some(phone) = access_identity_account::domain::phone::e164(raw, kit.auth.country)
+        else {
+            return Reply::problem(Problem {
+                status: 400,
+                code: "invalid-phone",
+                title: "This phone number can't be used here",
+                retry_after_s: None,
+            });
+        };
+        let Ok(secret) = access_crypto::random::bytes::<32>() else {
+            return Reply::problem(SESSION_REQUIRED);
+        };
+        let handle = format!("{PREFIX}{}", b64url_encode(&secret));
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        let actor_ref = kit.environment().external(subject).unwrap_or_default();
+        let actor = Actor {
+            actor: &actor_ref,
+            correlation: b.correlation,
+        };
+        let net = prefix(b.ip);
+        match registrar
+            .start_phone_change(
+                subject,
+                &PhoneStart {
+                    phone: &phone,
+                    bot_token: None,
+                    prefix: &net,
+                    flow_hash: handle_digest(&secret),
+                    device_hash: session_digest(session),
+                    now_ms: self.clock.now_ms(),
+                },
+                &actor,
+            )
+            .await
+        {
+            Ok(Started::Sent { .. }) => Reply::json(202, json!({ "change": handle })),
+            Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
+                Reply::problem(Problem {
+                    status: 429,
+                    code: "too-many-requests",
+                    title: "Too many attempts",
+                    retry_after_s: Some(retry_after_ms.div_ceil(1000)),
+                })
+            }
+            Ok(Started::Refused(_)) => Reply::problem(Problem {
+                status: 400,
+                code: "invalid-phone",
+                title: "This phone number can't be used here",
+                retry_after_s: None,
+            }),
+            Err(e) => failed(&e.into()),
+        }
+    }
+
     /// `POST /v1/account/email/{change}` (OP-153 m.3 (i), TN-64): the code from the new address
     /// makes it the account's; the old address is told and every session ends.
     pub async fn confirm_email_change(

@@ -1020,7 +1020,7 @@ fn every_kind_matches_the_json_schema() {
     .chain(
         Notice::ALL
             .into_iter()
-            .filter(|n| *n != Notice::MethodRemoved)
+            .filter(|n| !matches!(n, Notice::MethodRemoved | Notice::PhoneChanged))
             .map(notice_of),
     )
     .chain(
@@ -1116,7 +1116,7 @@ fn every_kind_matches_the_json_schema() {
     .chain(stage12_messages(s))
     .chain(stage13_messages(s))
     .chain(stage14_messages(s))
-    .chain(std::iter::once(notice_of(Notice::MethodRemoved)))
+    .chain([Notice::MethodRemoved, Notice::PhoneChanged].map(notice_of))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {

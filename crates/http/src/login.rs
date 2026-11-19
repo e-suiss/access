@@ -172,6 +172,14 @@ where
                 &format!("{prefix}/v1/account/email/{{change}}"),
                 post(web::confirm_email_change::<D, K, KI, C, M>),
             )
+            .route(
+                &format!("{prefix}/v1/account/phone"),
+                post(web::start_phone_change::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/phone/{{change}}"),
+                post(web::confirm_phone_change::<D, K, KI, C, M>),
+            )
             // OP-153 m.2 N2
             .route(
                 &format!("{prefix}/v1/recovery"),

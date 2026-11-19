@@ -5725,3 +5725,57 @@ async fn a_phone_environment_asks_an_account_without_a_number_for_one_and_proves
     let mut again = e.browser("veli-tel");
     assert_eq!(again.sign_in("0532 444 55 66").await.step(), "complete");
 }
+
+// TN-156, OP-159 m.54 (e)
+#[tokio::test]
+async fn a_phone_number_is_changed_with_a_code_to_the_new_one_and_the_old_one_is_told() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(67, "tn-156-ch", auth, false, signin).await;
+    let subject = e
+        .account_as(Identifier::new(IdentifierKind::Phone, "+905321230000").unwrap())
+        .await;
+    let mut b = e.browser("ch");
+    assert_eq!(b.sign_in("0532 123 00 00").await.step(), "complete");
+    let methods = b.get("/v1/account/methods").await.json();
+    assert_eq!(methods["phone"]["ends_with"], "00");
+    let started = b
+        .post(
+            "/v1/account/phone",
+            Some(json!({ "phone": "0533 999 88 77" })),
+        )
+        .await;
+    assert_eq!(
+        started.status,
+        StatusCode::ACCEPTED,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let change = started.json()["change"].as_str().unwrap().to_owned();
+    let (kind, _, _) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.sms_otp.v1");
+    let code = e.outbox.last();
+    let done = b
+        .post(
+            &format!("/v1/account/phone/{change}"),
+            Some(json!({ "code": code })),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::NO_CONTENT,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let (kind, _, to) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.phone_changed.v1");
+    assert_eq!(to, subject);
+    assert_eq!(e.holder("+905339998877").await, Some(subject));
+    assert_eq!(e.holder("+905321230000").await, None);
+    let mut again = e.browser("ch-new");
+    assert_eq!(again.sign_in("0533 999 88 77").await.step(), "complete");
+}

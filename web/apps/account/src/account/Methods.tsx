@@ -42,7 +42,13 @@ export const Methods = v.object({
   ),
   totp: v.array(v.object({ id: v.string(), created_at: v.string() })),
   recovery_codes: v.object({ set: v.boolean(), acknowledged: v.boolean() }),
+  phone: v.optional(
+    v.nullable(v.object({ set: v.boolean(), ends_with: v.nullable(v.string()) })),
+    null,
+  ),
 });
+
+const PhoneChange = v.object({ change: v.string() });
 export type Methods = v.InferOutput<typeof Methods>;
 
 const Enrollment = v.object({
@@ -367,6 +373,133 @@ function Password(props: {
             {props.set ? t("action.change_password") : t("action.set_password")}
           </Button>
         </Actions>
+      )}
+    </Part>
+  );
+}
+
+// TN-156: a phone number is added or changed with a text message code to the new number; the old
+// number is told and every sign-in ends, this one too
+function Phone(props: {
+  readonly phone: { readonly set: boolean; readonly ends_with: string | null };
+  readonly say: (text: string, alert?: boolean) => void;
+  readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
+}): ReactElement {
+  const [step, setStep] = useState<"idle" | "number" | { readonly change: string }>("idle");
+  const start = useMutation({
+    mutationFn: (phone: string) =>
+      json(frontend("/v1/account/phone", { method: "POST", body: { phone } }), PhoneChange),
+    onSuccess: (c) => {
+      setStep({ change: c.change });
+      props.say(t("methods.phone_code_sent"));
+    },
+    onError: (err) => {
+      props.fail(err, { "invalid-phone": "methods.phone_invalid" });
+    },
+  });
+  const confirm = useMutation({
+    mutationFn: ({ change, code }: { readonly change: string; readonly code: string }) =>
+      json(
+        frontend(`/v1/account/phone/${encodeURIComponent(change)}`, {
+          method: "POST",
+          body: { code },
+        }),
+      ),
+    onSuccess: () => {
+      props.say(t("methods.phone_changed"));
+      location.assign(`${FRONTEND}/login`);
+    },
+    onError: (err) => {
+      props.fail(err, { "code-not-accepted": "methods.proof_failed" });
+    },
+  });
+  return (
+    <Part aria-labelledby="phone-heading" data-testid="phone">
+      <h4 id="phone-heading" className="font-semibold">
+        {t("methods.phone")}
+      </h4>
+      <Meta>
+        {props.phone.set && props.phone.ends_with !== null
+          ? t("methods.phone_ends", { digits: props.phone.ends_with })
+          : t("methods.phone_none")}
+      </Meta>
+      {step === "idle" && (
+        <Actions>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setStep("number");
+            }}
+          >
+            {props.phone.set ? t("action.change_phone") : t("action.add_phone")}
+          </Button>
+        </Actions>
+      )}
+      {step === "number" && (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            start.mutate(String(new FormData(e.currentTarget).get("phone") ?? ""));
+          }}
+        >
+          <Field>
+            <FieldLabel htmlFor="new-phone">{t("label.new_phone")}</FieldLabel>
+            <Input
+              id="new-phone"
+              size="md"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              maxLength={32}
+              required
+            />
+          </Field>
+          <Actions>
+            <Button type="submit" disabled={start.isPending}>
+              {t("action.continue")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStep("idle");
+              }}
+            >
+              {t("action.cancel")}
+            </Button>
+          </Actions>
+        </form>
+      )}
+      {typeof step === "object" && (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const code = String(new FormData(e.currentTarget).get("code") ?? "").replace(
+              /\s+/g,
+              "",
+            );
+            confirm.mutate({ change: step.change, code });
+          }}
+        >
+          <Field>
+            <FieldLabel htmlFor="phone-code">{t("label.sms_code")}</FieldLabel>
+            <Input
+              id="phone-code"
+              size="md"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={16}
+              required
+            />
+          </Field>
+          <Actions>
+            <Button type="submit" disabled={confirm.isPending}>
+              {t("action.verify")}
+            </Button>
+          </Actions>
+        </form>
       )}
     </Part>
   );
@@ -736,6 +869,7 @@ export function SignInMethods(): ReactElement {
         <>
           <Passkeys methods={methods} reload={reload} say={say} fail={fail} remove={remove} />
           <Password set={methods.password.set} reload={reload} say={say} fail={fail} />
+          {methods.phone !== null && <Phone phone={methods.phone} say={say} fail={fail} />}
           <Authenticator
             methods={methods}
             reload={reload}

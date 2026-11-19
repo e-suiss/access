@@ -942,6 +942,76 @@
         }
       }
     },
+    "/v1/account/phone": {
+      "post": {
+        "operationId": "startPhoneChange",
+        "summary": "Starts adding or changing the phone number after a fresh sign-in, two factors once the account holds a strong method; a text message code goes to the new number (TN-156).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/phone/{change}": {
+      "post": {
+        "operationId": "confirmPhoneChange",
+        "summary": "Confirms the new phone number with its text message code; the old number is told and every other session ends (TN-156).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "change",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/recovery": {
       "post": {
         "operationId": "startRecovery",

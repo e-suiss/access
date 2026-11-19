@@ -390,6 +390,20 @@ pub const ROUTES: &[Route] = &[
         "confirmEmailChange",
         "Confirms the new address with its out-of-band code.",
     ),
+    live(
+        Owner::N1,
+        Verb::Post,
+        "/v1/account/phone",
+        "startPhoneChange",
+        "Starts adding or changing the phone number after a fresh sign-in, two factors once the account holds a strong method; a text message code goes to the new number (TN-156).",
+    ),
+    live(
+        Owner::N1,
+        Verb::Post,
+        "/v1/account/phone/{change}",
+        "confirmPhoneChange",
+        "Confirms the new phone number with its text message code; the old number is told and every other session ends (TN-156).",
+    ),
     lane(
         Owner::N2,
         Verb::Post,

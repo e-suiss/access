@@ -469,6 +469,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts adding or changing the phone number after a fresh sign-in, two factors once the account holds a strong method; a text message code goes to the new number (TN-156). */
+        post: operations["startPhoneChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/phone/{change}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirms the new phone number with its text message code; the old number is told and every other session ends (TN-156). */
+        post: operations["confirmPhoneChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/recovery": {
         parameters: {
             query?: never;
@@ -3447,6 +3481,58 @@ export interface operations {
         };
     };
     confirmEmailChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startPhoneChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    confirmPhoneChange: {
         parameters: {
             query?: never;
             header?: never;

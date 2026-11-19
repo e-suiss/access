@@ -561,6 +561,15 @@ where
             Err(e) => return failed(&e),
         };
         let pending = auth.recovery_codes_pending(subject).await.unwrap_or(false);
+        // TN-156
+        let phone = if kit.auth.phone {
+            match self.phone_ending(&kit, subject).await {
+                Ok(ending) => json!({ "set": ending.is_some(), "ends_with": ending }),
+                Err(r) => return r,
+            }
+        } else {
+            Value::Null
+        };
         let id = |r: &access_store::accounts::MethodRow| kit.ids.encode(METHOD_PREFIX, r.id).ok();
         let of = |kind: &'static str| rows.iter().filter(move |r| r.kind == kind);
         Reply::json(
@@ -581,8 +590,44 @@ where
                     "set": of("recovery_code").next().is_some(),
                     "acknowledged": !pending,
                 },
+                "phone": phone,
             }),
         )
+    }
+
+    /// The last two digits of the account's phone number, the most the page shows (TN-156).
+    async fn phone_ending(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Result<Option<String>, Reply> {
+        let read = async {
+            let t = access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                .await
+                .map_err(access_identity_account::AccountError::from)?;
+            let mut tx = access_identity_account::adapters::pg::PgTx(t, Some(kit.vault()));
+            let mut out = None;
+            for row in tx.0.identifiers(subject).await? {
+                if row.live && row.kind == "phone" {
+                    out = tx.reveal(subject, &row.stored).await?;
+                    break;
+                }
+            }
+            tx.0.commit()
+                .await
+                .map_err(access_identity_account::AccountError::from)?;
+            Ok::<_, access_identity_account::AccountError>(out)
+        };
+        let phone = read.await.map_err(|e| failed(&e.into()))?;
+        Ok(phone.map(|p| {
+            p.chars()
+                .rev()
+                .take(2)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect()
+        }))
     }
 
     /// `DELETE /v1/account/methods/{credential}` (TN-68): after a recent re-authentication,

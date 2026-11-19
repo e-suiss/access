@@ -907,9 +907,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         })
     }
 
-    /// Sends a code by text message to the first phone number of `subject` (TN-156, TN-151):
-    /// the same answer whether or not another account holds the number. An account that has a
-    /// phone number already changes it elsewhere.
+    /// Sends a code by text message to a new phone number of `subject` (TN-156, TN-151): the
+    /// same answer whether or not another account holds the number.
     ///
     /// # Errors
     /// [`AccountError`].
@@ -930,13 +929,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
         }
         let index = self.vault.index_of(&tenant, &environment, req.phone)?;
-        let has_phone =
-            tx.0.identifiers(subject)
-                .await?
-                .iter()
-                .any(|i| i.live && i.kind == IdentifierKind::Phone.name());
-        let free = !has_phone
-            && tx.subject_by_identifier(req.phone).await?.is_none()
+        let free = tx.subject_by_identifier(req.phone).await?.is_none()
             && !tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
         let code = new_sms_code()?;
         let digest = free.then(|| code_digest(&req.flow_hash, code.expose()));
@@ -1036,7 +1029,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         // TN-156
         let phone = address.starts_with('+');
         let old = if phone {
-            None
+            self.old_phone(&mut tx, subject).await?
         } else {
             self.old_email(&mut tx, subject).await?
         };
@@ -1071,16 +1064,30 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
                 .transpose()?;
             tx.0.insert_tombstone(&old_index, subject, i64_of(now_ms)?, reusable)
                 .await?;
+            // TN-156
+            let (to, valid_since_ms, notice) = if phone {
+                (
+                    Address::Phone(old_address.clone()),
+                    None,
+                    Notice::PhoneChanged,
+                )
+            } else {
+                (
+                    Address::Email(old_address.clone()),
+                    Some(*old_since),
+                    Notice::EmailChanged,
+                )
+            };
             notify(
                 self.notifier,
                 &mut tx,
                 &Message {
                     subject,
-                    to: Address::Email(old_address.clone()),
+                    to,
                     locale: None,
-                    valid_since_ms: Some(*old_since),
+                    valid_since_ms,
                     body: Body::Notice {
-                        notice: Notice::EmailChanged,
+                        notice,
                         at_ms: now_ms,
                         until_ms: None,
                     },
@@ -1115,6 +1122,23 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     }
 
     /// The account's current e-mail address and since when it owns it.
+    /// The account's current phone number (TN-156).
+    async fn old_phone(
+        &self,
+        tx: &mut PgTx,
+        subject: [u8; 16],
+    ) -> Result<Option<(String, u64)>, AccountError> {
+        for row in tx.0.identifiers(subject).await? {
+            if row.live && row.kind == IdentifierKind::Phone.name() {
+                let Some(value) = tx.reveal(subject, &row.stored).await? else {
+                    continue;
+                };
+                return Ok(Some((value, u64::try_from(row.created_ms).unwrap_or(1))));
+            }
+        }
+        Ok(None)
+    }
+
     async fn old_email(
         &self,
         tx: &mut PgTx,
