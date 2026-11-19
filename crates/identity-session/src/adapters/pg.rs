@@ -205,6 +205,15 @@ impl SessionTx for PgTx {
         Ok(self.0.has_national_id(subject).await?)
     }
 
+    async fn national_id_holder(
+        &mut self,
+        scheme: &str,
+        number: &str,
+    ) -> Result<Option<[u8; 16]>, SessionError> {
+        let v = self.vault()?.clone();
+        Ok(access_identity_account::app::national_id::holder(self, &v, scheme, number).await?)
+    }
+
     async fn keep_national_id(
         &mut self,
         subject: [u8; 16],

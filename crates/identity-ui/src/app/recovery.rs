@@ -66,6 +66,9 @@ pub struct SetupBody {
     /// Another e-mail address recovery codes go to.
     #[serde(default)]
     pub recovery_email: Option<String>,
+    /// A phone number recovery codes go to by text message (TN-156).
+    #[serde(default)]
+    pub recovery_phone: Option<String>,
     /// Assisted recovery; turning it off needs the acknowledgement (TN-60).
     #[serde(default = "yes")]
     pub assisted_recovery: bool,
@@ -166,6 +169,7 @@ fn setup_json(s: &RecoverySetup) -> Value {
     json!({
         "contacts": s.contacts,
         "recovery_email": s.recovery_email,
+        "recovery_phone": s.recovery_phone,
         "notice_addresses": s.notice_addresses,
         "methods": s.classes.iter().map(|c| c.name()).collect::<Vec<_>>(),
         "weakest_aal": s.weakest.map(aal_name),
@@ -396,6 +400,7 @@ where
         let change = SetupChange {
             contacts: body.contacts.clone(),
             recovery_email: body.recovery_email.clone(),
+            recovery_phone: body.recovery_phone.clone(),
             assisted: body.assisted_recovery,
             permanent_loss_acknowledged: body.permanent_loss_acknowledged,
         };

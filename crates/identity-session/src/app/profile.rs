@@ -12,6 +12,7 @@ use super::{
 use crate::SessionError;
 use crate::domain::flow::Purpose;
 use crate::ports::{Clock, Random, SessionDb, SessionTx};
+use access_identity_account::notify::message::Notice;
 use access_identity_account::ports::AccountTx as _;
 
 /// The most characters a display name holds.
@@ -240,6 +241,13 @@ where
                 return Ok(Ok(Err(FactsRefusal::Invalid)));
             };
             if !tx.keep_national_id(subject, scheme, number).await? {
+                // TN-158
+                if let Some(holder) = tx.national_id_holder(scheme, number).await?
+                    && holder != subject
+                {
+                    self.account_notice(&mut tx, holder, Notice::NationalIdUsed, now)
+                        .await?;
+                }
                 tx.commit().await?;
                 return Ok(Ok(Err(FactsRefusal::Taken)));
             }

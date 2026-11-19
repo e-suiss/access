@@ -688,6 +688,12 @@ impl SigninPolicy {
                 .national_id
                 .iter()
                 .all(|s| access_identity_account::domain::national_id::Scheme::parse(s).is_some())
+            && self
+                .national_id
+                .iter()
+                .filter(|s| s.starts_with("generic:"))
+                .count()
+                <= 1
             && (!self.required_fields.contains("national_id") || !self.national_id.is_empty());
         let age_ok = self.min_age.is_none_or(|a| (1..=125).contains(&a));
         let email_required_ok = !self.email_required || self.methods.contains(&SigninMethod::Phone);

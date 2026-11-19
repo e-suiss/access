@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use super::message::{Message, Text, TextId};
 use super::node::{
-    Autocomplete, CreateMediation, FieldName, InputKind, Method, Node, PasskeyOptions,
-    PasskeySignal,
+    Autocomplete, ChoiceOption, CreateMediation, FieldName, InputKind, Method, Node,
+    PasskeyOptions, PasskeySignal,
 };
 
 /// Contract version; additive changes keep it (OP-65).
@@ -573,13 +573,32 @@ impl Ui {
     pub fn complete_profile(
         flow: FlowId,
         (name, email, phone): (bool, bool, bool),
-        (national_id, birthdate): (Option<TextId>, bool),
+        (national, birthdate): (&[(String, TextId)], bool),
         offered: Option<String>,
         policy: &[Requirement],
     ) -> Self {
         let mut nodes = Vec::new();
         // TN-158
-        if let Some(label) = national_id {
+        if let [_, _, ..] = national {
+            nodes.push(Node::Choice {
+                name: FieldName::NationalIdScheme,
+                method: Method::Profile,
+                label: TextId::NationalIdSchemeLabel.into(),
+                options: national
+                    .iter()
+                    .map(|(value, label)| ChoiceOption {
+                        value: value.clone(),
+                        label: (*label).into(),
+                    })
+                    .collect(),
+            });
+        }
+        let label = match national {
+            [] => None,
+            [(_, one)] => Some(*one),
+            _ => Some(TextId::NationalIdLabel),
+        };
+        if let Some(label) = label {
             nodes.push(Node::Input {
                 name: FieldName::NationalId,
                 method: Method::Profile,

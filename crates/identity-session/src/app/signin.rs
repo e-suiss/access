@@ -179,6 +179,24 @@ pub const FACTOR_THROTTLE: KeyPolicy = KeyPolicy {
 
 const FACTOR_HORIZON_DAYS: i32 = 30;
 
+/// TN-157 (8): a six-digit PIN's own count per identifier, beside the password throttle: waits
+/// doubling from 2 s to 15 minutes, and a hard lock at 10 consecutive failures (NIST SP
+/// 800-63B-4 §3.2.2's activation-secret limit; PD).
+pub const PIN_THROTTLE: KeyPolicy = KeyPolicy {
+    rate: Gcra {
+        interval_ms: 60_000,
+        burst: 5,
+    },
+    penalty: Penalty::Doubling {
+        first_ms: 2_000,
+        cap_ms: 900_000,
+        lock_at: Some(PIN_LOCK_AT),
+    },
+};
+
+/// TN-157 (8): consecutive wrong PINs that lock the identifier.
+pub const PIN_LOCK_AT: u32 = 10;
+
 struct Salts<'a, R>(&'a R);
 
 impl<R: Random> Entropy for Salts<'_, R> {
@@ -404,6 +422,11 @@ where
         if !self.policy.password {
             return Ok(refuse(STEP_NOT_ALLOWED));
         }
+        // TN-157 (8)
+        let pin = match self.pin_admit(&folded, now).await? {
+            Ok(p) => p,
+            Err(step) => return Ok(step),
+        };
         let salts = Salts(self.random);
         let services = LoginServices {
             gate: self.gate,
@@ -423,6 +446,9 @@ where
             },
         )
         .await?;
+        if let Some(p) = &pin {
+            self.pin_counted(p, &outcome, now).await?;
+        }
         let (subject, prior_failures) = match outcome {
             PasswordLogin::Accepted {
                 subject,
@@ -665,6 +691,64 @@ where
         };
         tx.put_throttle(key, day, &throttle_row(&next)).await?;
         Ok(())
+    }
+
+    /// TN-157 (8): admits one PIN attempt of `folded` when the environment signs in with PINs;
+    /// the count to settle afterwards, or the step a waiting or locked identifier answers.
+    async fn pin_admit(
+        &self,
+        folded: &str,
+        now: u64,
+    ) -> Result<Result<Option<([u8; 32], i32, KeyState)>, Step>, SessionError> {
+        if !self.policy.pin {
+            return Ok(Ok(None));
+        }
+        let key = self.pin_key(folded);
+        let day = i32::try_from(now / THROTTLE_DAY_MS).map_err(|_| SessionError::Corrupt)?;
+        let mut tx = self.begin().await?;
+        let s = key_state(&tx.throttle(&key, day, FACTOR_HORIZON_DAYS).await?)?;
+        let refused = match PIN_THROTTLE.admit(&s, now) {
+            Gate::Open(opened) => {
+                tx.put_throttle(&key, day, &throttle_row(&opened)).await?;
+                tx.commit().await?;
+                return Ok(Ok(Some((key, day, opened))));
+            }
+            Gate::Wait { retry_after_ms } => Step::Throttled {
+                retry_after_s: access_identity_account::domain::login::ceil_seconds(retry_after_ms),
+            },
+            Gate::Locked => neutral(self.gate.mean_ms()),
+        };
+        tx.commit().await?;
+        Ok(Err(refused))
+    }
+
+    /// TN-157 (8): settles an admitted PIN attempt by the password step's outcome.
+    async fn pin_counted(
+        &self,
+        (key, day, opened): &([u8; 32], i32, KeyState),
+        outcome: &PasswordLogin,
+        now: u64,
+    ) -> Result<(), SessionError> {
+        let next = match outcome {
+            PasswordLogin::Accepted { .. } => PIN_THROTTLE.succeed(opened),
+            PasswordLogin::Rejected { .. } => PIN_THROTTLE.fail(opened, now),
+            PasswordLogin::Throttled { .. } => return Ok(()),
+        };
+        let mut tx = self.begin().await?;
+        tx.put_throttle(key, *day, &throttle_row(&next)).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// TN-157 (8): the PIN count of an identifier, whether or not it names an account.
+    fn pin_key(&self, folded: &str) -> [u8; 32] {
+        counter_key(
+            KeyKind::Account,
+            self.environment.tenant.as_bytes(),
+            self.environment.environment.as_bytes(),
+            Some(folded),
+            Some(b"pin"),
+        )
     }
 
     pub(crate) fn factor_key(&self, subject: [u8; 16], kind: &str) -> [u8; 32] {

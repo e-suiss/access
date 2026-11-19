@@ -327,3 +327,20 @@ test("the phone number is changed with a code sent to the new one", async ({ pag
   await phone.getByRole("button", { name: "Verify" }).click();
   await page.waitForURL(/\/login$/);
 });
+
+// TN-158: the identity details the environment asked for are shown, the number masked
+test("the identity details show the number masked and the birth date", async ({ page, bff }) => {
+  bff.methods = {
+    ...bff.methods,
+    identity: {
+      national_id: "*******0146",
+      national_id_scheme: "tr-tckn",
+      birthdate: "1990-05-04",
+    },
+  };
+  await page.goto("/account/");
+  const identity = page.getByTestId("identity");
+  await expect(identity).toContainText("Identity number: *******0146");
+  await expect(identity).toContainText("Date of birth: 1990-05-04");
+  await expect(identity).toContainText("To correct these details, contact support.");
+});

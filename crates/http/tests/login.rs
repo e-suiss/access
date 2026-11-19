@@ -5952,6 +5952,13 @@ async fn an_environment_that_requires_a_national_id_and_an_age_asks_for_them_onc
         "{}",
         String::from_utf8_lossy(&taken.body)
     );
+    let kemal = e.holder("kemal@example.com").await.unwrap();
+    assert!(
+        e.sent()
+            .iter()
+            .any(|(k, _, s)| *k == "relay.message.national_id_used.v1" && *s == kemal),
+        "the holder is told"
+    );
 }
 
 // TN-158, TN-151
@@ -6024,4 +6031,216 @@ async fn a_phone_environment_that_requires_an_email_too_asks_for_it() {
     let nodes = step.json()["nodes"].as_array().unwrap().clone();
     assert!(nodes.iter().any(|n| n["name"] == "email"));
     assert!(!nodes.iter().any(|n| n["name"] == "phone"));
+}
+
+// TN-156, IDP-9
+#[tokio::test]
+async fn a_recovery_phone_gets_its_recovery_code_by_text_message() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(72, "tn-156-rec", auth, false, signin).await;
+    e.account_as(Identifier::new(IdentifierKind::Phone, "+905324440011").unwrap())
+        .await;
+    let mut b = e.browser("rec");
+    assert_eq!(b.sign_in("0532 444 00 11").await.step(), "complete");
+    let bad = b
+        .send(
+            "PUT",
+            "/v1/account/recovery-contacts",
+            Some(json!({ "recovery_phone": "12" })),
+            Some("bad"),
+        )
+        .await;
+    assert_eq!(
+        bad.status,
+        StatusCode::BAD_REQUEST,
+        "{}",
+        String::from_utf8_lossy(&bad.body)
+    );
+    let set = b
+        .send(
+            "PUT",
+            "/v1/account/recovery-contacts",
+            Some(json!({ "recovery_phone": "0532 555 00 22" })),
+            Some("set"),
+        )
+        .await;
+    assert_eq!(
+        set.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&set.body)
+    );
+    assert_eq!(set.json()["recovery_phone"], "+905325550022");
+    assert!(
+        set.json()["methods"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("sent_code"))
+    );
+
+    let mut other = e.browser("thief");
+    let started = other
+        .send(
+            "POST",
+            "/v1/recovery",
+            Some(json!({ "identifier": "0532 444 00 11", "method": "sent_code" })),
+            Some("start"),
+        )
+        .await;
+    assert_eq!(
+        started.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let kinds: Vec<&str> = e.sent().iter().map(|(k, _, _)| *k).collect();
+    let at = kinds
+        .iter()
+        .rposition(|k| *k == "relay.message.sms_otp.v1")
+        .unwrap();
+    assert!(kinds.contains(&"relay.message.recovery_requested.v1"));
+    let attempt = started.json()["attempt"].as_str().unwrap().to_owned();
+    let code = e.outbox.0.lock().unwrap()[at].clone();
+    assert_eq!(code.len(), 6);
+    let met = other
+        .send(
+            "POST",
+            &format!("/v1/recovery/{attempt}"),
+            Some(json!({ "code": code })),
+            Some("code"),
+        )
+        .await;
+    assert_eq!(
+        met.json()["state"],
+        "cooling_down",
+        "{}",
+        String::from_utf8_lossy(&met.body)
+    );
+}
+
+// TN-157 (8)
+#[tokio::test]
+async fn ten_wrong_pins_in_a_row_lock_the_number() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        mfa_required: true,
+        pin: true,
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(73, "tn-157-lock", auth, false, signin).await;
+    e.account_as(Identifier::new(IdentifierKind::Phone, "+905326660033").unwrap())
+        .await;
+    let mut ok = e.browser("ok");
+    let right = ok.sign_in("0532 666 00 33").await;
+    let passed = right.step();
+    assert_ne!(
+        passed,
+        "authenticate",
+        "{}",
+        String::from_utf8_lossy(&right.body)
+    );
+    let mut waited = false;
+    for i in 0..10 {
+        e.advance(16 * 60_000);
+        let mut w = e.browser(&format!("wrong-{i}"));
+        let at = w.identify("0532 666 00 33").await;
+        let wrong = w
+            .submit(&at, "password", json!({ "password": "730264" }))
+            .await;
+        assert_ne!(wrong.step(), passed, "{i}");
+        let mut quick = e.browser(&format!("quick-{i}"));
+        let at = quick.identify("0532 666 00 33").await;
+        let early = quick
+            .submit(&at, "password", json!({ "password": "730264" }))
+            .await;
+        waited |= early.status == StatusCode::TOO_MANY_REQUESTS;
+    }
+    assert!(waited, "a wrong PIN makes the next one wait");
+    e.advance(16 * 60_000);
+    let mut late = e.browser("late");
+    let locked = late.sign_in("0532 666 00 33").await;
+    assert_ne!(
+        locked.step(),
+        passed,
+        "{}",
+        String::from_utf8_lossy(&locked.body)
+    );
+}
+
+// TN-158
+#[tokio::test]
+async fn several_schemes_ask_which_country_the_number_is_of() {
+    let signin = EnvironmentSignin {
+        required_fields: ["email", "national_id"].map(String::from).into(),
+        national_id: vec![String::from("tr-tckn"), String::from("de-steuer-id")],
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(74, "tn-158-ch", auth, false, signin).await;
+    e.account("lena@example.com").await;
+    let mut b = e.browser("lena");
+    let step = b.sign_in("lena@example.com").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let nodes = step.json()["nodes"].as_array().unwrap().clone();
+    let choice = nodes.iter().find(|n| n["type"] == "choice").unwrap();
+    assert_eq!(choice["name"], "national_id_scheme");
+    let values: Vec<&str> = choice["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["value"].as_str().unwrap())
+        .collect();
+    assert!(values.contains(&"tr-tckn") && values.contains(&"de-steuer-id"));
+    let field = nodes.iter().find(|n| n["name"] == "national_id").unwrap();
+    assert_eq!(field["label"]["id"], "label.national_id");
+    let unknown = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id_scheme": "us-ssn", "national_id": "123456789" }),
+        )
+        .await;
+    assert_eq!(unknown.status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        unknown.json()["code"],
+        "invalid-submission",
+        "a scheme the step did not offer"
+    );
+    let wrong_country = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id_scheme": "tr-tckn", "national_id": "86095742719" }),
+        )
+        .await;
+    assert!(
+        wrong_country
+            .messages()
+            .contains(&String::from("profile.facts_invalid"))
+    );
+    let done = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id_scheme": "de-steuer-id", "national_id": "86095742719" }),
+        )
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
 }

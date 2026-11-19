@@ -81,6 +81,12 @@ pub enum TextId {
     /// A number another account holds (TN-158).
     #[serde(rename = "profile.facts_taken")]
     FactsTaken,
+    /// The choice of a national identity number scheme (TN-158).
+    #[serde(rename = "label.national_id_scheme")]
+    NationalIdSchemeLabel,
+    /// The generic scheme in a choice of schemes (TN-158).
+    #[serde(rename = "label.national_id_other")]
+    OtherCountryLabel,
     /// The six-digit PIN a phone sign-up sets (TN-157).
     #[serde(rename = "label.pin")]
     PinLabel,
@@ -650,7 +656,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 211] = [
+    pub const ALL: [Self; 213] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -680,6 +686,8 @@ impl TextId {
         Self::FactsInvalid,
         Self::TooYoung,
         Self::FactsTaken,
+        Self::NationalIdSchemeLabel,
+        Self::OtherCountryLabel,
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
@@ -898,6 +906,8 @@ impl TextId {
             Self::FactsInvalid => "profile.facts_invalid",
             Self::TooYoung => "profile.too_young",
             Self::FactsTaken => "profile.facts_taken",
+            Self::NationalIdSchemeLabel => "label.national_id_scheme",
+            Self::OtherCountryLabel => "label.national_id_other",
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
@@ -1120,6 +1130,8 @@ impl TextId {
             Self::FactsInvalid => "Check the number and the date and try again.",
             Self::TooYoung => "You don't meet the age requirement for this service.",
             Self::FactsTaken => "You can't continue with these details. Contact support for help.",
+            Self::NationalIdSchemeLabel => "Country of your identity number",
+            Self::OtherCountryLabel => "Another country",
             Self::PinLabel => "Choose a 6-digit PIN",
             Self::SecretRefused => {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."

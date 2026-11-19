@@ -63,6 +63,43 @@ fn enrollment_nodes() -> (Value, Value) {
     (totp_setup, recovery_codes)
 }
 
+/// OP-156 m.3 (d)
+fn push_number_node() -> Value {
+    variant(
+        "type",
+        "push_number",
+        &json!({
+            "number": { "type": "integer", "minimum": 10, "maximum": 99 },
+            "approver": { "type": "string" },
+            "label": r("Text"),
+            "expires_at": { "type": "string", "format": "date-time" },
+        }),
+        &["number", "label", "expires_at"],
+    )
+}
+
+/// TN-158
+fn choice_node() -> Value {
+    variant(
+        "type",
+        "choice",
+        &json!({
+            "name": r("FieldName"),
+            "method": r("Method"),
+            "label": r("Text"),
+            "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": object(
+                    &json!({ "value": { "type": "string" }, "label": r("Text") }),
+                    &["value", "label"],
+                ),
+            },
+        }),
+        &["name", "method", "label", "options"],
+    )
+}
+
 fn node() -> Value {
     let input = variant(
         "type",
@@ -138,18 +175,8 @@ fn node() -> Value {
         }),
         &["provider", "label", "href"],
     );
-    // OP-156 m.3 (d)
-    let push_number = variant(
-        "type",
-        "push_number",
-        &json!({
-            "number": { "type": "integer", "minimum": 10, "maximum": 99 },
-            "approver": { "type": "string" },
-            "label": r("Text"),
-            "expires_at": { "type": "string", "format": "date-time" },
-        }),
-        &["number", "label", "expires_at"],
-    );
+    let push_number = push_number_node();
+    let choice = choice_node();
     let (totp_setup, recovery_codes) = enrollment_nodes();
     json!({ "oneOf": [
         input,
@@ -163,6 +190,7 @@ fn node() -> Value {
         push_number,
         totp_setup,
         recovery_codes,
+        choice,
     ] })
 }
 

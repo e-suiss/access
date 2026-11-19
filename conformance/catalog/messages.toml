@@ -1204,6 +1204,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "mail-national_id_used-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "mail-email_changed-subject"
 surface = "mail"
 class = "notice"
@@ -2285,6 +2292,41 @@ protected = false
 
 [[message]]
 key = "methods-phone_changed"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-identity"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-identity_number"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-identity_birthdate"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-identity_none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-identity_support"
 surface = "account"
 class = "label"
 owner = "identity_plane"
@@ -5598,6 +5640,22 @@ protected = false
 [[message]]
 key = "label-national_id_az_fin"
 text_id = "label.national_id_az_fin"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_scheme"
+text_id = "label.national_id_scheme"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-national_id_other"
+text_id = "label.national_id_other"
 surface = "login"
 class = "label"
 owner = "identity_plane"

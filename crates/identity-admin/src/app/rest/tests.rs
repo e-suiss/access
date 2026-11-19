@@ -867,6 +867,12 @@ fn the_tr_payment_profile_keeps_its_identity_rules_on() {
     assert!(p.check().is_ok());
     p.national_id.insert(String::from("generic:6-12:digits"));
     assert!(p.check().is_ok());
+    p.national_id.insert(String::from("generic:8-8:alnum"));
+    assert!(
+        p.check().is_err(),
+        "two generic schemes could not be told apart"
+    );
+    p.national_id.remove("generic:8-8:alnum");
     p.national_id.insert(String::from("generic:0-12:digits"));
     assert!(p.check().is_err(), "a scheme that does not parse");
 }

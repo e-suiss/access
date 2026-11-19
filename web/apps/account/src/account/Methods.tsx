@@ -49,6 +49,16 @@ export const Methods = v.object({
     v.nullable(v.object({ set: v.boolean(), ends_with: v.nullable(v.string()) })),
     null,
   ),
+  identity: v.optional(
+    v.nullable(
+      v.object({
+        national_id: v.nullable(v.string()),
+        national_id_scheme: v.nullable(v.string()),
+        birthdate: v.nullable(v.string()),
+      }),
+    ),
+    null,
+  ),
 });
 
 const PhoneChange = v.object({ change: v.string() });
@@ -403,6 +413,34 @@ function Password(props: {
 
 // TN-156: a phone number is added or changed with a text message code to the new number; the old
 // number is told and every sign-in ends, this one too
+// TN-158: what the environment asked for at sign-up; changed only through support
+function Identity(props: {
+  readonly identity: {
+    readonly national_id: string | null;
+    readonly national_id_scheme: string | null;
+    readonly birthdate: string | null;
+  };
+}): ReactElement {
+  const id = props.identity;
+  return (
+    <Part aria-labelledby="identity-heading" data-testid="identity">
+      <h4 id="identity-heading" className="font-semibold">
+        {t("methods.identity")}
+      </h4>
+      {id.national_id !== null && (
+        <Meta>{t("methods.identity_number", { number: id.national_id })}</Meta>
+      )}
+      {id.birthdate !== null && (
+        <Meta>{t("methods.identity_birthdate", { date: id.birthdate })}</Meta>
+      )}
+      {id.national_id === null && id.birthdate === null && (
+        <Meta>{t("methods.identity_none")}</Meta>
+      )}
+      <Meta>{t("methods.identity_support")}</Meta>
+    </Part>
+  );
+}
+
 function Phone(props: {
   readonly phone: { readonly set: boolean; readonly ends_with: string | null };
   readonly say: (text: string, alert?: boolean) => void;
@@ -899,6 +937,7 @@ export function SignInMethods(): ReactElement {
             fail={fail}
           />
           {methods.phone !== null && <Phone phone={methods.phone} say={say} fail={fail} />}
+          {methods.identity !== null && <Identity identity={methods.identity} />}
           <Authenticator
             methods={methods}
             reload={reload}

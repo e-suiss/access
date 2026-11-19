@@ -582,6 +582,51 @@
                 }
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "name",
+              "method",
+              "label",
+              "options"
+            ],
+            "properties": {
+              "type": {
+                "const": "choice"
+              },
+              "name": {
+                "$ref": "#/components/schemas/FieldName"
+              },
+              "method": {
+                "$ref": "#/components/schemas/Method"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "label"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "$ref": "#/components/schemas/Text"
+                    }
+                  }
+                }
+              }
+            }
           }
         ]
       },
@@ -606,6 +651,7 @@
           "sms_code",
           "phone",
           "national_id",
+          "national_id_scheme",
           "birthdate"
         ]
       },
@@ -669,6 +715,8 @@
           "profile.facts_invalid",
           "profile.too_young",
           "profile.facts_taken",
+          "label.national_id_scheme",
+          "label.national_id_other",
           "label.pin",
           "registration.secret_refused",
           "label.identifier_phone",

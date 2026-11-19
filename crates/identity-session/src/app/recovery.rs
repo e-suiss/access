@@ -280,6 +280,8 @@ pub struct RecoverySetup {
     pub contacts: Vec<String>,
     /// The address recovery codes go to, if any.
     pub recovery_email: Option<String>,
+    /// The phone number recovery codes go to by text message, if any (TN-156).
+    pub recovery_phone: Option<String>,
     /// How many addresses get notices.
     pub notice_addresses: usize,
     /// The classes a recovery can prove with.
@@ -299,6 +301,9 @@ pub struct SetupChange {
     pub contacts: Vec<String>,
     /// Another e-mail address recovery codes go to.
     pub recovery_email: Option<String>,
+    /// A phone number recovery codes go to by text message; only where the environment signs in
+    /// with phone numbers (TN-156).
+    pub recovery_phone: Option<String>,
     /// Turns assisted recovery off; then `permanent_loss_acknowledged` must be set (TN-60).
     pub assisted: bool,
     /// The person acknowledged that they may lose the account for good.
@@ -1832,7 +1837,15 @@ where
                 .collect(),
             recovery_email: rows
                 .iter()
-                .find(|a| a.recovery_target && !a.recovery_contact)
+                .find(|a| {
+                    a.recovery_target && !a.recovery_contact && matches!(a.to, Address::Email(_))
+                })
+                .map(|a| shown(&a.to)),
+            recovery_phone: rows
+                .iter()
+                .find(|a| {
+                    a.recovery_target && !a.recovery_contact && matches!(a.to, Address::Phone(_))
+                })
                 .map(|a| shown(&a.to)),
             notice_addresses: rows.iter().filter(|a| !a.recovery_target).count(),
             classes,
@@ -1871,6 +1884,17 @@ where
         else {
             return Ok(Err(RECOVERY_INVALID));
         };
+        // TN-156
+        let phone = match change.recovery_phone.as_deref() {
+            None => None,
+            Some(_) if !self.policy.phone => return Ok(Err(RECOVERY_INVALID)),
+            Some(raw) => {
+                match access_identity_account::domain::phone::e164(raw, self.policy.country) {
+                    Some(p) => Some(Address::Phone(p)),
+                    None => return Ok(Err(RECOVERY_INVALID)),
+                }
+            }
+        };
         let now = self.now();
         let mut tx = self.begin().await?;
         let Some(subject) = self.signed_in(&mut tx, cookie, now).await? else {
@@ -1883,11 +1907,11 @@ where
             return Ok(Err(p));
         }
         let login = address(tx.contact(subject).await?);
-        if recovery.is_some() && login.is_none() {
+        if (recovery.is_some() || phone.is_some()) && login.is_none() {
             return Ok(Err(RECOVERY_INVALID));
         }
         let mut planned: Vec<RecoveryPath> = Vec::new();
-        if recovery.is_some() {
+        if recovery.is_some() || phone.is_some() {
             planned.push(RecoveryPath::SentCode);
         }
         if !contacts.is_empty() {
@@ -1925,7 +1949,7 @@ where
             )
             .await?;
         }
-        if let Some(to) = recovery {
+        for to in recovery.into_iter().chain(phone) {
             let id = tx
                 .add_notice_address(
                     subject,

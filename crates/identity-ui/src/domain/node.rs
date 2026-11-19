@@ -49,13 +49,15 @@ pub enum FieldName {
     Phone,
     /// A national identity number (TN-158).
     NationalId,
+    /// The scheme a national identity number is of, when the environment takes several (TN-158).
+    NationalIdScheme,
     /// A birth date, ISO `YYYY-MM-DD` (TN-158).
     Birthdate,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -74,6 +76,7 @@ impl FieldName {
         Self::SmsCode,
         Self::Phone,
         Self::NationalId,
+        Self::NationalIdScheme,
         Self::Birthdate,
     ];
 
@@ -99,6 +102,7 @@ impl FieldName {
             Self::SmsCode => "sms_code",
             Self::Phone => "phone",
             Self::NationalId => "national_id",
+            Self::NationalIdScheme => "national_id_scheme",
             Self::Birthdate => "birthdate",
         }
     }
@@ -125,7 +129,7 @@ impl FieldName {
             Self::DisplayName => 200,
             Self::Acknowledged | Self::KeepSignedIn | Self::RememberDevice => 8,
             // OP-153 m.3 (d)
-            Self::LinkCode | Self::Phone | Self::NationalId => 32,
+            Self::LinkCode | Self::Phone | Self::NationalId | Self::NationalIdScheme => 32,
             Self::BotToken => 4096,
         }
     }
@@ -386,6 +390,16 @@ impl PasskeySignal {
     }
 }
 
+/// One option of a [`Node::Choice`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChoiceOption {
+    /// What is submitted.
+    pub value: String,
+    /// Caption.
+    pub label: Text,
+}
+
 /// One thing to draw.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -451,6 +465,18 @@ pub enum Node {
         /// The call.
         signal: PasskeySignal,
     },
+    /// A choice of one of a closed list (TN-158): drawn as a select; submitted as its
+    /// method's field `name` with the chosen option's `value`.
+    Choice {
+        /// Field name.
+        name: FieldName,
+        /// The method this field is submitted with.
+        method: Method,
+        /// Label.
+        label: Text,
+        /// The options, in order.
+        options: Vec<ChoiceOption>,
+    },
     /// N5: a checkbox that belongs to the whole step: when checked, the client sends
     /// `fields[name] = "true"` with every submission of the step (TN-36, X33).
     Option {
@@ -513,7 +539,9 @@ impl Node {
     #[must_use]
     pub const fn method(&self) -> Option<Method> {
         match self {
-            Self::Input { method, .. } | Self::Submit { method, .. } => Some(*method),
+            Self::Input { method, .. }
+            | Self::Submit { method, .. }
+            | Self::Choice { method, .. } => Some(*method),
             Self::PasskeyGet { .. } | Self::PasskeyAutofill { .. } => Some(Method::Passkey),
             Self::PasskeyCreate { .. } => Some(Method::PasskeyRegister),
             Self::PasskeySignal { .. }

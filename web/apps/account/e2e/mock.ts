@@ -676,6 +676,11 @@ export interface S11Methods {
   totp: { id: string; created_at: string }[];
   recovery_codes: { set: boolean; acknowledged: boolean };
   phone?: { set: boolean; ends_with: string | null } | null;
+  identity?: {
+    national_id: string | null;
+    national_id_scheme: string | null;
+    birthdate: string | null;
+  } | null;
 }
 
 /** A holding row as ADP's inventory answers it. */

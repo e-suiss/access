@@ -13,6 +13,7 @@ mail-second_factor_enabled-subject = İkinci adım açıldı
 mail-new_method-subject = Yeni bir giriş yöntemi eklendi
 mail-method_removed-subject = Bir giriş yöntemi kaldırıldı
 mail-phone_changed-subject = Telefon numaranız değiştirildi
+mail-national_id_used-subject = Kimlik numaranız başka bir hesapta kullanılmak istendi
 mail-email_changed-subject = E-posta adresiniz değiştirildi
 mail-invitation-subject = Bir organizasyona davet edildiniz
 mail-reset_intent-subject = Sizin için bir giriş sıfırlaması hazırlandı

@@ -2,12 +2,14 @@ import { Button } from "@access/ui/components/button";
 import { Checkbox } from "@access/ui/components/checkbox";
 import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 import { QrCode } from "@access/ui/components/qr-code";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 
 import { LOGIN, under } from "./base.js";
 import type {
+  ChoiceNode,
   FieldName,
   InputNode,
   LoginUi,
@@ -102,6 +104,25 @@ function Field({ node }: { readonly node: InputNode }) {
   );
 }
 
+// TN-158
+function Choice({ node }: { readonly node: ChoiceNode }) {
+  const id = `field-${node.name}-${node.method}`;
+  return (
+    <FieldBox className="gap-2">
+      <FieldLabel htmlFor={id} className="text-sm">
+        {text(node.label)}
+      </FieldLabel>
+      <NativeSelect id={id} name={node.name} required defaultValue={node.options[0]?.value}>
+        {node.options.map((o) => (
+          <NativeSelectOption key={o.value} value={o.value}>
+            {text(o.label)}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </FieldBox>
+  );
+}
+
 function MethodForm(props: {
   readonly method: Method;
   readonly nodes: readonly UiNode[];
@@ -111,6 +132,10 @@ function MethodForm(props: {
 }) {
   const inputs = props.nodes.filter(
     (n): n is InputNode => n.type === "input" && n.method === props.method,
+  );
+  const drawn = props.nodes.filter(
+    (n): n is InputNode | ChoiceNode =>
+      (n.type === "input" || n.type === "choice") && n.method === props.method,
   );
   const buttons = props.nodes.filter(
     (n): n is SubmitNode => n.type === "submit" && n.method === props.method,
@@ -124,13 +149,22 @@ function MethodForm(props: {
       const value = data.get(input.name);
       if (typeof value === "string") fields[input.name] = value;
     }
+    for (const choice of drawn) {
+      if (choice.type !== "choice") continue;
+      const value = data.get(choice.name);
+      if (typeof value === "string") fields[choice.name] = value;
+    }
     props.onSubmit({ method: props.method, fields: { ...fields, ...props.options } });
   };
   return (
     <form className={stack} onSubmit={handle} noValidate={false}>
-      {inputs.map((node) => (
-        <Field key={node.name} node={node} />
-      ))}
+      {drawn.map((node) =>
+        node.type === "choice" ? (
+          <Choice key={node.name} node={node} />
+        ) : (
+          <Field key={node.name} node={node} />
+        ),
+      )}
       {buttons.map((node) => (
         <Button
           key={node.label.id}

@@ -525,27 +525,35 @@ fn shipped_presets() -> Option<&'static access_identity_federation::domain::pres
         .as_ref()
 }
 
-/// TN-158: the environment's national identity number scheme and the field's caption.
-pub(crate) fn national_scheme(
+/// TN-158: the environment's national identity number schemes, each with its caption: the
+/// field's when it is the only one, the choice's option when there are several.
+pub(crate) fn national_schemes(
     kit: &EnvironmentKit,
-) -> Option<(
+) -> Vec<(
     String,
     access_identity_account::domain::national_id::Scheme,
     TextId,
 )> {
     use access_identity_account::domain::national_id::Scheme;
-    let name = kit.signin.national_id.first()?;
-    let scheme = Scheme::parse(name)?;
-    let label = match scheme {
-        Scheme::TrTckn => TextId::TcknLabel,
-        Scheme::UsSsn => TextId::SsnLabel,
-        Scheme::DeSteuerId => TextId::SteuerIdLabel,
-        Scheme::GbNino => TextId::NinoLabel,
-        Scheme::NlBsn => TextId::BsnLabel,
-        Scheme::AzFin => TextId::FinLabel,
-        Scheme::Generic { .. } => TextId::NationalIdLabel,
-    };
-    Some((name.clone(), scheme, label))
+    let several = kit.signin.national_id.len() > 1;
+    kit.signin
+        .national_id
+        .iter()
+        .filter_map(|name| {
+            let scheme = Scheme::parse(name)?;
+            let label = match scheme {
+                Scheme::TrTckn => TextId::TcknLabel,
+                Scheme::UsSsn => TextId::SsnLabel,
+                Scheme::DeSteuerId => TextId::SteuerIdLabel,
+                Scheme::GbNino => TextId::NinoLabel,
+                Scheme::NlBsn => TextId::BsnLabel,
+                Scheme::AzFin => TextId::FinLabel,
+                Scheme::Generic { .. } if several => TextId::OtherCountryLabel,
+                Scheme::Generic { .. } => TextId::NationalIdLabel,
+            };
+            Some((name.clone(), scheme, label))
+        })
+        .collect()
 }
 
 /// TN-151
@@ -553,15 +561,18 @@ fn profile_ui(kit: &EnvironmentKit, flow: &FlowId, p: &ProfileStep, reqs: &[Requ
     if p.sent {
         Ui::profile_code(flow.clone(), p.gap.phone, reqs)
     } else {
-        let national = p
-            .gap
-            .national_id
-            .then(|| national_scheme(kit).map(|(_, _, l)| l))
-            .flatten();
+        let national: Vec<(String, TextId)> = if p.gap.national_id {
+            national_schemes(kit)
+                .into_iter()
+                .map(|(n, _, l)| (n, l))
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ui::complete_profile(
             flow.clone(),
             (p.gap.name, p.gap.email && !p.gap.phone, p.gap.phone),
-            (national, p.gap.birthdate),
+            (&national, p.gap.birthdate),
             p.offered.clone(),
             reqs,
         )
@@ -1067,7 +1078,11 @@ where
                             kit,
                             b,
                             &fref,
-                            (field(FieldName::NationalId), field(FieldName::Birthdate)),
+                            (
+                                field(FieldName::NationalIdScheme),
+                                field(FieldName::NationalId),
+                                field(FieldName::Birthdate),
+                            ),
                         )
                         .await?
                 {
@@ -1109,17 +1124,24 @@ where
         kit: &EnvironmentKit,
         b: &Browser<'_>,
         fref: &FlowRef<'_>,
-        (number, birthdate): (&str, &str),
+        (chosen, number, birthdate): (&str, &str, &str),
     ) -> Result<Option<TextId>, Reply> {
         use access_identity_session::app::profile::FactsRefusal;
-        let normalized = match national_scheme(kit) {
-            Some((name, scheme, _)) if !number.trim().is_empty() => {
-                match scheme.normalize(number) {
-                    Some(n) => Some((name, n)),
-                    None => return Ok(Some(TextId::FactsInvalid)),
-                }
+        let schemes = national_schemes(kit);
+        let picked = match schemes.as_slice() {
+            [one] => Some(one),
+            _ => schemes.iter().find(|(n, _, _)| n == chosen),
+        };
+        let normalized = if number.trim().is_empty() {
+            None
+        } else {
+            let Some((name, scheme, _)) = picked else {
+                return Ok(Some(TextId::FactsInvalid));
+            };
+            match scheme.normalize(number) {
+                Some(n) => Some((name.clone(), n)),
+                None => return Ok(Some(TextId::FactsInvalid)),
             }
-            _ => None,
         };
         let date = (!birthdate.trim().is_empty()).then_some(birthdate);
         let outcome = auth

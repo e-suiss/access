@@ -145,6 +145,10 @@ impl Ui {
                 } if *m == method => Some((*name, *required, *max_length)),
                 // TN-36
                 Node::Option { name, .. } => Some((*name, false, name.max_length())),
+                // TN-158
+                Node::Choice {
+                    name, method: m, ..
+                } if *m == method => Some((*name, true, name.max_length())),
                 _ => None,
             })
             .collect();
@@ -161,6 +165,16 @@ impl Ui {
             let len = value.expose().chars().count();
             if u32::try_from(len).map_or(true, |l| l > max) {
                 return Err(SubmissionError::TooLong(name));
+            }
+            // TN-158
+            let chosen = self.nodes.iter().all(|n| match n {
+                Node::Choice {
+                    name: c, options, ..
+                } if *c == name => options.iter().any(|o| o.value == *value.expose()),
+                _ => true,
+            });
+            if !chosen {
+                return Err(SubmissionError::Field);
             }
             fields.insert(name, value);
         }

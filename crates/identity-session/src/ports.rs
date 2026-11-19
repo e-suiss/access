@@ -179,6 +179,12 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Vec<String>, SessionError>> + Send;
+    /// The account that holds a national identity number, if any (TN-158).
+    fn national_id_holder(
+        &mut self,
+        scheme: &str,
+        number: &str,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
     /// Whether the subject has a national identity number (TN-158).
     fn has_national_id(
         &mut self,

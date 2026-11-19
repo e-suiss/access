@@ -204,6 +204,9 @@ pub enum Notice {
     MethodRemoved,
     /// The phone number was changed; sent to the old number (TN-156).
     PhoneChanged,
+    /// Someone tried to give this account's national identity number to another account
+    /// (TN-158).
+    NationalIdUsed,
     /// The e-mail address was changed; sent to the old address (OP-153 m.3 (i)).
     EmailChanged,
     /// The account is scheduled for deletion; `until` is the date (OP-153 m.3 (bb)).
@@ -228,7 +231,7 @@ pub enum Notice {
 
 impl Notice {
     /// Every notice.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::RecoveryRequested,
         Self::RecoveryCooling,
         Self::RecoveryCompleted,
@@ -245,6 +248,7 @@ impl Notice {
         Self::GuardianConsent,
         Self::MethodRemoved,
         Self::PhoneChanged,
+        Self::NationalIdUsed,
     ];
 
     /// Its outbox kind and `CloudEvents` `type`.
@@ -267,6 +271,7 @@ impl Notice {
             Self::GuardianConsent => "relay.message.guardian_consent.v1",
             Self::MethodRemoved => "relay.message.method_removed.v1",
             Self::PhoneChanged => "relay.message.phone_changed.v1",
+            Self::NationalIdUsed => "relay.message.national_id_used.v1",
         }
     }
 
@@ -1405,7 +1410,7 @@ impl fmt::Debug for Body {
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 53] = [
+pub const KINDS: [&str; 54] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -1459,6 +1464,7 @@ pub const KINDS: [&str; 53] = [
     "relay.message.algorithm_retired.v1",
     "relay.message.method_removed.v1",
     "relay.message.phone_changed.v1",
+    "relay.message.national_id_used.v1",
 ];
 
 impl Body {

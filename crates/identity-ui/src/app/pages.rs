@@ -570,11 +570,21 @@ where
         } else {
             Value::Null
         };
+        // TN-158
+        let identity = if kit.auth.require_national_id || kit.auth.require_birthdate {
+            match self.identity_facts(&kit, subject).await {
+                Ok(v) => v,
+                Err(r) => return r,
+            }
+        } else {
+            Value::Null
+        };
         let id = |r: &access_store::accounts::MethodRow| kit.ids.encode(METHOD_PREFIX, r.id).ok();
         let of = |kind: &'static str| rows.iter().filter(move |r| r.kind == kind);
         Reply::json(
             200,
             json!({
+                "identity": identity,
                 "password": {
                     "set": of("password").next().is_some(),
                     // TN-157
@@ -600,6 +610,34 @@ where
     }
 
     /// The last two digits of the account's phone number, the most the page shows (TN-156).
+    /// TN-158: the account's national identity number, masked, its scheme and its birth date.
+    async fn identity_facts(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Result<Value, Reply> {
+        let read = async {
+            let mut t =
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                    .await
+                    .map_err(access_identity_account::AccountError::from)?;
+            let fields =
+                access_identity_account::app::vault::profile(&mut t, &kit.vault(), subject).await?;
+            t.commit()
+                .await
+                .map_err(access_identity_account::AccountError::from)?;
+            Ok::<_, access_identity_account::AccountError>(fields)
+        };
+        let fields = read.await.map_err(|e| failed(&e.into()))?;
+        let get = |k: &str| fields.iter().find(|(f, _)| f == k).map(|(_, v)| v.clone());
+        Ok(json!({
+            "national_id": get("national_id")
+                .map(|n| access_identity_account::domain::national_id::masked(&n)),
+            "national_id_scheme": get("national_id_scheme"),
+            "birthdate": get("birthdate"),
+        }))
+    }
+
     async fn phone_ending(
         &self,
         kit: &EnvironmentKit,

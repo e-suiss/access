@@ -350,3 +350,24 @@ test("a sign-in that lacks a national identity number and a birth date asks for 
   await expect(page.getByLabel("Date of birth")).toHaveAttribute("type", "date");
   await expect(page.getByLabel("Date of birth")).toHaveAttribute("autocomplete", "bday");
 });
+
+// TN-158: several schemes ask for the country first, then the number
+test("several identity number schemes ask which country the number is of", async ({
+  page,
+  mock,
+}) => {
+  mock.secondFactor = example("profile-identity-choice");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const country = page.getByLabel("Country of your identity number");
+  await expect(country).toBeVisible();
+  await expect(country.locator("option")).toHaveText([
+    "Turkish identity number (T.C. Kimlik No)",
+    "Tax identification number (Steuer-ID)",
+    "Another country",
+  ]);
+  await expect(page.getByLabel("National identity number")).toBeVisible();
+});

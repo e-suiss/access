@@ -34,6 +34,7 @@ export type FieldName =
   | "sms_code"
   | "phone"
   | "national_id"
+  | "national_id_scheme"
   | "birthdate";
 /** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
 export type OptionName = "keep_signed_in" | "remember_device";
@@ -138,6 +139,15 @@ export interface PasskeySignalNode {
   readonly signal: PasskeySignal;
 }
 
+/** TN-158: one of a closed list, drawn as a select and submitted with its method. */
+export interface ChoiceNode {
+  readonly type: "choice";
+  readonly name: FieldName;
+  readonly method: Method;
+  readonly label: Text;
+  readonly options: readonly { readonly value: string; readonly label: Text }[];
+}
+
 export interface OptionNode {
   readonly type: "option";
   readonly name: OptionName;
@@ -179,6 +189,7 @@ export interface RecoveryCodesNode {
 
 export type UiNode =
   | InputNode
+  | ChoiceNode
   | TotpSetupNode
   | RecoveryCodesNode
   | PushNumberNode
@@ -237,6 +248,7 @@ const FIELD_NAMES = [
   "sms_code",
   "phone",
   "national_id",
+  "national_id_scheme",
   "birthdate",
 ] as const satisfies readonly FieldName[];
 const METHODS = [
@@ -337,6 +349,13 @@ const PasskeySignalS: v.GenericSchema<unknown, PasskeySignalNode> = v.object({
   type: v.literal("passkey_signal"),
   signal: SignalS,
 });
+const ChoiceS: v.GenericSchema<unknown, ChoiceNode> = v.object({
+  type: v.literal("choice"),
+  name: v.picklist(FIELD_NAMES),
+  method: v.picklist(METHODS),
+  label: TextS,
+  options: v.pipe(v.array(v.object({ value: v.string(), label: TextS })), v.minLength(1)),
+});
 const OptionS: v.GenericSchema<unknown, OptionNode> = v.object({
   type: v.literal("option"),
   name: v.picklist(["keep_signed_in", "remember_device"]),
@@ -378,6 +397,7 @@ const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
   passkey_create: PasskeyCreateS,
   passkey_signal: PasskeySignalS,
   option: OptionS,
+  choice: ChoiceS,
   provider: ProviderS,
   push_number: PushNumberS,
   totp_setup: TotpSetupS,
