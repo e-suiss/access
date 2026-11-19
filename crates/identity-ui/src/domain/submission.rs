@@ -170,7 +170,9 @@ impl Ui {
             let chosen = self.nodes.iter().all(|n| match n {
                 Node::Choice {
                     name: c, options, ..
-                } if *c == name => options.iter().any(|o| o.value == *value.expose()),
+                } if *c == name => options
+                    .iter()
+                    .any(|o| FieldValue::new(o.value.clone()) == value),
                 _ => true,
             });
             if !chosen {
