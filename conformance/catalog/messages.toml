@@ -691,6 +691,13 @@ owner = "identity_plane"
 protected = true
 
 [[message]]
+key = "error-request_expired"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "error-app_owner"
 text_id = "error.app_owner"
 surface = "login"

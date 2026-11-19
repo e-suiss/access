@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Answer, createFlow, getFlow, stepUp, submit } from "./api.js";
+import { follow, returnTo } from "./http.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
 import { t } from "./i18n.js";
 import { note, Panel, problem } from "./Layout.js";
@@ -26,6 +27,37 @@ export const POLL_GIVE_UP_MS = 15 * 60 * 1000;
 
 function withMessage(ui: LoginUi, message: Message): LoginUi {
   return { ...ui, messages: [message] };
+}
+
+/** TN-163: the identifier this page typed, kept for a sign-in that starts again. */
+let typedIdentifier = "";
+const RESTARTED = "access.login.restarted";
+
+/** TN-163: the identifier field of a step started again holds what was typed before. */
+function withIdentifier(ui: LoginUi): LoginUi {
+  if (typedIdentifier === "") return ui;
+  return {
+    ...ui,
+    nodes: ui.nodes.map((n) =>
+      n.type === "input" && n.name === "identifier" && n.value === undefined
+        ? { ...n, value: typedIdentifier }
+        : n,
+    ),
+  };
+}
+
+/** TN-163: whether the app's request started this sign-in again after its page expired; the
+ * identifier typed before comes back with it, read once. */
+function restartedByApp(): boolean {
+  try {
+    const was = window.sessionStorage.getItem(RESTARTED);
+    window.sessionStorage.removeItem(RESTARTED);
+    if (was === null) return false;
+    typedIdentifier = was;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function remember(ui: LoginUi) {
@@ -59,9 +91,21 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
 
   const restart = useCallback(
     async (message: Message | null) => {
+      // TN-163: a sign-in for an app goes back through the app's request: signed in already in
+      // another tab, it returns to the app; otherwise the request opens a fresh sign-in
+      const back = message === null ? null : returnTo();
+      if (back !== null) {
+        try {
+          window.sessionStorage.setItem(RESTARTED, typedIdentifier);
+        } catch {
+          // a browser without session storage only misses the note
+        }
+        follow(back);
+        return;
+      }
       const answer = await createFlow(kind);
       if (answer.kind === "ui")
-        show(message === null ? answer.ui : withMessage(answer.ui, message));
+        show(message === null ? answer.ui : withIdentifier(withMessage(answer.ui, message)));
       else setState({ phase: answer.kind === "degraded" ? "degraded" : "failed" });
     },
     [show, kind],
@@ -106,8 +150,14 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
         : reason === "step_up" || (reason === "reauthenticate" && acr === null)
           ? stepUp(acr).then((a) => (a.kind === "ui" ? a : createFlow(kind, acr)))
           : createFlow(kind, acr);
-    void start.then(settle);
-  }, [settle, kind]);
+    void start.then((answer) => {
+      if (answer.kind === "ui" && flow === null && restartedByApp()) {
+        show(withIdentifier(withMessage(answer.ui, expired)));
+        return;
+      }
+      void settle(answer);
+    });
+  }, [settle, show, kind]);
 
   // TN-102
   const ui = state.phase === "ready" ? state.ui : null;
@@ -166,6 +216,9 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
     (submission: Submission) => {
       const ui = current.current;
       if (ui === null) return;
+      // TN-163
+      const typed = submission.fields.identifier;
+      if (typeof typed === "string" && typed.trim() !== "") typedIdentifier = typed.trim();
       setBusy(true);
       void submit(ui, submission)
         .then(settle)

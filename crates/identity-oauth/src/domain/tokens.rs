@@ -15,8 +15,9 @@ pub const CODE_TTL_MS: u64 = 60_000;
 /// Pushed request lifetime (RFC 9126 §2.2, PD).
 pub const PAR_TTL_MS: u64 = 60_000;
 
-/// How long a request waits while the user signs in (the flow lifetime, PD).
-pub const INTERACTIVE_TTL_MS: u64 = 30 * 60 * 1000;
+/// How long a request waits while the user signs in: longer than a sign-in flow, so a sign-in
+/// that started again after its page expired still returns to the app (TN-163, PD).
+pub const INTERACTIVE_TTL_MS: u64 = 4 * 60 * 60 * 1000;
 
 /// Access token lifetime: the 10-minute default of the 5–15 minute range (MD-7, PD).
 pub const ACCESS_TTL_MS: u64 = 10 * 60 * 1000;

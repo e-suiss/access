@@ -174,6 +174,8 @@ export class LoginMock {
   linkPolls = 2;
   /** OP-156 m.3 (d): the second step after the password, when a test replaces it. */
   secondFactor: LoginUi | undefined = undefined;
+  /** TN-163: the flow is gone by the time the password is sent. */
+  goneAtPassword = false;
   /** OP-159 m.48 (a): the step a right TOTP code answers with, when a test replaces it. */
   totpDone: LoginUi | undefined = undefined;
   /** The step a sent push answers with. */
@@ -312,6 +314,13 @@ export class LoginMock {
       fields?: Partial<Record<FieldName, string>>;
     };
     const fields = body.fields ?? {};
+    if (this.goneAtPassword && body.method === "password") {
+      return route.fulfill({
+        status: 410,
+        contentType: "application/problem+json",
+        body: JSON.stringify({ type: "about:blank", title: "Gone", status: 410 }),
+      });
+    }
     this.submissions.push({
       path: url.pathname,
       method: body.method,

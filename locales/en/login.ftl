@@ -3,7 +3,7 @@
 login-failed = We couldn't sign you in with these details.
 login-throttled = Too many attempts. Try again in a moment.
 login-unavailable = Sign-in is briefly unavailable. Try again shortly.
-flow-expired = This sign-in page has expired. Start again.
+flow-expired = The page was open for a long time, so we started the sign-in again.
 second_factor-failed = That code didn't work. Check it, or get a new code and try again.
 second_factor-enroll = This sign-in needs a second step. Set up an authenticator app or a passkey to continue.
 second_factor-account = You're signing in to { $account }.
@@ -95,6 +95,7 @@ signout-expired = This sign-out request has expired. You can still sign out of t
 signout-done_title = You're signed out
 signout-sign_in_again = Sign in again
 error-app_owner = You can't sign in with this app.
+error-request_expired = This sign-in request has expired or was already used. Go back to the app and sign in again.
 error-access_owner = We couldn't complete this. Please try again in a moment.
 step_up-required = Confirm it's you to continue with this action.
 

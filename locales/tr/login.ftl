@@ -3,7 +3,7 @@
 login-failed = Bu bilgilerle girişinizi yapamadık.
 login-throttled = Çok fazla deneme yapıldı. Biraz sonra yeniden deneyin.
 login-unavailable = Giriş kısa bir süre için kullanılamıyor. Birazdan yeniden deneyin.
-flow-expired = Bu giriş sayfasının süresi doldu. Baştan başlayın.
+flow-expired = Sayfa uzun süre açık kaldığı için girişi yeniden başlattık.
 second_factor-failed = Bu kod çalışmadı. Kodu kontrol edin ya da yeni bir kod alıp tekrar deneyin.
 second_factor-enroll = Bu giriş ikinci bir adım istiyor. Devam etmek için bir doğrulama uygulaması ya da geçiş anahtarı kurun.
 second_factor-account = { $account } hesabına giriş yapıyorsunuz.
@@ -95,6 +95,7 @@ signout-expired = Bu çıkış isteğinin süresi doldu. Bu tarayıcıdan yine d
 signout-done_title = Çıkış yaptınız
 signout-sign_in_again = Tekrar giriş yap
 error-app_owner = Bu uygulamayla giriş yapılamıyor.
+error-request_expired = Bu giriş isteğinin süresi doldu ya da kullanıldı. Uygulamaya dönüp yeniden giriş yapın.
 error-access_owner = İşleminiz tamamlanamadı. Lütfen biraz sonra tekrar deneyin.
 step_up-required = Bu eyleme devam etmek için siz olduğunuzu doğrulayın.
 

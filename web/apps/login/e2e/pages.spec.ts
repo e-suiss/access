@@ -613,3 +613,11 @@ test("Share sends a signed-out person to sign in and back to the request", async
   await page.goto(`/login?reason=share&return_to=${encodeURIComponent(returnTo)}`);
   await expect(page).toHaveURL(/\/login\?return_to=.*%2Fauthorize%3Fclient_id%3Dcli_x/);
 });
+
+// TN-163: an expired or spent app request says to go back to the app, not that the app is broken
+test("an expired app request says to go back to the app", async ({ page }) => {
+  await page.goto("/login/error?error=invalid-request-uri&owner=app&ref=7f3k-2q");
+  await expect(page.getByRole("alert")).toHaveText(
+    "This sign-in request has expired or was already used. Go back to the app and sign in again.",
+  );
+});

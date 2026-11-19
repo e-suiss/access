@@ -1142,7 +1142,9 @@ impl TextId {
             Self::LoginFailed => "We couldn't sign you in with these details.",
             Self::TooManyAttempts => "Too many attempts. Try again in a moment.",
             Self::Unavailable => "Sign-in is briefly unavailable. Try again shortly.",
-            Self::FlowExpired => "This sign-in page has expired. Start again.",
+            Self::FlowExpired => {
+                "The page was open for a long time, so we started the sign-in again."
+            }
             Self::SecondFactorFailed => {
                 "That code didn't work. Check it, or get a new code and try again."
             }

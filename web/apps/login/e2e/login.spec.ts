@@ -86,7 +86,9 @@ test("a different account restarts at the identifier", async ({ page, mock }) =>
 // TN-102
 test("an expired flow starts again with a message", async ({ page, mock }) => {
   await page.goto("/?flow=lgf_gone");
-  await expect(page.getByRole("alert")).toHaveText("This sign-in page has expired. Start again.");
+  await expect(page.getByRole("alert")).toHaveText(
+    "The page was open for a long time, so we started the sign-in again.",
+  );
   await expect(page.getByLabel("Email or username")).toBeVisible();
   expect(mock.requests).toEqual(["GET /v1/login/flows/lgf_gone", "POST /v1/login/flows"]);
   await expect(page).toHaveURL(/flow=lgf_example/);
@@ -196,4 +198,50 @@ test("with the identity database down the page says sign-in isn't available, not
   };
   await page.goto("/");
   await expect(page.getByRole("alert")).toHaveAttribute("data-message-id", "login.unavailable");
+});
+
+const authorize =
+  "/authorize?client_id=cli_x&request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aabc";
+
+// TN-163: a sign-in that started again keeps what was typed
+test("a sign-in that expires while typing starts again with the identifier kept", async ({
+  page,
+  mock,
+}) => {
+  mock.goneAtPassword = true;
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The page was open for a long time, so we started the sign-in again.",
+  );
+  await expect(page.getByLabel("Email or username")).toHaveValue("ada@example.org");
+});
+
+// TN-163: a sign-in for an app goes back through the app's request, which opens a fresh one
+test("an expired sign-in for an app goes back through the app's request", async ({
+  page,
+  mock,
+}) => {
+  mock.goneAtPassword = true;
+  const visited: string[] = [];
+  await page.route("**/authorize?**", async (route) => {
+    visited.push(new URL(route.request().url()).pathname);
+    await route.fulfill({
+      status: 303,
+      headers: { location: `/login?return_to=${encodeURIComponent(authorize)}` },
+    });
+  });
+  await page.goto(`/login?return_to=${encodeURIComponent(authorize)}`);
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The page was open for a long time, so we started the sign-in again.",
+  );
+  expect(visited).toEqual(["/authorize"]);
+  await expect(page.getByLabel("Email or username")).toHaveValue("ada@example.org");
 });

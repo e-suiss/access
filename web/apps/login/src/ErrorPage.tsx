@@ -16,6 +16,8 @@ export function reference(value: string | null): string | null {
 export function errorText(error: string | null, owner: string | null): string {
   if (error === "access_denied") return "page.access_denied";
   if (error === "temporarily_unavailable") return "error.access_owner";
+  // TN-163
+  if (error === "invalid-request-uri") return "error.request_expired";
   switch (owner) {
     case "app":
       return "error.app_owner";
