@@ -5,6 +5,7 @@ import { Input } from "@access/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
 import { PasswordInput } from "@access/ui/components/password-input";
 import { QrCode } from "@access/ui/components/qr-code";
+import { RecoveryCodeList } from "@access/ui/components/recovery-code-list";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 
@@ -345,6 +346,20 @@ function TotpSetup({ node }: { readonly node: TotpSetupNode }) {
 }
 
 // OP-159 m.48 (a), §10.2.2: shown once; the sign-in continues only after the person says they saved them
+/** TN-166 */
+function codeWords() {
+  return {
+    copy: t("page.codes_copy"),
+    copied: t("page.codes_copied"),
+    download: t("page.codes_download"),
+    print: t("page.codes_print"),
+    title: t("page.codes_file_title", {
+      host: window.location.hostname,
+      date: new Date().toISOString().slice(0, 10),
+    }),
+  };
+}
+
 function RecoveryCodes(props: {
   readonly node: RecoveryCodesNode;
   readonly target: string | undefined;
@@ -357,12 +372,12 @@ function RecoveryCodes(props: {
   };
   return (
     <div className="flex flex-col gap-3" data-testid="recovery-codes">
-      <p className="text-sm">{text(props.node.label)}</p>
-      <ul className="grid grid-cols-2 gap-2 rounded-lg bg-muted px-3 py-2 font-mono text-sm">
-        {props.node.codes.map((c) => (
-          <li key={c}>{c}</li>
-        ))}
-      </ul>
+      <p className="text-sm">{t("page.codes_save")}</p>
+      <RecoveryCodeList
+        codes={props.node.codes}
+        words={codeWords()}
+        fileName={`recovery-codes-${window.location.hostname}.txt`}
+      />
       <Button {...primary} disabled={busy} onClick={() => void proceed()}>
         {t("page.codes_saved")}
       </Button>

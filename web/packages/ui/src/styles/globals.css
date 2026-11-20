@@ -156,3 +156,18 @@
     }
   }
 }
+
+@media print {
+  body[data-printing="codes"] * {
+    visibility: hidden;
+  }
+  body[data-printing="codes"] [data-print-area],
+  body[data-printing="codes"] [data-print-area] * {
+    visibility: visible;
+  }
+  body[data-printing="codes"] [data-print-area] {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+  }
+}

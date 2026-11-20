@@ -585,14 +585,20 @@ export class AccountMock {
       });
     }
     if (path === "/recovery-codes") {
-      this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: false } };
+      this.methods = {
+        ...this.methods,
+        recovery_codes: { set: true, acknowledged: false, left: 1, of: 1 },
+      };
       return reply(200, {
         recovery_codes: ["JJJJ-KKKK-LLLL-MMMM"],
         acknowledgement_required: true,
       });
     }
     if (path === "/recovery-codes/acknowledgement") {
-      this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: true } };
+      this.methods = {
+        ...this.methods,
+        recovery_codes: { ...this.methods.recovery_codes, set: true, acknowledged: true },
+      };
       return reply(200, { acknowledged: true });
     }
     // TN-156
@@ -674,7 +680,7 @@ export interface S11Methods {
   password: { set: boolean };
   passkeys: { id: string; name: string | null; created_at: string; synced: boolean }[];
   totp: { id: string; created_at: string }[];
-  recovery_codes: { set: boolean; acknowledged: boolean };
+  recovery_codes: { set: boolean; acknowledged: boolean; left?: number; of?: number };
   phone?: { set: boolean; ends_with: string | null } | null;
   identity?: {
     national_id: string | null;

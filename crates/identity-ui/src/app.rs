@@ -1057,10 +1057,21 @@ where
                 .totp(&fref, field(FieldName::TotpCode), corr)
                 .await
                 .map_err(|e| failed(&e))?,
-            (Method::RecoveryCode, _) => auth
-                .recovery_code(&fref, field(FieldName::RecoveryCode), corr)
-                .await
-                .map_err(|e| failed(&e))?,
+            (Method::RecoveryCode, _) => {
+                let (step, codes) = auth
+                    .recovery_code(&fref, field(FieldName::RecoveryCode), corr)
+                    .await
+                    .map_err(|e| failed(&e))?;
+                // TN-166
+                match (step, codes) {
+                    (Outcome::SignedIn(s), Some(codes)) => {
+                        return Ok(self
+                            .complete_with_codes(auth, kit, b, &flow, s, &codes)
+                            .await);
+                    }
+                    (step, _) => step,
+                }
+            }
             (Method::EmailCode, Current::Email(EmailWait::Code)) => auth
                 .email_code(&fref, field(FieldName::EmailCode), corr)
                 .await
@@ -1673,14 +1684,31 @@ where
         let Outcome::SignedIn(s) = done.step else {
             return self.outcome(auth, kit, b, flow, fref, done.step).await;
         };
+        Ok(self
+            .complete_with_codes(
+                auth,
+                kit,
+                b,
+                flow,
+                s,
+                &done.recovery_codes.unwrap_or_default(),
+            )
+            .await)
+    }
+
+    /// The completed sign-in that shows recovery codes once, before going on (§10.2.2, TN-166).
+    async fn complete_with_codes<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &EnvironmentKit,
+        b: &Browser<'_>,
+        flow: &FlowId,
+        s: Box<access_identity_session::app::SignedIn>,
+        codes: &[access_crypto::Secret<String>],
+    ) -> Reply {
         // TN-159
         self.finish_link(kit, b, &s).await;
-        let codes = done
-            .recovery_codes
-            .unwrap_or_default()
-            .iter()
-            .map(|c| c.expose().clone())
-            .collect();
+        let codes = codes.iter().map(|c| c.expose().clone()).collect();
         let ui =
             Ui::complete(flow.clone(), self.done_to(kit), &policy(kit)).with_recovery_codes(codes);
         let reply = Reply::ui(200, ui)
@@ -1688,7 +1716,7 @@ where
             .cookie(s.marker_cookie)
             .cookie(Some(clear_cookie(LOGIN_COOKIE)));
         // TN-33, OP-153 m.3 (y)
-        Ok(self.offer_dbsc(auth, kit, s.session, reply).await)
+        self.offer_dbsc(auth, kit, s.session, reply).await
     }
 
     /// A passkey enrolled at sign-in (OP-159 m.48 (a)): once registered, the step asks for an

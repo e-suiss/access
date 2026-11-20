@@ -1226,7 +1226,9 @@ impl TextId {
             }
             Self::RecoveryLocked => "Too many tries for this recovery. Start a new one later.",
             Self::RecoveryCodesTitle => "Recovery codes",
-            Self::RecoveryCodesSave => "Save these codes somewhere safe. Each code works once.",
+            Self::RecoveryCodesSave => {
+                "These codes are shown only now. Save them somewhere safe; each code works once."
+            }
             Self::CodesSaved => "I saved them",
             Self::LinkCodeLabel => "Code shown on your other device",
             Self::SettingsTitle => "Account",

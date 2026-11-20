@@ -1,7 +1,12 @@
 # Access account texts, tr (OP-153 m.3 (s)). Keys: conformance/catalog/messages.toml.
 
 recovery_codes-title = Kurtarma kodları
-recovery_codes-save = Bu kodları güvenli bir yerde saklayın. Her kod bir kez çalışır.
+recovery_codes-save = Bu kodlar yalnız şimdi gösterilir. Güvenli bir yere kaydedin; her kod bir kez çalışır.
+recovery_codes-copy = Kopyala
+recovery_codes-copied = Kopyalandı
+recovery_codes-download = İndir
+recovery_codes-print = Yazdır
+recovery_codes-file_title = { $host } için kurtarma kodları, { $date } tarihinde oluşturuldu. Her kod bir kez çalışır.
 action-codes_saved = Sakladım
 settings-title = Hesap
 settings-sign_in_methods = Giriş yöntemleri
@@ -136,6 +141,7 @@ methods-recovery_codes_none = Henüz kurtarma kodunuz yok.
 methods-recovery_codes_set = Kurtarma kodlarınız var.
 methods-recovery_codes_unsaved = Kurtarma kodlarınız var, ama sakladığınızı belirtmediniz.
 methods-recovery_codes_replace = Yeni kodlar eskilerini geçersiz kılar.
+methods-recovery_codes_left = Kalan kod: { $left } / { $of }
 action-new_recovery_codes = Yeni kurtarma kodları al
 methods-codes_saved = Kaydedildi. Kodları güvenli bir yerde tutun.
 methods-caps_lock = Caps Lock açık.

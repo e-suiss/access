@@ -688,7 +688,7 @@ async fn totp_is_required_once_enrolled_and_cannot_be_replayed() {
         .with(async |a| {
             let f = replay_flow.clone();
             let t = typed.clone();
-            a.recovery_code(&ref_of(&f), &t, "req").await
+            a.recovery_code(&ref_of(&f), &t, "req").await.map(|r| r.0)
         })
         .await
         .unwrap();
@@ -703,7 +703,7 @@ async fn totp_is_required_once_enrolled_and_cannot_be_replayed() {
         .with(async |a| {
             let f = again.clone();
             let t = codes[0].clone();
-            a.recovery_code(&ref_of(&f), &t, "req").await
+            a.recovery_code(&ref_of(&f), &t, "req").await.map(|r| r.0)
         })
         .await
         .unwrap();
@@ -715,7 +715,7 @@ async fn totp_is_required_once_enrolled_and_cannot_be_replayed() {
         .with(async |a| {
             let f = before.clone();
             let c = codes[1].clone();
-            a.recovery_code(&ref_of(&f), &c, "req").await
+            a.recovery_code(&ref_of(&f), &c, "req").await.map(|r| r.0)
         })
         .await
         .unwrap();

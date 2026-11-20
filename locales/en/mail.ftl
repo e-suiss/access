@@ -14,6 +14,7 @@ mail-new_method-subject = A new sign-in method was added
 mail-method_removed-subject = A sign-in method was removed
 mail-phone_changed-subject = Your phone number was changed
 mail-national_id_used-subject = Someone tried to use your identity number
+mail-recovery_code_used-subject = A recovery code was used to sign in
 mail-email_changed-subject = Your email address was changed
 mail-invitation-subject = You're invited to join an organization
 mail-reset_intent-subject = A sign-in reset was prepared for you

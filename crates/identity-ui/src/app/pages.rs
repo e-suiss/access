@@ -603,6 +603,9 @@ where
                 "recovery_codes": {
                     "set": of("recovery_code").next().is_some(),
                     "acknowledged": !pending,
+                    // TN-166
+                    "left": of("recovery_code").count(),
+                    "of": access_identity_session::domain::codes::RECOVERY_CODES,
                 },
                 "phone": phone,
             }),

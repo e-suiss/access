@@ -1483,6 +1483,74 @@ async fn the_login_app_carries_its_security_headers() {
     assert_eq!(wk.json(), json!({ "origins": [ORIGIN] }));
 }
 
+// TN-166, §10.2.2, TN-59
+#[tokio::test]
+async fn each_used_recovery_code_is_told_with_the_count_and_the_last_brings_a_new_set() {
+    let e = env(0x9a, "tn166", AuthPolicy::DEFAULT).await;
+    e.account("rita@example.com").await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("rita@example.com").await.step(), "complete");
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "rita" })))
+        .await;
+    b.proved(&started, "enrollment").await;
+    let s = started.json();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    let ok = b.post(&path, Some(json!({ "code": e.totp(&seed) }))).await;
+    let codes: Vec<String> = ok.json()["recovery_codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap().to_owned())
+        .collect();
+    let m = b.get("/v1/account/methods").await.json();
+    assert_eq!(m["recovery_codes"]["left"], 10);
+    assert_eq!(m["recovery_codes"]["of"], 10);
+    let rita = e.holder("rita@example.com").await.unwrap();
+    let told = |kind: &str| {
+        e.sent()
+            .iter()
+            .filter(|(k, _, s)| *k == kind && *s == rita)
+            .count()
+    };
+
+    for (i, code) in codes.iter().enumerate() {
+        e.advance(600_000);
+        let mut w = e.browser(&format!("w{i}"));
+        let second = w.sign_in("rita@example.com").await;
+        let done = w
+            .submit(&second, "recovery_code", json!({ "recovery_code": code }))
+            .await;
+        assert_eq!(
+            done.step(),
+            "complete",
+            "{}",
+            String::from_utf8_lossy(&done.body)
+        );
+        assert_eq!(told("relay.message.recovery_code_used.v1"), i + 1);
+        let shown = done.json()["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["type"] == "recovery_codes")
+            .cloned();
+        if i + 1 < codes.len() {
+            assert!(shown.is_none());
+            assert_eq!(told("relay.message.recovery_codes_regenerated.v1"), 0);
+            let m = w.get("/v1/account/methods").await.json();
+            assert_eq!(m["recovery_codes"]["left"], 9 - i);
+        } else {
+            let fresh = shown.expect("the last code brings a new set");
+            assert_eq!(fresh["codes"].as_array().unwrap().len(), 10);
+            assert_eq!(told("relay.message.recovery_codes_regenerated.v1"), 1);
+            let m = w.get("/v1/account/methods").await.json();
+            assert_eq!(m["recovery_codes"]["left"], 10);
+            assert_eq!(m["recovery_codes"]["acknowledged"], false);
+        }
+    }
+}
+
 // §10.2.2, TN-64, TN-59, TN-36, TN-50, S10
 #[tokio::test]
 async fn totp_recovery_codes_and_sign_out() {

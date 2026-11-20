@@ -1129,6 +1129,16 @@ fn every_kind_matches_the_json_schema() {
         ]
         .map(notice_of),
     )
+    .chain([Message {
+        subject: s,
+        to: to(),
+        locale: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
+        body: Body::RecoveryCodeUsed {
+            at_ms: START_MS,
+            left: 7,
+        },
+    }])
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {

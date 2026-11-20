@@ -22,7 +22,7 @@
       "type": "recovery_codes",
       "label": {
         "id": "recovery_codes.save",
-        "text": "Save these codes somewhere safe. Each code works once."
+        "text": "These codes are shown only now. Save them somewhere safe; each code works once."
       },
       "codes": [
         "abcd-efgh-0001",

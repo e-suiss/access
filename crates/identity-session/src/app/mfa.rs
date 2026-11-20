@@ -156,7 +156,7 @@ where
         Ok(encode(&handle))
     }
 
-    async fn new_recovery_codes(
+    pub(crate) async fn new_recovery_codes(
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],

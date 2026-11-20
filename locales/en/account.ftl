@@ -1,7 +1,12 @@
 # Access account texts, en (OP-153 m.3 (s)). Keys: conformance/catalog/messages.toml.
 
 recovery_codes-title = Recovery codes
-recovery_codes-save = Save these codes somewhere safe. Each code works once.
+recovery_codes-save = These codes are shown only now. Save them somewhere safe; each code works once.
+recovery_codes-copy = Copy
+recovery_codes-copied = Copied
+recovery_codes-download = Download
+recovery_codes-print = Print
+recovery_codes-file_title = Recovery codes for { $host }, made on { $date }. Each code works once.
 action-codes_saved = I saved them
 settings-title = Account
 settings-sign_in_methods = Sign-in methods
@@ -136,6 +141,7 @@ methods-recovery_codes_none = You have no recovery codes yet.
 methods-recovery_codes_set = You have recovery codes.
 methods-recovery_codes_unsaved = You have recovery codes, but you haven't said you saved them.
 methods-recovery_codes_replace = New codes stop the old ones working.
+methods-recovery_codes_left = Codes left: { $left } of { $of }
 action-new_recovery_codes = Get new recovery codes
 methods-codes_saved = Saved. Keep the codes somewhere safe.
 methods-caps_lock = Caps Lock is on.

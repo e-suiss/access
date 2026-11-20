@@ -668,6 +668,13 @@ pub enum Body {
         /// When, Unix ms.
         at_ms: u64,
     },
+    /// A recovery code signed the account in (`relay.message.recovery_code_used.v1`, TN-166).
+    RecoveryCodeUsed {
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The unused codes left.
+        left: u8,
+    },
     /// A new sign-in (`relay.message.new_sign_in.v1`, SEC18).
     NewSignIn {
         /// When, Unix ms.
@@ -1132,6 +1139,11 @@ impl fmt::Debug for Body {
                 .field("link", &"[redacted]")
                 .field("expires_at_ms", expires_at_ms)
                 .finish(),
+            Self::RecoveryCodeUsed { at_ms, left } => f
+                .debug_struct("RecoveryCodeUsed")
+                .field("at_ms", at_ms)
+                .field("left", left)
+                .finish(),
             Self::PasswordChanged { at_ms } => f
                 .debug_struct("PasswordChanged")
                 .field("at_ms", at_ms)
@@ -1410,7 +1422,7 @@ impl fmt::Debug for Body {
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 54] = [
+pub const KINDS: [&str; 55] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -1465,6 +1477,7 @@ pub const KINDS: [&str; 54] = [
     "relay.message.method_removed.v1",
     "relay.message.phone_changed.v1",
     "relay.message.national_id_used.v1",
+    "relay.message.recovery_code_used.v1",
 ];
 
 impl Body {
@@ -1475,6 +1488,7 @@ impl Body {
             Self::Otp { .. } => KINDS[0],
             Self::MagicLink { .. } => KINDS[1],
             Self::PasswordChanged { .. } => KINDS[2],
+            Self::RecoveryCodeUsed { .. } => KINDS[54],
             Self::NewSignIn { .. } => KINDS[3],
             Self::AccountStatus { .. } => KINDS[4],
             Self::Notice { notice, .. } => notice.kind(),
@@ -1981,6 +1995,10 @@ impl Message {
             Body::PasswordChanged { at_ms } => {
                 m.insert("at_ms".into(), (*at_ms).into());
             }
+            Body::RecoveryCodeUsed { at_ms, left } => {
+                m.insert("at_ms".into(), (*at_ms).into());
+                m.insert("left".into(), (*left).into());
+            }
             Body::NewSignIn { at_ms, method } => {
                 m.insert("at_ms".into(), (*at_ms).into());
                 m.insert("method".into(), method.name().into());
@@ -2179,6 +2197,10 @@ impl Message {
             "relay.message.password_changed.v1" => Body::PasswordChanged {
                 at_ms: int("at_ms")?,
             },
+            "relay.message.recovery_code_used.v1" => Body::RecoveryCodeUsed {
+                at_ms: int("at_ms")?,
+                left: u8::try_from(int("left")?).map_err(|_| Invalid("left"))?,
+            },
             "relay.message.new_sign_in.v1" => Body::NewSignIn {
                 at_ms: int("at_ms")?,
                 method: SignInMethod::parse(text("method")?).ok_or(Invalid("method"))?,
@@ -2366,6 +2388,10 @@ impl Message {
             }
             Body::PasswordChanged { at_ms } => {
                 m.insert("at".into(), rfc3339(*at_ms)?.into());
+            }
+            Body::RecoveryCodeUsed { at_ms, left } => {
+                m.insert("at".into(), rfc3339(*at_ms)?.into());
+                m.insert("left".into(), (*left).into());
             }
             Body::NewSignIn { at_ms, method } => {
                 m.insert("at".into(), rfc3339(*at_ms)?.into());

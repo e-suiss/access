@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 // OP-159 m.47 (b), (c), (f), TN-89, TN-138, TN-141: a tenant's founding and an administrator's
 // invitation on the hosted pages, and the primary environment's sign-in. The magic code rides in
 // the fragment and is dropped from the address; the address is proved before the password is
@@ -268,6 +270,19 @@ test("a required second step is set up during the sign-in", async ({ page, mock 
   await page.getByLabel("Code from your authenticator app").fill("123456");
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByTestId("recovery-codes").getByRole("listitem")).toHaveCount(10);
+  // TN-166
+  await expect(page.getByTestId("recovery-codes")).toContainText(
+    "These codes are shown only now. Save them somewhere safe; each code works once.",
+  );
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download" }).click(),
+  ]);
+  const saved = await download.path().then((p) => readFileSync(p, "utf8"));
+  const shown = await page.getByTestId("recovery-codes").getByRole("listitem").allTextContents();
+  expect(saved.trim().split("\n").slice(-10)).toEqual(shown);
+  await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
   expect(mock.requests).not.toContain("POST /v1/account/recovery-codes/acknowledgement");
   await page.getByRole("button", { name: "I saved them — continue" }).click();
   await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 // S11 (§8.5, X32; TN-99, TN-64, TN-68, TN-107, TN-148, X29, §8.13, OP-153 m.3 (m), (z))
 import type { Page } from "@playwright/test";
 
@@ -141,15 +143,36 @@ test("the authenticator key is text with a copy button; one pasteable code field
   );
 });
 
-test("new recovery codes are shown once and need the saved acknowledgement", async ({ page }) => {
+// TN-166
+test("new recovery codes are shown once, can be kept, need the saved acknowledgement and count down", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/account/");
   const codes = page.getByTestId("recovery-codes");
   await expect(codes).toContainText("You have no recovery codes yet.");
   await codes.getByRole("button", { name: "Get new recovery codes" }).click();
   await expect(codes.getByTestId("code-list")).toHaveText("JJJJ-KKKK-LLLL-MMMM");
+  await expect(codes).toContainText("These codes are shown only now.");
+  await codes.getByRole("button", { name: "Copy" }).click();
+  await expect(codes.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("JJJJ-KKKK-LLLL-MMMM");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    codes.getByRole("button", { name: "Download" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^recovery-codes-.+\.txt$/);
+  const saved = await download.path().then((p) => readFileSync(p, "utf8"));
+  expect(saved).toContain("JJJJ-KKKK-LLLL-MMMM");
+  expect(saved).toMatch(
+    /^Recovery codes for .+, made on \d{4}-\d{2}-\d{2}\. Each code works once\./,
+  );
+  await expect(codes.getByRole("button", { name: "Print" })).toBeVisible();
   await codes.getByRole("button", { name: "I saved them" }).click();
   await expect(codes.getByTestId("code-list")).toHaveCount(0);
   await expect(codes).toContainText("You have recovery codes.");
+  await expect(codes).toContainText("Codes left: 1 of 1");
 });
 
 test("linked sign-ins are listed and unlinked, never called merged", async ({ page }) => {

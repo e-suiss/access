@@ -20,6 +20,7 @@ import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
 import { PasswordInput } from "@access/ui/components/password-input";
 import { QrCode } from "@access/ui/components/qr-code";
+import { RecoveryCodeList } from "@access/ui/components/recovery-code-list";
 import { cn } from "@access/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, type SyntheticEvent, useEffect, useRef, useState } from "react";
@@ -45,7 +46,12 @@ export const Methods = v.object({
     }),
   ),
   totp: v.array(v.object({ id: v.string(), created_at: v.string() })),
-  recovery_codes: v.object({ set: v.boolean(), acknowledged: v.boolean() }),
+  recovery_codes: v.object({
+    set: v.boolean(),
+    acknowledged: v.boolean(),
+    left: v.optional(v.number()),
+    of: v.optional(v.number()),
+  }),
   phone: v.optional(
     v.nullable(v.object({ set: v.boolean(), ends_with: v.nullable(v.string()) })),
     null,
@@ -810,6 +816,14 @@ function RecoveryCodes(props: {
                 ? t("methods.recovery_codes_set")
                 : t("methods.recovery_codes_unsaved")}
           </Meta>
+          {state.set && state.left !== undefined && state.of !== undefined && (
+            <Meta>
+              {t("methods.recovery_codes_left", {
+                left: String(state.left),
+                of: String(state.of),
+              })}
+            </Meta>
+          )}
           {state.set && <Meta>{t("methods.recovery_codes_replace")}</Meta>}
           <Actions>
             <Button
@@ -831,11 +845,21 @@ function RecoveryCodes(props: {
           >
             {t("recovery_codes.save")}
           </h5>
-          <ul className={cn(MONO, "grid gap-1 sm:grid-cols-2")} data-testid="code-list">
-            {codes.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
+          <RecoveryCodeList
+            codes={codes}
+            className="bg-background"
+            fileName={`recovery-codes-${window.location.hostname}.txt`}
+            words={{
+              copy: t("recovery_codes.copy"),
+              copied: t("recovery_codes.copied"),
+              download: t("recovery_codes.download"),
+              print: t("recovery_codes.print"),
+              title: t("recovery_codes.file_title", {
+                host: window.location.hostname,
+                date: new Date().toISOString().slice(0, 10),
+              }),
+            }}
+          />
           <Actions>
             <Button
               onClick={() => {

@@ -6,9 +6,11 @@ use std::net::IpAddr;
 
 use access_crypto::Secret;
 use access_identity_account::AccountError;
+use access_identity_account::app::events;
 use access_identity_account::app::login::{Attempt, LoginServices, password_login};
 use access_identity_account::app::sealing::{open, subject_key};
 use access_identity_account::app::signal::{emit as signal, fresh_id};
+use access_identity_account::domain::events::CredentialChange;
 use access_identity_account::domain::gcra::Gcra;
 use access_identity_account::domain::identifier::{MAX_CHARS, normalize};
 use access_identity_account::domain::login::{PasswordLogin, counter_key};
@@ -773,10 +775,12 @@ where
         code: &str,
         correlation: &str,
     ) -> Result<Step, SessionError> {
-        self.second_factor(flow, code, TOTP, correlation).await
+        Ok(self.second_factor(flow, code, TOTP, correlation).await?.0)
     }
 
-    /// The recovery code step (§10.2.2, TN-59): single use, Argon2id-hashed.
+    /// The recovery code step (§10.2.2, TN-59): single use, Argon2id-hashed. TN-166: the account's
+    /// address is told how many codes are left, and the last code brings a new set, returned to be
+    /// shown once.
     ///
     /// # Errors
     /// [`SessionError`].
@@ -785,7 +789,7 @@ where
         flow: &FlowRef<'_>,
         code: &str,
         correlation: &str,
-    ) -> Result<Step, SessionError> {
+    ) -> Result<(Step, Option<Vec<Secret<String>>>), SessionError> {
         self.second_factor(flow, code, RECOVERY_CODE, correlation)
             .await
     }
@@ -796,22 +800,22 @@ where
         code: &str,
         kind: &str,
         correlation: &str,
-    ) -> Result<Step, SessionError> {
+    ) -> Result<(Step, Option<Vec<Secret<String>>>), SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
         let mut l = match load(&mut tx, flow, now).await? {
             Ok(l) => l,
-            Err(e) => return Ok(gone(e)),
+            Err(e) => return Ok((gone(e), None)),
         };
         let Some(subject) = l.state.subject.filter(|_| l.state.first_done()) else {
-            return Ok(neutral(0));
+            return Ok((neutral(0), None));
         };
         let key = self.factor_key(subject, kind);
         let gate = match self.factor_gate(&mut tx, &key, now).await? {
             Ok(s) => s,
             Err(step) => {
                 tx.commit().await?;
-                return Ok(step);
+                return Ok((step, None));
             }
         };
         let row = tx
@@ -858,7 +862,7 @@ where
             )
             .await?;
             tx.commit().await?;
-            return Ok(refuse(CODE_NOT_ACCEPTED));
+            return Ok((refuse(CODE_NOT_ACCEPTED), None));
         };
         audit(
             &mut tx,
@@ -868,11 +872,59 @@ where
             correlation,
         )
         .await?;
+        // TN-166
+        let fresh = if kind == RECOVERY_CODE {
+            self.recovery_code_used(&mut tx, subject, &dek, now).await?
+        } else {
+            None
+        };
         if l.state.record(subject, factor).is_err() {
             tx.commit().await?;
-            return Ok(refuse(STEP_NOT_ALLOWED));
+            return Ok((refuse(STEP_NOT_ALLOWED), fresh));
         }
-        self.advance(tx, l, now, correlation).await
+        Ok((self.advance(tx, l, now, correlation).await?, fresh))
+    }
+
+    /// TN-166: tells the account's address a recovery code signed it in and how many are left;
+    /// after the last one, a new set is made (and announced) and returned.
+    async fn recovery_code_used(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        dek: &suiss_crypto::envelope::Dek,
+        now: u64,
+    ) -> Result<Option<Vec<Secret<String>>>, SessionError> {
+        let left = tx.credentials(subject, RECOVERY_CODE).await?.len();
+        self.account_message(
+            tx,
+            subject,
+            Body::RecoveryCodeUsed {
+                at_ms: now,
+                left: u8::try_from(left).unwrap_or(u8::MAX),
+            },
+        )
+        .await?;
+        if left > 0 {
+            return Ok(None);
+        }
+        let codes = self.new_recovery_codes(tx, subject, dek).await?;
+        // OP-151 m.3 (i)
+        events::credential(
+            tx,
+            &self.environment,
+            subject,
+            RECOVERY_CODE,
+            CredentialChange::Replaced,
+        )
+        .await?;
+        self.account_notice(
+            tx,
+            subject,
+            access_identity_account::notify::message::Notice::RecoveryCodesRegenerated,
+            now,
+        )
+        .await?;
+        Ok(Some(codes))
     }
 
     /// Suspends the flow on an e-mail code or link (§10.2.2, TN-102). The answer is the same

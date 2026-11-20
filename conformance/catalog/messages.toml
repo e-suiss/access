@@ -1246,6 +1246,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "mail-recovery_code_used-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "mail-email_changed-subject"
 surface = "mail"
 class = "notice"
@@ -2154,6 +2161,48 @@ protected = false
 key = "methods-caps_lock"
 surface = "account"
 class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-copy"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-copied"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-download"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-print"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-file_title"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-recovery_codes_left"
+surface = "account"
+class = "settings"
 owner = "identity_plane"
 protected = false
 
@@ -5565,6 +5614,48 @@ protected = false
 key = "page-caps_lock"
 surface = "login"
 class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_save"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_copy"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_copied"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_download"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_print"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-codes_file_title"
+surface = "login"
+class = "label"
 owner = "identity_plane"
 protected = false
 

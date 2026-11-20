@@ -84,7 +84,8 @@
         "relay.message.algorithm_retired.v1",
         "relay.message.method_removed.v1",
         "relay.message.phone_changed.v1",
-        "relay.message.national_id_used.v1"
+        "relay.message.national_id_used.v1",
+        "relay.message.recovery_code_used.v1"
       ]
     },
     "subject": {
@@ -971,6 +972,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.national_id_used.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.recovery_code_used.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.recovery_code_used.v1"
           }
         }
       }
@@ -2970,6 +2987,36 @@
         "at": {
           "type": "string",
           "format": "date-time"
+        }
+      }
+    },
+    "relay.message.recovery_code_used.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "left"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "The unused recovery codes left (TN-166)."
         }
       }
     }
