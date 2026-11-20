@@ -580,6 +580,9 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         subject: Option<[u8; 16]>,
     ) -> Result<[u8; 16], AccountError> {
         let (tenant, environment) = self.ids();
+        // TN-171
+        tx.0.supersede_challenges(&flow_hash, i64_of(now_ms)?)
+            .await?;
         let dek = Dek::generate()?;
         let wrapped = self.environment.kek.wrap(&dek)?;
         let sealed = seal_body(dek, &seal_context(&tx.0, &flow_hash), address.as_bytes())?;
@@ -648,6 +651,34 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             Some(row)
                 if row.status == "open"
                     && row.purpose == Purpose::Registration.name()
+                    && Secret::new(row.device_hash).ct_eq_bytes(device_hash)
+                    && i64_of(now_ms)? < row.expires_ms =>
+            {
+                Some(self.address(&tx, flow_hash, &row)?)
+            }
+            _ => None,
+        };
+        tx.commit().await?;
+        Ok(out)
+    }
+
+    /// The address an open address-change challenge of this flow and browser names, read
+    /// without using it, for sending its code again (TN-171).
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    pub async fn pending_change_address(
+        &self,
+        flow_hash: &[u8; 32],
+        device_hash: &[u8; 32],
+        now_ms: u64,
+    ) -> Result<Option<String>, AccountError> {
+        let mut tx = self.begin().await?;
+        let row = tx.0.challenge_by_flow(flow_hash).await?;
+        let out = match row {
+            Some(row)
+                if row.status == "open"
+                    && row.purpose == Purpose::EmailChange.name()
                     && Secret::new(row.device_hash).ct_eq_bytes(device_hash)
                     && i64_of(now_ms)? < row.expires_ms =>
             {

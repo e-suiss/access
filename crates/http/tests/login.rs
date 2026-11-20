@@ -2217,7 +2217,15 @@ async fn email_links_and_codes() {
     assert!(methods.contains(&"magic_link".to_owned()));
     let waiting = b.submit(&at, "magic_link", json!({})).await;
     assert_eq!(waiting.status, StatusCode::OK);
-    assert_eq!(waiting.messages(), ["email.sent"]);
+    // TN-171
+    assert_eq!(
+        waiting.messages(),
+        ["email.sent_to", "link.lifetime", "email.spam_hint"]
+    );
+    assert_eq!(
+        waiting.json()["messages"][0]["args"]["to"],
+        "carol@example.com"
+    );
     let link = e.outbox.last();
     let token = link
         .strip_prefix(&format!("https://{HOST}/login/link#"))
@@ -2237,7 +2245,10 @@ async fn email_links_and_codes() {
         .await;
     assert_eq!(other.json(), json!({ "state": "needs_confirmation" }));
     let polled = b.get(&waiting.action()).await;
-    assert_eq!(polled.messages(), ["email.sent"]);
+    assert_eq!(
+        polled.messages(),
+        ["email.sent_to", "link.lifetime", "email.spam_hint"]
+    );
     let yes = phone
         .post(
             "/v1/login/link/confirm",
@@ -2263,8 +2274,26 @@ async fn email_links_and_codes() {
     let mut c = e.browser("c");
     let at = c.identify("carol@example.com").await;
     let code_step = c.submit(&at, "email_code", json!({})).await;
-    assert_eq!(code_step.messages(), ["email.sent"]);
+    assert_eq!(
+        code_step.messages(),
+        ["email.sent_to", "code.lifetime", "email.spam_hint"]
+    );
+    // TN-171
+    let first = e.outbox.last();
+    let resent = c.submit(&code_step, "resend", json!({})).await;
+    assert_eq!(
+        resent.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&resent.body)
+    );
+    assert!(resent.messages().contains(&String::from("code.resent")));
     let code = e.outbox.last();
+    assert_ne!(code, first, "a new code");
+    let old = c
+        .submit(&code_step, "email_code", json!({ "email_code": first }))
+        .await;
+    assert_eq!(old.status, StatusCode::UNAUTHORIZED, "the old code is gone");
     let wrong = c
         .submit(
             &code_step,
@@ -2320,6 +2349,15 @@ fn masked(a: &Answer) -> (u16, Vec<(String, String)>, String) {
             }
             if n["name"] == "identifier" && n.get("value").is_some() {
                 n["value"] = "*".into();
+            }
+        }
+    }
+    // TN-171
+    if let Some(messages) = body["messages"].as_array_mut() {
+        for m in messages {
+            if m["args"].get("to").is_some() {
+                m["args"]["to"] = "*".into();
+                m["text"] = "*".into();
             }
         }
     }
@@ -3301,7 +3339,18 @@ async fn sign_up_creates_the_account_only_when_the_code_returns() {
     let code_step = b.register("New.Person@Example.com").await;
     assert_eq!(code_step.status, StatusCode::OK);
     assert_eq!(code_step.step(), "authenticate");
-    assert_eq!(code_step.messages(), vec!["registration.code_sent"]);
+    assert_eq!(
+        code_step.messages(),
+        vec![
+            "registration.code_sent_to",
+            "code.lifetime",
+            "email.spam_hint"
+        ]
+    );
+    assert_eq!(
+        code_step.json()["messages"][0]["args"]["to"],
+        "New.Person@Example.com"
+    );
     // TN-80
     assert_eq!(e.holder("new.person@example.com").await, None);
     let (kind, since, _) = *e.sent().last().unwrap();
@@ -3429,6 +3478,73 @@ async fn a_disposable_address_is_scored_and_never_refused() {
         r.register("me@privaterelay.appleid.com").await.status,
         StatusCode::OK
     );
+}
+
+// TN-171
+#[tokio::test]
+async fn a_sign_up_sends_a_new_code_on_request_and_takes_another_address() {
+    let e = env(0xa8, "su-tn171", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("su-r");
+    let code_step = b.register("first@example.com").await;
+    let methods: Vec<String> = code_step.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["method"].as_str().map(str::to_owned))
+        .collect();
+    assert!(methods.contains(&String::from("resend")));
+    assert!(methods.contains(&String::from("restart")));
+    let back = b.submit(&code_step, "restart", json!({})).await;
+    assert_eq!(back.status, StatusCode::OK);
+    assert_eq!(back.step(), "identifier");
+    let code_step = b
+        .submit(&back, "register", json!({ "email": "new@example.com" }))
+        .await;
+    assert_eq!(
+        code_step.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&code_step.body)
+    );
+    assert_eq!(
+        code_step.json()["messages"][0]["args"]["to"],
+        "new@example.com"
+    );
+    let first = e.outbox.last();
+    e.advance(61_000);
+    let resent = b.submit(&code_step, "resend", json!({})).await;
+    assert_eq!(
+        resent.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&resent.body)
+    );
+    assert!(resent.messages().contains(&String::from("code.resent")));
+    assert_eq!(
+        resent.json()["messages"][0]["args"]["to"],
+        "new@example.com"
+    );
+    let code = e.outbox.last();
+    assert_ne!(code, first);
+    let old = b
+        .submit(&resent, "email_code", json!({ "email_code": first }))
+        .await;
+    assert_ne!(old.status, StatusCode::OK, "the old code is gone");
+    let done = b
+        .submit(
+            &resent,
+            "email_code",
+            json!({ "email_code": code, "display_name": "New" }),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert!(e.holder("new@example.com").await.is_some());
+    assert_eq!(e.holder("first@example.com").await, None);
 }
 
 // TN-132, OP-153 m.3 (g)
@@ -5721,7 +5837,11 @@ async fn a_phone_environment_signs_up_with_the_number_and_a_text_message_code() 
         "{}",
         String::from_utf8_lossy(&code_step.body)
     );
-    assert_eq!(code_step.messages(), vec!["registration.code_sent"]);
+    assert_eq!(
+        code_step.messages(),
+        vec!["registration.code_sent_to_phone", "code.lifetime"]
+    );
+    assert_eq!(code_step.json()["messages"][0]["args"]["digits"], "33");
     let (kind, _, _) = *e.sent().last().unwrap();
     assert_eq!(kind, "relay.message.sms_otp.v1");
     let code = e.outbox.last();
@@ -5812,9 +5932,30 @@ async fn a_phone_environment_asks_an_account_without_a_number_for_one_and_proves
     );
     let (kind, _, _) = *e.sent().last().unwrap();
     assert_eq!(kind, "relay.message.sms_otp.v1");
+    // TN-171
+    assert_eq!(sent.json()["messages"][0]["args"]["digits"], "66");
+    let back = b.submit(&sent, "profile", json!({})).await;
+    let again = b
+        .submit(&back, "profile", json!({ "phone": "0532 444 55 66" }))
+        .await;
+    assert_eq!(
+        again.status,
+        StatusCode::OK,
+        "another number can be given: {}",
+        String::from_utf8_lossy(&again.body)
+    );
+    e.advance(61_000);
+    let resent = b.submit(&again, "resend", json!({})).await;
+    assert_eq!(
+        resent.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&resent.body)
+    );
+    assert!(resent.messages().contains(&String::from("code.resent")));
     let code = e.outbox.last();
     let done = b
-        .submit(&sent, "profile_code", json!({ "email_code": code }))
+        .submit(&resent, "profile_code", json!({ "email_code": code }))
         .await;
     assert_eq!(
         done.step(),

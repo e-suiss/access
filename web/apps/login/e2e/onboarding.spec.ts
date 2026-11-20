@@ -335,9 +335,12 @@ test("a sign-in that lacks a name or a proven address asks for them first", asyn
   await expect(page.getByLabel("Email", { exact: true })).toHaveValue("ada@example.org");
   await page.getByLabel("Your name").fill("Ada");
   await page.getByRole("button", { name: "Continue" }).click();
+  // TN-171
   await expect(
-    page.getByText("If this address can be used, we've sent a code to it."),
+    page.getByText("If this address can be used, we've sent a code to ada@example.org."),
   ).toBeVisible();
+  await expect(page.getByText("The code works for 15 minutes.")).toBeVisible();
+  await expect(page.getByText("If it doesn't arrive, check your spam folder.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Use another address" })).toBeVisible();
   await page.getByLabel("Code from your email").fill("000000");
   await page.getByRole("button", { name: "Verify" }).click();
@@ -514,4 +517,36 @@ test("the second step shows one way at a time and the code field only after the 
   await expect(sms).toHaveAttribute("inputmode", "numeric");
   await page.getByRole("button", { name: "Try another way" }).click();
   await expect(page.locator("[data-way=recovery_code]")).toBeVisible();
+});
+
+// TN-171: a new code can be asked for once the step has stood for half a minute
+test("a code step offers a new code after a short wait", async ({ page, mock }) => {
+  await page.clock.install();
+  const code = example("profile-code");
+  mock.secondFactor = code;
+  mock.resendAnswer = {
+    status: 200,
+    ui: {
+      ...code,
+      messages: [
+        ...code.messages,
+        { id: "code.resent", text: "We sent a new code.", severity: "info" },
+      ],
+    },
+  };
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const resend = page.getByTestId("resend");
+  await expect(resend).toBeDisabled();
+  await expect(resend).toHaveText("Send a new code in 30 s");
+  await page.clock.runFor(31_000);
+  await expect(resend).toBeEnabled();
+  await expect(resend).toHaveText("Send a new code");
+  await resend.click();
+  await expect(page.getByText("We sent a new code.")).toBeVisible();
+  expect(mock.submissions.some((s) => JSON.stringify(s).includes('"resend"'))).toBe(true);
+  await expect(page.getByTestId("resend")).toBeDisabled();
 });

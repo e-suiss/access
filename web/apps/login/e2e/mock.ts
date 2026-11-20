@@ -174,6 +174,8 @@ export class LoginMock {
   linkPolls = 2;
   /** OP-156 m.3 (d): the second step after the password, when a test replaces it. */
   secondFactor: LoginUi | undefined = undefined;
+  /** TN-171: how a request for a new code answers, when a test sets it. */
+  resendAnswer: Reply | undefined = undefined;
   /** TN-169: how the profile step answers, when a test sets it. */
   profileAnswer: ((fields: Partial<Record<FieldName, string>>) => Reply | undefined) | undefined =
     undefined;
@@ -425,6 +427,8 @@ export class LoginMock {
             ? { status: 200, ui: example("profile-code") }
             : { status: 200, ui: example("profile") })
         );
+      case "resend":
+        return this.resendAnswer ?? { status: 400, ui: this.identifierStep() };
       case "profile_code":
         return fields.email_code === totp
           ? { status: 200, ui: withoutNodes(example("complete")) }

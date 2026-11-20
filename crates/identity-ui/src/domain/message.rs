@@ -75,6 +75,36 @@ pub enum TextId {
     /// A number its scheme refuses, or no real birth date (TN-158).
     #[serde(rename = "profile.facts_invalid")]
     FactsInvalid,
+    /// The e-mail of a sign-in went to the typed address, if it matches an account (TN-171).
+    #[serde(rename = "email.sent_to")]
+    EmailSentTo,
+    /// A code went to the typed address, if it can be used (TN-171).
+    #[serde(rename = "registration.code_sent_to")]
+    CodeSentTo,
+    /// A code went to the typed number, if it can be used; only its last digits are shown (TN-171).
+    #[serde(rename = "registration.code_sent_to_phone")]
+    CodeSentToPhone,
+    /// How long a sent code works (TN-171).
+    #[serde(rename = "code.lifetime")]
+    CodeLifetime,
+    /// How long a sent link works (TN-171).
+    #[serde(rename = "link.lifetime")]
+    LinkLifetime,
+    /// Where to look when the e-mail does not arrive (TN-171).
+    #[serde(rename = "email.spam_hint")]
+    SpamHint,
+    /// Send a new code to the same address (TN-171).
+    #[serde(rename = "action.resend_code")]
+    ResendCode,
+    /// Send a new link to the same address (TN-171).
+    #[serde(rename = "action.resend_link")]
+    ResendLink,
+    /// A new code went out (TN-171).
+    #[serde(rename = "code.resent")]
+    CodeResent,
+    /// A new link went out (TN-171).
+    #[serde(rename = "link.resent")]
+    LinkResent,
     /// The identity number the profile step refused (TN-169).
     #[serde(rename = "profile.national_id_invalid")]
     NationalIdInvalid,
@@ -719,7 +749,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 234] = [
+    pub const ALL: [Self; 244] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -747,6 +777,16 @@ impl TextId {
         Self::FinLabel,
         Self::BirthdateLabel,
         Self::FactsInvalid,
+        Self::EmailSentTo,
+        Self::CodeSentTo,
+        Self::CodeSentToPhone,
+        Self::CodeLifetime,
+        Self::LinkLifetime,
+        Self::SpamHint,
+        Self::ResendCode,
+        Self::ResendLink,
+        Self::CodeResent,
+        Self::LinkResent,
         Self::NationalIdInvalid,
         Self::BirthdateInvalid,
         Self::AddressRefused,
@@ -988,6 +1028,16 @@ impl TextId {
             Self::FinLabel => "label.national_id_az_fin",
             Self::BirthdateLabel => "label.birthdate",
             Self::FactsInvalid => "profile.facts_invalid",
+            Self::EmailSentTo => "email.sent_to",
+            Self::CodeSentTo => "registration.code_sent_to",
+            Self::CodeSentToPhone => "registration.code_sent_to_phone",
+            Self::CodeLifetime => "code.lifetime",
+            Self::LinkLifetime => "link.lifetime",
+            Self::SpamHint => "email.spam_hint",
+            Self::ResendCode => "action.resend_code",
+            Self::ResendLink => "action.resend_link",
+            Self::CodeResent => "code.resent",
+            Self::LinkResent => "link.resent",
             Self::NationalIdInvalid => "profile.national_id_invalid",
             Self::BirthdateInvalid => "profile.birthdate_invalid",
             Self::AddressRefused => "profile.address_refused",
@@ -1237,6 +1287,20 @@ impl TextId {
             Self::FinLabel => "Personal identification code (FİN)",
             Self::BirthdateLabel => "Date of birth",
             Self::FactsInvalid => "Check the number and the date and try again.",
+            Self::EmailSentTo => {
+                "If these details match an account, we've sent an email to { $to }."
+            }
+            Self::CodeSentTo => "If this address can be used, we've sent a code to { $to }.",
+            Self::CodeSentToPhone => {
+                "If this number can be used, we've sent a code to the number ending in { $digits }."
+            }
+            Self::CodeLifetime => "The code works for { $minutes } minutes.",
+            Self::LinkLifetime => "The link works for { $minutes } minutes.",
+            Self::SpamHint => "If it doesn't arrive, check your spam folder.",
+            Self::ResendCode => "Send a new code",
+            Self::ResendLink => "Send a new link",
+            Self::CodeResent => "We sent a new code.",
+            Self::LinkResent => "We sent a new link.",
             Self::NationalIdInvalid => "Check the identity number and try again.",
             Self::BirthdateInvalid => "Enter a real date of birth.",
             Self::AddressRefused => "This address can't be used here. Enter another one.",

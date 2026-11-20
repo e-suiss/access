@@ -227,7 +227,8 @@ const NOT_ALLOWED: Problem = Problem {
 enum Current {
     Identifier,
     Authenticate(String),
-    Email(EmailWait),
+    /// TN-171: the wait, and the identifier this browser typed.
+    Email(EmailWait, Option<String>),
     /// The second step; the identifier this browser typed, when it typed one (TN-162).
     Second(SecondFactors, Option<String>),
     /// OP-156 m.3 (d): a push waits; the page shows the number until the end.
@@ -599,9 +600,15 @@ pub(crate) fn national_schemes(
 }
 
 /// TN-151
-fn profile_ui(kit: &EnvironmentKit, flow: &FlowId, p: &ProfileStep, reqs: &[Requirement]) -> Ui {
+fn profile_ui(
+    kit: &EnvironmentKit,
+    flow: &FlowId,
+    p: &ProfileStep,
+    reqs: &[Requirement],
+    to: Option<&str>,
+) -> Ui {
     if p.sent {
-        Ui::profile_code(flow.clone(), p.gap.phone, reqs)
+        Ui::profile_code(flow.clone(), p.gap.phone, to, reqs)
     } else {
         let national: Vec<(String, TextId)> = if p.gap.national_id {
             national_schemes(kit)
@@ -651,7 +658,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
         Current::Authenticate(id) => Ui::authenticate(flow.clone(), id, blank, &reqs)
             .with_email(email(kit))
             .with_first_steps(kit.auth.password, kit.auth.passkey),
-        Current::Email(wait) => Ui::email_sent(flow.clone(), *wait, &reqs),
+        Current::Email(wait, to) => Ui::email_sent(flow.clone(), *wait, to.as_deref(), &reqs),
         Current::Second(offered, _) | Current::PushEnded(offered, _) => {
             Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs)
         }
@@ -670,7 +677,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             kit.auth.passkey.then(|| blank.clone()),
             &reqs,
         ),
-        Current::Profile(p) => profile_ui(kit, flow, p, &reqs),
+        Current::Profile(p) => profile_ui(kit, flow, p, &reqs, None),
         Current::Done(_) => return None,
     })
 }
@@ -1104,7 +1111,7 @@ where
                     (step, _) => step,
                 }
             }
-            (Method::EmailCode, Current::Email(EmailWait::Code)) => auth
+            (Method::EmailCode, Current::Email(EmailWait::Code, _)) => auth
                 .email_code(&fref, field(FieldName::EmailCode), corr)
                 .await
                 .map_err(|e| failed(&e))?,
@@ -1153,7 +1160,7 @@ where
                         )
                         .await?
                 {
-                    let mut ui = profile_ui(kit, &flow, p, &policy(kit));
+                    let mut ui = self.profile_view(kit, &fref, &flow, p).await;
                     ui.messages.push(refused);
                     return Ok(Reply::ui(400, ui));
                 }
@@ -1168,6 +1175,55 @@ where
                     .profile_submit(auth, kit, b, (&flow, &fref), p, typed)
                     .await;
             }
+            // TN-171
+            (Method::Resend, Current::Email(wait, _)) => {
+                let code = *wait == EmailWait::Code;
+                let step = auth
+                    .send_email(
+                        &fref,
+                        if code {
+                            MethodClass::EmailOtp
+                        } else {
+                            MethodClass::MagicLink
+                        },
+                        corr,
+                    )
+                    .await
+                    .map_err(|e| failed(&e))?;
+                let mut reply = self.outcome(auth, kit, b, &flow, &fref, step).await?;
+                if let Body::Ui(ui) = &mut reply.body {
+                    ui.messages.push(Message::info(if code {
+                        TextId::CodeResent
+                    } else {
+                        TextId::LinkResent
+                    }));
+                }
+                return Ok(reply);
+            }
+            // TN-171
+            (Method::Resend, Current::Profile(p)) if p.sent => {
+                let Some(to) = self.profile_pending(kit, (fref.handle, fref.device)).await else {
+                    return Err(Reply::problem(FLOW_GONE));
+                };
+                let started = if p.gap.phone {
+                    self.profile_phone(kit, b, (fref.handle, fref.device), p.subject, &to)
+                        .await?
+                } else {
+                    self.profile_address(kit, b, (fref.handle, fref.device), p.subject, &to)
+                        .await?
+                };
+                let mut ui = self.profile_view(kit, &fref, &flow, p).await;
+                return Ok(match started {
+                    Ok(()) => {
+                        ui.messages.push(Message::info(TextId::CodeResent));
+                        Reply::ui(200, ui)
+                    }
+                    Err(refused) => {
+                        ui.messages.push(refused);
+                        Reply::ui(400, ui)
+                    }
+                });
+            }
             (Method::ProfileCode, Current::Profile(p)) if p.sent => {
                 if !self
                     .profile_proof(
@@ -1179,7 +1235,7 @@ where
                     )
                     .await?
                 {
-                    let mut ui = profile_ui(kit, &flow, p, &policy(kit));
+                    let mut ui = self.profile_view(kit, &fref, &flow, p).await;
                     ui.messages.push(Message::error(TextId::SecondFactorFailed));
                     return Ok(Reply::ui(401, ui));
                 }
@@ -1188,6 +1244,23 @@ where
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
+    }
+
+    /// The profile step as drawn now; the code step names the address its code went to
+    /// (TN-171).
+    async fn profile_view(
+        &self,
+        kit: &EnvironmentKit,
+        fref: &FlowRef<'_>,
+        flow: &FlowId,
+        p: &ProfileStep,
+    ) -> Ui {
+        let to = if p.sent {
+            self.profile_pending(kit, (fref.handle, fref.device)).await
+        } else {
+            None
+        };
+        profile_ui(kit, flow, p, &policy(kit), to.as_deref())
     }
 
     /// The profile step's national identity number and birth date (TN-158): the number is
@@ -1286,7 +1359,7 @@ where
                         .await?
                 };
                 if let Err(refused) = started {
-                    let mut ui = profile_ui(kit, flow, p, &policy(kit));
+                    let mut ui = self.profile_view(kit, fref, flow, p).await;
                     ui.messages.push(refused);
                     return Ok(Reply::ui(400, ui));
                 }
@@ -1447,11 +1520,11 @@ where
             }
             Outcome::Suspended {
                 method: MethodClass::MagicLink,
-            } => Current::Email(EmailWait::Link),
+            } => Current::Email(EmailWait::Link, typed(b, fref.handle)),
             Outcome::Suspended {
                 method: MethodClass::Push,
             } => Current::Done(Reply::problem(FLOW_GONE)),
-            Outcome::Suspended { .. } => Current::Email(EmailWait::Code),
+            Outcome::Suspended { .. } => Current::Email(EmailWait::Code, typed(b, fref.handle)),
             Outcome::SignedIn(s) => {
                 // TN-159
                 self.finish_link(kit, b, &s).await;
@@ -1524,7 +1597,7 @@ where
                 }
                 ui
             }
-            Current::Email(wait) => Ui::email_sent(flow.clone(), wait, &reqs),
+            Current::Email(wait, to) => Ui::email_sent(flow.clone(), wait, to.as_deref(), &reqs),
             Current::Second(offered, account) => {
                 let passkey = if offered.passkey {
                     Some(fresh(None).await?)
@@ -1556,7 +1629,7 @@ where
             ),
             Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
             // TN-151
-            Current::Profile(p) => profile_ui(kit, flow, &p, &reqs),
+            Current::Profile(p) => self.profile_view(kit, fref, flow, &p).await,
             // OP-159 m.48 (a)
             Current::Enroll(label) => {
                 match auth
@@ -1687,7 +1760,11 @@ where
                 } else {
                     EmailWait::Code
                 };
-                Ok(Reply::ui(200, Ui::email_sent(flow.clone(), wait, &reqs)))
+                let to = typed(b, fref.handle);
+                Ok(Reply::ui(
+                    200,
+                    Ui::email_sent(flow.clone(), wait, to.as_deref(), &reqs),
+                ))
             }
             Outcome::SignedIn(s) => {
                 // TN-159

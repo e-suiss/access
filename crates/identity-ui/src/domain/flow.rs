@@ -350,6 +350,52 @@ fn identity_nodes(national: &[(String, TextId)], documents: &[DocumentLink]) -> 
     nodes
 }
 
+/// TN-171: where a code or link went (the address the person typed, a phone number by its last
+/// two digits; nothing when it isn't known or isn't an e-mail address of a sign-in), how long it
+/// works and, for an e-mail, where to look.
+#[must_use]
+pub fn sent_notes(
+    neutral: TextId,
+    to: Option<&str>,
+    email: bool,
+    link: bool,
+    minutes: u64,
+) -> Vec<Message> {
+    let minutes = minutes.to_string();
+    let sent = match to {
+        Some(t) if t.contains('@') => Message::info(if neutral == TextId::EmailSent {
+            TextId::EmailSentTo
+        } else {
+            TextId::CodeSentTo
+        })
+        .with_arg("to", t),
+        Some(t)
+            if neutral != TextId::EmailSent
+                && t.chars().filter(char::is_ascii_digit).count() >= 2 =>
+        {
+            let digits: String = t.chars().filter(char::is_ascii_digit).collect();
+            let last = digits
+                .get(digits.len().saturating_sub(2)..)
+                .unwrap_or_default();
+            Message::info(TextId::CodeSentToPhone).with_arg("digits", last)
+        }
+        _ => Message::info(neutral),
+    };
+    let mut out = vec![
+        sent,
+        Message::info(if link {
+            TextId::LinkLifetime
+        } else {
+            TextId::CodeLifetime
+        })
+        .with_arg("minutes", &minutes),
+    ];
+    if email {
+        out.push(Message::info(TextId::SpamHint));
+    }
+    out
+}
+
 impl Ui {
     fn new(flow: FlowId, step: Step, policy: &[Requirement], nodes: Vec<Node>) -> Self {
         Self {
@@ -486,7 +532,12 @@ impl Ui {
     /// An e-mail step is waiting (TN-102): the same step and words whether or not anything
     /// was sent. A code is entered here; a link is confirmed elsewhere while the client polls.
     #[must_use]
-    pub fn email_sent(flow: FlowId, wait: EmailWait, policy: &[Requirement]) -> Self {
+    pub fn email_sent(
+        flow: FlowId,
+        wait: EmailWait,
+        to: Option<&str>,
+        policy: &[Requirement],
+    ) -> Self {
         let mut nodes = Vec::new();
         if wait == EmailWait::Code {
             nodes.push(Node::input(
@@ -501,12 +552,28 @@ impl Ui {
                 label: TextId::Verify.into(),
             });
         }
+        // TN-171
+        nodes.push(Node::Submit {
+            method: Method::Resend,
+            label: if wait == EmailWait::Code {
+                TextId::ResendCode
+            } else {
+                TextId::ResendLink
+            }
+            .into(),
+        });
         nodes.push(Node::Submit {
             method: Method::Restart,
             label: TextId::Restart.into(),
         });
         let mut ui = Self::new(flow, Step::Authenticate, policy, nodes);
-        ui.messages.push(Message::info(TextId::EmailSent));
+        ui.messages.extend(sent_notes(
+            TextId::EmailSent,
+            to,
+            true,
+            wait == EmailWait::Link,
+            access_identity_session::domain::flow::SUSPENSION_TTL_MS / 60_000,
+        ));
         ui
     }
 
@@ -721,7 +788,7 @@ impl Ui {
     /// The code sent to the address the profile step took (TN-151), the same answer whether or
     /// not another account holds it; the address can be typed again.
     #[must_use]
-    pub fn profile_code(flow: FlowId, sms: bool, policy: &[Requirement]) -> Self {
+    pub fn profile_code(flow: FlowId, sms: bool, to: Option<&str>, policy: &[Requirement]) -> Self {
         let nodes = vec![
             Node::input(
                 FieldName::EmailCode,
@@ -739,14 +806,24 @@ impl Ui {
                 method: Method::ProfileCode,
                 label: TextId::Verify.into(),
             },
+            // TN-171
+            Node::Submit {
+                method: Method::Resend,
+                label: TextId::ResendCode.into(),
+            },
             Node::Submit {
                 method: Method::Profile,
                 label: TextId::ChangeAddress.into(),
             },
         ];
         let mut ui = Self::new(flow, Step::Profile, &with_profile(policy), nodes);
-        ui.messages
-            .push(Message::info(TextId::RegistrationCodeSent));
+        ui.messages.extend(sent_notes(
+            TextId::RegistrationCodeSent,
+            to,
+            !sms,
+            false,
+            access_identity_account::domain::registration::CODE_TTL_MS / 60_000,
+        ));
         ui.messages.push(Message::info(TextId::ProfileAddressHint));
         ui
     }
@@ -1094,7 +1171,7 @@ mod tests {
                 .iter()
                 .all(|n| n.method() != Some(Method::EmailCode))
         );
-        let code = Ui::email_sent(flow(), EmailWait::Code, &[]);
+        let code = Ui::email_sent(flow(), EmailWait::Code, None, &[]);
         assert!(code.nodes.iter().any(|n| matches!(
             n,
             Node::Input {
@@ -1102,13 +1179,21 @@ mod tests {
                 ..
             }
         )));
-        assert_eq!(code.messages, [Message::info(TextId::EmailSent)]);
-        let link = Ui::email_sent(flow(), EmailWait::Link, &[]);
+        assert_eq!(code.messages[0], Message::info(TextId::EmailSent));
+        // TN-171
+        assert_eq!(code.messages[1].id, TextId::CodeLifetime);
+        assert_eq!(code.messages[1].args["minutes"], "15");
+        assert_eq!(code.messages[2].id, TextId::SpamHint);
+        let link = Ui::email_sent(flow(), EmailWait::Link, Some("ada@example.org"), &[]);
         assert!(
             link.nodes
                 .iter()
-                .all(|n| n.method() == Some(Method::Restart))
+                .all(|n| matches!(n.method(), Some(Method::Restart | Method::Resend)))
         );
+        assert_eq!(link.messages[0].args["to"], "ada@example.org");
+        assert_eq!(link.messages[1].id, TextId::LinkLifetime);
+        let typed_name = Ui::email_sent(flow(), EmailWait::Code, Some("ada"), &[]);
+        assert_eq!(typed_name.messages[0], Message::info(TextId::EmailSent));
     }
 
     // OP-159 m.48 (a)

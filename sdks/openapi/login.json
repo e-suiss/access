@@ -734,7 +734,8 @@
           "send_sms",
           "sms",
           "profile",
-          "profile_code"
+          "profile_code",
+          "resend"
         ]
       },
       "TextId": {
@@ -767,6 +768,16 @@
           "label.national_id_az_fin",
           "label.birthdate",
           "profile.facts_invalid",
+          "email.sent_to",
+          "registration.code_sent_to",
+          "registration.code_sent_to_phone",
+          "code.lifetime",
+          "link.lifetime",
+          "email.spam_hint",
+          "action.resend_code",
+          "action.resend_link",
+          "code.resent",
+          "link.resent",
           "profile.national_id_invalid",
           "profile.birthdate_invalid",
           "profile.address_refused",

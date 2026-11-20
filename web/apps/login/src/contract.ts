@@ -62,7 +62,8 @@ export type Method =
   | "send_sms"
   | "sms"
   | "profile"
-  | "profile_code";
+  | "profile_code"
+  | "resend";
 
 export interface Text {
   readonly id: string;
@@ -295,6 +296,7 @@ const METHODS = [
   "sms",
   "profile",
   "profile_code",
+  "resend",
 ] as const satisfies readonly Method[];
 
 const TextS = v.object({ id: v.string(), text: v.string() });

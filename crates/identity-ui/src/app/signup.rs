@@ -192,7 +192,13 @@ pub fn address_step(flow: FlowId, contact: Contact) -> Ui {
 /// The second step, the same for every address: the code and the display name (required when
 /// the environment says so).
 #[must_use]
-pub fn code_step(flow: FlowId, name_required: bool, contact: Contact, pin: bool) -> Ui {
+pub fn code_step(
+    flow: FlowId,
+    name_required: bool,
+    contact: Contact,
+    pin: bool,
+    to: Option<&str>,
+) -> Ui {
     let label = match contact {
         Contact::Email => TextId::EmailCodeLabel,
         Contact::Phone => TextId::SmsLabel,
@@ -247,8 +253,24 @@ pub fn code_step(flow: FlowId, name_required: bool, contact: Contact, pin: bool)
         method: Method::EmailCode,
         label: TextId::Verify.into(),
     });
+    // TN-171
+    nodes.push(Node::Submit {
+        method: Method::Resend,
+        label: TextId::ResendCode.into(),
+    });
+    nodes.push(Node::Submit {
+        method: Method::Restart,
+        label: TextId::ChangeAddress.into(),
+    });
     let mut u = ui(flow, Step::Authenticate, nodes);
-    u.messages.push(Message::info(TextId::RegistrationCodeSent));
+    let email = to.map_or(contact == Contact::Email, |t| t.contains('@'));
+    u.messages.extend(crate::domain::flow::sent_notes(
+        TextId::RegistrationCodeSent,
+        to,
+        email,
+        false,
+        access_identity_account::domain::registration::CODE_TTL_MS / 60_000,
+    ));
     u
 }
 
@@ -329,9 +351,13 @@ where
         let (Some(flow), Some(_)) = (FlowId::parse(handle), signup_secret(handle)) else {
             return Reply::problem(FLOW_GONE);
         };
-        if device_secret(b.flow).is_none() {
+        let (Some(secret), Some(device)) = (signup_secret(handle), device_secret(b.flow)) else {
             return Reply::problem(FLOW_GONE);
-        }
+        };
+        // TN-171
+        let to = self
+            .signup_pending(&kit, &handle_digest(&secret), &device_digest(&device))
+            .await;
         Reply::ui(
             200,
             code_step(
@@ -339,6 +365,7 @@ where
                 kit.signin.name_required(),
                 contact(&kit),
                 kit.auth.pin,
+                to.as_deref(),
             ),
         )
     }
@@ -372,6 +399,10 @@ where
         };
         let flow_hash = handle_digest(&secret);
         let device_hash = device_digest(&device);
+        // TN-171
+        if submission.method == Method::Restart {
+            return Reply::ui(200, address_step(flow, contact(&kit)));
+        }
         let step = if submission.method == Method::Register {
             address_step(flow.clone(), contact(&kit))
         } else {
@@ -380,6 +411,7 @@ where
                 kit.signin.name_required(),
                 contact(&kit),
                 kit.auth.pin,
+                None,
             )
         };
         let Ok(checked) = step.check(submission) else {
@@ -403,12 +435,24 @@ where
             correlation: b.correlation,
         };
         let started_ms = self.clock.now_ms();
-        if checked.method == Method::Register {
-            let email = field(FieldName::Email).unwrap_or_default();
-            let token = field(FieldName::BotToken);
+        let resend = checked.method == Method::Resend;
+        if checked.method == Method::Register || resend {
+            // TN-171
+            let (email, token) = if resend {
+                match self.signup_pending(&kit, &flow_hash, &device_hash).await {
+                    Some(a) => (a, None),
+                    None => return Reply::problem(FLOW_GONE),
+                }
+            } else {
+                (
+                    field(FieldName::Email).unwrap_or_default(),
+                    field(FieldName::BotToken),
+                )
+            };
             let net = prefix(b.ip);
             // TN-156
             let typed = match contact(&kit) {
+                Contact::Phone if resend => Some(email.clone()),
                 Contact::Phone => field(FieldName::Phone),
                 Contact::Either
                     if access_identity_account::domain::phone::looks_like_phone(&email) =>
@@ -417,6 +461,7 @@ where
                 }
                 Contact::Either | Contact::Email => None,
             };
+            let shown = typed.clone().unwrap_or_else(|| email.clone());
             let r = match typed {
                 Some(raw) => {
                     match access_identity_account::domain::phone::e164(&raw, kit.auth.country) {
@@ -456,15 +501,36 @@ where
                 }
             };
             let mut reply = match r {
-                Ok(Started::Sent { .. }) => Reply::ui(
-                    200,
-                    code_step(
+                Ok(Started::Sent { .. }) => {
+                    let mut u = code_step(
                         flow,
                         kit.signin.name_required(),
                         contact(&kit),
                         kit.auth.pin,
-                    ),
-                ),
+                        Some(&shown),
+                    );
+                    if resend {
+                        u.messages.push(Message::info(TextId::CodeResent));
+                    }
+                    Reply::ui(200, u)
+                }
+                Ok(Started::Refused(Refused::Throttled { retry_after_ms })) if resend => {
+                    let s = retry_after_ms.div_ceil(1000);
+                    let mut u = code_step(
+                        flow,
+                        kit.signin.name_required(),
+                        contact(&kit),
+                        kit.auth.pin,
+                        Some(&shown),
+                    );
+                    u.messages.push(
+                        Message::error(TextId::TooManyAttempts)
+                            .retry_after(u32::try_from(s).unwrap_or(u32::MAX)),
+                    );
+                    let mut r = Reply::ui(429, u);
+                    r.retry_after_s = Some(s);
+                    r
+                }
                 Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
                     let s = retry_after_ms.div_ceil(1000);
                     let mut u = address_step(flow, contact(&kit));
@@ -491,7 +557,7 @@ where
         let code = field(FieldName::EmailCode).unwrap_or_default();
         let name = field(FieldName::DisplayName).filter(|n| !n.trim().is_empty());
         if kit.signin.name_required() && name.is_none() {
-            let mut u = code_step(flow, true, contact(&kit), kit.auth.pin);
+            let mut u = code_step(flow, true, contact(&kit), kit.auth.pin, None);
             u.messages = vec![Message::error(TextId::RegistrationFailed)];
             return Reply::ui(400, u);
         }
@@ -517,6 +583,7 @@ where
                         kit.signin.name_required(),
                         contact(&kit),
                         kit.auth.pin,
+                        None,
                     );
                     u.messages = vec![Message::error(TextId::SecretRefused)];
                     return Reply::ui(400, u);
@@ -545,6 +612,7 @@ where
                     kit.signin.name_required(),
                     contact(&kit),
                     kit.auth.pin,
+                    None,
                 );
                 u.messages = vec![Message::error(TextId::RegistrationFailed)];
                 return Reply::ui(401, u);
@@ -1020,6 +1088,58 @@ where
         }
     }
 
+    /// The address a sign-in's profile step sent its open code to (TN-171).
+    pub(crate) async fn profile_pending(
+        &self,
+        kit: &EnvironmentKit,
+        (handle, device): (&str, &str),
+    ) -> Option<String> {
+        let (flow_hash, device_hash) = profile_binding(handle, device)?;
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        registrar
+            .pending_change_address(&flow_hash, &device_hash, self.clock.now_ms())
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// The address a sign-up flow sent its open code to (TN-171).
+    async fn signup_pending(
+        &self,
+        kit: &EnvironmentKit,
+        flow_hash: &[u8; 32],
+        device_hash: &[u8; 32],
+    ) -> Option<String> {
+        let environment = kit.environment();
+        let vault = kit.vault();
+        let notifier = self.messages.notifier(&environment);
+        let registrar = Registrar {
+            pool: &self.db,
+            environment: &environment,
+            vault: &vault,
+            bots: &self.signup.bots,
+            disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
+            notifier: &notifier,
+        };
+        registrar
+            .pending_address(flow_hash, device_hash, self.clock.now_ms())
+            .await
+            .ok()
+            .flatten()
+    }
+
     /// Sends a code by text message to the phone number a sign-in's profile step took (TN-156):
     /// the same answer whether or not another account holds it.
     pub(crate) async fn profile_phone(
@@ -1156,7 +1276,13 @@ mod tests {
         let a = address_step(FlowId::parse(&signup).unwrap(), Contact::Email);
         assert_eq!(a.kind, FlowKind::Registration);
         assert!(a.messages.iter().all(|m| m.id.pre_auth()));
-        let c = code_step(FlowId::parse(&signup).unwrap(), true, Contact::Phone, true);
+        let c = code_step(
+            FlowId::parse(&signup).unwrap(),
+            true,
+            Contact::Phone,
+            true,
+            None,
+        );
         assert!(c.messages.iter().all(|m| m.id.pre_auth()));
     }
 }

@@ -224,7 +224,10 @@ fn examples() -> Vec<(&'static str, Ui)> {
                 &POLICY,
             ),
         ),
-        ("profile-code", Ui::profile_code(flow(), false, &POLICY)),
+        (
+            "profile-code",
+            Ui::profile_code(flow(), false, Some("ada@example.org"), &POLICY),
+        ),
         (
             "complete-recovery-codes",
             Ui::complete(flow(), "/callback?state=example".into(), &POLICY)

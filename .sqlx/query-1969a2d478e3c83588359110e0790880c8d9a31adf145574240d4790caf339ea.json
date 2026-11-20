@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT challenge_id, purpose, device_hash, kek_id, wrapped_dek, nonce, ciphertext,\n                    address_index, code_digest, attempts_left, step_up, subject_id, status, expires_ms\n               FROM access.identity_address_challenges\n              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3\n              FOR UPDATE",
+  "query": "SELECT challenge_id, purpose, device_hash, kek_id, wrapped_dek, nonce, ciphertext,\n                    address_index, code_digest, attempts_left, step_up, subject_id, status, expires_ms\n               FROM access.identity_address_challenges\n              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3\n              ORDER BY (status = 'open') DESC, created_ms DESC\n              LIMIT 1\n              FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -182,5 +182,5 @@
       false
     ]
   },
-  "hash": "f183146be09b7fc50b669eeddfa8687d8ec118bf39164f78a7baee763d321853"
+  "hash": "1969a2d478e3c83588359110e0790880c8d9a31adf145574240d4790caf339ea"
 }

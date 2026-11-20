@@ -376,17 +376,55 @@ function MethodForm(props: {
           />
         ),
       )}
-      {buttons.map((node) => (
-        <Button
-          key={node.label.id}
-          type="submit"
-          {...(props.method === "restart" || props.method === "skip" ? quiet : primary)}
-          disabled={props.busy}
-        >
-          {text(node.label)}
-        </Button>
-      ))}
+      {buttons.map((node) =>
+        props.method === "resend" ? (
+          <Resend
+            key={node.label.id}
+            label={text(node.label)}
+            busy={props.busy}
+            since={props.nodes}
+          />
+        ) : (
+          <Button
+            key={node.label.id}
+            type="submit"
+            {...(props.method === "restart" || props.method === "skip" ? quiet : primary)}
+            disabled={props.busy}
+          >
+            {text(node.label)}
+          </Button>
+        ),
+      )}
     </form>
+  );
+}
+
+/** TN-171: seconds before a new code can be asked for, counted from when the step appeared. */
+const RESEND_WAIT_S = 30;
+
+/** TN-171: "Send a new code", closed for the first seconds of each step with the time left. */
+function Resend(props: {
+  readonly label: string;
+  readonly busy: boolean;
+  readonly since: unknown;
+}) {
+  const [left, setLeft] = useState(RESEND_WAIT_S);
+  useEffect(() => {
+    setLeft(RESEND_WAIT_S);
+    const timer = window.setInterval(() => {
+      setLeft((s) => {
+        if (s <= 1) window.clearInterval(timer);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [props.since]);
+  return (
+    <Button type="submit" {...quiet} disabled={props.busy || left > 0} data-testid="resend">
+      {left > 0 ? t("page.resend_in", { seconds: String(left) }) : props.label}
+    </Button>
   );
 }
 

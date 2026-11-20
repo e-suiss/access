@@ -129,7 +129,32 @@ impl TenantTx {
         Ok(*id.as_bytes())
     }
 
-    /// The challenge of flow handle digest `flow_hash`, locked.
+    /// Ends the open challenge of flow handle digest `flow_hash` as superseded, before the flow
+    /// asks again (TN-171); how many ended.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn supersede_challenges(
+        &mut self,
+        flow_hash: &[u8; 32],
+        now_ms: i64,
+    ) -> Result<u64, StoreError> {
+        let (tenant, environment) = self.challenge_scope()?;
+        Ok(sqlx::query!(
+            "UPDATE access.identity_address_challenges SET status = 'superseded', ended_ms = $4
+              WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3 AND status = 'open'",
+            tenant,
+            environment,
+            flow_hash.as_slice(),
+            now_ms,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected())
+    }
+
+    /// The challenge of flow handle digest `flow_hash`, locked: the open one, else the newest
+    /// (TN-171).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -143,6 +168,8 @@ impl TenantTx {
                     address_index, code_digest, attempts_left, step_up, subject_id, status, expires_ms
                FROM access.identity_address_challenges
               WHERE tenant_id = $1 AND environment_id = $2 AND flow_hash = $3
+              ORDER BY (status = 'open') DESC, created_ms DESC
+              LIMIT 1
               FOR UPDATE",
             tenant,
             environment,

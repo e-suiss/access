@@ -253,6 +253,93 @@ owner = "identity_plane"
 protected = true
 
 [[message]]
+key = "email-sent_to"
+text_id = "email.sent_to"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "registration-code_sent_to"
+text_id = "registration.code_sent_to"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "registration-code_sent_to_phone"
+text_id = "registration.code_sent_to_phone"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "code-lifetime"
+text_id = "code.lifetime"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "link-lifetime"
+text_id = "link.lifetime"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "email-spam_hint"
+text_id = "email.spam_hint"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-resend_code"
+text_id = "action.resend_code"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-resend_link"
+text_id = "action.resend_link"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "code-resent"
+text_id = "code.resent"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "link-resent"
+text_id = "link.resent"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-resend_in"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "registration-failed"
 text_id = "registration.failed"
 surface = "login"

@@ -45,6 +45,14 @@
     },
     {
       "type": "submit",
+      "method": "resend",
+      "label": {
+        "id": "action.resend_code",
+        "text": "Send a new code"
+      }
+    },
+    {
+      "type": "submit",
       "method": "profile",
       "label": {
         "id": "action.change_address",
@@ -54,8 +62,24 @@
   ],
   "messages": [
     {
-      "id": "registration.code_sent",
-      "text": "If this address can be used, we've sent a code to it.",
+      "id": "registration.code_sent_to",
+      "text": "If this address can be used, we've sent a code to ada@example.org.",
+      "severity": "info",
+      "args": {
+        "to": "ada@example.org"
+      }
+    },
+    {
+      "id": "code.lifetime",
+      "text": "The code works for 15 minutes.",
+      "severity": "info",
+      "args": {
+        "minutes": "15"
+      }
+    },
+    {
+      "id": "email.spam_hint",
+      "text": "If it doesn't arrive, check your spam folder.",
       "severity": "info"
     },
     {

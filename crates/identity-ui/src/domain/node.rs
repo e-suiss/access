@@ -206,11 +206,13 @@ pub enum Method {
     Profile,
     /// The code sent to the address the profile step took (TN-151).
     ProfileCode,
+    /// Send a new code or link to the address the step already took (TN-171).
+    Resend,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -234,6 +236,7 @@ impl Method {
         Self::Sms,
         Self::Profile,
         Self::ProfileCode,
+        Self::Resend,
     ];
 
     /// The wire name.
@@ -263,6 +266,7 @@ impl Method {
             Self::Sms => "sms",
             Self::Profile => "profile",
             Self::ProfileCode => "profile_code",
+            Self::Resend => "resend",
         }
     }
 }
