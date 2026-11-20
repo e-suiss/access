@@ -97,6 +97,10 @@ test("a password is changed; a weak one is refused with a reason", async ({ page
   await expect(password).toContainText("A password is set.");
   await password.getByRole("button", { name: "Change password" }).click();
   const field = password.getByLabel("New password");
+  // TN-168
+  await expect(field).toHaveAccessibleDescription(
+    "At least 8 characters. Don't use a password you use anywhere else.",
+  );
   await expect(field).toBeFocused();
   await expect(field).toHaveAttribute("autocomplete", "new-password");
   await field.fill("password");

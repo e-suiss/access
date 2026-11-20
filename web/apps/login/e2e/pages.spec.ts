@@ -268,6 +268,100 @@ test("recovery's rebind window takes a new password and shows a replacement code
   await expect(page.locator("main")).not.toContainText(/restored/i);
 });
 
+// TN-168: the recovery page names what the environment signs in with, takes the identifier typed
+// on the sign-in page, offers the faster email code way, and a refused password stays and says why
+test("recovery takes the typed identifier and a refused new password says why and is tried again", async ({
+  page,
+  mock,
+}) => {
+  mock.branding = {
+    status: 200,
+    body: {
+      display_name: null,
+      logo_uri: null,
+      sign_in: { identifier: "email_or_phone", secret: "password", email_code: true },
+    },
+  };
+  mock.json.set("POST /v1/recovery", {
+    status: 201,
+    body: { attempt: "rca_3", state: "rebind_open", method: "registered_code" },
+  });
+  let tries = 0;
+  mock.json.set("POST /v1/recovery/rca_3", () => {
+    tries += 1;
+    return tries === 1
+      ? { status: 400, body: { code: "password-rejected", title: "Choose another password" } }
+      : {
+          status: 200,
+          body: {
+            attempt: "rca_3",
+            state: "grace_period",
+            text: "recovery.complete",
+            sensitive_actions_after: "2026-11-11T09:30:00Z",
+          },
+        };
+  });
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("link", { name: "Can't sign in?" }).click();
+  const identifier = page.getByLabel("Email or phone number");
+  await expect(identifier).toHaveValue("ada@example.org");
+  expect(page.url()).not.toContain("ada");
+  await expect(page.getByTestId("email-code-instead")).toHaveText(
+    "Sign in with a code sent to your email instead",
+  );
+  await page.getByRole("button", { name: "Start recovery" }).click();
+  const fresh = page.getByLabel("New password");
+  await expect(page.getByText("At least 8 characters.")).toBeVisible();
+  await expect(page.locator('input[name="username"]')).toHaveValue("ada@example.org");
+  await fresh.fill("password");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Choose a different password. This one is easy to guess or appeared in a data breach.",
+  );
+  await expect(fresh).toHaveValue("");
+  await expect(fresh).toBeFocused();
+  await expect(fresh).toHaveAttribute("aria-invalid", "true");
+  await fresh.fill("a brand new passphrase");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByTestId("sensitive-after")).toContainText("2026");
+});
+
+// TN-168, TN-157: an environment that signs in with a PIN asks for a new PIN in recovery
+test("recovery in a PIN environment asks for a new six-digit PIN", async ({ page, mock }) => {
+  mock.branding = {
+    status: 200,
+    body: {
+      display_name: null,
+      logo_uri: null,
+      sign_in: { identifier: "phone", secret: "pin", email_code: false },
+    },
+  };
+  mock.json.set("POST /v1/recovery", {
+    status: 201,
+    body: { attempt: "rca_4", state: "rebind_open", method: "registered_code" },
+  });
+  mock.json.set("POST /v1/recovery/rca_4", {
+    status: 400,
+    body: { code: "password-rejected", title: "Choose another password" },
+  });
+  await page.goto("/login/recovery");
+  const phone = page.getByLabel("Phone number");
+  await expect(phone).toHaveAttribute("type", "tel");
+  await expect(page.getByTestId("email-code-instead")).toHaveCount(0);
+  await phone.fill("0532 111 22 33");
+  await page.getByRole("button", { name: "Start recovery" }).click();
+  const pin = page.getByLabel("New 6-digit PIN");
+  await expect(pin).toHaveAttribute("inputmode", "numeric");
+  await expect(pin).toHaveAttribute("maxlength", "6");
+  await expect(page.getByText("6 digits.")).toBeVisible();
+  await pin.fill("123456");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Choose a different PIN. This one is easy to guess.",
+  );
+});
+
 // TN-89, OP-153 m.3 (o)
 test("an invitation names the organization as text and asks before an unconfirmed domain", async ({
   page,

@@ -20,6 +20,14 @@ const BrandingData = v.looseObject({
       display_name: v.nullish(v.string()),
     }),
   ),
+  // TN-168
+  sign_in: v.exactOptional(
+    v.looseObject({
+      identifier: v.picklist(["email", "email_or_phone", "phone"]),
+      secret: v.picklist(["password", "pin"]),
+      email_code: v.boolean(),
+    }),
+  ),
 });
 
 export type BrandingData = Readonly<v.InferOutput<typeof BrandingData>>;

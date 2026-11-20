@@ -380,6 +380,7 @@ function Password(props: {
               autoComplete="new-password"
               maxLength={props.pin ? 6 : 128}
               {...(props.pin ? { inputMode: "numeric" as const } : {})}
+              aria-describedby="new-password-hint"
               required
               compact
               words={{
@@ -388,6 +389,9 @@ function Password(props: {
                 capsLock: t("methods.caps_lock"),
               }}
             />
+            <p id="new-password-hint" className="text-sm text-muted-foreground">
+              {props.pin ? t("methods.pin_hint") : t("methods.password_hint")}
+            </p>
           </Field>
           <Actions>
             <Button type="submit">{t("action.save")}</Button>

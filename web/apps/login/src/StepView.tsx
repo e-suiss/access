@@ -52,6 +52,7 @@ import {
   passkeysSupported,
   sendSignal,
 } from "./passkey.js";
+import { RECOVER_IDENTIFIER } from "./Recovery.js";
 
 interface Props {
   readonly ui: LoginUi;
@@ -212,6 +213,17 @@ function Documents({ node }: { readonly node: DocumentsNode }) {
 
 /** TN-165: the step's error list, which a refused password field points at. */
 const ERRORS_ID = "step-errors";
+
+/** TN-168: "Can't sign in?" takes the typed identifier to the recovery page, never in the URL. */
+function handIdentifier() {
+  const typed = document.querySelector<HTMLInputElement>('input[name="identifier"]')?.value.trim();
+  if (typed === undefined || typed === "") return;
+  try {
+    window.sessionStorage.setItem(RECOVER_IDENTIFIER, typed);
+  } catch {
+    // a browser without session storage types it again
+  }
+}
 
 function MethodForm(props: {
   readonly method: Method;
@@ -716,7 +728,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
         ))}
       {login && (ui.step === "identifier" || ui.step === "authenticate") && (
         <p className="flex flex-wrap justify-between gap-2">
-          <a className={link} href={`${LOGIN}/recovery`}>
+          <a className={link} href={`${LOGIN}/recovery`} onClick={handIdentifier}>
             {t("page.recover")}
           </a>{" "}
           <a className={link} href={`${LOGIN}?reason=create`}>

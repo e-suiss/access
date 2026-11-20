@@ -29,7 +29,6 @@ use access_identity_account::domain::throttle::{
 };
 use access_identity_account::notify::message::{Address, Body, Message, Notice, OtpPurpose};
 use access_identity_account::ports::AccountTx;
-use access_identity_risk::domain::assess::Breach;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
 use access_store::accounts::{NewCredential, Revoke};
 use access_store::sessions::NewSession;
@@ -1542,18 +1541,11 @@ where
         else {
             return Ok(Err(RECOVERY_STEP));
         };
-        let Ok(password) = Password::new(raw) else {
+        // TN-168, TN-157, TN-158 (7)
+        let facts = tx.secret_facts(subject).await?;
+        let Ok(password) = self.check_secret_apart(raw, &facts).await? else {
             return Ok(Err(PASSWORD_REFUSED));
         };
-        match self.risk.services.breach.check(&password).await {
-            Breach::Clean => {}
-            Breach::Listed => return Ok(Err(PASSWORD_REFUSED)),
-            Breach::Unavailable | Breach::NotChecked => {
-                return Err(SessionError::Account(
-                    access_identity_account::AccountError::BreachUnavailable,
-                ));
-            }
-        }
         // TN-54
         if !tx.use_token(row.id, i64_of(now)?).await? {
             return Ok(Err(RECOVERY_STEP));

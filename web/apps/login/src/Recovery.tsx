@@ -9,7 +9,7 @@ import { PasswordInput } from "@access/ui/components/password-input";
 import { RadioGroup, RadioGroupItem } from "@access/ui/components/radio-group";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
-
+import { useBranding } from "./Branding.js";
 import { LOGIN } from "./base.js";
 import { getJson, type JsonAnswer, postJson } from "./http.js";
 import { passwordWords, t, when } from "./i18n.js";
@@ -32,6 +32,26 @@ export type Attempt = Readonly<v.InferOutput<typeof Attempt>>;
 
 type Path = "registered_code" | "sent_code";
 
+/** TN-168: what the sign-in page hands the recovery page when "Can't sign in?" is followed. */
+export const RECOVER_IDENTIFIER = "access.login.recover";
+
+/** The identifier typed on the sign-in page, read once. */
+function handedIdentifier(): string {
+  try {
+    const typed = window.sessionStorage.getItem(RECOVER_IDENTIFIER);
+    window.sessionStorage.removeItem(RECOVER_IDENTIFIER);
+    return typed ?? "";
+  } catch {
+    return "";
+  }
+}
+
+const identifierLabels = {
+  email: "label.identifier",
+  email_or_phone: "label.identifier_phone",
+  phone: "label.phone",
+} as const;
+
 type State =
   | { readonly phase: "start" }
   | { readonly phase: "attempt"; readonly attempt: Attempt }
@@ -40,6 +60,9 @@ type State =
 const refusals: Readonly<Record<string, string>> = {
   "recovery-throttled": "login.throttled",
 };
+
+/** The new secret the environment uses: a password, or a six-digit PIN (TN-157, TN-168). */
+type Secret = "password" | "pin";
 
 function problemText(a: JsonAnswer<unknown>): string {
   if (a.ok) return "login.unavailable";
@@ -58,13 +81,26 @@ const methods = [
 function Field(props: {
   readonly name: string;
   readonly label: string;
-  readonly type?: "text" | "password";
+  readonly type?: "text" | "password" | "tel";
   readonly autoComplete: string;
   readonly numeric?: boolean;
   readonly code?: boolean;
   readonly maxLength: number;
+  readonly defaultValue?: string;
+  readonly hint?: string;
+  readonly error?: string;
 }) {
   const id = `recovery-${props.name}`;
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy = [
+    props.error === undefined ? "" : errorId,
+    props.hint === undefined ? "" : hintId,
+  ]
+    .filter((x) => x !== "")
+    .join(" ");
+  const described = describedBy === "" ? {} : { "aria-describedby": describedBy };
+  const invalid = props.error === undefined ? {} : { "aria-invalid": true as const };
   return (
     <FieldBox className="gap-2">
       <FieldLabel htmlFor={id} className="text-sm">
@@ -81,12 +117,17 @@ function Field(props: {
           autoCapitalize="none"
           dir="auto"
           words={passwordWords()}
+          autoFocus={props.error !== undefined}
+          {...(props.numeric === true ? { inputMode: "numeric" as const } : {})}
+          {...described}
+          {...invalid}
         />
       ) : (
         <Input
           id={id}
           name={props.name}
-          type="text"
+          type={props.type === "tel" ? "tel" : "text"}
+          {...(props.defaultValue === undefined ? {} : { defaultValue: props.defaultValue })}
           autoComplete={props.autoComplete}
           required
           maxLength={props.maxLength}
@@ -96,6 +137,16 @@ function Field(props: {
           {...(props.numeric === true ? { inputMode: "numeric" as const } : {})}
           {...(props.code === true ? { className: "font-mono tracking-widest" } : {})}
         />
+      )}
+      {props.error !== undefined && (
+        <p id={errorId} role="alert" className={problem}>
+          {props.error}
+        </p>
+      )}
+      {props.hint !== undefined && (
+        <p id={hintId} className={note}>
+          {props.hint}
+        </p>
       )}
     </FieldBox>
   );
@@ -110,6 +161,13 @@ export function Recovery() {
   const [state, setState] = useState<State>({ phase: "start" });
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [handed] = useState(handedIdentifier);
+  const [who, setWho] = useState("");
+  const [refused, setRefused] = useState<{ readonly text: string; readonly tries: number } | null>(
+    null,
+  );
+  const signIn = useBranding()?.sign_in;
+  const secret: Secret = signIn?.secret ?? "password";
   const title = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
   const phase = state.phase === "attempt" ? (state.attempt.state ?? "") : state.phase;
@@ -137,8 +195,30 @@ export function Recovery() {
   const start = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const identifier = value(event, "identifier");
+    setWho(identifier.trim());
     const method = value(event, "method") as Path;
     void run(() => postJson("/v1/recovery", { identifier, method }, Attempt));
+  };
+
+  // TN-168: a refused new secret stays on the attempt and says why
+  const bind = async (attempt: Attempt, newPassword: string) => {
+    const id = attempt.attempt ?? "";
+    setBusy(true);
+    const a = await postJson(
+      `/v1/recovery/${encodeURIComponent(id)}`,
+      { new_password: newPassword },
+      Attempt,
+    );
+    setBusy(false);
+    if (!a.ok && a.code === "password-rejected") {
+      setRefused((r) => ({
+        text: secret === "pin" ? "page.recovery_pin_rejected" : "page.recovery_password_rejected",
+        tries: (r?.tries ?? 0) + 1,
+      }));
+      return;
+    }
+    setRefused(null);
+    settle(a, attempt);
   };
 
   const step = (attempt: Attempt, body: Record<string, unknown>) => {
@@ -174,9 +254,11 @@ export function Recovery() {
           <form onSubmit={start} className={stack}>
             <Field
               name="identifier"
-              label={t("label.identifier")}
+              label={t(identifierLabels[signIn?.identifier ?? "email"])}
+              {...(signIn?.identifier === "phone" ? { type: "tel" as const } : {})}
               autoComplete="username"
               maxLength={320}
+              defaultValue={handed}
             />
             <FieldSet className="gap-3">
               <FieldLegend id="recovery-method" variant="label" className="mb-0">
@@ -209,6 +291,13 @@ export function Recovery() {
             <Button type="submit" {...primary} disabled={busy}>
               {t("action.recovery_start")}
             </Button>
+            {signIn?.email_code === true && (
+              <p className="text-sm">
+                <a className={link} href={LOGIN} data-testid="email-code-instead">
+                  {t("page.recovery_email_code_instead")}
+                </a>
+              </p>
+            )}
           </form>
         )}
         {state.phase === "attempt" && (
@@ -232,8 +321,11 @@ export function Recovery() {
             onExtend={() => {
               extend(state.attempt);
             }}
+            secret={secret}
+            who={who}
+            refused={refused}
             onPassword={(newPassword) => {
-              step(state.attempt, { new_password: newPassword });
+              void bind(state.attempt, newPassword);
             }}
           />
         )}
@@ -272,8 +364,12 @@ function AttemptView(props: {
   readonly onRefresh: () => void;
   readonly onExtend: () => void;
   readonly onPassword: (newPassword: string) => void;
+  readonly secret: Secret;
+  readonly who: string;
+  readonly refused: { readonly text: string; readonly tries: number } | null;
 }) {
   const a = props.attempt;
+  const pin = props.secret === "pin";
   const textId = a.text ?? "recovery.requested";
   const proving = a.state === "requested" || a.state === "throttled";
   const sentCode = a.method === "sent_code";
@@ -343,18 +439,32 @@ function AttemptView(props: {
       )}
       {a.state === "rebind_open" && (
         <form
+          key={props.refused?.tries ?? 0}
           className={stack}
           onSubmit={(e) => {
             e.preventDefault();
             props.onPassword(value(e, "new_password"));
           }}
         >
+          {props.who !== "" && (
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={props.who}
+              readOnly
+              hidden
+            />
+          )}
           <Field
             name="new_password"
-            label={t("label.new_password")}
+            label={pin ? t("page.recovery_new_pin") : t("label.new_password")}
             type="password"
             autoComplete="new-password"
-            maxLength={128}
+            maxLength={pin ? 6 : 128}
+            numeric={pin}
+            hint={pin ? t("page.recovery_pin_hint") : t("page.recovery_password_hint")}
+            {...(props.refused === null ? {} : { error: t(props.refused.text) })}
           />
           <Button type="submit" {...primary} disabled={props.busy}>
             {t("action.continue")}

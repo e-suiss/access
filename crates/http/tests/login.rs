@@ -5253,6 +5253,7 @@ async fn n5_the_theme_record_is_applied_to_the_hosted_page() {
             "display_name": null,
             "logo_uri": null,
             "environment": { "kind": "standard" },
+            "sign_in": { "identifier": "email", "secret": "password", "email_code": true },
         })
     );
     assert_eq!(b.get("/login/theme.css").await.body, b":root{}\n");
@@ -6202,6 +6203,156 @@ async fn a_recovery_phone_gets_its_recovery_code_by_text_message() {
         "cooling_down",
         "{}",
         String::from_utf8_lossy(&met.body)
+    );
+}
+
+// TN-168, TN-157
+#[tokio::test]
+async fn a_recovery_in_a_pin_environment_binds_a_pin_and_the_branding_says_so() {
+    let signin = EnvironmentSignin {
+        methods: ["phone", "passkey"].map(String::from).into(),
+        default_country: access_identity_account::domain::phone::country("TR"),
+        mfa_required: true,
+        pin: true,
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(0x9b, "tn-168-pin", auth, false, signin).await;
+    let mut b = e.browser("pin");
+    let brand = b.get("/v1/login/branding").await.json();
+    assert_eq!(
+        brand["sign_in"],
+        json!({ "identifier": "phone", "secret": "pin", "email_code": false })
+    );
+    let subject = e
+        .account_as(Identifier::new(IdentifierKind::Phone, "+905327770044").unwrap())
+        .await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    let v = e.kit.vault();
+    let contact = access_identity_account::app::vault::PiiClass::Contact;
+    let dek = access_identity_account::app::vault::class_key(&mut t, &v, subject, contact, true)
+        .await
+        .unwrap()
+        .unwrap();
+    for recovery_target in [false, true] {
+        let sealed = access_identity_account::app::vault::seal(
+            &t,
+            &dek,
+            subject,
+            contact,
+            "notification_address",
+            b"+905327770044",
+        )
+        .unwrap();
+        t.insert_notification_address(&access_store::recovery::NewAddress {
+            subject,
+            kind: "phone",
+            identifier: None,
+            sealed: Some((&sealed.nonce, &sealed.ciphertext)),
+            recovery_target,
+            recovery_contact: false,
+        })
+        .await
+        .unwrap();
+    }
+    t.commit().await.unwrap();
+
+    let started = b
+        .send(
+            "POST",
+            "/v1/recovery",
+            Some(json!({ "identifier": "0532 777 00 44", "method": "sent_code" })),
+            Some("start"),
+        )
+        .await;
+    assert_eq!(
+        started.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let attempt = started.json()["attempt"].as_str().unwrap().to_owned();
+    let path = format!("/v1/recovery/{attempt}");
+    let send = b
+        .send(
+            "POST",
+            &path,
+            Some(json!({ "send": "sent_code" })),
+            Some("send"),
+        )
+        .await;
+    assert!(
+        send.status.is_success(),
+        "{}",
+        String::from_utf8_lossy(&send.body)
+    );
+    let kinds: Vec<&str> = e.sent().iter().map(|(k, _, _)| *k).collect();
+    let at = kinds
+        .iter()
+        .rposition(|k| *k == "relay.message.sms_otp.v1")
+        .unwrap();
+    let code = e.outbox.0.lock().unwrap()[at].clone();
+    b.send("POST", &path, Some(json!({ "code": code })), Some("code"))
+        .await;
+    let met = b
+        .send(
+            "POST",
+            &path,
+            Some(json!({ "password": PW })),
+            Some("password"),
+        )
+        .await;
+    assert_eq!(
+        met.json()["state"],
+        "cooling_down",
+        "{}",
+        String::from_utf8_lossy(&met.body)
+    );
+    e.advance(86_400_000 + 1_000);
+    let open = b
+        .send(
+            "POST",
+            &path,
+            Some(json!({ "resume": true })),
+            Some("resume"),
+        )
+        .await;
+    assert_eq!(
+        open.json()["state"],
+        "rebind_open",
+        "{}",
+        String::from_utf8_lossy(&open.body)
+    );
+    for (i, refused) in ["a long passphrase that is no pin", "123456", "1984"]
+        .into_iter()
+        .enumerate()
+    {
+        let r = b
+            .send(
+                "POST",
+                &path,
+                Some(json!({ "new_password": refused })),
+                Some(&format!("refused-{i}")),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{refused}");
+        assert_eq!(r.json()["code"], "password-rejected", "{refused}");
+    }
+    let bound = b
+        .send(
+            "POST",
+            &path,
+            Some(json!({ "new_password": "390517" })),
+            Some("bound"),
+        )
+        .await;
+    assert_eq!(
+        bound.json()["state"],
+        "grace_period",
+        "{}",
+        String::from_utf8_lossy(&bound.body)
     );
 }
 
