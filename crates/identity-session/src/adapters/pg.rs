@@ -127,6 +127,32 @@ impl SessionTx for PgTx {
             .await?)
     }
 
+    async fn revoke_totp_by_recovery(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<[u8; 16]>, SessionError> {
+        Ok(self.0.revoke_by_recovery(subject, crate::app::TOTP).await?)
+    }
+
+    async fn second_factor_lost_to_recovery(
+        &mut self,
+        subject: [u8; 16],
+        now_ms: i64,
+    ) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .last_removed_by_recovery(
+                subject,
+                &[crate::app::TOTP, crate::adapters::passkeys::WEBAUTHN],
+            )
+            .await?
+            && self
+                .0
+                .recovery_grace_until(subject, now_ms)
+                .await?
+                .is_none())
+    }
+
     async fn user_handle(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 64]>, SessionError> {
         Ok(self.0.user_handle(subject).await?)
     }

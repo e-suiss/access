@@ -142,6 +142,7 @@ methods-recovery_codes_set = You have recovery codes.
 methods-recovery_codes_unsaved = You have recovery codes, but you haven't said you saved them.
 methods-recovery_codes_replace = New codes stop the old ones working.
 methods-recovery_codes_left = Codes left: { $left } of { $of }
+methods-setup_after = Your account was recovered recently. New sign-in methods and recovery codes can be added after { $date }.
 action-new_recovery_codes = Get new recovery codes
 methods-codes_saved = Saved. Keep the codes somewhere safe.
 methods-caps_lock = Caps Lock is on.

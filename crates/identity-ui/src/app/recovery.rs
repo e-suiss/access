@@ -158,6 +158,10 @@ fn recovered(r: Recovered, status: u16) -> Reply {
             m.insert("sensitive_actions_after".into(), rfc3339(after).into());
             m.insert("text".into(), TextId::RecoveryComplete.as_str().into());
             m.insert("federated_links_cut".into(), r.links_cut.into());
+            if r.authenticator_removed {
+                // TN-167
+                m.insert("authenticator_removed".into(), true.into());
+            }
         }
     }
     let mut reply = Reply::json(status, body);

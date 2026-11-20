@@ -10,7 +10,7 @@
 
 use access_crypto::Secret;
 use access_identity_account::app::Actor;
-use access_identity_account::app::accounts::{PASSWORD, store_password};
+use access_identity_account::app::accounts::{PASSWORD, removed, store_password};
 use access_identity_account::app::claims::emit;
 use access_identity_account::app::events;
 use access_identity_account::app::sealing::{open, seal, subject_key};
@@ -36,7 +36,9 @@ use access_store::sessions::NewSession;
 use access_telemetry::signals::{RECOVERY_RETRIGGERS, RECOVERY_TRANSITIONS, RECOVERY_WEAKEST_PATH};
 
 use super::signin::{ANONYMOUS, address, key_state, throttle_row};
-use super::{Auth, CODE_NOT_ACCEPTED, Notifier, RECOVERY_CODE, audit, decode32, encode, i64_of};
+use super::{
+    Auth, CODE_NOT_ACCEPTED, Notifier, RECOVERY_CODE, TOTP, audit, decode32, encode, i64_of,
+};
 use crate::SessionError;
 use crate::domain::assurance::{Aal, Factor, vector};
 use crate::domain::codes::{
@@ -203,6 +205,8 @@ pub struct Recovered {
     pub links_cut: u64,
     /// After a rebind: when high-impact actions open (X38, TN-55).
     pub sensitive_after_ms: Option<u64>,
+    /// After a rebind: the authenticator app it revoked (TN-167).
+    pub authenticator_removed: bool,
     /// After a successor is named: the Party and the predecessor Instance its self-signed
     /// `instance_recover` names (OP-153 m.3 (c)).
     pub successor: Option<([u8; 16], [u8; 16])>,
@@ -1561,6 +1565,12 @@ where
             correlation,
         };
         store_password(tx, &self.environment, subject, phc.expose(), &who).await?;
+        // TN-167
+        let lost = tx.revoke_totp_by_recovery(subject).await?;
+        for id in &lost {
+            removed(tx, &self.environment, subject, *id, TOTP, &who).await?;
+        }
+        out.authenticator_removed = !lost.is_empty();
         let until = now.saturating_add(GRACE_MS);
         if !tx
             .transition(
@@ -1624,6 +1634,11 @@ where
         // TN-57, Ek B 3657
         self.notice(tx, subject, Notice::RecoveryCompleted, None, now)
             .await?;
+        // TN-167
+        if out.authenticator_removed {
+            self.notice(tx, subject, Notice::MethodRemoved, None, now)
+                .await?;
+        }
         if let Some(to) = address(tx.contact(subject).await?) {
             let valid_since_ms = valid_since(&to, tx.mailbox_since(subject).await?.unwrap_or(1));
             tx.notify(
@@ -2023,6 +2038,18 @@ where
             .await?;
         tx.commit().await?;
         Ok(Ok(setup))
+    }
+
+    /// TN-167: when the grace period after the subject's recovery ends, while one runs.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn grace_ends(&self, subject: [u8; 16]) -> Result<Option<u64>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let until = grace_until(&mut tx, subject, now).await?;
+        tx.commit().await?;
+        Ok(until)
     }
 
     /// TN-56: whether the grace period after a recovery lets the signed-in subject of `cookie`

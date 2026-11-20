@@ -1,7 +1,8 @@
 //! The first second factor of an account, enrolled at sign-in (OP-159 m.48 (a)): only at the
 //! `EnrollSecondFactor` step of a login, after the first factor, when the environment requires a
-//! second factor and the account never held a TOTP credential or a passkey (a removed one counts).
-//! An account that has or had one is never offered this, so a stolen password cannot enrol the
+//! second factor and the account never held a TOTP credential or a passkey (a removed one counts),
+//! or the last one went with an account recovery whose grace period is over (TN-167). An account
+//! that has or had one otherwise is never offered this, so a stolen password cannot enrol the
 //! thief's own factor. A TOTP enrollment completes the sign-in only once its first code verifies;
 //! a passkey enrollment registers the credential and the sign-in then completes with an assertion
 //! of it. Turning MFA on ends every other session (TN-64).
@@ -21,7 +22,7 @@ use serde_json::Value;
 
 use super::{
     Auth, CODE_NOT_ACCEPTED, FlowRef, Loaded, Resume, STEP_NOT_ALLOWED, Step, TOTP, active, audit,
-    gone, hex_decode, load, refuse, save,
+    gone, hex_decode, i64_of, load, refuse, save,
 };
 use crate::SessionError;
 use crate::domain::assurance::Factor;
@@ -71,8 +72,9 @@ where
 {
     /// The subject of a login flow that may enroll its first second factor (OP-159 m.48 (a)): the
     /// first factor is done, the account is live, the environment requires a second factor, the
-    /// account holds none and never held a TOTP credential or a passkey, and what is missing is
-    /// exactly the enrollment.
+    /// account holds none and never held a TOTP credential or a passkey (or lost the last to an
+    /// account recovery whose grace period is over, TN-167), and what is missing is exactly the
+    /// enrollment.
     async fn may_enroll(
         &self,
         tx: &mut D::Tx,
@@ -94,7 +96,15 @@ where
             return Ok(None);
         }
         let enrolled = self.enrolled(tx, subject).await?;
-        if enrolled.second_factor() || tx.second_factor_ever(subject).await? {
+        if enrolled.second_factor() {
+            return Ok(None);
+        }
+        // TN-167
+        if tx.second_factor_ever(subject).await?
+            && !tx
+                .second_factor_lost_to_recovery(subject, i64_of(self.now())?)
+                .await?
+        {
             return Ok(None);
         }
         let needs = self.needs(&l.state, enrolled, false);

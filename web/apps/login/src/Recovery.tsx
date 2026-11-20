@@ -25,6 +25,7 @@ const Attempt = v.looseObject({
   until: v.exactOptional(v.string()),
   replacement_code: v.exactOptional(v.string()),
   sensitive_actions_after: v.exactOptional(v.string()),
+  authenticator_removed: v.exactOptional(v.boolean()),
 });
 
 export type Attempt = Readonly<v.InferOutput<typeof Attempt>>;
@@ -289,6 +290,13 @@ function AttemptView(props: {
         {a.sensitive_actions_after !== undefined && (
           <p className={note} data-testid="sensitive-after">
             {t("page.recovery_sensitive_after", { date: when(a.sensitive_actions_after) })}
+          </p>
+        )}
+        {a.sensitive_actions_after !== undefined && a.authenticator_removed === true && (
+          <p className={note} data-testid="authenticator-removed">
+            {t("page.recovery_authenticator_removed", {
+              date: when(a.sensitive_actions_after),
+            })}
           </p>
         )}
       </div>

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE((SELECT status = 'revoked' AND revoked_by IS NOT DISTINCT FROM 'recovery'\n                                  FROM access.identity_credentials\n                                 WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3\n                                   AND kind = ANY($4)\n                                 ORDER BY revoked_at DESC NULLS FIRST, created_at DESC\n                                 LIMIT 1), false) AS \"recovered!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recovered!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3a1b421b2d5796dcfca39835b24b3ff9419be772496459bd3010d636ee77bd34"
+}

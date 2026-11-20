@@ -324,6 +324,22 @@ test("another sign-in is linked from the account page and the outcome is said", 
   );
 });
 
+// TN-167: after an account recovery the page says when new methods can be added
+test("a recently recovered account says when new sign-in methods can be added", async ({
+  page,
+  bff,
+}) => {
+  await page.goto("/account/");
+  await expect(page.getByTestId("sign-in-methods")).toBeVisible();
+  await expect(page.getByTestId("setup-after")).toHaveCount(0);
+  bff.methods = { ...bff.methods, setup_after: "2026-11-21T09:30:00Z" };
+  await page.reload();
+  await expect(page.getByTestId("setup-after")).toContainText(
+    "Your account was recovered recently. New sign-in methods and recovery codes can be added after",
+  );
+  await expect(page.getByTestId("setup-after")).toContainText("2026");
+});
+
 // TN-156: the phone number is changed with a text message code to the new number, and the page
 // shows no more of it than its last two digits
 test("the phone number is changed with a code sent to the new one", async ({ page, bff }) => {

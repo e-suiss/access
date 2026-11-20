@@ -135,6 +135,7 @@ page-recovery_registered_code = Kaydettiğim bir kurtarma koduyla
 page-recovery_sent_code = E-postama gönderilen bir kodla
 page-recovery_until = Kurtarma { $date } sonrasında tamamlanabilir.
 page-recovery_sensitive_after = Bazı hassas eylemler { $date } sonrasında yeniden kullanılabilir.
+page-recovery_authenticator_removed = Doğrulama uygulamanız kurtarmayla kaldırıldı. { $date } sonrasında yeni bir uygulama kurabilirsiniz.
 page-recovery_send_code = Bana e-postayla kod gönderin
 page-recovery_extend = Bir gün daha isteyin
 page-recovery_continue = Kurtarmaya devam edin

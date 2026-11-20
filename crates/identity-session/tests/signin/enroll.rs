@@ -252,3 +252,108 @@ async fn a_sign_in_whose_client_asks_for_a_second_factor_enrolls_one_whatever_th
         Step::SignedIn(_)
     ));
 }
+
+/// Revokes `subject`'s authenticator app as an account recovery does (TN-167).
+async fn lost_to_recovery(e: &Env, subject: [u8; 16]) {
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.revoke_by_recovery(subject, "totp").await.unwrap().len(),
+        1
+    );
+    tx.commit().await.unwrap();
+}
+
+/// Opens `subject`'s grace period after a recovery until `until_ms` (TN-56).
+async fn in_grace(e: &Env, subject: [u8; 16], until_ms: i64) {
+    let now = i64::try_from(e.clock.now_ms()).unwrap();
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    let attempt = tx
+        .insert_recovery_attempt(&access_store::recovery::NewAttempt {
+            subject: Some(subject),
+            handle_hash: &[9; 32],
+            path: "reset_intent",
+            required_aal: "aal1",
+            cooling: &[0; 2],
+            high_value: false,
+            at_ms: now,
+        })
+        .await
+        .unwrap();
+    tx.insert_recovery_transition(
+        attempt,
+        &access_store::recovery::NewTransition {
+            seq: 0,
+            state: "grace_period",
+            required_aal: Some("aal1"),
+            achieved_aal: Some("aal1"),
+            evidence: &[],
+            reason: "authenticator_bound",
+            until_ms: Some(until_ms),
+            at_ms: now,
+        },
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+}
+
+// TN-167, OP-159 m.48 (a)
+#[tokio::test]
+async fn an_app_lost_to_a_recovery_is_set_up_again_at_sign_in_once_the_grace_period_ends() {
+    let e = env(0x67, "is-en167").await;
+    let alice = e.account("alice@example.com").await;
+    let cookie = sign_in(&e, "alice@example.com").await;
+    let (_, _) = enable_totp(&e, &cookie).await;
+    lost_to_recovery(&e, alice).await;
+    let until = i64::try_from(e.clock.now_ms()).unwrap() + 86_400_000;
+    in_grace(&e, alice, until).await;
+    let e = required(e);
+
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    let step = password(&e, &flow, "alice@example.com", PW).await;
+    assert!(
+        matches!(step, Step::Continue { ref needs, .. } if needs == &[Requirement::EnrollSecondFactor])
+    );
+    assert!(
+        matches!(enrollment(&e, &flow).await, Err(Step::Rejected(Refusal { problem, .. })) if problem == STEP_NOT_ALLOWED),
+        "not while the grace period runs"
+    );
+
+    e.advance(86_400_001);
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    password(&e, &flow, "alice@example.com", PW).await;
+    let (secret, _) = enrollment(&e, &flow)
+        .await
+        .unwrap_or_else(|s| panic!("{s:?}"));
+    let code = totp_now(&e, &base32_decode(&secret));
+    let done = e
+        .with(async |a| {
+            let f = flow.clone();
+            let c = code.clone();
+            a.confirm_sign_in_totp(&ref_of(&f), &c, "req").await
+        })
+        .await
+        .unwrap();
+    let (_, s) = signed_in(done.step);
+    assert_eq!(s.result.methods, [MethodClass::Password, MethodClass::Totp]);
+
+    let methods = e
+        .with(async |a| a.sign_in_methods(alice).await)
+        .await
+        .unwrap();
+    let totp = methods.into_iter().find(|m| m.kind == "totp").unwrap();
+    e.with(async |a| a.remove_method(alice, totp.id, "req").await)
+        .await
+        .unwrap()
+        .unwrap();
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    password(&e, &flow, "alice@example.com", PW).await;
+    assert!(
+        matches!(enrollment(&e, &flow).await, Err(Step::Rejected(Refusal { problem, .. })) if problem == STEP_NOT_ALLOWED),
+        "a removal after the recovery counts again"
+    );
+}

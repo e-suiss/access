@@ -682,6 +682,7 @@ export interface S11Methods {
   totp: { id: string; created_at: string }[];
   recovery_codes: { set: boolean; acknowledged: boolean; left?: number; of?: number };
   phone?: { set: boolean; ends_with: string | null } | null;
+  setup_after?: string | null;
   identity?: {
     national_id: string | null;
     national_id_scheme: string | null;

@@ -137,6 +137,19 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Revokes the subject's active TOTP credentials as an account recovery does, marked so
+    /// (TN-167); the ids revoked.
+    fn revoke_totp_by_recovery(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<[u8; 16]>, SessionError>> + Send;
+    /// Whether the subject holds no TOTP credential or passkey, the last one went with an
+    /// account recovery and that recovery's grace period is over at `now_ms` (TN-167).
+    fn second_factor_lost_to_recovery(
+        &mut self,
+        subject: [u8; 16],
+        now_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// The subject's WebAuthn `user.id`.
     fn user_handle(
         &mut self,

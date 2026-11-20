@@ -498,17 +498,35 @@ pub async fn remove_credential<D: AccountDb>(
     } else {
         credential_kind(&mut tx, subject, credential).await?
     };
-    let signal_kind = match kind {
-        PASSKEY => CredentialType::Fido2,
-        PASSWORD => CredentialType::Password,
-        _ => CredentialType::App,
-    };
     match tx.revoke(subject, credential, mailbox_signs_in).await? {
         Revoke::Done => {}
         Revoke::Missing => return Err(AccountError::NotFound),
         Revoke::LastMethod => return Err(AccountError::LastMethod),
     }
-    credential_signal(&mut tx, subject, signal_kind, ChangeType::Revoke).await?;
+    removed(&mut tx, environment, subject, credential, kind, who).await?;
+    tx.commit().await
+}
+
+/// What follows a revoked credential in its transaction: the CAEP signal, the binding Claim's
+/// removal, the account event and the audit record (IDP-2, OP-151 m.3 (i)); a recovery's
+/// revocation goes the same way (TN-167).
+///
+/// # Errors
+/// [`AccountError`].
+pub async fn removed<T: AccountTx>(
+    tx: &mut T,
+    environment: &Environment<'_>,
+    subject: [u8; 16],
+    credential: [u8; 16],
+    kind: &str,
+    who: &Actor<'_>,
+) -> Result<(), AccountError> {
+    let signal_kind = match kind {
+        PASSKEY => CredentialType::Fido2,
+        PASSWORD => CredentialType::Password,
+        _ => CredentialType::App,
+    };
+    credential_signal(tx, subject, signal_kind, ChangeType::Revoke).await?;
     // IDP-2, OP-150 L2, OP-150 m.12 (j)
     let bound = match kind {
         PASSKEY => Some(AuthenticatorKind::Passkey),
@@ -519,28 +537,20 @@ pub async fn remove_credential<D: AccountDb>(
     if let Some(bound) = bound {
         let at = tx.server_time().await?;
         crate::app::claims::emit(
-            &mut tx,
+            tx,
             &crate::domain::claims::authenticator_removed(subject, bound, &credential, at),
         )
         .await?;
     }
     // OP-151 m.3 (i)
-    events::credential(
-        &mut tx,
-        environment,
-        subject,
-        kind,
-        CredentialChange::Removed,
-    )
-    .await?;
+    events::credential(tx, environment, subject, kind, CredentialChange::Removed).await?;
     audit(
-        &mut tx,
+        tx,
         "credential.removed",
         who,
         &environment.external(subject)?,
     )
-    .await?;
-    tx.commit().await
+    .await
 }
 
 /// The kind of a live credential other than a passkey, before it is revoked.

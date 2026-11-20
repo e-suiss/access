@@ -56,6 +56,7 @@ export const Methods = v.object({
     v.nullable(v.object({ set: v.boolean(), ends_with: v.nullable(v.string()) })),
     null,
   ),
+  setup_after: v.optional(v.nullable(v.string()), null),
   identity: v.optional(
     v.nullable(
       v.object({
@@ -916,6 +917,11 @@ export function SignInMethods(): ReactElement {
       titleId="methods-heading"
     >
       {region}
+      {methods?.setup_after != null && (
+        <p className="text-sm text-muted-foreground" data-testid="setup-after">
+          {t("methods.setup_after", { date: when(methods.setup_after) })}
+        </p>
+      )}
       {noAddress && (
         <Actions>
           <a

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_credentials\n                SET status = 'revoked', revoked_at = now(), revoked_by = 'recovery'\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kind = $4\n                AND status = 'active'\n             RETURNING credential_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "credential_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "346f166342728ec663c9f0b1be2ba8dc9e924c0794eac3b34f1949d1fb8ce834"
+}

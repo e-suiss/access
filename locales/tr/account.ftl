@@ -142,6 +142,7 @@ methods-recovery_codes_set = Kurtarma kodlarınız var.
 methods-recovery_codes_unsaved = Kurtarma kodlarınız var, ama sakladığınızı belirtmediniz.
 methods-recovery_codes_replace = Yeni kodlar eskilerini geçersiz kılar.
 methods-recovery_codes_left = Kalan kod: { $left } / { $of }
+methods-setup_after = Hesabınız yakın zamanda kurtarıldı. Yeni giriş yöntemi ve kurtarma kodu { $date } sonrasında eklenebilir.
 action-new_recovery_codes = Yeni kurtarma kodları al
 methods-codes_saved = Kaydedildi. Kodları güvenli bir yerde tutun.
 methods-caps_lock = Caps Lock açık.

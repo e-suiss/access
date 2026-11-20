@@ -135,6 +135,7 @@ page-recovery_registered_code = With a recovery code I saved
 page-recovery_sent_code = With a code sent to my email
 page-recovery_until = Recovery can finish after { $date }.
 page-recovery_sensitive_after = Some sensitive actions are available again after { $date }.
+page-recovery_authenticator_removed = Your authenticator app was removed with the recovery. You can set up a new one after { $date }.
 page-recovery_send_code = Email me a code
 page-recovery_extend = Ask for one more day
 page-recovery_continue = Continue recovery

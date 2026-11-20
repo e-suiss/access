@@ -1085,6 +1085,61 @@ impl TenantTx {
         })
     }
 
+    /// Revokes the subject's active credentials of `kind` as an account recovery does (TN-167),
+    /// marking them so; the ids revoked.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn revoke_by_recovery(
+        &mut self,
+        subject: [u8; 16],
+        kind: &str,
+    ) -> Result<Vec<[u8; 16]>, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        let rows = sqlx::query_scalar!(
+            "UPDATE access.identity_credentials
+                SET status = 'revoked', revoked_at = now(), revoked_by = 'recovery'
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND kind = $4
+                AND status = 'active'
+             RETURNING credential_id",
+            tenant,
+            environment,
+            uuid(subject),
+            kind,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows.into_iter().map(|u| *u.as_bytes()).collect())
+    }
+
+    /// Whether the subject's newest second factor among `kinds` is one an account recovery
+    /// revoked (TN-167): none of them is active and the last revoked went with a recovery.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn last_removed_by_recovery(
+        &mut self,
+        subject: [u8; 16],
+        kinds: &[&str],
+    ) -> Result<bool, StoreError> {
+        let (tenant, environment) = self.scope()?;
+        let kinds: Vec<String> = kinds.iter().map(|k| String::from(*k)).collect();
+        Ok(sqlx::query_scalar!(
+            r#"SELECT COALESCE((SELECT status = 'revoked' AND revoked_by IS NOT DISTINCT FROM 'recovery'
+                                  FROM access.identity_credentials
+                                 WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3
+                                   AND kind = ANY($4)
+                                 ORDER BY revoked_at DESC NULLS FIRST, created_at DESC
+                                 LIMIT 1), false) AS "recovered!""#,
+            tenant,
+            environment,
+            uuid(subject),
+            &kinds,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// Records a successful use of a credential.
     ///
     /// # Errors

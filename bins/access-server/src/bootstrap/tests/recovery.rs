@@ -1179,6 +1179,103 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
     assert_eq!(audited(&c, "recovery.tap.issued").await.len(), 1);
 }
 
+// TN-167, TN-56, TN-61
+#[tokio::test]
+async fn a_recovery_revokes_the_authenticator_app_it_never_proved_and_says_when_a_new_one_fits() {
+    let c = console("recovery-app", false).await;
+    let sent = Recording::default();
+    let app = hosted(&c, sent.clone());
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let una = account(&c, "una@example.com", true).await;
+    let key = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, una)
+        .unwrap();
+    let mut t = access_identity_account::adapters::pg::PgTx::new(
+        TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
+            .await
+            .unwrap(),
+    );
+    t.insert_credential(&access_store::accounts::NewCredential {
+        subject: una,
+        kind: "totp",
+        algorithm: "hmac-sha1",
+        sealed: &access_store::accounts::SealedSecret {
+            kek_id: String::from("unused"),
+            wrapped_dek: vec![0; 40],
+            nonce: [0; 12],
+            ciphertext: vec![0; 32],
+            pepper_version: None,
+        },
+    })
+    .await
+    .unwrap();
+    AccountTx::commit(t).await.unwrap();
+
+    let (status, body) = admin_write(
+        &c,
+        "createResetIntent",
+        Some(&key),
+        &format!("/admin/envs/acme/accounts/{key}/reset-intents"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let m = relayed(&c, una, "relay.message.reset_intent.v1").await;
+    let MessageBody::Link { link, .. } = &m.body else {
+        panic!("not a link")
+    };
+    let token = link.expose().split_once("#intent=").unwrap().1.to_owned();
+    let mut page = Page::default();
+    let opened = page
+        .call(
+            &app,
+            &Method::POST,
+            &format!("/v1/recovery/intents/{token}"),
+            None,
+        )
+        .await;
+    assert_eq!(opened.status, StatusCode::OK, "{}", opened.json);
+    let attempt = opened.json["attempt"].as_str().unwrap().to_owned();
+    let bound = page
+        .call(
+            &app,
+            &Method::POST,
+            &format!("/v1/recovery/{attempt}"),
+            Some(serde_json::json!({"new_password": "una picks a new one after the loss"})),
+        )
+        .await;
+    assert_eq!(bound.status, StatusCode::OK, "{}", bound.json);
+    assert_eq!(bound.json["state"], "grace_period");
+    assert_eq!(bound.json["authenticator_removed"], true);
+
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.environment)
+        .await
+        .unwrap();
+    assert!(t.credentials(una, "totp").await.unwrap().is_empty());
+    assert!(
+        t.last_removed_by_recovery(una, &["totp", "webauthn"])
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    assert!(
+        sent.sent()
+            .iter()
+            .any(|s| s.kind == Notice::MethodRemoved.kind() && s.to == "una@example.com")
+    );
+    assert_eq!(audited(&c, "credential.removed").await.len(), 1);
+
+    let methods = page
+        .call(&app, &Method::GET, "/v1/account/methods", None)
+        .await;
+    assert_eq!(methods.status, StatusCode::OK, "{}", methods.json);
+    assert_eq!(methods.json["totp"], serde_json::json!([]));
+    assert_eq!(
+        methods.json["setup_after"],
+        bound.json["sensitive_actions_after"]
+    );
+}
+
 // 4109, OP-148, §7.9.8, E42, TN-49, OP-153 m.3 (gg)
 #[tokio::test]
 async fn a_suspension_and_its_lifting_are_told_to_the_account() {

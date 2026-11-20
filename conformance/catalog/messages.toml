@@ -2207,6 +2207,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "methods-setup_after"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "methods-password_none"
 surface = "account"
 class = "label"
@@ -3078,6 +3085,13 @@ protected = false
 
 [[message]]
 key = "page-recovery_sensitive_after"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_authenticator_removed"
 surface = "login"
 class = "recovery"
 owner = "identity_plane"

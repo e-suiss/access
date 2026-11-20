@@ -248,6 +248,7 @@ test("recovery's rebind window takes a new password and shows a replacement code
       text: "recovery.complete",
       replacement_code: "ABCD-EFGH-IJKL-MNOP",
       sensitive_actions_after: "2026-11-11T09:30:00Z",
+      authenticator_removed: true,
     },
   });
   await page.goto("/login/recovery");
@@ -259,6 +260,10 @@ test("recovery's rebind window takes a new password and shows a replacement code
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("replacement-code")).toHaveText("ABCD-EFGH-IJKL-MNOP");
   await expect(page.getByTestId("sensitive-after")).toContainText("2026");
+  // TN-167
+  await expect(page.getByTestId("authenticator-removed")).toContainText(
+    "Your authenticator app was removed with the recovery",
+  );
   // X38
   await expect(page.locator("main")).not.toContainText(/restored/i);
 });

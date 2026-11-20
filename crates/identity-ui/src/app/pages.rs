@@ -561,6 +561,11 @@ where
             Err(e) => return failed(&e),
         };
         let pending = auth.recovery_codes_pending(subject).await.unwrap_or(false);
+        // TN-167
+        let setup_after = match auth.grace_ends(subject).await {
+            Ok(until) => until.and_then(|u| i64::try_from(u).ok()).map(rfc3339),
+            Err(e) => return failed(&e),
+        };
         // TN-156
         let phone = if kit.auth.phone {
             match self.phone_ending(&kit, subject).await {
@@ -608,6 +613,7 @@ where
                     "of": access_identity_session::domain::codes::RECOVERY_CODES,
                 },
                 "phone": phone,
+                "setup_after": setup_after,
             }),
         )
     }
