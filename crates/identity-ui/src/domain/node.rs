@@ -441,6 +441,12 @@ pub enum Node {
         /// Shown, but not editable.
         #[serde(default, skip_serializing_if = "core::ops::Not::not")]
         read_only: bool,
+        /// A line under the field that says what it takes (TN-169).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hint: Option<Text>,
+        /// Digits only: the page opens the numeric keyboard (TN-169).
+        #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+        numeric: bool,
     },
     /// A button that submits its method with that method's inputs.
     Submit {
@@ -600,6 +606,8 @@ impl Node {
             label,
             value: None,
             read_only: false,
+            hint: None,
+            numeric: false,
         }
     }
 }

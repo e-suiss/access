@@ -6042,6 +6042,107 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "profile-national_id_invalid"
+text_id = "profile.national_id_invalid"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-birthdate_invalid"
+text_id = "profile.birthdate_invalid"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-address_refused"
+text_id = "profile.address_refused"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-phone_invalid"
+text_id = "profile.phone_invalid"
+surface = "login"
+class = "error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-national_id_purpose"
+text_id = "profile.national_id_purpose"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "profile-birthdate_purpose"
+text_id = "profile.birthdate_purpose"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hint-digits_11"
+text_id = "hint.digits_11"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hint-digits_9"
+text_id = "hint.digits_9"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hint-nino"
+text_id = "hint.nino"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hint-fin"
+text_id = "hint.fin"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-birthdate_day"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-birthdate_month"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-birthdate_year"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "profile-too_young"
 text_id = "profile.too_young"
 surface = "login"

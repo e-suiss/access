@@ -178,6 +178,8 @@ pub fn address_step(flow: FlowId, contact: Contact) -> Ui {
             label: TextId::RegistrationTitle.into(),
             value: None,
             read_only: false,
+            hint: None,
+            numeric: false,
         },
         Node::Submit {
             method: Method::Register,
@@ -213,6 +215,8 @@ pub fn code_step(flow: FlowId, name_required: bool, contact: Contact, pin: bool)
         label: TextId::DisplayNameLabel.into(),
         value: None,
         read_only: false,
+        hint: None,
+        numeric: false,
     });
     // TN-156, TN-157
     if contact != Contact::Email {
@@ -235,6 +239,8 @@ pub fn code_step(flow: FlowId, name_required: bool, contact: Contact, pin: bool)
             .into(),
             value: None,
             read_only: false,
+            hint: None,
+            numeric: false,
         });
     }
     nodes.push(Node::Submit {
@@ -965,7 +971,7 @@ where
         (handle, device): (&str, &str),
         subject: [u8; 16],
         email: &str,
-    ) -> Result<(), Reply> {
+    ) -> Result<Result<(), Message>, Reply> {
         let (flow_hash, device_hash) =
             profile_binding(handle, device).ok_or_else(|| Reply::problem(FLOW_GONE))?;
         let environment = kit.environment();
@@ -1002,21 +1008,14 @@ where
             )
             .await
         {
-            Ok(Started::Sent { .. }) => Ok(()),
+            Ok(Started::Sent { .. }) => Ok(Ok(())),
+            // TN-169
             Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
-                Err(Reply::problem(Problem {
-                    status: 429,
-                    code: "too-many-requests",
-                    title: "Too many attempts",
-                    retry_after_s: Some(retry_after_ms.div_ceil(1000)),
-                }))
+                Ok(Err(throttled(retry_after_ms)))
             }
-            Ok(Started::Refused(_)) => Err(Reply::problem(Problem {
-                status: 400,
-                code: "invalid-email",
-                title: "This address can't be used here",
-                retry_after_s: None,
-            })),
+            Ok(Started::Refused(_)) => Ok(Err(
+                Message::error(TextId::AddressRefused).on(FieldName::Email)
+            )),
             Err(e) => Err(failed(&e.into())),
         }
     }
@@ -1030,7 +1029,7 @@ where
         (handle, device): (&str, &str),
         subject: [u8; 16],
         phone: &str,
-    ) -> Result<(), Reply> {
+    ) -> Result<Result<(), Message>, Reply> {
         let (flow_hash, device_hash) =
             profile_binding(handle, device).ok_or_else(|| Reply::problem(FLOW_GONE))?;
         let environment = kit.environment();
@@ -1066,21 +1065,14 @@ where
             )
             .await
         {
-            Ok(Started::Sent { .. }) => Ok(()),
+            Ok(Started::Sent { .. }) => Ok(Ok(())),
+            // TN-169
             Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
-                Err(Reply::problem(Problem {
-                    status: 429,
-                    code: "too-many-requests",
-                    title: "Too many attempts",
-                    retry_after_s: Some(retry_after_ms.div_ceil(1000)),
-                }))
+                Ok(Err(throttled(retry_after_ms)))
             }
-            Ok(Started::Refused(_)) => Err(Reply::problem(Problem {
-                status: 400,
-                code: "invalid-phone",
-                title: "This phone number can't be used here",
-                retry_after_s: None,
-            })),
+            Ok(Started::Refused(_)) => Ok(Err(
+                Message::error(TextId::PhoneInvalid).on(FieldName::Phone)
+            )),
             Err(e) => Err(failed(&e.into())),
         }
     }
@@ -1138,6 +1130,12 @@ fn session_digest(cookie: &str) -> [u8; 32] {
     let mut m = b"access/address-challenge-session/v1\0".to_vec();
     m.extend_from_slice(cookie.as_bytes());
     suiss_crypto::digest::sha256(&m)
+}
+
+/// The step message of a profile address the throttle holds back (TN-169).
+fn throttled(retry_after_ms: u64) -> Message {
+    Message::error(TextId::TooManyAttempts)
+        .retry_after(u32::try_from(retry_after_ms.div_ceil(1000)).unwrap_or(u32::MAX))
 }
 
 #[cfg(test)]

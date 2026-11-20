@@ -397,6 +397,8 @@ fn strict(mut ui: Ui) -> Ui {
                 label,
                 value,
                 read_only,
+                hint,
+                numeric,
                 ..
             } => nodes.push(crate::domain::node::Node::Input {
                 name: FieldName::Identifier,
@@ -408,6 +410,8 @@ fn strict(mut ui: Ui) -> Ui {
                 label,
                 value,
                 read_only,
+                hint,
+                numeric,
             }),
             crate::domain::node::Node::Submit {
                 method: Method::Identifier,
@@ -1122,7 +1126,7 @@ where
                         .await?
                 {
                     let mut ui = profile_ui(kit, &flow, p, &policy(kit));
-                    ui.messages.push(Message::error(refused));
+                    ui.messages.push(refused);
                     return Ok(Reply::ui(400, ui));
                 }
                 // TN-158 (12)
@@ -1167,8 +1171,10 @@ where
         b: &Browser<'_>,
         fref: &FlowRef<'_>,
         (chosen, number, birthdate): (&str, &str, &str),
-    ) -> Result<Option<TextId>, Reply> {
+    ) -> Result<Option<Message>, Reply> {
         use access_identity_session::app::profile::FactsRefusal;
+        // TN-169
+        let number_refused = || Message::error(TextId::NationalIdInvalid).on(FieldName::NationalId);
         let schemes = national_schemes(kit);
         let picked = match schemes.as_slice() {
             [one] => Some(one),
@@ -1178,11 +1184,11 @@ where
             None
         } else {
             let Some((name, scheme, _)) = picked else {
-                return Ok(Some(TextId::FactsInvalid));
+                return Ok(Some(number_refused()));
             };
             match scheme.normalize(number) {
                 Some(n) => Some((name.clone(), n)),
-                None => return Ok(Some(TextId::FactsInvalid)),
+                None => return Ok(Some(number_refused())),
             }
         };
         let date = (!birthdate.trim().is_empty()).then_some(birthdate);
@@ -1198,9 +1204,12 @@ where
             .map_err(|_| Reply::problem(FLOW_GONE))?;
         Ok(match outcome {
             Ok(_) => None,
-            Err(FactsRefusal::Invalid) => Some(TextId::FactsInvalid),
-            Err(FactsRefusal::TooYoung) => Some(TextId::TooYoung),
-            Err(FactsRefusal::Taken) => Some(TextId::FactsTaken),
+            Err(FactsRefusal::InvalidNumber) => Some(number_refused()),
+            Err(FactsRefusal::InvalidBirthdate) => {
+                Some(Message::error(TextId::BirthdateInvalid).on(FieldName::Birthdate))
+            }
+            Err(FactsRefusal::TooYoung) => Some(Message::error(TextId::TooYoung)),
+            Err(FactsRefusal::Taken) => Some(Message::error(TextId::FactsTaken)),
         })
     }
 
@@ -1229,15 +1238,29 @@ where
                     .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
             }
             if p.gap.email || p.gap.phone {
-                if p.gap.phone {
-                    let phone =
-                        access_identity_account::domain::phone::e164(email, kit.auth.country)
-                            .ok_or_else(|| Reply::problem(INVALID_SUBMISSION))?;
-                    self.profile_phone(kit, b, (fref.handle, fref.device), p.subject, &phone)
-                        .await?;
+                // TN-169
+                let started = if p.gap.phone {
+                    match access_identity_account::domain::phone::e164(email, kit.auth.country) {
+                        Some(phone) => {
+                            self.profile_phone(
+                                kit,
+                                b,
+                                (fref.handle, fref.device),
+                                p.subject,
+                                &phone,
+                            )
+                            .await?
+                        }
+                        None => Err(Message::error(TextId::PhoneInvalid).on(FieldName::Phone)),
+                    }
                 } else {
                     self.profile_address(kit, b, (fref.handle, fref.device), p.subject, email)
-                        .await?;
+                        .await?
+                };
+                if let Err(refused) = started {
+                    let mut ui = profile_ui(kit, flow, p, &policy(kit));
+                    ui.messages.push(refused);
+                    return Ok(Reply::ui(400, ui));
                 }
                 auth.profile_address_sent(fref, true)
                     .await

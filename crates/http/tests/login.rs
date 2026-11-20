@@ -5789,6 +5789,18 @@ async fn a_phone_environment_asks_an_account_without_a_number_for_one_and_proves
             .iter()
             .any(|n| n["name"] == "phone" && n["kind"] == "tel")
     );
+    // TN-169
+    let unreadable = b.submit(&step, "profile", json!({ "phone": "12" })).await;
+    assert_eq!(unreadable.status, StatusCode::BAD_REQUEST);
+    assert_eq!(unreadable.step(), "profile");
+    let said = &unreadable.json()["messages"];
+    assert!(
+        said.as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == "profile.phone_invalid" && m["field"] == "phone"),
+        "{said}"
+    );
     let sent = b
         .submit(&step, "profile", json!({ "phone": "0532 444 55 66" }))
         .await;
@@ -5977,8 +5989,23 @@ async fn an_environment_that_requires_a_national_id_and_an_age_asks_for_them_onc
     let nodes = step.json()["nodes"].as_array().unwrap().clone();
     let id = nodes.iter().find(|n| n["name"] == "national_id").unwrap();
     assert_eq!(id["label"]["id"], "label.national_id_tr_tckn");
+    // TN-169
+    assert_eq!(id["hint"]["id"], "hint.digits_11");
+    assert_eq!(id["numeric"], true);
+    assert!(
+        step.messages()
+            .contains(&String::from("profile.national_id_purpose"))
+    );
     let date = nodes.iter().find(|n| n["name"] == "birthdate").unwrap();
     assert_eq!(date["kind"], "date");
+    let about = |r: &Answer, id: &str| {
+        r.json()["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == id)
+            .map(|m| m["field"].clone())
+    };
     let bad = b
         .submit(
             &step,
@@ -5987,9 +6014,21 @@ async fn an_environment_that_requires_a_national_id_and_an_age_asks_for_them_onc
         )
         .await;
     assert_eq!(bad.status, StatusCode::BAD_REQUEST);
-    assert!(
-        bad.messages()
-            .contains(&String::from("profile.facts_invalid"))
+    assert_eq!(
+        about(&bad, "profile.national_id_invalid"),
+        Some(json!("national_id"))
+    );
+    let no_day = b
+        .submit(
+            &step,
+            "profile",
+            json!({ "national_id": "10000000146", "birthdate": "1990-02-30" }),
+        )
+        .await;
+    assert_eq!(no_day.status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        about(&no_day, "profile.birthdate_invalid"),
+        Some(json!("birthdate"))
     );
     let young = b
         .submit(
@@ -6461,7 +6500,7 @@ async fn several_schemes_ask_which_country_the_number_is_of() {
     assert!(
         wrong_country
             .messages()
-            .contains(&String::from("profile.facts_invalid"))
+            .contains(&String::from("profile.national_id_invalid"))
     );
     let done = b
         .submit(

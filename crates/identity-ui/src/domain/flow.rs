@@ -315,6 +315,14 @@ fn identity_nodes(national: &[(String, TextId)], documents: &[DocumentLink]) -> 
         [(_, one)] => Some(*one),
         _ => Some(TextId::NationalIdLabel),
     };
+    // TN-169
+    let (hint, numeric) = match label {
+        Some(TextId::TcknLabel | TextId::SteuerIdLabel) => (Some(TextId::Digits11Hint), true),
+        Some(TextId::SsnLabel | TextId::BsnLabel) => (Some(TextId::Digits9Hint), true),
+        Some(TextId::NinoLabel) => (Some(TextId::NinoHint), false),
+        Some(TextId::FinLabel) => (Some(TextId::FinHint), false),
+        _ => (None, false),
+    };
     if let Some(label) = label {
         nodes.push(Node::Input {
             name: FieldName::NationalId,
@@ -326,6 +334,8 @@ fn identity_nodes(national: &[(String, TextId)], documents: &[DocumentLink]) -> 
             label: label.into(),
             value: None,
             read_only: false,
+            hint: hint.map(Into::into),
+            numeric,
         });
     }
     // TN-158 (12)
@@ -405,6 +415,8 @@ impl Ui {
             label: TextId::IdentifierLabel.into(),
             value: Some(identifier.to_owned()),
             read_only: true,
+            hint: None,
+            numeric: false,
         };
         let nodes = vec![
             echo,
@@ -637,6 +649,8 @@ impl Ui {
                 label: TextId::BirthdateLabel.into(),
                 value: None,
                 read_only: false,
+                hint: None,
+                numeric: false,
             });
         }
         if name {
@@ -650,6 +664,8 @@ impl Ui {
                 label: TextId::DisplayNameLabel.into(),
                 value: None,
                 read_only: false,
+                hint: None,
+                numeric: false,
             });
         }
         if email {
@@ -663,6 +679,8 @@ impl Ui {
                 label: TextId::EmailLabel.into(),
                 value: offered,
                 read_only: false,
+                hint: None,
+                numeric: false,
             });
         }
         // TN-156
@@ -677,6 +695,8 @@ impl Ui {
                 label: TextId::PhoneLabel.into(),
                 value: None,
                 read_only: false,
+                hint: None,
+                numeric: false,
             });
         }
         nodes.push(Node::Submit {
@@ -689,6 +709,12 @@ impl Ui {
         });
         let mut ui = Self::new(flow, Step::Profile, &with_profile(policy), nodes);
         ui.messages.push(Message::info(TextId::ProfileComplete));
+        // TN-169
+        if !national.is_empty() {
+            ui.messages.push(Message::info(TextId::NationalIdPurpose));
+        } else if birthdate {
+            ui.messages.push(Message::info(TextId::BirthdatePurpose));
+        }
         ui
     }
 

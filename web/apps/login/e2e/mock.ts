@@ -174,6 +174,9 @@ export class LoginMock {
   linkPolls = 2;
   /** OP-156 m.3 (d): the second step after the password, when a test replaces it. */
   secondFactor: LoginUi | undefined = undefined;
+  /** TN-169: how the profile step answers, when a test sets it. */
+  profileAnswer: ((fields: Partial<Record<FieldName, string>>) => Reply | undefined) | undefined =
+    undefined;
   /** TN-163: the flow is gone by the time the password is sent. */
   goneAtPassword = false;
   /** OP-159 m.48 (a): the step a right TOTP code answers with, when a test replaces it. */
@@ -407,9 +410,12 @@ export class LoginMock {
       }
       // TN-151
       case "profile":
-        return (fields.email ?? "").includes("@")
-          ? { status: 200, ui: example("profile-code") }
-          : { status: 200, ui: example("profile") };
+        return (
+          this.profileAnswer?.(fields) ??
+          ((fields.email ?? "").includes("@")
+            ? { status: 200, ui: example("profile-code") }
+            : { status: 200, ui: example("profile") })
+        );
       case "profile_code":
         return fields.email_code === totp
           ? { status: 200, ui: withoutNodes(example("complete")) }

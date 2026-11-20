@@ -363,9 +363,82 @@ test("a sign-in that lacks a national identity number and a birth date asks for 
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByLabel("Turkish identity number (T.C. Kimlik No)")).toBeVisible();
-  await expect(page.getByLabel("Date of birth")).toHaveAttribute("type", "date");
-  await expect(page.getByLabel("Date of birth")).toHaveAttribute("autocomplete", "bday");
+  const number = page.getByLabel("Turkish identity number (T.C. Kimlik No)");
+  await expect(number).toBeVisible();
+  // TN-169
+  await expect(number).toHaveAttribute("inputmode", "numeric");
+  await expect(number).toHaveAccessibleDescription("11 digits");
+  await expect(page.getByText("This service asks for your identity number.")).toBeVisible();
+  const birth = page.getByRole("group", { name: "Date of birth" });
+  const day = birth.getByLabel("Day");
+  await expect(day).toHaveAttribute("autocomplete", "bday-day");
+  await expect(birth.getByLabel("Month")).toHaveAttribute("autocomplete", "bday-month");
+  await expect(birth.getByLabel("Year")).toHaveAttribute("autocomplete", "bday-year");
+  await expect(day).toHaveAttribute("inputmode", "numeric");
+  const identity = example("profile-identity");
+  mock.profileAnswer = (fields) =>
+    fields.birthdate === "1990-03-05"
+      ? {
+          status: 400,
+          ui: {
+            ...identity,
+            messages: [
+              ...identity.messages,
+              {
+                id: "profile.birthdate_invalid",
+                text: "Enter a real date of birth.",
+                severity: "error",
+                field: "birthdate",
+              },
+            ],
+          },
+        }
+      : undefined;
+  await number.fill("10000000146");
+  await day.fill("5");
+  await birth.getByLabel("Month").fill("3");
+  await birth.getByLabel("Year").fill("1990");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(birth.getByRole("alert")).toHaveText("Enter a real date of birth.");
+  await expect(page.getByLabel("Day")).toBeFocused();
+  await expect(page.getByLabel("Day")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByTestId("errors")).toBeEmpty();
+});
+
+// TN-169: an address the profile step can't use is said under its field, not as an outage
+test("an address the profile step refuses is said under the field", async ({ page, mock }) => {
+  const profile = example("profile");
+  mock.secondFactor = profile;
+  mock.profileAnswer = () => ({
+    status: 400,
+    ui: {
+      ...profile,
+      messages: [
+        ...profile.messages,
+        {
+          id: "profile.address_refused",
+          text: "This address can't be used here. Enter another one.",
+          severity: "error",
+          field: "email",
+        },
+      ],
+    },
+  });
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByLabel("Your name").fill("Ada");
+  await page.getByLabel("Email").fill("ada@mailinator.com");
+  await page.getByRole("button", { name: "Continue" }).click();
+  const email = page.getByLabel("Email");
+  await expect(email).toBeFocused();
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toHaveAccessibleDescription(
+    "This address can't be used here. Enter another one.",
+  );
+  await expect(page.locator("main")).not.toContainText("briefly unavailable");
 });
 
 // TN-158: several schemes ask for the country first, then the number

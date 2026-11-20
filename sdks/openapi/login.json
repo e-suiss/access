@@ -349,6 +349,12 @@
               },
               "read_only": {
                 "type": "boolean"
+              },
+              "hint": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "numeric": {
+                "type": "boolean"
               }
             }
           },
@@ -760,6 +766,16 @@
           "label.national_id_az_fin",
           "label.birthdate",
           "profile.facts_invalid",
+          "profile.national_id_invalid",
+          "profile.birthdate_invalid",
+          "profile.address_refused",
+          "profile.phone_invalid",
+          "profile.national_id_purpose",
+          "profile.birthdate_purpose",
+          "hint.digits_11",
+          "hint.digits_9",
+          "hint.nino",
+          "hint.fin",
           "profile.too_young",
           "profile.facts_taken",
           "label.national_id_scheme",
@@ -1003,6 +1019,9 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "field": {
+            "$ref": "#/components/schemas/FieldName"
           }
         }
       },

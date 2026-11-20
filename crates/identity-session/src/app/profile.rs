@@ -55,8 +55,10 @@ impl ProfileGap {
 /// Why the profile step's facts were refused (TN-158).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FactsRefusal {
-    /// Not a birth date, or a number the scheme refuses.
-    Invalid,
+    /// No birth date, or not a real past day (TN-169).
+    InvalidBirthdate,
+    /// No number, or one the scheme refuses (TN-169).
+    InvalidNumber,
     /// Younger than the environment's youngest age.
     TooYoung,
     /// Another account holds the number.
@@ -234,13 +236,13 @@ where
         if gap.birthdate {
             let Some(raw) = birthdate else {
                 tx.commit().await?;
-                return Ok(Ok(Err(FactsRefusal::Invalid)));
+                return Ok(Ok(Err(FactsRefusal::InvalidBirthdate)));
             };
             let min = u32::from(self.policy.min_age.unwrap_or(0));
             match access_identity_account::domain::birthdate::old_enough(raw, min, now) {
                 None => {
                     tx.commit().await?;
-                    return Ok(Ok(Err(FactsRefusal::Invalid)));
+                    return Ok(Ok(Err(FactsRefusal::InvalidBirthdate)));
                 }
                 Some(false) => {
                     tx.commit().await?;
@@ -254,7 +256,7 @@ where
         if gap.national_id {
             let Some((scheme, number)) = national_id else {
                 tx.commit().await?;
-                return Ok(Ok(Err(FactsRefusal::Invalid)));
+                return Ok(Ok(Err(FactsRefusal::InvalidNumber)));
             };
             if !tx.keep_national_id(subject, scheme, number).await? {
                 // TN-158

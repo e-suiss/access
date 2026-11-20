@@ -16,6 +16,7 @@ import type {
   FieldName,
   InputNode,
   LoginUi,
+  Message,
   Method,
   OptionName,
   OptionNode,
@@ -120,9 +121,38 @@ function methodsInOrder(nodes: readonly UiNode[]): Method[] {
 }
 
 // TN-107: paste and autofill are never blocked; one pasteable field per code
-function Field({ node, invalid }: { readonly node: InputNode; readonly invalid: boolean }) {
+function Field({
+  node,
+  invalid,
+  error,
+}: {
+  readonly node: InputNode;
+  readonly invalid: boolean;
+  readonly error?: Message | undefined;
+}) {
   if (node.kind === "hidden") return null;
   const id = `field-${node.name}-${node.method}`;
+  if (node.kind === "date") return <DateField node={node} id={id} error={error} />;
+  // TN-169: a message about this field sits under it, and a hint says what it takes
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy = [error === undefined ? "" : errorId, node.hint === undefined ? "" : hintId]
+    .filter((x) => x !== "")
+    .join(" ");
+  const below = (
+    <>
+      {error !== undefined && (
+        <p id={errorId} role="alert" className={problem} data-message-id={error.id}>
+          {text(error)}
+        </p>
+      )}
+      {node.hint !== undefined && (
+        <p id={hintId} className={note}>
+          {text(node.hint)}
+        </p>
+      )}
+    </>
+  );
   if (node.kind === "password") {
     return (
       <FieldBox className="gap-2">
@@ -158,14 +188,76 @@ function Field({ node, invalid }: { readonly node: InputNode; readonly invalid: 
         maxLength={node.max_length}
         readOnly={node.read_only === true}
         defaultValue={node.value}
-        {...(numeric.has(node.name) ? { inputMode: "numeric" as const } : {})}
+        {...(numeric.has(node.name) || node.numeric === true
+          ? { inputMode: "numeric" as const }
+          : {})}
         spellCheck={false}
         autoCapitalize="none"
         dir="auto"
         {...(node.kind === "code" ? { className: "font-mono tracking-widest" } : {})}
+        {...(error !== undefined ? { "aria-invalid": true } : {})}
+        {...(describedBy === "" ? {} : { "aria-describedby": describedBy })}
       />
+      {below}
     </FieldBox>
   );
+}
+
+/** TN-169: a date of birth as three boxes, day, month and year, never a calendar picker. */
+function DateField(props: {
+  readonly node: InputNode;
+  readonly id: string;
+  readonly error?: Message | undefined;
+}) {
+  const { node, id, error } = props;
+  const errorId = `${id}-error`;
+  const parts = [
+    { part: "day", label: t("page.birthdate_day"), size: 2, auto: "bday-day" },
+    { part: "month", label: t("page.birthdate_month"), size: 2, auto: "bday-month" },
+    { part: "year", label: t("page.birthdate_year"), size: 4, auto: "bday-year" },
+  ] as const;
+  return (
+    <FieldSet className="gap-2" {...(error === undefined ? {} : { "aria-describedby": errorId })}>
+      <FieldLegend variant="label" className="mb-0 text-sm">
+        {text(node.label)}
+      </FieldLegend>
+      <div className="flex gap-3">
+        {parts.map((p) => (
+          <FieldBox key={p.part} className={p.size === 4 ? "w-24 gap-1" : "w-16 gap-1"}>
+            <FieldLabel htmlFor={`${id}-${p.part}`} className="text-sm font-normal">
+              {p.label}
+            </FieldLabel>
+            <Input
+              id={`${id}-${p.part}`}
+              name={`${node.name}_${p.part}`}
+              type="text"
+              inputMode="numeric"
+              autoComplete={p.auto}
+              required={node.required}
+              maxLength={p.size}
+              {...(error !== undefined ? { "aria-invalid": true } : {})}
+            />
+          </FieldBox>
+        ))}
+      </div>
+      {error !== undefined && (
+        <p id={errorId} role="alert" className={problem} data-message-id={error.id}>
+          {text(error)}
+        </p>
+      )}
+    </FieldSet>
+  );
+}
+
+/** The `YYYY-MM-DD` of the three boxes of a date field, or what was typed when it isn't whole. */
+function dateOf(data: FormData, name: FieldName): string {
+  const part = (p: string) => {
+    const v = data.get(`${name}_${p}`);
+    return typeof v === "string" ? v.trim() : "";
+  };
+  const [day, month, year] = [part("day"), part("month"), part("year")];
+  if (day === "" && month === "" && year === "") return "";
+  return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
 // TN-158
@@ -228,6 +320,7 @@ function handIdentifier() {
 function MethodForm(props: {
   readonly method: Method;
   readonly invalid: boolean;
+  readonly fieldErrors?: readonly Message[];
   readonly nodes: readonly UiNode[];
   readonly busy: boolean;
   readonly options: Fields;
@@ -250,6 +343,10 @@ function MethodForm(props: {
     const fields: Fields = {};
     for (const input of inputs) {
       if (input.read_only === true || input.kind === "hidden") continue;
+      if (input.kind === "date") {
+        fields[input.name] = dateOf(data, input.name);
+        continue;
+      }
       const value = data.get(input.name);
       if (typeof value === "string") fields[input.name] = value;
     }
@@ -268,7 +365,12 @@ function MethodForm(props: {
         ) : node.type === "documents" ? (
           <Documents key={node.name} node={node} />
         ) : (
-          <Field key={node.name} node={node} invalid={props.invalid} />
+          <Field
+            key={node.name}
+            node={node}
+            invalid={props.invalid}
+            error={props.fieldErrors?.find((m) => m.field === node.name)}
+          />
         ),
       )}
       {buttons.map((node) => (
@@ -484,6 +586,17 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const section = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!ui.messages.some((m) => m.severity === "error")) return;
+    // TN-169: a message about one field focuses that field
+    const about = ui.messages.find((m) => m.severity === "error" && m.field !== undefined)?.field;
+    if (about !== undefined) {
+      const target = section.current?.querySelector<HTMLInputElement>(
+        `input[name="${about}"], input[name="${about}_day"]`,
+      );
+      if (target !== null && target !== undefined) {
+        target.focus();
+        return;
+      }
+    }
     const field = section.current?.querySelector<HTMLInputElement>(
       'input[name="password"]:not([readonly])',
     );
@@ -571,7 +684,13 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     });
   };
 
-  const errors = ui.messages.filter((m) => m.severity === "error");
+  const drawnFields = new Set(
+    ui.nodes.flatMap((n) => (n.type === "input" && n.kind !== "hidden" ? [n.name] : [])),
+  );
+  const fieldErrors = ui.messages.filter(
+    (m) => m.severity === "error" && m.field !== undefined && drawnFields.has(m.field),
+  );
+  const errors = ui.messages.filter((m) => m.severity === "error" && !fieldErrors.includes(m));
   const infos = ui.messages.filter((m) => m.severity === "info");
   const login = ui.kind === undefined || ui.kind === "login";
 
@@ -674,6 +793,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             key={method}
             method={method}
             invalid={errors.length > 0}
+            fieldErrors={fieldErrors}
             nodes={ui.nodes}
             busy={busy}
             options={options}

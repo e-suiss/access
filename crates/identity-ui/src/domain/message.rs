@@ -75,6 +75,36 @@ pub enum TextId {
     /// A number its scheme refuses, or no real birth date (TN-158).
     #[serde(rename = "profile.facts_invalid")]
     FactsInvalid,
+    /// The identity number the profile step refused (TN-169).
+    #[serde(rename = "profile.national_id_invalid")]
+    NationalIdInvalid,
+    /// A birth date that is not a real past day (TN-169).
+    #[serde(rename = "profile.birthdate_invalid")]
+    BirthdateInvalid,
+    /// An e-mail address the profile step cannot use (TN-169).
+    #[serde(rename = "profile.address_refused")]
+    AddressRefused,
+    /// A phone number the profile step cannot read (TN-169).
+    #[serde(rename = "profile.phone_invalid")]
+    PhoneInvalid,
+    /// Why the profile step asks for the identity number and what the account page shows of it (TN-169).
+    #[serde(rename = "profile.national_id_purpose")]
+    NationalIdPurpose,
+    /// Why the profile step asks for the birth date (TN-169).
+    #[serde(rename = "profile.birthdate_purpose")]
+    BirthdatePurpose,
+    /// An eleven-digit identity number (TN-169).
+    #[serde(rename = "hint.digits_11")]
+    Digits11Hint,
+    /// A nine-digit identity number (TN-169).
+    #[serde(rename = "hint.digits_9")]
+    Digits9Hint,
+    /// The shape of a National Insurance number (TN-169).
+    #[serde(rename = "hint.nino")]
+    NinoHint,
+    /// The shape of an Azerbaijani FİN (TN-169).
+    #[serde(rename = "hint.fin")]
+    FinHint,
     /// Younger than the environment's youngest age (TN-158).
     #[serde(rename = "profile.too_young")]
     TooYoung,
@@ -680,7 +710,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 221] = [
+    pub const ALL: [Self; 231] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -708,6 +738,16 @@ impl TextId {
         Self::FinLabel,
         Self::BirthdateLabel,
         Self::FactsInvalid,
+        Self::NationalIdInvalid,
+        Self::BirthdateInvalid,
+        Self::AddressRefused,
+        Self::PhoneInvalid,
+        Self::NationalIdPurpose,
+        Self::BirthdatePurpose,
+        Self::Digits11Hint,
+        Self::Digits9Hint,
+        Self::NinoHint,
+        Self::FinHint,
         Self::TooYoung,
         Self::FactsTaken,
         Self::NationalIdSchemeLabel,
@@ -936,6 +976,16 @@ impl TextId {
             Self::FinLabel => "label.national_id_az_fin",
             Self::BirthdateLabel => "label.birthdate",
             Self::FactsInvalid => "profile.facts_invalid",
+            Self::NationalIdInvalid => "profile.national_id_invalid",
+            Self::BirthdateInvalid => "profile.birthdate_invalid",
+            Self::AddressRefused => "profile.address_refused",
+            Self::PhoneInvalid => "profile.phone_invalid",
+            Self::NationalIdPurpose => "profile.national_id_purpose",
+            Self::BirthdatePurpose => "profile.birthdate_purpose",
+            Self::Digits11Hint => "hint.digits_11",
+            Self::Digits9Hint => "hint.digits_9",
+            Self::NinoHint => "hint.nino",
+            Self::FinHint => "hint.fin",
             Self::TooYoung => "profile.too_young",
             Self::FactsTaken => "profile.facts_taken",
             Self::NationalIdSchemeLabel => "label.national_id_scheme",
@@ -1172,6 +1222,18 @@ impl TextId {
             Self::FinLabel => "Personal identification code (FİN)",
             Self::BirthdateLabel => "Date of birth",
             Self::FactsInvalid => "Check the number and the date and try again.",
+            Self::NationalIdInvalid => "Check the identity number and try again.",
+            Self::BirthdateInvalid => "Enter a real date of birth.",
+            Self::AddressRefused => "This address can't be used here. Enter another one.",
+            Self::PhoneInvalid => "Enter a valid phone number.",
+            Self::NationalIdPurpose => {
+                "This service asks for your identity number. Your account page shows only its last 4 digits."
+            }
+            Self::BirthdatePurpose => "This service asks for your date of birth.",
+            Self::Digits11Hint => "11 digits",
+            Self::Digits9Hint => "9 digits",
+            Self::NinoHint => "Like QQ 12 34 56 C",
+            Self::FinHint => "7 letters and digits",
             Self::TooYoung => "You don't meet the age requirement for this service.",
             Self::FactsTaken => "You can't continue with these details. Contact support for help.",
             Self::NationalIdSchemeLabel => "Country of your identity number",
@@ -1657,6 +1719,9 @@ pub struct Message {
     /// own language (TN-162).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub args: std::collections::BTreeMap<String, String>,
+    /// The input the message is about, which the page marks and focuses (TN-169).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<crate::domain::node::FieldName>,
 }
 
 impl Message {
@@ -1669,6 +1734,7 @@ impl Message {
             severity: Severity::Error,
             retry_after_s: None,
             args: std::collections::BTreeMap::new(),
+            field: None,
         }
     }
 
@@ -1681,7 +1747,15 @@ impl Message {
             severity: Severity::Info,
             retry_after_s: None,
             args: std::collections::BTreeMap::new(),
+            field: None,
         }
+    }
+
+    /// About one input of the step (TN-169).
+    #[must_use]
+    pub const fn on(mut self, field: crate::domain::node::FieldName) -> Self {
+        self.field = Some(field);
+        self
     }
 
     /// With a retry hint.

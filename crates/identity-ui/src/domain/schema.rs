@@ -139,6 +139,8 @@ fn node() -> Value {
             "label": r("Text"),
             "value": { "type": "string" },
             "read_only": { "type": "boolean" },
+            "hint": r("Text"),
+            "numeric": { "type": "boolean" },
         }),
         &[
             "name",
@@ -293,6 +295,7 @@ fn components() -> Value {
                 "severity": string_enum(&["info", "error"]),
                 "retry_after_s": { "type": "integer", "minimum": 0 },
                 "args": { "type": "object", "additionalProperties": { "type": "string" } },
+                "field": r("FieldName"),
             }),
             &["id", "text", "severity"],
         ),

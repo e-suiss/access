@@ -33,7 +33,12 @@
       "label": {
         "id": "label.national_id_tr_tckn",
         "text": "Turkish identity number (T.C. Kimlik No)"
-      }
+      },
+      "hint": {
+        "id": "hint.digits_11",
+        "text": "11 digits"
+      },
+      "numeric": true
     },
     {
       "type": "input",
@@ -69,6 +74,11 @@
     {
       "id": "profile.complete",
       "text": "Finish setting up your account to continue.",
+      "severity": "info"
+    },
+    {
+      "id": "profile.national_id_purpose",
+      "text": "This service asks for your identity number. Your account page shows only its last 4 digits.",
       "severity": "info"
     }
   ]

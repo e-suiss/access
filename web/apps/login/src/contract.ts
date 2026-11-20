@@ -74,6 +74,8 @@ export interface Message extends Text {
   readonly retry_after_s?: number;
   /** TN-162: the values of the text's placeholders. */
   readonly args?: Readonly<Record<string, string>>;
+  /** TN-169: the input the message is about. */
+  readonly field?: FieldName;
 }
 
 export interface RequirementStatus {
@@ -110,6 +112,10 @@ export interface InputNode {
   readonly label: Text;
   readonly value?: string;
   readonly read_only?: boolean;
+  /** TN-169: a line under the field that says what it takes. */
+  readonly hint?: Text;
+  /** TN-169: digits only. */
+  readonly numeric?: boolean;
 }
 
 export interface SubmitNode {
@@ -298,6 +304,7 @@ const MessageS: v.GenericSchema<unknown, Message> = v.object({
   severity: v.picklist(["info", "error"]),
   retry_after_s: v.exactOptional(v.number()),
   args: v.exactOptional(v.record(v.string(), v.string())),
+  field: v.exactOptional(v.picklist(FIELD_NAMES)),
 });
 const RequirementS: v.GenericSchema<unknown, RequirementStatus> = v.object({
   requirement: v.picklist(["identifier", "first_factor", "second_factor", "profile"]),
@@ -318,6 +325,8 @@ const InputS: v.GenericSchema<unknown, InputNode> = v.object({
   label: TextS,
   value: v.exactOptional(v.string()),
   read_only: v.exactOptional(v.boolean()),
+  hint: v.exactOptional(TextS),
+  numeric: v.exactOptional(v.boolean()),
 });
 const SubmitS: v.GenericSchema<unknown, SubmitNode> = v.object({
   type: v.literal("submit"),
