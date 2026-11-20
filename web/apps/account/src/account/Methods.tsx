@@ -18,6 +18,7 @@ import { Button, buttonVariants } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
+import { PasswordInput } from "@access/ui/components/password-input";
 import { QrCode } from "@access/ui/components/qr-code";
 import { cn } from "@access/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -365,16 +366,20 @@ function Password(props: {
             <FieldLabel htmlFor="new-password">
               {props.pin ? t("label.new_pin") : t("label.new_password")}
             </FieldLabel>
-            <Input
+            <PasswordInput
               id="new-password"
               ref={field}
-              size="md"
               name="new_password"
-              type="password"
               autoComplete="new-password"
               maxLength={props.pin ? 6 : 128}
               {...(props.pin ? { inputMode: "numeric" as const } : {})}
               required
+              compact
+              words={{
+                show: t(props.pin ? "methods.show_pin" : "methods.show_password"),
+                hide: t(props.pin ? "methods.hide_pin" : "methods.hide_password"),
+                capsLock: t("methods.caps_lock"),
+              }}
             />
           </Field>
           <Actions>

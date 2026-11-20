@@ -26,9 +26,9 @@ test("identifier first, then password and MFA, then back to the client", async (
   await identifier.fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   await page.getByLabel("Code from your authenticator app").fill(totp);
@@ -47,7 +47,7 @@ test("a refused first factor shows one neutral message and the same screen for e
     await page.goto("/");
     await page.getByLabel("Email or username").fill(who);
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByLabel("Password").fill("not it");
+    await page.getByLabel("Password", { exact: true }).fill("not it");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("alert")).toHaveText(neutral);
     return (await page.locator("main").ariaSnapshot()).replaceAll(who, "<identifier>");
@@ -66,7 +66,7 @@ test("only the fields the step offered are submitted", async ({ page, mock }) =>
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Email or username")).toHaveValue("ada@example.org");
-  await page.getByLabel("Password").fill("not it");
+  await page.getByLabel("Password", { exact: true }).fill("not it");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText(neutral);
   expect(mock.submissions[1]).toMatchObject({ method: "password", fields: { password: "not it" } });
@@ -133,7 +133,7 @@ test("a completed sign-in returns to the authorization request that sent it, and
     await page.goto(`/login?return_to=${encodeURIComponent(returnTo)}`);
     await page.getByLabel("Email or username").fill("ada@example.org");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByLabel("Password").fill(password);
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByLabel("Code from your authenticator app").fill(totp);
     await page.getByRole("button", { name: "Verify" }).click();
@@ -160,7 +160,7 @@ test("a completed sign-in continues the SAML or WS-Federation flow that sent it,
     await page.goto(`/login?return_to=${encodeURIComponent(returnTo)}`);
     await page.getByLabel("Email or username").fill("ada@example.org");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByLabel("Password").fill(password);
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByLabel("Code from your authenticator app").fill(totp);
     await page.getByRole("button", { name: "Verify" }).click();
@@ -212,7 +212,7 @@ test("a sign-in that expires while typing starts again with the identifier kept"
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "The page was open for a long time, so we started the sign-in again.",
@@ -237,11 +237,62 @@ test("an expired sign-in for an app goes back through the app's request", async 
   await page.goto(`/login?return_to=${encodeURIComponent(authorize)}`);
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "The page was open for a long time, so we started the sign-in again.",
   );
   expect(visited).toEqual(["/authorize"]);
   await expect(page.getByLabel("Email or username")).toHaveValue("ada@example.org");
+});
+
+// TN-165
+test("the password can be shown, hides again when sent, and a refused one is cleared and focused", async ({
+  page,
+  mock,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  const field = page.getByLabel("Password", { exact: true });
+  await expect(field).toHaveAttribute("type", "password");
+  await field.fill("not it");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(field).toHaveAttribute("type", "text");
+  await expect(page.getByRole("button", { name: "Hide password" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(neutral);
+  await expect(field).toHaveAttribute("type", "password");
+  await expect(field).toHaveValue("");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(field).toHaveAccessibleDescription(neutral);
+  expect(mock.submissions.at(-1)?.fields.password).toBe("not it");
+
+  await field.fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByLabel("Code from your authenticator app")).toBeVisible();
+});
+
+// TN-165
+test("a password field says when Caps Lock is on", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  const field = page.getByLabel("Password", { exact: true });
+  await field.focus();
+  const press = (caps: boolean) =>
+    field.evaluate((el, on) => {
+      el.dispatchEvent(
+        new KeyboardEvent("keyup", { key: "a", bubbles: true, modifierCapsLock: on }),
+      );
+    }, caps);
+  await press(true);
+  await expect(page.getByText("Caps Lock is on.")).toBeVisible();
+  await expect(field).toHaveAccessibleDescription("Caps Lock is on.");
+  await press(false);
+  await expect(page.getByText("Caps Lock is on.")).toHaveCount(0);
 });

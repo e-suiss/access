@@ -56,7 +56,7 @@ test("loads nothing from a third party and shows no tracking, CAPTCHA or consent
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const mfa = await page.locator("main").innerText();
   await page.getByLabel("Code from your authenticator app").fill(totp);

@@ -63,7 +63,7 @@ for (const locale of ["en", "ar-XB"]) {
 
     await page.getByLabel("Email or username").fill("ada@example.org");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByLabel("Password").fill("not it");
+    await page.getByLabel("Password", { exact: true }).fill("not it");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("alert")).not.toBeEmpty();
     await clean(page);

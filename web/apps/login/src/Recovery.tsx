@@ -5,13 +5,14 @@
 import { Button } from "@access/ui/components/button";
 import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { PasswordInput } from "@access/ui/components/password-input";
 import { RadioGroup, RadioGroupItem } from "@access/ui/components/radio-group";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 
 import { LOGIN } from "./base.js";
 import { getJson, type JsonAnswer, postJson } from "./http.js";
-import { t, when } from "./i18n.js";
+import { passwordWords, t, when } from "./i18n.js";
 import { link, note, Panel, pressable, primary, problem, quiet, stack, Title } from "./Layout.js";
 
 // OP-159 m.46 (f)
@@ -68,19 +69,33 @@ function Field(props: {
       <FieldLabel htmlFor={id} className="text-sm">
         {props.label}
       </FieldLabel>
-      <Input
-        id={id}
-        name={props.name}
-        type={props.type ?? "text"}
-        autoComplete={props.autoComplete}
-        required
-        maxLength={props.maxLength}
-        spellCheck={false}
-        autoCapitalize="none"
-        dir="auto"
-        {...(props.numeric === true ? { inputMode: "numeric" as const } : {})}
-        {...(props.code === true ? { className: "font-mono tracking-widest" } : {})}
-      />
+      {props.type === "password" ? (
+        <PasswordInput
+          id={id}
+          name={props.name}
+          autoComplete={props.autoComplete}
+          required
+          maxLength={props.maxLength}
+          spellCheck={false}
+          autoCapitalize="none"
+          dir="auto"
+          words={passwordWords()}
+        />
+      ) : (
+        <Input
+          id={id}
+          name={props.name}
+          type="text"
+          autoComplete={props.autoComplete}
+          required
+          maxLength={props.maxLength}
+          spellCheck={false}
+          autoCapitalize="none"
+          dir="auto"
+          {...(props.numeric === true ? { inputMode: "numeric" as const } : {})}
+          {...(props.code === true ? { className: "font-mono tracking-widest" } : {})}
+        />
+      )}
     </FieldBox>
   );
 }

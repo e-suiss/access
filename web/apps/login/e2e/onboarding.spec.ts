@@ -241,7 +241,7 @@ test("a second step the account has none of is explained", async ({ page, mock }
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId("second-step-missing")).toContainText(
     "Your account doesn't have one yet",
@@ -257,7 +257,7 @@ test("a required second step is set up during the sign-in", async ({ page, mock 
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId("totp-secret")).toHaveText("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
   // TN-155
@@ -314,7 +314,7 @@ test("a sign-in that lacks a name or a proven address asks for them first", asyn
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Finish setting up your account to continue.")).toBeVisible();
   await expect(page.getByLabel("Email", { exact: true })).toHaveValue("ada@example.org");
@@ -346,7 +346,7 @@ test("a sign-in that lacks a national identity number and a birth date asks for 
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByLabel("Turkish identity number (T.C. Kimlik No)")).toBeVisible();
   await expect(page.getByLabel("Date of birth")).toHaveAttribute("type", "date");
@@ -362,7 +362,7 @@ test("several identity number schemes ask which country the number is of", async
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const country = page.getByLabel("Country of your identity number");
   await expect(country).toBeVisible();
@@ -380,7 +380,7 @@ test("the profile step asks for the documents to be accepted", async ({ page, mo
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const terms = page.getByRole("link", { name: "Terms of Service" });
   await expect(terms).toHaveAttribute("href", "https://example.com/terms");
@@ -408,7 +408,7 @@ test("the second step shows one way at a time and the code field only after the 
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("correct horse battery staple");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
   await expect(page.getByText("You're signing in to ada@example.org.")).toBeVisible();

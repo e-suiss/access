@@ -29,11 +29,11 @@ test("a checked option goes with every submission of its step, an unchecked one 
   await page.getByRole("checkbox", { name: "Keep me signed in on this device" }).check();
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("checkbox", { name: "Don't ask for a second step on this device for 30 days" }),
   ).not.toBeChecked();
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByLabel("Code from your authenticator app").fill(totp);
   await page.getByRole("button", { name: "Verify" }).click();
@@ -459,7 +459,7 @@ test("a path environment keeps its prefix on every call and link", async ({ page
   );
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect(mock.requests.at(-1)).toBe("POST /env/acme/v1/login/flows/lgf_example");
 });
 
@@ -479,7 +479,7 @@ test("the environment's text overrides are drawn, and a protected key keeps Acce
   await page.goto("/");
   await page.getByLabel("Your work email").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill("not it");
+  await page.getByLabel("Password", { exact: true }).fill("not it");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("We couldn't sign you in with these details.");
 });

@@ -13,7 +13,7 @@ test("a push shows the number to type and signs in once the approver answers", a
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "Send a request to my approver" }).click();
   await expect(page.getByTestId("push-number")).toHaveText("42");
@@ -32,7 +32,7 @@ test("a push answered with this wasn't me stops the sign-in", async ({ page, moc
   await page.goto("/");
   await page.getByLabel("Email or username").fill("ada@example.org");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "Send a request to my approver" }).click();
   await expect(page.getByRole("alert")).toContainText("We stopped this sign-in");

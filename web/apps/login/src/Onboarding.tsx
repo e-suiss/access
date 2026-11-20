@@ -7,13 +7,14 @@
 import { Button } from "@access/ui/components/button";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
+import { PasswordInput } from "@access/ui/components/password-input";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import type * as v from "valibot";
 
 import { ENVIRONMENT, LOGIN } from "./base.js";
 import { makeKey } from "./founder.js";
 import { Empty, getJson, type JsonAnswer, postJson } from "./http.js";
-import { t } from "./i18n.js";
+import { passwordWords, t } from "./i18n.js";
 import { link, note, outcome, Panel, primary, problem, stack, Title } from "./Layout.js";
 
 /** What an invitation is, as its page needs it. */
@@ -245,13 +246,13 @@ export function Onboarding<S extends v.GenericSchema>({ kind }: { readonly kind:
               <FieldLabel htmlFor="onboarding-password" className="text-sm">
                 {t("label.new_password")}
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="onboarding-password"
                 name="new_password"
-                type="password"
                 autoComplete="new-password"
                 required
                 maxLength={256}
+                words={passwordWords()}
               />
             </Field>
             <p className={note}>{t("onboarding.key_note")}</p>

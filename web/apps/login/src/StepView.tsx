@@ -3,6 +3,7 @@ import { Checkbox } from "@access/ui/components/checkbox";
 import { Field as FieldBox, FieldLabel, FieldLegend, FieldSet } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@access/ui/components/native-select";
+import { PasswordInput } from "@access/ui/components/password-input";
 import { QrCode } from "@access/ui/components/qr-code";
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 import * as v from "valibot";
@@ -27,7 +28,7 @@ import type {
   UiNode,
 } from "./contract.js";
 import { Empty, follow, postJson, returnTo } from "./http.js";
-import { t, text } from "./i18n.js";
+import { passwordWords, t, text } from "./i18n.js";
 import {
   link,
   note,
@@ -117,9 +118,30 @@ function methodsInOrder(nodes: readonly UiNode[]): Method[] {
 }
 
 // TN-107: paste and autofill are never blocked; one pasteable field per code
-function Field({ node }: { readonly node: InputNode }) {
+function Field({ node, invalid }: { readonly node: InputNode; readonly invalid: boolean }) {
   if (node.kind === "hidden") return null;
   const id = `field-${node.name}-${node.method}`;
+  if (node.kind === "password") {
+    return (
+      <FieldBox className="gap-2">
+        <FieldLabel htmlFor={id} className="text-sm">
+          {text(node.label)}
+        </FieldLabel>
+        <PasswordInput
+          id={id}
+          name={node.name}
+          autoComplete={node.autocomplete}
+          required={node.required}
+          maxLength={node.max_length}
+          spellCheck={false}
+          autoCapitalize="none"
+          dir="auto"
+          words={passwordWords()}
+          {...(invalid ? { "aria-invalid": true, "aria-describedby": ERRORS_ID } : {})}
+        />
+      </FieldBox>
+    );
+  }
   return (
     <FieldBox className="gap-2">
       <FieldLabel htmlFor={id} className="text-sm">
@@ -187,8 +209,12 @@ function Documents({ node }: { readonly node: DocumentsNode }) {
   );
 }
 
+/** TN-165: the step's error list, which a refused password field points at. */
+const ERRORS_ID = "step-errors";
+
 function MethodForm(props: {
   readonly method: Method;
+  readonly invalid: boolean;
   readonly nodes: readonly UiNode[];
   readonly busy: boolean;
   readonly options: Fields;
@@ -229,7 +255,7 @@ function MethodForm(props: {
         ) : node.type === "documents" ? (
           <Documents key={node.name} node={node} />
         ) : (
-          <Field key={node.name} node={node} />
+          <Field key={node.name} node={node} invalid={props.invalid} />
         ),
       )}
       {buttons.map((node) => (
@@ -427,6 +453,18 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     title.current?.focus();
   }, [ui.flow, ui.step]);
 
+  // TN-165: a refused password is cleared and its field takes the focus again
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!ui.messages.some((m) => m.severity === "error")) return;
+    const field = section.current?.querySelector<HTMLInputElement>(
+      'input[name="password"]:not([readonly])',
+    );
+    if (field === null || field === undefined) return;
+    field.value = "";
+    field.focus();
+  }, [ui]);
+
   // TN-97
   useEffect(() => {
     const signals = ui.nodes.flatMap((n) => (n.type === "passkey_signal" ? [n.signal] : []));
@@ -538,6 +576,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
 
   return (
     <section
+      ref={section}
       aria-labelledby="step-heading"
       data-step={ui.step}
       data-kind={ui.kind ?? "login"}
@@ -546,7 +585,12 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       <Title id="step-heading" ref={title}>
         {heading(ui)}
       </Title>
-      <div role="alert" className="flex flex-col gap-2 empty:-mb-4" data-testid="errors">
+      <div
+        id={ERRORS_ID}
+        role="alert"
+        className="flex flex-col gap-2 empty:-mb-4"
+        data-testid="errors"
+      >
         {errors.map((m) => (
           <p key={m.id} className={problem} data-message-id={m.id}>
             {text(m)}
@@ -602,6 +646,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           <MethodForm
             key={method}
             method={method}
+            invalid={errors.length > 0}
             nodes={ui.nodes}
             busy={busy}
             options={options}
@@ -647,6 +692,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           <MethodForm
             key={method}
             method={method}
+            invalid={false}
             nodes={ui.nodes}
             busy={busy}
             options={{}}

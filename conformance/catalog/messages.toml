@@ -2123,6 +2123,41 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "methods-show_password"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-hide_password"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-show_pin"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-hide_pin"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-caps_lock"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "methods-password_none"
 surface = "account"
 class = "label"
@@ -5507,6 +5542,27 @@ protected = false
 
 [[message]]
 key = "passkey-unsupported"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-show_password"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-hide_password"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-caps_lock"
 surface = "login"
 class = "info"
 owner = "identity_plane"

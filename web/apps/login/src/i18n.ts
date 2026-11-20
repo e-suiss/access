@@ -96,6 +96,15 @@ export function t(id: string, args?: Readonly<Record<string, string>>): string {
   return catalogs.format(keyOf(id), locale, environment, args) ?? id;
 }
 
+/** TN-165: the words every password field speaks. */
+export function passwordWords() {
+  return {
+    show: t("action.show_password"),
+    hide: t("action.hide_password"),
+    capsLock: t("page.caps_lock"),
+  };
+}
+
 /** The text of `id` when a catalog has it. */
 export function maybe(id: string, args?: Readonly<Record<string, string>>): string | undefined {
   return catalogs.format(keyOf(id), locale, environment, args);
