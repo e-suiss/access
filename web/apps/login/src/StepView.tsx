@@ -69,6 +69,7 @@ const htmlType = {
   code: "text",
   tel: "tel",
   date: "date",
+  email: "text",
 } as const;
 
 /** Codes that are digits only get the numeric keyboard; recovery codes are not (TN-107). */
@@ -190,7 +191,9 @@ function Field({
         defaultValue={node.value}
         {...(numeric.has(node.name) || node.numeric === true
           ? { inputMode: "numeric" as const }
-          : {})}
+          : node.kind === "email"
+            ? { inputMode: "email" as const }
+            : {})}
         spellCheck={false}
         autoCapitalize="none"
         dir="auto"
@@ -577,6 +580,12 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   useEffect(() => {
     if (first.current) {
       first.current = false;
+      // TN-170: a sign-in page that opens on the identifier puts the caret in its empty field
+      if (ui.step !== "identifier") return;
+      const field = document.querySelector<HTMLInputElement>(
+        'input[name="identifier"]:not([readonly])',
+      );
+      if (field !== null && field.value === "") field.focus();
       return;
     }
     title.current?.focus();

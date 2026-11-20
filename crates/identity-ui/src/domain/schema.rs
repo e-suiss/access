@@ -132,7 +132,7 @@ fn node() -> Value {
         &json!({
             "name": r("FieldName"),
             "method": r("Method"),
-            "kind": string_enum(&["text", "password", "code", "hidden", "tel", "date"]),
+            "kind": string_enum(&["text", "password", "code", "hidden", "tel", "date", "email"]),
             "autocomplete": string_enum(&["username webauthn", "username", "current-password", "one-time-code", "off", "new-password", "email", "name", "tel", "bday"]),
             "required": { "type": "boolean" },
             "max_length": { "type": "integer", "minimum": 1 },

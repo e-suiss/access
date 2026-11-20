@@ -436,16 +436,14 @@ fn strict(mut ui: Ui) -> Ui {
     ui
 }
 
-/// The identifier step as the environment's enumeration mode draws it.
-/// TN-156: the identifier field names what the environment signs in with; where only phone
-/// numbers do, it is a phone field.
-fn phone_labels(kit: &EnvironmentKit, ui: &mut Ui) {
+/// TN-156, TN-170: the identifier field names exactly what the environment signs in with; where
+/// only phone numbers do it is a phone field, where only e-mail addresses do it opens the e-mail
+/// keyboard.
+fn identifier_labels(kit: &EnvironmentKit, ui: &mut Ui) {
     use crate::domain::node::{InputKind, Node};
-    if !kit.auth.phone {
+    let Some((text, drawn, _)) = identifier_kind(kit) else {
         return;
-    }
-    let phone_only =
-        !kit.signin.methods.contains("email") && !kit.signin.methods.contains("username");
+    };
     for node in &mut ui.nodes {
         if let Node::Input {
             name: FieldName::Identifier,
@@ -453,15 +451,45 @@ fn phone_labels(kit: &EnvironmentKit, ui: &mut Ui) {
             label,
             ..
         } = node
+            && *kind != InputKind::Hidden
         {
-            if phone_only {
-                *kind = InputKind::Tel;
-                *label = TextId::PhoneLabel.into();
-            } else {
-                *label = TextId::IdentifierPhoneLabel.into();
-            }
+            *kind = drawn;
+            *label = text.into();
         }
     }
+}
+
+/// What the environment's identifier is (TN-156, TN-170): its label, how its field is drawn, and
+/// its name for the pages that come before a flow; `None` when no identifier method is on.
+pub(crate) fn identifier_kind(
+    kit: &EnvironmentKit,
+) -> Option<(TextId, crate::domain::node::InputKind, &'static str)> {
+    use crate::domain::node::InputKind;
+    let email = kit.signin.methods.contains("email");
+    let username = kit.signin.methods.contains("username");
+    let phone = kit.auth.phone;
+    Some(match (email, username, phone) {
+        (true, false, false) => (TextId::EmailLabel, InputKind::Email, "email"),
+        (false, true, false) => (TextId::UsernameLabel, InputKind::Text, "username"),
+        (true, true, false) => (
+            TextId::IdentifierLabel,
+            InputKind::Text,
+            "email_or_username",
+        ),
+        (false, false, true) => (TextId::PhoneLabel, InputKind::Tel, "phone"),
+        (true, false, true) => (
+            TextId::IdentifierPhoneLabel,
+            InputKind::Text,
+            "email_or_phone",
+        ),
+        (false, true, true) => (
+            TextId::UsernamePhoneLabel,
+            InputKind::Text,
+            "username_or_phone",
+        ),
+        (true, true, true) => (TextId::AnyIdentifierLabel, InputKind::Text, "any"),
+        (false, false, false) => return None,
+    })
 }
 
 fn first_step(kit: &EnvironmentKit, ui: Ui) -> Ui {
@@ -692,7 +720,7 @@ where
             return reply;
         }
         **ui = with_options(kit, (**ui).clone());
-        phone_labels(kit, ui);
+        identifier_labels(kit, ui);
         // OP-159 m.48 (c)
         if ui.step != Step::Identifier || !kit.signin.social {
             return reply;

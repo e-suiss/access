@@ -5914,6 +5914,30 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "label-username"
+text_id = "label.username"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-username_phone"
+text_id = "label.username_phone"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-identifier_any"
+text_id = "label.identifier_any"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "label-sent_code"
 text_id = "label.sent_code"
 surface = "login"

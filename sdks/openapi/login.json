@@ -316,7 +316,8 @@
                   "code",
                   "hidden",
                   "tel",
-                  "date"
+                  "date",
+                  "email"
                 ]
               },
               "autocomplete": {
@@ -786,6 +787,9 @@
           "label.pin",
           "registration.secret_refused",
           "label.identifier_phone",
+          "label.username",
+          "label.username_phone",
+          "label.identifier_any",
           "profile.address_hint",
           "action.change_address",
           "label.totp_setup",

@@ -141,6 +141,15 @@ pub enum TextId {
     /// The identifier field where e-mail addresses and phone numbers sign in (TN-156).
     #[serde(rename = "label.identifier_phone")]
     IdentifierPhoneLabel,
+    /// The identifier field where only usernames sign in (TN-170).
+    #[serde(rename = "label.username")]
+    UsernameLabel,
+    /// The identifier field where usernames and phone numbers sign in (TN-170).
+    #[serde(rename = "label.username_phone")]
+    UsernamePhoneLabel,
+    /// The identifier field where e-mail addresses, usernames and phone numbers sign in (TN-170).
+    #[serde(rename = "label.identifier_any")]
+    AnyIdentifierLabel,
     /// The environment requires a second step and the account has none yet: set one up now. Only
     /// after the first factor (OP-159 m.48 (a)).
     #[serde(rename = "second_factor.enroll")]
@@ -710,7 +719,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 231] = [
+    pub const ALL: [Self; 234] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -758,6 +767,9 @@ impl TextId {
         Self::PinLabel,
         Self::SecretRefused,
         Self::IdentifierPhoneLabel,
+        Self::UsernameLabel,
+        Self::UsernamePhoneLabel,
+        Self::AnyIdentifierLabel,
         Self::ProfileAddressHint,
         Self::ChangeAddress,
         Self::TotpSetup,
@@ -996,6 +1008,9 @@ impl TextId {
             Self::PinLabel => "label.pin",
             Self::SecretRefused => "registration.secret_refused",
             Self::IdentifierPhoneLabel => "label.identifier_phone",
+            Self::UsernameLabel => "label.username",
+            Self::UsernamePhoneLabel => "label.username_phone",
+            Self::AnyIdentifierLabel => "label.identifier_any",
             Self::ProfileAddressHint => "profile.address_hint",
             Self::ChangeAddress => "action.change_address",
             Self::TotpSetup => "label.totp_setup",
@@ -1248,6 +1263,9 @@ impl TextId {
                 "Choose another one. It is easy to guess, too short, or appeared in a data breach."
             }
             Self::IdentifierPhoneLabel => "Email or phone number",
+            Self::UsernameLabel => "Username",
+            Self::UsernamePhoneLabel => "Username or phone number",
+            Self::AnyIdentifierLabel => "Email, username or phone number",
             Self::ProfileAddressHint => {
                 "If another account already uses this address, sign in to that account and link this sign-in from its settings."
             }

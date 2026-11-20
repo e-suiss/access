@@ -682,7 +682,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/v1/login/branding",
         "getBranding",
-        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `primary`) and, for a primary environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)); and `sign_in`: what the environment signs in with, for the pages that come before a sign-in flow, `identifier` (`email` | `email_or_phone` | `phone`), `secret` (`password` | `pin`) and `email_code`, whether an e-mailed code or link opens a sign-in (TN-168).",
+        "The environment's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)), and `environment`: its `kind` (`standard` | `primary`) and, for a primary environment, the tenant's `tenant_name`, which the page titles as the tenant's administrator sign-in (TN-138, OP-159 m.47 (b)); and `sign_in`: what the environment signs in with, for the pages that come before a sign-in flow, `identifier` (`email` | `username` | `email_or_username` | `phone` | `email_or_phone` | `username_or_phone` | `any`, TN-170), `secret` (`password` | `pin`) and `email_code`, whether an e-mailed code or link opens a sign-in (TN-168).",
     ),
     // OP-159 m.47 (c), TN-141
     served(

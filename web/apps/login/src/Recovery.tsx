@@ -47,9 +47,13 @@ function handedIdentifier(): string {
 }
 
 const identifierLabels = {
-  email: "label.identifier",
-  email_or_phone: "label.identifier_phone",
+  email: "label.email",
+  username: "label.username",
+  email_or_username: "label.identifier",
   phone: "label.phone",
+  email_or_phone: "label.identifier_phone",
+  username_or_phone: "label.username_phone",
+  any: "label.identifier_any",
 } as const;
 
 type State =
@@ -84,6 +88,7 @@ function Field(props: {
   readonly type?: "text" | "password" | "tel";
   readonly autoComplete: string;
   readonly numeric?: boolean;
+  readonly email?: boolean;
   readonly code?: boolean;
   readonly maxLength: number;
   readonly defaultValue?: string;
@@ -135,6 +140,7 @@ function Field(props: {
           autoCapitalize="none"
           dir="auto"
           {...(props.numeric === true ? { inputMode: "numeric" as const } : {})}
+          {...(props.email === true ? { inputMode: "email" as const } : {})}
           {...(props.code === true ? { className: "font-mono tracking-widest" } : {})}
         />
       )}
@@ -254,8 +260,9 @@ export function Recovery() {
           <form onSubmit={start} className={stack}>
             <Field
               name="identifier"
-              label={t(identifierLabels[signIn?.identifier ?? "email"])}
+              label={t(identifierLabels[signIn?.identifier ?? "email_or_username"])}
               {...(signIn?.identifier === "phone" ? { type: "tel" as const } : {})}
+              email={signIn?.identifier === "email"}
               autoComplete="username"
               maxLength={320}
               defaultValue={handed}

@@ -6395,6 +6395,51 @@ async fn a_recovery_in_a_pin_environment_binds_a_pin_and_the_branding_says_so() 
     );
 }
 
+// TN-170, TN-156
+#[tokio::test]
+async fn the_identifier_field_names_exactly_what_the_environment_signs_in_with() {
+    let cases: [(&[&str], &str, &str, &str); 4] = [
+        (&["email", "passkey"], "label.email", "email", "email"),
+        (&["username"], "label.username", "text", "username"),
+        (
+            &["email", "username"],
+            "label.identifier",
+            "text",
+            "email_or_username",
+        ),
+        (
+            &["email", "username", "phone"],
+            "label.identifier_any",
+            "text",
+            "any",
+        ),
+    ];
+    for (i, (methods, label, kind, named)) in cases.into_iter().enumerate() {
+        let signin = EnvironmentSignin {
+            methods: methods.iter().map(|m| String::from(*m)).collect(),
+            default_country: access_identity_account::domain::phone::country("TR"),
+            ..EnvironmentSignin::default()
+        };
+        let auth = signin.apply(AuthPolicy::DEFAULT);
+        let seed = 0xa0 + u8::try_from(i).unwrap();
+        let e = env_full(seed, &format!("tn-170-{i}"), auth, false, signin).await;
+        let mut b = e.browser("id");
+        let first = b.start().await;
+        let field = first.json()["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["name"] == "identifier")
+            .cloned()
+            .unwrap();
+        assert_eq!(field["label"]["id"], label, "{methods:?}");
+        assert_eq!(field["kind"], kind, "{methods:?}");
+        assert_eq!(field["autocomplete"], "username webauthn", "{methods:?}");
+        let brand = b.get("/v1/login/branding").await.json();
+        assert_eq!(brand["sign_in"]["identifier"], named, "{methods:?}");
+    }
+}
+
 // TN-157 (8)
 #[tokio::test]
 async fn ten_wrong_pins_in_a_row_lock_the_number() {

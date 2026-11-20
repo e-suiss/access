@@ -23,7 +23,15 @@ const BrandingData = v.looseObject({
   // TN-168
   sign_in: v.exactOptional(
     v.looseObject({
-      identifier: v.picklist(["email", "email_or_phone", "phone"]),
+      identifier: v.picklist([
+        "email",
+        "username",
+        "email_or_username",
+        "phone",
+        "email_or_phone",
+        "username_or_phone",
+        "any",
+      ]),
       secret: v.picklist(["password", "pin"]),
       email_code: v.boolean(),
     }),

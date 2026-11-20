@@ -268,9 +268,18 @@ export class LoginMock {
     return this.reply(route, { status: 201, ui: example("identifier") });
   }
 
+  /** TN-170: how the identifier field is drawn, when a test sets it. */
+  identifierField: { kind: "text" | "email" | "tel"; label: { id: string; text: string } } | null =
+    null;
+
   private identifierStep(): LoginUi {
     const ui = example("identifier");
-    return { ...ui, nodes: [...ui.nodes, ...this.identifierExtras] };
+    const field = this.identifierField;
+    const nodes = ui.nodes.map(
+      (n): UiNode =>
+        field !== null && n.type === "input" && n.name === "identifier" ? { ...n, ...field } : n,
+    );
+    return { ...ui, nodes: [...nodes, ...this.identifierExtras] };
   }
 
   private async handle(route: Route): Promise<void> {

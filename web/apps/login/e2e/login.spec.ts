@@ -296,3 +296,22 @@ test("a password field says when Caps Lock is on", async ({ page }) => {
   await press(false);
   await expect(page.getByText("Caps Lock is on.")).toHaveCount(0);
 });
+
+// TN-170: the sign-in page opens with the caret in the identifier field, and an e-mail-only
+// environment names it "Email" and opens the e-mail keyboard
+test("the identifier field takes the caret on load and says exactly what signs in", async ({
+  page,
+  mock,
+}) => {
+  mock.identifierField = { kind: "email", label: { id: "label.email", text: "Email" } };
+  await page.goto("/");
+  const field = page.getByLabel("Email", { exact: true });
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute("inputmode", "email");
+  await expect(field).toHaveAttribute("type", "text");
+  await expect(field).toHaveAttribute("autocomplete", "username webauthn");
+  await field.fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+});

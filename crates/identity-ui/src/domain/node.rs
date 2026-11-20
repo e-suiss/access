@@ -283,6 +283,8 @@ pub enum InputKind {
     Tel,
     /// A calendar date (TN-158).
     Date,
+    /// Text typed with the e-mail keyboard (TN-170).
+    Email,
 }
 
 /// The HTML `autocomplete` token list of an input.

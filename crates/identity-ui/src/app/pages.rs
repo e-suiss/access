@@ -300,21 +300,13 @@ where
         if primary && let Some(o) = environment.as_object_mut() {
             o.insert(String::from("tenant_name"), serde_json::Value::from(name));
         }
-        // TN-168
-        let phone_only = kit.auth.phone
-            && !kit.signin.methods.contains("email")
-            && !kit.signin.methods.contains("username");
-        let identifier = if !kit.auth.phone {
-            "email"
-        } else if phone_only {
-            "phone"
-        } else {
-            "email_or_phone"
-        };
+        // TN-168, TN-170
+        let identifier = crate::app::identifier_kind(&kit).map_or("email_or_username", |k| k.2);
         let sign_in = serde_json::json!({
             "identifier": identifier,
             "secret": if kit.auth.pin { "pin" } else { "password" },
-            "email_code": !phone_only && (kit.auth.email_otp || kit.auth.magic_link),
+            "email_code": kit.signin.methods.contains("email")
+                && (kit.auth.email_otp || kit.auth.magic_link),
         });
         let mut body = theme.json();
         if let Some(o) = body.as_object_mut() {
