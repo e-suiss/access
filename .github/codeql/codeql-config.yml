@@ -6,3 +6,9 @@ paths-ignore:
   - "**/benches/**"
   - fuzz
   - conformance/vectors
+# F-14: request bodies are read only with serde_json into concrete types, under the global body
+# limit and serde_json's recursion limit (`unbounded_depth` is banned in deny.toml); deserializers
+# that could rebuild other types or carry binary payloads are banned there too.
+query-filters:
+  - exclude:
+      id: rust/unsafe-deserialization

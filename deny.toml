@@ -98,6 +98,13 @@ deny = [
     { crate = "ml-dsa", reason = "CR-14: RUSTSEC-2025-0144" },
     { crate = "slh-dsa", reason = "CR-14: unaudited" },
     { crate = "pqcrypto", reason = "CR-14: PQ comes from aws-lc-rs" },
+    # F-14: serde_json into concrete types is the only deserializer of untrusted input
+    { crate = "bincode", reason = "F-14: untrusted input is read only as JSON into concrete types" },
+    { crate = "serde_pickle", reason = "F-14: untrusted input is read only as JSON into concrete types" },
+    { crate = "rmp-serde", reason = "F-14: untrusted input is read only as JSON into concrete types" },
+    { crate = "serde_yaml", reason = "F-14: untrusted input is read only as JSON into concrete types" },
+    { crate = "serde_yml", reason = "F-14: untrusted input is read only as JSON into concrete types" },
+    { crate = "serde_cbor", reason = "F-14: untrusted input is read only as JSON into concrete types" },
     { crate = "pqcrypto-mlkem", reason = "CR-14: PQ comes from aws-lc-rs" },
     { crate = "pqcrypto-mldsa", reason = "CR-14: PQ comes from aws-lc-rs" },
     { crate = "pqcrypto-kyber", reason = "CR-14: PQ comes from aws-lc-rs" },
