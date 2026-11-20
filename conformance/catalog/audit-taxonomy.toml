@@ -2440,3 +2440,36 @@ ocsf_class = 6003
 ocsf_activity = 99
 caep = ""
 webhook = false
+
+[[event]]
+event = "account.phone_change.started"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.profile_completed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 3
+caep = ""
+webhook = false
+
+[[event]]
+event = "credential.change.proved"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false

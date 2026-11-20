@@ -31,7 +31,9 @@ resource = "settings/signin-policy"
 
 [step.body]
 methods = ["passkey"]
-required_fields = ["email", "phone_number"]
+required_fields = ["email", "phone_number", "national_id", "birthdate"]
+national_id = ["tr-tckn"]
+min_age = 18
 mfa_required = true
 profile = "tr-payment"
 
