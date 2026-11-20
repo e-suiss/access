@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Answer, createFlow, getFlow, stepUp, submit } from "./api.js";
-import { follow, returnTo } from "./http.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
+import { follow, returnTo } from "./http.js";
 import { t } from "./i18n.js";
 import { note, Panel, problem } from "./Layout.js";
 import { PUSH_POLL_MS, pushGiveUpMs, pushOf, waitsForPush } from "./PushWait.js";

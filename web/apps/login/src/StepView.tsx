@@ -42,10 +42,12 @@ import {
 } from "./Layout.js";
 import { PushWait, pushOf } from "./PushWait.js";
 import {
+  askPasskey,
   conditionalCreateAvailable,
   conditionalGetAvailable,
   createPasskey,
   getPasskey,
+  passkeysSupported,
   sendSignal,
 } from "./passkey.js";
 
@@ -86,7 +88,7 @@ const smsSent = new Set<string>();
 function waysOf(nodes: readonly UiNode[]): Way[] {
   return WAYS.filter((w) =>
     w === "passkey"
-      ? nodes.some((n) => n.type === "passkey_get")
+      ? passkeysSupported() && nodes.some((n) => n.type === "passkey_get")
       : nodes.some((n) => n.type === "submit" && WAY_METHODS[w].includes(n.method)),
   );
 }
@@ -409,9 +411,11 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const [shown, setShown] = useState(ui);
 
   // X33, TN-36: the choices belong to the step they were offered on
+  const [passkeyFailed, setPasskeyFailed] = useState(false);
   if (shown !== ui) {
     setShown(ui);
     setOptions(initialOptions(ui.nodes));
+    setPasskeyFailed(false);
   }
 
   // TN-107: a new step is announced by moving focus to its heading
@@ -477,16 +481,14 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const signInWithPasskey = async () => {
     if (passkeyButton === undefined) return;
     conditional.current?.abort();
-    const credential = await getPasskey(
-      passkeyButton.options,
-      undefined,
-      new AbortController().signal,
-    );
-    if (credential === null) {
+    setPasskeyFailed(false);
+    const result = await askPasskey(passkeyButton.options, undefined, new AbortController().signal);
+    if (result.kind !== "credential") {
+      setPasskeyFailed(result.kind === "failed");
       setRound((r) => r + 1);
       return;
     }
-    onSubmit({ method: "passkey", fields: { passkey_credential: credential, ...options } });
+    onSubmit({ method: "passkey", fields: { passkey_credential: result.json, ...options } });
   };
 
   const registerPasskey = async () => {
@@ -511,6 +513,8 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   // TN-162: one way at a time on the second step, the others behind "Try another way"
   const second = ui.step === "second_factor";
   const ways = second ? waysOf(ui.nodes) : [];
+  const passkeyOnly =
+    second && ways.length === 0 && passkeyButton !== undefined && !passkeysSupported();
   const primary = ways.find((w) => w !== "recovery_code") ?? ways[0];
   const remembered = chosenWay.get(ui.flow);
   const way = remembered !== undefined && ways.includes(remembered) ? remembered : primary;
@@ -548,6 +552,16 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             {text(m)}
           </p>
         ))}
+        {passkeyFailed && (
+          <p className={problem} data-message-id="passkey.failed">
+            {t("passkey.failed")}
+          </p>
+        )}
+        {passkeyOnly && (
+          <p className={problem} data-message-id="passkey.unsupported">
+            {t("passkey.unsupported")}
+          </p>
+        )}
       </div>
       <div role="status" className="flex flex-col gap-2 empty:-mb-4">
         {infos.map((m) => (
@@ -594,7 +608,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             onSubmit={submit}
           />
         ))}
-      {passkeyButton !== undefined && (!second || way === "passkey") && (
+      {passkeyButton !== undefined && passkeysSupported() && (!second || way === "passkey") && (
         <Button {...other} disabled={busy} onClick={() => void signInWithPasskey()}>
           {text(passkeyButton.label)}
         </Button>

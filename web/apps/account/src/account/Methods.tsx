@@ -15,10 +15,10 @@ import {
   AlertDialogTitle,
 } from "@access/ui/components/alert-dialog";
 import { Button, buttonVariants } from "@access/ui/components/button";
-import { QrCode } from "@access/ui/components/qr-code";
 import { Field, FieldLabel } from "@access/ui/components/field";
 import { Input } from "@access/ui/components/input";
 import { ItemActions, ItemContent } from "@access/ui/components/item";
+import { QrCode } from "@access/ui/components/qr-code";
 import { cn } from "@access/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, type SyntheticEvent, useEffect, useRef, useState } from "react";

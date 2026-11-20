@@ -5499,6 +5499,20 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "passkey-failed"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "passkey-unsupported"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "page-second_step_missing"
 surface = "login"
 class = "info"

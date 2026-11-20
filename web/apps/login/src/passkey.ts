@@ -173,22 +173,56 @@ function credentialJson(credential: PublicKeyCredential): string {
   });
 }
 
-/** `navigator.credentials.get`; `null` when the user cancelled or the ceremony was aborted. */
-export async function getPasskey(
+/** TN-164: whether this browser can use passkeys at all. */
+export function passkeysSupported(): boolean {
+  return (
+    typeof window.PublicKeyCredential === "function" &&
+    typeof navigator.credentials?.get === "function"
+  );
+}
+
+/**
+ * TN-164: a passkey ceremony's end. Browsers report a dismissed prompt and a timed-out one alike
+ * (`NotAllowedError`), so both are `cancelled`; anything else is `failed`.
+ */
+export type PasskeyResult =
+  | { readonly kind: "credential"; readonly json: string }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "failed" };
+
+const CANCELLED: ReadonlySet<string> = new Set(["NotAllowedError", "AbortError"]);
+
+/** `navigator.credentials.get`, telling a cancelled ceremony from a failed one (TN-164). */
+export async function askPasskey(
   options: PasskeyOptions,
   mediation: "conditional" | undefined,
   signal: AbortSignal,
-): Promise<string | null> {
+): Promise<PasskeyResult> {
   try {
     const credential = await navigator.credentials.get({
       publicKey: await requestOptions(options),
       signal,
       ...(mediation === undefined ? {} : { mediation }),
     });
-    return credential instanceof PublicKeyCredential ? credentialJson(credential) : null;
-  } catch {
-    return null;
+    return credential instanceof PublicKeyCredential
+      ? { kind: "credential", json: credentialJson(credential) }
+      : { kind: "cancelled" };
+  } catch (e) {
+    if (signal.aborted) return { kind: "cancelled" };
+    return e instanceof DOMException && CANCELLED.has(e.name)
+      ? { kind: "cancelled" }
+      : { kind: "failed" };
   }
+}
+
+/** `navigator.credentials.get`; `null` when the user cancelled or the ceremony was aborted. */
+export async function getPasskey(
+  options: PasskeyOptions,
+  mediation: "conditional" | undefined,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const result = await askPasskey(options, mediation, signal);
+  return result.kind === "credential" ? result.json : null;
 }
 
 /** `navigator.credentials.create`; `null` when declined or unavailable. */

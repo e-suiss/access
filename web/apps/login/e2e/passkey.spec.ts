@@ -168,3 +168,53 @@ test("after sign-in sends the full accepted list and user details, then tries co
   const registered = mock.submissions.filter((s) => s.method === "passkey_register").length;
   expect(registered).toBeLessThanOrEqual(conditional);
 });
+
+// TN-164
+test("a browser without passkeys gets no passkey button, and a passkey-only second step says why", async ({
+  page,
+  mock,
+}) => {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(window, "PublicKeyCredential");
+  });
+  await page.goto("/");
+  await expect(page.getByLabel("Email or username")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toHaveCount(0);
+
+  const all = example("second-factor-all");
+  const button = example("identifier").nodes.filter((n) => n.type === "passkey_get");
+  mock.flows.set("lgf_example", {
+    ...all,
+    nodes: [...all.nodes.filter((n) => n.type !== "submit" && n.type !== "input"), ...button],
+  });
+  await page.goto("/?flow=lgf_example");
+  await expect(page.getByRole("alert")).toHaveText(
+    "This browser can't use passkeys. Open this page in another browser, or on a device that has your passkey.",
+  );
+  await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toHaveCount(0);
+});
+
+// TN-164
+test("a passkey that fails says so, and a dismissed prompt stays quiet", async ({ page, mock }) => {
+  await page.addInitScript(() => {
+    PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+    const w = window as unknown as { passkeyError: string };
+    w.passkeyError = "SecurityError";
+    navigator.credentials.get = () => Promise.reject(new DOMException("no", w.passkeyError));
+  });
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Sign in with a passkey" });
+  await button.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The passkey couldn't be used. Try again, or continue with your email.",
+  );
+
+  await page.evaluate(() => {
+    (window as unknown as { passkeyError: string }).passkeyError = "NotAllowedError";
+  });
+  await button.click();
+  await expect(page.getByRole("alert")).toHaveText("");
+  await expect(button).toBeEnabled();
+  expect(mock.submissions.filter((s) => s.method === "passkey")).toEqual([]);
+});
