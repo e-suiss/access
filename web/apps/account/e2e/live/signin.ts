@@ -1,15 +1,11 @@
-// OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, §10.2.2: the bootstrap test user signs in at
-// the environment's hosted login through its JSON steps: identifier, password and, since the environment asks
-// for a second factor once one is enrolled, a code of the authenticator app whose seed the
-// bootstrap wrote (RFC 6238: HMAC-SHA-1, six digits, 30-second steps).
+// OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, TN-183, §10.2.2: the bootstrap test user signs
+// in at the environment's hosted login through its JSON steps: identifier and password. It has no
+// second step, and the environment asks for one only once the person adds one.
 import { type APIRequestContext, expect } from "@playwright/test";
-
-import { nextStep, totp } from "./totp.js";
 
 export const ENVIRONMENT = "/env/acme";
 export const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
-const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
 async function post(
   request: APIRequestContext,
@@ -64,17 +60,5 @@ async function passwordStep(
 
 /** Signs the bootstrap test user in on `request`, whose cookie jar then holds the session. */
 export async function signIn(request: APIRequestContext, origin: string): Promise<void> {
-  const step = SEED === "" ? 0 : await nextStep();
-  let done = await passwordStep(request, origin, IDENTIFIER, PASSWORD);
-  if (done["step"] === "second_factor") {
-    expect(
-      SEED,
-      "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
-    ).not.toBe("");
-    done = await post(request, origin, `${ENVIRONMENT}${String(done["action"])}`, {
-      method: "totp",
-      fields: { totp_code: totp(SEED, step) },
-    });
-  }
-  expect(done["step"]).toBe("complete");
+  await signInWithPassword(request, origin, IDENTIFIER, PASSWORD);
 }

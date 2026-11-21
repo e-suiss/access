@@ -1725,9 +1725,10 @@ fn every_shipped_plan_is_valid() {
         // OP-149 m.26 (b), (c)
         let user = plan.test_user.as_ref().unwrap();
         assert_eq!(user.environment, "acme", "{name}");
+        // TN-183
         assert_eq!(
             user.totp.as_ref().map(|t| t.path.clone()),
-            Some(keys.join("test-user-totp")),
+            (name != "bootstrap.toml").then(|| keys.join("test-user-totp")),
             "{name}"
         );
         assert_eq!(

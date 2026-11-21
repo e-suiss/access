@@ -1,38 +1,16 @@
-// OP-153 m.3 (gg), OP-154 m.3 (e), m.15 (i), IA-5, XI-17: the console's agent registry against
-// the running local deployment, through its real BFF on the management listener. The environment has
-// the bootstrap's sample agent: the registry route is served, and like every authority read it
-// answers nothing without a session or this browser's device key, so even a signed-in cookie
-// reads no agent and the page never names it; the Agents screen is not offered to a viewer who
-// cannot exercise it, and nowhere is an agent given a person badge.
-import { expect, type Page, test } from "@playwright/test";
+// OP-153 m.3 (gg), OP-154 m.3 (e), m.15 (i), IA-5, XI-17, TN-183: the console's agent registry
+// against the running local deployment, through its real BFF on the management listener. The
+// environment has the bootstrap's sample agent: the registry route is served, and like every
+// authority read it answers nothing without a session or this browser's device key, so even the
+// Acme administrator's signed-in cookie reads no agent before this browser's key is registered and
+// the page never names it; the Agents screen is not offered to a viewer who cannot exercise it, and
+// nowhere is an agent given a person badge.
+import { expect, test } from "@playwright/test";
 
-import { nextStep, totp } from "./totp.js";
+import { NOT_READY, READY, signIn } from "./signin.js";
 
-const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
-const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
-const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 /** The sample agent's name in deploy/compose/access/bootstrap.toml. */
 const SAMPLE_AGENT = "Local sample agent";
-
-/** The console's sign-in at the environment's hosted login: identifier, password and a code of the
- * test user's authenticator app (OP-149 m.26 (b)). */
-async function signIn(page: Page): Promise<void> {
-  const start = await page.request.get("/console/api/sign-in?environment=acme", {
-    maxRedirects: 0,
-  });
-  expect(start.status()).toBe(303);
-  await page.goto(start.headers()["location"] ?? "");
-  await page.waitForURL(/\/env\/acme\/login\?/);
-  await page.getByLabel("Email or username").fill(IDENTIFIER);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  const code = page.getByLabel("Code from your authenticator app");
-  await code.waitFor();
-  await code.fill(totp(SEED, await nextStep()));
-  await code.press("Enter");
-  await page.waitForURL(/\/console\/acme(?:[/?#]|$)/);
-}
 
 test.describe("@live console agents", () => {
   test("@live the agent registry reads nothing without a session", async ({ page }) => {
@@ -56,14 +34,7 @@ test.describe("@live console agents", () => {
   test("@live a signed-in cookie without the device key reads no agent of the environment", async ({
     page,
   }) => {
-    test.skip(
-      PASSWORD === "",
-      "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password",
-    );
-    test.skip(
-      SEED === "",
-      "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
-    );
+    test.skip(!READY, NOT_READY);
     // TN-59: up to one TOTP step of waiting
     test.setTimeout(90_000);
     await signIn(page);

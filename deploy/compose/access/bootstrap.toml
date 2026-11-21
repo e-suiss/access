@@ -50,18 +50,17 @@ resource_path_prefix = "led_"
 # party, instance, passkey, allowed).
 # Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
 # against one; the bootstrap says so.
-# With `totp_seed_file` the user also has an authenticator app (RFC 6238: SHA-1, 6 digits, 30 s),
-# enrolled through the environment's own TOTP enrollment with a seed the environment draws at random; the
-# seed is written to that file in base32, owner-only, and never printed. A browser test signs in
-# with the password and a code from it. The summary says `test_user.totp` (seed_file, algorithm,
-# digits, period).
+# TN-183: the test user has no authenticator app, so it signs in with its password alone; the
+# environment asks for a second step only once the person adds one (`mfa_required` is off), and
+# the console asks for one whatever the environment's policy (TN-144). `totp_seed_file` would
+# enrol one (RFC 6238: SHA-1, 6 digits, 30 s) through the environment's own TOTP enrollment, with
+# the seed written to that file in base32, owner-only, and never printed.
 [test_user]
 environment = "acme"
 identifier = "test@acme.example"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 client_display_name = "Local test client"
 redirect_uri = "http://127.0.0.1/cb"
-totp_seed_file = "/var/lib/access/bootstrap/test-user-totp"
 
 # OP-149 m.26 (c): acme accepts unsigned `party_compromise` Claims from a local declarant Party,
 # so a product's PEP can hand one to `POST /access/v1/claims:ingest` with its PEP certificate and

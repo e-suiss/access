@@ -35,7 +35,6 @@ test.describe("@live merchants and the one-time payment", () => {
     page,
     baseURL,
   }) => {
-    // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page.request, baseURL ?? "");
     await setUpDevice(page);

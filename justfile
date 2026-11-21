@@ -412,7 +412,9 @@ start:
     export ACCESS_IMAGE="$image" ACCESS_LOCAL_TEST_PASSWORD
     docker compose -f deploy/compose/access.yaml up -d
     docker compose -f deploy/compose/access.yaml logs --no-log-prefix bootstrap
-    (umask 077; docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/test-user-totp > target/local-test-totp)
+    rm -f target/local-test-totp
+    test_seed="$(docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/test-user-totp 2>/dev/null || true)"
+    if [[ -n "$test_seed" ]]; then (umask 077; printf '%s\n' "$test_seed" > target/local-test-totp); fi
     (umask 077; docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/platform-admin-totp > target/local-platform-totp)
     (umask 077; docker compose -f deploy/compose/access.yaml run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/acme-admin-totp > target/local-acme-admin-totp)
     echo
@@ -421,7 +423,7 @@ start:
     echo "Platform:        https://access-server.local:9443/console/platform"
     echo "Acme:            https://access-server.local:9443/console/acme"
     echo "Test user:       test@acme.example in acme, password: $ACCESS_LOCAL_TEST_PASSWORD (its own account page: https://access-server:8443/env/acme/account)"
-    echo "Second factor:   just totp (the code of the test user's authenticator app; its key is in target/local-test-totp)"
+    echo "Second step:     none until the test user adds a passkey or an authenticator app on its account page (TN-183)"
     echo "Platform admin:  admin@platform.local in platform, the same password; second factor: just totp platform"
     echo "Acme admin:      admin@acme.example in acme, the same password; second factor: just totp acme-admin; it administers the Acme tenant from /console/acme"
     echo "Local CA:        docker compose -f deploy/compose/access.yaml cp access-server:/var/lib/access/certs/ca.crt ."
@@ -431,16 +433,17 @@ start:
 web-dev: wasm
     node scripts/web-dev.mjs
 
-# OP-149 m.26 (b), OP-159 m.29, m.41 (a), m.43 (c): the current code of a local authenticator app (RFC 6238, SHA-1, 6 digits, 30 s): the test user's, or with `platform` the platform admin's (in the platform environment and in acme)
-totp who="test":
+# OP-149 m.26 (b), OP-159 m.29, m.41 (a), m.43 (c), TN-183: the current code of a local authenticator app (RFC 6238, SHA-1, 6 digits, 30 s): the Acme admin's, with `platform` the platform admin's, with `test` the test user's when a plan gave it one
+totp who="acme-admin":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{who}}" in
       test) seed=target/local-test-totp ;;
       platform) seed=target/local-platform-totp ;;
       acme-admin) seed=target/local-acme-admin-totp ;;
-      *) echo "just totp [platform|acme-admin]: unknown account {{who}}" >&2; exit 2 ;;
+      *) echo "just totp [acme-admin|platform|test]: unknown account {{who}}" >&2; exit 2 ;;
     esac
+    if [[ "{{who}}" == test && ! -s "$seed" ]]; then echo "the test user has no authenticator app; it signs in with its password (TN-183)" >&2; exit 1; fi
     test -s "$seed" || { echo "no $seed: run just start" >&2; exit 1; }
     python3 -I -c 'import base64,hmac,struct,sys,time; k=base64.b32decode(sys.argv[1].strip().upper()+"="*(-len(sys.argv[1].strip())%8)); s=int(time.time())//30; h=hmac.digest(k,struct.pack(">Q",s),"sha1"); o=h[-1]&15; print("%06d (%ds left)"%((struct.unpack(">I",h[o:o+4])[0]&0x7fffffff)%1000000,30-int(time.time())%30))' "$(cat "$seed")"
 

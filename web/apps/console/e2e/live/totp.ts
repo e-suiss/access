@@ -1,5 +1,5 @@
-// OP-149 m.26 (b), §10.2.2: a code of the bootstrap test user's authenticator app, from the seed
-// the bootstrap wrote (RFC 6238: HMAC-SHA-1, six digits, 30-second steps).
+// OP-149 m.26 (b), OP-159 m.47 (i), TN-183, §10.2.2: a code of a bootstrap administrator's
+// authenticator app, from the seed the bootstrap wrote (RFC 6238: HMAC-SHA-1, six digits, 30-second steps).
 import { createHmac } from "node:crypto";
 
 const STEP_S = 30;
@@ -11,7 +11,7 @@ function base32(text: string): Buffer {
   let value = 0;
   for (const c of text.replace(/=+$/, "").toUpperCase()) {
     const v = BASE32.indexOf(c);
-    if (v < 0) throw new Error("ACCESS_LIVE_TEST_TOTP_SEED is not base32");
+    if (v < 0) throw new Error("the authenticator app seed is not base32");
     value = (value << 5) | v;
     bits += 5;
     if (bits >= 8) {

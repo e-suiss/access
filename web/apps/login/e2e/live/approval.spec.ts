@@ -71,7 +71,6 @@ test.describe("@live approval surface", () => {
       PASSWORD === "",
       "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password",
     );
-    // TN-59: up to one TOTP step of waiting
     test.setTimeout(120_000);
     await signIn(page.request, baseURL ?? "", ENVIRONMENT);
     const r = await page.goto(`${ENVIRONMENT}/v1/approve?${PUSHED ?? ""}`);

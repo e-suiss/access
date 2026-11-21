@@ -547,17 +547,12 @@ jobs:
             sleep 2
           done
           exit 1
-      # OP-149 m.26 (b): the environment asks the test user for a second factor; the browser tests answer
-      # it with a code of the authenticator app whose seed the bootstrap kept in its volume
-      - name: Test user's authenticator app
+      # TN-183: the test user has no authenticator app and signs in with its password; OP-159 m.47 (i):
+      # the Acme tenant's and the platform's administrators sign in to the console with a second
+      # factor, a code of the authenticator app whose seed the bootstrap kept in its volume
+      - name: Administrators' authenticator apps
         id: totp
         run: |
-          seed="$($COMPOSE run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/test-user-totp)"
-          echo "::add-mask::$seed"
-          test -n "$seed"
-          echo "ACCESS_LIVE_TEST_TOTP_SEED=$seed" >> "$GITHUB_ENV"
-          # OP-159 m.47 (i): the Acme tenant's and the platform's administrators sign in to the
-          # console with a second factor too
           for pair in ADMIN:acme-admin-totp PLATFORM:platform-admin-totp; do
             seed="$($COMPOSE run --rm --no-deps -T --entrypoint cat bootstrap "/var/lib/access/bootstrap/${pair#*:}")"
             echo "::add-mask::$seed"

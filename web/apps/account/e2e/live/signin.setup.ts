@@ -10,11 +10,8 @@ setup("the bootstrap test user signs in once", async ({ request, baseURL }) => {
     PASSWORD === "",
     "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password",
   );
-  // TN-59: up to one TOTP step of waiting for each of the two sign-ins
-  setup.setTimeout(150_000);
   await signIn(request, baseURL ?? "");
   await request.storageState({ path: SESSION });
-  // the environment accepts each TOTP step once: the second sign-in waits for the next one
   const own = await http.newContext({ baseURL: baseURL ?? "", ignoreHTTPSErrors: true });
   await signIn(own, baseURL ?? "");
   await own.storageState({ path: OWN_DEVICE_SESSION });

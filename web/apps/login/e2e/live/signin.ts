@@ -1,14 +1,10 @@
-// OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, §10.2.2: the bootstrap test user signs in at
-// the environment's hosted login through its JSON steps: identifier, password and, since the environment asks
-// for a second factor once one is enrolled, a code of the authenticator app whose seed the
-// bootstrap wrote.
+// OP-153 m.3 (gg), OP-149 m.26 (b), TN-96, TN-132, TN-183, §10.2.2: the bootstrap test user signs
+// in at the environment's hosted login through its JSON steps: identifier and password. It has no
+// second step, and the environment asks for one only once the person adds one.
 import { type APIRequestContext, expect } from "@playwright/test";
-
-import { nextStep, totp } from "./totp.js";
 
 const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
 export const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
-const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
 async function post(
   request: APIRequestContext,
@@ -36,26 +32,15 @@ export async function signIn(
   origin: string,
   environment: string,
 ): Promise<void> {
-  const step = SEED === "" ? 0 : await nextStep();
   const started = await post(request, origin, `${environment}/v1/login/flows`);
   const identified = await post(request, origin, `${environment}${String(started["action"])}`, {
     method: "identifier",
     fields: { identifier: IDENTIFIER },
   });
   expect(identified["step"]).toBe("authenticate");
-  let done = await post(request, origin, `${environment}${String(identified["action"])}`, {
+  const done = await post(request, origin, `${environment}${String(identified["action"])}`, {
     method: "password",
     fields: { password: PASSWORD },
   });
-  if (done["step"] === "second_factor") {
-    expect(
-      SEED,
-      "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
-    ).not.toBe("");
-    done = await post(request, origin, `${environment}${String(done["action"])}`, {
-      method: "totp",
-      fields: { totp_code: totp(SEED, step) },
-    });
-  }
   expect(done["step"]).toBe("complete");
 }
