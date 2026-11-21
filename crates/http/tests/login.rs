@@ -647,6 +647,13 @@ async fn env_tweaked(
         },
         redirect_to: "/account".into(),
         mtls_port: None,
+        // TN-182
+        aaguid_hints: std::sync::Arc::new(
+            access_identity_webauthn::domain::aaguid_hints::AaguidHints::parse(
+                br#"{ "11111111-1111-1111-1111-111111111111": { "name": "Test Key" } }"#,
+            )
+            .unwrap(),
+        ),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup,
@@ -6889,4 +6896,47 @@ async fn the_profile_step_lists_only_the_documents_still_to_accept_and_says_whic
         "{}",
         String::from_utf8_lossy(&done.body)
     );
+}
+
+// TN-180, TN-182
+#[tokio::test]
+async fn an_unnamed_passkey_is_listed_under_its_models_name() {
+    let e = env(77, "tn-182-pk", AuthPolicy::DEFAULT).await;
+    e.account("ann@example.com").await;
+    let mut b = e.browser("ann");
+    assert_eq!(b.sign_in("ann@example.com").await.step(), "complete");
+    let reg = b
+        .post("/v1/account/passkeys", Some(json!({ "name": "  " })))
+        .await;
+    assert_eq!(reg.status, StatusCode::CREATED);
+    b.proved(&reg, "registration").await;
+    let r = reg.json();
+    let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
+    let mut key = Authenticator::new(Key::es256());
+    let (cdj, att) = key.register(RP_ID, ORIGIN, &challenge);
+    let id = b64url_encode(&key.credential_id);
+    let credential = json!({
+        "id": id, "rawId": id, "type": "public-key",
+        "response": {
+            "clientDataJSON": b64url_encode(&cdj),
+            "attestationObject": b64url_encode(&att),
+            "transports": ["internal"],
+        },
+        "clientExtensionResults": {},
+    });
+    let path = format!(
+        "/v1/account/passkeys/{}",
+        r["registration"].as_str().unwrap()
+    );
+    let done = b
+        .post(&path, Some(json!({ "credential": credential })))
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let methods = b.get("/v1/account/methods").await;
+    assert_eq!(methods.json()["passkeys"][0]["name"], "Test Key");
 }

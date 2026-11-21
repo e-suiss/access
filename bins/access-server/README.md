@@ -110,6 +110,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 | `session_idle_s` | `604800` | Session idle lifetime. |
 | `session_absolute_s` | `2592000` | Session absolute lifetime. |
 | `hash_mean_ms` | `0` | The calibrated password hash time refusals are padded to. |
+| `aaguid_hints_file` | none | The community AAGUID list (`{ "<aaguid>": { "name": "…" } }`); an unnamed passkey is listed under its model's name. A hint, never a trust input. |
 
 ### `[console]`
 

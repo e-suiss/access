@@ -81,6 +81,7 @@ async fn lab(name: &str) -> Lab {
         )),
         redirect_to: String::from("/account"),
         mtls_port: None,
+        aaguid_hints: std::sync::Arc::default(),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),

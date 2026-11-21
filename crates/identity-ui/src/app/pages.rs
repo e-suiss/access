@@ -627,7 +627,14 @@ where
                 },
                 "passkeys": of("webauthn").map(|r| json!({
                     "id": id(r),
-                    "name": r.label,
+                    // TN-180, TN-182
+                    "name": r.label.clone().or_else(|| {
+                        r.aaguid.and_then(|a| {
+                            self.aaguid_hints
+                                .hint(access_identity_webauthn::domain::ids::Aaguid(a))
+                                .map(|h| h.name.clone())
+                        })
+                    }),
                     "created_at": rfc3339(r.created_ms),
                     "synced": r.synced.unwrap_or(false),
                 })).collect::<Vec<_>>(),

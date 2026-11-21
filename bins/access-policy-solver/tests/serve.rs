@@ -65,16 +65,18 @@ fn start(name: &str, dir_mode: u32, cvc5: &Path) -> (Solver, PathBuf) {
         .arg("serve")
         .arg(&config)
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
         .unwrap();
     (Solver { child, dir: d }, socket)
 }
 
+/// The solver listens once a connection succeeds: its socket file appears at `bind`, before it
+/// accepts, and a connection in between is refused.
 fn wait_for(socket: &Path, solver: &mut Solver) -> bool {
     let until = Instant::now() + Duration::from_secs(20);
     while Instant::now() < until {
-        if socket.exists() {
+        if std::os::unix::net::UnixStream::connect(socket).is_ok() {
             return true;
         }
         if solver.child.try_wait().unwrap().is_some() {

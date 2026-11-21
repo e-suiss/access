@@ -267,6 +267,19 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
     let reply = match endpoint {
         Endpoint::Authorize => {
             let reply = s.authorize(&environment, &p, cookie.as_deref()).await;
+            // TN-181
+            if let Reply::FormPost {
+                action,
+                response,
+                look,
+            } = reply
+            {
+                return form_post(
+                    &action,
+                    &response,
+                    &crate::login::post::Look::of(&req.headers, look),
+                );
+            }
             return render(error_page(&environment, &req.headers, reply));
         }
         Endpoint::Par => {
@@ -449,7 +462,15 @@ pub fn render(reply: Reply) -> Response {
         }
         Reply::NotFound => crate::not_found_problem().into_response(),
         // OP-155 m.3 (k)
-        Reply::FormPost { action, body } => form_post(&action, body),
+        Reply::FormPost {
+            action,
+            response,
+            look,
+        } => form_post(
+            &action,
+            &response,
+            &crate::login::post::Look::of(&HeaderMap::new(), look),
+        ),
         // IDP-24, TN-150
         Reply::SignOut(page) => {
             sign_out::response(&page, access_identity_ui::domain::locale::DEFAULT_LANGUAGE)
@@ -476,7 +497,9 @@ pub fn render(reply: Reply) -> Response {
 }
 
 /// The `form_post.jwt` page (JARM §2.3.4): HTML that may only post to the client's origin.
-fn form_post(action: &str, body: String) -> Response {
+/// TN-181: the page that posts the `form_post.jwt` response, drawn like the SAML one: the person's
+/// language, the environment's colours, a button always there.
+fn form_post(action: &str, response: &str, look: &crate::login::post::Look) -> Response {
     let origin = action
         .split_once("://")
         .map(|(scheme, rest)| {
@@ -484,11 +507,16 @@ fn form_post(action: &str, body: String) -> Response {
             format!("{scheme}://{host}")
         })
         .unwrap_or_default();
-    let csp = format!("default-src 'none'; form-action {origin}; frame-ancestors 'none'");
+    let nonce = access_identity_saml::binding::csp_nonce();
+    let csp = format!(
+        "default-src 'none'; style-src 'nonce-{nonce}'; script-src 'nonce-{nonce}'; \
+         form-action {origin}; frame-ancestors 'none'; base-uri 'none'"
+    );
     let Ok(csp) = HeaderValue::from_str(&csp) else {
         return Problem::new(StatusCode::BAD_REQUEST, "invalid-redirect", "Bad Request")
             .into_response();
     };
+    let body = crate::login::post::post_page(action, &[("response", response)], &nonce, look);
     let mut r = (
         StatusCode::OK,
         [(
@@ -499,5 +527,46 @@ fn form_post(action: &str, body: String) -> Response {
     )
         .into_response();
     r.headers_mut().insert(header::CONTENT_SECURITY_POLICY, csp);
+    r.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // JARM §2.3.4, TN-181
+    #[tokio::test]
+    async fn the_form_post_page_speaks_the_persons_language_and_posts_only_to_the_client() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            HeaderValue::from_static("tr-TR, en;q=0.5"),
+        );
+        let look = crate::login::post::Look::of(&headers, (None, None));
+        let r = form_post("https://c.example/cb?a=1", "a.b.c", &look);
+        assert_eq!(r.status(), StatusCode::OK);
+        let csp = r.headers()[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        assert!(csp.contains("form-action https://c.example;"), "{csp}");
+        assert!(csp.contains("script-src 'nonce-"), "{csp}");
+        assert_eq!(r.headers()[header::CACHE_CONTROL], "no-store");
+        let body = axum::body::to_bytes(r.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let page = String::from_utf8(body.to_vec()).unwrap();
+        assert!(page.contains("<html lang=\"tr\""), "{page}");
+        assert!(
+            page.contains("<button type=\"submit\">Devam</button>"),
+            "{page}"
+        );
+        assert!(page.contains("name=\"response\" value=\"a.b.c\""), "{page}");
+        assert!(
+            page.contains("action=\"https://c.example/cb?a=1\""),
+            "{page}"
+        );
+    }
 }

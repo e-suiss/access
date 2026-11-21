@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.credential_id, c.kind,\n                      (extract(epoch FROM c.created_at) * 1000)::bigint AS \"created_ms!\",\n                      w.backup_eligible AS \"backup_eligible?\",\n                      w.aaguid AS \"aaguid?\",\n                      (SELECT l.label FROM access.identity_passkey_labels l\n                        WHERE l.tenant_id = c.tenant_id AND l.environment_id = c.environment_id\n                          AND l.credential_id = c.credential_id\n                        ORDER BY l.created_ms DESC, l.label_id DESC LIMIT 1) AS \"label?\"\n                 FROM access.identity_credentials c\n                 LEFT JOIN access.webauthn_credentials w\n                   ON w.tenant_id = c.tenant_id AND w.environment_id = c.environment_id\n                  AND w.credential_id = c.credential_id\n                WHERE c.tenant_id = $1 AND c.environment_id = $2 AND c.subject_id = $3\n                  AND c.status = 'active'\n                ORDER BY c.credential_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "credential_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "backup_eligible?",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "backup_eligible"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "aaguid?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "aaguid"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "label?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "246cb23631ec82b06d65c67ec9a8f4508fccc098fda657a0706843216c3a57e8"
+}

@@ -149,6 +149,8 @@ pub struct MethodRow {
     pub synced: Option<bool>,
     /// For a passkey: the name the person gave it (TN-180).
     pub label: Option<String>,
+    /// For a passkey: the model's AAGUID (TN-182).
+    pub aaguid: Option<[u8; 16]>,
 }
 
 /// Outcome of removing a credential.
@@ -794,6 +796,7 @@ impl TenantTx {
             r#"SELECT c.credential_id, c.kind,
                       (extract(epoch FROM c.created_at) * 1000)::bigint AS "created_ms!",
                       w.backup_eligible AS "backup_eligible?",
+                      w.aaguid AS "aaguid?",
                       (SELECT l.label FROM access.identity_passkey_labels l
                         WHERE l.tenant_id = c.tenant_id AND l.environment_id = c.environment_id
                           AND l.credential_id = c.credential_id
@@ -819,6 +822,9 @@ impl TenantTx {
                 created_ms: r.created_ms,
                 synced: r.backup_eligible,
                 label: r.label,
+                aaguid: r
+                    .aaguid
+                    .and_then(|a| <[u8; 16]>::try_from(a.as_slice()).ok()),
             })
             .collect())
     }

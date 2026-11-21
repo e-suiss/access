@@ -13,7 +13,7 @@ status = "met"
 rules = ["SA-21"]
 tests = [
   "crates/http/src/login/post.rs::the_post_page_speaks_the_persons_language_escapes_and_carries_the_nonce",
-  "crates/identity-oauth/src/domain/jarm.rs::the_form_escapes_what_it_posts",
+  "crates/http/src/oauth.rs::the_form_post_page_speaks_the_persons_language_and_posts_only_to_the_client",
   "bins/access-parser-worker/src/c14n.rs::text_and_attributes_are_escaped",
 ]
 note = "Pages escape what they render; parsers run in an isolated worker."

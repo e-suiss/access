@@ -321,6 +321,8 @@ pub struct Hosted<K, C, M> {
     pub redirect_to: String,
     /// The public port of the mTLS listener, where certificate sign-in is served (OP-155 m.3 (m)).
     pub mtls_port: Option<u16>,
+    /// The community AAGUID list, naming an unnamed passkey's model (TN-182); a hint only.
+    pub aaguid_hints: std::sync::Arc<access_identity_webauthn::domain::aaguid_hints::AaguidHints>,
     /// The environments' inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
     /// SL2 risk sources (TN-46, OP-151 m.1 (b)).

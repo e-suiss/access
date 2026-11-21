@@ -145,6 +145,8 @@ const OUTBOUND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Everything read from the file system before the lockdown closes it.
 struct Prepared {
+    /// TN-182: the community AAGUID list, read before the lockdown.
+    aaguid_hints: Arc<access_identity_webauthn::domain::aaguid_hints::AaguidHints>,
     tls: Arc<access_http::tls::ServerConfig>,
     /// OP-156 m.3 (i): the public listener's certificates by SNI.
     sni: Arc<access_http::tls::Sni>,
@@ -983,7 +985,17 @@ fn prepare(config: &Config, (tls, sni): TlsParts) -> Result<Prepared, String> {
         .map(Assets::load)
         .transpose()
         .map_err(|e| e.to_string())?;
+    // TN-182
+    let aaguid_hints = match &config.login.aaguid_hints_file {
+        Some(path) => {
+            let bytes = std::fs::read(path).map_err(|e| format!("aaguid hints: {e}"))?;
+            access_identity_webauthn::domain::aaguid_hints::AaguidHints::parse(&bytes)
+                .map_err(|e| format!("aaguid hints: {e}"))?
+        }
+        None => access_identity_webauthn::domain::aaguid_hints::AaguidHints::default(),
+    };
     Ok(Prepared {
+        aaguid_hints: Arc::new(aaguid_hints),
         tls,
         sni,
         acme: acme_https(config)?,
@@ -1662,7 +1674,11 @@ fn login(
     app: Pool,
     products: Pool,
     keks: login::EnvironmentKeks,
-    (assets, outbound): (Option<Assets>, Outbound),
+    (assets, outbound, aaguid_hints): (
+        Option<Assets>,
+        Outbound,
+        Arc<access_identity_webauthn::domain::aaguid_hints::AaguidHints>,
+    ),
     (hooks, risk): (
         Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
         access_identity_session::app::RiskServices,
@@ -1710,6 +1726,7 @@ fn login(
         },
         redirect_to: config.login.redirect_to.clone(),
         mtls_port: config.mtls_port(),
+        aaguid_hints,
         hooks,
         risk,
         signup: signup(config)?,
@@ -2220,7 +2237,11 @@ async fn serve(
         app.clone(),
         outbox_reader,
         keks,
-        (prepared.assets, prepared.outbound.clone()),
+        (
+            prepared.assets,
+            prepared.outbound.clone(),
+            prepared.aaguid_hints.clone(),
+        ),
         (hooks.clone(), risk_services),
     )?;
     let tenants_pool = router_pool.clone();

@@ -15,7 +15,7 @@ mod idempotency;
 mod ldap;
 mod me;
 mod payment;
-mod post;
+pub(crate) mod post;
 mod push;
 mod recovery;
 mod saml;

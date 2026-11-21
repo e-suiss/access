@@ -51,7 +51,8 @@ impl Drop for Solver {
     }
 }
 
-/// A real solver process on a socket in a fresh private directory, with `cvc5`.
+/// A real solver process on a socket in a fresh private directory, with `cvc5`; ready once a
+/// connection succeeds, since the socket file appears at `bind`, before the solver accepts.
 fn solver(label: &str, cvc5: &Path) -> (Solver, PathBuf) {
     let dir = std::env::temp_dir().join(format!("aps-{label}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -76,7 +77,7 @@ fn solver(label: &str, cvc5: &Path) -> (Solver, PathBuf) {
         .spawn()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(20);
-    while !socket.exists() {
+    while std::os::unix::net::UnixStream::connect(&socket).is_err() {
         assert!(Instant::now() < until, "the solver did not listen");
         assert!(child.try_wait().unwrap().is_none(), "the solver exited");
         std::thread::sleep(Duration::from_millis(20));

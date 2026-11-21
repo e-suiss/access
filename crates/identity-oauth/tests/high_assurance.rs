@@ -391,11 +391,17 @@ async fn jarm_and_jwe_reach_the_client_only() {
     let posted = a
         .authorize(&[("response_mode", "form_post.jwt")], Some(&cookie))
         .await;
-    let Reply::FormPost { action, body: page } = posted else {
+    let Reply::FormPost {
+        action, response, ..
+    } = posted
+    else {
         panic!("{posted:?}");
     };
     assert_eq!(action, CB);
-    assert!(page.contains("name=\"response\""));
+    assert!(
+        matches!(response.split('.').count(), 3 | 5),
+        "a response JWT: {response}"
+    );
 }
 
 // CR-4, Ek B 4726

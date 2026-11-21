@@ -238,8 +238,10 @@ pub enum Reply {
     FormPost {
         /// Where the page posts.
         action: String,
-        /// The page.
-        body: String,
+        /// The `response` JWT the page posts.
+        response: String,
+        /// The environment's branding and text overrides, for the page (TN-181).
+        look: crate::ports::oauth::PageLook,
     },
     /// `200` with a signed or encrypted JWT, `application/jwt`, `Cache-Control: no-store`
     /// (OIDC Core §5.3.2, OP-155 m.3 (k)).

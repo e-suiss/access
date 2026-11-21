@@ -755,6 +755,10 @@ pub(crate) struct Login {
     /// The calibrated Argon2id time that pads refusals until successes are measured (TN-82,
     /// OP-146 m.4 (f)).
     pub(crate) hash_mean_ms: u64,
+    /// The community AAGUID list, `{ "<aaguid>": { "name": "…" } }`: an unnamed passkey is
+    /// listed under its model's name (TN-182, OP-158 m.3 (y)); a hint, never a trust input.
+    /// Read once before the lockdown; without it unnamed passkeys are listed as "Passkey".
+    pub(crate) aaguid_hints_file: Option<PathBuf>,
 }
 
 impl Default for Login {
@@ -765,6 +769,7 @@ impl Default for Login {
             session_idle_s: 7 * 86_400,
             session_absolute_s: 30 * 86_400,
             hash_mean_ms: 0,
+            aaguid_hints_file: None,
         }
     }
 }

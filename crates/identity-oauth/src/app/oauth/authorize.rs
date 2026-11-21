@@ -420,9 +420,11 @@ impl<E: Env> OAuth<E> {
             )
             .await?;
         Ok(match to.mode {
+            // TN-181
             ResponseMode::FormPostJwt => Reply::FormPost {
                 action: String::from(to.redirect_uri),
-                body: jarm::form_post(to.redirect_uri, &response),
+                response,
+                look: tx.page_look().await?,
             },
             _ => Reply::Redirect(jarm::query(to.redirect_uri, &response)),
         })
