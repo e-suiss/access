@@ -1203,7 +1203,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Get,
         "/login/certificate",
         "certificateLoginPage",
-        "Certificate, PIV and CAC sign-in on the mTLS listener: trust comes only from TLS that ends at access-server, never from a forwarded header (OP-155 m.3 (k), (m)).",
+        "Certificate, PIV and CAC sign-in on the mTLS listener: trust comes only from TLS that ends at access-server, never from a forwarded header (OP-155 m.3 (k), (m)); a refusal goes back to the sign-in page of `flow` with `certificate=none`, `refused` or `status_unknown` (TN-172).",
     ),
     live(
         Owner::P10,

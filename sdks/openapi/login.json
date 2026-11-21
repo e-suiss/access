@@ -517,6 +517,32 @@
             "additionalProperties": false,
             "required": [
               "type",
+              "label",
+              "hint",
+              "port"
+            ],
+            "properties": {
+              "type": {
+                "const": "certificate"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "hint": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
               "number",
               "label",
               "expires_at"

@@ -182,6 +182,14 @@ export interface ProviderNode {
   readonly href: string;
 }
 
+/** TN-172: certificate sign-in, a full-page navigation to the mTLS listener's `port` at this host. */
+export interface CertificateNode {
+  readonly type: "certificate";
+  readonly label: Text;
+  readonly hint: Text;
+  readonly port: number;
+}
+
 /** The number to type into the approver while a push waits; the push never carries it (OP-156 m.3 (d)). */
 export interface PushNumberNode {
   readonly type: "push_number";
@@ -215,6 +223,7 @@ export type UiNode =
   | PushNumberNode
   | OptionNode
   | ProviderNode
+  | CertificateNode
   | SubmitNode
   | PasskeyGetNode
   | PasskeyAutofillNode
@@ -406,6 +415,12 @@ const ProviderS: v.GenericSchema<unknown, ProviderNode> = v.object({
   label: TextS,
   href: v.custom<string>(isLocalPath),
 });
+const CertificateS: v.GenericSchema<unknown, CertificateNode> = v.object({
+  type: v.literal("certificate"),
+  label: TextS,
+  hint: TextS,
+  port: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65_535)),
+});
 const PushNumberS: v.GenericSchema<unknown, PushNumberNode> = v.object({
   type: v.literal("push_number"),
   number: v.number(),
@@ -437,6 +452,7 @@ const NODES: Readonly<Record<string, v.GenericSchema<unknown, UiNode>>> = {
   choice: ChoiceS,
   documents: DocumentsS,
   provider: ProviderS,
+  certificate: CertificateS,
   push_number: PushNumberS,
   totp_setup: TotpSetupS,
   recovery_codes: RecoveryCodesS,

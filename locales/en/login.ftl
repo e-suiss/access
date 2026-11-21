@@ -226,6 +226,7 @@ certificate-title = Sign in with a certificate
 certificate-prompt = Pick your certificate or smart card when your browser asks.
 certificate-refused = This certificate can't be used to sign in here.
 certificate-status_unknown = We couldn't check this certificate right now. Try again later.
+certificate-none = No certificate was chosen. Try again or sign in another way.
 action-use_certificate = Use a certificate
 sso_setup-title = Set up sign-in for { $organization }
 sso_setup-choose_provider = Choose your identity provider

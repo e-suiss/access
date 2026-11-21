@@ -78,6 +78,20 @@ fn push_number_node() -> Value {
     )
 }
 
+/// TN-172
+fn certificate_node() -> Value {
+    variant(
+        "type",
+        "certificate",
+        &json!({
+            "label": r("Text"),
+            "hint": r("Text"),
+            "port": { "type": "integer", "minimum": 1, "maximum": 65_535 },
+        }),
+        &["label", "hint", "port"],
+    )
+}
+
 /// TN-158 (12)
 fn documents_node() -> Value {
     variant(
@@ -202,6 +216,7 @@ fn node() -> Value {
         }),
         &["provider", "label", "href"],
     );
+    let certificate = certificate_node();
     let push_number = push_number_node();
     let choice = choice_node();
     let documents = documents_node();
@@ -215,6 +230,7 @@ fn node() -> Value {
         passkey_signal,
         option,
         provider,
+        certificate,
         push_number,
         totp_setup,
         recovery_codes,

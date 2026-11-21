@@ -1709,6 +1709,7 @@ fn login(
             }
         },
         redirect_to: config.login.redirect_to.clone(),
+        mtls_port: config.mtls_port(),
         hooks,
         risk,
         signup: signup(config)?,

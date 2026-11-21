@@ -11,6 +11,7 @@ import * as v from "valibot";
 
 import { LOGIN, under } from "./base.js";
 import type {
+  CertificateNode,
   ChoiceNode,
   DocumentsNode,
   FieldName,
@@ -462,6 +463,34 @@ function Provider({ node }: { readonly node: ProviderNode }) {
   );
 }
 
+/** TN-172: where certificate sign-in starts for this page's flow: this host on the mTLS port. */
+export function certificateHref(port: number, flow: string): string {
+  const url = new URL(under("/login/certificate"), window.location.href);
+  url.protocol = "https:";
+  url.port = String(port);
+  url.search = new URLSearchParams({ flow }).toString();
+  return url.href;
+}
+
+// TN-172: a full-page navigation; the browser asks for the certificate there
+function Certificate({ node, flow }: { readonly node: CertificateNode; readonly flow: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <a
+        className={otherLink}
+        href={certificateHref(node.port, flow)}
+        aria-describedby="certificate-hint"
+        data-testid="certificate"
+      >
+        {text(node.label)}
+      </a>
+      <p id="certificate-hint" className={note}>
+        {text(node.hint)}
+      </p>
+    </div>
+  );
+}
+
 // OP-159 m.48 (a): the key of a TOTP set up at sign-in; the code that proves it is the step's input
 function TotpSetup({ node }: { readonly node: TotpSetupNode }) {
   const [copied, setCopied] = useState(false);
@@ -598,6 +627,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const recoveryCodes = ui.nodes.find((n): n is RecoveryCodesNode => n.type === "recovery_codes");
   const optionNodes = ui.nodes.filter((n): n is OptionNode => n.type === "option");
   const providers = ui.nodes.filter((n): n is ProviderNode => n.type === "provider");
+  const certificate = ui.nodes.find((n): n is CertificateNode => n.type === "certificate");
   const push = pushOf(ui);
   const conditional = useRef<AbortController | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -873,6 +903,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             ))}
         </nav>
       )}
+      {certificate !== undefined && <Certificate node={certificate} flow={ui.flow} />}
       {providers.length > 0 && (
         <nav className="flex flex-col gap-2" aria-label={t("page.providers")}>
           {providers.map((node) => (

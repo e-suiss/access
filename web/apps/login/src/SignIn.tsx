@@ -60,6 +60,23 @@ function restartedByApp(): boolean {
   }
 }
 
+/** TN-172: why certificate sign-in sent the page back, read once from its address. */
+const CERTIFICATE_BACK: Readonly<Record<string, string>> = {
+  none: "certificate.none",
+  refused: "certificate.refused",
+  status_unknown: "certificate.status_unknown",
+};
+
+function certificateBack(): Message | null {
+  const url = new URL(window.location.href);
+  const why = url.searchParams.get("certificate");
+  if (why === null) return null;
+  url.searchParams.delete("certificate");
+  window.history.replaceState(null, "", url);
+  const id = CERTIFICATE_BACK[why];
+  return id === undefined ? null : { id, text: "", severity: "error" };
+}
+
 function remember(ui: LoginUi) {
   const url = new URL(window.location.href);
   if (url.searchParams.get("flow") !== ui.flow) {
@@ -150,7 +167,12 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
         : reason === "step_up" || (reason === "reauthenticate" && acr === null)
           ? stepUp(acr).then((a) => (a.kind === "ui" ? a : createFlow(kind, acr)))
           : createFlow(kind, acr);
+    const back = certificateBack();
     void start.then((answer) => {
+      if (answer.kind === "ui" && back !== null) {
+        show(withMessage(answer.ui, back));
+        return;
+      }
       if (answer.kind === "ui" && flow === null && restartedByApp()) {
         show(withIdentifier(withMessage(answer.ui, expired)));
         return;

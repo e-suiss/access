@@ -54,22 +54,44 @@ const CERTIFICATE_OFF: Problem = Problem {
     retry_after_s: None,
 };
 
-/// One answer for every refused certificate (`certificate.refused`).
-const CERTIFICATE_REFUSED: Problem = Problem {
-    status: 401,
-    code: "certificate-refused",
-    title: "This certificate can't be used to sign in here.",
-    retry_after_s: None,
-};
+/// Why the sign-in page is shown again: the `certificate` query value it says (TN-172).
+#[derive(Clone, Copy, Debug)]
+enum Back {
+    /// No certificate came, or the person closed the browser's picker.
+    None,
+    /// One answer for every refused certificate (`certificate.refused`).
+    Refused,
+    /// The certificate's revocation status could not be established (`certificate.status_unknown`,
+    /// MD-8).
+    StatusUnknown,
+}
 
-/// The certificate's revocation status could not be established (`certificate.status_unknown`,
-/// MD-8).
-const CERTIFICATE_STATUS_UNKNOWN: Problem = Problem {
-    status: 401,
-    code: "certificate-status-unknown",
-    title: "We couldn't check this certificate right now. Try again later.",
-    retry_after_s: None,
-};
+impl Back {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Refused => "refused",
+            Self::StatusUnknown => "status_unknown",
+        }
+    }
+}
+
+/// A flow handle as the sign-in page puts it in its address.
+fn handle(raw: &str) -> bool {
+    (1..=64).contains(&raw.len())
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// TN-172: back to the sign-in page, on the flow it came from, saying why.
+fn back(kit: &EnvironmentKit, flow: Option<&str>, why: Back) -> Reply {
+    let to = match flow.filter(|f| handle(f)) {
+        Some(f) => format!("{}/login?flow={f}&certificate={}", kit.issuer, why.as_str()),
+        None => format!("{}/login?certificate={}", kit.issuer, why.as_str()),
+    };
+    Reply::new(303, Body::Redirect(to))
+}
 
 fn unavailable() -> Reply {
     Reply::problem(Problem {
@@ -80,14 +102,14 @@ fn unavailable() -> Reply {
     })
 }
 
-fn refused(why: &'static str) -> Reply {
+fn refused(why: &'static str) -> Back {
     tracing::info!(
         event = "login.certificate.refused",
         outcome = "refused",
         reason = why,
         "certificate refused"
     );
-    Reply::problem(CERTIFICATE_REFUSED)
+    Back::Refused
 }
 
 /// The environment's setting and its governing domain.
@@ -127,7 +149,18 @@ where
         }))
     }
 
-    async fn certificate_subject(&self, kit: &EnvironmentKit, id: &str) -> Result<[u8; 16], Reply> {
+    /// Whether the sign-in page offers a certificate: the environment turned it on and has a
+    /// governing domain to accept its CAs (TN-172).
+    pub(crate) async fn certificate_offered(&self, kit: &EnvironmentKit) -> bool {
+        matches!(self.certificate_setting(kit).await, Ok(Some(_)))
+    }
+
+    async fn certificate_subject(
+        &self,
+        kit: &EnvironmentKit,
+        id: &str,
+        flow: Option<&str>,
+    ) -> Result<[u8; 16], Reply> {
         let db = PgAccounts::sealed(self.db.clone(), kit.vault());
         let found = async {
             let mut tx = db.begin(kit.tenant, kit.environment).await?;
@@ -144,18 +177,20 @@ where
         };
         match found.await {
             Ok(Some(s)) => Ok(s),
-            Ok(None) => Err(refused("account")),
+            Ok(None) => Err(back(kit, flow, refused("account"))),
             Err(_) => Err(unavailable()),
         }
     }
 
     /// `GET /login/certificate` on the mTLS listener: signs in with the client certificate
     /// `chain` (leaf first) the TLS layer handed over, then continues the flow or ends at the
-    /// environment's landing page (§10.2.5, OP-155 m.3 (m)).
+    /// environment's landing page (§10.2.5, OP-155 m.3 (m)). A refusal goes back to the sign-in
+    /// page on `flow`, the handle the page came from, and says why (TN-172).
     pub async fn certificate_login(
         &self,
         entry: &EnvironmentEntry,
         b: &Browser<'_>,
+        flow: Option<&str>,
         chain: Option<&[Vec<u8>]>,
         certs: &Certificates,
     ) -> Reply {
@@ -170,35 +205,35 @@ where
         };
         // OP-155 m.3 (k)
         let Some(chain) = chain else {
-            return refused("no-certificate");
+            return back(&kit, flow, Back::None);
         };
         let now_ms = self.clock.now_ms();
         let now = now_ms / 1000;
         let Ok(path) = verify(chain, &s.anchors, now) else {
-            return refused("path");
+            return back(&kit, flow, refused("path"));
         };
         let Some(Ok(issuer)) = s.anchors.get(path.anchor).map(|a| ca_issuer(a)) else {
-            return refused("ca");
+            return back(&kit, flow, refused("ca"));
         };
         // §10.2.5, OP-155 m.3 (m)
         match certs.trust.accepted(s.domain, issuer).await {
             Ok(true) => {}
-            Ok(false) => return refused("acceptance"),
+            Ok(false) => return back(&kit, flow, refused("acceptance")),
             Err(_) => return unavailable(),
         }
         // MD-8
         match certs.revocation.check(&path, &s.anchors, now).await {
             Ok(()) => {}
-            Err(Refusal::Revoked) => return refused("revoked"),
-            Err(Refusal::Unknown) => return Reply::problem(CERTIFICATE_STATUS_UNKNOWN),
+            Err(Refusal::Revoked) => return back(&kit, flow, refused("revoked")),
+            Err(Refusal::Unknown) => return back(&kit, flow, Back::StatusUnknown),
         }
         let Ok(leaf) = Cert::parse(path.leaf()) else {
-            return refused("malformed");
+            return back(&kit, flow, refused("malformed"));
         };
         let Ok(id) = identifier(&leaf, s.rule) else {
-            return refused("identifier");
+            return back(&kit, flow, refused("identifier"));
         };
-        let subject = match self.certificate_subject(&kit, &id).await {
+        let subject = match self.certificate_subject(&kit, &id, flow).await {
             Ok(subject) => subject,
             Err(r) => return r,
         };

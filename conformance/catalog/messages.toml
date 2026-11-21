@@ -4090,6 +4090,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "certificate-none"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "action-use_certificate"
 text_id = "action.use_certificate"
 surface = "login"

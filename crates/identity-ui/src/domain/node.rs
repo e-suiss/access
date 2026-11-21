@@ -537,6 +537,17 @@ pub enum Node {
         /// action of the contract.
         href: String,
     },
+    /// TN-172: certificate, PIV and CAC sign-in (OP-155 m.3 (m)): a button that navigates the whole
+    /// page to `/login/certificate` under the environment issuer on the mTLS listener's `port`, at
+    /// the page's own host, with the page's flow handle as `flow`.
+    Certificate {
+        /// Caption.
+        label: Text,
+        /// What the browser will ask.
+        hint: Text,
+        /// The mTLS listener's public port.
+        port: u16,
+    },
     /// Q5: the number to type into the approver while a push waits (OP-156 m.3 (d)). Only the
     /// sign-in page shows it; the push never carries it. The client polls the flow until
     /// `expires_at`.
@@ -587,6 +598,7 @@ impl Node {
             Self::PasskeySignal { .. }
             | Self::Option { .. }
             | Self::Provider { .. }
+            | Self::Certificate { .. }
             | Self::PushNumber { .. }
             | Self::TotpSetup { .. }
             | Self::RecoveryCodes { .. } => None,

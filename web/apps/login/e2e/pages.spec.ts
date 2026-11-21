@@ -78,6 +78,46 @@ test("a social sign-in is a full-page link; a link off this site is dropped", as
   await expect(page).toHaveURL(/\/v1\/login\/social\/google$/);
 });
 
+// TN-172
+test("a certificate sign-in leaves for the mTLS port with the flow and says why it came back", async ({
+  page,
+  mock,
+}) => {
+  mock.identifierExtras = [
+    {
+      type: "certificate",
+      label: { id: "action.use_certificate", text: "Use a certificate" },
+      hint: { id: "certificate.prompt", text: "Pick your certificate or smart card when your browser asks." },
+      port: 8443,
+    },
+  ];
+  await page.goto("/");
+  const button = page.getByRole("link", { name: "Use a certificate" });
+  await expect(button).toHaveAccessibleDescription(
+    "Pick your certificate or smart card when your browser asks.",
+  );
+  const href = new URL((await button.getAttribute("href")) ?? "");
+  const flow = new URL(page.url()).searchParams.get("flow");
+  expect(flow).not.toBeNull();
+  expect([href.protocol, href.port, href.pathname, href.searchParams.get("flow")]).toEqual([
+    "https:",
+    "8443",
+    "/login/certificate",
+    flow,
+  ]);
+
+  mock.flows.set(flow ?? "", mock.identifierStep());
+  await page.goto(`/?flow=${flow}&certificate=refused`);
+  await expect(page.getByRole("alert")).toContainText(
+    "This certificate can't be used to sign in here.",
+  );
+  await expect(page).not.toHaveURL(/certificate=/);
+  expect(new URL(page.url()).searchParams.get("flow")).toBe(flow);
+
+  await page.goto("/?certificate=none");
+  await expect(page.getByRole("alert")).toContainText("No certificate was chosen.");
+});
+
 // §10.4.6, OP-153 m.3 (g), Ek B 4098, 4104
 test("prompt=create opens the sign-up page: address, then code and name", async ({
   page,

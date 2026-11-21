@@ -274,7 +274,7 @@ export class LoginMock {
   identifierField: { kind: "text" | "email" | "tel"; label: { id: string; text: string } } | null =
     null;
 
-  private identifierStep(): LoginUi {
+  identifierStep(): LoginUi {
     const ui = example("identifier");
     const field = this.identifierField;
     const nodes = ui.nodes.map(

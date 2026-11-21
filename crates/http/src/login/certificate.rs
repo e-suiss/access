@@ -6,7 +6,8 @@
 //!
 //! The request is a top-level navigation from the environment's login page, so it is held to the same
 //! site, not the same origin: a `Sec-Fetch-Site` other than `same-origin`, `same-site` or `none`
-//! is refused.
+//! is refused. `flow` is the handle of the sign-in page the person came from; a refusal goes back
+//! to it (TN-172).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -72,6 +73,13 @@ fn same_site(headers: &HeaderMap) -> bool {
         .is_none_or(|v| matches!(v, "same-origin" | "same-site" | "none"))
 }
 
+/// TN-172: the raw `flow` query value; the back end checks its shape.
+fn flow_of(uri: &Uri) -> Option<&str> {
+    uri.query()?
+        .split('&')
+        .find_map(|p| p.strip_prefix("flow="))
+}
+
 /// `GET /login/certificate` (OP-155 m.3 (m)).
 async fn sign_in<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
@@ -104,7 +112,13 @@ where
     let reply = s
         .login
         .hosted
-        .certificate_login(&entry, &jar.browser(), chain.as_deref(), &s.certs)
+        .certificate_login(
+            &entry,
+            &jar.browser(),
+            flow_of(&uri),
+            chain.as_deref(),
+            &s.certs,
+        )
         .await;
     send(reply, &headers).await
 }

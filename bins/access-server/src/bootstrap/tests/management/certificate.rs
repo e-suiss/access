@@ -107,6 +107,7 @@ fn hosted(
             cgroup_memory_budget(),
         )),
         redirect_to: String::from("/"),
+        mtls_port: Some(8443),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
@@ -154,6 +155,11 @@ struct Answer {
 
 /// `GET /env/acme/login/certificate` over TLS, presenting `leaf` when given.
 async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
+    sign_in_from(l, leaf, "").await
+}
+
+/// The same, with `query` after the path.
+async fn sign_in_from(l: &Listener, leaf: Option<&Issued>, query: &str) -> Answer {
     let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -175,7 +181,7 @@ async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
         .await
         .unwrap();
     let head = format!(
-        "GET /env/acme/login/certificate HTTP/1.1\r\nHost: {HOST}:{}\r\n\
+        "GET /env/acme/login/certificate{query} HTTP/1.1\r\nHost: {HOST}:{}\r\n\
          Sec-Fetch-Site: same-site\r\nConnection: close\r\n\r\n",
         l.addr.port()
     );
@@ -200,6 +206,53 @@ async fn sign_in(l: &Listener, leaf: Option<&Issued>) -> Answer {
         head: head.to_owned(),
         body,
     }
+}
+
+/// TN-172: where a refused sign-in sends the page back.
+fn back_to(a: &Answer) -> (u16, String) {
+    let to = a
+        .head
+        .lines()
+        .find_map(|l| {
+            l.split_once(':')
+                .filter(|(k, _)| k.eq_ignore_ascii_case("location"))
+                .map(|(_, v)| v.trim().to_owned())
+        })
+        .unwrap_or_default();
+    (a.status, to)
+}
+
+/// TN-172: the mTLS port the first sign-in step offers a certificate on, if it does.
+async fn offered(c: &Console) -> Option<u64> {
+    let h = hosted(c);
+    let entry = PgDirectory::new(c.w.db.router.clone())
+        .by_slug("acme")
+        .await
+        .unwrap()
+        .unwrap();
+    let b = access_identity_ui::app::Browser {
+        flow: None,
+        session: None,
+        marker: None,
+        login: None,
+        ip: std::net::IpAddr::from([192, 0, 2, 1]),
+        correlation: "req_test",
+    };
+    let reply = h.create(&entry, &b, false).await;
+    let access_identity_ui::app::Body::Ui(ui) = reply.body else {
+        panic!("{}", reply.status);
+    };
+    let ui = serde_json::to_value(&ui).unwrap();
+    ui["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "certificate")
+        .map(|n| {
+            assert_eq!(n["label"]["id"], "action.use_certificate");
+            assert_eq!(n["hint"]["id"], "certificate.prompt");
+            n["port"].as_u64().unwrap()
+        })
 }
 
 /// An active account of the environment with `email` as its identifier.
@@ -281,6 +334,8 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
         (a.status, &a.body["code"]),
         (404, &serde_json::json!("no-such-provider"))
     );
+    // TN-172
+    assert_eq!(offered(&c).await, None);
     let w = c
         .rest_write(
             &Method::PUT,
@@ -312,31 +367,35 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
         .await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
 
-    // OP-155 m.3 (k)
-    let a = sign_in(&l, None).await;
-    assert_eq!(
-        (a.status, &a.body["code"]),
-        (401, &serde_json::json!("certificate-refused"))
+    // TN-172
+    assert_eq!(offered(&c).await, Some(8443));
+    // OP-155 m.3 (k), TN-172
+    let (status, to) = back_to(&sign_in_from(&l, None, "?flow=f_page-1").await);
+    assert_eq!(status, 303);
+    assert!(
+        to.ends_with("/env/acme/login?flow=f_page-1&certificate=none"),
+        "{to}"
     );
+    // TN-172
+    let (_, to) = back_to(&sign_in_from(&l, None, "?flow=../evil").await);
+    assert!(to.ends_with("/env/acme/login?certificate=none"), "{to}");
 
     // §10.2.5
     responders.0.lock().unwrap().insert(
         String::from(OCSP),
         ca.ocsp(&piv.der, &OcspAnswer::current_at(S::Good, at), None),
     );
-    let a = sign_in(&l, Some(&piv)).await;
-    assert_eq!(
-        (a.status, &a.body["code"]),
-        (401, &serde_json::json!("certificate-refused"))
-    );
+    let (status, to) = back_to(&sign_in(&l, Some(&piv)).await);
+    assert_eq!(status, 303);
+    assert!(to.ends_with("/env/acme/login?certificate=refused"), "{to}");
     assert_eq!(authentications(&c, subject).await.len(), 0);
     trust.scripted.store(true, Ordering::SeqCst);
 
     // MD-8
-    let a = sign_in(&l, Some(&stale)).await;
-    assert_eq!(
-        (a.status, &a.body["code"]),
-        (401, &serde_json::json!("certificate-status-unknown"))
+    let (_, to) = back_to(&sign_in(&l, Some(&stale)).await);
+    assert!(
+        to.ends_with("/env/acme/login?certificate=status_unknown"),
+        "{to}"
     );
     // MD-8
     let old = OcspAnswer {
@@ -349,21 +408,18 @@ async fn a_certificate_signs_in_only_through_an_accepted_ca_with_a_current_statu
         .lock()
         .unwrap()
         .insert(String::from(OCSP), ca.ocsp(&stale.der, &old, None));
-    let a = sign_in(&l, Some(&stale)).await;
-    assert_eq!(
-        (a.status, &a.body["code"]),
-        (401, &serde_json::json!("certificate-status-unknown"))
+    let (_, to) = back_to(&sign_in(&l, Some(&stale)).await);
+    assert!(
+        to.ends_with("/env/acme/login?certificate=status_unknown"),
+        "{to}"
     );
     // MD-8
     responders.0.lock().unwrap().insert(
         String::from(OCSP),
         ca.ocsp(&revoked.der, &OcspAnswer::current_at(S::Revoked, at), None),
     );
-    let a = sign_in(&l, Some(&revoked)).await;
-    assert_eq!(
-        (a.status, &a.body["code"]),
-        (401, &serde_json::json!("certificate-refused"))
-    );
+    let (_, to) = back_to(&sign_in(&l, Some(&revoked)).await);
+    assert!(to.ends_with("/env/acme/login?certificate=refused"), "{to}");
     assert_eq!(authentications(&c, subject).await.len(), 0);
 
     // OP-155 m.3 (m), §10.3.1

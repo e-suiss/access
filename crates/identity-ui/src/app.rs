@@ -318,6 +318,8 @@ pub struct Hosted<K, C, M> {
     /// Where a completed sign-in with no request to return to goes: a path under the environment's
     /// issuer (`redirect_to`; OP-159 m.29 (d)).
     pub redirect_to: String,
+    /// The public port of the mTLS listener, where certificate sign-in is served (OP-155 m.3 (m)).
+    pub mtls_port: Option<u16>,
     /// The environments' inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
     /// SL2 risk sources (TN-46, OP-151 m.1 (b)).
@@ -728,8 +730,21 @@ where
         }
         **ui = with_options(kit, (**ui).clone());
         identifier_labels(kit, ui);
+        if ui.step != Step::Identifier {
+            return reply;
+        }
+        // TN-172
+        if let Some(port) = self.mtls_port
+            && self.certificate_offered(kit).await
+        {
+            ui.nodes.push(Node::Certificate {
+                label: TextId::UseCertificate.into(),
+                hint: TextId::CertificatePrompt.into(),
+                port,
+            });
+        }
         // OP-159 m.48 (c)
-        if ui.step != Step::Identifier || !kit.signin.social {
+        if !kit.signin.social {
             return reply;
         }
         let Ok(social) = self.social_buttons(kit).await else {

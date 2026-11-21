@@ -378,6 +378,7 @@ async fn the_headless_client_runs_the_code_flow() {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(hasher),
         redirect_to: String::from("/"),
+        mtls_port: None,
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),

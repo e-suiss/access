@@ -226,6 +226,7 @@ certificate-title = Sertifikayla giriş yapın
 certificate-prompt = Tarayıcınız sorduğunda sertifikanızı ya da akıllı kartınızı seçin.
 certificate-refused = Bu sertifikayla burada giriş yapılamıyor.
 certificate-status_unknown = Bu sertifikayı şu an kontrol edemedik. Daha sonra yeniden deneyin.
+certificate-none = Sertifika seçilmedi. Yeniden deneyin ya da başka bir yolla giriş yapın.
 action-use_certificate = Sertifika kullan
 sso_setup-title = { $organization } için girişi kurun
 sso_setup-choose_provider = Kimlik sağlayıcınızı seçin

@@ -182,6 +182,7 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: hasher(),
         redirect_to: String::from("/"),
+        mtls_port: None,
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk,
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
