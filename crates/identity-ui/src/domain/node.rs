@@ -419,6 +419,9 @@ pub struct DocumentLink {
     pub title: String,
     /// Its `https://` address.
     pub href: String,
+    /// TN-178: the account accepted an earlier version of this document.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub updated: bool,
 }
 
 /// One thing to draw.

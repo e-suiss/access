@@ -184,6 +184,94 @@ pub struct DomainRow {
 }
 
 impl TenantTx {
+    /// TN-177: the live organizations `subject` belongs to, as (Party, display name), in the
+    /// order they joined.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn live_organizations_of(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<([u8; 16], String)>, StoreError> {
+        let (tenant, environment) = self.org_scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT o.party, o.display_name FROM access.org_memberships m
+                 JOIN access.organizations o
+                   ON o.tenant_id = m.tenant_id AND o.environment_id = m.environment_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.environment_id = $2 AND m.subject_id = $3
+                  AND m.ended_at IS NULL AND o.ended_at IS NULL
+                ORDER BY m.membership_id"#,
+            tenant,
+            environment,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                <[u8; 16]>::try_from(r.party.as_slice())
+                    .ok()
+                    .map(|p| (p, r.display_name))
+            })
+            .collect())
+    }
+
+    /// TN-177: records that `subject` continues with the organization `party` for `client`.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn choose_organization(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        party: [u8; 16],
+        now_ms: u64,
+    ) -> Result<(), StoreError> {
+        let (tenant, environment) = self.org_scope()?;
+        sqlx::query!(
+            "INSERT INTO access.identity_organization_choices (tenant_id, environment_id,
+                    subject_id, client_uuid, organization_party, created_ms)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+            tenant,
+            environment,
+            uuid(subject),
+            uuid(client),
+            &party[..],
+            i64::try_from(now_ms).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// TN-177: the organization `subject` last chose for `client` at or after `since_ms`.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn chosen_organization(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        since_ms: u64,
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, environment) = self.org_scope()?;
+        let party = sqlx::query_scalar!(
+            "SELECT organization_party FROM access.identity_organization_choices
+              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4
+                AND created_ms >= $5
+              ORDER BY created_ms DESC, choice_id DESC LIMIT 1",
+            tenant,
+            environment,
+            uuid(subject),
+            uuid(client),
+            i64::try_from(since_ms).map_err(|_| StoreError::Range)?,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(party.and_then(|p| <[u8; 16]>::try_from(p.as_slice()).ok()))
+    }
+
     pub(crate) fn org_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
         let environment = self.environment().ok_or(StoreError::Range)?;
         Ok((uuid(*self.tenant.as_bytes()), uuid(*environment.as_bytes())))

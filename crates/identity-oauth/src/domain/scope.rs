@@ -4,15 +4,20 @@
 //! access to a resource is authority: it is asked for as RAR `authorization_details` and is
 //! only ever the product of `grant.issue` and `projection.issue`, never of a scope string.
 
-/// The protocol scopes OpenID Connect defines (OIDC Core §3.1.2.1, §5.4, §11).
-pub const PROTOCOL_SCOPES: [&str; 6] = [
+/// The protocol scopes OpenID Connect defines (OIDC Core §3.1.2.1, §5.4, §11), and
+/// `organization` (TN-177).
+pub const PROTOCOL_SCOPES: [&str; 7] = [
     "openid",
     "profile",
     "email",
     "address",
     "phone",
     "offline_access",
+    ORGANIZATION,
 ];
+
+/// TN-177: the organization the person continues with, as context for the app; never authority.
+pub const ORGANIZATION: &str = "organization";
 
 /// The long-lived token scope; the grace period after a recovery withholds it (TN-56).
 pub const OFFLINE_ACCESS: &str = "offline_access";

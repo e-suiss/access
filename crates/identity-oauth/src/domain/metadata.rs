@@ -151,8 +151,8 @@ pub const SERVED: Served = Served {
 };
 
 /// The protocol scopes the metadata declares (OP-146 m.5 (c)).
-const SCOPES: [&str; 3] = ["openid", "email", "profile"];
-const CLAIMS: [&str; 16] = [
+const SCOPES: [&str; 4] = ["openid", "email", "profile", "organization"];
+const CLAIMS: [&str; 17] = [
     "sub",
     "iss",
     "aud",
@@ -169,6 +169,7 @@ const CLAIMS: [&str; 16] = [
     "family_name",
     "locale",
     "zoneinfo",
+    "organization",
 ];
 
 /// The JWKS path under the issuer (§11.4.5).

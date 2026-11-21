@@ -2675,3 +2675,104 @@ async fn a_third_party_asks_before_it_receives_claims_and_stopping_ends_the_rele
     assert!(info.get("email").is_none(), "{info}");
     assert!(info["sub"].is_string());
 }
+
+// TN-177
+#[tokio::test]
+async fn the_organization_scope_names_the_organization_the_person_continues_with() {
+    let w = world().await;
+    let ask = [("scope", "openid organization")];
+
+    let none = id_claims_of(
+        &w,
+        query(&location(&w.authorize(&ask, Some(&w.cookie)).await), "code"),
+    )
+    .await;
+    assert!(none.get("organization").is_none(), "{none}");
+
+    let (acme, globex) = ([0x0a_u8; 16], [0x0b_u8; 16]);
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
+        .await
+        .unwrap();
+    let org = tx.insert_org(acme, "Acme", &[1; 32]).await.unwrap();
+    tx.insert_membership(
+        org,
+        w.subject,
+        access_store::orgs::Source::Founder,
+        true,
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let one = id_claims_of(
+        &w,
+        query(&location(&w.authorize(&ask, Some(&w.cookie)).await), "code"),
+    )
+    .await;
+    assert_eq!(
+        one["organization"],
+        serde_json::json!({ "id": b64url_encode(&acme), "name": "Acme" })
+    );
+    let plain = id_claims_of(&w, w.code(PUBLIC).await).await;
+    assert!(
+        plain.get("organization").is_none(),
+        "only when asked: {plain}"
+    );
+
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
+        .await
+        .unwrap();
+    let org = tx.insert_org(globex, "Globex", &[2; 32]).await.unwrap();
+    tx.insert_membership(
+        org,
+        w.subject,
+        access_store::orgs::Source::Founder,
+        false,
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let to = location(&w.authorize(&ask, Some(&w.cookie)).await);
+    assert!(
+        to.starts_with(&format!("{ISSUER}/login?return_to=")) && to.contains("reason=organization"),
+        "{to}"
+    );
+    let silent = location(
+        &w.authorize(
+            &[("scope", "openid organization"), ("prompt", "none")],
+            Some(&w.cookie),
+        )
+        .await,
+    );
+    assert_eq!(query(&silent, "error"), "interaction_required");
+
+    let mut tx = TenantTx::begin(&w.db.app, w.environment.tenant, w.environment.environment)
+        .await
+        .unwrap();
+    tx.choose_organization(w.subject, [1; 16], globex, now())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let chosen = id_claims_of(
+        &w,
+        query(&location(&w.authorize(&ask, Some(&w.cookie)).await), "code"),
+    )
+    .await;
+    assert_eq!(
+        chosen["organization"],
+        serde_json::json!({ "id": b64url_encode(&globex), "name": "Globex" })
+    );
+
+    let later = w.sign_in(now() + 1_000).await;
+    let to = location(&w.authorize(&ask, Some(&later)).await);
+    assert!(
+        to.contains("reason=organization"),
+        "a new sign-in asks again: {to}"
+    );
+}
+
+async fn id_claims_of(w: &World, code: String) -> Value {
+    let tokens = body(&w.exchange(&code).await, 200);
+    claims(tokens["id_token"].as_str().unwrap())
+}

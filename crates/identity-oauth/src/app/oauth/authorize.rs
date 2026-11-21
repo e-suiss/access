@@ -23,8 +23,10 @@ use crate::domain::request::{
     AuthError, AuthRequest, Params, Prompt, REQUEST_URI_PREFIX, ResponseMode, Unredirectable,
     code_redirect, error_redirect, stage_one, stage_two,
 };
+use crate::domain::scope::ORGANIZATION;
 use crate::domain::tokens::{
-    CODE_TTL_MS, CodeDetails, GrantDetails, INTERACTIVE_TTL_MS, PAR_TTL_MS, Signed, needs_login,
+    CODE_TTL_MS, CodeDetails, GrantDetails, INTERACTIVE_TTL_MS, OrganizationClaim, PAR_TTL_MS,
+    Signed, needs_login,
 };
 use crate::ports::Unavailable;
 use crate::ports::oauth::{LoginPages, OAuthTx};
@@ -303,6 +305,27 @@ impl<E: Env> OAuth<E> {
                 )
                 .await;
         }
+        // TN-177
+        let Ok(organization) = self
+            .organization(&mut tx, &l, session.subject, s.auth_time_ms)
+            .await?
+        else {
+            if req.prompt == Prompt::None {
+                let members = Outcome::Error(AuthError::INTERACTION_REQUIRED);
+                return self
+                    .answer(&mut tx, environment, &l.client, back_to, members, now)
+                    .await;
+            }
+            return self
+                .to_login(
+                    tx,
+                    environment,
+                    &l,
+                    now,
+                    crate::domain::tokens::LoginReason::Organization,
+                )
+                .await;
+        };
         if let Some((d, hash)) = l.stored
             && !tx.use_request(d, &hash, signed(now)).await?
         {
@@ -324,6 +347,7 @@ impl<E: Env> OAuth<E> {
                 projection: None,
                 resource: req.resource.clone(),
                 claims: req.claims.clone(),
+                organization,
             },
         };
         let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;
@@ -480,6 +504,38 @@ impl<E: Env> OAuth<E> {
         tx.end_consent_record(record.consent_id, "grant_ended", now)
             .await?;
         Ok(false)
+    }
+
+    /// TN-177: the organization a request with the `organization` scope continues with: none
+    /// without the scope or without a membership, the only one, or the one chosen for this client
+    /// since the sign-in while it is still live; `Err` when the person must choose.
+    async fn organization(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        l: &Loaded,
+        subject: [u8; 16],
+        auth_time_ms: u64,
+    ) -> Result<Result<Option<OrganizationClaim>, ()>, Unavailable> {
+        if !l.request.scope.iter().any(|s| s == ORGANIZATION) {
+            return Ok(Ok(None));
+        }
+        let live = tx.organizations_of(subject).await?;
+        let claim = |(party, name): &([u8; 16], String)| OrganizationClaim {
+            id: b64url_encode(party),
+            name: name.clone(),
+        };
+        match live.as_slice() {
+            [] => return Ok(Ok(None)),
+            [only] => return Ok(Ok(Some(claim(only)))),
+            _ => {}
+        }
+        let chosen = tx
+            .chosen_organization(subject, l.client.uuid, auth_time_ms)
+            .await?;
+        Ok(chosen
+            .and_then(|c| live.iter().find(|(party, _)| *party == c))
+            .map(|o| Some(claim(o)))
+            .ok_or(()))
     }
 
     /// Whether a third-party client asks for claims the person has not shared with it

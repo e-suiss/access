@@ -110,7 +110,7 @@ fn only_served_endpoints_are_declared() {
     assert_eq!(m["jwks_uri"], "https://acme.id.example/jwks.json");
 }
 
-// OP-146 I7, m.8 (d), §10.4.6
+// OP-146 I7, m.8 (d), §10.4.6, TN-177
 #[test]
 fn the_served_core_is_declared() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
@@ -122,7 +122,7 @@ fn the_served_core_is_declared() {
     assert_eq!(m["backchannel_logout_supported"], true);
     assert_eq!(
         m["scopes_supported"],
-        serde_json::json!(["openid", "email", "profile"])
+        serde_json::json!(["openid", "email", "profile", "organization"])
     );
     assert_eq!(
         m["claims_supported"],
@@ -142,7 +142,8 @@ fn the_served_core_is_declared() {
             "given_name",
             "family_name",
             "locale",
-            "zoneinfo"
+            "zoneinfo",
+            "organization"
         ])
     );
     // OP-148

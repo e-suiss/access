@@ -473,6 +473,14 @@ test("the profile step asks for the documents to be accepted", async ({ page, mo
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // TN-178
+  await expect(
+    page.getByText("Our documents were updated. Accept the new version to continue."),
+  ).toBeVisible();
+  await expect(page.getByTestId("updated")).toHaveCount(1);
+  await expect(page.getByRole("listitem").filter({ hasText: "Terms of Service" })).toContainText(
+    "Updated",
+  );
   const terms = page.getByRole("link", { name: "Terms of Service" });
   await expect(terms).toHaveAttribute("href", "https://example.com/terms");
   await expect(terms).toHaveAttribute("target", "_blank");
@@ -487,6 +495,41 @@ test("the profile step asks for the documents to be accepted", async ({ page, mo
   await expect
     .poll(() => mock.submissions.at(-1))
     .toMatchObject({ method: "profile", fields: { accept_documents: "true" } });
+});
+
+// TN-178, X-L8: not accepting starts the sign-in again with why, or answers the app
+test("not accepting the documents never signs in", async ({ page, mock }) => {
+  mock.secondFactor = example("profile-documents");
+  await page.goto("/");
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "I don't accept" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "You can't sign in without accepting the documents.",
+  );
+  await expect(page.getByLabel("Email or username")).toBeVisible();
+  expect(mock.submissions.map((s) => s.method)).not.toContain("profile");
+
+  const back =
+    "/authorize?client_id=cli_x&request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aabc";
+  mock.json.set("POST /v1/login/decline", {
+    status: 200,
+    body: { redirect_to: "/callback?error=access_denied" },
+  });
+  await page.goto(`/login?return_to=${encodeURIComponent(back)}`);
+  await page.getByLabel("Email or username").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "I don't accept" }).click();
+  await expect(page).toHaveURL(/\/callback\?error=access_denied$/);
+  const origin = new URL(page.url()).origin;
+  expect(mock.posted.at(-1)).toEqual({
+    key: "POST /v1/login/decline",
+    body: { return_to: `${origin}${back}` },
+  });
 });
 
 // TN-162: one way at a time on the second step, the strongest first; the others behind "Try

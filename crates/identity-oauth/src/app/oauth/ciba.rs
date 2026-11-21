@@ -650,6 +650,7 @@ impl<E: Env> OAuth<E> {
             projection: None,
             resource: None,
             claims: None,
+            organization: None,
         };
         let sid = self.random::<16>()?;
         let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;

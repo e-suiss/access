@@ -155,6 +155,7 @@ fn identity_assertions_have_their_profile() {
         projection: None,
         resource: None,
         claims: None,
+        organization: None,
     };
     assert_eq!(details.audience(&issuer), issuer.as_str());
     let named = GrantDetails {

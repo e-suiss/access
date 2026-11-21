@@ -401,6 +401,25 @@ impl OAuthTx for PgOAuthTx {
         self.0.claim_consent(subject, client).await.map_err(down)
     }
 
+    async fn organizations_of(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<([u8; 16], String)>, Unavailable> {
+        self.0.live_organizations_of(subject).await.map_err(down)
+    }
+
+    async fn chosen_organization(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        since_ms: u64,
+    ) -> Result<Option<[u8; 16]>, Unavailable> {
+        self.0
+            .chosen_organization(subject, client, since_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn pairwise(
         &mut self,
         subject: [u8; 16],
@@ -956,6 +975,7 @@ pub const fn reason_name(reason: LoginReason) -> &'static str {
         LoginReason::StepUp(_) => "step_up",
         LoginReason::Share => "share",
         LoginReason::Approve => "approve",
+        LoginReason::Organization => "organization",
     }
 }
 

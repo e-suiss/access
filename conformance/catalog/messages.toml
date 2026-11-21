@@ -6158,6 +6158,43 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "documents-updated"
+text_id = "documents.updated"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "documents-to_accept"
+text_id = "documents.to_accept"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-document_updated"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-decline_documents"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "documents-declined"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "label-accept_documents"
 text_id = "label.accept_documents"
 surface = "login"
@@ -6387,6 +6424,27 @@ protected = false
 key = "page-way_recovery_code_hint"
 surface = "login"
 class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-organization_title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-organization_body"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-organization_failed"
+surface = "login"
+class = "info"
 owner = "identity_plane"
 protected = false
 

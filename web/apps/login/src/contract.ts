@@ -164,7 +164,12 @@ export interface DocumentsNode {
   readonly name: FieldName;
   readonly method: Method;
   readonly label: Text;
-  readonly documents: readonly { readonly title: string; readonly href: string }[];
+  /** TN-178: `updated` when the account accepted an earlier version. */
+  readonly documents: readonly {
+    readonly title: string;
+    readonly href: string;
+    readonly updated?: boolean;
+  }[];
 }
 
 export interface OptionNode {
@@ -402,7 +407,13 @@ const DocumentsS: v.GenericSchema<unknown, DocumentsNode> = v.object({
   method: v.picklist(METHODS),
   label: TextS,
   documents: v.pipe(
-    v.array(v.object({ title: v.string(), href: v.pipe(v.string(), v.startsWith("https://")) })),
+    v.array(
+      v.object({
+        title: v.string(),
+        href: v.pipe(v.string(), v.startsWith("https://")),
+        updated: v.exactOptional(v.boolean()),
+      }),
+    ),
     v.minLength(1),
   ),
 });

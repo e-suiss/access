@@ -481,6 +481,27 @@ pub const ROUTES: &[Route] = &[
         "listOrganizations",
         "The organizations the person belongs to.",
     ),
+    live(
+        Owner::N3,
+        Verb::Post,
+        "/v1/login/organization/preview",
+        "previewOrganizationStep",
+        "The app and the person's organizations for a sign-in whose app asked for the organization scope (TN-177).",
+    ),
+    live(
+        Owner::N3,
+        Verb::Post,
+        "/v1/login/organization",
+        "chooseOrganization",
+        "Continues the waiting request with one of the person's organizations: context for the organization claim, never authority (TN-177).",
+    ),
+    live(
+        Owner::N3,
+        Verb::Post,
+        "/v1/login/decline",
+        "declineWaitingRequest",
+        "The person did not accept the environment's documents: the waiting request goes back to the app with access_denied and the sign-in never completes (TN-178, X-L8).",
+    ),
     planned(
         Owner::N3,
         Verb::Post,

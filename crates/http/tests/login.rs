@@ -6798,3 +6798,76 @@ async fn an_account_accepts_the_current_terms_once_before_it_signs_in() {
         String::from_utf8_lossy(&done.body)
     );
 }
+
+// TN-178
+#[tokio::test]
+async fn the_profile_step_lists_only_the_documents_still_to_accept_and_says_which_changed() {
+    use access_identity_account::domain::document::Document;
+    let required = |kind: &str, title: &str, digest: u8| Document {
+        kind: String::from(kind),
+        version: String::from("2026-11"),
+        title: String::from(title),
+        url: format!("https://example.com/{kind}"),
+        digest: [digest; 32],
+        required: true,
+    };
+    let signin = EnvironmentSignin {
+        documents: vec![
+            required("terms", "Terms of Service", 3),
+            required("privacy", "Privacy Notice", 6),
+        ],
+        ..EnvironmentSignin::default()
+    };
+    let auth = signin.apply(AuthPolicy::DEFAULT);
+    let e = env_full(76, "tn-178-doc", auth, false, signin).await;
+    let subject = e.account("old@example.com").await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    for (kind, digest) in [("terms", [2_u8; 32]), ("privacy", [6; 32])] {
+        t.insert_acceptance(
+            subject,
+            &access_store::privacy::NewAcceptance {
+                document_type: kind,
+                version: "earlier",
+                document_digest: &digest,
+                locale: "und",
+                method: "checkbox",
+                client: None,
+                record_digest: &[9; 32],
+            },
+        )
+        .await
+        .unwrap();
+    }
+    t.commit().await.unwrap();
+    let mut b = e.browser("old");
+    let step = b.sign_in("old@example.com").await;
+    assert_eq!(
+        step.step(),
+        "profile",
+        "{}",
+        String::from_utf8_lossy(&step.body)
+    );
+    let docs = step.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "documents")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        docs["documents"],
+        json!([{ "title": "Terms of Service", "href": "https://example.com/terms", "updated": true }])
+    );
+    assert!(step.messages().contains(&String::from("documents.updated")));
+    let done = b
+        .submit(&step, "profile", json!({ "accept_documents": "true" }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+}

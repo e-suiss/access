@@ -900,6 +900,14 @@ impl<E: Env> OAuth<E> {
                 crate::domain::claims_request::Target::IdToken,
             )
             .await?;
+        let mut released = released;
+        // TN-177
+        if let Some(o) = &details.organization {
+            released.insert(
+                String::from("organization"),
+                serde_json::json!({ "id": o.id, "name": o.name }),
+            );
+        }
         let base = id_token_claims(facts, nonce, &released);
         let call = Call::TokenIssuance(TokenIssuance {
             client_id: String::from(facts.client_id),

@@ -10,6 +10,7 @@ import { ErrorPage } from "./ErrorPage.js";
 import { Founding } from "./Founding.js";
 import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
+import { Organization } from "./Organization.js";
 import { Recovery } from "./Recovery.js";
 import { SignIn } from "./SignIn.js";
 import { SignedOut, SignOut } from "./SignOut.js";
@@ -21,6 +22,7 @@ export type Page =
   | "sign_in"
   | "sign_up"
   | "consent"
+  | "organization"
   | "approval"
   | "pay"
   | "ciba"
@@ -54,6 +56,8 @@ export function pageOf(path: string, search: string): Page {
   const reason = new URLSearchParams(search).get("reason");
   // OP-153 m.3 (z)
   if (reason === "share") return "consent";
+  // TN-177
+  if (reason === "organization") return "organization";
   // §11.6, OP-154 m.3 (k)
   if (reason === "approve") return "approval";
   // OP-156 m.3 (g)
@@ -73,6 +77,8 @@ function Body({ page }: { readonly page: Page }) {
       return <SignIn kind="registration" />;
     case "consent":
       return <Consent />;
+    case "organization":
+      return <Organization />;
     case "approval":
       return <Approval />;
     case "pay":

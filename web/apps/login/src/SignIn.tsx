@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as v from "valibot";
 
 import { type Answer, createFlow, getFlow, stepUp, submit } from "./api.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
-import { follow, returnTo } from "./http.js";
+import { follow, postJson, returnTo } from "./http.js";
 import { t } from "./i18n.js";
 import { note, Panel, problem } from "./Layout.js";
 import { PUSH_POLL_MS, pushGiveUpMs, pushOf, waitsForPush } from "./PushWait.js";
@@ -19,6 +20,9 @@ const unavailable: Message = { id: "login.unavailable", text: "", severity: "err
 // OP-45, §8.13
 const degraded: Message = { id: "login.degraded", text: "", severity: "error" };
 const stopped: Message = { id: "page.email_wait_stopped", text: "", severity: "error" };
+// TN-178
+const declinedDocuments: Message = { id: "documents.declined", text: "", severity: "error" };
+const Redirect = v.looseObject({ redirect_to: v.string() });
 
 /** TN-102: the link wait polls with a growing pause and gives up after the link's lifetime. */
 export const POLL_FIRST_MS = 2000;
@@ -251,9 +255,30 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
     [settle],
   );
 
+  // TN-178, X-L8: an app's sign-in answers the app with access_denied; otherwise it starts again
+  const onDecline = useCallback(() => {
+    const back = returnTo();
+    if (back === null) {
+      void restart(declinedDocuments);
+      return;
+    }
+    setBusy(true);
+    void postJson("/v1/login/decline", { return_to: back }, Redirect).then((a) => {
+      if (a.ok) {
+        follow(a.body.redirect_to);
+        return;
+      }
+      setBusy(false);
+      const ui = current.current;
+      if (ui !== null) show(withMessage(ui, unavailable));
+    });
+  }, [restart, show]);
+
   return (
     <Panel aria-busy={state.phase === "loading" || busy}>
-      {state.phase === "ready" && <StepView ui={state.ui} busy={busy} onSubmit={onSubmit} />}
+      {state.phase === "ready" && (
+        <StepView ui={state.ui} busy={busy} onSubmit={onSubmit} onDecline={onDecline} />
+      )}
       {ui !== null && waitsForLink(ui) && (
         <p role="status" className={note} data-testid="link-wait">
           {t("page.email_waiting")}

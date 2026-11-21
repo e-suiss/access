@@ -83,6 +83,8 @@ pub enum LoginReason {
     /// Ask on the Approval Surface for a client the environment did not register: the Grant is the
     /// person's `grant.issue` with their AAS (§11.6, OP-154 m.3 (k), EI-18).
     Approve,
+    /// TN-177: ask which of the person's organizations to continue with.
+    Organization,
 }
 
 /// The live session facts the request is held against.
@@ -330,6 +332,19 @@ pub struct GrantDetails {
     /// The OIDC `claims` request the grant was given with (§10.4.6).
     #[serde(default)]
     pub claims: Option<crate::domain::claims_request::ClaimsAsk>,
+    /// TN-177: the organization the person continues with, for the `organization` claim: context
+    /// for the app, never authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub organization: Option<OrganizationClaim>,
+}
+
+/// TN-177: the `organization` claim, the organization's id (its Party, base64url) and its name.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct OrganizationClaim {
+    /// The organization's Party, base64url.
+    pub id: String,
+    /// Its display name.
+    pub name: String,
 }
 
 impl GrantDetails {

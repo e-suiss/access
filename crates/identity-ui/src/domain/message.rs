@@ -614,6 +614,12 @@ pub enum TextId {
     /// TN-174: the SMS code ran out of tries, expired or was used; a new one is asked for.
     #[serde(rename = "sms.code_spent")]
     SmsCodeSpent,
+    /// TN-178: the account accepted an earlier version of a document the step asks for.
+    #[serde(rename = "documents.updated")]
+    DocumentsUpdated,
+    /// TN-178: the step asks for documents the account never accepted.
+    #[serde(rename = "documents.to_accept")]
+    DocumentsToAccept,
     /// P8: Secure Payment Confirmation (OP-156 m.3 (g)).
     #[serde(rename = "spc.title")]
     SpcTitle,
@@ -752,7 +758,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 245] = [
+    pub const ALL: [Self; 247] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -955,6 +961,8 @@ impl TextId {
         Self::SmsSent,
         Self::SmsRefused,
         Self::SmsCodeSpent,
+        Self::DocumentsUpdated,
+        Self::DocumentsToAccept,
         Self::SpcTitle,
         Self::SpcMismatch,
         Self::AppFactorTitle,
@@ -1207,6 +1215,8 @@ impl TextId {
             Self::SmsSent => "sms.sent",
             Self::SmsRefused => "sms.refused",
             Self::SmsCodeSpent => "sms.code_spent",
+            Self::DocumentsUpdated => "documents.updated",
+            Self::DocumentsToAccept => "documents.to_accept",
             Self::SpcTitle => "spc.title",
             Self::SpcMismatch => "spc.mismatch",
             Self::AppFactorTitle => "app_factor.title",
@@ -1543,6 +1553,10 @@ impl TextId {
                 "Text message codes can't be used for this number right now. Use another way."
             }
             Self::SmsCodeSpent => "This code no longer works. Ask for a new one.",
+            Self::DocumentsUpdated => {
+                "Our documents were updated. Accept the new version to continue."
+            }
+            Self::DocumentsToAccept => "Accept these documents to continue.",
             Self::SpcTitle => "Confirm this payment",
             Self::SpcMismatch => "The payment details didn't match. Nothing was approved.",
             Self::AppFactorTitle => "Confirm in { $app }",
@@ -1722,6 +1736,8 @@ impl TextId {
                 | Self::SmsSent
                 | Self::SmsRefused
                 | Self::SmsCodeSpent
+                | Self::DocumentsUpdated
+                | Self::DocumentsToAccept
                 | Self::SpcTitle
                 | Self::SpcMismatch
                 | Self::AppFactorTitle

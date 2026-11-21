@@ -223,16 +223,20 @@ fn examples() -> Vec<(&'static str, Ui)> {
                         access_identity_ui::domain::node::DocumentLink {
                             title: String::from("Terms of Service"),
                             href: String::from("https://example.com/terms"),
+                            updated: true,
                         },
                         access_identity_ui::domain::node::DocumentLink {
                             title: String::from("Privacy Notice"),
                             href: String::from("https://example.com/privacy"),
+                            updated: false,
                         },
                     ],
                 ),
                 None,
                 &POLICY,
-            ),
+            )
+            .with_message(Message::info(TextId::DocumentsUpdated))
+            .unwrap(),
         ),
         (
             "profile-code",

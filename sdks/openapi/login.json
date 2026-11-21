@@ -701,6 +701,9 @@
                     "href": {
                       "type": "string",
                       "pattern": "^https://"
+                    },
+                    "updated": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -969,6 +972,8 @@
           "sms.sent",
           "sms.refused",
           "sms.code_spent",
+          "documents.updated",
+          "documents.to_accept",
           "spc.title",
           "spc.mismatch",
           "app_factor.title",

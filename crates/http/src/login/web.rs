@@ -1092,6 +1092,53 @@ handler! {
     }
 }
 
+/// TN-177: the waiting request and, when choosing, the organization.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrganizationStep {
+    return_to: String,
+    #[serde(default)]
+    organization: Option<String>,
+}
+
+/// TN-178: the waiting request to decline.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeclineBody {
+    return_to: String,
+}
+
+handler! {
+    /// `POST /v1/login/decline` (TN-178, X-L8).
+    decline_waiting(s, entry, b, p, bytes, headers) true {
+        let _ = (&p, &b);
+        let req: DeclineBody = body(&bytes)?;
+        let to = bounded(&req.return_to, 2048)?;
+        Ok(s.hosted.decline_waiting(&entry, to).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/login/organization/preview` (TN-177).
+    organization_preview(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: OrganizationStep = body(&bytes)?;
+        let to = bounded(&req.return_to, 2048)?;
+        Ok(s.hosted.organization_preview(&entry, &b, to).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/login/organization` (TN-177).
+    choose_organization(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: OrganizationStep = body(&bytes)?;
+        let to = bounded(&req.return_to, 2048)?;
+        let org = bounded(req.organization.as_deref().unwrap_or_default(), 64)?;
+        Ok(s.hosted.choose_organization(&entry, &b, to, org).await)
+    }
+}
+
 handler! {
     /// `GET /v1/account/organizations` (OP-153 m.3 (o)).
     organizations(s, entry, b, p, bytes, headers) false {

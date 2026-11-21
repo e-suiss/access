@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT organization_party FROM access.identity_organization_choices\n              WHERE tenant_id = $1 AND environment_id = $2 AND subject_id = $3 AND client_uuid = $4\n                AND created_ms >= $5\n              ORDER BY created_ms DESC, choice_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "organization_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_organization_choices",
+            "name": "organization_party"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8eddcf1e86471e34b4dda1deb51f9816b655e20b951d0d7a940e163c5f5ecad4"
+}

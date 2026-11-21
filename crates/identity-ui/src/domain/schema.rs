@@ -108,6 +108,7 @@ fn documents_node() -> Value {
                     &json!({
                         "title": { "type": "string" },
                         "href": { "type": "string", "pattern": "^https://" },
+                        "updated": { "type": "boolean" },
                     }),
                     &["title", "href"],
                 ),

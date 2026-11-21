@@ -296,6 +296,18 @@ where
                 get(web::organizations::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/login/organization/preview"),
+                post(web::organization_preview::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/login/organization"),
+                post(web::choose_organization::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/login/decline"),
+                post(web::decline_waiting::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/organizations/{{organization}}/sign-in"),
                 get(web::organization_sign_in::<D, K, KI, C, M>),
             )

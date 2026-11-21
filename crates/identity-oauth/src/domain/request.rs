@@ -17,8 +17,14 @@ pub mod jar;
 pub const OPENID: &str = "openid";
 
 /// The protocol scopes served (OP-146 m.5 (c)): `openid`, and `email` and `profile`, which
-/// release only what the account holds honestly (§10.4.6, OP-153 m.3 (l)).
-pub const SCOPES: [&str; 3] = [OPENID, "email", "profile"];
+/// release only what the account holds honestly (§10.4.6, OP-153 m.3 (l)), and `organization`
+/// (TN-177).
+pub const SCOPES: [&str; 4] = [
+    OPENID,
+    "email",
+    "profile",
+    crate::domain::scope::ORGANIZATION,
+];
 
 /// Longest `state` kept (PD).
 pub const MAX_STATE: usize = 1024;
@@ -229,6 +235,13 @@ impl AuthError {
     pub const CONSENT_REQUIRED: Self = Self::new(
         "consent_required",
         "the person has not shared these claims with this app",
+    );
+
+    /// `interaction_required`: the person must choose an organization (OIDC Core §3.1.2.6,
+    /// TN-177).
+    pub const INTERACTION_REQUIRED: Self = Self::new(
+        "interaction_required",
+        "the person must choose an organization",
     );
 
     /// `invalid_target`: a client the environment did not register names no registered protected

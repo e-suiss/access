@@ -59,6 +59,8 @@ interface Props {
   readonly ui: LoginUi;
   readonly busy: boolean;
   readonly onSubmit: (submission: Submission) => void;
+  /** TN-178: the person does not accept the environment's documents. */
+  readonly onDecline?: () => void;
 }
 
 type Fields = Partial<Record<FieldName, string>>;
@@ -307,6 +309,14 @@ function Documents({ node }: { readonly node: DocumentsNode }) {
             <a className="underline" href={d.href} target="_blank" rel="noopener noreferrer">
               {d.title}
             </a>
+            {d.updated === true && (
+              <span
+                className="ms-2 rounded-full bg-muted px-2 py-0.5 text-xs"
+                data-testid="updated"
+              >
+                {t("page.document_updated")}
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -634,7 +644,7 @@ function initialOptions(nodes: readonly UiNode[]): Fields {
   return out;
 }
 
-export function StepView({ ui, busy, onSubmit }: Props) {
+export function StepView({ ui, busy, onSubmit, onDecline }: Props) {
   const autofill = ui.nodes.find((n) => n.type === "passkey_autofill");
   const passkeyButton = ui.nodes.find((n) => n.type === "passkey_get");
   const create = ui.nodes.find((n): n is PasskeyCreateNode => n.type === "passkey_create");
@@ -643,6 +653,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const optionNodes = ui.nodes.filter((n): n is OptionNode => n.type === "option");
   const providers = ui.nodes.filter((n): n is ProviderNode => n.type === "provider");
   const certificate = ui.nodes.find((n): n is CertificateNode => n.type === "certificate");
+  const documents = ui.nodes.some((n) => n.type === "documents");
   const push = pushOf(ui);
   const conditional = useRef<AbortController | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -919,6 +930,11 @@ export function StepView({ ui, busy, onSubmit }: Props) {
               <WayChoice key={w} way={w} busy={busy} onPick={pick} />
             ))}
         </nav>
+      )}
+      {documents && onDecline !== undefined && (
+        <Button {...quiet} disabled={busy} onClick={onDecline} data-testid="decline-documents">
+          {t("action.decline_documents")}
+        </Button>
       )}
       {certificate !== undefined && <Certificate node={certificate} flow={ui.flow} />}
       {providers.length > 0 && (

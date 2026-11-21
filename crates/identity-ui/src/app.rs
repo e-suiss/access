@@ -25,6 +25,7 @@ pub mod household;
 pub mod hrd;
 pub mod ldap;
 mod me;
+pub mod organization;
 pub mod orgs;
 pub mod pages;
 pub mod payment;
@@ -607,7 +608,7 @@ fn profile_ui(
     flow: &FlowId,
     p: &ProfileStep,
     reqs: &[Requirement],
-    to: Option<&str>,
+    (to, accepted): (Option<&str>, &[(String, [u8; 32])]),
 ) -> Ui {
     if p.sent {
         Ui::profile_code(flow.clone(), p.gap.phone, to, reqs)
@@ -621,26 +622,37 @@ fn profile_ui(
             Vec::new()
         };
         // TN-158 (12)
+        // TN-178
         let documents: Vec<crate::domain::node::DocumentLink> = if p.gap.documents {
             kit.signin
                 .documents
                 .iter()
-                .filter(|d| d.required)
+                .filter(|d| d.required && !accepted.iter().any(|(_, a)| *a == d.digest))
                 .map(|d| crate::domain::node::DocumentLink {
                     title: d.title.clone(),
                     href: d.url.clone(),
+                    updated: accepted.iter().any(|(kind, _)| *kind == d.kind),
                 })
                 .collect()
         } else {
             Vec::new()
         };
-        Ui::complete_profile(
+        let mut ui = Ui::complete_profile(
             flow.clone(),
             (p.gap.name, p.gap.email && !p.gap.phone, p.gap.phone),
             (&national, p.gap.birthdate, &documents),
             p.offered.clone(),
             reqs,
-        )
+        );
+        if !documents.is_empty() {
+            ui.messages
+                .push(Message::info(if documents.iter().any(|d| d.updated) {
+                    TextId::DocumentsUpdated
+                } else {
+                    TextId::DocumentsToAccept
+                }));
+        }
+        ui
     }
 }
 
@@ -679,7 +691,7 @@ fn shape_bare(kit: &EnvironmentKit, flow: &FlowId, current: &Current) -> Option<
             kit.auth.passkey.then(|| blank.clone()),
             &reqs,
         ),
-        Current::Profile(p) => profile_ui(kit, flow, p, &reqs, None),
+        Current::Profile(p) => profile_ui(kit, flow, p, &reqs, (None, &[])),
         Current::Done(_) => return None,
     })
 }
@@ -1289,7 +1301,34 @@ where
         } else {
             None
         };
-        profile_ui(kit, flow, p, &policy(kit), to.as_deref())
+        // TN-178
+        let accepted = if p.gap.documents && !p.sent {
+            self.accepted_documents(kit, p.subject).await
+        } else {
+            Vec::new()
+        };
+        profile_ui(kit, flow, p, &policy(kit), (to.as_deref(), &accepted))
+    }
+
+    /// The (type, digest) of every document `subject` accepted; none when they cannot be read now.
+    async fn accepted_documents(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+    ) -> Vec<(String, [u8; 32])> {
+        let read = async {
+            let mut t =
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                    .await?;
+            let rows = t.acceptances(subject).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(rows)
+        };
+        read.await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| (r.document_type, r.document_digest))
+            .collect()
     }
 
     /// The profile step's national identity number and birth date (TN-158): the number is

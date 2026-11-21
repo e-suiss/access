@@ -2002,3 +2002,111 @@ async fn a_sign_in_that_lacks_a_name_or_a_proven_address_asks_for_them_and_compl
         "complete stays complete"
     );
 }
+
+// TN-177, TN-178, X-L8
+#[tokio::test]
+async fn a_waiting_request_takes_an_organization_or_answers_the_app_when_documents_are_refused() {
+    let e = env(0x5c, "soc-org").await;
+    let subject = e.account("ada@example.org").await;
+    let return_to = e.waiting_request("openid organization", None).await;
+    let (acme, globex) = ([0x0a_u8; 16], [0x0b_u8; 16]);
+    {
+        let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+            .await
+            .unwrap();
+        for (party, name, seed) in [(acme, "Acme", 1_u8), (globex, "Globex", 2)] {
+            let org = t.insert_org(party, name, &[seed; 32]).await.unwrap();
+            t.insert_membership(
+                org,
+                subject,
+                access_store::orgs::Source::Founder,
+                true,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+        t.commit().await.unwrap();
+    }
+    let ask = json!({ "return_to": return_to });
+
+    let mut anon = e.browser(9);
+    let unsigned = anon
+        .send("POST", "/v1/login/organization/preview", Some(ask.clone()))
+        .await;
+    assert_eq!(unsigned.status, StatusCode::UNAUTHORIZED);
+
+    let mut w = e.browser(1);
+    w.sign_in("ada@example.org").await;
+    let preview = w
+        .send("POST", "/v1/login/organization/preview", Some(ask.clone()))
+        .await;
+    assert_eq!(preview.status, StatusCode::OK, "{}", preview.code());
+    assert_eq!(preview.json()["app"], "Ledgerly");
+    assert_eq!(
+        preview.json()["organizations"],
+        json!([
+            { "id": b64url_encode(&acme), "name": "Acme" },
+            { "id": b64url_encode(&globex), "name": "Globex" },
+        ])
+    );
+    let foreign = w
+        .send(
+            "POST",
+            "/v1/login/organization",
+            Some(json!({ "return_to": return_to, "organization": b64url_encode(&[0x0c; 16]) })),
+        )
+        .await;
+    assert_eq!(foreign.json()["code"], "no-waiting-request");
+    let chosen = w
+        .send(
+            "POST",
+            "/v1/login/organization",
+            Some(json!({ "return_to": return_to, "organization": b64url_encode(&globex) })),
+        )
+        .await;
+    assert_eq!(chosen.status, StatusCode::OK, "{}", chosen.code());
+    assert_eq!(chosen.json()["redirect_to"], json!(return_to));
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.environment)
+        .await
+        .unwrap();
+    assert_eq!(
+        t.chosen_organization(subject, [0x67; 16], 0).await.unwrap(),
+        Some(globex)
+    );
+    t.commit().await.unwrap();
+
+    let plain = e.waiting_request("openid", None).await;
+    let refused = w
+        .send(
+            "POST",
+            "/v1/login/organization/preview",
+            Some(json!({ "return_to": plain })),
+        )
+        .await;
+    assert_eq!(refused.json()["code"], "no-waiting-request");
+
+    // TN-178
+    let declined = anon
+        .send(
+            "POST",
+            "/v1/login/decline",
+            Some(json!({ "return_to": plain })),
+        )
+        .await;
+    assert_eq!(declined.status, StatusCode::OK, "{}", declined.code());
+    let to = declined.json()["redirect_to"].as_str().unwrap().to_owned();
+    assert!(
+        to.starts_with("https://ledgerly.example/cb?error=access_denied"),
+        "{to}"
+    );
+    assert!(to.contains(&format!("iss=https%3A%2F%2F{HOST}")), "{to}");
+    let nowhere = anon
+        .send(
+            "POST",
+            "/v1/login/decline",
+            Some(json!({ "return_to": "https://evil.example/authorize?client_id=x" })),
+        )
+        .await;
+    assert_eq!(nowhere.json()["code"], "no-waiting-request");
+}

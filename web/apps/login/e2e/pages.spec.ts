@@ -516,6 +516,41 @@ test("Share with the app lists the claims and never says Allow or Authorize", as
   ]);
 });
 
+// TN-177
+test("a person in two organizations chooses which one the app continues with", async ({
+  page,
+  mock,
+}) => {
+  mock.json.set("POST /v1/login/organization/preview", {
+    status: 200,
+    body: {
+      app: "Photo Prints",
+      organizations: [
+        { id: "b3JnLWFjbWU", name: "Acme" },
+        { id: "b3JnLWdsb2Jl", name: "Globex" },
+      ],
+    },
+  });
+  mock.json.set("POST /v1/login/organization", {
+    status: 200,
+    body: { redirect_to: "/callback?code=abc" },
+  });
+  await page.goto(`/login?reason=organization&return_to=${encodeURIComponent(returnTo)}`);
+  await expect(
+    page.getByRole("heading", { name: "Which organization do you want to continue with?" }),
+  ).toBeFocused();
+  await expect(
+    page.getByText("Photo Prints will know which organization you chose."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Globex" }).click();
+  await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+  const origin = new URL(page.url()).origin;
+  expect(mock.posted.map((p) => p.body)).toEqual([
+    { return_to: `${origin}${returnTo}` },
+    { return_to: `${origin}${returnTo}`, organization: "b3JnLWdsb2Jl" },
+  ]);
+});
+
 // X-L8, Ek B 3453
 test("Don't share says the person chose not to continue, then answers the app", async ({
   page,

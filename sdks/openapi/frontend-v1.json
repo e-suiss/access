@@ -1360,6 +1360,96 @@
         }
       }
     },
+    "/v1/login/organization/preview": {
+      "post": {
+        "operationId": "previewOrganizationStep",
+        "summary": "The app and the person's organizations for a sign-in whose app asked for the organization scope (TN-177).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/login/organization": {
+      "post": {
+        "operationId": "chooseOrganization",
+        "summary": "Continues the waiting request with one of the person's organizations: context for the organization claim, never authority (TN-177).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/login/decline": {
+      "post": {
+        "operationId": "declineWaitingRequest",
+        "summary": "The person did not accept the environment's documents: the waiting request goes back to the app with access_denied and the sign-in never completes (TN-178, X-L8).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/organizations": {
       "post": {
         "operationId": "createOrganization",

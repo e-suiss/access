@@ -729,6 +729,7 @@ impl<E: Env> OAuth<E> {
             projection: None,
             resource: None,
             claims: None,
+            organization: None,
         };
         // TN-56
         withhold_offline(tx, &mut details.scope, session.subject, now).await?;

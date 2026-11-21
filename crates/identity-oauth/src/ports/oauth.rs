@@ -229,6 +229,18 @@ pub trait OAuthTx: Send {
         subject: [u8; 16],
         client: [u8; 16],
     ) -> impl Future<Output = Result<Option<Vec<String>>, Unavailable>> + Send;
+    /// TN-177: the live organizations `subject` belongs to, as (Party, display name).
+    fn organizations_of(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<([u8; 16], String)>, Unavailable>> + Send;
+    /// TN-177: the organization `subject` last chose for `client` at or after `since_ms`.
+    fn chosen_organization(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        since_ms: u64,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
     /// Writes an identity audit row in this transaction (OP-10, OP-39): identifiers only.
     fn audit(
         &mut self,
