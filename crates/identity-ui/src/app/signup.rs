@@ -333,7 +333,15 @@ where
                 .ok()
                 .map(|d| set_cookie(FLOW_COOKIE, &b64url_encode(&d), None))
         };
-        Reply::ui(201, address_step(flow, contact(&kit))).cookie(cookie)
+        Reply::ui(201, self.signup_address(&kit, flow).await).cookie(cookie)
+    }
+
+    /// The address step as drawn: the environment's sign-in providers below it, since a first
+    /// sign-in with one opens the account (TN-173, TN-151).
+    async fn signup_address(&self, kit: &EnvironmentKit, flow: FlowId) -> Ui {
+        let mut ui = address_step(flow, contact(kit));
+        self.provider_buttons(kit, &mut ui.nodes).await;
+        ui
     }
 
     /// `GET /v1/login/flows/{flow}` of a sign-up flow: the address step until a challenge exists
@@ -401,7 +409,7 @@ where
         let device_hash = device_digest(&device);
         // TN-171
         if submission.method == Method::Restart {
-            return Reply::ui(200, address_step(flow, contact(&kit)));
+            return Reply::ui(200, self.signup_address(&kit, flow).await);
         }
         let step = if submission.method == Method::Register {
             address_step(flow.clone(), contact(&kit))
@@ -533,7 +541,7 @@ where
                 }
                 Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
                     let s = retry_after_ms.div_ceil(1000);
-                    let mut u = address_step(flow, contact(&kit));
+                    let mut u = self.signup_address(&kit, flow).await;
                     u.messages = vec![
                         Message::error(TextId::TooManyAttempts)
                             .retry_after(u32::try_from(s).unwrap_or(u32::MAX)),
@@ -543,7 +551,7 @@ where
                     r
                 }
                 Ok(Started::Refused(_)) => {
-                    let mut u = address_step(flow, contact(&kit));
+                    let mut u = self.signup_address(&kit, flow).await;
                     u.messages = vec![Message::error(TextId::RegistrationFailed)];
                     Reply::ui(400, u)
                 }

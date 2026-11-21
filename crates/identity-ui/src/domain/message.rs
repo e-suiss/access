@@ -1762,6 +1762,22 @@ pub struct Text {
     pub id: TextId,
     /// Default English text.
     pub text: String,
+    /// The values of the text's placeholders, by name, for a client that words the text in its
+    /// own language (TN-173).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub args: std::collections::BTreeMap<String, String>,
+}
+
+impl Text {
+    /// `id` with its placeholder `name` set to `value`, in the default text too.
+    #[must_use]
+    pub fn with_arg(id: TextId, name: &str, value: &str) -> Self {
+        Self {
+            id,
+            text: id.default_text().replace(&format!("{{ ${name} }}"), value),
+            args: std::collections::BTreeMap::from([(name.to_owned(), value.to_owned())]),
+        }
+    }
 }
 
 impl From<TextId> for Text {
@@ -1769,6 +1785,7 @@ impl From<TextId> for Text {
         Self {
             id,
             text: id.default_text().to_owned(),
+            args: std::collections::BTreeMap::new(),
         }
     }
 }

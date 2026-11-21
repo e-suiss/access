@@ -303,7 +303,14 @@ fn components() -> Value {
         "FieldName": string_enum(&field_names),
         "Method": string_enum(&methods),
         "TextId": string_enum(&text_ids()),
-        "Text": object(&json!({ "id": r("TextId"), "text": s }), &["id", "text"]),
+        "Text": object(
+            &json!({
+                "id": r("TextId"),
+                "text": s,
+                "args": { "type": "object", "additionalProperties": { "type": "string" } },
+            }),
+            &["id", "text"],
+        ),
         "Message": object(
             &json!({
                 "id": r("TextId"),

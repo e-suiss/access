@@ -1850,7 +1850,7 @@ async fn a_person_who_does_not_share_sends_the_app_access_denied() {
     assert_eq!(list.json()["apps"], json!([]));
 }
 
-// OP-153 m.3 (l), TN-106
+// OP-153 m.3 (l), TN-106, TN-173
 #[tokio::test]
 async fn the_first_step_offers_the_environments_active_providers() {
     let e = env(0x5b, "soc-n5b").await;
@@ -1877,6 +1877,27 @@ async fn the_first_step_offers_the_environments_active_providers() {
     assert_eq!(provider["href"], "/v1/login/social/google");
     assert_eq!(provider["label"]["id"], "action.continue_with");
     assert_eq!(provider["label"]["text"], "Continue with Google");
+    // TN-173
+    assert_eq!(provider["label"]["args"], json!({ "provider": "Google" }));
+
+    // TN-173
+    let mut w = e.browser(3);
+    let signup = w
+        .send(
+            "POST",
+            "/v1/login/flows",
+            Some(json!({ "kind": "registration" })),
+        )
+        .await;
+    assert_eq!(signup.json()["kind"], "registration", "{}", signup.code());
+    let offered: Vec<_> = signup.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["type"] == "provider")
+        .cloned()
+        .collect();
+    assert_eq!(offered, vec![provider]);
 }
 
 // TN-151

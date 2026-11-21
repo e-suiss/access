@@ -68,13 +68,13 @@ export type Method =
 export interface Text {
   readonly id: string;
   readonly text: string;
+  /** TN-173: the values of the text's placeholders. */
+  readonly args?: Readonly<Record<string, string>>;
 }
 
 export interface Message extends Text {
   readonly severity: "info" | "error";
   readonly retry_after_s?: number;
-  /** TN-162: the values of the text's placeholders. */
-  readonly args?: Readonly<Record<string, string>>;
   /** TN-169: the input the message is about. */
   readonly field?: FieldName;
 }
@@ -308,7 +308,11 @@ const METHODS = [
   "resend",
 ] as const satisfies readonly Method[];
 
-const TextS = v.object({ id: v.string(), text: v.string() });
+const TextS = v.object({
+  id: v.string(),
+  text: v.string(),
+  args: v.exactOptional(v.record(v.string(), v.string())),
+});
 const MessageS: v.GenericSchema<unknown, Message> = v.object({
   id: v.string(),
   text: v.string(),

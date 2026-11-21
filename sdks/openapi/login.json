@@ -1026,6 +1026,12 @@
           },
           "text": {
             "type": "string"
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },

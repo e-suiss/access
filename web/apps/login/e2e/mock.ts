@@ -168,6 +168,8 @@ export class LoginMock {
   readonly flows = new Map<string, LoginUi>();
   /** Nodes added to the identifier step (the option and provider nodes of N5). */
   identifierExtras: UiNode[] = [];
+  /** TN-173: nodes added to the sign-up address step. */
+  signupExtras: UiNode[] = [];
   /** Nodes added to the authenticate step. */
   authenticateExtras: UiNode[] = [];
   /** How many polls of a link wait still answer "waiting". */
@@ -274,6 +276,11 @@ export class LoginMock {
   identifierField: { kind: "text" | "email" | "tel"; label: { id: string; text: string } } | null =
     null;
 
+  private signupStep(): LoginUi {
+    const ui = signupAddress();
+    return { ...ui, nodes: [...ui.nodes, ...this.signupExtras] };
+  }
+
   identifierStep(): LoginUi {
     const ui = example("identifier");
     const field = this.identifierField;
@@ -301,7 +308,7 @@ export class LoginMock {
       const kind = created === null ? undefined : (JSON.parse(created) as { kind?: string }).kind;
       return this.reply(route, {
         status: 201,
-        ui: kind === "registration" ? signupAddress() : this.identifierStep(),
+        ui: kind === "registration" ? this.signupStep() : this.identifierStep(),
       });
     }
     const flow = url.pathname.split("/").at(-1) ?? "";

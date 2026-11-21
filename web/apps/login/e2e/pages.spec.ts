@@ -87,7 +87,10 @@ test("a certificate sign-in leaves for the mTLS port with the flow and says why 
     {
       type: "certificate",
       label: { id: "action.use_certificate", text: "Use a certificate" },
-      hint: { id: "certificate.prompt", text: "Pick your certificate or smart card when your browser asks." },
+      hint: {
+        id: "certificate.prompt",
+        text: "Pick your certificate or smart card when your browser asks.",
+      },
       port: 8443,
     },
   ];
@@ -116,6 +119,28 @@ test("a certificate sign-in leaves for the mTLS port with the flow and says why 
 
   await page.goto("/?certificate=none");
   await expect(page.getByRole("alert")).toContainText("No certificate was chosen.");
+});
+
+// TN-173
+test("the sign-up page offers the environment's providers", async ({ page, mock }) => {
+  mock.signupExtras = [
+    {
+      type: "provider",
+      provider: "google",
+      label: {
+        id: "action.continue_with",
+        text: "Continue with Google",
+        args: { provider: "Google" },
+      },
+      href: "/v1/login/social/google",
+    },
+  ];
+  await page.goto("/login?reason=create");
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+    "href",
+    /\/v1\/login\/social\/google$/,
+  );
 });
 
 // §10.4.6, OP-153 m.3 (g), Ek B 4098, 4104

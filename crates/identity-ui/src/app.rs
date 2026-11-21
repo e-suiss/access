@@ -743,35 +743,49 @@ where
                 port,
             });
         }
+        self.provider_buttons(kit, &mut ui.nodes).await;
+        reply
+    }
+
+    /// A button for each active sign-in provider of the environment, on the first step of a
+    /// sign-in or a sign-up (TN-36, X33, OP-153 m.3 (l), TN-173). A provider list that cannot be
+    /// read now leaves the buttons out.
+    pub(crate) async fn provider_buttons(
+        &self,
+        kit: &EnvironmentKit,
+        nodes: &mut Vec<crate::domain::node::Node>,
+    ) {
+        use crate::domain::node::Node;
         // OP-159 m.48 (c)
         if !kit.signin.social {
-            return reply;
+            return;
         }
         let Ok(social) = self.social_buttons(kit).await else {
-            return reply;
+            return;
         };
         for (preset, name) in social {
-            ui.nodes.push(Node::Provider {
-                label: crate::domain::message::Text {
-                    id: TextId::ContinueWith,
-                    text: format!("Continue with {name}"),
-                },
+            nodes.push(Node::Provider {
+                label: crate::domain::message::Text::with_arg(
+                    TextId::ContinueWith,
+                    "provider",
+                    &name,
+                ),
                 href: format!("/v1/login/social/{preset}"),
                 provider: preset,
             });
         }
         // TN-95, OP-155 m.3 (h), Ek B 4678
         for (name, display) in self.upstream_buttons(kit).await {
-            ui.nodes.push(Node::Provider {
-                label: crate::domain::message::Text {
-                    id: TextId::SignInWith,
-                    text: format!("Sign in with {display}"),
-                },
+            nodes.push(Node::Provider {
+                label: crate::domain::message::Text::with_arg(
+                    TextId::SignInWith,
+                    "provider",
+                    &display,
+                ),
                 href: format!("/v1/login/upstream/{name}"),
                 provider: name,
             });
         }
-        reply
     }
 
     /// The environment's active social providers with the name on their button (OP-153 m.3 (l)).
